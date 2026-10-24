@@ -1,106 +1,110 @@
-# Proposed ways of working
+# Ways of working
 
-Status: draft for maintainer review. Product constraints in `AGENTS.md` reflect
-the project brief; the workflow details and delivery order below are proposals.
-This document does not accept backend architecture or claim implemented features.
-The current product requirements and open decisions are collected in
-[SPEC-0001](specs/0001-system-overview.md). Read it before using the delivery sketch.
+Status: active project workflow. The maintainer agreed to a coordinator with
+`gpt-6-luna` implementers and fast, evidence-based verification on 2026-10-24.
+This workflow does not alter accepted product contracts or authorize publishing.
 
-## Objective
+## Roles
 
-Deliver a usable single-tenant Go application quickly while making its behavior
-and important technical decisions explicit. Preserve the Almanac visual design.
-Support SLI collection from disparate sources, SLO measurement, error budgets,
-burn rates, reporting, and alerting.
+The primary agent is the coordinator. It owns task decomposition, architectural
+consistency, independent review, integration and truthful delivery status. It
+continues through ready tasks within the user's authorized scope, rather than
+asking the maintainer to supervise each handoff.
 
-## Delivery approach
+Use `gpt-6-luna` for bounded implementation tasks. The implementer reads the task,
+relevant project instructions and cited spec sections, implements only its scope,
+runs required checks and submits evidence. It cannot accept its own work, change
+product contracts, relax checks, or start a later milestone on its own.
 
-Recommended: deliver small complete features, each supported by a behavior spec,
-the relevant ADRs, an implementation, and acceptance evidence. Review available
-components for reuse within each feature, including their tests and dependencies.
-Adapt only what the feature needs. Maintain a runnable application after each
-delivery stage once the foundation exists.
+The coordinator handles unresolved design, security/calculation/concurrency risks,
+and tasks needing broad context. It may implement a task directly when delegation
+would add more overhead than useful work; explain that choice briefly. Do not
+silently switch the requested implementer model. If unavailable, report the limitation
+and agree on a replacement. Runtime configuration must request the model explicitly;
+documenting its name does not configure the tool automatically.
 
-Write each decision in terms of Almanac's requirements, alternatives, and
-consequences. Keep project documentation focused on enduring guidance.
+## Start or resume a session
 
-## The feature loop
+1. Read [AGENTS.md](../AGENTS.md), directory instructions and [status.md](status.md).
+2. Inspect the branch, working tree and recent commits. Preserve unrelated edits.
+3. Read the current milestone plan and assigned [task](tasks/README.md), then only
+   the relevant accepted spec/ADR sections. No task plan currently exists for F1.
+4. Identify the next ready task and its dependency revision. Do not infer that an
+   earlier session's agent, worktree, service or test result still exists or is valid.
+5. Restore task ownership and verification context before resuming. A new session
+   can follow this workflow without chat history; uncertain acceptance evidence is
+   a reason to inspect the record, not to mark work done.
 
-1. **Inspect.** Read relevant code and tests. Identify useful components, hidden
-   dependencies, correctness assumptions, and missing coverage. Investigate only
-   as far as needed for the current feature.
-2. **Specify.** Write the observable contract, scope, non-goals, failure behavior,
-   and numbered acceptance criteria. Include concrete examples for calculations.
-3. **Decide.** Link existing accepted ADRs. Propose new ADRs only for consequential
-   choices. The maintainer accepts new specifications and architectural decisions
-   before their implementation; routine work within them needs no new approval.
-4. **Plan.** For multi-step work, list small tasks and dependencies, each linked
-   to acceptance criteria. Keep a short checklist in the spec for simple work.
-5. **Implement.** Reuse reviewed components and tests when they fit. Keep only
-   dependencies needed by the accepted scope. Update source contracts before
-   generated implementations when generation is part of the chosen architecture.
-6. **Verify.** Exercise the acceptance criteria, including failures and recovery.
-   Validate reused behavior here. Record exact commands, results, and unresolved
-   gaps; include visual evidence for UI changes.
-7. **Reconcile.** Update the spec and delivery status. Report what works, what is
-   deferred, and any decisions needed next. Publish only when authorized.
+## Task preparation and dispatch
 
-A defect that restores specified behavior needs a regression check and a fix;
-it does not need a new architectural decision. Documentation-only edits need
-content and link checks, not an application test run.
+Use `docs/plans/NNNN-topic.md` for a milestone dependency plan and
+`docs/tasks/FN-TNN.md` for individual briefs. Use the [task template](tasks/TEMPLATE.md).
+A task is ready only when it has a concrete outcome, accepted contracts, exact
+interfaces or a designated interface-design prerequisite, bounded edit scope,
+acceptance checks and no unresolved consequential decision in its implementation path.
+Do not create speculative briefs for the entire product in advance.
 
-## Documentation structure
+Give the implementer a fresh task context: repository/worktree, base revision, task
+path, required reading, scope and reporting rules. Do not forward the full project
+conversation or private investigation notes. For reusable components, the coordinator
+reviews suitability and provides the relevant constraints; existing code never
+overrides Almanac's contract.
 
-Create documents as needed, rather than scaffolding all future features.
+Start with one active implementer. Use isolated worktrees for implementation, with
+unique ports, test databases and artifact directories. The shared baseline must
+contain the task's approved dependencies. Never have workers edit the same checkout
+or mutate a shared test database. Only the coordinator integrates results.
 
-| Location | Purpose |
-| --- | --- |
-| `AGENTS.md` | Concise contributor and agent instructions |
-| `docs/specs/NNNN-topic.md` | Current behavior contract and acceptance criteria |
-| `docs/adr/NNNN-decision.md` | Why a consequential choice was made |
-| `docs/plans/NNNN-topic.md` | Optional task breakdown linked to a spec |
-| `docs/status.md` | Delivery stages, implementation status, verification evidence |
-| `web/DESIGN_SYSTEM.md` | Visual rules and links to actual shared assets, once established |
+Increase concurrency only for tasks with stable interfaces, disjoint edits and
+independent fixtures. A shared contract/schema change precedes its consumers; it
+cannot be delegated as conflicting parallel guesses. No worker may delegate further
+without a coordinator-assigned need and explicit scope.
 
-Specs use `draft`, `accepted`, and `superseded` states. Track implementation
-separately as `not started`, `in progress`, or `verified`, with evidence and known
-limitations. An accepted spec is not proof that its behavior exists.
+## Implement, review, integrate
 
-ADRs use `proposed`, `accepted`, `rejected`, and `superseded` states. Record the
-acceptance date and maintainer approval reference. Preserve accepted rationale;
-superseding records explain what changed and why. Correcting a typo or link does
-not require a new decision.
+1. The implementer confirms scope, reads applicable Modern Go guidance before Go
+   edits, writes relevant behavior checks and implements the task.
+2. It runs the task's focused verification and required boundary checks from
+   [testing.md](testing.md). A narrow passing test is not full acceptance evidence.
+3. It hands off file/diff details, criterion-to-check mapping, exact commands,
+   exit status, timings, test selection/counts, fixture identity, and remaining gaps.
+4. The coordinator reads the actual diff and independently evaluates correctness,
+   contract fit and test adequacy. For math/security/concurrency, establish expected
+   outcomes independently of the worker's implementation and test assertions.
+5. The coordinator runs the relevant checks on the integrated candidate. Worker
+   results from another revision do not prove the combined application works.
+6. Update task and delivery status only after that evidence exists. Keep known gaps
+   explicit. Commit or publish only within the user's current authorization.
 
-## Minimum spec contents
+Use focused correction requests referencing observed failures and expected behavior.
+After two unsuccessful correction rounds on the same issue, the coordinator takes
+it over or splits/reframes the task. Do not burn cycles by repeating the same prompt.
+Escalate immediately for conflicting specs, changes to public contracts or dependencies,
+security boundaries, data loss, missing required environment, or suspected bad tests.
+Report the attempted action, evidence and smallest decision needed. Continue independent
+work where possible; do not use escalation to stop routine authorized work.
 
-- Identifier, title, status, and purpose.
-- User-visible behavior, scope, and explicit non-goals.
-- Inputs, outputs, data semantics, and relevant API or UI contracts.
-- Failure, recovery, and operational behavior appropriate to the feature.
-- Numbered acceptance criteria with concrete examples.
-- Linked ADRs, dependencies, and unresolved questions.
-- Implementation status and acceptance evidence.
+## Evidence and progress
 
-## Minimum ADR contents
+Task states are `draft`, `ready`, `in_progress`, `review`, `done`, and `blocked`.
+The coordinator sets `ready` and `done`; worker completion only moves a task to
+`review`. A task marked done identifies its integrated revision and evidence.
+A blocked task records the concrete dependency and next action, not just “blocked”.
 
-- Identifier, title, status, date, and approval reference when accepted.
-- Context: requirements and constraints driving the choice.
-- Decision: what Almanac will do and the boundary of that decision.
-- Alternatives: credible choices and why they were not selected.
-- Consequences: benefits, costs, operational effects, and limitations.
-- Links to affected specs and any superseded decision.
+Keep decisions in ADRs, observable behavior in specs, tasks in task records, and
+milestone progress/evidence in [status.md](status.md). Do not duplicate product
+requirements across these documents. Record durable workflow lessons in AGENTS.md;
+keep transient logs and private investigation material out of repository content.
 
-Create ADRs for choices that shape correctness, public contracts, security,
-operations, dependencies, or several features. Avoid splitting one coherent
-decision into many records just to document every implementation detail.
+The first three bounded F1 tasks form a delegation pilot. Record elapsed time,
+review/correction rounds, repeated failure causes and available usage data. Compare
+accepted results and total rework, not just implementation speed. Decide whether to
+expand delegation after that evidence; no cost savings or quality parity is assumed.
 
-## Delivery and current decisions
+## Delivery and acceptance
 
-The proposed delivery sequence, release boundaries, and verification expectations
-are maintained in [SPEC-0014](specs/0014-delivery-and-verification.md). Current
-acceptance and implementation status is in [status.md](status.md). Review the
-[design guide](review-guide.md) for proposed choices and unresolved product questions.
-
-Keep a single source for detailed product behavior. This document describes the
-working method; it does not override accepted specs or ADRs and does not maintain
-a separate roadmap with conflicting assumptions.
+Follow [SPEC-0014](specs/0014-delivery-and-verification.md) for release sequencing.
+The maintainer accepts new product specs and ADRs; routine work within accepted
+contracts needs no repeated approval. Test or documentation edits do not authorize
+relaxing an accepted behavior. UI work includes real browser checks and the shared
+component catalogue; copied or mocked screenshots cannot establish working behavior.

@@ -50,3 +50,26 @@ and decision register. The completed review clarified mandatory initial-password
 rotation, local users before Google SSO, calculation examples, composite sequencing,
 React/API packaging and measurable UI performance. The encryption library remains a
 candidate selection before encryption implementation. No product tests have run.
+
+## Next work and session handoff
+
+- The initial accepted design is committed as `09cfdfd`.
+- The maintainer selected a primary coordinator and `gpt-6-luna` implementers.
+  Follow AGENTS.md and [ways of working](ways-of-working.md) on every new session.
+- [Testing guidance](testing.md) requires focused iteration, independent coordinator
+  review, a real-stack smoke gate and full boundary/release evidence. Initial duration
+  targets are unmeasured until the harness exists; no passing product tests are claimed.
+- Prepare the F1 plan and first three bounded [tasks](tasks/README.md). No application
+  task is currently assigned, ready or running. No implementation worktree exists here.
+- Resolve explicitly deferred choices before their affected task, including encryption
+  library/key format; verify tool/dependency versions when scaffolding.
+- Documentation validation exists at `python3 scripts/check-docs.py`; build/unit/API/
+  integration/browser entry points still need to be implemented and measured in F1.
+
+## Workflow preparation evidence
+
+The coordinator reviewed the workflow and a fresh `gpt-6-luna` session performed an
+advisory read-only review. Its CI wording finding was corrected: CI gates are required
+future work, not running infrastructure. The documentation checker passed and rejected
+isolated deliberate broken-link, duplicate-criterion and index-status fixtures, then
+passed again after repair. These checks establish documentation tooling behavior only.

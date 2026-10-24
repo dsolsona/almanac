@@ -30,6 +30,29 @@ directories you change, then the relevant specs and ADRs.
   resolve it with the maintainer before making the affected change. Continue
   independent work when possible. Do not treat draft documents as accepted policy.
 
+## Coordinator and implementer workflow
+
+- The primary agent coordinates: prepare bounded tasks, settle interfaces, review
+  actual diffs, integrate results and own verification. Delegate suitable ready
+  implementation tasks to `gpt-6-luna`, explicitly selecting that model. This is
+  standing project guidance for delegation; no repeated permission is needed within
+  the user's authorized task scope. If the model is unavailable, report it; do not
+  silently substitute another model.
+- Start with one implementer in an isolated worktree. Give it a fresh task brief
+  with the base revision, relevant accepted specs/ADRs, edit scope, interfaces,
+  acceptance cases and required checks. Avoid forwarding unrelated chat history.
+  The coordinator may handle tiny or high-risk tasks directly when appropriate.
+- The implementer submits code and evidence for review; it cannot accept its own
+  task, relax checks, change product contracts or start later milestones. After
+  two unsuccessful correction rounds on one issue, take over or reframe the task.
+- On a new session, read [delivery status](docs/status.md), inspect git state and
+  find the active plan/task before dispatch. Do not assume prior processes,
+  worktrees or verification results are still valid.
+- Follow [ways of working](docs/ways-of-working.md), the
+  [task format](docs/tasks/README.md) and [testing strategy](docs/testing.md).
+  Only the coordinator marks integrated, verified tasks done. Parallel work needs
+  independent interfaces, files, databases, ports and artifacts.
+
 ## Guiding principles
 
 - Almanac is a single-tenant application supporting multiple users, services,
@@ -79,7 +102,9 @@ directories you change, then the relevant specs and ADRs.
 | [docs/README.md](docs/README.md) | Documentation map and reading order |
 | [docs/specs/](docs/specs/README.md) | Behavior, scope, contracts, and acceptance criteria |
 | [docs/adr/](docs/adr/README.md) | Consequential architectural and technical decisions |
-| `docs/plans/` | Optional implementation task breakdowns; create when needed |
+| `docs/plans/` | Milestone task dependency plans; create when needed |
+| [docs/tasks/](docs/tasks/README.md) | Bounded implementer briefs and coordinator acceptance |
+| [docs/testing.md](docs/testing.md) | Fast feedback, boundary checks and integration/release gates |
 | [docs/status.md](docs/status.md) | Delivery progress and verification evidence |
 | [docs/review-guide.md](docs/review-guide.md) | Accepted choices, pending amendments and deferred decisions |
 | `web/DESIGN_SYSTEM.md` | Visual rules and shared asset references; establish with the UI |
@@ -89,8 +114,9 @@ and ADRs have independent four-digit sequences and descriptive kebab-case names.
 Refer to them as `SPEC-0001` and `ADR-0001` and include relative Markdown links.
 Plans reference their governing spec; they do not redefine its requirements.
 
-The delivery strategy in [docs/ways-of-working.md](docs/ways-of-working.md) remains
-a proposal. This file and the directory conventions govern current work.
+The coordinator/implementer workflow in [docs/ways-of-working.md](docs/ways-of-working.md)
+and verification gates in [docs/testing.md](docs/testing.md) govern current delivery.
+Product scope and milestone order remain defined by accepted specs and ADRs.
 
 ## Working loop
 
@@ -142,6 +168,13 @@ documentation updates do not require a new spec, ADR, or approval cycle.
 
 ## Evidence and scope
 
+- Keep the edit loop focused and fast; run the integrated-candidate gate before
+  accepting combined work and broader checks at the required milestone/risk boundary.
+  Do not wrap every focused test in a full build/browser matrix. Separate cached
+  setup from execution, and verify the stack matches the candidate revision.
+- Never replace real API/database/agent acceptance evidence with mocked UI checks.
+  Preserve first-attempt failures; do not rerun-to-green, skip expected tests, weaken
+  assertions, disable auth, or increase timeouts to manufacture a passing gate.
 - Verify changed behavior against the spec. Use focused calculation tests,
   integration tests for persistence and collection, and browser checks for user
   flows as applicable. Reused tests must be reviewed against Almanac's contract.
@@ -152,5 +185,6 @@ documentation updates do not require a new spec, ADR, or approval cycle.
 - Keep changes reviewable and confined to the current feature. Do not begin
   later milestones merely because related code is available.
 - Document commands only once they exist and work here. The repository currently
-  has no application build or test commands.
+  has no application build or test commands. Documentation checks are available via
+  `python3 scripts/check-docs.py`.
 - Do not commit, push, or publish unless requested. Respect unrelated local edits.

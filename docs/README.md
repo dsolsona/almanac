@@ -13,7 +13,9 @@ started. For the complete design package, begin with the
 | `plans/` (when needed) | Implementation tasks linked to accepted specifications |
 | [status.md](status.md) | Delivery progress, evidence, and known gaps |
 | [review-guide.md](review-guide.md) | Reading order, accepted choices, and deferred decisions |
-| [ways-of-working.md](ways-of-working.md) | Proposed delivery strategy for discussion |
+| [ways-of-working.md](ways-of-working.md) | Coordinator/Luna implementation and review workflow |
+| [tasks/](tasks/README.md) | Task briefs, handoffs and acceptance evidence |
+| [testing.md](testing.md) | Fast local feedback and integrated/release verification gates |
 
 The design package contains 17 accepted specs and 15 accepted ADRs. Crit review
 `7fd22977b6c0` accepted the main package; `0de0c0e42db6` accepted maintenance exclusions

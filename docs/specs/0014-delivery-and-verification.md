@@ -67,6 +67,15 @@ acceptance criteria. Resolve architectural contradictions before product code.
 Use Modern Go Guidelines for the selected Go version; keep formatting, static analysis,
 generated-code consistency and meaningful tests in the eventual verification workflow.
 
+## Verification workflow
+
+[Testing guidance](../testing.md) maps this feature matrix to focused edit checks,
+independent task review, the integrated-candidate gate and broader release checks.
+F1 delivers runnable focused/full entry points and records setup/build/test timings.
+Preserve real authenticated UI/API/database/agent evidence without making every edit
+run the full browser matrix. Initial time budgets are measurement targets, not a
+claim of tested throughput or authorization to remove acceptance coverage.
+
 ## Verification matrix
 
 | Boundary | Required evidence before release |
