@@ -21,6 +21,6 @@ timer should masquerade as real application performance.
 
 Read [F1-T02](../tasks/F1-T02.md) for exact interfaces, behavior and checks.
 
-- [ ] Implement and verify shared controls with meaningful regression coverage.
-- [ ] Independently review code and inspect real screenshots in both themes.
-- [ ] Integrate, verify and update delivery evidence.
+- [x] Implement and verify shared controls with meaningful regression coverage.
+- [x] Independently review code and inspect real screenshots in both themes.
+- [x] Integrate, verify and update delivery evidence.

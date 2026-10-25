@@ -15,5 +15,7 @@ request for coordinator review. Only integrated, verified work is `done`.
 
 The [visual foundation plan](../plans/0001-visual-foundation.md) is complete.
 [F1-T01](F1-T01.md) establishes the shared controls, local catalogue and focused
-verification harness. Prepare the next bounded task for charts and exact tables;
+verification harness. [F1-T02](F1-T02.md) adds calendars, switches and continuous
+loading feedback; its [plan](../plans/0002-catalogue-controls.md) is also complete.
+Prepare the next bounded task for charts and exact tables;
 the wider F1 milestone remains in progress.

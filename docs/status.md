@@ -4,6 +4,7 @@
 
 The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
+The catalogue also includes a date picker, switches and shared loading feedback.
 No Go module, application binary, database schema, CLI or provider is implemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
@@ -16,7 +17,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01 done; F1 incomplete | Catalogue integrated and verified; charts and product journeys remain |
+| Product implementation | F1-T01–02 done; F1 incomplete | Catalogue and extended controls verified; charts and product journeys remain |
 
 ## Coverage
 
@@ -65,6 +66,8 @@ no Go/API/database or full product-journey tests are claimed.
   [F1-T01](tasks/F1-T01.md) are complete and integrated into `main` through `21505bd`.
   Prepare the next bounded chart/exact-table task. The implementation worktree and
   ignored screenshots/review reports remain available for inspection.
+- [F1-T02](tasks/F1-T02.md) and its [controls plan](plans/0002-catalogue-controls.md)
+  are complete, integrated through `4a1f15b` with independent review and fresh checks.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
@@ -113,3 +116,21 @@ advisory read-only review. Its CI wording finding was corrected: CI gates are re
 future work, not running infrastructure. The documentation checker passed and rejected
 isolated deliberate broken-link, duplicate-criterion and index-status fixtures, then
 passed again after repair. These checks establish documentation tooling behavior only.
+
+## Calendar, switches and loading verification
+
+The coordinator reran `make verify` on integrated main: 20 unit tests, typecheck,
+build and production exclusion/routing checks passed. Full browser verification
+passed 54/54 in 22.2s across both themes at 1440/1024/360px. Independent focused
+mobile-dark controls verification selected 3 tests and passed in 2.5s. Invalid test
+files and unknown browser projects fail before browser startup. No dependencies
+were added; production JavaScript remains 68.92kB gzip.
+
+Visual review covered open calendars and switches on desktop/mobile in both themes.
+Tests cover leap dates, early years, month clamping, date navigation/commit/cancel,
+switch keyboard/disabled/form-reset semantics, explicit demo completion, continuous
+transform animation and static reduced-motion presentation. Initial failures exposed
+an outdated timed-completion assertion and an ambiguous switch locator; both were
+corrected. A failing native-reset regression drove checked-state styling from the
+actual checkbox. Task and whole-branch reviews found no remaining issues. Manual
+screen-reader and Firefox/Safari evidence is still outstanding.
