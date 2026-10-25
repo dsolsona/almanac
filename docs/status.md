@@ -97,6 +97,8 @@ and product-journey acceptance remain outstanding.
   PostgreSQL18.6 passed25 integration tests under race in5.731s. Task and final
   reviews approved the corrected authority and logout boundary cases.
   Login/throttling, first-password rotation and API/CLI/UI remain future work.
+- [F1-T10](tasks/F1-T10.md) is ready: atomic password rotation, session replacement
+  and initial onboarding completion. External password proof and HTTP remain later.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
