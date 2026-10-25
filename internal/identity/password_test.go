@@ -128,6 +128,22 @@ func TestPasswordVerifierRejectsMalformedBeforeDerivation(t *testing.T) {
 	}
 }
 
+func TestValidatePasswordVerifierAcceptsSupportedAndRejectsMalformed(t *testing.T) {
+	h := NewPasswordHasher()
+	valid, err := h.Hash(t.Context(), strings.Repeat("v", 15))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePasswordVerifier(valid); err != nil {
+		t.Fatalf("ValidatePasswordVerifier(valid) = %v", err)
+	}
+	for _, encoded := range []string{"", valid + "$extra", strings.Replace(valid, "p=1", "p=2", 1)} {
+		if err := ValidatePasswordVerifier(encoded); !errors.Is(err, ErrInvalidVerifier) {
+			t.Fatalf("ValidatePasswordVerifier(malformed) = %v, want ErrInvalidVerifier", err)
+		}
+	}
+}
+
 func TestPasswordHasherCancellationAndAdmission(t *testing.T) {
 	h := NewPasswordHasher()
 	ctx, cancel := context.WithCancel(t.Context())

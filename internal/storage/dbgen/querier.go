@@ -6,10 +6,17 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
+	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
+	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
+	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
+	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
 }
 

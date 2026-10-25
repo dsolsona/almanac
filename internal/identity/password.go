@@ -61,6 +61,13 @@ func ValidatePasswordText(password string) error {
 	return nil
 }
 
+// ValidatePasswordVerifier checks that encoded is a supported canonical verifier
+// without deriving a password hash.
+func ValidatePasswordVerifier(encoded string) error {
+	_, _, err := parseVerifier(encoded)
+	return err
+}
+
 // Hash returns a salted Argon2id verifier using the fixed initial cost.
 func (h *PasswordHasher) Hash(ctx context.Context, password string) (string, error) {
 	if err := ValidatePasswordText(password); err != nil {
