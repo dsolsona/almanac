@@ -72,6 +72,11 @@ no Go/API/database or full product-journey tests are claimed.
 - [F1-T03](tasks/F1-T03.md) and its [plan](plans/0003-charts-and-tables.md)
   are complete, integrated through `5ade04d` plus the reviewed test URL correction.
   Continue with the independently runnable Go UI executable foundation.
+- F1-T04 is actively being implemented on local branch `feat/f1-runtime` in
+  `.worktrees/f1-runtime`. Its task brief and plan are on that branch; Go/runtime
+  changes are not accepted or integrated yet. Resume from its task report and
+  plan ledger before dispatching another implementer. Preserve the main catalogue
+  preview on port 5198; the runtime task does not require browser checks.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
