@@ -4,7 +4,8 @@
 
 The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
-The catalogue also includes a date picker, switches and shared loading feedback.
+The catalogue also includes a date picker, switches, shared loading feedback,
+aligned timeline charts and exact-value tables.
 No Go module, application binary, database schema, CLI or provider is implemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
@@ -17,7 +18,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–02 done; F1 incomplete | Catalogue and extended controls verified; charts and product journeys remain |
+| Product implementation | F1-T01–03 done; F1 incomplete | Catalogue, controls and charts verified; product journeys remain |
 
 ## Coverage
 
@@ -68,11 +69,9 @@ no Go/API/database or full product-journey tests are claimed.
   ignored screenshots/review reports remain available for inspection.
 - [F1-T02](tasks/F1-T02.md) and its [controls plan](plans/0002-catalogue-controls.md)
   are complete, integrated through `4a1f15b` with independent review and fresh checks.
-- [F1-T03](tasks/F1-T03.md) is in review on its implementation branch. A failed
-  lazy module request reproduced a blank catalogue; a scoped error boundary now
-  preserves other controls and offers reload recovery. Browser verification uses
-  port 5200 independently of the maintainer preview on 5198. Review corrections
-  and integrated verification remain required before this task is accepted.
+- [F1-T03](tasks/F1-T03.md) and its [plan](plans/0003-charts-and-tables.md)
+  are complete, integrated through `5ade04d` plus the reviewed test URL correction.
+  Continue with the independently runnable Go UI executable foundation.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
@@ -139,3 +138,30 @@ an outdated timed-completion assertion and an ambiguous switch locator; both wer
 corrected. A failing native-reset regression drove checked-state styling from the
 actual checkbox. Task and whole-branch reviews found no remaining issues. Manual
 screen-reader and Firefox/Safari evidence is still outstanding.
+
+## Timeline chart verification
+
+Integrated main passed `make verify`: 28 component tests in 2.05s, typecheck,
+production build and routing/exclusion smoke. Browser verification passed 90/90
+in 57.9s across six viewport/theme projects. Production JavaScript remains
+68.92kB gzip; ECharts and catalogue modules remain development-only. Desktop and
+mobile chart screenshots in both themes were inspected. This is catalogue
+coverage, not the full SLO workload benchmark, real-stack journeys or manual
+screen-reader/Firefox/Safari acceptance.
+
+The reported blank catalogue was reproduced by failing the lazy chart import.
+A scoped boundary preserves other controls and offers reload recovery. Preview
+5198 now remains separate from browser5200 and production-smoke5199. Independent
+review also drove unique internal chart IDs, exact page-row validation, CSS-token
+consumption, accessible chart-label contrast, bounded gap expansion with a
+subprocess-protected hang regression, and unique table heading IDs.
+
+First failures were retained: initial chart layout/hover selectors and catalogue
+readiness needed corrections; the bounded regression harness required a Node
+builtin access adjustment; two simultaneous browser invocations conflicted and
+were subsequently sequenced. The first integrated matrix passed 89/90: a custom
+touch context still used preview5198 during its restart. Its URL now inherits the
+test configuration; independent review approved the fix before the passing gate.
+The original trace is retained locally. Expected React console errors in the
+deliberately failed-import cases are caught by the boundary; normal navigation
+tests assert no uncaught page errors or failed requests.

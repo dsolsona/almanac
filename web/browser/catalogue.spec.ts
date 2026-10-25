@@ -101,11 +101,11 @@ test('catalogue is dev-only and unsupported development paths are honest', async
   await expect(page.getByText(/Clear signals/)).toHaveCount(0);
 });
 
-test('coarse pointer controls use the 44px target size', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 360, height: 800 }, hasTouch: true });
+test('coarse pointer controls use the 44px target size', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, viewport: { width: 360, height: 800 }, hasTouch: true });
   try {
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:5198/design-system');
+    await page.goto('/design-system');
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     await expect(page.locator('.ui-button').first()).toHaveCSS('min-height', '44px');
     await expect(page.locator('.ui-control').first()).toHaveCSS('min-height', '44px');
