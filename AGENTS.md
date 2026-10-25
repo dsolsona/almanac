@@ -77,8 +77,8 @@ directories you change, then the relevant specs and ADRs.
   UI components in `web/src/components/ui/`, chart components in
   `web/src/components/charts/`, and design guidance in `web/DESIGN_SYSTEM.md`.
   The catalogue should demonstrate those actual components and their states;
-  feature screens should reuse them. Shared controls and the catalogue exist;
-  chart components will be added in a later task.
+  feature screens should reuse them. Shared controls, timeline charts, exact-value
+  tables and their catalogue examples exist.
   Backend architecture remains subject to explicit decisions.
 - Keep maintenance exclusions, notification silences and graph annotations distinct.
   Maintenance omits eligible measurements without deleting them; silences affect
