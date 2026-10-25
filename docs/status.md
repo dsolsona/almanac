@@ -21,7 +21,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–06 done; F1 incomplete | Catalogue, UI-only runtime, PostgreSQL upgrades and identity primitives verified; authentication flows and product journeys remain |
+| Product implementation | F1-T01–07 done; F1 incomplete | Catalogue, UI-only runtime, PostgreSQL upgrades, identity primitives and initial-owner persistence verified; authentication flows and product journeys remain |
 
 ## Coverage
 
@@ -85,8 +85,9 @@ and product-journey acceptance remain outstanding.
 - [F1-T06](tasks/F1-T06.md) is complete: reviewed internal password/session
   primitives at `334fb33`, with merged foundation fixes. It does not expose login
   or complete onboarding. Next is transactional initial-owner persistence.
-- [F1-T07](tasks/F1-T07.md) is ready: atomic initial-owner persistence, stacked on
-  the identity-primitives increment. Authentication endpoints remain subsequent work.
+- [F1-T07](tasks/F1-T07.md) is complete at `1f0bf0c`: atomic initial-owner persistence,
+  stacked on the identity-primitives increment. Independent reviews and 14 real
+  PostgreSQL integration checks passed; authentication endpoints remain subsequent work.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

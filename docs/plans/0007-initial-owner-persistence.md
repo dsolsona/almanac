@@ -28,8 +28,8 @@ Approved command families only; coordinator-owned Git; no PR merge.
 
 ## Task 1: Atomic owner storage
 
-- [ ] Add failing strict-verifier and PostgreSQL acceptance cases from F1-T07.
-- [ ] Add immutable schema, generated queries and bounded transactional operations.
-- [ ] Verify upgrade-from-v1, failure rollback, cancellation and repeated calls.
-- [ ] Run focused checks and isolated PostgreSQL integration; preserve evidence.
-- [ ] Review actual diff, run combined checks and publish against the identity PR.
+- [x] Add failing strict-verifier and PostgreSQL acceptance cases from F1-T07.
+- [x] Add immutable schema, generated queries and bounded transactional operations.
+- [x] Verify upgrade-from-v1, failure rollback, cancellation and repeated calls.
+- [x] Run focused checks and isolated PostgreSQL integration; preserve evidence.
+- [x] Review actual diff and run combined checks; ready for the stacked PR.
