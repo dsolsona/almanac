@@ -27,8 +27,8 @@ locks or public authentication routes; no new dependencies or approval requests.
 
 ## Task 1: Session persistence
 
-- [ ] Add schema3 and failing real-database acceptance cases in F1-T09.
-- [ ] Implement generated lookup/issue/authenticate/revoke operations and safe errors.
-- [ ] Verify expiry/revocation/concurrency/audit rollback and prior-schema upgrade.
-- [ ] Run focused/integration/race and combined gates; independently review.
+- [x] Add schema3 and failing real-database acceptance cases in F1-T09.
+- [x] Implement generated lookup/issue/authenticate/revoke operations and safe errors.
+- [x] Verify expiry/revocation/concurrency/audit rollback and prior-schema upgrade.
+- [x] Run focused/integration/race and combined gates; independently review.
 - [ ] Record acceptance and open the next stacked PR.

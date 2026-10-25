@@ -6,7 +6,10 @@
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
 - Implementation: in progress
 - Related ADRs: [ADR-0004](../adr/0004-identity-and-access.md) (accepted)
-- Plan: [Identity primitives](../plans/0006-identity-primitives.md)
+- Plans: [Identity primitives](../plans/0006-identity-primitives.md),
+  [initial owner](../plans/0007-initial-owner-persistence.md),
+  [offline password policy](../plans/0008-offline-password-policy.md),
+  [persistent sessions](../plans/0009-persistent-local-sessions.md)
 - Supersedes / superseded by: none
 
 ## Purpose
@@ -405,6 +408,12 @@ not completion of the authentication acceptance criteria. The remaining criteria
 require concurrent database tests, a fake OIDC
 provider for the later Google increment, controlled clocks, fault injection, secret-disclosure checks, and browser
 checks in both themes/mobile layouts. Document inspection is not security validation.
+
+[F1-T07](../tasks/F1-T07.md) verifies atomic initial-owner storage and audit with
+real concurrent PostgreSQL tests. [F1-T08](../tasks/F1-T08.md) verifies offline
+common-password screening. Session persistence is verified under
+[F1-T09](../tasks/F1-T09.md). These internal operations do not yet supply login,
+startup provisioning, password rotation, throttling, cookies/CSRF or UI/CLI journeys.
 
 ## Change notes
 

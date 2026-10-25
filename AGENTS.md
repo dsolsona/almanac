@@ -55,6 +55,9 @@ directories you change, then the relevant specs and ADRs.
 - On a new session, read [delivery status](docs/status.md), inspect git state and
   find the active plan/task before dispatch. Do not assume prior processes,
   worktrees or verification results are still valid.
+- During stacked delivery, also inspect open PR bases/heads and existing worktree
+  branches. The default branch's status document can lag verified, unmerged work;
+  read the active branch's task and evidence before redispatching anything.
 - Follow [ways of working](docs/ways-of-working.md), the
   [task format](docs/tasks/README.md) and [testing strategy](docs/testing.md).
   Only the coordinator marks integrated, verified tasks done. Parallel work needs
