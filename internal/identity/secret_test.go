@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -40,9 +41,28 @@ func TestSessionSecretVerifierKnownVectorAndMalformedInputs(t *testing.T) {
 	if err != nil || got != want {
 		t.Fatalf("known vector = %x, %v", got, err)
 	}
-	for _, value := range []string{known + "=", " " + known, known + "\n", "!" + known[1:], known[:42], known + "x", string(make([]byte, 1025))} {
-		if _, err := SessionSecretVerifier(value); !errors.Is(err, ErrInvalidSecret) {
-			t.Fatalf("SessionSecretVerifier malformed = %v", err)
-		}
+	urlAlphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	noncanonicalTrailingBits := known[:len(known)-1] + string(urlAlphabet[strings.IndexByte(urlAlphabet, known[len(known)-1])^1])
+	malformed := []struct {
+		name  string
+		value string
+	}{
+		{name: "padding", value: known + "="},
+		{name: "leading whitespace", value: " " + known},
+		{name: "trailing newline", value: known + "\n"},
+		{name: "embedded newline", value: known[:10] + "\n" + known[11:]},
+		{name: "embedded carriage return", value: known[:10] + "\r" + known[11:]},
+		{name: "invalid alphabet", value: "!" + known[1:]},
+		{name: "wrong decoded length", value: known[:42]},
+		{name: "too long", value: known + "x"},
+		{name: "oversized", value: string(make([]byte, 1025))},
+		{name: "nonzero trailing bits", value: noncanonicalTrailingBits},
+	}
+	for _, tc := range malformed {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := SessionSecretVerifier(tc.value); !errors.Is(err, ErrInvalidSecret) {
+				t.Fatalf("SessionSecretVerifier malformed = %v", err)
+			}
+		})
 	}
 }

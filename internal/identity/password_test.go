@@ -2,9 +2,10 @@ package identity
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
-	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -85,21 +86,42 @@ func TestPasswordHashVerifyAndEncoding(t *testing.T) {
 
 func TestPasswordVerifierRejectsMalformedBeforeDerivation(t *testing.T) {
 	h := NewPasswordHasher()
-	for _, verifier := range []string{
-		"", strings.Repeat("x", 1025), "$argon2id$v=19$m=19456,t=2,p=1$!$!",
-		"$argon2id$v=19$m=19456,t=2,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA=$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$extra",
-	} {
-		if _, err := h.Verify(t.Context(), "password", verifier); !errors.Is(err, ErrInvalidVerifier) {
-			t.Fatalf("Verify malformed = %v, want ErrInvalidVerifier", err)
-		}
+	valid, err := h.Hash(t.Context(), strings.Repeat("x", 15))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(valid, "$")
+	standardAlphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	noncanonicalSalt := parts[4][:len(parts[4])-1] + string(standardAlphabet[strings.IndexByte(standardAlphabet, parts[4][len(parts[4])-1])^1])
+	noncanonicalKey := parts[5][:len(parts[5])-1] + string(standardAlphabet[strings.IndexByte(standardAlphabet, parts[5][len(parts[5])-1])^1])
+	wrongSaltSize := base64.RawStdEncoding.EncodeToString(make([]byte, 15))
+	wrongKeySize := base64.RawStdEncoding.EncodeToString(make([]byte, 31))
+	malformed := []struct {
+		name string
+		text string
+	}{
+		{name: "empty", text: ""},
+		{name: "oversized", text: strings.Repeat("x", 1025)},
+		{name: "invalid base64", text: "$argon2id$v=19$m=19456,t=2,p=1$!$!"},
+		{name: "changed parallelism", text: strings.Replace(valid, "p=1", "p=2", 1)},
+		{name: "changed version", text: strings.Replace(valid, "v=19", "v=20", 1)},
+		{name: "changed algorithm", text: strings.Replace(valid, "argon2id", "argon2i", 1)},
+		{name: "padded base64", text: strings.Join([]string{parts[0], parts[1], parts[2], parts[3], parts[4] + "=", parts[5]}, "$")},
+		{name: "extra field", text: valid + "$extra"},
+		{name: "nonzero salt trailing bits", text: strings.Join([]string{parts[0], parts[1], parts[2], parts[3], noncanonicalSalt, parts[5]}, "$")},
+		{name: "nonzero key trailing bits", text: strings.Join([]string{parts[0], parts[1], parts[2], parts[3], parts[4], noncanonicalKey}, "$")},
+		{name: "embedded newline", text: strings.Join([]string{parts[0], parts[1], parts[2], parts[3], "\n" + parts[4][1:], parts[5]}, "$")},
+		{name: "wrong salt length", text: strings.Join([]string{parts[0], parts[1], parts[2], parts[3], wrongSaltSize, parts[5]}, "$")},
+		{name: "wrong key length", text: strings.Join([]string{parts[0], parts[1], parts[2], parts[3], parts[4], wrongKeySize}, "$")},
+	}
+	for _, tc := range malformed {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := h.Verify(t.Context(), "password", tc.text); !errors.Is(err, ErrInvalidVerifier) {
+				t.Fatalf("Verify malformed = %v, want ErrInvalidVerifier", err)
+			}
+		})
 	}
 	for _, candidate := range []string{strings.Repeat("x", 129), strings.Repeat("😀", 129), "\xff"} {
-		valid, err := h.Hash(t.Context(), strings.Repeat("x", 15))
-		if err != nil {
-			t.Fatal(err)
-		}
 		if ok, err := h.Verify(t.Context(), candidate, valid); ok || !errors.Is(err, ErrInvalidPassword) {
 			t.Fatalf("Verify invalid candidate = %t, %v", ok, err)
 		}
@@ -118,6 +140,11 @@ func TestPasswordHasherCancellationAndAdmission(t *testing.T) {
 	// queued without relying on a sleep or racing Argon2 start notifications.
 	h.slots <- struct{}{}
 	h.slots <- struct{}{}
+	t.Cleanup(func() {
+		for len(h.slots) > 0 {
+			<-h.slots
+		}
+	})
 	waitCtx, waitCancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer waitCancel()
 	if _, err := h.Hash(waitCtx, strings.Repeat("r", 15)); !errors.Is(err, context.DeadlineExceeded) {
@@ -128,33 +155,63 @@ func TestPasswordHasherCancellationAndAdmission(t *testing.T) {
 	if _, err := h.Hash(t.Context(), strings.Repeat("s", 15)); err != nil {
 		t.Fatalf("Hash after release = %v", err)
 	}
+	if err := h.acquire(t.Context()); err != nil {
+		t.Fatalf("acquire after queued cancellation = %v", err)
+	}
+	h.release()
+}
 
-	deriveCtx, deriveCancel := context.WithCancel(t.Context())
-	defer deriveCancel()
-	result := make(chan error, 1)
-	h.slots <- struct{}{}
-	go func() {
-		_, err := h.Hash(deriveCtx, strings.Repeat("c", 15))
-		result <- err
-	}()
-	<-h.slots // Let the call acquire admission before cancellation.
-	deadline := time.Now().Add(5 * time.Second)
-	for len(h.slots) == 0 && time.Now().Before(deadline) {
-		runtime.Gosched()
+func TestPasswordHasherChecksCancellationAfterDerivation(t *testing.T) {
+	h := NewPasswordHasher()
+	password := strings.Repeat("c", 15)
+	verifier, err := h.Hash(t.Context(), password)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(h.slots) != 1 {
-		t.Fatal("hash did not acquire a work slot within deadline")
+	for _, tc := range []struct {
+		name string
+		call func(context.Context) error
+	}{
+		{name: "Hash", call: func(ctx context.Context) error {
+			_, err := h.Hash(ctx, password)
+			return err
+		}},
+		{name: "Verify", call: func(ctx context.Context) error {
+			_, err := h.Verify(ctx, password, verifier)
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			baseCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			t.Cleanup(cancel)
+			ctx := &cancelAtErrContext{Context: baseCtx, cancel: cancel, cancelAt: 3}
+			if err := tc.call(ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("operation after derivation = %v, want context cancellation", err)
+			}
+			if len(h.slots) != 0 {
+				t.Fatal("canceled derivation leaked a work slot")
+			}
+		})
 	}
-	deriveCancel()
-	if err := <-result; !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled derivation = %v", err)
+	if _, err := h.Hash(t.Context(), password); err != nil {
+		t.Fatalf("Hash after canceled derivations = %v", err)
 	}
-	if len(h.slots) != 0 {
-		t.Fatal("canceled derivation leaked a work slot")
+}
+
+// cancelAtErrContext cancels an underlying bounded context at a selected Err
+// check. The third Hash and Verify checks follow synchronous Argon2 work.
+type cancelAtErrContext struct {
+	context.Context
+	cancel   context.CancelFunc
+	calls    atomic.Int32
+	cancelAt int32
+}
+
+func (ctx *cancelAtErrContext) Err() error {
+	if ctx.calls.Add(1) == ctx.cancelAt {
+		ctx.cancel()
 	}
-	if _, err := h.Hash(t.Context(), strings.Repeat("d", 15)); err != nil {
-		t.Fatalf("Hash after canceled derivation = %v", err)
-	}
+	return ctx.Context.Err()
 }
 
 func BenchmarkPasswordHash(b *testing.B) {
