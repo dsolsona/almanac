@@ -31,3 +31,11 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Isolated implementation and local verification artifacts
+.worktrees/
+.local/
+node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
