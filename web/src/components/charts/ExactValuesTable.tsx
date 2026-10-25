@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Button } from '../ui/Button.tsx';
 import type { Coverage } from './timelineModel.ts';
 
@@ -5,6 +6,7 @@ export type ExactValueRow = { timestamp: string; lane: string; series: string; u
 export function ExactValuesTable({ rows, page, totalRows, onPageChange }: {
   rows: ExactValueRow[]; page: number; totalRows: number; onPageChange: (page: number) => void;
 }) {
+  const titleId = useId();
   const validTotal = Number.isInteger(totalRows) && totalRows >= 0;
   const pageCount = validTotal ? Math.max(1, Math.ceil(totalRows / 50)) : 1;
   const error = rows.length > 50 ? 'Exact-value pages cannot contain more than 50 rows.'
@@ -13,11 +15,11 @@ export function ExactValuesTable({ rows, page, totalRows, onPageChange }: {
         : rows.length !== (totalRows === 0 ? 0 : Math.min(50, totalRows - (page - 1) * 50))
           ? `Expected ${totalRows === 0 ? 0 : Math.min(50, totalRows - (page - 1) * 50)} rows for page ${page}, received ${rows.length}.`
           : null;
-  if (error) return <section className="exact-values" aria-labelledby="exact-values-title"><h2 id="exact-values-title">Exact values</h2><p role="alert">Table unavailable: {error}</p></section>;
+  if (error) return <section className="exact-values" aria-labelledby={titleId}><h2 id={titleId}>Exact values</h2><p role="alert">Table unavailable: {error}</p></section>;
   const first = totalRows === 0 ? 0 : (page - 1) * 50 + 1;
   const last = Math.min(page * 50, totalRows);
-  return <section className="exact-values" aria-labelledby="exact-values-title">
-    <h2 id="exact-values-title">Exact values</h2>
+  return <section className="exact-values" aria-labelledby={titleId}>
+    <h2 id={titleId}>Exact values</h2>
     <div className="exact-values__scroll" role="region" aria-label="Exact timeline values" tabIndex={0}>
       <table>
         <caption>Exact timeline values for the displayed range</caption>

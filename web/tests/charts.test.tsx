@@ -6,6 +6,8 @@ import { afterEach } from 'vitest';
 import { ExactValuesTable } from '../src/components/charts/ExactValuesTable.tsx';
 
 afterEach(cleanup);
+type SpawnSync = (command: string, args: string[], options: { encoding: 'utf8'; timeout: number }) => { error?: Error; status: number | null; stdout: string };
+const nodeProcess = (globalThis as unknown as { process: { execPath: string; getBuiltinModule: (name: string) => unknown } }).process;
 
 const chart: TimelineChart = {
   title: 'Synthetic', summary: 'Illustrative samples only', start: '2026-01-01T00:00:00Z', end: '2026-01-01T00:04:00Z', stepMs: 60_000,
@@ -15,7 +17,7 @@ const chart: TimelineChart = {
     { timestamp: '2026-01-01T00:03:00Z', value: '0.000000', coverage: 'partial' },
   ] }] }],
 };
-const palette = { axis: '#111111', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
+const palette = { axis: '#111111', labelText: '#444444', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
 
 describe('timeline model and options', () => {
   it('inserts nulls for absent steps and retains missing, zero and partial semantics', () => {
@@ -37,6 +39,14 @@ describe('timeline model and options', () => {
     expect(() => validateTimeline({ ...chart, lanes: [{ ...chart.lanes[0]!, series: [{ ...series, points: [{ ...series.points[1]!, coverage: 'zero-traffic', value: '0' }] }] }] })).toThrow(/must not have a value/);
   });
 
+  it('rejects a step that cannot advance timestamps near the end of the supported UTC range', async () => {
+    const { spawnSync } = nodeProcess.getBuiltinModule('node:child_process') as { spawnSync: SpawnSync };
+    const result = spawnSync(nodeProcess.execPath, ['tests/helpers/nonadvancing-gap-probe.mjs'], { encoding: 'utf8', timeout: 1_500 });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/expected gap timestamp cannot advance/i);
+  });
+
   it('builds aligned lanes with one labelled bottom time axis and linked crosshair', () => {
     const fourLanes = { ...chart, lanes: Array.from({ length: 4 }, (_, index) => ({ ...chart.lanes[0]!, id: `lane-${index}` })) };
     const option = buildTimelineOption(fourLanes, validateTimeline(fourLanes), palette);
@@ -47,6 +57,8 @@ describe('timeline model and options', () => {
     expect(axes.map((axis) => (axis as { gridIndex?: number }).gridIndex)).toEqual([0, 1, 2, 3]);
     expect(axes.map((axis) => (axis as { axisLabel?: { show?: boolean } }).axisLabel?.show)).toEqual([false, false, false, true]);
     expect(yAxes.map((axis) => (axis as { splitNumber?: number }).splitNumber)).toEqual([2, 2, 2, 2]);
+    expect(yAxes.map((axis) => (axis as { axisLabel?: { color?: string }; nameTextStyle?: { color?: string } }).axisLabel?.color)).toEqual(Array(4).fill(palette.labelText));
+    expect(yAxes.map((axis) => (axis as { nameTextStyle?: { color?: string } }).nameTextStyle?.color)).toEqual(Array(4).fill(palette.labelText));
     expect(yAxes.map((axis) => (axis as { axisLabel?: { showMaxLabel?: boolean } }).axisLabel?.showMaxLabel)).toEqual([true, true, true, true]);
     expect(yAxes.map((axis) => (axis as { axisLabel?: { showMinLabel?: boolean } }).axisLabel?.showMinLabel)).toEqual([true, true, true, true]);
     expect(option.axisPointer).toMatchObject({ link: [{ xAxisIndex: 'all' }] });
@@ -78,6 +90,16 @@ describe('timeline model and options', () => {
     }));
     render(<ExactValuesTable rows={rows} page={2} totalRows={60} onPageChange={() => undefined} />);
     expect(screen.getByRole('alert')).toHaveTextContent(/Expected 10 rows/);
+  });
+
+  it('gives multiple exact-value tables unique accessible heading IDs', () => {
+    const rows = [{ timestamp: '2026-01-01T00:00:00Z', lane: 'SLI', series: 'Example', unit: '%', value: '1.000000', coverage: 'complete' as const }];
+    render(<><ExactValuesTable rows={rows} page={1} totalRows={1} onPageChange={() => undefined} /><ExactValuesTable rows={rows} page={1} totalRows={1} onPageChange={() => undefined} /></>);
+    const headings = screen.getAllByRole('heading', { name: 'Exact values' });
+    const ids = headings.map((heading) => heading.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(headings.map((heading) => heading.parentElement?.getAttribute('aria-labelledby'))).toEqual(ids);
   });
 
   it('pages exact rows with bounded controls and rejects oversized or invalid pages', () => {

@@ -3,6 +3,7 @@ import type { TimelineChart, ValidatedTimeline } from './timelineModel.ts';
 
 export type TimelinePalette = {
   axis: string;
+  labelText: string;
   grid: string;
   crosshair: string;
   series: readonly [string, string];
@@ -25,13 +26,13 @@ function coverageLabel(coverage: string): string {
 }
 
 export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeline, palette: TimelinePalette): EChartsOption {
-  const { axis, grid, crosshair, series: colors } = palette;
+  const { axis, grid, labelText, crosshair, series: colors } = palette;
   const lanes = chart.lanes.length;
   const grids = chart.lanes.map((_, index) => ({ left: 66, right: 20, top: `${6 + index * 22}%`, height: '16%', containLabel: false }));
   const xAxis = chart.lanes.map((_, index) => ({
     type: 'time' as const, gridIndex: index, min: Date.parse(chart.start), max: Date.parse(chart.end),
     axisLine: { lineStyle: { color: axis } }, axisTick: { show: index === lanes - 1 },
-    axisLabel: { show: index === lanes - 1, color: axis, hideOverlap: true, formatter: (value: number) => {
+    axisLabel: { show: index === lanes - 1, color: labelText, hideOverlap: true, formatter: (value: number) => {
       const date = new Date(value);
       const short = Date.parse(chart.end) - Date.parse(chart.start) < 86_400_000;
       return short ? `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')} UTC` : `${date.toISOString().slice(0, 10)} UTC`;
@@ -39,8 +40,8 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   }));
   const yAxis = chart.lanes.map((lane, index) => ({
     type: 'value' as const, gridIndex: index, name: `${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
-    nameGap: 46, nameTextStyle: { color: axis, fontSize: 11 }, axisLabel: {
-      color: axis, fontSize: 10, margin: 4, hideOverlap: true,
+    nameGap: 46, nameTextStyle: { color: labelText, fontSize: 11 }, axisLabel: {
+      color: labelText, fontSize: 10, margin: 4, hideOverlap: true,
       showMaxLabel: true, showMinLabel: true,
     }, splitNumber: 2,
     axisLine: { show: true, lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } },

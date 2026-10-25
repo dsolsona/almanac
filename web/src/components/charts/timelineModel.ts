@@ -26,6 +26,7 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
   chart.lanes.forEach((lane, laneIndex) => {
     if (lane.series.length < 1 || lane.series.length > 2) throw new Error(`Lane ${lane.label} must have between 1 and 2 series`);
     lane.series.forEach((item, seriesIndex) => {
+      if (item.points.length > 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);
       let previous = -Infinity;
       const points: PlotPoint[] = [];
       const partial: PlotPoint[] = [];
@@ -51,26 +52,35 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
         if (point.coverage === 'partial') partial.push(plot);
         tooltipData.push(point);
       }
-      const gapCount = points.reduce((count, point, index) => {
-        const prior = points[index - 1];
-        if (!prior) return count;
-        const nextExpected = start + (Math.floor((prior.timestamp - start) / chart.stepMs) + 1) * chart.stepMs;
-        return count + Math.max(0, Math.ceil((point.timestamp - nextExpected) / chart.stepMs));
-      }, 0);
-      if (points.length + gapCount > 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);
       const expanded: PlotPoint[] = [];
       for (let index = 0; index < points.length; index += 1) {
         const point = points[index]!;
         const prior = points[index - 1];
         if (prior) {
-          const firstExpected = start + (Math.floor((prior.timestamp - start) / chart.stepMs) + 1) * chart.stepMs;
-          for (let gap = firstExpected; gap < point.timestamp; gap += chart.stepMs) {
-            expanded.push({ timestamp: gap, value: null, exact: null, coverage: 'missing' });
+          let tickIndex = Math.floor((prior.timestamp - start) / chart.stepMs) + 1;
+          let gapTime = start + tickIndex * chart.stepMs;
+          if (!Number.isFinite(gapTime)) throw new Error(`Expected gap timestamp cannot be represented for series ${item.label}`);
+          if (gapTime < point.timestamp && gapTime <= prior.timestamp) {
+            throw new Error(`Expected gap timestamp cannot advance at the configured step for series ${item.label}`);
+          }
+          while (gapTime < point.timestamp) {
+            if (gapTime <= (expanded.at(-1)?.timestamp ?? prior.timestamp)) {
+              throw new Error(`Expected gap timestamp cannot advance at the configured step for series ${item.label}`);
+            }
+            if (expanded.length >= 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);
+            expanded.push({ timestamp: gapTime, value: null, exact: null, coverage: 'missing' });
+            tickIndex += 1;
+            const nextGapTime = start + tickIndex * chart.stepMs;
+            if (Number.isNaN(nextGapTime)) throw new Error(`Expected gap timestamp cannot be represented for series ${item.label}`);
+            if (nextGapTime < point.timestamp && nextGapTime <= gapTime) {
+              throw new Error(`Expected gap timestamp cannot advance at the configured step for series ${item.label}`);
+            }
+            gapTime = nextGapTime;
           }
         }
+        if (expanded.length >= 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);
         expanded.push(point);
       }
-      if (expanded.length > 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);
       series.push({ lane: laneIndex, seriesIndex, id: item.id, label: item.label, data: expanded, partial, tooltipData });
     });
   });

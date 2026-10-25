@@ -73,6 +73,35 @@ test('chart series colors follow the resolved semantic CSS token', async ({ page
   await expect.poll(() => svg.locator('path[stroke="#123456"]').count()).toBeGreaterThan(0);
 });
 
+test('rendered axis labels meet text contrast in light and dark themes', async ({ page }) => {
+  await page.goto('/design-system');
+  await page.getByRole('button', { name: 'Charts' }).click();
+  const svg = page.locator('.timeline-chart__plot svg');
+  await expect(svg).toBeVisible();
+  for (const dark of [false, true]) {
+    await page.evaluate((useDark) => document.documentElement.classList.toggle('dark', useDark), dark);
+    const contrast = await page.evaluate(() => {
+      const label = [...document.querySelectorAll('.timeline-chart__plot svg text')].find((element) => element.textContent?.trim() === 'SLI (%)');
+      const panel = document.querySelector('.timeline-chart');
+      if (!label || !panel) return null;
+      const rgb = (color: string) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      const luminance = (color: string) => {
+        const [red, green, blue] = rgb(color).map((value) => {
+          const channel = value / 255;
+          return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+      };
+      const foreground = luminance(getComputedStyle(label).fill);
+      const background = luminance(getComputedStyle(panel).backgroundColor);
+      const [lighter, darker] = [foreground, background].sort((a, b) => b - a);
+      return (lighter! + 0.05) / (darker! + 0.05);
+    });
+    expect(contrast, `${dark ? 'dark' : 'light'} axis label contrast`).not.toBeNull();
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test('reopening charts across navigation and theme changes leaves the page error-free', async ({ page }) => {
   const browserErrors: string[] = [];
   page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.stack ?? error.message}`));

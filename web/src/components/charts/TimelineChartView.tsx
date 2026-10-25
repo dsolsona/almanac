@@ -14,7 +14,7 @@ function readTimelinePalette(): TimelinePalette {
   const style = getComputedStyle(document.documentElement);
   const color = (token: string) => style.getPropertyValue(token).trim();
   return {
-    axis: color('--axis'), grid: color('--grid'), crosshair: color('--crosshair'),
+    axis: color('--axis'), labelText: color('--text-3'), grid: color('--grid'), crosshair: color('--crosshair'),
     series: [color('--s1'), color('--s2')] as [string, string], surface: color('--surface'),
     surfaceBorder: color('--border'), text: color('--text'),
   };
