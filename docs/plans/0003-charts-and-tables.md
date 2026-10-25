@@ -22,6 +22,6 @@ non-chart routes. Fail visibly for unsupported large input instead of truncating
 
 Read [F1-T03](../tasks/F1-T03.md) for contracts and acceptance checks.
 
-- [ ] Implement shared chart/table components and lazy catalogue examples.
-- [ ] Verify units/browser/bundle exclusion and inspect screenshots.
-- [ ] Review, integrate and record actual evidence and remaining scope.
+- [x] Implement shared chart/table components and lazy catalogue examples.
+- [x] Verify units/browser/bundle exclusion and inspect screenshots.
+- [x] Review, integrate and record actual evidence and remaining scope.

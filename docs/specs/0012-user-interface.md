@@ -192,8 +192,10 @@ view. Error pages preserve navigation and a safe retry path.
 ## Dependencies and open questions
 
 Domain specs govern data and permissions. The shared control catalogue and
-[design guide](../../web/DESIGN_SYSTEM.md) exist. Charts, exact tables and feature
-journeys remain unimplemented.
+[design guide](../../web/DESIGN_SYSTEM.md) exist. Shared timeline charts and exact
+tables are implemented in [F1-T03](../tasks/F1-T03.md) using illustrative catalogue
+data. Feature journeys, event overlays and the full SLO workload benchmark remain
+unimplemented.
 
 <!-- REVIEW-U09: Confirm the proposed bundle, load and interaction budgets and benchmark fixture. Fast, lightweight SLO/chart interaction is required; these initial numeric thresholds need implementation evidence. -->
 <!-- REVIEW-U08: Accept hierarchical folders, one folder per SLO, stable-ID moves and nonempty deletion protection? This is navigation organization, not a separate authorization hierarchy. -->
