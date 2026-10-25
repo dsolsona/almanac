@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/storage"
 )
 
 func TestResolveDatabaseURLUsesExplicitFileThenEnvironmentPrecedence(t *testing.T) {
@@ -163,6 +166,36 @@ func TestDBUpgradeJSONFlagAndPositionalFailuresRemainJSON(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWriteUpgradeResultReturnsExitOneWhenHumanOutputFails(t *testing.T) {
+	var stderr bytes.Buffer
+	code := writeUpgradeResult(alwaysFailWriter{}, &stderr, false, storage.UpgradeResult{DatabaseSchemaVersion: 1, Applied: 1})
+	if code != 1 || !strings.Contains(stderr.String(), "output failed") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestWriteUpgradeResultReturnsExitOneWhenJSONNewlineFails(t *testing.T) {
+	var stderr bytes.Buffer
+	stdout := failOnNewlineWriter{}
+	code := writeUpgradeResult(&stdout, &stderr, true, storage.UpgradeResult{DatabaseSchemaVersion: 1, Applied: 1})
+	if code != 1 || !strings.Contains(stderr.String(), "output failed") {
+		t.Fatalf("code=%d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+}
+
+type alwaysFailWriter struct{}
+
+func (alwaysFailWriter) Write([]byte) (int, error) { return 0, errors.New("writer failed") }
+
+type failOnNewlineWriter struct{ bytes.Buffer }
+
+func (w *failOnNewlineWriter) Write(data []byte) (int, error) {
+	if bytes.Equal(data, []byte("\n")) {
+		return 0, errors.New("newline write failed")
+	}
+	return w.Buffer.Write(data)
 }
 
 func protectedURLFile(t *testing.T, value string) string {

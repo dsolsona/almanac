@@ -91,17 +91,31 @@ func dbUpgrade(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			return writeUpgradeError(stdout, stderr, *output == "json", 1, "database_failure", "database upgrade failed")
 		}
 	}
-	if *output == "json" {
+	return writeUpgradeResult(stdout, stderr, *output == "json", result)
+}
+
+func writeUpgradeResult(stdout, stderr io.Writer, outputJSON bool, result storage.UpgradeResult) int {
+	if outputJSON {
 		response := dbUpgradeJSON{SchemaVersion: 1, Operation: "db.upgrade", DatabaseSchemaVersion: result.DatabaseSchemaVersion, Applied: result.Applied}
 		if err := json.MarshalWrite(stdout, response); err != nil {
-			fmt.Fprintln(stderr, "db upgrade: output failed")
+			writeOutputFailure(stderr)
 			return 1
 		}
-		fmt.Fprintln(stdout)
+		if _, err := fmt.Fprintln(stdout); err != nil {
+			writeOutputFailure(stderr)
+			return 1
+		}
 		return 0
 	}
-	fmt.Fprintf(stdout, "database schema version %d; applied %d migrations\n", result.DatabaseSchemaVersion, result.Applied)
+	if _, err := fmt.Fprintf(stdout, "database schema version %d; applied %d migrations\n", result.DatabaseSchemaVersion, result.Applied); err != nil {
+		writeOutputFailure(stderr)
+		return 1
+	}
 	return 0
+}
+
+func writeOutputFailure(stderr io.Writer) {
+	_, _ = fmt.Fprintln(stderr, "db upgrade: output failed")
 }
 
 func writeUpgradeError(stdout, stderr io.Writer, outputJSON bool, code int, errorCode, message string) int {
