@@ -4,7 +4,7 @@ export type TimelineSeries = { id: string; label: string; points: TimelinePoint[
 export type TimelineLane = { id: string; label: string; unit: string; series: TimelineSeries[] };
 export type TimelineChart = { title: string; summary: string; start: string; end: string; stepMs: number; lanes: TimelineLane[] };
 export type PlotPoint = { timestamp: number; value: number | null; exact: string | null; coverage: Coverage };
-export type PlotSeries = { lane: number; id: string; label: string; data: PlotPoint[]; partial: PlotPoint[]; tooltipData: TimelinePoint[] };
+export type PlotSeries = { lane: number; seriesIndex: number; id: string; label: string; data: PlotPoint[]; partial: PlotPoint[]; tooltipData: TimelinePoint[] };
 export type ValidatedTimeline = { timestamps: number[]; series: PlotSeries[]; exactValues: Map<string, string> };
 
 function timestamp(value: string, name: string): number {
@@ -25,7 +25,7 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
   const timestamps = new Set<number>();
   chart.lanes.forEach((lane, laneIndex) => {
     if (lane.series.length < 1 || lane.series.length > 2) throw new Error(`Lane ${lane.label} must have between 1 and 2 series`);
-    lane.series.forEach((item) => {
+    lane.series.forEach((item, seriesIndex) => {
       let previous = -Infinity;
       const points: PlotPoint[] = [];
       const partial: PlotPoint[] = [];
@@ -71,7 +71,7 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
         expanded.push(point);
       }
       if (expanded.length > 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);
-      series.push({ lane: laneIndex, id: item.id, label: item.label, data: expanded, partial, tooltipData });
+      series.push({ lane: laneIndex, seriesIndex, id: item.id, label: item.label, data: expanded, partial, tooltipData });
     });
   });
   return { timestamps: [...timestamps].sort((a, b) => a - b), series, exactValues };

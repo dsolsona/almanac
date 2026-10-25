@@ -64,6 +64,15 @@ test('chart theme updates and keyboard pagination work without page overflow', a
   await page.screenshot({ path: testInfo.outputPath('charts-theme.png'), fullPage: true });
 });
 
+test('chart series colors follow the resolved semantic CSS token', async ({ page }) => {
+  await page.goto('/design-system');
+  await page.getByRole('button', { name: 'Charts' }).click();
+  const svg = page.locator('.timeline-chart__plot svg');
+  await expect(svg).toBeVisible();
+  await page.evaluate(() => document.documentElement.style.setProperty('--s1', '#123456'));
+  await expect.poll(() => svg.locator('path[stroke="#123456"]').count()).toBeGreaterThan(0);
+});
+
 test('reopening charts across navigation and theme changes leaves the page error-free', async ({ page }) => {
   const browserErrors: string[] = [];
   page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.stack ?? error.message}`));

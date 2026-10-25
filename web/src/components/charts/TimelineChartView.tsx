@@ -6,9 +6,19 @@ import { SVGRenderer } from 'echarts/renderers';
 import { init } from 'echarts/core';
 import type { ECharts } from 'echarts/core';
 import { validateTimeline, type TimelineChart as TimelineChartData } from './timelineModel.ts';
-import { buildTimelineOption } from './timelineOption.ts';
+import { buildTimelineOption, type TimelinePalette } from './timelineOption.ts';
 
 use([LineChart, ScatterChart, AriaComponent, GridComponent, TooltipComponent, SVGRenderer]);
+
+function readTimelinePalette(): TimelinePalette {
+  const style = getComputedStyle(document.documentElement);
+  const color = (token: string) => style.getPropertyValue(token).trim();
+  return {
+    axis: color('--axis'), grid: color('--grid'), crosshair: color('--crosshair'),
+    series: [color('--s1'), color('--s2')] as [string, string], surface: color('--surface'),
+    surfaceBorder: color('--border'), text: color('--text'),
+  };
+}
 
 export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -29,14 +39,14 @@ export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
     instanceRef.current = instance;
     const update = () => {
       const latest = latestRef.current;
-      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, document.documentElement.classList.contains('dark')), true);
+      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, readTimelinePalette()), true);
     };
     applyRef.current = update;
     update();
     const resize = new ResizeObserver(() => instance.resize());
     resize.observe(host);
     const theme = new MutationObserver(update);
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
     return () => {
       resize.disconnect();
       theme.disconnect();

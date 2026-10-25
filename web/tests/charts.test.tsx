@@ -15,6 +15,7 @@ const chart: TimelineChart = {
     { timestamp: '2026-01-01T00:03:00Z', value: '0.000000', coverage: 'partial' },
   ] }] }],
 };
+const palette = { axis: '#111111', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
 
 describe('timeline model and options', () => {
   it('inserts nulls for absent steps and retains missing, zero and partial semantics', () => {
@@ -38,7 +39,7 @@ describe('timeline model and options', () => {
 
   it('builds aligned lanes with one labelled bottom time axis and linked crosshair', () => {
     const fourLanes = { ...chart, lanes: Array.from({ length: 4 }, (_, index) => ({ ...chart.lanes[0]!, id: `lane-${index}` })) };
-    const option = buildTimelineOption(fourLanes, validateTimeline(fourLanes), false);
+    const option = buildTimelineOption(fourLanes, validateTimeline(fourLanes), palette);
     const axes = Array.isArray(option.xAxis) ? option.xAxis : [option.xAxis];
     const yAxes = Array.isArray(option.yAxis) ? option.yAxis : [option.yAxis];
     const series = Array.isArray(option.series) ? option.series : [option.series];
@@ -49,13 +50,39 @@ describe('timeline model and options', () => {
     expect(yAxes.map((axis) => (axis as { axisLabel?: { showMaxLabel?: boolean } }).axisLabel?.showMaxLabel)).toEqual([true, true, true, true]);
     expect(yAxes.map((axis) => (axis as { axisLabel?: { showMinLabel?: boolean } }).axisLabel?.showMinLabel)).toEqual([true, true, true, true]);
     expect(option.axisPointer).toMatchObject({ link: [{ xAxisIndex: 'all' }] });
+    expect(option.color).toEqual(palette.series);
+    expect(option.tooltip).toMatchObject({ backgroundColor: palette.surface, borderColor: palette.surfaceBorder, textStyle: { color: palette.text } });
     expect(series.some((item) => item && 'type' in item && item.type === 'line' && 'connectNulls' in item && item.connectNulls === false)).toBe(true);
     expect(option.animation).toBe(false);
   });
 
+  it('assigns unique ECharts IDs when user series IDs collide across lanes and suffixes', () => {
+    const partial = chart.lanes[0]!.series[0]!.points[2]!;
+    const duplicateIds: TimelineChart = { ...chart, lanes: [
+      { id: 'one', label: 'First', unit: '%', series: [
+        { id: 'foo', label: 'Partial', points: [partial] },
+        { id: 'foo-partial', label: 'Full', points: [{ timestamp: partial.timestamp, value: '1', coverage: 'complete' }] },
+      ] },
+      { id: 'two', label: 'Second', unit: '%', series: [{ id: 'foo', label: 'Repeated', points: [partial] }] },
+    ] };
+    const option = buildTimelineOption(duplicateIds, validateTimeline(duplicateIds), palette);
+    const series = Array.isArray(option.series) ? option.series : [option.series];
+    const ids = series.flatMap((item) => item && 'id' in item && typeof item.id === 'string' ? [item.id] : []);
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('rejects a page whose row count exceeds the remaining rows on that page', () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      timestamp: `2026-01-01T00:${String(index).padStart(2, '0')}:00Z`, lane: 'Availability', series: 'SLI', unit: '%', value: '1', coverage: 'complete' as Coverage,
+    }));
+    render(<ExactValuesTable rows={rows} page={2} totalRows={60} onPageChange={() => undefined} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/Expected 10 rows/);
+  });
+
   it('pages exact rows with bounded controls and rejects oversized or invalid pages', () => {
-    const rows = Array.from({ length: 50 }, (_, index) => ({
-      timestamp: `2026-01-01T00:${String(index).padStart(2, '0')}:00Z`, lane: 'Availability', series: 'SLI', unit: '%',
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      timestamp: `2026-01-01T00:${String(index + 50).padStart(2, '0')}:00Z`, lane: 'Availability', series: 'SLI', unit: '%',
       value: index === 2 || index === 3 ? null : index === 0 ? '99.970000' : '0.000000',
       coverage: (index === 1 ? 'partial' : index === 2 ? 'missing' : index === 3 ? 'zero-traffic' : 'complete') as Coverage,
     }));
@@ -71,7 +98,8 @@ describe('timeline model and options', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
     expect(change).toHaveBeenCalledWith(1);
     cleanup();
-    render(<ExactValuesTable rows={[...rows, rows[0]!]} page={1} totalRows={100} onPageChange={change} />);
+    const oversizedRows = Array.from({ length: 51 }, (_, index) => ({ ...rows[index % rows.length]!, timestamp: `2026-01-01T00:${String(index).padStart(2, '0')}:00Z` }));
+    render(<ExactValuesTable rows={oversizedRows} page={1} totalRows={100} onPageChange={change} />);
     expect(screen.getByRole('alert')).toHaveTextContent(/more than 50/);
     cleanup();
     render(<ExactValuesTable rows={[]} page={3} totalRows={60} onPageChange={change} />);

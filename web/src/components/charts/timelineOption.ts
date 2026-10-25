@@ -1,6 +1,16 @@
 import type { EChartsOption } from 'echarts';
 import type { TimelineChart, ValidatedTimeline } from './timelineModel.ts';
 
+export type TimelinePalette = {
+  axis: string;
+  grid: string;
+  crosshair: string;
+  series: readonly [string, string];
+  surface: string;
+  surfaceBorder: string;
+  text: string;
+};
+
 function escapeHTML(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 }
@@ -14,10 +24,8 @@ function coverageLabel(coverage: string): string {
   }
 }
 
-export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeline, dark: boolean): EChartsOption {
-  const axis = dark ? '#adb6a9' : '#606761';
-  const grid = dark ? '#3a443d' : '#e6e1d4';
-  const colors = dark ? ['#98c6bc', '#efab8f'] : ['#246469', '#bd4426'];
+export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeline, palette: TimelinePalette): EChartsOption {
+  const { axis, grid, crosshair, series: colors } = palette;
   const lanes = chart.lanes.length;
   const grids = chart.lanes.map((_, index) => ({ left: 66, right: 20, top: `${6 + index * 22}%`, height: '16%', containLabel: false }));
   const xAxis = chart.lanes.map((_, index) => ({
@@ -40,13 +48,14 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   const series = model.series.flatMap((item, index) => {
     const lane = chart.lanes[item.lane]!;
     const color = colors[index % colors.length]!;
+    const seriesId = `lane-${item.lane}-series-${item.seriesIndex}`;
     return [
-      { id: item.id, name: `${lane.label} · ${item.label}`, type: 'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
+      { id: `${seriesId}-line`, name: `${lane.label} · ${item.label}`, type: 'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
         showSymbol: false, connectNulls: false, animation: false, itemStyle: { color }, lineStyle: { color, width: 2 },
         data: item.data.map((point) => [point.timestamp, point.value]),
       },
-      ...(item.partial.length ? [{ id: `${item.id}-partial`, name: `${lane.label} · ${item.label} · partial`, type: 'scatter' as const,
-        xAxisIndex: item.lane, yAxisIndex: item.lane, symbolSize: 9, itemStyle: { color, borderColor: dark ? '#202725' : '#fffdf6', borderWidth: 2 },
+      ...(item.partial.length ? [{ id: `${seriesId}-partial`, name: `${lane.label} · ${item.label} · partial`, type: 'scatter' as const,
+        xAxisIndex: item.lane, yAxisIndex: item.lane, symbolSize: 9, itemStyle: { color, borderColor: palette.surface, borderWidth: 2 },
         data: item.partial.map((point) => [point.timestamp, point.value]),
       }] : []),
     ];
@@ -58,10 +67,10 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     grid: grids,
     xAxis,
     yAxis,
-    axisPointer: { link: [{ xAxisIndex: 'all' }], snap: true, lineStyle: { color: axis, type: 'dashed' } },
+    axisPointer: { link: [{ xAxisIndex: 'all' }], snap: true, lineStyle: { color: crosshair, type: 'dashed' } },
     tooltip: {
-      className: 'timeline-chart-tooltip', backgroundColor: dark ? '#27302d' : '#fffdf6', borderColor: axis,
-      textStyle: { color: dark ? '#f8f6ee' : '#183440' },
+      className: 'timeline-chart-tooltip', backgroundColor: palette.surface, borderColor: palette.surfaceBorder,
+      textStyle: { color: palette.text },
       trigger: 'axis', axisPointer: { type: 'cross' },
       formatter: (raw: unknown) => {
         const params = Array.isArray(raw) ? raw : [raw];
