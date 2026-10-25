@@ -92,6 +92,22 @@ and product-journey acceptance remain outstanding.
 
 ## PostgreSQL foundation verification
 
+PR #1 review corrections make the Go and race lanes build absent embedded web
+assets before test discovery. The original Go failure was reproduced without
+`web/dist`; corrected Go (30 tests) and race (27 tests) lanes passed from that
+state. Storage integration already builds assets after storage-only discovery;
+its six real PostgreSQL18.6 checks also passed from missing assets in 2.235s.
+
+Isolated complete chart samples now render circles, partial samples use diamonds,
+and shared chart/table styles load with the components independently of catalogue
+styles. The combined `make verify` passed 30 UI tests, 30 Go tests (cached from
+the preceding Go run), typecheck/vet/format, generation checks, production build
+and process smoke. The focused chart browser matrix passed 42 checks across six
+viewport/theme projects, including the actual isolated sample position and layout
+with catalogue styles removed. Desktop-light and mobile-dark screenshots were
+inspected. Intermediate test-harness failures are retained in the local review
+report; no product assertions were weakened to obtain a pass.
+
 Integrated-main `28bafab` passed `make verify`: 28 UI tests in 1.31s, 30 Go tests,
 vet/format, both generation-drift checks, production build/routing/exclusion and
 real-process UI smoke. Changed command/storage tests ran in 0.112s/0.003s;

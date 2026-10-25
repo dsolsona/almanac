@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Button } from '../ui/Button.tsx';
 import type { Coverage } from './timelineModel.ts';
+import './charts.css';
 
 export type ExactValueRow = { timestamp: string; lane: string; series: string; unit: string; value: string | null; coverage: Coverage };
 export function ExactValuesTable({ rows, page, totalRows, onPageChange }: {

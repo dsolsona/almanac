@@ -68,6 +68,40 @@ describe('timeline model and options', () => {
     expect(option.animation).toBe(false);
   });
 
+  it('renders complete samples with visible symbols when null gaps isolate them', () => {
+    const isolated: TimelineChart = { ...chart, lanes: [{ ...chart.lanes[0]!, series: [{ id: 'isolated', label: 'Isolated', points: [
+      { timestamp: '2026-01-01T00:00:00Z', value: '1', coverage: 'complete' },
+      { timestamp: '2026-01-01T00:01:00Z', value: '1.5', coverage: 'partial' },
+      { timestamp: '2026-01-01T00:02:00Z', value: '2', coverage: 'complete' },
+      { timestamp: '2026-01-01T00:03:00Z', value: null, coverage: 'missing' },
+    ] }] }] };
+    const option = buildTimelineOption(isolated, validateTimeline(isolated), palette);
+    const series = Array.isArray(option.series) ? option.series : [option.series];
+    const isolatedMarkers = series.filter((item) => item && 'id' in item && typeof item.id === 'string' && item.id.endsWith('-isolated'));
+    expect(isolatedMarkers).toHaveLength(1);
+    expect(isolatedMarkers[0]).toMatchObject({ type: 'scatter', symbolSize: 9, data: [[Date.parse(isolated.start), 1], [Date.parse('2026-01-01T00:02:00Z'), 2]] });
+    expect(series.find((item) => item && 'id' in item && typeof item.id === 'string' && item.id.endsWith('-partial'))).toMatchObject({ symbol: 'diamond' });
+  });
+
+  it('renders a single complete sample and a final boundary sample as markers', () => {
+    const boundaryCases: TimelineChart[] = [
+      { ...chart, lanes: [{ ...chart.lanes[0]!, series: [{ id: 'single', label: 'Single', points: [
+        { timestamp: '2026-01-01T00:02:00Z', value: '1', coverage: 'complete' },
+      ] }] }] },
+      { ...chart, lanes: [{ ...chart.lanes[0]!, series: [{ id: 'last', label: 'Last', points: [
+        { timestamp: '2026-01-01T00:02:00Z', value: null, coverage: 'missing' },
+        { timestamp: '2026-01-01T00:03:00Z', value: '2', coverage: 'complete' },
+      ] }] }] },
+    ];
+    for (const boundaryCase of boundaryCases) {
+      const option = buildTimelineOption(boundaryCase, validateTimeline(boundaryCase), palette);
+      const series = Array.isArray(option.series) ? option.series : [option.series];
+      expect(series.find((item) => item && 'id' in item && typeof item.id === 'string' && item.id.endsWith('-isolated'))).toMatchObject({
+        type: 'scatter', data: [[Date.parse(boundaryCase.lanes[0]!.series[0]!.points.at(-1)!.timestamp), Number(boundaryCase.lanes[0]!.series[0]!.points.at(-1)!.value ?? 1)]],
+      });
+    }
+  });
+
   it('assigns unique ECharts IDs when user series IDs collide across lanes and suffixes', () => {
     const partial = chart.lanes[0]!.series[0]!.points[2]!;
     const duplicateIds: TimelineChart = { ...chart, lanes: [
@@ -80,7 +114,7 @@ describe('timeline model and options', () => {
     const option = buildTimelineOption(duplicateIds, validateTimeline(duplicateIds), palette);
     const series = Array.isArray(option.series) ? option.series : [option.series];
     const ids = series.flatMap((item) => item && 'id' in item && typeof item.id === 'string' ? [item.id] : []);
-    expect(ids).toHaveLength(5);
+    expect(ids).toHaveLength(6);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
