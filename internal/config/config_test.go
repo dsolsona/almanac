@@ -71,7 +71,10 @@ func TestValidateComponentsAndBackendOrigin(t *testing.T) {
 			t.Errorf("listen address %q accepted", value)
 		}
 	}
-	for _, value := range []string{"http://user:secret@host", "https://host/path", "http://host?q=secret", "ftp://host", "http://host/#x"} {
+	for _, value := range []string{
+		"http://user:secret@host", "https://host/path", "http://host?q=secret", "http://host?",
+		"ftp://host", "http://host/#x", "http://:8081", "http://host:", "http://host:0", "http://host:65536",
+	} {
 		cfg := Defaults()
 		cfg.Components = "ui"
 		cfg.BackendURL = value
@@ -84,5 +87,9 @@ func TestValidateComponentsAndBackendOrigin(t *testing.T) {
 	cfg.BackendURL = "https://backend.example"
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	cfg.BackendURL = "https://backend.example:65535"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("maximum valid port rejected: %v", err)
 	}
 }

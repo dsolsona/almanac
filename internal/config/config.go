@@ -150,8 +150,14 @@ func (c Config) Validate() error {
 	}
 	if c.Components == "ui" {
 		u, err := url.Parse(c.BackendURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Path != "" && u.Path != "/" || u.RawQuery != "" || u.Fragment != "" {
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || strings.HasSuffix(u.Host, ":") || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 			return errors.New("config: backend_url must be an http(s) origin without credentials, path, query, or fragment")
+		}
+		if port := u.Port(); port != "" {
+			portNumber, err := strconv.ParseUint(port, 10, 16)
+			if err != nil || portNumber == 0 {
+				return errors.New("config: backend_url port must be between 1 and 65535")
+			}
 		}
 	}
 	return nil

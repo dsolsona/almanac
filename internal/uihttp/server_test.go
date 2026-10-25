@@ -11,12 +11,15 @@ import (
 	"net/http/httptest"
 	"path"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/config"
 	webassets "github.com/dsolsona/almanac/web"
 )
+
+var testHTTPClient = &http.Client{Timeout: 2 * time.Second}
 
 func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +37,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 	for _, tc := range []struct{ path, wantType string }{
 		{"/", "text/html"},
 	} {
-		response, err := http.Get(frontend.URL + tc.path)
+		response, err := testHTTPClient.Get(frontend.URL + tc.path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,7 +51,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"/design-system", "/missing.js", "/assets/missing.js"} {
-		response, err := http.Get(frontend.URL + path)
+		response, err := testHTTPClient.Get(frontend.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +61,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 		}
 	}
 	assetName := fingerprintedAssetPath(t)
-	asset, err := http.Get(frontend.URL + "/" + assetName)
+	asset, err := testHTTPClient.Get(frontend.URL + "/" + assetName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +70,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 		t.Errorf("fingerprinted asset headers = %d %q", asset.StatusCode, asset.Header.Get("Cache-Control"))
 	}
 	for _, path := range []string{"/livez", "/readyz"} {
-		response, err := http.Get(frontend.URL + path)
+		response, err := testHTTPClient.Get(frontend.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +81,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 		}
 	}
 	request, _ := http.NewRequest(http.MethodPost, frontend.URL+"/livez", nil)
-	response, err := http.DefaultClient.Do(request)
+	response, err := testHTTPClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,16 +97,14 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 		got <- r.Clone(context.Background())
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer backend.Close()
 	server := testServer(t, backend.URL)
 	frontend := newTestServer(t, server.http.Handler)
-	defer frontend.Close()
 	request, _ := http.NewRequest(http.MethodPut, frontend.URL+"/api/v1/slis/7?x=1", strings.NewReader("body"))
 	request.Header.Set("Authorization", "Bearer test")
 	request.Header.Set("Cookie", "session=test")
 	request.Header.Set("X-Forwarded-Host", "attacker.example")
 	request.Header.Set("X-Real-Ip", "192.0.2.12")
-	response, err := http.DefaultClient.Do(request)
+	response, err := testHTTPClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 	if response.StatusCode != http.StatusNoContent {
 		t.Fatalf("proxy status = %d", response.StatusCode)
 	}
-	forwarded := <-got
+	forwarded := awaitValue(t, got, "proxied request")
 	if forwarded.URL.Path != "/api/v1/slis/7" || forwarded.URL.RawQuery != "x=1" {
 		t.Errorf("forwarded URL = %s", forwarded.URL)
 	}
@@ -121,7 +122,7 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 	if forwarded.Header.Get("X-Forwarded-Host") != "" || forwarded.Header.Get("X-Forwarded-For") != "" || forwarded.Header.Get("X-Real-Ip") != "" {
 		t.Error("untrusted forwarding headers were retained")
 	}
-	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	noRedirect := &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	for _, path := range []string{"/api/v1/../internal/v1/work", "/api/v1/%2e%2e/internal/v1/work", "/api/v1/%252e%252e/internal/v1/work", "/api/agent/v1/heartbeat", "/internal/v1/work"} {
 		resp, err := noRedirect.Get(frontend.URL + path)
 		if err != nil {
@@ -133,7 +134,7 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 		}
 	}
 	trace, _ := http.NewRequest(http.MethodTrace, frontend.URL+"/api/v1/slis", nil)
-	resp, err := http.DefaultClient.Do(trace)
+	resp, err := testHTTPClient.Do(trace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,28 +162,40 @@ func TestSafeAPIPathRejectsDecodedTraversal(t *testing.T) {
 func TestGracefulShutdownDrainsAndClosesListener(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
-	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var releaseOnce sync.Once
+	releaseHandler := func() { releaseOnce.Do(func() { close(release) }) }
+	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
-		<-release
-		w.WriteHeader(http.StatusNoContent)
+		select {
+		case <-release:
+			w.WriteHeader(http.StatusNoContent)
+		case <-r.Context().Done():
+		}
 	}))
-	defer backend.Close()
 	server := testServer(t, backend.URL)
+	t.Cleanup(func() { _ = server.Close() })
+	t.Cleanup(releaseHandler)
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- server.Serve(listener) }()
+	requestCtx, cancelRequest := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancelRequest()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://"+listener.Addr().String()+"/api/v1/slis", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	requestDone := make(chan error, 1)
 	go func() {
-		response, err := http.Get("http://" + listener.Addr().String() + "/api/v1/slis")
+		response, err := testHTTPClient.Do(request)
 		if response != nil {
 			response.Body.Close()
 		}
 		requestDone <- err
 	}()
-	<-started
+	awaitSignal(t, started, "upstream request start")
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	shutdownDone := make(chan error, 1)
@@ -192,14 +205,14 @@ func TestGracefulShutdownDrainsAndClosesListener(t *testing.T) {
 		t.Fatalf("shutdown completed before in-flight request drained: %v", err)
 	case <-time.After(20 * time.Millisecond):
 	}
-	close(release)
-	if err := <-shutdownDone; err != nil {
+	releaseHandler()
+	if err := awaitValue(t, shutdownDone, "graceful shutdown"); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-requestDone; err != nil {
+	if err := awaitValue(t, requestDone, "in-flight request completion"); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-serveDone; !errors.Is(err, http.ErrServerClosed) {
+	if err := awaitValue(t, serveDone, "listener shutdown"); !errors.Is(err, http.ErrServerClosed) {
 		t.Fatalf("serve returned %v", err)
 	}
 }
@@ -212,31 +225,27 @@ func TestProxyPropagatesRequestCancellation(t *testing.T) {
 		<-r.Context().Done()
 		close(canceled)
 	}))
-	defer backend.Close()
 	server := testServer(t, backend.URL)
 	frontend := newTestServer(t, server.http.Handler)
-	defer frontend.Close()
 	ctx, cancel := context.WithCancel(t.Context())
+	ctx, timeoutCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer timeoutCancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, frontend.URL+"/api/v1/slis", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	requestDone := make(chan struct{})
 	go func() {
-		response, _ := http.DefaultClient.Do(request)
+		response, _ := testHTTPClient.Do(request)
 		if response != nil {
 			response.Body.Close()
 		}
 		close(requestDone)
 	}()
-	<-started
+	awaitSignal(t, started, "upstream request start")
 	cancel()
-	select {
-	case <-canceled:
-	case <-time.After(time.Second):
-		t.Fatal("upstream request did not observe cancellation")
-	}
-	<-requestDone
+	awaitSignal(t, canceled, "upstream cancellation")
+	awaitSignal(t, requestDone, "cancelled client request completion")
 }
 
 func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
@@ -247,23 +256,29 @@ func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
 		<-r.Context().Done()
 		close(upstreamCanceled)
 	}))
-	defer backend.Close()
 	server := testServer(t, backend.URL)
+	t.Cleanup(func() { _ = server.Close() })
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- server.Serve(listener) }()
+	requestCtx, cancelRequest := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancelRequest()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://"+listener.Addr().String()+"/api/v1/slis", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	requestDone := make(chan struct{})
 	go func() {
-		response, _ := http.Get("http://" + listener.Addr().String() + "/api/v1/slis")
+		response, _ := testHTTPClient.Do(request)
 		if response != nil {
 			response.Body.Close()
 		}
 		close(requestDone)
 	}()
-	<-started
+	awaitSignal(t, started, "upstream request start")
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
 	if err := server.Shutdown(ctx); !errors.Is(err, context.DeadlineExceeded) {
@@ -272,14 +287,35 @@ func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
 	if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		t.Fatal(err)
 	}
-	select {
-	case <-upstreamCanceled:
-	case <-time.After(time.Second):
-		t.Fatal("forced close did not cancel upstream request")
-	}
-	<-requestDone
-	if err := <-serveDone; !errors.Is(err, http.ErrServerClosed) {
+	awaitSignal(t, upstreamCanceled, "forced-close cancellation")
+	awaitSignal(t, requestDone, "forced-close client completion")
+	if err := awaitValue(t, serveDone, "listener close"); !errors.Is(err, http.ErrServerClosed) {
 		t.Fatalf("serve returned %v", err)
+	}
+}
+
+func awaitSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-signal:
+	case <-timer.C:
+		t.Fatalf("timed out waiting for %s", description)
+	}
+}
+
+func awaitValue[T any](t *testing.T, result <-chan T, description string) T {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case value := <-result:
+		return value
+	case <-timer.C:
+		t.Fatalf("timed out waiting for %s", description)
+		var zero T
+		return zero
 	}
 }
 
@@ -319,7 +355,7 @@ func TestReadinessOutageAndRedirectAreUnavailable(t *testing.T) {
 		backend := newTestServer(t, handler)
 		server := testServer(t, backend.URL)
 		frontend := newTestServer(t, server.http.Handler)
-		response, err := http.Get(frontend.URL + "/readyz")
+		response, err := testHTTPClient.Get(frontend.URL + "/readyz")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -334,7 +370,7 @@ func TestReadinessOutageAndRedirectAreUnavailable(t *testing.T) {
 	server := testServer(t, "http://127.0.0.1:1")
 	frontend := newTestServer(t, server.http.Handler)
 	defer frontend.Close()
-	response, err := http.Get(frontend.URL + "/api/v1/slis")
+	response, err := testHTTPClient.Get(frontend.URL + "/api/v1/slis")
 	if err != nil {
 		t.Fatal(err)
 	}

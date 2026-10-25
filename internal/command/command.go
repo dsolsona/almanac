@@ -111,7 +111,7 @@ func runServer(ctx context.Context, server *uihttp.Server, cfg config.Config, lo
 	}
 	errch := make(chan error, 1)
 	go func() { errch <- server.Serve(listener) }()
-	logger.Info("component started", "component", "ui", "address", cfg.Listen)
+	logger.Info("component started", "component", "ui", "address", listener.Addr().String())
 	select {
 	case err := <-errch:
 		if errors.Is(err, uihttp.ErrServerClosed) {
