@@ -114,6 +114,9 @@ and product-journey acceptance remain outstanding.
   combined PostgreSQL 18.6 passed 51 tests under race. Final test-only additions
   passed 12 authentication integration tests under race in 10.086s. Public HTTP,
   cookie/CSRF protections and UI/CLI journeys are the next delivery work.
+- [F1-T13](tasks/F1-T13.md) is ready: generated authentication routes, protected
+  cookies, session-bound CSRF and strict origin/source handling, with a real TLS/
+  PostgreSQL journey. Backend runtime exposure and UI/CLI follow this adapter.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
