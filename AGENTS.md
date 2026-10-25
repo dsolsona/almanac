@@ -173,6 +173,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   accepting combined work and broader checks at the required milestone/risk boundary.
   Do not wrap every focused test in a full build/browser matrix. Separate cached
   setup from execution, and verify the stack matches the candidate revision.
+- Keep the maintainer's preview available during verification. Browser checks own
+  a separate port and server; never stop the preview to free their port. If a
+  preview must restart after integration, restore it and verify the URL before
+  handing back the page. Lazy-loaded sections must fail visibly without blanking
+  unrelated controls.
 - Prefer established, narrowly scoped command families for setup, builds, checks,
   previews and Git operations. Reuse existing approvals; do not introduce generic
   shell execution targets or bypass permission controls. If an operation requires
