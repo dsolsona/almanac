@@ -172,6 +172,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   accepting combined work and broader checks at the required milestone/risk boundary.
   Do not wrap every focused test in a full build/browser matrix. Separate cached
   setup from execution, and verify the stack matches the candidate revision.
+- Prefer established, narrowly scoped command families for setup, builds, checks,
+  previews and Git operations. Reuse existing approvals; do not introduce generic
+  shell execution targets or bypass permission controls. If an operation requires
+  new approval while the maintainer is unavailable, leave it pending and continue
+  independent authorized work.
 - Never replace real API/database/agent acceptance evidence with mocked UI checks.
   Preserve first-attempt failures; do not rerun-to-green, skip expected tests, weaken
   assertions, disable auth, or increase timeouts to manufacture a passing gate.

@@ -2,8 +2,9 @@
 
 ## Current state
 
-Documentation only. No Go module, application binary, database schema, UI, CLI,
-provider executable, build/test commands, or deployment artifacts are implemented.
+The first visual foundation task is in progress. Shared theme tokens and the local
+heading font are committed; the catalogue and verification harness are being built.
+No Go module, application binary, database schema, CLI or provider is implemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -15,7 +16,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | Not started | No runtime verification or passing product tests claimed |
+| Product implementation | F1-T01 in progress | Shared visual assets committed; runtime verification pending |
 
 ## Coverage
 
@@ -59,8 +60,9 @@ candidate selection before encryption implementation. No product tests have run.
 - [Testing guidance](testing.md) requires focused iteration, independent coordinator
   review, a real-stack smoke gate and full boundary/release evidence. Initial duration
   targets are unmeasured until the harness exists; no passing product tests are claimed.
-- Prepare the F1 plan and first three bounded [tasks](tasks/README.md). No application
-  task is currently assigned, ready or running. No implementation worktree exists here.
+- The [visual foundation plan](plans/0001-visual-foundation.md) and
+  [F1-T01](tasks/F1-T01.md) are active on `feat/f1-visual` in `.worktrees/f1-visual`.
+  A `gpt-6-luna` implementer builds the catalogue; the coordinator owns acceptance.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation exists at `python3 scripts/check-docs.py`; build/unit/API/
