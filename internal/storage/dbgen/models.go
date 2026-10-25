@@ -28,6 +28,15 @@ type AlmanacInstallation struct {
 	OnboardingCompletedAt pgtype.Timestamptz `json:"onboarding_completed_at"`
 }
 
+type AlmanacLoginAttempt struct {
+	ID         pgtype.UUID        `json:"id"`
+	AccountKey []byte             `json:"account_key"`
+	SourceKey  []byte             `json:"source_key"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	State      string             `json:"state"`
+}
+
 type AlmanacSchemaMigration struct {
 	Version   int64              `json:"version"`
 	Filename  string             `json:"filename"`

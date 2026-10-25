@@ -7,6 +7,7 @@ sql:
       - internal/storage/migrations/0001_installation.sql
       - internal/storage/migrations/0002_initial_owner.sql
       - internal/storage/migrations/0003_local_sessions.sql
+      - internal/storage/migrations/0004_login_attempts.sql
     gen:
       go:
         package: dbgen
