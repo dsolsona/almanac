@@ -77,6 +77,10 @@ no Go/API/database or full product-journey tests are claimed.
   changes are not accepted or integrated yet. Resume from its task report and
   plan ledger before dispatching another implementer. Preserve the main catalogue
   preview on port 5198; the runtime task does not require browser checks.
+  Work is checkpointed for a session restart to pick up Docker group membership;
+  the implementer is paused and its uncommitted files are preserved. Resume the
+  existing task after reading its report and restart checkpoint. Final lifecycle
+  regressions, full verification, review and integration remain outstanding.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
