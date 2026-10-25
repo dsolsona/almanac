@@ -1,9 +1,13 @@
 .PHONY: setup build verify preview
 
 setup:
-	@case "$${UPDATE_LOCK:-}" in '') ;; 1) cd web && npm install --package-lock-only ;; *) echo 'UPDATE_LOCK must be 1 or unset' >&2; exit 2;; esac
-	cd web && npm ci
-	cd web && ./node_modules/.bin/playwright install chromium
+	@set -eu; case "$${SETUP_MODE:-web}" in \
+	  go) sh scripts/setup-go.sh ;; \
+	  web) case "$${UPDATE_LOCK:-}" in '') ;; 1) (cd web && npm install --package-lock-only); (cd tools/openapi && npm install --package-lock-only) ;; *) echo 'UPDATE_LOCK must be 1 or unset' >&2; exit 2;; esac; \
+	    (cd web && npm ci && ./node_modules/.bin/playwright install chromium); \
+	    (cd tools/openapi && npm ci) ;; \
+	  *) echo 'SETUP_MODE must be web or go' >&2; exit 2 ;; \
+	esac
 
 build:
 	cd web && npm run typecheck && npm run build
