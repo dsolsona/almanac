@@ -21,8 +21,8 @@ Only already approved fixed-purpose commands; never request new approvals.
 
 ## Task 1: Shared admission storage
 
-- [ ] Add schema4 and real-database acceptance tests.
-- [ ] Implement begin/finish operations and generated queries.
-- [ ] Verify concurrency, rolling boundaries, completion and bounded cleanup.
-- [ ] Run focused/integration/race and combined gates; review independently.
+- [x] Add schema4 and real-database acceptance tests.
+- [x] Implement begin/finish operations and generated queries.
+- [x] Verify concurrency, rolling boundaries, completion and bounded cleanup.
+- [x] Run focused/integration/race and combined gates; review independently.
 - [ ] Record acceptance and publish the next stacked PR.

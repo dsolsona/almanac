@@ -10,7 +10,8 @@
   [initial owner](../plans/0007-initial-owner-persistence.md),
   [offline password policy](../plans/0008-offline-password-policy.md),
   [persistent sessions](../plans/0009-persistent-local-sessions.md),
-  [atomic password rotation](../plans/0010-atomic-password-rotation.md)
+  [atomic password rotation](../plans/0010-atomic-password-rotation.md),
+  [shared login admission](../plans/0011-shared-login-throttle.md)
 - Supersedes / superseded by: none
 
 ## Purpose
@@ -414,9 +415,10 @@ checks in both themes/mobile layouts. Document inspection is not security valida
 real concurrent PostgreSQL tests. [F1-T08](../tasks/F1-T08.md) verifies offline
 common-password screening. Session persistence is verified under
 [F1-T09](../tasks/F1-T09.md). [F1-T10](../tasks/F1-T10.md) verifies atomic password
-rotation and initial completion storage. These internal operations do not yet
-supply login, startup provisioning, application password proof/policy orchestration,
-throttling, cookies/CSRF or UI/CLI journeys.
+rotation and initial completion storage. [F1-T11](../tasks/F1-T11.md) verifies shared
+login admission and failure budgets. These internal operations do not yet supply
+login, startup provisioning, application password proof/policy orchestration,
+transport throttling, cookies/CSRF or UI/CLI journeys.
 
 ## Change notes
 
