@@ -31,4 +31,4 @@ locks or public authentication routes; no new dependencies or approval requests.
 - [x] Implement generated lookup/issue/authenticate/revoke operations and safe errors.
 - [x] Verify expiry/revocation/concurrency/audit rollback and prior-schema upgrade.
 - [x] Run focused/integration/race and combined gates; independently review.
-- [ ] Record acceptance and open the next stacked PR.
+- [x] Record acceptance and open [PR #5](https://github.com/dsolsona/almanac/pull/5).

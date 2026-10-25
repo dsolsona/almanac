@@ -25,4 +25,4 @@ Only existing approved fixed-purpose commands; never request new approvals.
 - [x] Implement validated rotation and generated transaction queries.
 - [x] Verify concurrency, authority rejection, digest collision and audit rollback.
 - [x] Run focused, PostgreSQL/race and combined gates; obtain independent reviews.
-- [ ] Reconcile evidence and open a stacked PR.
+- [x] Reconcile evidence and open [PR #6](https://github.com/dsolsona/almanac/pull/6).

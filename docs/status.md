@@ -102,6 +102,8 @@ and product-journey acceptance remain outstanding.
   Go tests; PostgreSQL 18.6 passed 31 integration tests under race in 9.993s.
   Task and final reviews approved the corrected denial and rollback evidence.
   External password proof, shared login throttling and HTTP remain later.
+- [F1-T11](tasks/F1-T11.md) is ready: shared login admission and rolling failure
+  limits, stacked on password rotation. This remains an internal prerequisite.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

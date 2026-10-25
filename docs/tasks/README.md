@@ -38,3 +38,6 @@ transactional bootstrap/login service and API/CLI/UI wiring.
 
 [F1-T10](F1-T10.md) adds atomic password rotation and onboarding completion under
 its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure.
+
+[F1-T11](F1-T11.md) adds shared login admission and failure limits under its
+[plan](../plans/0011-shared-login-throttle.md), before password checks are exposed.
