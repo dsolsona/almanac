@@ -5,12 +5,9 @@ package storage
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/testpostgres"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -411,59 +409,7 @@ func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing
 
 func integrationDatabase(t *testing.T) string {
 	t.Helper()
-	adminURL := os.Getenv("ALMANAC_TEST_DATABASE_URL")
-	if adminURL == "" {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL must select the isolated PostgreSQL fixture")
-	}
-	parsed, err := url.Parse(adminURL)
-	if err != nil || parsed.Scheme != "postgres" || parsed.Hostname() != "127.0.0.1" || parsed.Port() != "15487" || parsed.Path != "/almanac_f1_storage" || parsed.User == nil || parsed.User.Username() != "almanac" {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL must select the pinned local F1-T05 fixture")
-	}
-	password, hasPassword := parsed.User.Password()
-	if !hasPassword || password != "almanac_f1_t05_local_only" || parsed.RawQuery != "sslmode=disable" {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL does not match the synthetic local fixture credentials")
-	}
-	config, err := ParseDatabaseURL(adminURL)
-	if err != nil {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL is invalid")
-	}
-	connectCtx, cancelConnect := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancelConnect()
-	admin, err := pgx.ConnectConfig(connectCtx, config)
-	if err != nil {
-		t.Fatal("connect to the verified local PostgreSQL fixture failed")
-	}
-	t.Cleanup(func() { closeIntegrationConn(admin) })
-	var currentDatabase, currentUser string
-	var version int
-	if err := admin.QueryRow(connectCtx, "SELECT current_database(), current_user, current_setting('server_version_num')::integer").Scan(&currentDatabase, &currentUser, &version); err != nil {
-		t.Fatal("verify PostgreSQL fixture identity failed")
-	}
-	if currentDatabase != "almanac_f1_storage" || currentUser != "almanac" || version != 180006 {
-		t.Fatalf("connected server is not the expected PostgreSQL 18.6 fixture (database=%q user=%q version=%d)", currentDatabase, currentUser, version)
-	}
-	var suffix [12]byte
-	if _, err := rand.Read(suffix[:]); err != nil {
-		t.Fatal(err)
-	}
-	databaseName := "almanac_test_" + hex.EncodeToString(suffix[:])
-	childURL := parsed.Clone()
-	childURL.Path = "/" + databaseName
-	createCtx, cancelCreate := context.WithTimeout(t.Context(), 10*time.Second)
-	_, err = admin.Exec(createCtx, "CREATE DATABASE "+pgx.Identifier{databaseName}.Sanitize())
-	cancelCreate()
-	if err != nil {
-		t.Fatal("create unique disposable test database failed")
-	}
-	t.Cleanup(func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if _, err := admin.Exec(cleanupCtx, "DROP DATABASE "+pgx.Identifier{databaseName}.Sanitize()+" WITH (FORCE)"); err != nil {
-			t.Errorf("drop test-owned database %s failed", databaseName)
-		}
-		_ = admin.Close(cleanupCtx)
-	})
-	return childURL.String()
+	return testpostgres.Database(t)
 }
 
 func runAlmanac(t *testing.T, binary string, args, extraEnv []string) (int, []byte, []byte) {
@@ -541,20 +487,7 @@ func decodeBinaryUpgrade(t *testing.T, data []byte) struct {
 
 func integrationConnect(t *testing.T, databaseURL string) *pgx.Conn {
 	t.Helper()
-	config, err := ParseDatabaseURL(databaseURL)
-	if err != nil {
-		t.Fatal("test database URL is invalid")
-	}
-	connectCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	conn, err := pgx.ConnectConfig(connectCtx, config)
-	if err != nil {
-		t.Fatal("connect to test-owned database failed")
-	}
-	t.Cleanup(func() {
-		closeIntegrationConn(conn)
-	})
-	return conn
+	return testpostgres.Connect(t, databaseURL)
 }
 
 func closeIntegrationConn(conn *pgx.Conn) {

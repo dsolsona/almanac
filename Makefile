@@ -84,7 +84,7 @@ _ensure_web_assets:
 
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp|./internal/storage|./internal/identity) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
+	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp|./internal/storage|./internal/identity|./internal/authentication|./internal/secretfile) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
@@ -108,11 +108,11 @@ _verify_go:
 _verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage ./internal/identity > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage ./internal/identity ./internal/authentication ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected race tests: $$tests"; \
-	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/storage ./internal/identity
+	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/storage ./internal/identity ./internal/authentication ./internal/secretfile
 
 _verify_auth_bench:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
@@ -126,18 +126,19 @@ _verify_integration:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	  test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./internal/storage}" in ./internal/storage) ;; *) echo 'GO_PACKAGE must be ./internal/storage for integration checks' >&2; exit 2 ;; esac; \
+	  case "$${GO_PACKAGE:-all}" in ./internal/storage|./internal/authentication|all) ;; *) echo 'GO_PACKAGE must select ./internal/storage, ./internal/authentication, or all' >&2; exit 2 ;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
-	  target="$${GO_PACKAGE:-./internal/storage}"; \
+	  target="$${GO_PACKAGE:-all}"; \
+	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/storage ./internal/authentication'; fi; \
 	  test_list=$$(mktemp .local/integration-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -tags=integration -list . "$$target" > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  if ! .local/bin/go test -tags=integration -list . $$packages > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^TestIntegration/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected integration packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected PostgreSQL integration tests: $$tests"; \
 	  $(MAKE) _verify_sqlc_generated; \
 	  sh scripts/setup-database.sh --check; \
 	  $(MAKE) build; \
-	  .local/bin/go test -race -tags=integration -run '^TestIntegration' -count=1 -timeout=2m "$$target"
+	  .local/bin/go test -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m $$packages
 
 _verify_sqlc_generated:
 	@set -eu; test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
