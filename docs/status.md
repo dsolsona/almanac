@@ -85,6 +85,8 @@ and product-journey acceptance remain outstanding.
 - [F1-T06](tasks/F1-T06.md) is complete: reviewed internal password/session
   primitives at `334fb33`, with merged foundation fixes. It does not expose login
   or complete onboarding. Next is transactional initial-owner persistence.
+- [F1-T07](tasks/F1-T07.md) is ready: atomic initial-owner persistence, stacked on
+  the identity-primitives increment. Authentication endpoints remain subsequent work.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

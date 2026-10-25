@@ -26,3 +26,6 @@ covers explicit schema upgrades and isolated real-database verification. Identit
 work continues with [F1-T06](F1-T06.md) and its
 [bounded primitives plan](../plans/0006-identity-primitives.md), before the
 transactional bootstrap/login service and API/CLI/UI wiring.
+
+[F1-T07](F1-T07.md) adds atomic initial-owner persistence under its
+[plan](../plans/0007-initial-owner-persistence.md), stacked on F1-T06.
