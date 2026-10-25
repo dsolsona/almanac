@@ -27,8 +27,8 @@ of exhaustive compromised-password detection; no PR merge or new command approva
 
 ## Task 1: Offline screening
 
-- [ ] Vendor pinned source/license and provenance with independent checksum evidence.
-- [ ] Add failing policy/boundary/concurrency/data-integrity cases from F1-T08.
-- [ ] Implement `ValidateNewPassword` with immutable embedded lookup.
-- [ ] Run focused/race gates, review diff and verify the integrated candidate.
-- [ ] Record acceptance and publish against the initial-owner PR.
+- [x] Vendor pinned source/license and provenance with independent checksum evidence.
+- [x] Add failing policy/boundary/concurrency/data-integrity cases from F1-T08.
+- [x] Implement `ValidateNewPassword` with immutable embedded lookup.
+- [x] Run focused/race gates, review diff and verify the integrated candidate.
+- [x] Record acceptance; ready to publish against the initial-owner PR.
