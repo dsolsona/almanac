@@ -1,6 +1,25 @@
-import { useRef, useState } from 'react';
+import { Component, lazy, Suspense, useRef, useState, type ReactNode } from 'react';
 import { Button, DatePicker, Dialog, LoadingIndicator, Panel, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
 import '../styles/catalogue.css';
+
+const ChartsSection = lazy(() => import('./ChartsSection.tsx').then((module) => ({ default: module.ChartsSection })));
+
+class ChartsLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) return <section id="charts" className="charts-load-error" aria-labelledby="charts-load-error-title">
+      <h2 id="charts-load-error-title">Charts are unavailable</h2>
+      <p role="alert">Chart examples could not be loaded. Other catalogue controls remain available.</p>
+      <Button variant="outline" onClick={() => window.location.reload()}>Reload catalogue to retry</Button>
+    </section>;
+    return this.props.children;
+  }
+}
 
 const colors = [
   ['Paper', '--almanac-paper'], ['Ink', '--almanac-ink'], ['Vermilion', '--almanac-vermilion'], ['Teal', '--almanac-teal'],
@@ -14,6 +33,7 @@ export function Catalogue() {
   const [count, setCount] = useState(0);
   const [feedback, setFeedback] = useState('No local action yet.');
   const [demoDate, setDemoDate] = useState('2026-10-25');
+  const [chartsOpen, setChartsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   function demonstrateSave() {
     setPending(true);
@@ -29,7 +49,7 @@ export function Catalogue() {
     <a className="skip-link" href="#catalogue-main">Skip to catalogue</a>
     <header className="masthead"><a href="/" className="wordmark">ALMANAC</a><span className="catalogue-label">LOCAL COMPONENT CATALOGUE</span><ThemeToggle /></header>
     <nav className="catalogue-nav" aria-label="Catalogue sections">
-      <a href="#foundations">Foundations</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#status">Status</a><a href="#panels">Panels</a><a href="#dialog">Dialog</a><a href="#controls">Controls</a>
+      <a href="#foundations">Foundations</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#status">Status</a><a href="#panels">Panels</a><a href="#dialog">Dialog</a><a href="#controls">Controls</a><button type="button" aria-expanded={chartsOpen} aria-controls={chartsOpen ? 'charts' : undefined} onClick={() => setChartsOpen(true)}>Charts</button>
     </nav>
     <main id="catalogue-main" className="catalogue-main">
       <section className="catalogue-intro">
@@ -75,6 +95,7 @@ export function Catalogue() {
         <Panel heading="Working modal example"><Button ref={triggerRef} onClick={() => setDialogOpen(true)}>Open dialog</Button><Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title="A local dialog" triggerRef={triggerRef}><p>This is a local example. Press Tab to move among controls and Escape to close.</p><TextField id="dialog-example" label="Example input" hint="Focus remains inside the open dialog."/><div className="example-row dialog-actions"><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => setDialogOpen(false)}>Done</Button></div></Dialog></Panel>
       </section>
       <section className="catalogue-section" id="controls" aria-labelledby="controls-heading"><div className="section-heading"><p className="eyebrow mono">07 / CONTROLS</p><h2 id="controls-heading">Calendar, switches and loading</h2><p>Keyboard-first controls and visible pending feedback remain responsive at narrow widths.</p></div><div className="control-panels"><Panel heading="Calendar and switches"><div className="feedback-controls"><div className="field-stack"><DatePicker label="Start date" value={demoDate} today="2026-10-25" onValueChange={(date) => { setDemoDate(date); setFeedback(date ? `Calendar selected ${date}.` : 'Calendar selection cleared.'); }} hint="Calendar dates are shown in local form."/><DatePicker label="Locked date" value="2026-10-25" today="2026-10-25" disabled onValueChange={() => undefined}/></div><div className="field-stack"><Switch label="Notifications" hint="Send a local example notification."/><Switch label="Maintenance mode" hint="This is a disabled example." checked disabled onChange={() => undefined}/></div></div></Panel><Panel heading="Loading feedback"><LoadingIndicator label="Refreshing catalogue data"/></Panel></div></section>
+      {chartsOpen && <ChartsLoadBoundary><Suspense fallback={<p role="status">Loading chart examples…</p>}><ChartsSection /></Suspense></ChartsLoadBoundary>}
       <footer className="catalogue-footer"><span className="mono">ALMANAC · FOUNDATION CATALOGUE</span><a href="#catalogue-main">Back to top ↑</a></footer>
     </main>
   </>;

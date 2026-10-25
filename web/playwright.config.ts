@@ -7,7 +7,7 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:5198',
+    baseURL: 'http://127.0.0.1:5200',
     browserName: 'chromium',
     screenshot: 'off',
     trace: 'retain-on-failure',
@@ -21,8 +21,8 @@ export default defineConfig({
     { name: 'mobile-dark', use: { viewport: { width: 360, height: 800 }, colorScheme: 'dark' } },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 5198 --strictPort',
-    url: 'http://127.0.0.1:5198/design-system',
+    command: 'npm run dev -- --host 127.0.0.1 --port 5200 --strictPort',
+    url: 'http://127.0.0.1:5200/design-system',
     reuseExistingServer: false,
     timeout: 30_000,
   },

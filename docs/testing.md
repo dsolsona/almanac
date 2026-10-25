@@ -174,8 +174,9 @@ The web foundation provides these fixed entry points:
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
 
-The browser matrix owns port 5198 and refuses an existing server; stop a preview
-before running it. The production smoke uses port 5199. Checks require completed
+The browser matrix owns port 5200 and refuses an existing server. Keep the
+maintainer's preview on port 5198 running during checks; stopping it breaks lazy
+imports in already-open tabs. The production smoke uses port 5199. Checks require completed
 setup and never install dependencies. Unknown modes and empty test selections fail.
 These commands establish UI foundation behavior, not API/database/authentication
 acceptance. Real-stack and Go entry points remain future F1 work.

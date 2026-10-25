@@ -77,8 +77,8 @@ directories you change, then the relevant specs and ADRs.
   UI components in `web/src/components/ui/`, chart components in
   `web/src/components/charts/`, and design guidance in `web/DESIGN_SYSTEM.md`.
   The catalogue should demonstrate those actual components and their states;
-  feature screens should reuse them. Shared controls and the catalogue exist;
-  chart components will be added in a later task.
+  feature screens should reuse them. Shared controls, timeline charts, exact-value
+  tables and their catalogue examples exist.
   Backend architecture remains subject to explicit decisions.
 - Keep maintenance exclusions, notification silences and graph annotations distinct.
   Maintenance omits eligible measurements without deleting them; silences affect
@@ -173,6 +173,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   accepting combined work and broader checks at the required milestone/risk boundary.
   Do not wrap every focused test in a full build/browser matrix. Separate cached
   setup from execution, and verify the stack matches the candidate revision.
+- Keep the maintainer's preview available during verification. Browser checks own
+  a separate port and server; never stop the preview to free their port. If a
+  preview must restart after integration, restore it and verify the URL before
+  handing back the page. Lazy-loaded sections must fail visibly without blanking
+  unrelated controls.
 - Prefer established, narrowly scoped command families for setup, builds, checks,
   previews and Git operations. Reuse existing approvals; do not introduce generic
   shell execution targets or bypass permission controls. If an operation requires

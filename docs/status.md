@@ -68,6 +68,11 @@ no Go/API/database or full product-journey tests are claimed.
   ignored screenshots/review reports remain available for inspection.
 - [F1-T02](tasks/F1-T02.md) and its [controls plan](plans/0002-catalogue-controls.md)
   are complete, integrated through `4a1f15b` with independent review and fresh checks.
+- [F1-T03](tasks/F1-T03.md) is in review on its implementation branch. A failed
+  lazy module request reproduced a blank catalogue; a scoped error boundary now
+  preserves other controls and offers reload recovery. Browser verification uses
+  port 5200 independently of the maintainer preview on 5198. Review corrections
+  and integrated verification remain required before this task is accepted.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
