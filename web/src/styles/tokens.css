@@ -1,0 +1,83 @@
+@font-face {
+  font-family: 'Almanac Slab';
+  src: url('/fonts/Bevan-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Almanac foundations. Keep component/status meanings separate from brand hues. */
+:root {
+  --almanac-paper: #f8f6ee;
+  --almanac-ink: #183440;
+  --almanac-vermilion: #bd4426;
+  --almanac-teal: #246469;
+  --almanac-heading: 'Almanac Slab', Rockwell, Georgia, serif;
+  --almanac-space-1: 4px;
+  --almanac-space-2: 8px;
+  --almanac-space-3: 12px;
+  --almanac-space-4: 16px;
+  --almanac-space-6: 24px;
+  --almanac-space-8: 32px;
+  --primary-foreground: #ffffff;
+  --bg: var(--almanac-paper); --surface: #fffdf6; --surface-2: #eeeade; --surface-3: #e0dacb;
+  --text: var(--almanac-ink); --text-2: #485353; --text-3: #606761;
+  --border: #c5cbc4; --border-strong: #858e85;
+  --grid: #e6e1d4; --axis: #a1a99e; --crosshair: #606761;
+  --accent: var(--almanac-vermilion); --accent-ink: #99371f; --accent-wash: #f3e2d7;
+  --s1: var(--almanac-teal); --s2: #bd4426; --s3: var(--almanac-teal);
+  --shadow: 0 4px 16px rgb(36 43 44 / 8%);
+  --radius: 4px; --radius-sm: 3px;
+}
+:root.dark {
+  --bg: #202725; --surface: #27302d; --surface-2: #323c37; --surface-3: #455047;
+  --text: #f8f6ee; --text-2: #d0cdbf; --text-3: #adb6a9;
+  --border: #465148; --border-strong: #778578;
+  --grid: #3a443d; --axis: #778578; --crosshair: #adb6a9;
+  --accent: #efab8f; --accent-ink: #f5b59c; --accent-wash: #4c3830;
+  --primary-foreground: #202725;
+  --s1: #98c6bc; --s2: #efab8f; --s3: #98c6bc;
+  --shadow: 0 4px 16px rgb(0 0 0 / 25%);
+}
+
+
+/* Almanac keeps all status semantics here, independent of its orange brand. */
+:root {
+  --good-text: var(--status-healthy); --warn-text: var(--status-warning); --crit-text: var(--status-breached); --neutral-text: var(--status-no-data);
+  --status-healthy: #31665e; --status-warning: #ae4b00; --status-breached: #a52b38;
+  --status-no-data: #606761; --status-stale: #606761;
+  --good: #416b68; --good-wash: #e5eee8;
+  --warn: #d66b00; --warn-wash: #f5ecd1;
+  --crit: #b53442; --crit-wash: #f5e3e3;
+  --neutral: #7d847a; --neutral-wash: #e9e7dd;
+}
+:root.dark {
+  --status-healthy: #98c6bc; --status-warning: #e5c06e; --status-breached: #f39da5;
+  --status-no-data: #b8bfb2; --status-stale: #b8bfb2;
+  --good: #98c6bc; --good-wash: #31473e;
+  --warn: #e5c06e; --warn-wash: #4d442c;
+  --crit: #f39da5; --crit-wash: #503337;
+  --neutral: #b8bfb2; --neutral-wash: #3f473f;
+}
+
+:root {
+  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --control-height: 38px;
+  --focus-ring: var(--accent);
+  --dialog-scrim: rgb(24 52 64 / 55%);
+  --layer-dialog: 20;
+  --space-1: var(--almanac-space-1);
+  --space-2: var(--almanac-space-2);
+  --space-3: var(--almanac-space-3);
+  --space-4: var(--almanac-space-4);
+  --space-6: var(--almanac-space-6);
+  --space-8: var(--almanac-space-8);
+  --space-12: 48px;
+  --space-16: 64px;
+  --motion: 120ms;
+  color-scheme: light;
+}
+:root.dark { color-scheme: dark; }
+@media (pointer: coarse) { :root { --control-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { :root { --motion: 0ms; } }
