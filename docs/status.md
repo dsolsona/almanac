@@ -92,6 +92,8 @@ and product-journey acceptance remain outstanding.
   screening, stacked on initial-owner persistence. Full/race gates and independent
   reviews passed. Login/startup must apply the complete creation policy before
   accepting new passwords; persistent sessions are the next prerequisite.
+- [F1-T09](tasks/F1-T09.md) is ready: persistent session issuance, validation and
+  revocation. Login/throttling, first-password rotation and API/CLI/UI remain future work.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

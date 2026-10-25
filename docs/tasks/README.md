@@ -32,3 +32,6 @@ transactional bootstrap/login service and API/CLI/UI wiring.
 
 [F1-T08](F1-T08.md) adds offline common-password screening under its
 [plan](../plans/0008-offline-password-policy.md), before password-creation flows.
+
+[F1-T09](F1-T09.md) adds persistent local sessions under its
+[plan](../plans/0009-persistent-local-sessions.md), before login/API exposure.
