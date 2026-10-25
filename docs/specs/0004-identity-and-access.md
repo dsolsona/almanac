@@ -9,7 +9,8 @@
 - Plans: [Identity primitives](../plans/0006-identity-primitives.md),
   [initial owner](../plans/0007-initial-owner-persistence.md),
   [offline password policy](../plans/0008-offline-password-policy.md),
-  [persistent sessions](../plans/0009-persistent-local-sessions.md)
+  [persistent sessions](../plans/0009-persistent-local-sessions.md),
+  [atomic password rotation](../plans/0010-atomic-password-rotation.md)
 - Supersedes / superseded by: none
 
 ## Purpose
@@ -412,8 +413,10 @@ checks in both themes/mobile layouts. Document inspection is not security valida
 [F1-T07](../tasks/F1-T07.md) verifies atomic initial-owner storage and audit with
 real concurrent PostgreSQL tests. [F1-T08](../tasks/F1-T08.md) verifies offline
 common-password screening. Session persistence is verified under
-[F1-T09](../tasks/F1-T09.md). These internal operations do not yet supply login,
-startup provisioning, password rotation, throttling, cookies/CSRF or UI/CLI journeys.
+[F1-T09](../tasks/F1-T09.md). [F1-T10](../tasks/F1-T10.md) verifies atomic password
+rotation and initial completion storage. These internal operations do not yet
+supply login, startup provisioning, application password proof/policy orchestration,
+throttling, cookies/CSRF or UI/CLI journeys.
 
 ## Change notes
 

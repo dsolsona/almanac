@@ -21,8 +21,8 @@ Only existing approved fixed-purpose commands; never request new approvals.
 
 ## Task 1: Atomic rotation storage
 
-- [ ] Add failing acceptance cases for initial and ordinary rotation.
-- [ ] Implement validated rotation and generated transaction queries.
-- [ ] Verify concurrency, authority rejection, digest collision and audit rollback.
-- [ ] Run focused, PostgreSQL/race and combined gates; obtain independent reviews.
+- [x] Add failing acceptance cases for initial and ordinary rotation.
+- [x] Implement validated rotation and generated transaction queries.
+- [x] Verify concurrency, authority rejection, digest collision and audit rollback.
+- [x] Run focused, PostgreSQL/race and combined gates; obtain independent reviews.
 - [ ] Reconcile evidence and open a stacked PR.
