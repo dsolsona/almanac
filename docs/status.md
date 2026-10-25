@@ -21,7 +21,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–05 done; F1 incomplete | Catalogue, UI-only runtime and PostgreSQL upgrade foundation verified; identity and product journeys remain |
+| Product implementation | F1-T01–06 done; F1 incomplete | Catalogue, UI-only runtime, PostgreSQL upgrades and identity primitives verified; authentication flows and product journeys remain |
 
 ## Coverage
 
@@ -82,8 +82,9 @@ and product-journey acceptance remain outstanding.
   are complete, integrated at `28bafab`. PostgreSQL18.6 explicit upgrades and their
   isolated integration lane are verified. Next foundation work is local identity,
   protected onboarding and authenticated backend operations, within SPEC-0004.
-- [F1-T06](tasks/F1-T06.md) is in progress: internal password/session primitives
-  for the local identity service. It does not expose login or complete onboarding.
+- [F1-T06](tasks/F1-T06.md) is complete: reviewed internal password/session
+  primitives at `334fb33`, with merged foundation fixes. It does not expose login
+  or complete onboarding. Next is transactional initial-owner persistence.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

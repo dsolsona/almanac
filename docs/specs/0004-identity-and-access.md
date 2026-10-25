@@ -4,9 +4,9 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related ADRs: [ADR-0004](../adr/0004-identity-and-access.md) (accepted)
-- Plan: none
+- Plan: [Identity primitives](../plans/0006-identity-primitives.md)
 - Supersedes / superseded by: none
 
 ## Purpose
@@ -399,7 +399,10 @@ plaintext secrets. UI and CLI retain actionable redacted codes and request IDs.
 
 ## Verification evidence
 
-Not implemented. Acceptance criteria require concurrent database tests, a fake OIDC
+Internal password/session-secret primitives have focused encoding, password-boundary
+and cancellation tests under [F1-T06](../tasks/F1-T06.md). This is partial evidence,
+not completion of the authentication acceptance criteria. The remaining criteria
+require concurrent database tests, a fake OIDC
 provider for the later Google increment, controlled clocks, fault injection, secret-disclosure checks, and browser
 checks in both themes/mobile layouts. Document inspection is not security validation.
 

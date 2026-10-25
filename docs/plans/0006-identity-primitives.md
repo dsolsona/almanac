@@ -33,7 +33,7 @@ families only; one implementer, coordinator-owned Git, no publishing.
 Read [F1-T06](../tasks/F1-T06.md) for exact signatures, encodings, ownership,
 negative cases, fixed command selectors and benchmark requirements.
 
-- [ ] Establish failing boundary, encoding and bounded-admission tests.
-- [ ] Implement Argon2id verification and canonical random session secrets.
-- [ ] Run focused/full/race checks and bounded benchmark; report evidence.
-- [ ] Review, integrate, verify and reconcile remaining authentication scope.
+- [x] Establish failing boundary, encoding and bounded-admission tests.
+- [x] Implement Argon2id verification and canonical random session secrets.
+- [x] Run focused/full/race checks and bounded benchmark; report evidence.
+- [x] Review, integrate, verify and reconcile remaining authentication scope.
