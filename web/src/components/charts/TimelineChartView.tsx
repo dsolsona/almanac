@@ -7,6 +7,7 @@ import { init } from 'echarts/core';
 import type { ECharts } from 'echarts/core';
 import { validateTimeline, type TimelineChart as TimelineChartData } from './timelineModel.ts';
 import { buildTimelineOption, type TimelinePalette } from './timelineOption.ts';
+import './charts.css';
 
 use([LineChart, ScatterChart, AriaComponent, GridComponent, TooltipComponent, SVGRenderer]);
 
@@ -62,7 +63,7 @@ export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
     <h2 id={titleId}>{chart.title}</h2>
     <p className="timeline-chart__summary">{chart.summary}</p>
     <p className="timeline-chart__meta">Range: {chart.start} to {chart.end} (end excluded) · UTC · step {Math.round(chart.stepMs / 1000)} seconds</p>
-    <p className="timeline-chart__coverage">Coverage: complete samples are lines; partial samples are marked and labelled; missing and zero-traffic samples break lines.</p>
+    <p className="timeline-chart__coverage">Coverage: complete samples are lines, with circles for isolated points; partial samples use diamonds and are labelled; missing and zero-traffic samples break lines.</p>
     {result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" role="img" aria-label={`${chart.title}. ${chart.summary}`} />}
   </section>;
 }

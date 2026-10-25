@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_sqlc_generated _report_sizes
+.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -75,6 +75,12 @@ _verify_web:
 	cd web && npm run build
 	cd web && node scripts/check-production.mjs
 
+_ensure_web_assets:
+	@if [ ! -f web/dist/index.html ]; then \
+	  echo 'Building missing embedded web assets'; \
+	  cd web && npm run build; \
+	fi
+
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp|./internal/storage) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
@@ -82,6 +88,7 @@ _verify_go:
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
 	  target="$${GO_PACKAGE:-./...}"; \
+	  case "$$target" in ./...|./internal/command|./internal/uihttp) $(MAKE) _ensure_web_assets ;; esac; \
 	  test_list=$$(mktemp .local/go-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
 	  if ! .local/bin/go test -list . "$$target" > "$$test_list"; then echo 'Go test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
@@ -97,7 +104,7 @@ _verify_go:
 	    $(MAKE) _verify_smoke; \
 	  fi
 
-_verify_go_race:
+_verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
 	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \

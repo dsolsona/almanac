@@ -10,6 +10,20 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await expect(page.getByRole('heading', { name: 'Aligned charts and exact values' })).toBeVisible();
   const plot = page.locator('.timeline-chart__plot');
   await expect(plot.locator('svg')).toBeVisible();
+  const visiblePointMarkers = await plot.locator('svg path[fill]:not([fill="none"])').count();
+  expect(visiblePointMarkers).toBeGreaterThanOrEqual(8);
+  const isolatedMinuteNineMarker = await plot.locator('svg path[fill]:not([fill="none"])').evaluateAll((paths, plotRect) => {
+    const bounds = plotRect as { x: number; y: number; width: number; height: number };
+    const expectedX = bounds.x + 66 + (9 / 16) * (bounds.width - 86);
+    return paths.some((path) => {
+      const marker = path.getBoundingClientRect();
+      const centerX = marker.x + marker.width / 2;
+      const centerY = marker.y + marker.height / 2;
+      return marker.width > 0 && marker.height > 0 && marker.width <= 12 && marker.height <= 12 &&
+        Math.abs(centerX - expectedX) <= 5 && centerY >= bounds.y + bounds.height * .05 && centerY <= bounds.y + bounds.height * .25;
+    });
+  }, await plot.boundingBox());
+  expect(isolatedMinuteNineMarker, 'isolated complete sample at minute 9 has a visible SVG marker').toBe(true);
   await expect(page.getByRole('table').locator('tbody').getByText('99.970000 %', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Complete', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('page 1 of 2')).toBeVisible();
@@ -32,6 +46,8 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await moveToMinute(5);
   await expect(tooltip).toContainText('SLI · Example service: Missing');
   await expect(tooltip).not.toContainText('99.960000 %');
+  await moveToMinute(6);
+  await expect(tooltip).toContainText('SLI · Example service: 0.000000 % · Complete');
   await moveToMinute(8);
   await expect(tooltip).toContainText('No sample at this timestamp');
   await expect(tooltip).not.toContainText('99.950000 %');
@@ -71,6 +87,24 @@ test('chart series colors follow the resolved semantic CSS token', async ({ page
   await expect(svg).toBeVisible();
   await page.evaluate(() => document.documentElement.style.setProperty('--s1', '#123456'));
   await expect.poll(() => svg.locator('path[stroke="#123456"]').count()).toBeGreaterThan(0);
+});
+
+test('chart and table retain their shared layout without catalogue styles', async ({ page }) => {
+  await page.goto('/design-system');
+  await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.evaluate(() => document.querySelectorAll('style[data-vite-dev-id*="catalogue.css"]').forEach((style) => style.remove()));
+  await page.getByRole('button', { name: 'Charts' }).click();
+  const panel = page.locator('.timeline-chart');
+  const plot = page.locator('.timeline-chart__plot');
+  const tableScroll = page.locator('.exact-values__scroll');
+  await expect(plot.locator('svg')).toBeVisible();
+  await expect.poll(() => panel.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe('1px');
+  expect(await plot.evaluate((element) => getComputedStyle(element).height)).toBe('420px');
+  expect(await tableScroll.evaluate((element) => getComputedStyle(element).overflow)).toBe('auto');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await plot.evaluate((element) => getComputedStyle(element).height)).toBe('400px');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
 test('rendered axis labels meet text contrast in light and dark themes', async ({ page }) => {

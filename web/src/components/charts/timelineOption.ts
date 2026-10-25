@@ -50,13 +50,20 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     const lane = chart.lanes[item.lane]!;
     const color = colors[index % colors.length]!;
     const seriesId = `lane-${item.lane}-series-${item.seriesIndex}`;
+    const isolated = item.data.filter((point, pointIndex) => point.value !== null &&
+      (pointIndex === 0 || item.data[pointIndex - 1]?.value === null) &&
+      (pointIndex === item.data.length - 1 || item.data[pointIndex + 1]?.value === null));
     return [
       { id: `${seriesId}-line`, name: `${lane.label} · ${item.label}`, type: 'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
         showSymbol: false, connectNulls: false, animation: false, itemStyle: { color }, lineStyle: { color, width: 2 },
         data: item.data.map((point) => [point.timestamp, point.value]),
       },
-      ...(item.partial.length ? [{ id: `${seriesId}-partial`, name: `${lane.label} · ${item.label} · partial`, type: 'scatter' as const,
+      ...(isolated.length ? [{ id: `${seriesId}-isolated`, name: `${lane.label} · ${item.label}`, type: 'scatter' as const,
         xAxisIndex: item.lane, yAxisIndex: item.lane, symbolSize: 9, itemStyle: { color, borderColor: palette.surface, borderWidth: 2 },
+        data: isolated.map((point) => [point.timestamp, point.value]),
+      }] : []),
+      ...(item.partial.length ? [{ id: `${seriesId}-partial`, name: `${lane.label} · ${item.label} · partial`, type: 'scatter' as const,
+        xAxisIndex: item.lane, yAxisIndex: item.lane, symbol: 'diamond', symbolSize: 9, itemStyle: { color, borderColor: palette.surface, borderWidth: 2 },
         data: item.partial.map((point) => [point.timestamp, point.value]),
       }] : []),
     ];

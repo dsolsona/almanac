@@ -185,8 +185,13 @@ The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy
 imports in already-open tabs. The production smoke uses port 5199. Checks require completed
 setup and never install dependencies. Unknown modes and empty test selections fail.
-Go tests exercise real loopback upstreams and embedded assets. The process smoke
-owns an ephemeral port. Generation/build/tests use local pinned tools and offline
+Go tests exercise real loopback upstreams and embedded assets.
+Go and race checks build missing embedded assets before
+test discovery; focused config/storage unit checks do not need a web build. Existing
+assets are reused for a fast Go-only loop. After web source changes, use `make build`
+or the full `make verify` gate to refresh them. Integration checks build the binary
+and its assets after storage-only test discovery.
+The process smoke owns an ephemeral port. Generation/build/tests use local pinned tools and offline
 Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
 They require the matching local fixture, use a fresh disposable database per test,
 and fail for unavailable infrastructure or an empty integration-test selection.

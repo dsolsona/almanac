@@ -26,6 +26,9 @@ directories you change, then the relevant specs and ADRs.
   comes next. Bring reviewable specs and ADRs to Crit when requested; ask focused
   questions only where missing information changes the outcome. Product code still
   requires the relevant accepted contracts.
+- A request to check PR review comments includes validating findings, fixing valid
+  issues, running the relevant checks, updating the PR and replying in its review
+  threads. Do not stop after triage; explain findings that do not apply.
 - If instructions, specs, and accepted ADRs conflict, identify the conflict and
   resolve it with the maintainer before making the affected change. Continue
   independent work when possible. Do not treat draft documents as accepted policy.
