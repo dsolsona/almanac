@@ -49,6 +49,7 @@ test('catalogue foundations and shared controls work at this viewport and theme'
 
 test('keyboard navigation enters dialog, Escape closes it and restores focus', async ({ page }) => {
   await page.goto('/design-system');
+  await expect(page.getByRole('link', { name: 'Skip to catalogue' })).toBeVisible();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to catalogue' })).toBeFocused();
   await page.getByRole('button', { name: 'Open dialog' }).focus();

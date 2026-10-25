@@ -100,8 +100,23 @@ with the unit mode.
 
 The catalogue demonstrates actual shared control exports and local-only state.
 It includes palette and type specimens, disabled/pending/invalid/empty/loading/
-error/long-content examples, switches, date selection and a working dialog. Its
-local save example completes only when the explicit finish control is pressed.
-It is imported only by the development build. Charts, exact-value tables,
-complex navigation, and domain screens are future work; this catalogue does not
-imply application data, authentication or backend operation.
+error/long-content examples, switches, date selection, a working dialog, and a
+lazy charts section. Its local save example completes only when the explicit
+finish control is pressed. It is imported only by the development build; examples
+do not imply application data, authentication or backend operation.
+
+## Timeline charts and exact values
+
+Timeline charts use the shared wrappers in `src/components/charts/`. Each lane
+shares the declared UTC range and step; missing samples and absent expected steps
+break lines, while partial samples use a distinct marker. Zero remains numeric.
+Units, range, UTC timezone and coverage meaning are shown next to every plot.
+Charts are SVG rendered, theme-aware, resize-aware and bounded to 1,500 plotted
+points per series. Chart values are display inputs only; the browser does not
+calculate SLOs, budgets or burn rates.
+
+Pair every chart with `ExactValuesTable`, backed by the same sample objects. It
+shows exact decimal strings and coverage in a keyboard-focusable scroll region,
+with controlled pages of at most 50 rows. Keep missing, partial and zero-traffic
+labels distinct. Synthetic catalogue fixtures must be explicitly labelled and
+must never look like live service data.
