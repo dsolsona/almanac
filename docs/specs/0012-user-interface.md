@@ -4,10 +4,10 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: shared foundations in progress; feature journeys not started
 - Related ADRs: [ADR-0011](../adr/0011-ui-design-and-tooling.md) (accepted),
   [ADR-0002](../adr/0002-agent-communication.md) (accepted)
-- Plan: none
+- Plan: [Visual foundation](../plans/0001-visual-foundation.md)
 - Supersedes / superseded by: none
 
 ## Accepted amendment
