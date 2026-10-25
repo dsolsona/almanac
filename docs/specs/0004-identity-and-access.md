@@ -11,7 +11,8 @@
   [offline password policy](../plans/0008-offline-password-policy.md),
   [persistent sessions](../plans/0009-persistent-local-sessions.md),
   [atomic password rotation](../plans/0010-atomic-password-rotation.md),
-  [shared login admission](../plans/0011-shared-login-throttle.md)
+  [shared login admission](../plans/0011-shared-login-throttle.md),
+  [local authentication service](../plans/0012-local-authentication-service.md)
 - Supersedes / superseded by: none
 
 ## Purpose
@@ -416,9 +417,11 @@ real concurrent PostgreSQL tests. [F1-T08](../tasks/F1-T08.md) verifies offline
 common-password screening. Session persistence is verified under
 [F1-T09](../tasks/F1-T09.md). [F1-T10](../tasks/F1-T10.md) verifies atomic password
 rotation and initial completion storage. [F1-T11](../tasks/F1-T11.md) verifies shared
-login admission and failure budgets. These internal operations do not yet supply
-login, startup provisioning, application password proof/policy orchestration,
-transport throttling, cookies/CSRF or UI/CLI journeys.
+login admission and failure budgets. [F1-T12](../tasks/F1-T12.md) connects these
+operations into an application service for protected initial provisioning, password
+proof/policy, login, rotation, authentication and logout. Its real PostgreSQL journey
+is service-level evidence; public HTTP, cookies/CSRF and UI/CLI journeys remain
+unimplemented.
 
 ## Change notes
 

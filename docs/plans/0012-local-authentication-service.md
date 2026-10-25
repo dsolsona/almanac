@@ -21,8 +21,8 @@ Only approved fixed-purpose command families, no new approvals or direct compile
 
 ## Task 1: Authentication orchestration
 
-- [ ] Extract the protected-file and disposable-database helpers without regressions.
-- [ ] Implement bootstrap/login/rotation/authenticate/logout with bounded work.
-- [ ] Verify real journey, admission, proof races, failure and secret boundaries.
-- [ ] Run focused/combined integration/race and full gate; review independently.
-- [ ] Record evidence and open a stacked PR.
+- [x] Extract the protected-file and disposable-database helpers without regressions.
+- [x] Implement bootstrap/login/rotation/authenticate/logout with bounded work.
+- [x] Verify real journey, admission, proof races, failure and secret boundaries.
+- [x] Run focused/combined integration/race and full gate; review independently.
+- [x] Record acceptance evidence; publish this increment as a stacked PR.

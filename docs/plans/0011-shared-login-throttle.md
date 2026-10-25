@@ -25,4 +25,4 @@ Only already approved fixed-purpose commands; never request new approvals.
 - [x] Implement begin/finish operations and generated queries.
 - [x] Verify concurrency, rolling boundaries, completion and bounded cleanup.
 - [x] Run focused/integration/race and combined gates; review independently.
-- [ ] Record acceptance and publish the next stacked PR.
+- [x] Record acceptance and publish [PR #7](https://github.com/dsolsona/almanac/pull/7).

@@ -8,8 +8,9 @@ The catalogue also includes a date picker, switches, shared loading feedback,
 aligned timeline charts and exact-value tables.
 A Go executable now serves the embedded UI with operational health, a fixed-origin
 API proxy, version/help commands and bounded shutdown. Explicit PostgreSQL upgrades
-establish immutable schema history and installation metadata. Authentication,
-management operations, observation storage and providers remain unimplemented.
+establish immutable schema history and installation metadata. Local authentication
+now has a verified application service; public authentication transport, management
+operations, observation storage and providers remain unimplemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -21,7 +22,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–08 done; F1 incomplete | Catalogue, runtime, storage, identity primitives, initial-owner persistence and offline password policy verified; authentication flows and product journeys remain |
+| Product implementation | F1-T01–12 done; F1 incomplete | Catalogue, runtime, storage and local authentication service verified; public authentication and product journeys remain |
 
 ## Coverage
 
@@ -107,8 +108,12 @@ and product-journey acceptance remain outstanding.
   integration tests under race in 13.030s. Review drove explicit READ COMMITTED
   transactions, with a reproduced over-admission regression now fixed. Application
   authentication and HTTP remain the next integration work.
-- [F1-T12](tasks/F1-T12.md) is ready: connect protected initial setup, login,
+- [F1-T12](tasks/F1-T12.md) is verified at `3d8fd7d`: protected initial setup, login,
   password rotation, authentication and logout through one backend service.
+  Independent task and whole-branch reviews approved. Full gate passed 30 UI/52 Go;
+  combined PostgreSQL 18.6 passed 51 tests under race. Final test-only additions
+  passed 12 authentication integration tests under race in 10.086s. Public HTTP,
+  cookie/CSRF protections and UI/CLI journeys are the next delivery work.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
