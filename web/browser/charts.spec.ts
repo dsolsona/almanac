@@ -63,3 +63,57 @@ test('chart theme updates and keyboard pagination work without page overflow', a
   await expect(page.getByText('page 2 of 2')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('charts-theme.png'), fullPage: true });
 });
+
+test('reopening charts across navigation and theme changes leaves the page error-free', async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.stack ?? error.message}`));
+  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ''}`));
+  await page.goto('/design-system');
+  await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
+
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    await page.getByRole('button', { name: 'Charts' }).click();
+    await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
+    const themeToggle = page.locator('.theme-toggle');
+    const isDark = await themeToggle.getAttribute('aria-pressed') === 'true';
+    await themeToggle.click();
+    if (isDark) await expect(page.locator('html')).not.toHaveClass(/dark/);
+    else await expect(page.locator('html')).toHaveClass(/dark/);
+    await page.getByRole('link', { name: 'Controls' }).click();
+    await expect(page.getByRole('heading', { name: 'Calendar, switches and loading' })).toBeVisible();
+    await page.getByRole('button', { name: 'Charts' }).click();
+    await expect(page.getByRole('heading', { name: 'Aligned charts and exact values' })).toBeVisible();
+    if (cycle < 2) {
+      await page.getByRole('link', { name: 'ALMANAC' }).click();
+      await expect(page.getByRole('heading', { name: 'Almanac is being built.' })).toBeVisible();
+      await page.goBack();
+      await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
+    }
+  }
+  expect(browserErrors).toEqual([]);
+});
+
+test('a failed lazy chart import leaves catalogue controls available and reload retries it', async ({ page }) => {
+  let chartChunkRequests = 0;
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.stack ?? error.message));
+  await page.route('**/src/catalogue/ChartsSection.tsx*', async (route) => {
+    chartChunkRequests += 1;
+    if (chartChunkRequests === 1) await route.abort('failed');
+    else await route.continue();
+  });
+  await page.goto('/design-system');
+  await page.getByRole('button', { name: 'Charts' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: /chart examples could not be loaded/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Foundations' })).toBeVisible();
+  await page.getByRole('button', { name: 'Primary' }).click();
+  await expect(page.locator('.demo-feedback')).toContainText('Count: 1');
+
+  await page.getByRole('button', { name: 'Reload catalogue to retry' }).click();
+  await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
+  await page.getByRole('button', { name: 'Charts' }).click();
+  await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
+  expect(chartChunkRequests).toBe(2);
+  expect(pageErrors).toEqual([]);
+});
