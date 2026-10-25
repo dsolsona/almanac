@@ -23,4 +23,6 @@ in progress. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
 generated operational contracts and lifecycle checks. [F1-T05](F1-T05.md) is the
 completed PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
 covers explicit schema upgrades and isolated real-database verification. Identity
-work remains a subsequent foundation task.
+work continues with [F1-T06](F1-T06.md) and its
+[bounded primitives plan](../plans/0006-identity-primitives.md), before the
+transactional bootstrap/login service and API/CLI/UI wiring.

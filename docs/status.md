@@ -82,6 +82,8 @@ and product-journey acceptance remain outstanding.
   are complete, integrated at `28bafab`. PostgreSQL18.6 explicit upgrades and their
   isolated integration lane are verified. Next foundation work is local identity,
   protected onboarding and authenticated backend operations, within SPEC-0004.
+- [F1-T06](tasks/F1-T06.md) is in progress: internal password/session primitives
+  for the local identity service. It does not expose login or complete onboarding.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
