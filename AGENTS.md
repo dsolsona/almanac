@@ -183,6 +183,17 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   shell execution targets or bypass permission controls. If an operation requires
   new approval while the maintainer is unavailable, leave it pending and continue
   independent authorized work.
+- The coordinator must carry this command restriction into every implementer
+  brief and enforce it during review. Do not request new command approvals for
+  direct formatter, compiler or helper-script invocations. Route them through
+  fixed-purpose operations under the approved `make setup`, `make build`,
+  `make verify` or `make generate` families. Never add arbitrary command execution
+  or unchecked passthrough arguments to those targets. Leave actions that cannot
+  fit an approved family pending instead of interrupting the maintainer.
+- If an implementer cannot reuse an existing command approval, hand the exact
+  bounded operation and verification evidence back to the coordinator. Do not
+  retry approval requests. The coordinator can perform approved Git staging and
+  commits after checking file ownership and the submitted evidence.
 - Never replace real API/database/agent acceptance evidence with mocked UI checks.
   Preserve first-attempt failures; do not rerun-to-green, skip expected tests, weaken
   assertions, disable auth, or increase timeouts to manufacture a passing gate.
