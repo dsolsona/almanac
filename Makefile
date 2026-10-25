@@ -13,8 +13,10 @@ preview:
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "unit" ]; then \
 	  if [ -n "$${TEST_FILE:-}" ]; then \
-	    case "$${TEST_FILE}" in *[!A-Za-z0-9_./-]*) echo 'TEST_FILE contains unsupported characters' >&2; exit 2;; esac; \
-	    cd web && ./node_modules/.bin/vitest run --config vitest.config.ts -- "$${TEST_FILE}"; \
+	    case "$${TEST_FILE}" in tests/*.test.tsx) ;; *) echo 'TEST_FILE must select a tests/*.test.tsx file' >&2; exit 2;; esac; \
+	    case "$${TEST_FILE}" in *[!A-Za-z0-9_./-]*|*..*) echo 'TEST_FILE contains unsupported characters' >&2; exit 2;; esac; \
+	    cd web && if [ ! -f "$${TEST_FILE}" ]; then echo 'TEST_FILE must name an existing test file' >&2; exit 2; fi && \
+	      ./node_modules/.bin/vitest run --config vitest.config.ts "$${TEST_FILE}"; \
 	  else cd web && ./node_modules/.bin/vitest run --config vitest.config.ts; fi; \
 	elif [ "$${VERIFY_MODE:-}" = "browser" ]; then \
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts; \

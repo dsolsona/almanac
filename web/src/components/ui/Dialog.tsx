@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 import { Button } from './Button.tsx';
 
 type Props = {
@@ -10,6 +10,7 @@ type Props = {
 };
 
 export function Dialog({ open, onClose, title, children, triggerRef }: Props) {
+  const titleId = `${useId()}-title`;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const wasOpen = useRef(false);
   useEffect(() => {
@@ -25,9 +26,9 @@ export function Dialog({ open, onClose, title, children, triggerRef }: Props) {
     onClose();
   }
 
-  return <dialog ref={dialogRef} className="ui-dialog" aria-labelledby="ui-dialog-title" onCancel={(event) => { event.preventDefault(); requestClose(); }}>
+  return <dialog ref={dialogRef} className="ui-dialog" aria-labelledby={titleId} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
     <header className="ui-dialog__header">
-      <h2 id="ui-dialog-title">{title}</h2>
+      <h2 id={titleId}>{title}</h2>
       <Button variant="ghost" aria-label="Close dialog" onClick={requestClose}>×</Button>
     </header>
     <div className="ui-dialog__content">{children}</div>

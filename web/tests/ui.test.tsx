@@ -1,7 +1,8 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import { useRef } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { Button, SelectField, StatusBadge, TextField, ThemeToggle } from '../src/components/ui/index.ts';
+import { Button, Dialog, SelectField, StatusBadge, TextField, ThemeToggle } from '../src/components/ui/index.ts';
 
 afterEach(() => {
   cleanup();
@@ -77,6 +78,39 @@ describe('shared controls', () => {
     render(<div>{(['healthy', 'warning', 'breached', 'no-data', 'stale'] as const).map((status) => <StatusBadge key={status} status={status} />)}</div>);
     for (const label of ['Healthy', 'Warning', 'Breached', 'No data', 'Stale']) expect(screen.getByText(label)).toBeVisible();
     expect([...document.querySelectorAll('.ui-status__mark')].map((mark) => mark.textContent)).toEqual(['✓', '!', '×', '–', '↻']);
+  });
+
+  it('gives each mounted dialog its own accessible title', () => {
+    const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+    const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value(this: HTMLDialogElement) { this.setAttribute('open', ''); },
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+      configurable: true,
+      value(this: HTMLDialogElement) { this.removeAttribute('open'); },
+    });
+
+    function DialogPair() {
+      const triggerRef = useRef<HTMLButtonElement>(null);
+      return <>
+        <button ref={triggerRef}>Dialog trigger</button>
+        <Dialog open={false} onClose={() => undefined} title="First dialog" triggerRef={triggerRef}>First content</Dialog>
+        <Dialog open onClose={() => undefined} title="Second dialog" triggerRef={triggerRef}>Second content</Dialog>
+      </>;
+    }
+
+    try {
+      render(<DialogPair />);
+      expect(screen.getByRole('dialog', { name: 'Second dialog' })).toBeInTheDocument();
+    } finally {
+      cleanup();
+      if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+      if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+    }
   });
 
 });
