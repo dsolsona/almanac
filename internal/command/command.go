@@ -48,6 +48,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return 0
 	case "serve":
 		return serve(ctx, args[1:], stdout, stderr)
+	case "db":
+		return db(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "almanac: unsupported command %q\n", args[0])
 		return 2
@@ -58,6 +60,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, `Usage:
   almanac version [--output=json]
   almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--backend-url=ORIGIN] [--shutdown-timeout=DURATION]
+  almanac db upgrade [--database-url-file=FILE] [--timeout=30s] [--output=json]
 
 Implemented component modes:
   ui       Serve the embedded web UI and proxy /api/v1/ to --backend-url.

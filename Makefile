@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _report_sizes
+.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_sqlc_generated _report_sizes
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -10,7 +10,8 @@ setup:
 	    sh scripts/setup-go.sh; \
 	    (cd web && npm ci && ./node_modules/.bin/playwright install chromium); \
 	    (cd tools/openapi && npm ci) ;; \
-	  *) echo 'SETUP_MODE must be all, web, or go' >&2; exit 2 ;; \
+	  database) sh scripts/setup-database.sh ;; \
+	  *) echo 'SETUP_MODE must be all, web, go, or database' >&2; exit 2 ;; \
 	esac
 
 build:
@@ -23,11 +24,12 @@ generate:
 	  api) export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	    test -x .local/bin/oapi-codegen || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	    test -x tools/openapi/node_modules/.bin/openapi-typescript || { echo 'OpenAPI setup missing; run make setup' >&2; exit 2; }; \
-	    .local/bin/oapi-codegen -config api/oapi-codegen.yaml api/openapi.yaml; \
+	    .local/bin/oapi-codegen -config api/oapi-codegen.yaml -o internal/api/generated.go api/openapi.yaml; \
 	    tools/openapi/node_modules/.bin/openapi-typescript api/openapi.yaml -o web/src/api/generated.ts ;; \
 	  format) test -x .local/bin/gofmt || { echo 'Pinned gofmt missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	    find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -w ;; \
-	  *) echo 'GENERATE_MODE must be api or format' >&2; exit 2 ;; \
+	  sqlc) test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; .local/bin/sqlc generate -f sqlc.yaml ;; \
+	  *) echo 'GENERATE_MODE must be api, format, or sqlc' >&2; exit 2 ;; \
 	esac
 
 preview:
@@ -36,6 +38,7 @@ preview:
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
+	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
 	  if [ -n "$${TEST_FILE:-}" ]; then \
@@ -59,7 +62,7 @@ verify:
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, or smoke)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, integration, or smoke)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -74,17 +77,20 @@ _verify_web:
 
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
+	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp|./internal/storage) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
 	  target="$${GO_PACKAGE:-./...}"; \
-	  tests=$$(.local/bin/go test -list . "$$target" | awk '/^Test/{n++} END{print n+0}'); \
+	  test_list=$$(mktemp .local/go-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
+	  if ! .local/bin/go test -list . "$$target" > "$$test_list"; then echo 'Go test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected Go packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected Go tests: $$tests"; \
 	  .local/bin/go vet "$$target"; \
 	  .local/bin/go test "$$target"; \
 	  if [ -z "$${GO_PACKAGE:-}" ]; then \
+	    $(MAKE) _verify_sqlc_generated; \
 	    mkdir -p bin; .local/bin/go build -o bin/almanac ./cmd/almanac; \
 	    $(MAKE) _report_sizes; \
 	    $(MAKE) _verify_generated; \
@@ -93,14 +99,41 @@ _verify_go:
 
 _verify_go_race:
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
-	  tests=$$(.local/bin/go test -list . ./internal/uihttp ./internal/command | awk '/^Test/{n++} END{print n+0}'); \
+	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
+	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected race tests: $$tests"; \
-	  .local/bin/go test -race ./internal/uihttp ./internal/command
+	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/storage
+
+_verify_integration:
+	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
+	  case "$${GO_PACKAGE:-./internal/storage}" in ./internal/storage) ;; *) echo 'GO_PACKAGE must be ./internal/storage for integration checks' >&2; exit 2 ;; esac; \
+	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
+	  target="$${GO_PACKAGE:-./internal/storage}"; \
+	  test_list=$$(mktemp .local/integration-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
+	  if ! .local/bin/go test -tags=integration -list . "$$target" > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  tests=$$(awk '/^TestIntegration/{n++} END{print n+0}' "$$test_list"); \
+	  test "$$tests" -gt 0 || { echo 'selected integration packages contain zero tests' >&2; exit 1; }; \
+	  echo "Selected PostgreSQL integration tests: $$tests"; \
+	  $(MAKE) _verify_sqlc_generated; \
+	  sh scripts/setup-database.sh --check; \
+	  $(MAKE) build; \
+	  .local/bin/go test -race -tags=integration -run '^TestIntegration' -count=1 -timeout=2m "$$target"
+
+_verify_sqlc_generated:
+	@set -eu; test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  temp_dir=$$(mktemp -d .local/sqlc-check.XXXXXX); temp_config=$$(mktemp .sqlc-check.XXXXXX.yaml); trap 'rm -rf "$$temp_dir"; rm -f "$$temp_config"' EXIT; \
+	  sed "s|out: internal/storage/dbgen|out: $$temp_dir/dbgen|" sqlc.yaml > "$$temp_config"; \
+	  .local/bin/sqlc generate -f "$$temp_config"; \
+	  diff -ru internal/storage/dbgen "$$temp_dir/dbgen"
 
 _verify_generated:
 	@set -eu; temp_dir=$$(mktemp -d); trap 'rm -rf "$$temp_dir"' EXIT; \
-	  GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build" .local/bin/oapi-codegen -generate types,std-http,skip-prune -package api -o "$$temp_dir/generated.go" api/openapi.yaml; \
+	  GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build" .local/bin/oapi-codegen -config api/oapi-codegen.yaml -o "$$temp_dir/generated.go" api/openapi.yaml; \
 	  tools/openapi/node_modules/.bin/openapi-typescript api/openapi.yaml -o "$$temp_dir/generated.ts" >/dev/null; \
 	  cmp internal/api/generated.go "$$temp_dir/generated.go"; cmp web/src/api/generated.ts "$$temp_dir/generated.ts"
 
