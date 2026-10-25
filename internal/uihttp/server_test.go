@@ -20,6 +20,7 @@ import (
 )
 
 var testHTTPClient = &http.Client{Timeout: 2 * time.Second}
+var longTestHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +229,8 @@ func TestProxyPropagatesRequestCancellation(t *testing.T) {
 	server := testServer(t, backend.URL)
 	frontend := newTestServer(t, server.http.Handler)
 	ctx, cancel := context.WithCancel(t.Context())
-	ctx, timeoutCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ctx, timeoutCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer timeoutCancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, frontend.URL+"/api/v1/slis", nil)
 	if err != nil {
@@ -236,7 +238,7 @@ func TestProxyPropagatesRequestCancellation(t *testing.T) {
 	}
 	requestDone := make(chan struct{})
 	go func() {
-		response, _ := testHTTPClient.Do(request)
+		response, _ := longTestHTTPClient.Do(request)
 		if response != nil {
 			response.Body.Close()
 		}
@@ -244,8 +246,8 @@ func TestProxyPropagatesRequestCancellation(t *testing.T) {
 	}()
 	awaitSignal(t, started, "upstream request start")
 	cancel()
-	awaitSignal(t, canceled, "upstream cancellation")
-	awaitSignal(t, requestDone, "cancelled client request completion")
+	awaitSignalWithin(t, canceled, "upstream cancellation", 500*time.Millisecond)
+	awaitSignalWithin(t, requestDone, "cancelled client request completion", time.Second)
 }
 
 func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
@@ -264,7 +266,7 @@ func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
 	}
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- server.Serve(listener) }()
-	requestCtx, cancelRequest := context.WithTimeout(t.Context(), 2*time.Second)
+	requestCtx, cancelRequest := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancelRequest()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://"+listener.Addr().String()+"/api/v1/slis", nil)
 	if err != nil {
@@ -272,7 +274,7 @@ func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
 	}
 	requestDone := make(chan struct{})
 	go func() {
-		response, _ := testHTTPClient.Do(request)
+		response, _ := longTestHTTPClient.Do(request)
 		if response != nil {
 			response.Body.Close()
 		}
@@ -287,16 +289,20 @@ func TestShutdownDeadlineForcesInFlightRequestClosed(t *testing.T) {
 	if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		t.Fatal(err)
 	}
-	awaitSignal(t, upstreamCanceled, "forced-close cancellation")
-	awaitSignal(t, requestDone, "forced-close client completion")
+	awaitSignalWithin(t, upstreamCanceled, "forced-close cancellation", 500*time.Millisecond)
+	awaitSignalWithin(t, requestDone, "forced-close client completion", time.Second)
 	if err := awaitValue(t, serveDone, "listener close"); !errors.Is(err, http.ErrServerClosed) {
 		t.Fatalf("serve returned %v", err)
 	}
 }
 
 func awaitSignal(t *testing.T, signal <-chan struct{}, description string) {
+	awaitSignalWithin(t, signal, description, 2*time.Second)
+}
+
+func awaitSignalWithin(t *testing.T, signal <-chan struct{}, description string, timeout time.Duration) {
 	t.Helper()
-	timer := time.NewTimer(2 * time.Second)
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case <-signal:
