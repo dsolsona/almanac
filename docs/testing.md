@@ -179,3 +179,10 @@ before running it. The production smoke uses port 5199. Checks require completed
 setup and never install dependencies. Unknown modes and empty test selections fail.
 These commands establish UI foundation behavior, not API/database/authentication
 acceptance. Real-stack and Go entry points remain future F1 work.
+
+For browser iteration, select a file and a single viewport/theme, for example
+`make verify VERIFY_MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.
+Both selectors are validated; absent files and unknown projects fail. Omit them
+for the complete matrix. This focused controls check currently runs three tests
+in about 2.5 seconds with dependencies ready; it does not replace the full
+matrix before shared-control acceptance.
