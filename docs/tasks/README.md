@@ -29,3 +29,6 @@ transactional bootstrap/login service and API/CLI/UI wiring.
 
 [F1-T07](F1-T07.md) adds atomic initial-owner persistence under its
 [plan](../plans/0007-initial-owner-persistence.md), stacked on F1-T06.
+
+[F1-T08](F1-T08.md) adds offline common-password screening under its
+[plan](../plans/0008-offline-password-policy.md), before password-creation flows.

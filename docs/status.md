@@ -88,6 +88,9 @@ and product-journey acceptance remain outstanding.
 - [F1-T07](tasks/F1-T07.md) is complete at `1f0bf0c`: atomic initial-owner persistence,
   stacked on the identity-primitives increment. Independent reviews and 14 real
   PostgreSQL integration checks passed; authentication endpoints remain subsequent work.
+- [F1-T08](tasks/F1-T08.md) is ready: offline common-password screening, stacked
+  on initial-owner persistence. Login/startup must use the complete creation policy
+  before accepting new passwords.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
