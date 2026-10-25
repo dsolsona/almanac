@@ -23,6 +23,6 @@ must match source contracts and verify must not download missing tools.
 
 Read [F1-T04](../tasks/F1-T04.md) for interfaces and acceptance.
 
-- [ ] Implement CLI/config, generated health contract, static server/proxy and lifecycle.
-- [ ] Verify fixed toolchain/build/test/generation lanes and executable smoke.
-- [ ] Review, integrate and record scope and evidence before backend persistence work.
+- [x] Implement CLI/config, generated health contract, static server/proxy and lifecycle.
+- [x] Verify fixed toolchain/build/test/generation lanes and executable smoke.
+- [x] Review, integrate and record scope and evidence before backend persistence work.

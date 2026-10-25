@@ -6,7 +6,9 @@ The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
 The catalogue also includes a date picker, switches, shared loading feedback,
 aligned timeline charts and exact-value tables.
-No Go module, application binary, database schema, CLI or provider is implemented.
+A Go executable now serves the embedded UI with operational health, a fixed-origin
+API proxy, version/help commands and bounded shutdown. Database schema,
+authentication, management operations and providers remain unimplemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -18,7 +20,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–03 done; F1 incomplete | Catalogue, controls and charts verified; product journeys remain |
+| Product implementation | F1-T01–04 done; F1 incomplete | Catalogue and UI-only Go runtime verified; persistence, identity and product journeys remain |
 
 ## Coverage
 
@@ -53,7 +55,8 @@ and decision register. The completed review clarified mandatory initial-password
 rotation, local users before Google SSO, calculation examples, composite sequencing,
 React/API packaging and measurable UI performance. The encryption library remains a
 candidate selection before encryption implementation. Web foundation checks now run;
-no Go/API/database or full product-journey tests are claimed.
+Go and operational HTTP checks also run; database and full product-journey
+acceptance remain outstanding.
 
 ## Next work and session handoff
 
@@ -65,25 +68,53 @@ no Go/API/database or full product-journey tests are claimed.
   timings are measured below; real-stack and later boundary gates remain future work.
 - The [visual foundation plan](plans/0001-visual-foundation.md) and
   [F1-T01](tasks/F1-T01.md) are complete and integrated into `main` through `21505bd`.
-  Prepare the next bounded chart/exact-table task. The implementation worktree and
-  ignored screenshots/review reports remain available for inspection.
+  Its implementation worktree and ignored screenshots/review reports remain
+  available for inspection.
 - [F1-T02](tasks/F1-T02.md) and its [controls plan](plans/0002-catalogue-controls.md)
   are complete, integrated through `4a1f15b` with independent review and fresh checks.
 - [F1-T03](tasks/F1-T03.md) and its [plan](plans/0003-charts-and-tables.md)
   are complete, integrated through `5ade04d` plus the reviewed test URL correction.
   Continue with the independently runnable Go UI executable foundation.
-- F1-T04 is actively being implemented on local branch `feat/f1-runtime` in
-  `.worktrees/f1-runtime`. Its task brief and plan are on that branch; Go/runtime
-  changes are not accepted or integrated yet. Resume from its task report and
-  plan ledger before dispatching another implementer. Preserve the main catalogue
-  preview on port 5198; the runtime task does not require browser checks.
-  Implementation has resumed from its checkpoint. Read its current report and
-  ledger before dispatching another worker. Independent review and integrated
-  verification remain outstanding; do not treat worker results as acceptance.
+- [F1-T04](tasks/F1-T04.md) and its [runtime plan](plans/0004-go-runtime-foundation.md)
+  are complete and integrated at `db1b9d4`. The next bounded foundation task is
+  explicit PostgreSQL upgrades and real persistence verification. Preserve the
+  main catalogue preview on port 5198 during checks.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
-  catalogue browser entry points exist; API/database/agent integration remains F1 work.
+  catalogue browser entry points and Go/operational HTTP gates exist; database,
+  identity and agent integration remain future work.
+
+## Go UI runtime verification
+
+Fresh integrated-main `make verify` passed 28 UI tests (1.31s), 13 Go tests
+(command/config 0.003s each, HTTP 0.067s), typecheck, vet/format, generated drift,
+production exclusion/routing, embedded binary build and real-process outage/SIGTERM
+smoke. `make verify VERIFY_MODE=go-race` passed 10 tests (HTTP 1.088s, command
+1.008s). No application runtime dependencies were added; generators are pinned
+setup tools. The TypeScript generator has its own compatible compiler dependency.
+
+Measured main binary: 11,883,808 bytes; gzip: 6,555,266 bytes; web asset tree:
+371,292 bytes. Build paths affect binary size; these are UI-only foundation
+measurements, not the final server-with/without-UI release benchmark. UI source
+and behavior did not change, so the existing 90-check browser result was retained
+and the runtime boundary was checked through real HTTP and process tests.
+
+Review corrected invalid origin acceptance, unbounded failure waits and a
+cancellation test whose safety timeout could cause a false pass. Removing the
+forced close now fails that assertion at 0.52s, before safety deadlines. Tests
+cover fixed-origin forwarding, traversal rejection, redacted outages, strict
+config precedence/validation, embedded routing, in-flight drain and cancellation.
+Unsupported backend/alert/combined modes fail before binding; no auth/DB readiness
+or full API/CLI parity is claimed. Invalid package and generation selectors fail.
+
+First failures included sandbox network/loopback restrictions, proxy path joining,
+a readiness fixture, generator output selection/drift and unsupported-mode wording;
+their corrections and verification are retained in task evidence. All required
+integrated checks passed after correction. Two nonblocking final-review follow-ups
+remain: directly exercise automatic forced shutdown in command wiring, and remove
+duplicated generator options between configuration and drift checking. Carry these
+into the next task that changes command wiring or generation.
 
 ## Visual foundation verification
 

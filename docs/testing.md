@@ -1,8 +1,8 @@
 # Testing and verification
 
 Status: engineering guidance requested by the maintainer on 2026-10-24. The web
-foundation now has component and Chromium checks; Go/API/database and real-stack
-journeys remain unimplemented. The initial time budgets below are planning targets;
+foundation now has component, Chromium, Go, operational HTTP and process checks;
+database and full product journeys remain unimplemented. The initial time budgets below are planning targets;
 measured evidence is recorded in [delivery status](status.md).
 
 ## Fast feedback with credible acceptance
@@ -163,13 +163,17 @@ fresh final verification must execute the relevant acceptance checks on the cand
 statuses, index coverage and acceptance-criterion IDs. It does not validate product
 behavior, external URLs, Markdown anchors, security or performance.
 
-The web foundation provides these fixed entry points:
+The foundation provides these fixed entry points:
 
 | Command | Scope |
 | --- | --- |
-| `make setup` | Locked web dependencies and Chromium; explicit network-capable setup |
-| `make build` | Typecheck and production assets |
-| `make verify` | Typecheck, component suite, build, bundle exclusion and production routing smoke |
+| `make setup` | Pinned Go/generators, locked web dependencies and Chromium; explicit network-capable setup; optional SETUP_MODE=go/web |
+| `make build` | Typecheck, production assets and embedded Go executable; size report |
+| `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt |
+| `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
+| `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
+| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle and command race checks |
+| `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
@@ -178,8 +182,10 @@ The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy
 imports in already-open tabs. The production smoke uses port 5199. Checks require completed
 setup and never install dependencies. Unknown modes and empty test selections fail.
-These commands establish UI foundation behavior, not API/database/authentication
-acceptance. Real-stack and Go entry points remain future F1 work.
+Go tests exercise real loopback upstreams and embedded assets. The process smoke
+owns an ephemeral port. Generation/build/tests use local pinned tools and offline
+Go module settings. These checks establish UI runtime and operational API behavior,
+not database/authentication or complete product-journey acceptance.
 
 For browser iteration, select a file and a single viewport/theme, for example
 `make verify VERIFY_MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.

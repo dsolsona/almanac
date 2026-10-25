@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related ADR: [ADR-0009](../adr/0009-contracts-and-cli-parity.md)
 
 ## Purpose and contracts
@@ -13,7 +13,9 @@ Use versioned JSON HTTP APIs as the shared UI and automation surface. Propose
 OpenAPI 3.0.3 for generated server/client compatibility, `net/http`, `oapi-codegen`
 Go types/handlers, and generated TypeScript types. Pin generator versions when
 scaffolding. Agent WebSocket messages have separate versioned JSON schemas with
-shared type generation. No product implementation exists yet.
+shared type generation. Operational health types/handlers, CLI version/help and
+UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Management,
+ingestion, agent protocols and authentication remain unimplemented.
 
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and
@@ -114,5 +116,5 @@ remote YAML includes, execute shell expressions, or embed credentials in exports
   selected generators before implementation if3.1 features are required.
 - **REVIEW-A02:** Command names, limits and exit codes are provisional stable contracts
   to review before release. Keys are scoped machine identities, not browser sessions.
-- Not implemented; contract generation, API/CLI parity, RBAC, idempotency and
-  noninteractive execution require automated acceptance.
+- Operational contract generation and basic noninteractive CLI behavior are
+  verified; management API/CLI parity, RBAC and idempotency remain unimplemented.

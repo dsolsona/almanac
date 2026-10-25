@@ -4,14 +4,15 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related ADR: [ADR-0008](../adr/0008-runtime-components-and-packaging.md)
 
 ## Purpose and executable shape
 
 Provide a convenient combined server and independently runnable components without
-requiring distributed deployment for local use. Commands here are proposed interfaces;
-none exist yet.
+requiring distributed deployment for local use. UI-only serving and version/help
+exist through [F1-T04](../tasks/F1-T04.md). Other commands and component modes in
+the table remain unimplemented; unsupported server modes fail before listening.
 
 | Command | Starts | Credentials |
 | --- | --- | --- |
@@ -142,5 +143,6 @@ patches through ordinary tested dependency updates; do not require a new ADR per
   remains an alternative if distribution simplicity outweighs that benefit.
 - **REVIEW-R02:** Backend horizontal replication is deferred, not implied by component
   flags. Confirm one active backend is acceptable for the first release.
-- Not implemented; require real-process/container mode parity, outage, drain, and
-  restore checks. No deployment or scalability claims have been verified.
+- UI-only embedded serving, proxy/outage handling and bounded shutdown have real
+  HTTP/process checks. Combined/separate backend/alert parity, containers, restore
+  and scalability remain unverified and unimplemented.

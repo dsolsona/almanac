@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related specs: [system overview](0001-system-overview.md), [runtime](0013-runtime-and-operations.md), [providers](0015-datasource-providers.md)
 
 ## Accepted amendment

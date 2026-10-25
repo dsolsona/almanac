@@ -19,4 +19,6 @@ verification harness. [F1-T02](F1-T02.md) adds calendars, switches and continuou
 loading feedback; its [plan](../plans/0002-catalogue-controls.md) is also complete.
 [F1-T03](F1-T03.md) provides charts and exact tables; its review and verification
 are tracked in [delivery status](../status.md). The wider F1 milestone remains
-in progress.
+in progress. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
+generated operational contracts and lifecycle checks. Database and identity work
+remain subsequent foundation tasks.

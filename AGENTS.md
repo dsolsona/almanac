@@ -206,11 +206,14 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   tests passed based on an earlier codebase or a different revision.
 - Keep changes reviewable and confined to the current feature. Do not begin
   later milestones merely because related code is available.
-- Use `make setup` for locked web dependencies and Chromium, `make build` for a
-  production build, `make verify` for unit/type/build/production checks, and
+- Use `make setup` for pinned Go/web tools and Chromium, `make build` for the
+  embedded UI binary, `make verify` for unit/type/build/generated/HTTP checks, and
   `make verify VERIFY_MODE=browser` for catalogue browser checks. Focused component
   checks use `make verify VERIFY_MODE=unit TEST_FILE=tests/ui.test.tsx`.
-  `make preview` serves the local catalogue. These cover the web foundations only;
-  Go/API/database gates do not exist yet. Documentation checks use
+  Go checks use `VERIFY_MODE=go` with an optional validated `GO_PACKAGE`;
+  `VERIFY_MODE=go-race` checks concurrency and `VERIFY_MODE=smoke` runs the binary.
+  `make generate` regenerates API contracts; `GENERATE_MODE=format` formats Go
+  with the pinned toolchain. `make preview` serves the local catalogue. Database,
+  authentication and full product-journey gates do not exist yet. Documentation checks use
   `python3 scripts/check-docs.py`. Document new commands only after they work here.
 - Do not commit, push, or publish unless requested. Respect unrelated local edits.
