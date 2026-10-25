@@ -8,12 +8,15 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/netip"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestIntegrationLoginAdmissionEnforcesAccountAndSourceLimits(t *testing.T) {
@@ -75,6 +78,7 @@ func TestIntegrationLoginAdmissionCanonicalKeysSecretsAndCompletions(t *testing.
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	earlierFailure := beginFailedLogin(t, databaseURL, "Case@Example", netip.MustParseAddr("192.0.2.77"), now.Add(-time.Minute))
 	first, err := BeginLoginAttempt(t.Context(), databaseURL, BeginLoginAttemptInput{
 		Login: "Case@Example", Source: netip.MustParseAddr("::ffff:192.0.2.77"), Now: now,
 	})
@@ -126,8 +130,13 @@ WHERE position(convert_to('Case@Example', 'UTF8') in account_key) > 0
 	if finished, err := FinishLoginAttempt(t.Context(), databaseURL, first.AttemptID, false, now); err != nil || finished {
 		t.Fatalf("duplicate successful finish = %t, %v; want false", finished, err)
 	}
-	if countLoginAttempts(t, databaseURL) != 1 {
-		t.Fatal("successful finish did not delete only its own reservation")
+	if countLoginAttempts(t, databaseURL) != 2 {
+		t.Fatal("successful finish did not delete only its own reservation and preserve the earlier failure")
+	}
+	var earlierState string
+	var earlierExpiry time.Time
+	if err := conn.QueryRow(t.Context(), "SELECT state, expires_at FROM public.almanac_login_attempts WHERE id=$1", earlierFailure.AttemptID).Scan(&earlierState, &earlierExpiry); err != nil || earlierState != "failed" || !earlierExpiry.Equal(now.Add(14*time.Minute)) {
+		t.Fatalf("successful completion changed earlier failure state=%q expiry=%v error=%v", earlierState, earlierExpiry, err)
 	}
 	if finished, err := FinishLoginAttempt(t.Context(), databaseURL, second.AttemptID, false, now.Add(time.Second)); err != nil || !finished {
 		t.Fatalf("failed finish = %t, %v", finished, err)
@@ -143,7 +152,7 @@ WHERE position(convert_to('Case@Example', 'UTF8') in account_key) > 0
 	if state != "failed" || !expires.Equal(now.Add(15*time.Minute+time.Second)) {
 		t.Fatalf("failed attempt state=%q expires=%v; want failed and completion+15m", state, expires)
 	}
-	if countLoginAttempts(t, databaseURL) != 1 {
+	if countLoginAttempts(t, databaseURL) != 2 {
 		t.Fatal("failed completion added an event rather than consuming its reservation")
 	}
 }
@@ -273,6 +282,178 @@ func TestIntegrationLoginAdmissionConcurrentReservationsRespectBothLimits(t *tes
 	}
 }
 
+func TestIntegrationLoginAdmissionUsesFreshSnapshotAfterAdvisoryWait(t *testing.T) {
+	databaseURL := integrationDatabase(t)
+	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	setDisposableDatabaseRepeatableRead(t, databaseURL)
+	const login = "repeatable-read-account"
+	baseTime := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	for attempt := range 4 {
+		beginFailedLogin(t, databaseURL, login,
+			netip.AddrFrom4([4]byte{198, 51, 100, byte(attempt + 20)}), baseTime)
+	}
+
+	keyConn := integrationConnect(t, databaseURL)
+	keys, err := dbgen.New(keyConn).LoginAttemptKeys(t.Context(), dbgen.LoginAttemptKeysParams{
+		Login: login, Source: "198.51.100.250",
+	})
+	if err != nil {
+		t.Fatal("read repeatable-read account key failed")
+	}
+	closeIntegrationConn(keyConn)
+	accountLockKey := int32(binary.BigEndian.Uint32(keys.AccountKey[:4]))
+	blocker := integrationConnect(t, databaseURL)
+	blockerTx, err := blocker.Begin(t.Context())
+	if err != nil {
+		t.Fatal("begin repeatable-read blocker failed")
+	}
+	if _, err := blockerTx.Exec(t.Context(), "SELECT pg_advisory_xact_lock($1, $2)", loginAccountLockNamespace, accountLockKey); err != nil {
+		t.Fatal("acquire repeatable-read test lock failed")
+	}
+	var blockerPID int32
+	if err := blocker.QueryRow(t.Context(), "SELECT pg_backend_pid()::integer").Scan(&blockerPID); err != nil {
+		t.Fatal("read repeatable-read blocker PID failed")
+	}
+
+	type result struct {
+		admission LoginAdmission
+		err       error
+	}
+	const contenders = 4
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	start := make(chan struct{})
+	ready := make(chan struct{}, contenders)
+	results := make(chan result, contenders)
+	var workers sync.WaitGroup
+	for attempt := range contenders {
+		workers.Go(func() {
+			ready <- struct{}{}
+			<-start
+			admission, err := BeginLoginAttempt(ctx, databaseURL, BeginLoginAttemptInput{
+				Login: login, Source: netip.AddrFrom4([4]byte{203, 0, 113, byte(attempt + 1)}), Now: baseTime,
+			})
+			results <- result{admission: admission, err: err}
+		})
+	}
+	for range contenders {
+		select {
+		case <-ready:
+		case <-ctx.Done():
+			t.Fatalf("contenders did not become ready within bound: %v", ctx.Err())
+		}
+	}
+	close(start)
+	observer := integrationConnect(t, databaseURL)
+	waitForLoginAdvisoryWaiters(t, ctx, observer, loginAccountLockNamespace, accountLockKey, blockerPID, contenders)
+	if err := blockerTx.Rollback(t.Context()); err != nil {
+		t.Fatal("release repeatable-read test lock failed")
+	}
+	closeIntegrationConn(blocker)
+	closeIntegrationConn(observer)
+	var allowed int
+	for range contenders {
+		select {
+		case got := <-results:
+			if got.err != nil {
+				t.Fatalf("queued repeatable-read admission failed: %v", got.err)
+			}
+			if got.admission.Allowed {
+				allowed++
+			}
+		case <-ctx.Done():
+			t.Fatalf("queued admissions did not finish within bound: %v", ctx.Err())
+		}
+	}
+	workers.Wait()
+	if allowed != 1 || countLoginAttempts(t, databaseURL) != loginAccountLimit {
+		t.Fatalf("after four queued admissions on repeatable-read default allowed=%d total=%d; want one allowed and five total", allowed, countLoginAttempts(t, databaseURL))
+	}
+}
+
+func setDisposableDatabaseRepeatableRead(t *testing.T, databaseURL string) {
+	t.Helper()
+	parsed, err := url.Parse(databaseURL)
+	if err != nil || parsed.Path == "" {
+		t.Fatal("parse disposable database URL failed")
+	}
+	databaseName := strings.TrimPrefix(parsed.Path, "/")
+	admin := integrationConnect(t, os.Getenv("ALMANAC_TEST_DATABASE_URL"))
+	if _, err := admin.Exec(t.Context(), "ALTER DATABASE "+pgx.Identifier{databaseName}.Sanitize()+" SET default_transaction_isolation = 'repeatable read'"); err != nil {
+		t.Fatal("set disposable database isolation default failed")
+	}
+	closeIntegrationConn(admin)
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	var isolation string
+	if err := conn.QueryRow(t.Context(), "SHOW default_transaction_isolation").Scan(&isolation); err != nil || isolation != "repeatable read" {
+		t.Fatalf("disposable database default isolation=%q error=%v; want repeatable read", isolation, err)
+	}
+}
+
+func waitForLoginAdvisoryWaiters(t *testing.T, ctx context.Context, observer *pgx.Conn, namespace, key, blockerPID int32, want int) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		count := loginAdvisoryWaiterCount(t, ctx, observer, namespace, key, blockerPID)
+		if count >= want {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("observed %d/%d waiters for advisory lock (%#x,%#x), blocker PID %d: %v", count, want, namespace, key, blockerPID, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForNoLoginAdvisoryWaiters(t *testing.T, ctx context.Context, observer *pgx.Conn, namespace, key, blockerPID int32) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		count := loginAdvisoryWaiterCount(t, ctx, observer, namespace, key, blockerPID)
+		if count == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("%d waiters remain after cancellation for advisory lock (%#x,%#x), blocker PID %d: %v", count, namespace, key, blockerPID, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func loginAdvisoryWaiterCount(t *testing.T, ctx context.Context, observer *pgx.Conn, namespace, key, blockerPID int32) int {
+	t.Helper()
+	var count int
+	err := observer.QueryRow(ctx, `SELECT count(*)
+FROM pg_locks AS waiting
+WHERE waiting.locktype='advisory'
+  AND waiting.database=(SELECT oid FROM pg_database WHERE datname=current_database())
+  AND waiting.classid::bigint=($1::bigint & 4294967295)
+  AND waiting.objid::bigint=($2::bigint & 4294967295)
+  AND waiting.objsubid=2
+  AND NOT waiting.granted
+  AND $3 = ANY(pg_blocking_pids(waiting.pid))`, namespace, key, blockerPID).Scan(&count)
+	if err != nil {
+		t.Fatalf("observe exact advisory-lock wait failed: %v", err)
+	}
+	return count
+}
+
+func backendPID(t *testing.T, conn *pgx.Conn) int32 {
+	t.Helper()
+	var pid int32
+	if err := conn.QueryRow(t.Context(), "SELECT pg_backend_pid()::integer").Scan(&pid); err != nil {
+		t.Fatal("read PostgreSQL backend PID failed")
+	}
+	return pid
+}
+
 func TestIntegrationLoginAdmissionPruningBoundAndSkipLocked(t *testing.T) {
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
@@ -357,15 +538,38 @@ func TestIntegrationLoginAdmissionLockCancellationAndFaultRollback(t *testing.T)
 	if _, err := tx.Exec(t.Context(), "SELECT pg_advisory_xact_lock($1, $2)", loginAccountLockNamespace, lockKey); err != nil {
 		t.Fatal("acquire test account advisory lock failed")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
-	defer cancel()
+	blockerPID := backendPID(t, blocker)
+	ctx, cancel := context.WithCancel(t.Context())
+	type beginResult struct {
+		admission LoginAdmission
+		err       error
+	}
+	result := make(chan beginResult, 1)
+	go func() {
+		admission, err := BeginLoginAttempt(ctx, databaseURL, input)
+		result <- beginResult{admission: admission, err: err}
+	}()
+	observer := integrationConnect(t, databaseURL)
+	observeCtx, stopObserving := context.WithTimeout(t.Context(), 5*time.Second)
+	waitForLoginAdvisoryWaiters(t, observeCtx, observer, loginAccountLockNamespace, lockKey, blockerPID, 1)
+	stopObserving()
 	lockWaitStarted := time.Now()
-	if _, err := BeginLoginAttempt(ctx, databaseURL, input); err == nil || errors.Is(err, ErrInvalidLoginAttemptInput) || strings.Contains(err.Error(), input.Login) {
-		t.Fatalf("cancelled advisory wait error = %v; want safe operational failure", err)
+	cancel()
+	select {
+	case got := <-result:
+		if got.err == nil || errors.Is(got.err, ErrInvalidLoginAttemptInput) || strings.Contains(got.err.Error(), input.Login) {
+			t.Fatalf("cancelled advisory wait error = %v; want safe operational failure", got.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled advisory waiter did not return within 2s")
 	}
 	if elapsed := time.Since(lockWaitStarted); elapsed >= 2*time.Second {
 		t.Fatalf("cancelled advisory wait took %s; want bounded return under 2s", elapsed)
 	}
+	cleanupCtx, stopCleanup := context.WithTimeout(t.Context(), 3*time.Second)
+	waitForNoLoginAdvisoryWaiters(t, cleanupCtx, observer, loginAccountLockNamespace, lockKey, blockerPID)
+	stopCleanup()
+	closeIntegrationConn(observer)
 	if err := tx.Rollback(t.Context()); err != nil {
 		t.Fatal("release test account lock failed")
 	}

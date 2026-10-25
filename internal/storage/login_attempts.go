@@ -60,7 +60,7 @@ func BeginLoginAttempt(ctx context.Context, databaseURL string, input BeginLogin
 	if len(keys.AccountKey) != sha256.Size || len(keys.SourceKey) != sha256.Size {
 		return LoginAdmission{}, errors.New("storage: login admission key calculation failed")
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return LoginAdmission{}, operationError(ctx, "storage: login admission transaction failed", err)
 	}
@@ -139,7 +139,7 @@ func FinishLoginAttempt(ctx context.Context, databaseURL, attemptID string, succ
 	if len(keys.AccountKey) != sha256.Size || len(keys.SourceKey) != sha256.Size {
 		return false, errors.New("storage: login attempt keys unavailable")
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return false, operationError(ctx, "storage: login completion transaction failed", err)
 	}
