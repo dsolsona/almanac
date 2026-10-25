@@ -2,7 +2,7 @@
 
 Status: engineering guidance requested by the maintainer on 2026-10-24. The
 foundation has component, Chromium, Go, operational HTTP and process checks.
-The active storage task adds real PostgreSQL upgrade checks; full product journeys
+The storage foundation includes real PostgreSQL upgrade checks; full product journeys
 remain unimplemented. The initial time budgets below are planning targets;
 measured evidence is recorded in [delivery status](status.md).
 

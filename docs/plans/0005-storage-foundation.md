@@ -29,7 +29,7 @@ drift checks must use the actual generator configuration.
 
 Read [F1-T05](../tasks/F1-T05.md) for exact interfaces, ownership and acceptance.
 
-- [ ] Add bounded failing tests and the isolated PostgreSQL setup lane.
-- [ ] Implement embedded migrations, generated metadata access and the CLI command.
-- [ ] Verify real concurrency/rollback/cancellation, CLI, generated output and race checks.
-- [ ] Review, integrate and reconcile documentation and remaining scope.
+- [x] Add bounded failing tests and the isolated PostgreSQL setup lane.
+- [x] Implement embedded migrations, generated metadata access and the CLI command.
+- [x] Verify real concurrency/rollback/cancellation, CLI, generated output and race checks.
+- [x] Review, integrate and reconcile documentation and remaining scope.

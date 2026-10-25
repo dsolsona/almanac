@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related ADRs: [ADR-0007](../adr/0007-postgresql-and-storage-boundaries.md)
 - Related specs: [SPEC-0003](0003-ingestion-and-recovery.md), [SPEC-0006](0006-slo-calculation-and-reporting.md)
 
@@ -160,8 +160,11 @@ old writes. Restore never silently revives credentials revoked after the snapsho
   proposed wire/storage limits. Confirm before schema/code generation.
 - **REVIEW-S03:** UUID identity and next-common-boundary definition edits are proposed
   implementation choices, not inherited requirements.
-- Not implemented. Verification must cover transactional faults, precision,
-  partition boundaries, retention races, restore, and live/historical load isolation.
+- [F1-T05](../tasks/F1-T05.md) implements explicit schema upgrades, immutable
+  migration history and installation metadata, with real PostgreSQL transaction,
+  concurrency and cancellation checks. Observation persistence, precision,
+  partition boundaries, retention races, restore and live/historical isolation
+  remain unimplemented and unverified.
 
 ## Maintenance and annotation records
 

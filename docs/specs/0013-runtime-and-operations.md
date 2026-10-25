@@ -11,8 +11,9 @@
 
 Provide a convenient combined server and independently runnable components without
 requiring distributed deployment for local use. UI-only serving and version/help
-exist through [F1-T04](../tasks/F1-T04.md). Other commands and component modes in
-the table remain unimplemented; unsupported server modes fail before listening.
+exist through [F1-T04](../tasks/F1-T04.md); explicit database upgrades exist through
+[F1-T05](../tasks/F1-T05.md). Other commands and component modes in the table
+remain unimplemented; unsupported server modes fail before listening.
 
 | Command | Starts | Credentials |
 | --- | --- | --- |

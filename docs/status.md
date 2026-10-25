@@ -7,8 +7,9 @@ the local heading font, catalogue and web verification harness are implemented.
 The catalogue also includes a date picker, switches, shared loading feedback,
 aligned timeline charts and exact-value tables.
 A Go executable now serves the embedded UI with operational health, a fixed-origin
-API proxy, version/help commands and bounded shutdown. Database schema,
-authentication, management operations and providers remain unimplemented.
+API proxy, version/help commands and bounded shutdown. Explicit PostgreSQL upgrades
+establish immutable schema history and installation metadata. Authentication,
+management operations, observation storage and providers remain unimplemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -20,7 +21,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–04 done; F1 incomplete | Catalogue and UI-only Go runtime verified; persistence, identity and product journeys remain |
+| Product implementation | F1-T01–05 done; F1 incomplete | Catalogue, UI-only runtime and PostgreSQL upgrade foundation verified; identity and product journeys remain |
 
 ## Coverage
 
@@ -55,8 +56,8 @@ and decision register. The completed review clarified mandatory initial-password
 rotation, local users before Google SSO, calculation examples, composite sequencing,
 React/API packaging and measurable UI performance. The encryption library remains a
 candidate selection before encryption implementation. Web foundation checks now run;
-Go and operational HTTP checks also run; database and full product-journey
-acceptance remain outstanding.
+Go, operational HTTP and PostgreSQL upgrade checks also run; full persistence
+and product-journey acceptance remain outstanding.
 
 ## Next work and session handoff
 
@@ -74,19 +75,49 @@ acceptance remain outstanding.
   are complete, integrated through `4a1f15b` with independent review and fresh checks.
 - [F1-T03](tasks/F1-T03.md) and its [plan](plans/0003-charts-and-tables.md)
   are complete, integrated through `5ade04d` plus the reviewed test URL correction.
-  Continue with the independently runnable Go UI executable foundation.
 - [F1-T04](tasks/F1-T04.md) and its [runtime plan](plans/0004-go-runtime-foundation.md)
-  are complete and integrated at `db1b9d4`. The next bounded foundation task is
-  explicit PostgreSQL upgrades and real persistence verification. Preserve the
-  main catalogue preview on port 5198 during checks.
-- [F1-T05](tasks/F1-T05.md) is in progress in an isolated worktree under the
-  [storage plan](plans/0005-storage-foundation.md). It adds explicit PostgreSQL18
-  upgrades and isolated database checks; no persistence acceptance is claimed yet.
+  are complete and integrated at `db1b9d4`. Preserve the main catalogue preview
+  on port 5198 during checks.
+- [F1-T05](tasks/F1-T05.md) and the [storage plan](plans/0005-storage-foundation.md)
+  are complete, integrated at `28bafab`. PostgreSQL18.6 explicit upgrades and their
+  isolated integration lane are verified. Next foundation work is local identity,
+  protected onboarding and authenticated backend operations, within SPEC-0004.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
-  catalogue browser entry points and Go/operational HTTP gates exist; database,
-  identity and agent integration remain future work.
+  catalogue browser entry points and Go/operational HTTP/database upgrade gates
+  exist; identity and agent integration remain future work.
+
+## PostgreSQL foundation verification
+
+Integrated-main `28bafab` passed `make verify`: 28 UI tests in 1.31s, 30 Go tests,
+vet/format, both generation-drift checks, production build/routing/exclusion and
+real-process UI smoke. Changed command/storage tests ran in 0.112s/0.003s;
+unchanged config/HTTP package results were cached. The observed full gate took
+about eight seconds with setup complete. `make verify VERIFY_MODE=go-race` passed
+27 tests, with fresh command/storage runs in 1.120s/1.008s and cached HTTP results.
+
+Six fresh PostgreSQL/executable integration tests with the race detector passed in
+1.918s. They cover real concurrent upgraders, transaction rollback after DDL,
+identity-preserving repeats, incompatible histories, observed lock cancellation,
+real binary JSON/errors and SIGTERM exit6. Fixture checks verified PostgreSQL18.6
+on loopback15487; no disposable test databases remained after cleanup. Missing
+fixture configuration fails instead of skipping tests. PostgreSQL runs separately
+from the ordinary unit loop; setup downloads tools/images and verification stays
+offline. No browser matrix was repeated because UI behavior did not change.
+
+Main binary: 17,703,680 bytes; gzip: 8,794,402 bytes; web assets: 371,292 bytes.
+These include pgx and remain foundation measurements, not a full release benchmark.
+The application dependency is pgx/v5 5.11.0; sqlc1.31.1 is a pinned generator.
+
+Independent task and whole-branch reviews approved the change. One minor output
+write-failure finding was fixed and approved by scoped re-review. Both T04 follow-ups
+are resolved: a direct forced-shutdown regression and shared generator configuration.
+Preserved first failures included setup/import issues, generator output precedence,
+and a sandbox-denied chart subprocess; the latter passed in the coordinator's
+approved execution environment without test changes. Preview5198 stayed available.
+Backend readiness, credentials, observation storage, restore and complete F1
+acceptance remain outstanding. Reports and implementation worktree are retained locally.
 
 ## Go UI runtime verification
 
@@ -114,10 +145,9 @@ or full API/CLI parity is claimed. Invalid package and generation selectors fail
 First failures included sandbox network/loopback restrictions, proxy path joining,
 a readiness fixture, generator output selection/drift and unsupported-mode wording;
 their corrections and verification are retained in task evidence. All required
-integrated checks passed after correction. Two nonblocking final-review follow-ups
-remain: directly exercise automatic forced shutdown in command wiring, and remove
-duplicated generator options between configuration and drift checking. Carry these
-into the next task that changes command wiring or generation.
+integrated checks passed after correction. The two nonblocking final-review
+follow-ups—automatic forced shutdown in command wiring and duplicated generator
+options—were subsequently resolved and verified in F1-T05.
 
 ## Visual foundation verification
 

@@ -21,6 +21,6 @@ loading feedback; its [plan](../plans/0002-catalogue-controls.md) is also comple
 are tracked in [delivery status](../status.md). The wider F1 milestone remains
 in progress. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
 generated operational contracts and lifecycle checks. [F1-T05](F1-T05.md) is the
-active PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
+completed PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
 covers explicit schema upgrades and isolated real-database verification. Identity
 work remains a subsequent foundation task.

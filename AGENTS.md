@@ -212,7 +212,8 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   checks use `make verify VERIFY_MODE=unit TEST_FILE=tests/ui.test.tsx`.
   Go checks use `VERIFY_MODE=go` with an optional validated `GO_PACKAGE`;
   `VERIFY_MODE=go-race` checks concurrency and `VERIFY_MODE=smoke` runs the binary.
-  `make generate` regenerates API contracts; `GENERATE_MODE=format` formats Go
+  `make generate` regenerates API contracts; `GENERATE_MODE=sqlc` regenerates storage
+  queries; `GENERATE_MODE=format` formats Go
   with the pinned toolchain. `make preview` serves the local catalogue. Database
   checks use `make setup SETUP_MODE=database` for the isolated PostgreSQL18 fixture
   and `make verify VERIFY_MODE=integration` with its explicit

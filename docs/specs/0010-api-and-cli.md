@@ -14,7 +14,8 @@ OpenAPI 3.0.3 for generated server/client compatibility, `net/http`, `oapi-codeg
 Go types/handlers, and generated TypeScript types. Pin generator versions when
 scaffolding. Agent WebSocket messages have separate versioned JSON schemas with
 shared type generation. Operational health types/handlers, CLI version/help and
-UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Management,
+UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Explicit database
+upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md). Management,
 ingestion, agent protocols and authentication remain unimplemented.
 
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
