@@ -79,6 +79,9 @@ acceptance remain outstanding.
   are complete and integrated at `db1b9d4`. The next bounded foundation task is
   explicit PostgreSQL upgrades and real persistence verification. Preserve the
   main catalogue preview on port 5198 during checks.
+- [F1-T05](tasks/F1-T05.md) is in progress in an isolated worktree under the
+  [storage plan](plans/0005-storage-foundation.md). It adds explicit PostgreSQL18
+  upgrades and isolated database checks; no persistence acceptance is claimed yet.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

@@ -28,7 +28,8 @@ documenting its name does not configure the tool automatically.
 1. Read [AGENTS.md](../AGENTS.md), directory instructions and [status.md](status.md).
 2. Inspect the branch, working tree and recent commits. Preserve unrelated edits.
 3. Read the current milestone plan and assigned [task](tasks/README.md), then only
-   the relevant accepted spec/ADR sections. No task plan currently exists for F1.
+   the relevant accepted spec/ADR sections. Find active plans through delivery status
+   and the task index; completed plans remain as evidence.
 4. Identify the next ready task and its dependency revision. Do not infer that an
    earlier session's agent, worktree, service or test result still exists or is valid.
 5. Restore task ownership and verification context before resuming. A new session

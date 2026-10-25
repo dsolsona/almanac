@@ -19,4 +19,7 @@ ln -sfn "$guidelines_dir/go-modern-guidelines" "$project_root/.local/bin/go-mode
 "$project_root/.local/bin/go-modern-guidelines" --version
 GOBIN="$project_root/.local/bin" go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
 "$project_root/.local/bin/oapi-codegen" --version
+GOBIN="$project_root/.local/bin" go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+"$project_root/.local/bin/sqlc" version
 GOPROXY="${GOPROXY:-https://proxy.golang.org}" "$project_root/.local/bin/go" mod download
+GOPROXY="${GOPROXY:-https://proxy.golang.org}" "$project_root/.local/bin/go" mod tidy

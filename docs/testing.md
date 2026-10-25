@@ -1,8 +1,9 @@
 # Testing and verification
 
-Status: engineering guidance requested by the maintainer on 2026-10-24. The web
-foundation now has component, Chromium, Go, operational HTTP and process checks;
-database and full product journeys remain unimplemented. The initial time budgets below are planning targets;
+Status: engineering guidance requested by the maintainer on 2026-10-24. The
+foundation has component, Chromium, Go, operational HTTP and process checks.
+The active storage task adds real PostgreSQL upgrade checks; full product journeys
+remain unimplemented. The initial time budgets below are planning targets;
 measured evidence is recorded in [delivery status](status.md).
 
 ## Fast feedback with credible acceptance
@@ -168,11 +169,13 @@ The foundation provides these fixed entry points:
 | Command | Scope |
 | --- | --- |
 | `make setup` | Pinned Go/generators, locked web dependencies and Chromium; explicit network-capable setup; optional SETUP_MODE=go/web |
+| `make setup SETUP_MODE=database` | Isolated PostgreSQL18.6 fixture bound to loopback; validates existing fixture before reuse |
 | `make build` | Typecheck, production assets and embedded Go executable; size report |
-| `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt |
+| `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
 | `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
-| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle and command race checks |
+| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command and storage unit race checks |
+| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; fresh upgrade, concurrency, rollback and cancellation tests; optional GO_PACKAGE=./internal/storage |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
@@ -184,8 +187,10 @@ imports in already-open tabs. The production smoke uses port 5199. Checks requir
 setup and never install dependencies. Unknown modes and empty test selections fail.
 Go tests exercise real loopback upstreams and embedded assets. The process smoke
 owns an ephemeral port. Generation/build/tests use local pinned tools and offline
-Go module settings. These checks establish UI runtime and operational API behavior,
-not database/authentication or complete product-journey acceptance.
+Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
+They require the matching local fixture, use a fresh disposable database per test,
+and fail for unavailable infrastructure or an empty integration-test selection.
+Authentication, ingestion and complete product-journey acceptance remain future work.
 
 For browser iteration, select a file and a single viewport/theme, for example
 `make verify VERIFY_MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.
