@@ -107,6 +107,8 @@ and product-journey acceptance remain outstanding.
   integration tests under race in 13.030s. Review drove explicit READ COMMITTED
   transactions, with a reproduced over-admission regression now fixed. Application
   authentication and HTTP remain the next integration work.
+- [F1-T12](tasks/F1-T12.md) is ready: connect protected initial setup, login,
+  password rotation, authentication and logout through one backend service.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

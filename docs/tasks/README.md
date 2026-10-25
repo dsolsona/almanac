@@ -41,3 +41,6 @@ its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure
 
 [F1-T11](F1-T11.md) adds shared login admission and failure limits under its
 [plan](../plans/0011-shared-login-throttle.md), before password checks are exposed.
+
+[F1-T12](F1-T12.md) connects the local authentication application service under its
+[plan](../plans/0012-local-authentication-service.md), before HTTP/UI/CLI delivery.
