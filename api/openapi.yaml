@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: Almanac operational API
+  version: 1.0.0
+  description: Anonymous operational endpoints for the independently runnable UI.
+paths:
+  /livez:
+    get:
+      operationId: getLiveness
+      summary: Report whether the UI process is alive
+      security: []
+      responses:
+        '200':
+          description: UI process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example: {status: ok, component: ui}
+        '405': {description: Method not allowed}
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: Report whether the configured backend is ready
+      security: []
+      responses:
+        '200':
+          description: Backend is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example: {status: ok, component: ui}
+        '503':
+          description: Backend is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example: {status: unavailable, component: ui}
+        '405': {description: Method not allowed}
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, component]
+      properties:
+        status: {type: string, enum: [ok, unavailable]}
+        component: {type: string, enum: [ui]}
+    ProxyProblem:
+      type: object
+      example:
+        code: backend_unavailable
+        request_id: 0123456789abcdef0123456789abcdef
+        field_errors: []
+        message: Configured backend is unavailable
+      required: [code, request_id, field_errors, message]
+      properties:
+        code: {type: string, enum: [backend_unavailable]}
+        request_id: {type: string, minLength: 1}
+        field_errors:
+          type: array
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field: {type: string}
+              code: {type: string}
+              message: {type: string}
+        message: {type: string, example: Configured backend is unavailable}
