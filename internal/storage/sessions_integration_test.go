@@ -67,6 +67,43 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 	if len(savedVerifier) != len(verifier) || string(savedVerifier) != string(verifier[:]) {
 		t.Fatal("session verifier was not persisted exactly")
 	}
+	var unrelatedVerifier [32]byte
+	unrelatedVerifier[0] = 11
+	if _, err := IssueSession(t.Context(), databaseURL, IssueSessionInput{
+		UserID: identity.UserID, ExpectedCredentialEpoch: identity.CredentialEpoch,
+		ExpectedCredentialRevision: identity.CredentialRevision, Verifier: unrelatedVerifier,
+		Now: now, RequestID: "issue-unrelated-session",
+	}); err != nil {
+		t.Fatal("issue unrelated session failed")
+	}
+	var unknownVerifier [32]byte
+	unknownVerifier[0] = 255
+	if _, err := AuthenticateSession(t.Context(), databaseURL, unknownVerifier, wantNow); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("unknown verifier authentication = %v; want invalid session", err)
+	}
+	if revoked, err := RevokeSession(t.Context(), databaseURL, unknownVerifier, wantNow, "unknown-revoke"); err != nil || revoked {
+		t.Fatalf("unknown verifier revoke = %t, %v; want false", revoked, err)
+	}
+	if _, err := AuthenticateSession(t.Context(), databaseURL, verifier, wantNow.Add(-time.Microsecond)); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("authentication before CreatedAt = %v; want invalid session", err)
+	}
+	if revoked, err := RevokeSession(t.Context(), databaseURL, verifier, wantNow.Add(-time.Microsecond), "before-created-revoke"); err != nil || revoked {
+		t.Fatalf("revoke before CreatedAt = %t, %v; want false", revoked, err)
+	}
+	var initialLastSeen time.Time
+	var initialSessionCount, initialAuditCount int
+	if err := conn.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&initialLastSeen); err != nil {
+		t.Fatal("read untouched session timestamp failed")
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_sessions").Scan(&initialSessionCount); err != nil {
+		t.Fatal("count sessions after no-op operations failed")
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_audit_events").Scan(&initialAuditCount); err != nil {
+		t.Fatal("count audit events after no-op operations failed")
+	}
+	if !initialLastSeen.Equal(wantNow) || initialSessionCount != 2 || initialAuditCount != 3 {
+		t.Fatalf("no-op operations changed last_seen=%v sessions=%d audits=%d; want createdAt, 2, 3", initialLastSeen, initialSessionCount, initialAuditCount)
+	}
 	beforeIdle := wantNow.Add(30*time.Minute - time.Microsecond)
 	touched, err := AuthenticateSession(t.Context(), databaseURL, verifier, beforeIdle)
 	if err != nil || !touched.LastSeenAt.Equal(beforeIdle) || !touched.AbsoluteExpiresAt.Equal(wantNow.Add(12*time.Hour)) {
@@ -84,6 +121,13 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 	if revoked, err := RevokeSession(t.Context(), databaseURL, verifier, beforeIdle, "revoke-again"); err != nil || revoked {
 		t.Fatalf("repeat revoke = %t, %v; want false", revoked, err)
 	}
+	if _, err := AuthenticateSession(t.Context(), databaseURL, verifier, beforeIdle); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("authentication after successful revoke = %v; want invalid session", err)
+	}
+	other, err := AuthenticateSession(t.Context(), databaseURL, unrelatedVerifier, wantNow.Add(time.Minute))
+	if err != nil || other.UserID != identity.UserID {
+		t.Fatalf("unrelated session after target revoke = %+v, %v", other, err)
+	}
 	var sessionCount, auditCount int
 	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_sessions").Scan(&sessionCount); err != nil {
 		t.Fatal(err)
@@ -91,11 +135,11 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_audit_events").Scan(&auditCount); err != nil {
 		t.Fatal(err)
 	}
-	if sessionCount != 0 || auditCount != 3 {
-		t.Fatalf("after lifecycle session count=%d audit count=%d; want 0 and 3", sessionCount, auditCount)
+	if sessionCount != 1 || auditCount != 4 {
+		t.Fatalf("after lifecycle session count=%d audit count=%d; want 1 and 4", sessionCount, auditCount)
 	}
 	var issuedAudits, revokedAudits int
-	if err := conn.QueryRow(t.Context(), "SELECT count(*) FILTER (WHERE action='identity.session.issued'), count(*) FILTER (WHERE action='identity.session.revoked') FROM public.almanac_audit_events").Scan(&issuedAudits, &revokedAudits); err != nil || issuedAudits != 1 || revokedAudits != 1 {
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FILTER (WHERE action='identity.session.issued'), count(*) FILTER (WHERE action='identity.session.revoked') FROM public.almanac_audit_events").Scan(&issuedAudits, &revokedAudits); err != nil || issuedAudits != 2 || revokedAudits != 1 {
 		t.Fatalf("session audit counts issue=%d revoke=%d error=%v", issuedAudits, revokedAudits, err)
 	}
 }
@@ -223,6 +267,23 @@ func TestIntegrationSessionsInvalidateOnDisableRevisionAndEpochChanges(t *testin
 		if _, err := AuthenticateSession(t.Context(), databaseURL, verifier, now.Add(time.Minute)); !errors.Is(err, ErrInvalidSession) {
 			t.Fatalf("authentication after mutation %d = %v; want invalid session", n, err)
 		}
+		if revoked, err := RevokeSession(t.Context(), databaseURL, verifier, now.Add(time.Minute), "revoke-stale"); err != nil || revoked {
+			t.Fatalf("revoke after authority mutation %d = %t, %v; want false", n, revoked, err)
+		}
+		var savedLastSeen time.Time
+		var sessionRows, revocationAudits int
+		if err := conn.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&savedLastSeen); err != nil {
+			t.Fatalf("read stale session after logout no-op %d failed: %v", n, err)
+		}
+		if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&sessionRows); err != nil {
+			t.Fatalf("count stale session after logout no-op %d failed: %v", n, err)
+		}
+		if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_audit_events WHERE action='identity.session.revoked'").Scan(&revocationAudits); err != nil {
+			t.Fatalf("count stale revocation audits after no-op %d failed: %v", n, err)
+		}
+		if !savedLastSeen.Equal(now) || sessionRows != 1 || revocationAudits != 0 {
+			t.Fatalf("stale logout %d changed last_seen=%v sessionRows=%d revocationAudits=%d", n, savedLastSeen, sessionRows, revocationAudits)
+		}
 		var rejectedVerifier [32]byte
 		rejectedVerifier[0] = byte(90 + n)
 		if _, err := IssueSession(t.Context(), databaseURL, IssueSessionInput{
@@ -263,6 +324,60 @@ func TestIntegrationSessionsInvalidateOnDisableRevisionAndEpochChanges(t *testin
 	}
 	if sessions != 3 || issuedAudits != 3 {
 		t.Fatalf("rejected issuance left sessions=%d issuance audits=%d; want 3 each", sessions, issuedAudits)
+	}
+}
+
+func TestIntegrationSessionOperationsRejectMissingInstallationAuthority(t *testing.T) {
+	databaseURL := integrationDatabase(t)
+	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	owner, err := ProvisionInitialOwner(t.Context(), databaseURL, InitialOwnerInput{Login: "missing-installation-owner", PasswordVerifier: testPasswordVerifier, Now: now, RequestID: "bootstrap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := ReadLocalIdentity(t.Context(), databaseURL, "missing-installation-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var existingVerifier [32]byte
+	existingVerifier[0] = 31
+	if _, err := IssueSession(t.Context(), databaseURL, IssueSessionInput{
+		UserID: owner.State.AdministratorID, ExpectedCredentialEpoch: identity.CredentialEpoch,
+		ExpectedCredentialRevision: identity.CredentialRevision, Verifier: existingVerifier,
+		Now: now, RequestID: "issue-existing",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, databaseURL)
+	if _, err := conn.Exec(t.Context(), "DELETE FROM public.almanac_installation WHERE singleton"); err != nil {
+		t.Fatal("remove installation singleton failed")
+	}
+	var issueVerifier [32]byte
+	issueVerifier[0] = 32
+	if _, err := IssueSession(t.Context(), databaseURL, IssueSessionInput{
+		UserID: owner.State.AdministratorID, ExpectedCredentialEpoch: identity.CredentialEpoch,
+		ExpectedCredentialRevision: identity.CredentialRevision, Verifier: issueVerifier,
+		Now: now.Add(time.Minute), RequestID: "issue-missing-installation",
+	}); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("issue without installation authority = %v; want ErrInvalidSession", err)
+	}
+	if _, err := AuthenticateSession(t.Context(), databaseURL, existingVerifier, now.Add(time.Minute)); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("authenticate without installation authority = %v; want ErrInvalidSession", err)
+	}
+	if revoked, err := RevokeSession(t.Context(), databaseURL, existingVerifier, now.Add(time.Minute), "revoke-missing-installation"); err != nil || revoked {
+		t.Fatalf("revoke without installation authority = %t, %v; want false,nil", revoked, err)
+	}
+	var sessionRows, issuedAudits, revokedAudits int
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_sessions").Scan(&sessionRows); err != nil {
+		t.Fatal("count sessions after missing installation operations failed")
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FILTER (WHERE action='identity.session.issued'), count(*) FILTER (WHERE action='identity.session.revoked') FROM public.almanac_audit_events").Scan(&issuedAudits, &revokedAudits); err != nil {
+		t.Fatal("count audits after missing installation operations failed")
+	}
+	if sessionRows != 1 || issuedAudits != 1 || revokedAudits != 0 {
+		t.Fatalf("missing installation operations left sessions=%d issued audits=%d revoked audits=%d", sessionRows, issuedAudits, revokedAudits)
 	}
 }
 

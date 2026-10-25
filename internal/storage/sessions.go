@@ -111,6 +111,9 @@ func IssueSession(ctx context.Context, databaseURL string, input IssueSessionInp
 	}
 	queries := dbgen.New(tx)
 	installation, err := queries.LockSessionInstallation(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SessionAccess{}, ErrInvalidSession
+	}
 	if err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: session installation lock failed", err)
 	}
@@ -179,6 +182,9 @@ func AuthenticateSession(ctx context.Context, databaseURL string, verifier [32]b
 	}
 	queries = dbgen.New(tx)
 	installation, err := queries.LockSessionInstallation(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SessionAccess{}, ErrInvalidSession
+	}
 	if err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: session installation lock failed", err)
 	}
@@ -245,6 +251,9 @@ func RevokeSession(ctx context.Context, databaseURL string, verifier [32]byte, n
 	}
 	queries = dbgen.New(tx)
 	installation, err := queries.LockSessionInstallation(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
 	if err != nil {
 		return false, operationError(ctx, "storage: session installation lock failed", err)
 	}
