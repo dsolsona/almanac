@@ -2,7 +2,7 @@
 
 ## Current state
 
-The first visual foundation task is under review. Shared controls, theme tokens,
+The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
 No Go module, application binary, database schema, CLI or provider is implemented.
 The scope of the design pass is the product described in SPEC-0001; further product
@@ -16,7 +16,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01 under review | Shared catalogue implemented; coordinator verification and review underway |
+| Product implementation | F1-T01 done; F1 incomplete | Catalogue integrated and verified; charts and product journeys remain |
 
 ## Coverage
 
@@ -62,8 +62,9 @@ no Go/API/database or full product-journey tests are claimed.
   review, a real-stack smoke gate and full boundary/release evidence. Web foundation
   timings are measured below; real-stack and later boundary gates remain future work.
 - The [visual foundation plan](plans/0001-visual-foundation.md) and
-  [F1-T01](tasks/F1-T01.md) are active on `feat/f1-visual` in `.worktrees/f1-visual`.
-  A `gpt-6-luna` implementer builds the catalogue; the coordinator owns acceptance.
+  [F1-T01](tasks/F1-T01.md) are complete and integrated into `main` through `21505bd`.
+  Prepare the next bounded chart/exact-table task. The implementation worktree and
+  ignored screenshots/review reports remain available for inspection.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
@@ -87,6 +88,23 @@ unmatched test-file selector incorrectly ran all tests. Both were corrected in
 unmatched selector. Manual screen-reader testing and Firefox/Safari coverage remain
 outstanding; browser semantics, keyboard and computed contrast checks are partial
 accessibility evidence only.
+
+Fresh verification on integrated `main` passed on 2026-10-25: 9 component tests,
+typecheck, build and production routing/exclusion checks; full `make verify` elapsed
+2.75 seconds, with component tests taking 0.95 seconds. The browser matrix passed
+36/36 in 15.5 seconds. Setup in this checkout used the committed lockfile and cached
+Chromium, installing dependencies in about 2 seconds. Environment: AMD Ryzen 5 7640U
+(6 cores/12 threads), Linux x86_64, Node 26.8.1, npm 12.0.2, Playwright 1.64.1 with
+bundled Chromium 156.0.8078.4. Playwright uses its Ubuntu fallback on this host;
+Node emitted a color-environment warning during browser checks. Neither warning
+was suppressed or treated as test evidence.
+
+Independent task review, scoped correction review and final branch review approved
+this bounded delivery. Two nonblocking follow-ups remain before broader reuse:
+replace heading-derived Panel IDs with unique per-instance IDs, and exercise both
+forward and reverse dialog focus wrapping in browser tests. The supplied OFL file
+retains its upstream line endings/trailing whitespace; whole-range whitespace
+checking therefore reports that license asset, an intentional preservation exception.
 
 ## Workflow preparation evidence
 

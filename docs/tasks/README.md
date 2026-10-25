@@ -13,6 +13,7 @@ States: `draft` → `ready` → `in_progress` → `review` → `done`; any activ
 `blocked` with a concrete reason and resumption condition. Worker completion is a
 request for coordinator review. Only integrated, verified work is `done`.
 
-The [visual foundation plan](../plans/0001-visual-foundation.md) is active.
+The [visual foundation plan](../plans/0001-visual-foundation.md) is complete.
 [F1-T01](F1-T01.md) establishes the shared controls, local catalogue and focused
-verification harness. Later tasks are prepared after this foundation is reviewed.
+verification harness. Prepare the next bounded task for charts and exact tables;
+the wider F1 milestone remains in progress.

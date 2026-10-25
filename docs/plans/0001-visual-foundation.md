@@ -42,10 +42,10 @@ Read [the complete task brief](../tasks/F1-T01.md), including exact palette, int
 allowed files and tests. That file is the implementation requirements; keep its
 acceptance mapping and verification evidence there instead of duplicating it here.
 
-- [ ] Implement meaningful red/green component tests and the specified shared controls.
-- [ ] Run fixed Make targets for install, production build, component and browser checks.
-- [ ] Inspect rendered light/dark/mobile pages and generated production output.
-- [ ] Coordinator reviews, integrates and records evidence; no claim that F1 is complete.
+- [x] Implement meaningful red/green component tests and the specified shared controls.
+- [x] Run fixed Make targets for install, production build, component and browser checks.
+- [x] Inspect rendered light/dark/mobile pages and generated production output.
+- [x] Coordinator reviews, integrates and records evidence; no claim that F1 is complete.
 
 ## Subsequent F1 work
 
