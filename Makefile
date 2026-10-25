@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_sqlc_generated _report_sizes
+.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_sqlc_generated _report_sizes
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -38,6 +38,7 @@ preview:
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
+	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
@@ -62,7 +63,7 @@ verify:
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, integration, or smoke)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, auth-bench, integration, or smoke)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -77,7 +78,7 @@ _verify_web:
 
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp|./internal/storage) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
+	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/uihttp|./internal/storage|./internal/identity) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
@@ -100,11 +101,19 @@ _verify_go:
 _verify_go_race:
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage ./internal/identity > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected race tests: $$tests"; \
-	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/storage
+	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/storage ./internal/identity
+
+_verify_auth_bench:
+	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
+	  benchmarks=$$(.local/bin/go test -run '^$$' -list '^BenchmarkPassword(Hash|Verify)$$' ./internal/identity); \
+	  printf '%s\n' "$$benchmarks"; \
+	  test "$$(printf '%s\n' "$$benchmarks" | awk '/^Benchmark/{n++} END{print n+0}')" -eq 2 || { echo 'expected both named password benchmarks' >&2; exit 1; }; \
+	  .local/bin/go test -run '^$$' -bench '^BenchmarkPassword(Hash|Verify)$$' -benchtime=10x -count=1 -timeout=2m ./internal/identity
 
 _verify_integration:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
