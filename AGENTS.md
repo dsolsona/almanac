@@ -190,6 +190,10 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   `make verify` or `make generate` families. Never add arbitrary command execution
   or unchecked passthrough arguments to those targets. Leave actions that cannot
   fit an approved family pending instead of interrupting the maintainer.
+- If an implementer cannot reuse an existing command approval, hand the exact
+  bounded operation and verification evidence back to the coordinator. Do not
+  retry approval requests. The coordinator can perform approved Git staging and
+  commits after checking file ownership and the submitted evidence.
 - Never replace real API/database/agent acceptance evidence with mocked UI checks.
   Preserve first-attempt failures; do not rerun-to-green, skip expected tests, weaken
   assertions, disable auth, or increase timeouts to manufacture a passing gate.
