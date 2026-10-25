@@ -11,13 +11,22 @@ import (
 )
 
 type Querier interface {
+	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
+	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
 	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
+	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
+	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
+	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
+	LockSessionInstallation(ctx context.Context) (LockSessionInstallationRow, error)
+	LockSessionUser(ctx context.Context, userID pgtype.UUID) (LockSessionUserRow, error)
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
+	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

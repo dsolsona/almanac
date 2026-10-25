@@ -6,6 +6,7 @@ sql:
       - internal/storage/bootstrap.sql
       - internal/storage/migrations/0001_installation.sql
       - internal/storage/migrations/0002_initial_owner.sql
+      - internal/storage/migrations/0003_local_sessions.sql
     gen:
       go:
         package: dbgen

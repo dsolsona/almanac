@@ -35,6 +35,17 @@ type AlmanacSchemaMigration struct {
 	AppliedAt pgtype.Timestamptz `json:"applied_at"`
 }
 
+type AlmanacSession struct {
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	Verifier           []byte             `json:"verifier"`
+	CredentialRevision int64              `json:"credential_revision"`
+	CredentialEpoch    pgtype.UUID        `json:"credential_epoch"`
+	Restricted         bool               `json:"restricted"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
+}
+
 type AlmanacUser struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Login              string             `json:"login"`
