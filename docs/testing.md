@@ -1,8 +1,9 @@
 # Testing and verification
 
-Status: engineering guidance requested by the maintainer on 2026-10-24. No application
-test harness exists yet. The initial time budgets below are planning targets to
-validate during F1, not claims of measured performance or existing commands.
+Status: engineering guidance requested by the maintainer on 2026-10-24. The web
+foundation now has component and Chromium checks; Go/API/database and real-stack
+journeys remain unimplemented. The initial time budgets below are planning targets;
+measured evidence is recorded in [delivery status](status.md).
 
 ## Fast feedback with credible acceptance
 
@@ -162,6 +163,19 @@ fresh final verification must execute the relevant acceptance checks on the cand
 statuses, index coverage and acceptance-criterion IDs. It does not validate product
 behavior, external URLs, Markdown anchors, security or performance.
 
-Application build, unit, integration and browser commands do not exist yet. F1 must
-create explicit focused and full entry points and document them only after they run.
-Dependency installation is an explicit setup step, not a hidden test prerequisite.
+The web foundation provides these fixed entry points:
+
+| Command | Scope |
+| --- | --- |
+| `make setup` | Locked web dependencies and Chromium; explicit network-capable setup |
+| `make build` | Typecheck and production assets |
+| `make verify` | Typecheck, component suite, build, bundle exclusion and production routing smoke |
+| `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
+| `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
+| `make preview` | Local catalogue on port 5198 |
+
+The browser matrix owns port 5198 and refuses an existing server; stop a preview
+before running it. The production smoke uses port 5199. Checks require completed
+setup and never install dependencies. Unknown modes and empty test selections fail.
+These commands establish UI foundation behavior, not API/database/authentication
+acceptance. Real-stack and Go entry points remain future F1 work.

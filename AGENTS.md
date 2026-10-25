@@ -77,7 +77,8 @@ directories you change, then the relevant specs and ADRs.
   UI components in `web/src/components/ui/`, chart components in
   `web/src/components/charts/`, and design guidance in `web/DESIGN_SYSTEM.md`.
   The catalogue should demonstrate those actual components and their states;
-  feature screens should reuse them. These locations will be created with the UI.
+  feature screens should reuse them. Shared controls and the catalogue exist;
+  chart components will be added in a later task.
   Backend architecture remains subject to explicit decisions.
 - Keep maintenance exclusions, notification silences and graph annotations distinct.
   Maintenance omits eligible measurements without deleting them; silences affect
@@ -189,7 +190,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   tests passed based on an earlier codebase or a different revision.
 - Keep changes reviewable and confined to the current feature. Do not begin
   later milestones merely because related code is available.
-- Document commands only once they exist and work here. The repository currently
-  has no application build or test commands. Documentation checks are available via
-  `python3 scripts/check-docs.py`.
+- Use `make setup` for locked web dependencies and Chromium, `make build` for a
+  production build, `make verify` for unit/type/build/production checks, and
+  `make verify VERIFY_MODE=browser` for catalogue browser checks. Focused component
+  checks use `make verify VERIFY_MODE=unit TEST_FILE=tests/ui.test.tsx`.
+  `make preview` serves the local catalogue. These cover the web foundations only;
+  Go/API/database gates do not exist yet. Documentation checks use
+  `python3 scripts/check-docs.py`. Document new commands only after they work here.
 - Do not commit, push, or publish unless requested. Respect unrelated local edits.

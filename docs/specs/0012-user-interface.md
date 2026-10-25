@@ -191,8 +191,9 @@ view. Error pages preserve navigation and a safe retry path.
 
 ## Dependencies and open questions
 
-Domain specs govern data and permissions. The design guide and catalogue do not
-exist yet; this spec records their required contract, not their completion.
+Domain specs govern data and permissions. The shared control catalogue and
+[design guide](../../web/DESIGN_SYSTEM.md) exist. Charts, exact tables and feature
+journeys remain unimplemented.
 
 <!-- REVIEW-U09: Confirm the proposed bundle, load and interaction budgets and benchmark fixture. Fast, lightweight SLO/chart interaction is required; these initial numeric thresholds need implementation evidence. -->
 <!-- REVIEW-U08: Accept hierarchical folders, one folder per SLO, stable-ID moves and nonempty deletion protection? This is navigation organization, not a separate authorization hierarchy. -->
@@ -201,8 +202,11 @@ exist yet; this spec records their required contract, not their completion.
 
 ## Verification evidence
 
-Not implemented or verified. Require real browser evidence, accessibility checks,
-production-bundle inspection and API/CLI comparison; screenshots alone are insufficient.
+Shared control catalogue verification is recorded in [delivery status](../status.md).
+Component/browser tests, contrast checks, visual inspection and production-bundle/
+routing checks cover this initial slice. Manual screen-reader checks, supported
+browser coverage and domain journeys/API/CLI comparisons remain outstanding.
+The whole spec is not verified; screenshots alone are insufficient.
 
 ## Change notes
 

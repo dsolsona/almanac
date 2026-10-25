@@ -2,8 +2,8 @@
 
 ## Current state
 
-The first visual foundation task is in progress. Shared theme tokens and the local
-heading font are committed; the catalogue and verification harness are being built.
+The first visual foundation task is under review. Shared controls, theme tokens,
+the local heading font, catalogue and web verification harness are implemented.
 No Go module, application binary, database schema, CLI or provider is implemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
@@ -16,7 +16,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01 in progress | Shared visual assets committed; runtime verification pending |
+| Product implementation | F1-T01 under review | Shared catalogue implemented; coordinator verification and review underway |
 
 ## Coverage
 
@@ -50,7 +50,8 @@ See [review guide](review-guide.md) for the highest-impact decisions, reading or
 and decision register. The completed review clarified mandatory initial-password
 rotation, local users before Google SSO, calculation examples, composite sequencing,
 React/API packaging and measurable UI performance. The encryption library remains a
-candidate selection before encryption implementation. No product tests have run.
+candidate selection before encryption implementation. Web foundation checks now run;
+no Go/API/database or full product-journey tests are claimed.
 
 ## Next work and session handoff
 
@@ -58,15 +59,34 @@ candidate selection before encryption implementation. No product tests have run.
 - The maintainer selected a primary coordinator and `gpt-6-luna` implementers.
   Follow AGENTS.md and [ways of working](ways-of-working.md) on every new session.
 - [Testing guidance](testing.md) requires focused iteration, independent coordinator
-  review, a real-stack smoke gate and full boundary/release evidence. Initial duration
-  targets are unmeasured until the harness exists; no passing product tests are claimed.
+  review, a real-stack smoke gate and full boundary/release evidence. Web foundation
+  timings are measured below; real-stack and later boundary gates remain future work.
 - The [visual foundation plan](plans/0001-visual-foundation.md) and
   [F1-T01](tasks/F1-T01.md) are active on `feat/f1-visual` in `.worktrees/f1-visual`.
   A `gpt-6-luna` implementer builds the catalogue; the coordinator owns acceptance.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
-- Documentation validation exists at `python3 scripts/check-docs.py`; build/unit/API/
-  integration/browser entry points still need to be implemented and measured in F1.
+- Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
+  catalogue browser entry points exist; API/database/agent integration remains F1 work.
+
+## Visual foundation verification
+
+The coordinator independently ran `make verify`: component tests, typecheck,
+production build, emitted-bundle exclusion and production routing smoke passed.
+The initial component suite had 8 tests and took 0.97 seconds; the reviewed correction
+adds a ninth regression test (focused suite: 1.16 seconds). The browser matrix
+passed 36 checks in 15.3 seconds with two Chromium workers, at 1440/1024/360 px in
+both themes. Production JavaScript measured 68.92 kB gzip. These are foundation
+measurements, not the SLO workload benchmark or real-stack smoke acceptance.
+
+Desktop and mobile screenshots in both themes received visual inspection. A missing
+spacing-token mapping was corrected and guarded by computed layout assertions.
+Review found a duplicate dialog title ID; negative verification found that an
+unmatched test-file selector incorrectly ran all tests. Both were corrected in
+`fd7a12a`, with a failing-then-passing dialog regression and a nonzero exit for an
+unmatched selector. Manual screen-reader testing and Firefox/Safari coverage remain
+outstanding; browser semantics, keyboard and computed contrast checks are partial
+accessibility evidence only.
 
 ## Workflow preparation evidence
 
