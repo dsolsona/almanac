@@ -7,20 +7,24 @@ type Props = {
   title: string;
   children: ReactNode;
   triggerRef: RefObject<HTMLElement | null>;
+  initialFocusRef?: RefObject<HTMLElement | null>;
 };
 
-export function Dialog({ open, onClose, title, children, triggerRef }: Props) {
+export function Dialog({ open, onClose, title, children, triggerRef, initialFocusRef }: Props) {
   const titleId = `${useId()}-title`;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const wasOpen = useRef(false);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      initialFocusRef?.current?.focus();
+    }
     if (!open && dialog.open) dialog.close();
     if (wasOpen.current && !open) triggerRef.current?.focus();
     wasOpen.current = open;
-  }, [open, triggerRef]);
+  }, [open, triggerRef, initialFocusRef]);
 
   function requestClose() {
     onClose();

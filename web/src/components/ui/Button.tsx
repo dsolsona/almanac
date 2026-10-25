@@ -11,7 +11,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 export function Button({ variant = 'primary', pending = false, disabled, type = 'button', className = '', children, ...props }: Props) {
   return (
     <button {...props} type={type} disabled={disabled || pending} aria-busy={pending || undefined} className={`ui-button ui-button--${variant} ${className}`.trim()}>
-      {pending && <span className="ui-button__mark" aria-hidden="true">…</span>}{children}
+      {pending && <span className="ui-button__mark" aria-hidden="true" />}{children}
     </button>
   );
 }

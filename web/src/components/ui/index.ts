@@ -8,3 +8,6 @@ export type { Status } from './StatusBadge.tsx';
 export { Panel } from './Panel.tsx';
 export { Dialog } from './Dialog.tsx';
 export { ThemeToggle } from './ThemeToggle.tsx';
+export { Switch } from './Switch.tsx';
+export { DatePicker } from './DatePicker.tsx';
+export { LoadingIndicator } from './LoadingIndicator.tsx';

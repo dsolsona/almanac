@@ -80,6 +80,12 @@ Import controls from `src/components/ui/` and prefer native semantics:
   Escape and focus containment, with focus restoration through `triggerRef`.
 - `ThemeToggle` honors a persisted choice, defaults to system preference, and
   tolerates unavailable storage.
+- `Switch` uses a native checkbox with switch semantics, persistent label, hint,
+  checked state text and visible thumb position.
+- `DatePicker` validates `YYYY-MM-DD` calendar dates and opens a shared native
+  dialog containing a Monday-first, keyboard-navigable month grid.
+- `LoadingIndicator` announces an indeterminate status with a transform-only
+  moving segment and a static reduced-motion state.
 
 ## Catalogue and scope
 
@@ -94,7 +100,8 @@ with the unit mode.
 
 The catalogue demonstrates actual shared control exports and local-only state.
 It includes palette and type specimens, disabled/pending/invalid/empty/loading/
-error/long-content examples and a working dialog. It is imported only by the
-development build. Charts, exact-value tables, complex navigation, and domain
-screens are future work; this catalogue does not imply application data,
-authentication or backend operation.
+error/long-content examples, switches, date selection and a working dialog. Its
+local save example completes only when the explicit finish control is pressed.
+It is imported only by the development build. Charts, exact-value tables,
+complex navigation, and domain screens are future work; this catalogue does not
+imply application data, authentication or backend operation.

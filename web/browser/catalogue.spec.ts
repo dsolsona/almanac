@@ -70,6 +70,9 @@ test('local pending action blocks repeat input and completes with honest feedbac
   const pending = page.getByRole('button', { name: 'Saving locally' });
   await expect(pending).toBeDisabled();
   await expect(pending).toHaveAttribute('aria-busy', 'true');
+  await expect(page.getByRole('button', { name: 'Finish local example' })).toBeEnabled();
+  await expect(page.getByRole('status').filter({ hasText: 'Saving this local example…' })).toBeVisible();
+  await page.getByRole('button', { name: 'Finish local example' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved locally for this page only.' })).toBeVisible();
   await expect(page.getByText('Count: 1.')).toBeVisible();
 });
