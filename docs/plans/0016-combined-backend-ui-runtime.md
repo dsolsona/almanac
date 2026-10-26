@@ -38,7 +38,10 @@ Exact files/interfaces and acceptance cases: [F1-T16](../tasks/F1-T16.md).
   the backend-only cases and all existing security/drain assertions.
 - [x] Run focused checks and compile tagged tests; submit the frozen candidate.
 - [x] Coordinator runs full/race/PostgreSQL/docs checks and independent reviews.
-- [ ] Record verified evidence and publish stacked on the setup CLI PR.
+- [x] Record verified evidence and publish stacked on the setup CLI PR.
+
+Published as [PR #13](https://github.com/dsolsona/almanac/pull/13), stacked on the
+setup CLI PR. Candidate and acceptance evidence are recorded in F1-T16.
 
 This increment does not complete combined alerts, secure remote UI authentication,
 browser onboarding, or full F1 acceptance.
