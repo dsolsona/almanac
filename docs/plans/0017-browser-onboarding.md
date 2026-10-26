@@ -53,8 +53,12 @@ credentials. Existing catalogue and unknown paths remain separate.
 - [x] Exercise the production binary/API/database in Chromium across themes and
   desktop/mobile layouts; inspect actual pages and preserve sanitized first failures.
 - [x] Run integrated checks, independently review tasks and reconcile docs.
-- [ ] Complete whole-branch review and publish the browser increment stacked on
+- [x] Complete whole-branch review and publish the browser increment stacked on
   the combined-runtime PR.
+
+Published as [PR #14](https://github.com/dsolsona/almanac/pull/14), based on
+[PR #13](https://github.com/dsolsona/almanac/pull/13). Independent whole-branch and
+scoped editorial reviews approve the delivered increment.
 
 Google SSO, recovery, user management, ordinary account settings, persisted CLI
 profiles and secure standalone UI proxy integration remain separate increments.

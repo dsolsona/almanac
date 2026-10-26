@@ -147,9 +147,14 @@ and product-journey acceptance remain outstanding.
   restricted initial-password setup and signed-in identity/logout in combined mode.
   Product `fd82f8a`, fixture/catalogue correction `75eb742`: 72 web/102 Go tests,
   race 95, real PostgreSQL 18.6 integration 66 (command 26.864 s), catalogue 96 (51.2 s).
-  Task reviews approve; final whole-branch review precedes publication. Actual
+  Task and final whole-branch reviews approve. Published as
+  [PR #14](https://github.com/dsolsona/almanac/pull/14), stacked on the combined runtime. Actual
   Chromium 156.0.8078.4 screens were inspected at 360/1024/1440 px in both themes.
   Lost responses are exercised after real commits, without automatic replay.
+  The PR review correction clears abandoned setup passwords immediately on logout,
+  including failure. Updated verification passes 73 web/102 Go tests and 66 real
+  PostgreSQL integration tests (command 26.805 s), including the logout/re-login
+  regression. Independent scoped review approves.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

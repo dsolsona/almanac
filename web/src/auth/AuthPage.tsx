@@ -231,6 +231,10 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   async function signOut() {
     if (busy.current || !context?.session) return;
     busy.current = true;
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmation('');
+    setErrors({});
     setNotice(null);
     setPending(true);
     const request = startRequest();

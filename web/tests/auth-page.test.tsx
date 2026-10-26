@@ -200,15 +200,48 @@ describe('authentication page', () => {
 
   it('does not claim sign-out when logout fails and exposes deliberate session recovery', async () => {
     const user = userEvent.setup();
-    const client = clientFor(signedIn);
+    const client = clientFor(restricted);
     client.logout = vi.fn().mockRejectedValue(new AuthFailure('unavailable', 'logout_unconfirmed', 'untrusted text'));
     render(<AuthPage client={client} />);
-    await screen.findByRole('heading', { name: 'Signed in' });
+    await screen.findByRole('heading', { name: 'Set your permanent password' });
+    await user.type(screen.getByLabelText('Current password'), 'draft current');
+    await user.type(screen.getByLabelText('New password'), 'draft new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'mismatched draft password');
+    await user.click(screen.getByRole('button', { name: 'Set password' }));
+    expect(await screen.findByText('Enter the same new password again.')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not be confirmed/i);
-    expect(screen.getByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Set your permanent password' })).toBeVisible();
+    expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(screen.getByLabelText('New password')).toHaveValue('');
+    expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
+    expect(screen.queryByText('Enter the same new password again.')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Check session' })).toBeVisible();
     expect(client.logout).toHaveBeenCalledOnce();
+  });
+
+  it('clears restricted password drafts before logout and keeps them cleared after sign-in', async () => {
+    const user = userEvent.setup();
+    const client = clientFor(restricted);
+    client.context = vi.fn().mockResolvedValueOnce(restricted).mockResolvedValueOnce(anonymous);
+    client.login = vi.fn().mockResolvedValue(restricted);
+    render(<AuthPage client={client} />);
+    await screen.findByRole('heading', { name: 'Set your permanent password' });
+    await user.type(screen.getByLabelText('Current password'), 'draft current');
+    await user.type(screen.getByLabelText('New password'), 'draft new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'draft new password');
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await user.type(screen.getByLabelText('Login'), 'owner');
+    await user.type(screen.getByLabelText('Password'), 'initial password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('heading', { name: 'Set your permanent password' })).toBeVisible();
+    expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(screen.getByLabelText('New password')).toHaveValue('');
+    expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
+    expect(client.changePassword).not.toHaveBeenCalled();
+    expect(client.logout).toHaveBeenCalledOnce();
+    expect(client.login).toHaveBeenCalledOnce();
   });
 
   it('describes an unknown password change accurately when recovery finds no session', async () => {
