@@ -224,6 +224,9 @@ func TestIntegrationExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T) 
 	if err := os.Remove(passwordFile); err != nil {
 		t.Fatal("remove initial password fixture failed")
 	}
+	// Close idle client connections before server-side graceful drain.
+	client.CloseIdleConnections()
+
 	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	drainConn, err := tls.DialWithDialer(dialer, "tcp", address, &tls.Config{RootCAs: roots, ServerName: "localhost", MinVersion: tls.VersionTLS12})
 	if err != nil {
