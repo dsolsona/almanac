@@ -92,7 +92,7 @@ func setup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	if *caFile != "" {
 		ca, err = secretfile.ReadCertificate(*caFile)
-		if err != nil {
+		if err != nil || len(ca) == 0 {
 			return writeSetupError(stdout, stderr, jsonOut, 2, "invalid_ca_file", "CA bundle file is invalid", false, "unchecked", "", 0)
 		}
 	}

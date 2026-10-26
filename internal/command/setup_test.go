@@ -173,6 +173,15 @@ func TestSetupRejectsOversizedPasswordAndCABundlesBeforeNetwork(t *testing.T) {
 	if code := setup(t.Context(), base, &out, &stderr); code != 2 {
 		t.Fatalf("explicit empty CA exit=%d", code)
 	}
+	if err := os.WriteFile(caFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base[len(base)-2] = "--ca-file=" + caFile
+	out.Reset()
+	stderr.Reset()
+	if code := setup(t.Context(), base, &out, &stderr); code != 2 || !strings.Contains(out.String(), `"code":"invalid_ca_file"`) {
+		t.Fatalf("zero-byte CA result exit=%d output=%s", code, out.String())
+	}
 	if hits != 0 {
 		t.Fatalf("network requests before file validation=%d", hits)
 	}
@@ -343,5 +352,56 @@ func TestSetupConflictReportsSessionStateSupportedByCleanup(t *testing.T) {
 				t.Fatalf("conflict output=%q; want %q", out.String(), want)
 			}
 		})
+	}
+}
+
+func TestSetupUncertainOutcomePrintsRecoveryGuidanceInJSONAndText(t *testing.T) {
+	var contexts, logins, passwordChanges int
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/auth/context":
+			contexts++
+			w.Header().Add("Set-Cookie", "__Host-almanac-preauth="+setupTestCookie+setupCookieAttributes)
+			_, _ = fmt.Fprint(w, `{"csrf_token":"csrf","session":null}`)
+		case "/api/v1/auth/login":
+			logins++
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = fmt.Fprint(w, `{"code":"authentication_unavailable","message":"private backend detail","request_id":"","field_errors":[]}`)
+		case "/api/v1/auth/password":
+			passwordChanges++
+		default:
+			t.Errorf("unexpected route %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	initial, next, caFile := filepath.Join(dir, "initial"), filepath.Join(dir, "next"), filepath.Join(dir, "ca")
+	for path, value := range map[string]string{initial: "Initial-password-123", next: "Permanent-password-456"} {
+		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	if err := os.WriteFile(caFile, ca, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	baseArgs := []string{"setup", "--backend-url=" + server.URL, "--initial-admin-login=admin", "--initial-admin-password-file=" + initial, "--new-password-file=" + next, "--ca-file=" + caFile}
+	var jsonOut, jsonErr bytes.Buffer
+	if code := Run(t.Context(), append(append([]string{}, baseArgs...), "--output=json"), &jsonOut, &jsonErr, BuildInfo{}); code != 1 {
+		t.Fatalf("JSON uncertain setup exit=%d", code)
+	}
+	if !strings.Contains(jsonOut.String(), `"outcome_unknown":true`) || !strings.Contains(jsonOut.String(), "deliberately sign in through the authentication API") || !strings.Contains(jsonOut.String(), "Do not automatically rerun setup") || !strings.Contains(jsonOut.String(), "a valid session does not prove") || strings.Contains(jsonOut.String()+jsonErr.String(), "private backend detail") {
+		t.Fatalf("JSON uncertain result omitted safe recovery guidance: %q / %q", jsonOut.String(), jsonErr.String())
+	}
+	var textOut, textErr bytes.Buffer
+	if code := Run(t.Context(), baseArgs, &textOut, &textErr, BuildInfo{}); code != 1 {
+		t.Fatalf("text uncertain setup exit=%d", code)
+	}
+	if textOut.Len() != 0 || !strings.Contains(textErr.String(), "deliberately sign in through the authentication API") || !strings.Contains(textErr.String(), "Do not automatically rerun setup") || !strings.Contains(textErr.String(), "a valid session does not prove") {
+		t.Fatalf("text uncertain result omitted safe recovery guidance: %q / %q", textOut.String(), textErr.String())
+	}
+	if contexts != 4 || logins != 2 || passwordChanges != 0 {
+		t.Fatalf("context/login/password counts=%d/%d/%d", contexts, logins, passwordChanges)
 	}
 }

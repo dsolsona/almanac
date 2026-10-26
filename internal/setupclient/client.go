@@ -25,6 +25,7 @@ import (
 )
 
 const maxResponseBytes = 64 << 10
+const uncertainOutcomeMessage = "setup outcome is unknown; the initial or new password may already be active. If you do not have a usable session, deliberately sign in through the authentication API with the initial password if login was uncertain; after an uncertain password change, use the new password and, if that fails, the initial password. Do not automatically rerun setup; a valid session does not prove the password change completed."
 
 type Kind string
 
@@ -290,7 +291,7 @@ func (c *Client) rejectAndLogout(ctx context.Context, original *Failure, csrf st
 	return original
 }
 func (c *Client) uncertain(ctx context.Context, cause error, state string) error {
-	f := &Failure{Kind: KindRemote, Code: "outcome_unknown", Message: "setup outcome is unknown; the initial or new password may already be active", OutcomeUnknown: true, SessionState: "unchecked"}
+	f := &Failure{Kind: KindRemote, Code: "outcome_unknown", Message: uncertainOutcomeMessage, OutcomeUnknown: true, SessionState: "unchecked"}
 	if cause != nil && ctx.Err() == nil {
 		r, e := c.api.PostAuthContext(ctx, api.PostAuthContextJSONRequestBody{}, c.headers(""))
 		if e == nil {
@@ -422,21 +423,33 @@ func mapProblem(status int, p api.Problem, state string, mutation bool) *Failure
 }
 func networkFailure(err error, mutation bool, state string) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return &Failure{Kind: KindCancelled, Code: "cancelled", Message: "setup was cancelled or timed out", OutcomeUnknown: mutation, SessionState: "unavailable"}
+		message := "setup was cancelled or timed out"
+		if mutation {
+			message = uncertainOutcomeMessage
+		}
+		return &Failure{Kind: KindCancelled, Code: "cancelled", Message: message, OutcomeUnknown: mutation, SessionState: "unavailable"}
 	}
-	return &Failure{Kind: KindRemote, Code: map[bool]string{true: "outcome_unknown", false: "connection_failed"}[mutation], Message: map[bool]string{true: "setup outcome is unknown; the initial or new password may already be active", false: "could not contact the authentication backend"}[mutation], OutcomeUnknown: mutation, SessionState: map[bool]string{true: "unchecked", false: state}[mutation]}
+	message := "could not contact the authentication backend"
+	if mutation {
+		message = uncertainOutcomeMessage
+	}
+	return &Failure{Kind: KindRemote, Code: map[bool]string{true: "outcome_unknown", false: "connection_failed"}[mutation], Message: message, OutcomeUnknown: mutation, SessionState: map[bool]string{true: "unchecked", false: state}[mutation]}
 }
 func cancelledFailure(unknown bool, state string) *Failure {
 	if unknown {
 		state = "unavailable"
 	}
-	return &Failure{Kind: KindCancelled, Code: "cancelled", Message: "setup was cancelled or timed out", OutcomeUnknown: unknown, SessionState: state}
+	message := "setup was cancelled or timed out"
+	if unknown {
+		message = uncertainOutcomeMessage
+	}
+	return &Failure{Kind: KindCancelled, Code: "cancelled", Message: message, OutcomeUnknown: unknown, SessionState: state}
 }
 func protocolFailure(state string, unknown bool) error {
 	code, msg := "protocol_failure", "authentication response was invalid"
 	if unknown {
 		code = "outcome_unknown"
-		msg = "setup outcome is unknown; the initial or new password may already be active"
+		msg = uncertainOutcomeMessage
 	}
 	return &Failure{Kind: KindRemote, Code: code, Message: msg, OutcomeUnknown: unknown, SessionState: state}
 }
