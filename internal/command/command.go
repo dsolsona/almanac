@@ -56,6 +56,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return serve(ctx, args[1:], stdout, stderr)
 	case "db":
 		return db(ctx, args[1:], stdout, stderr)
+	case "setup":
+		return setup(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "almanac: unsupported command %q\n", args[0])
 		return 2
@@ -67,6 +69,7 @@ func printHelp(w io.Writer) {
   almanac version [--output=json]
   almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--backend-url=ORIGIN] [--database-url-file=FILE] [--initial-admin-login=LOGIN] [--initial-admin-password-file=FILE] [--public-origin=ORIGIN] [--tls-cert-file=FILE] [--tls-key-file=FILE] [--trusted-proxy-cidrs=LIST] [--shutdown-timeout=DURATION]
   almanac db upgrade [--database-url-file=FILE] [--timeout=30s] [--output=json]
+  almanac setup --backend-url=ORIGIN --initial-admin-login=LOGIN --initial-admin-password-file=FILE --new-password-file=FILE [--ca-file=PEM] [--timeout=30s] [--output=json]
 
 Implemented component modes:
   backend  Serve protected local authentication API with PostgreSQL ownership.

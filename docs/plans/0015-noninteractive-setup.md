@@ -9,7 +9,8 @@ Spec: [SPEC-0004](../specs/0004-identity-and-access.md),
 [SPEC-0010](../specs/0010-api-and-cli.md); exact scope/interfaces in
 [F1-T15](../tasks/F1-T15.md). Architecture: generated API client operations with a
 bounded TLS/cookie workflow, invoked by the existing CLI command boundary. No DB
-access from the setup client, new dependency, profile storage or UI work.
+access from the setup client, profile storage or UI work. Generated client output
+uses its pinned runtime support library under the existing generator architecture.
 
 Review focus: credentials crossing redirects/logs; false success after lost response;
 ordinary-password rotation through repeated setup; partial file validation after

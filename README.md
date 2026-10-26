@@ -70,8 +70,36 @@ Backend settings have matching snake_case JSON fields, `ALMANAC_` environment
 variables and flags; precedence is flags, environment, then file. Proxy CIDRs are a
 JSON array or a comma-separated environment/flag value. See the
 [runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
-This increment provides the authentication API; secure UI proxy integration,
-onboarding screens, setup CLI, management and metric ingestion follow separately.
+This increment provides the authentication API and noninteractive setup; secure UI
+proxy integration, onboarding screens, general CLI profiles, management and metric
+ingestion follow separately.
+
+Complete initial administrator setup through HTTPS:
+
+```sh
+bin/almanac setup --backend-url=https://almanac.example.com \
+  --initial-admin-login=admin \
+  --initial-admin-password-file=/run/secrets/almanac-initial-password \
+  --new-password-file=/run/secrets/almanac-permanent-password \
+  --output=json
+```
+
+For a private certificate authority, add `--ca-file=/run/certs/issuer-ca.pem`.
+Certificate verification is always enabled. Password files contain the exact UTF-8
+password text: a trailing newline is part of the password. The command validates
+local inputs before network access, never prompts, and does not save or print session
+secrets. `--timeout` bounds the whole operation (default30s, maximum2m).
+
+Successful JSON output reports `completed:true` and `session_cleanup:"complete"`.
+If rotation succeeds but logout cannot be confirmed, completion remains true and
+cleanup is `"unknown"`, with a diagnostic on stderr. Running setup with an ordinary
+administrator session refuses another password rotation.
+
+A lost or ambiguous login/password response reports `outcome_unknown:true`; setup
+checks session context once when its deadline permits and never repeats the mutation.
+An authenticated context alone does not establish that rotation succeeded. Recover
+through a deliberate sign-in using the authentication API; the new password may
+already be active. Do not automatically retry setup after an uncertain outcome.
 
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
 pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:

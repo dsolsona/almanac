@@ -164,6 +164,9 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   version declared in `go.mod`. Read its complete applicable guideline list;
   consult explanations for relevant rules. Do not assume a toolchain version
   from another project. If tooling is unavailable, report the limitation.
+  `make setup SETUP_MODE=go` installs `.local/bin/go-modern-guidelines`; use that
+  installed CLI for read-only guideline queries rather than rerunning a global-cache
+  installer that may be unavailable inside the sandbox.
 - Prefer clear, idiomatic Go and small interfaces justified by actual consumers.
   Avoid speculative frameworks and abstractions. Explain added dependencies;
   architectural dependencies require an ADR.

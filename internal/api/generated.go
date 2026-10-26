@@ -6,8 +6,16 @@
 package api
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Defines values for HealthResponseComponent.
@@ -151,6 +159,1893 @@ type PostAuthLogoutJSONRequestBody = EmptyAuthRequest
 
 // PostAuthPasswordJSONRequestBody defines body for PostAuthPassword for application/json ContentType.
 type PostAuthPasswordJSONRequestBody = PasswordRequest
+
+// RequestEditorFn is the function signature for the RequestEditor callback function
+type RequestEditorFn func(ctx context.Context, req *http.Request) error
+
+// Doer performs HTTP requests.
+//
+// The standard http.Client implements this interface.
+type HttpRequestDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Client which conforms to the OpenAPI3 specification for this service.
+type Client struct {
+	// The endpoint of the server conforming to this interface, with scheme,
+	// https://api.deepmap.com for example. This can contain a path relative
+	// to the server, such as https://api.deepmap.com/dev-test, and all the
+	// paths in the swagger spec will be appended to the server.
+	Server string
+
+	// Doer for performing requests, typically a *http.Client with any
+	// customized settings, such as certificate chains.
+	Client HttpRequestDoer
+
+	// A list of callbacks for modifying requests which are generated before sending over
+	// the network.
+	RequestEditors []RequestEditorFn
+}
+
+// ClientOption allows setting custom parameters during construction
+type ClientOption func(*Client) error
+
+// Creates a new Client, with reasonable defaults
+func NewClient(server string, opts ...ClientOption) (*Client, error) {
+	// create a client with sane default values
+	client := Client{
+		Server: server,
+	}
+	// mutate client and add all optional params
+	for _, o := range opts {
+		if err := o(&client); err != nil {
+			return nil, err
+		}
+	}
+	// ensure the server URL always has a trailing slash
+	if !strings.HasSuffix(client.Server, "/") {
+		client.Server += "/"
+	}
+	// create httpClient, if not already present
+	if client.Client == nil {
+		client.Client = &http.Client{}
+	}
+	return &client, nil
+}
+
+// WithHTTPClient allows overriding the default Doer, which is
+// automatically created using http.Client. This is useful for tests.
+func WithHTTPClient(doer HttpRequestDoer) ClientOption {
+	return func(c *Client) error {
+		c.Client = doer
+		return nil
+	}
+}
+
+// WithRequestEditorFn allows setting up a callback function, which will be
+// called right before sending the request. This can be used to mutate the request.
+func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
+	return func(c *Client) error {
+		c.RequestEditors = append(c.RequestEditors, fn)
+		return nil
+	}
+}
+
+// The interface specification for the client above.
+type ClientInterface interface {
+
+	// PostAuthContextWithBody Read the current authentication context
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+	PostAuthContextWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthContext Read the current authentication context
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+	PostAuthContext(ctx context.Context, body PostAuthContextJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthLoginWithBody Create a local session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+	PostAuthLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthLogin Create a local session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+	PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthLogoutWithBody Revoke the current session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+	PostAuthLogoutWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthLogout Revoke the current session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+	PostAuthLogout(ctx context.Context, body PostAuthLogoutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthPasswordWithBody Change the current password
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+	PostAuthPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthPassword Change the current password
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+	PostAuthPassword(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLiveness Report whether the UI process is alive
+	//
+	// Corresponds with GET /livez (the `GetLiveness` operationId).
+	GetLiveness(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetReadiness Report whether the configured backend is ready
+	//
+	// Corresponds with GET /readyz (the `GetReadiness` operationId).
+	GetReadiness(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// PostAuthContextWithBody Read the current authentication context
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+func (c *Client) PostAuthContextWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthContextRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthContext Read the current authentication context
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+func (c *Client) PostAuthContext(ctx context.Context, body PostAuthContextJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthContextRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthLoginWithBody Create a local session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+func (c *Client) PostAuthLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthLoginRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthLogin Create a local session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+func (c *Client) PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthLoginRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthLogoutWithBody Revoke the current session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+func (c *Client) PostAuthLogoutWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthLogoutRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthLogout Revoke the current session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+func (c *Client) PostAuthLogout(ctx context.Context, body PostAuthLogoutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthLogoutRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthPasswordWithBody Change the current password
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+func (c *Client) PostAuthPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthPasswordRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAuthPassword Change the current password
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+func (c *Client) PostAuthPassword(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthPasswordRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetLiveness Report whether the UI process is alive
+//
+// Corresponds with GET /livez (the `GetLiveness` operationId).
+func (c *Client) GetLiveness(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLivenessRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetReadiness Report whether the configured backend is ready
+//
+// Corresponds with GET /readyz (the `GetReadiness` operationId).
+func (c *Client) GetReadiness(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetReadinessRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewPostAuthContextRequest calls the generic PostAuthContext builder with application/json body
+func NewPostAuthContextRequest(server string, body PostAuthContextJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthContextRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthContextRequestWithBody constructs an http.Request for the PostAuthContext method, with any body, and a specified content type
+func NewPostAuthContextRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/context")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthLoginRequest calls the generic PostAuthLogin builder with application/json body
+func NewPostAuthLoginRequest(server string, body PostAuthLoginJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthLoginRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthLoginRequestWithBody constructs an http.Request for the PostAuthLogin method, with any body, and a specified content type
+func NewPostAuthLoginRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/login")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthLogoutRequest calls the generic PostAuthLogout builder with application/json body
+func NewPostAuthLogoutRequest(server string, body PostAuthLogoutJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthLogoutRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthLogoutRequestWithBody constructs an http.Request for the PostAuthLogout method, with any body, and a specified content type
+func NewPostAuthLogoutRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/logout")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthPasswordRequest calls the generic PostAuthPassword builder with application/json body
+func NewPostAuthPasswordRequest(server string, body PostAuthPasswordJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthPasswordRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthPasswordRequestWithBody constructs an http.Request for the PostAuthPassword method, with any body, and a specified content type
+func NewPostAuthPasswordRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/password")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetLivenessRequest constructs an http.Request for the GetLiveness method
+func NewGetLivenessRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/livez")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetReadinessRequest constructs an http.Request for the GetReadiness method
+func NewGetReadinessRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/readyz")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
+	for _, r := range c.RequestEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	for _, r := range additionalEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClientWithResponses builds on ClientInterface to offer response payloads
+type ClientWithResponses struct {
+	ClientInterface
+}
+
+// NewClientWithResponses creates a new ClientWithResponses, which wraps
+// Client with return type handling
+func NewClientWithResponses(server string, opts ...ClientOption) (*ClientWithResponses, error) {
+	client, err := NewClient(server, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientWithResponses{client}, nil
+}
+
+// WithBaseURL overrides the baseURL.
+func WithBaseURL(baseURL string) ClientOption {
+	return func(c *Client) error {
+		newBaseURL, err := url.Parse(baseURL)
+		if err != nil {
+			return err
+		}
+		c.Server = newBaseURL.String()
+		return nil
+	}
+}
+
+// ClientWithResponsesInterface is the interface specification for the client with responses above.
+type ClientWithResponsesInterface interface {
+
+	// PostAuthContextWithBodyWithResponse Read the current authentication context
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+	PostAuthContextWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthContextResponse, error)
+
+	// PostAuthContextWithResponse Read the current authentication context
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+	PostAuthContextWithResponse(ctx context.Context, body PostAuthContextJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthContextResponse, error)
+
+	// PostAuthLoginWithBodyWithResponse Create a local session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+	PostAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error)
+
+	// PostAuthLoginWithResponse Create a local session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+	PostAuthLoginWithResponse(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error)
+
+	// PostAuthLogoutWithBodyWithResponse Revoke the current session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+	PostAuthLogoutWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLogoutResponse, error)
+
+	// PostAuthLogoutWithResponse Revoke the current session
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+	PostAuthLogoutWithResponse(ctx context.Context, body PostAuthLogoutJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLogoutResponse, error)
+
+	// PostAuthPasswordWithBodyWithResponse Change the current password
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+	PostAuthPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthPasswordResponse, error)
+
+	// PostAuthPasswordWithResponse Change the current password
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+	PostAuthPasswordWithResponse(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPasswordResponse, error)
+
+	// GetLivenessWithResponse Report whether the UI process is alive
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /livez (the `GetLiveness` operationId).
+	GetLivenessWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLivenessResponse, error)
+
+	// GetReadinessWithResponse Report whether the configured backend is ready
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /readyz (the `GetReadiness` operationId).
+	GetReadinessWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetReadinessResponse, error)
+}
+
+// PostAuthContextResponse405Headers the declared response headers of an HTTP 405 response for PostAuthContext
+type PostAuthContextResponse405Headers struct {
+	Allow *string
+}
+
+type PostAuthContextResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuthResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *AuthenticationProblem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON405 the response for an HTTP 405 `application/json` response
+	JSON405 *AuthenticationMethodNotAllowed
+	// JSON408 the response for an HTTP 408 `application/json` response
+	JSON408 *AuthenticationProblem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *AuthenticationProblem
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *AuthenticationProblem
+	// JSON501 the response for an HTTP 501 `application/json` response
+	JSON501 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+	// Headers405 the parsed response headers for an HTTP 405 response
+	Headers405 *PostAuthContextResponse405Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAuthContextResponse) GetJSON200() *AuthResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostAuthContextResponse) GetJSON400() *AuthenticationProblem {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostAuthContextResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON405 returns the response for an HTTP 405 `application/json` response
+func (r PostAuthContextResponse) GetJSON405() *AuthenticationMethodNotAllowed {
+	return r.JSON405
+}
+
+// GetJSON408 returns the response for an HTTP 408 `application/json` response
+func (r PostAuthContextResponse) GetJSON408() *AuthenticationProblem {
+	return r.JSON408
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PostAuthContextResponse) GetJSON413() *AuthenticationProblem {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r PostAuthContextResponse) GetJSON415() *AuthenticationProblem {
+	return r.JSON415
+}
+
+// GetJSON501 returns the response for an HTTP 501 `application/json` response
+func (r PostAuthContextResponse) GetJSON501() *Problem {
+	return r.JSON501
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostAuthContextResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAuthContextResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthContextResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthContextResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAuthContextResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostAuthLoginResponse405Headers the declared response headers of an HTTP 405 response for PostAuthLogin
+type PostAuthLoginResponse405Headers struct {
+	Allow *string
+}
+
+// PostAuthLoginResponse429Headers the declared response headers of an HTTP 429 response for PostAuthLogin
+type PostAuthLoginResponse429Headers struct {
+	RetryAfter int
+}
+
+type PostAuthLoginResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuthResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON405 the response for an HTTP 405 `application/json` response
+	JSON405 *AuthenticationMethodNotAllowed
+	// JSON408 the response for an HTTP 408 `application/json` response
+	JSON408 *AuthenticationProblem
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Problem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *AuthenticationProblem
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *AuthenticationProblem
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *AuthenticationRateLimited
+	// JSON501 the response for an HTTP 501 `application/json` response
+	JSON501 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+	// Headers405 the parsed response headers for an HTTP 405 response
+	Headers405 *PostAuthLoginResponse405Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostAuthLoginResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAuthLoginResponse) GetJSON200() *AuthResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostAuthLoginResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostAuthLoginResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostAuthLoginResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON405 returns the response for an HTTP 405 `application/json` response
+func (r PostAuthLoginResponse) GetJSON405() *AuthenticationMethodNotAllowed {
+	return r.JSON405
+}
+
+// GetJSON408 returns the response for an HTTP 408 `application/json` response
+func (r PostAuthLoginResponse) GetJSON408() *AuthenticationProblem {
+	return r.JSON408
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r PostAuthLoginResponse) GetJSON409() *Problem {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PostAuthLoginResponse) GetJSON413() *AuthenticationProblem {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r PostAuthLoginResponse) GetJSON415() *AuthenticationProblem {
+	return r.JSON415
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostAuthLoginResponse) GetJSON429() *AuthenticationRateLimited {
+	return r.JSON429
+}
+
+// GetJSON501 returns the response for an HTTP 501 `application/json` response
+func (r PostAuthLoginResponse) GetJSON501() *Problem {
+	return r.JSON501
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostAuthLoginResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAuthLoginResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthLoginResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthLoginResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAuthLoginResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostAuthLogoutResponse405Headers the declared response headers of an HTTP 405 response for PostAuthLogout
+type PostAuthLogoutResponse405Headers struct {
+	Allow *string
+}
+
+type PostAuthLogoutResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON405 the response for an HTTP 405 `application/json` response
+	JSON405 *AuthenticationMethodNotAllowed
+	// JSON408 the response for an HTTP 408 `application/json` response
+	JSON408 *AuthenticationProblem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *AuthenticationProblem
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *AuthenticationProblem
+	// JSON501 the response for an HTTP 501 `application/json` response
+	JSON501 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+	// Headers405 the parsed response headers for an HTTP 405 response
+	Headers405 *PostAuthLogoutResponse405Headers
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON405 returns the response for an HTTP 405 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON405() *AuthenticationMethodNotAllowed {
+	return r.JSON405
+}
+
+// GetJSON408 returns the response for an HTTP 408 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON408() *AuthenticationProblem {
+	return r.JSON408
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON413() *AuthenticationProblem {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON415() *AuthenticationProblem {
+	return r.JSON415
+}
+
+// GetJSON501 returns the response for an HTTP 501 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON501() *Problem {
+	return r.JSON501
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostAuthLogoutResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAuthLogoutResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthLogoutResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthLogoutResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAuthLogoutResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostAuthPasswordResponse405Headers the declared response headers of an HTTP 405 response for PostAuthPassword
+type PostAuthPasswordResponse405Headers struct {
+	Allow *string
+}
+
+// PostAuthPasswordResponse429Headers the declared response headers of an HTTP 429 response for PostAuthPassword
+type PostAuthPasswordResponse429Headers struct {
+	RetryAfter int
+}
+
+type PostAuthPasswordResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuthResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Problem
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Problem
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Problem
+	// JSON405 the response for an HTTP 405 `application/json` response
+	JSON405 *AuthenticationMethodNotAllowed
+	// JSON408 the response for an HTTP 408 `application/json` response
+	JSON408 *AuthenticationProblem
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *AuthenticationProblem
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *AuthenticationProblem
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Problem
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *AuthenticationRateLimited
+	// JSON501 the response for an HTTP 501 `application/json` response
+	JSON501 *Problem
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Problem
+	// Headers405 the parsed response headers for an HTTP 405 response
+	Headers405 *PostAuthPasswordResponse405Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *PostAuthPasswordResponse429Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON200() *AuthResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON400() *Problem {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON401() *Problem {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON403() *Problem {
+	return r.JSON403
+}
+
+// GetJSON405 returns the response for an HTTP 405 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON405() *AuthenticationMethodNotAllowed {
+	return r.JSON405
+}
+
+// GetJSON408 returns the response for an HTTP 408 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON408() *AuthenticationProblem {
+	return r.JSON408
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON413() *AuthenticationProblem {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON415() *AuthenticationProblem {
+	return r.JSON415
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON422() *Problem {
+	return r.JSON422
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON429() *AuthenticationRateLimited {
+	return r.JSON429
+}
+
+// GetJSON501 returns the response for an HTTP 501 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON501() *Problem {
+	return r.JSON501
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r PostAuthPasswordResponse) GetJSON503() *Problem {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAuthPasswordResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthPasswordResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthPasswordResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAuthPasswordResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetLivenessResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *HealthResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetLivenessResponse) GetJSON200() *HealthResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetLivenessResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLivenessResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLivenessResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetLivenessResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetReadinessResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *HealthResponse
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *HealthResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetReadinessResponse) GetJSON200() *HealthResponse {
+	return r.JSON200
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetReadinessResponse) GetJSON503() *HealthResponse {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetReadinessResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetReadinessResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetReadinessResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetReadinessResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostAuthContextWithBodyWithResponse Read the current authentication context
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+func (c *ClientWithResponses) PostAuthContextWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthContextResponse, error) {
+	rsp, err := c.PostAuthContextWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthContextResponse(rsp)
+}
+
+// PostAuthContextWithResponse Read the current authentication context
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/context (the `PostAuthContext` operationId).
+func (c *ClientWithResponses) PostAuthContextWithResponse(ctx context.Context, body PostAuthContextJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthContextResponse, error) {
+	rsp, err := c.PostAuthContext(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthContextResponse(rsp)
+}
+
+// PostAuthLoginWithBodyWithResponse Create a local session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+func (c *ClientWithResponses) PostAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error) {
+	rsp, err := c.PostAuthLoginWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthLoginResponse(rsp)
+}
+
+// PostAuthLoginWithResponse Create a local session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/login (the `PostAuthLogin` operationId).
+func (c *ClientWithResponses) PostAuthLoginWithResponse(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error) {
+	rsp, err := c.PostAuthLogin(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthLoginResponse(rsp)
+}
+
+// PostAuthLogoutWithBodyWithResponse Revoke the current session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+func (c *ClientWithResponses) PostAuthLogoutWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLogoutResponse, error) {
+	rsp, err := c.PostAuthLogoutWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthLogoutResponse(rsp)
+}
+
+// PostAuthLogoutWithResponse Revoke the current session
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/logout (the `PostAuthLogout` operationId).
+func (c *ClientWithResponses) PostAuthLogoutWithResponse(ctx context.Context, body PostAuthLogoutJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLogoutResponse, error) {
+	rsp, err := c.PostAuthLogout(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthLogoutResponse(rsp)
+}
+
+// PostAuthPasswordWithBodyWithResponse Change the current password
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+func (c *ClientWithResponses) PostAuthPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthPasswordResponse, error) {
+	rsp, err := c.PostAuthPasswordWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthPasswordResponse(rsp)
+}
+
+// PostAuthPasswordWithResponse Change the current password
+//
+// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
+func (c *ClientWithResponses) PostAuthPasswordWithResponse(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPasswordResponse, error) {
+	rsp, err := c.PostAuthPassword(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthPasswordResponse(rsp)
+}
+
+// GetLivenessWithResponse Report whether the UI process is alive
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /livez (the `GetLiveness` operationId).
+func (c *ClientWithResponses) GetLivenessWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLivenessResponse, error) {
+	rsp, err := c.GetLiveness(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLivenessResponse(rsp)
+}
+
+// GetReadinessWithResponse Report whether the configured backend is ready
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /readyz (the `GetReadiness` operationId).
+func (c *ClientWithResponses) GetReadinessWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetReadinessResponse, error) {
+	rsp, err := c.GetReadiness(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetReadinessResponse(rsp)
+}
+
+// ParsePostAuthContextResponse parses an HTTP response from a PostAuthContextWithResponse call
+func ParsePostAuthContextResponse(rsp *http.Response) (*PostAuthContextResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthContextResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuthResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 405:
+		var dest AuthenticationMethodNotAllowed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON405 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 405:
+		var headers PostAuthContextResponse405Headers
+		if values := rsp.Header.Values("Allow"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Allow", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Allow = &value
+		}
+		response.Headers405 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthLoginResponse parses an HTTP response from a PostAuthLoginWithResponse call
+func ParsePostAuthLoginResponse(rsp *http.Response) (*PostAuthLoginResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthLoginResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuthResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 405:
+		var dest AuthenticationMethodNotAllowed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON405 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest AuthenticationRateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 405:
+		var headers PostAuthLoginResponse405Headers
+		if values := rsp.Header.Values("Allow"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Allow", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Allow = &value
+		}
+		response.Headers405 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostAuthLoginResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthLogoutResponse parses an HTTP response from a PostAuthLogoutWithResponse call
+func ParsePostAuthLogoutResponse(rsp *http.Response) (*PostAuthLogoutResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthLogoutResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 405:
+		var dest AuthenticationMethodNotAllowed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON405 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 405:
+		var headers PostAuthLogoutResponse405Headers
+		if values := rsp.Header.Values("Allow"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Allow", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Allow = &value
+		}
+		response.Headers405 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthPasswordResponse parses an HTTP response from a PostAuthPasswordWithResponse call
+func ParsePostAuthPasswordResponse(rsp *http.Response) (*PostAuthPasswordResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthPasswordResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuthResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 405:
+		var dest AuthenticationMethodNotAllowed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON405 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest AuthenticationProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest AuthenticationRateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 405:
+		var headers PostAuthPasswordResponse405Headers
+		if values := rsp.Header.Values("Allow"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Allow", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Allow = &value
+		}
+		response.Headers405 = &headers
+	case rsp.StatusCode == 429:
+		var headers PostAuthPasswordResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
+func ParseGetLivenessResponse(rsp *http.Response) (*GetLivenessResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLivenessResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest HealthResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 405:
+		break // No content-type
+
+	}
+
+	return response, nil
+}
+
+// ParseGetReadinessResponse parses an HTTP response from a GetReadinessWithResponse call
+func ParseGetReadinessResponse(rsp *http.Response) (*GetReadinessResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetReadinessResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest HealthResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 405:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest HealthResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
