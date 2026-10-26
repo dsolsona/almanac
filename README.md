@@ -3,6 +3,44 @@
 SLO monitoring and reliability management platform. Track SLIs, error budgets,
 burn rates and alerts across services.
 
+## Run locally
+
+Install Docker with its Compose plugin and Make, then run:
+
+```sh
+make bootstrap
+```
+
+This builds the app inside containers, prepares a separate PostgreSQL 18 database,
+generates local credentials and a localhost HTTPS certificate, upgrades the schema,
+and starts the app. No host Go, Node, or OpenSSL installation is needed.
+Open **https://localhost:8080** and accept the generated local certificate in your
+browser. No host trust settings are changed. Sign in as **admin**; retrieve the
+initial password explicitly with `make credentials`, then choose your permanent
+password in the onboarding page. The initial password is never printed in startup
+or container logs and stops working after rotation.
+
+Day to day:
+
+```sh
+make run       # Start dependencies and recreate the app; make start is an alias
+make stop      # Stop containers, preserving all data and credentials
+make logs      # View application logs
+```
+
+Run `make bootstrap` again after source changes to rebuild. Repeating it preserves
+your users, passwords and data. The app runs in the background; readiness failures
+make startup fail visibly. Recreating only the app gives it a fresh network connection,
+including after a failed port bind; the database container and volumes are reused.
+`ALMANAC_PORT=8082 make bootstrap` selects another local
+HTTPS port; use the same setting for later commands. PostgreSQL has no host port.
+Named volumes belong to the `almanac-local` Compose project; the test database and
+design catalogue are separate. This is a local development stack, not production
+deployment or restore qualification.
+
+The current app supports initial administrator onboarding, sign-in and sign-out.
+SLI collection, SLO dashboards and alerting are still under development.
+
 ## Runtime foundation
 
 `make setup` installs the pinned Go and web toolchains. `make build` builds the

@@ -227,6 +227,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   tests passed based on an earlier codebase or a different revision.
 - Keep changes reviewable and confined to the current feature. Do not begin
   later milestones merely because related code is available.
+- Use `make bootstrap` for the container-only local app, `make run` (or `make start`)
+  for daily startup, and `make stop` to preserve its data while stopping services.
+  Bootstrap/run/stop never reset volumes or credentials. Keep this Compose project
+  separate from the catalogue and acceptance fixtures; disclose the initial password
+  only through the explicit `make credentials` action.
 - Use `make setup` for pinned Go/web tools and Chromium, `make build` for the
   embedded UI binary, `make verify` for unit/type/build/generated/HTTP checks, and
   `make verify VERIFY_MODE=browser` for catalogue browser checks. Focused component

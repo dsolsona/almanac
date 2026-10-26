@@ -181,6 +181,7 @@ The foundation provides these fixed entry points:
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
+| `make verify VERIFY_MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes |
 
 The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy

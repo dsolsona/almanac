@@ -26,13 +26,16 @@ requirements may legitimately create additional specifications and ADRs.
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
 | ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
-| Product implementation | F1 Foundation verified; PR stack awaiting merge | F1-T01–18 deliver the foundation slice; F2 observations and later release requirements remain unimplemented |
+| Product implementation | F1 Foundation merged at `9c25fef`; local Compose follow-up verified | F1-T01–18 deliver the foundation slice; F1-T19 adds one-command local startup; F2 observations and later release requirements remain unimplemented |
 
 ## Foundation acceptance
 
 F1 meets the bounded foundation outcomes in [SPEC-0014](specs/0014-delivery-and-verification.md)
 on browser-auth revision `c12d221`, stacked on the unmerged runtime/setup increments.
-This records verified implementation, not a merged release or full-product acceptance.
+The foundation stack subsequently merged at `9c25fef`. This is not a full-product
+release acceptance. [F1-T19](tasks/F1-T19.md) adds the explicitly requested local
+Compose follow-up: `make bootstrap`, `make run` and `make stop`, with container-only
+build/setup, persistent volumes and real browser restart/onboarding evidence.
 
 | F1 outcome | Reproducible evidence |
 | --- | --- |

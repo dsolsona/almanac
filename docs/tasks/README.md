@@ -19,7 +19,7 @@ verification harness. [F1-T02](F1-T02.md) adds calendars, switches and continuou
 loading feedback; its [plan](../plans/0002-catalogue-controls.md) is also complete.
 [F1-T03](F1-T03.md) provides charts and exact tables; its review and verification
 are tracked in [delivery status](../status.md). F1 foundation is verified through
-F1-T18 in the unmerged PR stack. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
+F1-T18, merged at `9c25fef`. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
 generated operational contracts and lifecycle checks. [F1-T05](F1-T05.md) is the
 completed PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
 covers explicit schema upgrades and isolated real-database verification. Identity
@@ -64,3 +64,7 @@ and real browser acceptance.
 
 [F1-T18](F1-T18.md) defines the dependent sign-in and initial-password screens,
 with actual browser/backend/database acceptance in the same increment.
+
+[F1-T19](F1-T19.md) adds container-only local bootstrap and daily startup under the
+[local Compose plan](../plans/0018-local-compose.md), with persistent state and
+actual onboarding/restart verification.
