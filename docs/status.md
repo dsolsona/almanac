@@ -9,8 +9,9 @@ aligned timeline charts and exact-value tables.
 A Go executable now serves the embedded UI with operational health, a fixed-origin
 API proxy, version/help commands and bounded shutdown. Explicit PostgreSQL upgrades
 establish immutable schema history and installation metadata. Local authentication
-now has a verified application service; public authentication transport, management
-operations, observation storage and providers remain unimplemented.
+now has a verified application service and protected HTTP handlers. Executable
+backend serving, authentication UI/CLI, management operations, observation storage
+and providers remain unimplemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -23,7 +24,7 @@ requirements may legitimately create additional specifications and ADRs.
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
 | ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
-| Product implementation | F1-T01–12 done; F1 incomplete | Catalogue, runtime, storage and local authentication service verified; public authentication and product journeys remain |
+| Product implementation | F1-T01–13 done; F1 incomplete | Catalogue, runtime foundation, storage and local authentication HTTP handlers verified; backend serving and UI/CLI journeys remain |
 
 ## Coverage
 
@@ -115,9 +116,11 @@ and product-journey acceptance remain outstanding.
   combined PostgreSQL 18.6 passed 51 tests under race. Final test-only additions
   passed 12 authentication integration tests under race in 10.086s. Public HTTP,
   cookie/CSRF protections and UI/CLI journeys are the next delivery work.
-- [F1-T13](tasks/F1-T13.md) is in review: generated authentication routes, protected
-  cookies, session-bound CSRF and strict origin/source handling, with a real TLS/
-  PostgreSQL journey. Backend runtime exposure and UI/CLI follow this adapter.
+- [F1-T13](tasks/F1-T13.md) is verified at `dc6cfce`: generated authentication routes,
+  protected cookies, session-bound CSRF and strict origin/source handling. Full gate
+  passed30 web/65 Go, race62, and real PostgreSQL18.6 passed55 integration tests under
+  race (HTTP12.243s). Task re-review and whole-branch review approved. Backend runtime
+  exposure and UI/CLI follow this adapter.
 - The maintainer merged PRs #2–#8; local `main` is `5cd60b2`, with the verified
   F1-T06–12 changes. The authentication HTTP increment remains separate.
 - Resolve explicitly deferred choices before their affected task, including encryption

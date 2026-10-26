@@ -20,13 +20,13 @@ Only existing approved command families; no new approval prompts. Preserve previ
 
 ## Task 1: Protected authentication transport
 
-- [ ] Add focused failing boundary tests and real TLS/database journey cases from F1-T13.
-- [ ] Extend source contracts and regenerate Go/TypeScript definitions.
-- [ ] Add non-mutating session inspection, preserving current authority/expiry rules.
-- [ ] Implement the bounded handler, cookies, CSRF, strict decoding and error mapping.
-- [ ] Run focused checks, serial real-database acceptance, race and integrated gate.
-- [ ] Independently review actual diff and evidence; correct findings before acceptance.
-- [ ] Record acceptance and publish a stacked PR; retain review evidence locally.
+- [x] Add focused failing boundary tests and real TLS/database journey cases from F1-T13.
+- [x] Extend source contracts and regenerate Go/TypeScript definitions.
+- [x] Add non-mutating session inspection, preserving current authority/expiry rules.
+- [x] Implement the bounded handler, cookies, CSRF, strict decoding and error mapping.
+- [x] Run focused checks, serial real-database acceptance, race and integrated gate.
+- [x] Independently review actual diff and evidence; correct findings before acceptance.
+- [x] Record acceptance for PR publication; retain review evidence locally.
 
 The next delivery wires backend startup/ownership/readiness and then the real
 onboarding/account UI and setup CLI to these routes. This plan does not claim those

@@ -17,7 +17,9 @@ scaffolding. Agent WebSocket messages have separate versioned JSON schemas with
 shared type generation. Operational health types/handlers, CLI version/help and
 UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Explicit database
 upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md). Management,
-ingestion, agent protocols and authentication remain unimplemented.
+ingestion and agent protocols remain unimplemented. Local authentication HTTP handlers
+are verified under [F1-T13](../tasks/F1-T13.md); backend executable exposure and
+authentication UI/CLI wiring remain subsequent work.
 
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and
