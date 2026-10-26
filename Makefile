@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -55,6 +55,7 @@ credentials:
 
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
+	elif [ "$${VERIFY_MODE:-}" = "go-portability" ]; then $(MAKE) _verify_go_portability; \
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
@@ -83,7 +84,7 @@ verify:
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, auth-bench, integration, providers, compose, or smoke)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, providers, compose, or smoke)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -99,6 +100,16 @@ _verify_web:
 .PHONY: _verify_providers
 _verify_providers:
 	cd web && node scripts/check-local-providers.mjs
+
+.PHONY: _verify_go_portability
+_verify_go_portability: _ensure_web_assets
+	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/cache-darwin-amd64" GOOS=darwin GOARCH=amd64 CGO_ENABLED=0; \
+	  out="$(CURDIR)/.local/portability/darwin-amd64"; mkdir -p "$$out"; \
+	  echo 'Compile internal/command tests for darwin/amd64 (ordinary tags; compile only)'; \
+	  .local/bin/go test -c -o "$$out/command.test" ./internal/command; \
+	  echo 'Compile internal/command tests for darwin/amd64 (integration tag; compile only)'; \
+	  .local/bin/go test -c -tags=integration -o "$$out/command.integration.test" ./internal/command
 
 _ensure_web_assets:
 	@if [ ! -f web/dist/index.html ]; then \
