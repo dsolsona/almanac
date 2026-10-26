@@ -163,6 +163,12 @@ try {
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await heading('Sign in');
   assert.equal(pageErrors, 0);
+  await writeFile(join(fixture.artifacts, 'evidence.json'), JSON.stringify({
+    scenario: fixture.scenario, chromium: browser.version(), node: process.version,
+    completed: true, mutationCounts: counts,
+    inspectedWidths: fixture.scenario === 'onboarding' ? [1440, 1024, 360] : [1440],
+    inspectedThemes: fixture.scenario === 'onboarding' ? ['light', 'dark'] : ['light'],
+  }, null, 2), { mode: 0o600 });
   stage = 'complete';
 } catch (error) {
   failed = true;

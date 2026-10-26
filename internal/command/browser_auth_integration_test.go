@@ -181,6 +181,9 @@ func testBrowserAuthentication(t *testing.T, scenario string) {
 	case <-time.After(7 * time.Second):
 		t.Fatal("browser backend shutdown deadline exceeded")
 	}
+	if strings.Contains(logs.String(), initialPassword) || strings.Contains(logs.String(), permanentPassword) {
+		t.Fatal("browser backend leaked a credential in logs")
+	}
 	t.Logf("real browser scenario %s passed; sanitized artifacts: %s", scenario, artifacts)
 }
 
