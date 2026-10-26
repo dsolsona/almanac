@@ -131,6 +131,9 @@ func TestSetupHonorsResultWriteFailure(t *testing.T) {
 	if stderr.String() != "setup: output failed\n" {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
+	if code := writeSetupError(&bytes.Buffer{}, setupFailWriter{}, false, 3, "unauthenticated", "safe", false, "anonymous", "", 0); code != 1 {
+		t.Fatalf("text diagnostic write failure exit = %d", code)
+	}
 }
 
 func TestSetupRejectsOversizedPasswordAndCABundlesBeforeNetwork(t *testing.T) {
@@ -271,6 +274,13 @@ func TestSetupCommandWritesOnlyRequestedSuccessFormat(t *testing.T) {
 	if cleanupJSON.String() != wantCleanupJSON || cleanupJSONErr.String() != "setup: password change completed; session cleanup could not be confirmed\n" {
 		t.Fatalf("cleanup-failure result/stderr = %q / %q", cleanupJSON.String(), cleanupJSONErr.String())
 	}
+	var warningFailureOut bytes.Buffer
+	if code := Run(t.Context(), jsonArgs, &warningFailureOut, setupFailWriter{}, BuildInfo{}); code != 1 {
+		t.Fatalf("cleanup warning write failure exit=%d", code)
+	}
+	if warningFailureOut.String() != wantCleanupJSON {
+		t.Fatalf("cleanup warning write failure lost truthful completion output: %q", warningFailureOut.String())
+	}
 	var textOut, textErr bytes.Buffer
 	if code := Run(t.Context(), baseArgs, &textOut, &textErr, BuildInfo{}); code != 0 {
 		t.Fatalf("text setup exit=%d, stderr=%s", code, textErr.String())
@@ -282,7 +292,56 @@ func TestSetupCommandWritesOnlyRequestedSuccessFormat(t *testing.T) {
 	if strings.Contains(allOutput, initial) || strings.Contains(allOutput, permanent) || strings.Contains(allOutput, server.URL) || strings.Contains(allOutput, initialFile) {
 		t.Fatal("setup output disclosed a secret, path, or URL")
 	}
-	if calls != 12 {
-		t.Fatalf("backend requests=%d; want 12", calls)
+	if calls != 16 {
+		t.Fatalf("backend requests=%d; want 16", calls)
+	}
+}
+
+func TestSetupConflictReportsSessionStateSupportedByCleanup(t *testing.T) {
+	for _, tc := range []struct {
+		name, state string
+		logout      int
+	}{
+		{name: "logout succeeds", state: "anonymous", logout: http.StatusNoContent},
+		{name: "logout fails", state: "unchecked", logout: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/api/v1/auth/context":
+					w.Header().Add("Set-Cookie", "__Host-almanac-preauth="+setupTestCookie+setupCookieAttributes)
+					_, _ = fmt.Fprint(w, `{"csrf_token":"csrf","session":null}`)
+				case "/api/v1/auth/login":
+					w.WriteHeader(http.StatusConflict)
+					_, _ = fmt.Fprint(w, `{"code":"session_present","message":"private backend detail","request_id":"","field_errors":[]}`)
+				case "/api/v1/auth/logout":
+					w.WriteHeader(tc.logout)
+				default:
+					t.Errorf("unexpected route %q", r.URL.Path)
+				}
+			}))
+			defer server.Close()
+			dir := t.TempDir()
+			initial, next, caFile := filepath.Join(dir, "initial"), filepath.Join(dir, "next"), filepath.Join(dir, "ca")
+			for path, value := range map[string]string{initial: "Initial-password-123", next: "Permanent-password-456"} {
+				if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+			if err := os.WriteFile(caFile, ca, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"setup", "--backend-url=" + server.URL, "--initial-admin-login=admin", "--initial-admin-password-file=" + initial, "--new-password-file=" + next, "--ca-file=" + caFile, "--output=json"}
+			var out, stderr bytes.Buffer
+			if code := Run(t.Context(), args, &out, &stderr, BuildInfo{}); code != 5 {
+				t.Fatalf("exit=%d; output=%s; stderr=%s", code, out.String(), stderr.String())
+			}
+			want := `{"schema_version":1,"operation":"setup","error":{"code":"setup_already_complete","message":"setup is already complete","outcome_unknown":false,"session_state":"` + tc.state + `"}}` + "\n"
+			if out.String() != want || strings.Contains(out.String()+stderr.String(), "private backend detail") {
+				t.Fatalf("conflict output=%q; want %q", out.String(), want)
+			}
+		})
 	}
 }

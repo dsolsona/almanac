@@ -423,7 +423,11 @@ operations into an application service for protected initial provisioning, passw
 proof/policy, login, rotation, authentication and logout. Its real PostgreSQL journey
 is service-level evidence. [F1-T13](../tasks/F1-T13.md) verifies protected cookies,
 CSRF, origin/source validation and the real TLS/API/database handler journey.
-Executable backend serving and authentication UI/CLI journeys remain unimplemented.
+[F1-T14](../tasks/F1-T14.md) verifies executable backend serving and lifecycle.
+[F1-T15](../tasks/F1-T15.md) exercises noninteractive setup through the executable
+CLI, TLS backend and database, including restart persistence and uncertain-response
+handling. Browser onboarding, reusable CLI login and the remaining identity flows
+are separate work; these increments do not complete this specification.
 
 ## Change notes
 

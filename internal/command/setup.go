@@ -109,8 +109,12 @@ func setup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeSetupFailure(stdout, stderr, jsonOut, err)
 	}
+	cleanupDiagnosticFailed := false
 	if result.Completed && result.SessionCleanup == "unknown" {
-		fmt.Fprintln(stderr, "setup: password change completed; session cleanup could not be confirmed")
+		if _, err := fmt.Fprintln(stderr, "setup: password change completed; session cleanup could not be confirmed"); err != nil {
+			writeSetupOutputFailure(stderr)
+			cleanupDiagnosticFailed = true
+		}
 	}
 	if jsonOut {
 		doc := setupDocument{SchemaVersion: 1, Operation: "setup", Completed: result.Completed, SessionCleanup: result.SessionCleanup}
@@ -122,11 +126,17 @@ func setup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			writeSetupOutputFailure(stderr)
 			return 1
 		}
+		if cleanupDiagnosticFailed {
+			return 1
+		}
 		return 0
 	}
 	_, err = fmt.Fprintln(stdout, "administrator setup completed")
 	if err != nil {
 		writeSetupOutputFailure(stderr)
+		return 1
+	}
+	if cleanupDiagnosticFailed {
 		return 1
 	}
 	return 0
@@ -163,7 +173,10 @@ func writeSetupError(stdout, stderr io.Writer, jsonOut bool, exit int, code, mes
 		}
 		return exit
 	}
-	_, _ = fmt.Fprintln(stderr, "setup:", message)
+	if _, err := fmt.Fprintln(stderr, "setup:", message); err != nil {
+		writeSetupOutputFailure(stderr)
+		return 1
+	}
 	return exit
 }
 func writeSetupOutputFailure(stderr io.Writer) { _, _ = fmt.Fprintln(stderr, "setup: output failed") }

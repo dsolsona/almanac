@@ -19,7 +19,9 @@ UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Explicit databa
 upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md). Management,
 ingestion and agent protocols remain unimplemented. Local authentication HTTP handlers
 are verified under [F1-T13](../tasks/F1-T13.md), with backend executable exposure
-under [F1-T14](../tasks/F1-T14.md). Authentication UI/CLI wiring remains subsequent work.
+under [F1-T14](../tasks/F1-T14.md). Noninteractive administrator setup is implemented
+under [F1-T15](../tasks/F1-T15.md), using generated client operations and ephemeral
+sessions. Authentication UI, reusable CLI login and profiles remain subsequent work.
 
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and

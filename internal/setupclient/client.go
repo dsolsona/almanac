@@ -341,6 +341,10 @@ func (c *Client) responseFailure(ctx context.Context, r *http.Response, body []b
 	}
 	if f.Code != "setup_already_complete" {
 		f.SessionState = state
+	} else {
+		// A login conflict does not prove which session the server observed. The
+		// later logout attempt can establish anonymous state if it succeeds.
+		f.SessionState = "unchecked"
 	}
 	f.RequestID = p.RequestId
 	if !requestIDPattern.MatchString(f.RequestID) {
