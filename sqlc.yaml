@@ -9,6 +9,8 @@ sql:
       - internal/storage/migrations/0003_local_sessions.sql
       - internal/storage/migrations/0004_login_attempts.sql
       - internal/storage/migrations/0005_agents.sql
+      - internal/storage/migrations/0006_agent_pagination_indexes.sql
+      - internal/storage/migrations/0007_agent_credential_retirement.sql
     gen:
       go:
         package: dbgen

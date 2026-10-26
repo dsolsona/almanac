@@ -11,6 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+func TestDecodeAgentLifecycleReceiptKeepsRetirementOptionalForHistoricalReceipts(t *testing.T) {
+	raw := []byte(`{"version":1,"agent":{"id":"abcdefab-cdef-4abc-8def-abcdefabcdee","name":"agent-one","display_name":"Agent One","enabled":true,"version":2,"created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:01Z"},"credential":{"id":"abcdefab-cdef-4abc-8def-abcdefabcdea","agent_id":"abcdefab-cdef-4abc-8def-abcdefabcdee","issued_at":"2026-10-26T10:00:00Z","expires_at":"2026-10-26T11:00:00Z","revoked_at":"2026-10-26T10:00:01Z"},"changed":true,"revoked_credential_count":1}`)
+	saved, err := decodeAgentLifecycleReceipt(raw)
+	if err != nil || saved.Credential == nil || saved.Credential.RetireAt != nil {
+		t.Fatalf("historical receipt decoded as %+v, %v", saved, err)
+	}
+}
+
 func TestAgentPageValidation(t *testing.T) {
 	const agentID = "abcdefab-cdef-4abc-8def-abcdefabcdee"
 	base := time.Date(2026, 10, 26, 12, 0, 0, 123456000, time.UTC)

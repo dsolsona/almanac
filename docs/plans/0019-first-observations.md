@@ -46,6 +46,8 @@ transactional registration with current-authority checks, audit and safe receipt
 issuance to that transaction before exposing management operations.
 [F2-T04](../tasks/F2-T04.md) supplies safe reads, revoke and disable with current
 authority, optimistic versions and safe historical receipts. Rotation follows.
+[F2-T05](../tasks/F2-T05.md) adds bounded overlap and one-time replacement issuance,
+plus the thin management service methods for those guarded storage operations.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

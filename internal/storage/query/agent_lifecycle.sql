@@ -3,7 +3,7 @@ SELECT id, name, display_name, enabled, version, created_at, updated_at
 FROM public.almanac_agents WHERE id = sqlc.arg(agent_id) FOR UPDATE;
 
 -- name: LockLifecycleCredential :one
-SELECT id, agent_id, issued_at, expires_at, revoked_at
+SELECT id, agent_id, issued_at, expires_at, revoked_at, retire_at
 FROM public.almanac_agent_credentials
 WHERE id = sqlc.arg(credential_id) AND agent_id = sqlc.arg(agent_id) FOR UPDATE;
 
@@ -36,7 +36,7 @@ WHERE actor_id = sqlc.arg(actor_id) AND operation = sqlc.arg(operation)
 -- name: RevokeAgentCredential :one
 UPDATE public.almanac_agent_credentials SET revoked_at = sqlc.arg(revoked_at)
 WHERE id = sqlc.arg(credential_id) AND agent_id = sqlc.arg(agent_id) AND revoked_at IS NULL
-RETURNING id, agent_id, issued_at, expires_at, revoked_at;
+RETURNING id, agent_id, issued_at, expires_at, revoked_at, retire_at;
 
 -- name: UpdateLifecycleAgent :one
 UPDATE public.almanac_agents SET enabled = sqlc.arg(enabled), version = version + 1,

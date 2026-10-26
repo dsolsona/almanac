@@ -183,7 +183,7 @@ func (q *Queries) LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (
 }
 
 const lockLifecycleCredential = `-- name: LockLifecycleCredential :one
-SELECT id, agent_id, issued_at, expires_at, revoked_at
+SELECT id, agent_id, issued_at, expires_at, revoked_at, retire_at
 FROM public.almanac_agent_credentials
 WHERE id = $1 AND agent_id = $2 FOR UPDATE
 `
@@ -199,6 +199,7 @@ type LockLifecycleCredentialRow struct {
 	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	RetireAt  pgtype.Timestamptz `json:"retire_at"`
 }
 
 func (q *Queries) LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error) {
@@ -210,6 +211,7 @@ func (q *Queries) LockLifecycleCredential(ctx context.Context, arg LockLifecycle
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.RetireAt,
 	)
 	return i, err
 }
@@ -234,7 +236,7 @@ func (q *Queries) LockUnrevokedAgentCredentials(ctx context.Context, agentID pgt
 const revokeAgentCredential = `-- name: RevokeAgentCredential :one
 UPDATE public.almanac_agent_credentials SET revoked_at = $1
 WHERE id = $2 AND agent_id = $3 AND revoked_at IS NULL
-RETURNING id, agent_id, issued_at, expires_at, revoked_at
+RETURNING id, agent_id, issued_at, expires_at, revoked_at, retire_at
 `
 
 type RevokeAgentCredentialParams struct {
@@ -249,6 +251,7 @@ type RevokeAgentCredentialRow struct {
 	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	RetireAt  pgtype.Timestamptz `json:"retire_at"`
 }
 
 func (q *Queries) RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error) {
@@ -260,6 +263,7 @@ func (q *Queries) RevokeAgentCredential(ctx context.Context, arg RevokeAgentCred
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.RetireAt,
 	)
 	return i, err
 }

@@ -77,3 +77,5 @@ it precedes the management service and API/UI/CLI exposure.
 agent-token issuance service before management endpoints are exposed.
 [F2-T04](F2-T04.md) extends guarded storage with safe administrative reads,
 credential revocation and agent disablement before rotation and public exposure.
+[F2-T05](F2-T05.md) completes internal credential rotation and the management
+service operations needed by the subsequent HTTP, CLI and UI boundary.

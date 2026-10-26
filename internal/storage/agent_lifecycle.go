@@ -74,6 +74,7 @@ type agentCredentialStateReceiptWire struct {
 	IssuedAt  *time.Time `json:"issued_at"`
 	ExpiresAt *time.Time `json:"expires_at"`
 	RevokedAt *time.Time `json:"revoked_at"`
+	RetireAt  *time.Time `json:"retire_at"`
 }
 type agentCreationReceiptWire struct {
 	Version    *int                                `json:"version"`
@@ -330,11 +331,11 @@ func runAgentLifecycle(ctx context.Context, databaseURL string, proof AgentAdmin
 }
 
 func ptrCredential(c dbgen.LockLifecycleCredentialRow) *AgentCredentialStateRecord {
-	v := credentialState(c.ID, c.AgentID, c.IssuedAt, c.ExpiresAt, c.RevokedAt)
+	v := credentialState(c.ID, c.AgentID, c.IssuedAt, c.ExpiresAt, c.RevokedAt, c.RetireAt)
 	return &v
 }
 func ptrRevokedCredential(c dbgen.RevokeAgentCredentialRow) *AgentCredentialStateRecord {
-	v := credentialState(c.ID, c.AgentID, c.IssuedAt, c.ExpiresAt, c.RevokedAt)
+	v := credentialState(c.ID, c.AgentID, c.IssuedAt, c.ExpiresAt, c.RevokedAt, c.RetireAt)
 	return &v
 }
 func credentialString(id pgtype.UUID) string {
@@ -386,7 +387,7 @@ func validAgentLifecycleReceipt(saved agentLifecycleReceipt, operation string, a
 	if operation == "agent.credential.revoke" {
 		if saved.Credential == nil || saved.Credential.AgentID != agentID.String() || saved.Credential.ID != credentialID.String() ||
 			saved.Credential.RevokedAt == nil || saved.Credential.IssuedAt.IsZero() || !saved.Credential.ExpiresAt.After(saved.Credential.IssuedAt) ||
-			saved.Credential.RevokedAt.Before(saved.Credential.IssuedAt) || saved.RevokedCredentialCount < 0 ||
+			saved.Credential.RevokedAt.Before(saved.Credential.IssuedAt) || saved.Credential.RetireAt != nil && saved.Credential.RetireAt.Before(saved.Credential.IssuedAt) || saved.RevokedCredentialCount < 0 ||
 			saved.Changed && saved.RevokedCredentialCount != 1 || !saved.Changed && saved.RevokedCredentialCount != 0 {
 			return false
 		}
@@ -422,7 +423,7 @@ func decodeAgentLifecycleReceipt(raw []byte) (agentLifecycleReceipt, error) {
 		if c.ID == nil || c.AgentID == nil || c.IssuedAt == nil || c.ExpiresAt == nil || c.RevokedAt == nil {
 			return agentLifecycleReceipt{}, errors.New("storage: invalid agent lifecycle receipt")
 		}
-		saved.Credential = &AgentCredentialStateRecord{ID: *c.ID, AgentID: *c.AgentID, IssuedAt: *c.IssuedAt, ExpiresAt: *c.ExpiresAt, RevokedAt: c.RevokedAt}
+		saved.Credential = &AgentCredentialStateRecord{ID: *c.ID, AgentID: *c.AgentID, IssuedAt: *c.IssuedAt, ExpiresAt: *c.ExpiresAt, RevokedAt: c.RevokedAt, RetireAt: c.RetireAt}
 	}
 	return saved, nil
 }

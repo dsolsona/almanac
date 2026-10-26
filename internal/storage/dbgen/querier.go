@@ -39,10 +39,12 @@ type Querier interface {
 	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
 	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
+	InsertRotatedAgentCredential(ctx context.Context, arg InsertRotatedAgentCredentialParams) (InsertRotatedAgentCredentialRow, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
 	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
 	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
+	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
 	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
@@ -60,6 +62,7 @@ type Querier interface {
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)

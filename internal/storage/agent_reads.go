@@ -43,6 +43,7 @@ type AgentCredentialStateRecord struct {
 	IssuedAt  time.Time  `json:"issued_at"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	RevokedAt *time.Time `json:"revoked_at"`
+	RetireAt  *time.Time `json:"retire_at"`
 }
 type AgentCredentialPage struct {
 	Items      []AgentCredentialStateRecord `json:"items"`
@@ -145,7 +146,7 @@ func ListAgentCredentials(ctx context.Context, databaseURL string, input ListAge
 		if i == limit {
 			break
 		}
-		page.Items = append(page.Items, credentialState(row.ID, row.AgentID, row.IssuedAt, row.ExpiresAt, row.RevokedAt))
+		page.Items = append(page.Items, credentialState(row.ID, row.AgentID, row.IssuedAt, row.ExpiresAt, row.RevokedAt, row.RetireAt))
 	}
 	if len(rows) > limit {
 		last := page.Items[len(page.Items)-1]
@@ -248,11 +249,15 @@ func normalizedAgentNow(clock func() time.Time) time.Time {
 func agentRecord(row dbgen.AlmanacAgent) AgentRecord {
 	return AgentRecord{ID: row.ID.String(), Name: row.Name, DisplayName: row.DisplayName, Enabled: row.Enabled, Version: row.Version, CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC()}
 }
-func credentialState(id, agentID pgtype.UUID, issued, expires, revoked pgtype.Timestamptz) AgentCredentialStateRecord {
+func credentialState(id, agentID pgtype.UUID, issued, expires, revoked, retire pgtype.Timestamptz) AgentCredentialStateRecord {
 	r := AgentCredentialStateRecord{ID: id.String(), AgentID: agentID.String(), IssuedAt: issued.Time.UTC(), ExpiresAt: expires.Time.UTC()}
 	if revoked.Valid {
 		v := revoked.Time.UTC()
 		r.RevokedAt = &v
+	}
+	if retire.Valid {
+		v := retire.Time.UTC()
+		r.RetireAt = &v
 	}
 	return r
 }

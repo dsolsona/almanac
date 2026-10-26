@@ -32,7 +32,7 @@ func (q *Queries) GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAge
 }
 
 const listAgentCredentials = `-- name: ListAgentCredentials :many
-SELECT id, agent_id, issued_at, expires_at, revoked_at
+SELECT id, agent_id, issued_at, expires_at, revoked_at, retire_at
 FROM public.almanac_agent_credentials
 WHERE agent_id = $1
   AND (issued_at, id) > ($2::timestamptz, $3::uuid)
@@ -52,6 +52,7 @@ type ListAgentCredentialsRow struct {
 	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	RetireAt  pgtype.Timestamptz `json:"retire_at"`
 }
 
 func (q *Queries) ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error) {
@@ -74,6 +75,7 @@ func (q *Queries) ListAgentCredentials(ctx context.Context, arg ListAgentCredent
 			&i.IssuedAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.RetireAt,
 		); err != nil {
 			return nil, err
 		}

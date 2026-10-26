@@ -26,6 +26,7 @@ type AlmanacAgentCredential struct {
 	IssuedAt        pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	RetireAt        pgtype.Timestamptz `json:"retire_at"`
 }
 
 type AlmanacAuditEvent struct {
