@@ -4,10 +4,10 @@ import { AgentFailure, createAgentClient, type Agent, type AgentCredential, type
 import type { AgentLifecycleIntent, SessionRecheck } from './AgentsPage.tsx';
 import { Button, Dialog, TextField } from '../components/ui/index.ts';
 
-type Props = { agent: Agent | null; detail: AgentDetail | null; credentials: AgentCredential[]; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; selectedAgentID: string; navigationScope: string; actionAvailable: boolean; intent: AgentLifecycleIntent | null; onIntentChange: (intent: AgentLifecycleIntent | null) => void; busy: boolean; onBusyChange: (busy: boolean) => void; refresh: () => Promise<void>; revokeRequest: { credentialID: string; sequence: number } | null; mutationLock: { current: boolean }; onForbidden: () => void };
+type Props = { agent: Agent | null; detail: AgentDetail | null; credentials: AgentCredential[]; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; selectedAgentID: string; navigationScope: string; actionAvailable: boolean; intent: AgentLifecycleIntent | null; onIntentChange: (intent: AgentLifecycleIntent | null) => void; busy: boolean; onBusyChange: (busy: boolean) => void; refresh: () => Promise<void>; revokeRequest: { credentialID: string; sequence: number } | null; onRevokeRequestHandled: (sequence: number) => void; mutationLock: { current: boolean }; onForbidden: () => void };
 const safeFailure = 'The credential action could not be completed. Check the session and try again.';
 
-export function AgentLifecycleControls({ agent, detail, credentials, context, recheckSession, suspended, selectedAgentID, navigationScope, actionAvailable, intent, onIntentChange, busy, onBusyChange, refresh, revokeRequest, mutationLock, onForbidden }: Props) {
+export function AgentLifecycleControls({ agent, detail, credentials, context, recheckSession, suspended, selectedAgentID, navigationScope, actionAvailable, intent, onIntentChange, busy, onBusyChange, refresh, revokeRequest, onRevokeRequestHandled, mutationLock, onForbidden }: Props) {
   const clientRef = useRef<ReturnType<typeof createAgentClient> | null>(null);
   if (!clientRef.current) clientRef.current = createAgentClient();
   const client = clientRef.current;
@@ -21,7 +21,6 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
   const [passwordError, setPasswordError] = useState('');
   const [notice, setNotice] = useState('');
   const [proofUnavailable, setProofUnavailable] = useState(false);
-  const [retryUntil, setRetryUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [token, setToken] = useState<RotationIssuance | null>(null);
   const [copyNotice, setCopyNotice] = useState('');
@@ -37,6 +36,7 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
   scope.current = { agentID, selectedAgentID, navigationScope, userID, administrator: isAdministrator, suspended };
   const strongDetail = agent && detail?.agent.id === agent.id && detail.agent.version === agent.version ? detail : null;
   const currentIntent = intent?.agentID === agentID && intent.userID === userID ? intent : null;
+  const retryUntil = currentIntent?.retryAfterDeadline ?? 0;
   const activeCredential = credentials.find((item) => item.id === credentialID);
   const hasCurrentCredential = (id: string) => credentials.some((item) => item.id === id && item.revoked_at === null);
 
@@ -48,7 +48,7 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
     generation.current++;
     setPassword(''); setToken(null); setCopyNotice(''); setKind(null); setConfirm(false);
   }, [suspended, isAdministrator]);
-  useEffect(() => { if (revokeRequest) open('revoke', revokeRequest.credentialID); }, [revokeRequest?.sequence]);
+  useEffect(() => { if (!revokeRequest) return; open('revoke', revokeRequest.credentialID); onRevokeRequestHandled(revokeRequest.sequence); }, [revokeRequest, onRevokeRequestHandled]);
   useEffect(() => { if (token && (suspended || !userID || context.session?.restricted || context.session?.role !== 'administrator')) setToken(null); }, [suspended, userID, context.session?.restricted, context.session?.role, token]);
 
   function open(action: AgentLifecycleIntent['kind'], id = '') {
@@ -107,7 +107,7 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
     const generationAtStart = ++generation.current;
     const navigationAtStart = scope.current.navigationScope;
     const earlierUnknown = old?.outcome === 'unknown';
-    onIntentChange({ ...value, outcome: 'unknown', retryRejected: undefined });
+    onIntentChange({ ...value, outcome: 'unknown', retryRejected: undefined, retryAfterDeadline: undefined });
     setPassword(''); setPasswordError(''); setError(''); setNotice(''); lock.current = true; mutationLock.current = true; onBusyChange(true);
     try {
       const result = action === 'rotate'
@@ -131,7 +131,8 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
       } else if (failure?.code === 'conflict') {
         onIntentChange({ ...value, outcome: earlierUnknown ? 'unknown' : 'conflict', retryRejected: earlierUnknown ? 'conflict' : undefined }); setKind(null); setError('The agent changed before this command was accepted. Refresh and reconcile its current state. Abandon this command explicitly before starting a new one.');
       } else if (failure?.code === 'rate_limited' && failure.retryAfterSeconds) {
-        onIntentChange({ ...value, outcome: earlierUnknown ? 'unknown' : 'rejected' }); setRetryUntil(Date.now() + failure.retryAfterSeconds * 1000); setError(`Wait ${failure.retryAfterSeconds} seconds before retrying this command with the same key.`);
+        const retryAfterDeadline = Date.now() + failure.retryAfterSeconds * 1000;
+        onIntentChange({ ...value, outcome: earlierUnknown ? 'unknown' : 'rejected', retryAfterDeadline }); setNow(Date.now()); setError(`Wait ${failure.retryAfterSeconds} seconds before retrying this command with the same key.`);
       } else if (failure?.code === 'forbidden') {
         onIntentChange(earlierUnknown ? { ...value, outcome: 'unknown', retryRejected: 'permission' } : null); setProofUnavailable(true); onForbidden(); setError(earlierUnknown ? 'This retry was rejected for lack of permission. An earlier outcome remains unknown; confirm authority before reconciling it.' : 'You are not allowed to perform this credential action.');
       } else {
