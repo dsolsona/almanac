@@ -182,6 +182,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description Authentication proof throttled */
+        AuthenticationRateLimited: {
+            headers: {
+                /** @description Positive wait time in seconds, rounded up to the next whole second. */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Authentication request rejected or unavailable */
         AuthenticationProblem: {
             headers: {
@@ -327,15 +338,7 @@ export interface operations {
             };
             413: components["responses"]["AuthenticationProblem"];
             415: components["responses"]["AuthenticationProblem"];
-            /** @description Login throttled */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
+            429: components["responses"]["AuthenticationRateLimited"];
             /** @description Authentication idempotency is unsupported */
             501: {
                 headers: {
@@ -418,15 +421,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Login throttled */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
+            429: components["responses"]["AuthenticationRateLimited"];
             /** @description Authentication idempotency is unsupported */
             501: {
                 headers: {

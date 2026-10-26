@@ -134,6 +134,9 @@ type AuthenticationMethodNotAllowed = Problem
 // AuthenticationProblem defines model for AuthenticationProblem.
 type AuthenticationProblem = Problem
 
+// AuthenticationRateLimited defines model for AuthenticationRateLimited.
+type AuthenticationRateLimited = Problem
+
 // PostAuthContextJSONRequestBody defines body for PostAuthContext for application/json ContentType.
 type PostAuthContextJSONRequestBody = EmptyAuthRequest
 

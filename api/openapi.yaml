@@ -55,7 +55,7 @@ paths:
         '415': {$ref: '#/components/responses/AuthenticationProblem'}
         '401': {description: Authentication failed, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '409': {description: Session already present, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-        '429': {description: Login throttled, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '429': {$ref: '#/components/responses/AuthenticationRateLimited'}
         '501': {description: Authentication idempotency is unsupported, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '503': {description: Authentication unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/auth/password:
@@ -84,7 +84,7 @@ paths:
         '413': {$ref: '#/components/responses/AuthenticationProblem'}
         '415': {$ref: '#/components/responses/AuthenticationProblem'}
         '422': {description: Password rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-        '429': {description: Login throttled, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '429': {$ref: '#/components/responses/AuthenticationRateLimited'}
         '501': {description: Authentication idempotency is unsupported, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '503': {description: Authentication unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/auth/logout:
@@ -246,6 +246,16 @@ components:
               message: {type: string}
         message: {type: string, example: Configured backend is unavailable}
   responses:
+    AuthenticationRateLimited:
+      description: Authentication proof throttled
+      headers:
+        Retry-After:
+          required: true
+          description: Positive wait time in seconds, rounded up to the next whole second.
+          schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Problem'}
     AuthenticationProblem:
       description: Authentication request rejected or unavailable
       content:
