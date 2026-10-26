@@ -8,9 +8,61 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlmanacAuditEvent struct {
+	ID         pgtype.UUID        `json:"id"`
+	Actor      string             `json:"actor"`
+	SubjectID  pgtype.UUID        `json:"subject_id"`
+	Action     string             `json:"action"`
+	Outcome    string             `json:"outcome"`
+	OccurredAt pgtype.Timestamptz `json:"occurred_at"`
+	RequestID  string             `json:"request_id"`
+}
+
+type AlmanacInstallation struct {
+	Singleton             bool               `json:"singleton"`
+	InstallationID        pgtype.UUID        `json:"installation_id"`
+	CredentialEpoch       pgtype.UUID        `json:"credential_epoch"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	BootstrapAdminID      pgtype.UUID        `json:"bootstrap_admin_id"`
+	BootstrappedAt        pgtype.Timestamptz `json:"bootstrapped_at"`
+	OnboardingCompletedAt pgtype.Timestamptz `json:"onboarding_completed_at"`
+}
+
+type AlmanacLoginAttempt struct {
+	ID         pgtype.UUID        `json:"id"`
+	AccountKey []byte             `json:"account_key"`
+	SourceKey  []byte             `json:"source_key"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	State      string             `json:"state"`
+}
+
 type AlmanacSchemaMigration struct {
 	Version   int64              `json:"version"`
 	Filename  string             `json:"filename"`
 	Checksum  []byte             `json:"checksum"`
 	AppliedAt pgtype.Timestamptz `json:"applied_at"`
+}
+
+type AlmanacSession struct {
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	Verifier           []byte             `json:"verifier"`
+	CredentialRevision int64              `json:"credential_revision"`
+	CredentialEpoch    pgtype.UUID        `json:"credential_epoch"`
+	Restricted         bool               `json:"restricted"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
+}
+
+type AlmanacUser struct {
+	ID                 pgtype.UUID        `json:"id"`
+	Login              string             `json:"login"`
+	PasswordVerifier   pgtype.Text        `json:"password_verifier"`
+	Role               string             `json:"role"`
+	Enabled            bool               `json:"enabled"`
+	MustChangePassword bool               `json:"must_change_password"`
+	CredentialRevision int64              `json:"credential_revision"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }

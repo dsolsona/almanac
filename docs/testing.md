@@ -174,8 +174,9 @@ The foundation provides these fixed entry points:
 | `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
 | `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
-| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command and storage unit race checks |
-| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; fresh upgrade, concurrency, rollback and cancellation tests; optional GO_PACKAGE=./internal/storage |
+| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, storage, identity, authentication and secret-file unit race checks |
+| `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
+| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage and authentication suites run serially; GO_PACKAGE=all (default), ./internal/storage or ./internal/authentication |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
@@ -190,12 +191,16 @@ Go and race checks build missing embedded assets before
 test discovery; focused config/storage unit checks do not need a web build. Existing
 assets are reused for a fast Go-only loop. After web source changes, use `make build`
 or the full `make verify` gate to refresh them. Integration checks build the binary
-and its assets after storage-only test discovery.
+and its assets after the selected integration packages' test discovery.
 The process smoke owns an ephemeral port. Generation/build/tests use local pinned tools and offline
 Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
 They require the matching local fixture, use a fresh disposable database per test,
 and fail for unavailable infrastructure or an empty integration-test selection.
-Authentication, ingestion and complete product-journey acceptance remain future work.
+Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's
+execution selector. Pure unit cases belong in ordinary test files so the fast lane
+runs them. Discovery alone does not prove a test was executed.
+The authentication service's database journey is covered here; public HTTP/browser
+authentication, ingestion and complete product journeys remain future work.
 
 For browser iteration, select a file and a single viewport/theme, for example
 `make verify VERIFY_MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.

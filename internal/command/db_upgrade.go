@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/secretfile"
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
@@ -179,18 +180,9 @@ func readDatabaseURLFile(path string) (string, error) {
 	if path == "" {
 		return "", errors.New("database URL file path is empty")
 	}
-	file, err := openProtectedURLFile(path)
+	data, err := secretfile.Read(path, maxDatabaseURLBytes)
 	if err != nil {
 		return "", errors.New("database URL file is invalid")
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return "", errors.New("database URL file must be regular and protected")
-	}
-	data, err := io.ReadAll(io.LimitReader(file, maxDatabaseURLBytes+1))
-	if err != nil || len(data) > maxDatabaseURLBytes {
-		return "", errors.New("database URL file exceeds 16 KiB or cannot be read")
 	}
 	value := strings.TrimSpace(string(data))
 	if value == "" {

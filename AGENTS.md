@@ -29,6 +29,10 @@ directories you change, then the relevant specs and ADRs.
 - A request to check PR review comments includes validating findings, fixing valid
   issues, running the relevant checks, updating the PR and replying in its review
   threads. Do not stop after triage; explain findings that do not apply.
+- During authorized unattended delivery, open verified increments as stacked PRs
+  against their dependency branch. Address review feedback only from the maintainer
+  or Greptile; ignore other commenters. Keep required check failures actionable
+  regardless of who emitted them. Opening PRs does not authorize merging them.
 - If instructions, specs, and accepted ADRs conflict, identify the conflict and
   resolve it with the maintainer before making the affected change. Continue
   independent work when possible. Do not treat draft documents as accepted policy.
@@ -51,6 +55,9 @@ directories you change, then the relevant specs and ADRs.
 - On a new session, read [delivery status](docs/status.md), inspect git state and
   find the active plan/task before dispatch. Do not assume prior processes,
   worktrees or verification results are still valid.
+- During stacked delivery, also inspect open PR bases/heads and existing worktree
+  branches. The default branch's status document can lag verified, unmerged work;
+  read the active branch's task and evidence before redispatching anything.
 - Follow [ways of working](docs/ways-of-working.md), the
   [task format](docs/tasks/README.md) and [testing strategy](docs/testing.md).
   Only the coordinator marks integrated, verified tasks done. Parallel work needs
@@ -220,7 +227,8 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   with the pinned toolchain. `make preview` serves the local catalogue. Database
   checks use `make setup SETUP_MODE=database` for the isolated PostgreSQL18 fixture
   and `make verify VERIFY_MODE=integration` with its explicit
-  `ALMANAC_TEST_DATABASE_URL`. Authentication and full product-journey gates do not
-  exist yet. Documentation checks use
+  `ALMANAC_TEST_DATABASE_URL`; storage and authentication service suites run serially
+  by default. Public HTTP/browser authentication and full product-journey gates do
+  not exist yet. Documentation checks use
   `python3 scripts/check-docs.py`. Document new commands only after they work here.
 - Do not commit, push, or publish unless requested. Respect unrelated local edits.

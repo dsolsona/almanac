@@ -5,12 +5,9 @@ package storage
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/testpostgres"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -43,16 +41,16 @@ func TestIntegrationUpgradeIsIdempotentAndPreservesInstallationIdentity(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Applied != 1 || first.DatabaseSchemaVersion != 1 {
-		t.Fatalf("first upgrade = %+v, want one applied migration at version 1", first)
+	if first.Applied != 4 || first.DatabaseSchemaVersion != 4 {
+		t.Fatalf("first upgrade = %+v, want four applied migrations at version 4", first)
 	}
 	firstID, firstEpoch, firstCreatedAt := installationIdentity(t, databaseURL)
 	second, err := Upgrade(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Applied != 0 || second.DatabaseSchemaVersion != 1 {
-		t.Fatalf("second upgrade = %+v, want zero applied migrations at version 1", second)
+	if second.Applied != 0 || second.DatabaseSchemaVersion != 4 {
+		t.Fatalf("second upgrade = %+v, want zero applied migrations at version 4", second)
 	}
 	secondID, secondEpoch, secondCreatedAt := installationIdentity(t, databaseURL)
 	if firstID != secondID || firstEpoch != secondEpoch || !firstCreatedAt.Equal(secondCreatedAt) {
@@ -90,16 +88,16 @@ func TestIntegrationConcurrentUpgradesApplyOnce(t *testing.T) {
 		}
 		totalApplied += outcome.result.Applied
 	}
-	if totalApplied != 1 {
-		t.Fatalf("concurrent upgrades applied %d migrations, want 1", totalApplied)
+	if totalApplied != 4 {
+		t.Fatalf("concurrent upgrades applied %d migrations, want 4", totalApplied)
 	}
 	conn := integrationConnect(t, databaseURL)
 	var count int
 	if err := conn.QueryRow(ctx, "SELECT count(*) FROM public.almanac_schema_migrations").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Fatalf("history row count = %d, want 1", count)
+	if count != 4 {
+		t.Fatalf("history row count = %d, want 4", count)
 	}
 	var installationCount int
 	if err := conn.QueryRow(ctx, "SELECT count(*) FROM public.almanac_installation").Scan(&installationCount); err != nil {
@@ -107,6 +105,34 @@ func TestIntegrationConcurrentUpgradesApplyOnce(t *testing.T) {
 	}
 	if installationCount != 1 {
 		t.Fatalf("installation row count = %d, want 1", installationCount)
+	}
+}
+
+func TestIntegrationUpgradeFromVersionOneAppliesInitialOwnerSchema(t *testing.T) {
+	databaseURL := integrationDatabase(t)
+	migrations, err := LoadMigrations(embeddedMigrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(migrations) != 4 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 {
+		t.Fatalf("embedded migration versions = %v, want [1 2 3 4]", versions(migrations))
+	}
+	first, err := UpgradeWithMigrations(t.Context(), databaseURL, migrations[:1])
+	if err != nil || first.Applied != 1 || first.DatabaseSchemaVersion != 1 {
+		t.Fatalf("version 1 upgrade = %+v, %v", first, err)
+	}
+	identityID, identityEpoch, createdAt := installationIdentity(t, databaseURL)
+	second, err := UpgradeWithMigrations(t.Context(), databaseURL, migrations[:2])
+	if err != nil || second.Applied != 1 || second.DatabaseSchemaVersion != 2 {
+		t.Fatalf("version 1 to 2 upgrade = %+v, %v", second, err)
+	}
+	third, err := Upgrade(t.Context(), databaseURL)
+	if err != nil || third.Applied != 2 || third.DatabaseSchemaVersion != 4 {
+		t.Fatalf("version 2 to 4 upgrade = %+v, %v", third, err)
+	}
+	gotID, gotEpoch, gotCreatedAt := installationIdentity(t, databaseURL)
+	if gotID != identityID || gotEpoch != identityEpoch || !gotCreatedAt.Equal(createdAt) {
+		t.Fatal("version 2 migration changed installation identity or creation time")
 	}
 }
 
@@ -120,7 +146,7 @@ func TestIntegrationFailedMigrationRollsBackAndReleasesLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	failedSQL := "CREATE TABLE public.storage_rolled_back (id integer); SELECT 1 / 0;"
-	failed := Migration{Version: 2, Name: "0002_fails.sql", SQL: failedSQL, Checksum: sha256.Sum256([]byte(failedSQL))}
+	failed := Migration{Version: 5, Name: "0005_fails.sql", SQL: failedSQL, Checksum: sha256.Sum256([]byte(failedSQL))}
 	if _, err := UpgradeWithMigrations(t.Context(), databaseURL, append(base, failed)); err == nil {
 		t.Fatal("upgrade accepted a migration that failed after DDL")
 	}
@@ -130,18 +156,18 @@ func TestIntegrationFailedMigrationRollsBackAndReleasesLock(t *testing.T) {
 	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_schema_migrations").Scan(&historyCount); err != nil {
 		t.Fatal(err)
 	}
-	if historyCount != 1 {
-		t.Fatalf("history rows after rollback = %d, want 1", historyCount)
+	if historyCount != 4 {
+		t.Fatalf("history rows after rollback = %d, want 4", historyCount)
 	}
 	closeIntegrationConn(conn)
 
 	validSQL := "CREATE TABLE public.storage_after_failure (id integer);"
-	valid := Migration{Version: 2, Name: "0002_valid.sql", SQL: validSQL, Checksum: sha256.Sum256([]byte(validSQL))}
+	valid := Migration{Version: 5, Name: "0005_valid.sql", SQL: validSQL, Checksum: sha256.Sum256([]byte(validSQL))}
 	result, err := UpgradeWithMigrations(t.Context(), databaseURL, append(base, valid))
 	if err != nil {
 		t.Fatalf("upgrade after failed migration could not acquire lock: %v", err)
 	}
-	if result.Applied != 1 || result.DatabaseSchemaVersion != 2 {
+	if result.Applied != 1 || result.DatabaseSchemaVersion != 5 {
 		t.Fatalf("upgrade after failure = %+v", result)
 	}
 }
@@ -168,7 +194,7 @@ func TestIntegrationAlteredAndNewerHistoryAreRejected(t *testing.T) {
 			t.Fatal(err)
 		}
 		conn := integrationConnect(t, databaseURL)
-		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (2, '0002_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
+		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (5, '0005_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
 			t.Fatal(err)
 		}
 		closeIntegrationConn(conn)
@@ -187,7 +213,7 @@ func TestIntegrationAlteredAndNewerHistoryAreRejected(t *testing.T) {
 			t.Fatal(err)
 		}
 		conn := integrationConnect(t, databaseURL)
-		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (3, '0003_gap.sql', decode(repeat('cd', 32), 'hex'))"); err != nil {
+		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (6, '0006_gap.sql', decode(repeat('cd', 32), 'hex'))"); err != nil {
 			t.Fatal(err)
 		}
 		closeIntegrationConn(conn)
@@ -270,7 +296,7 @@ func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing
 		t.Fatalf("first binary upgrade: code=%d stdout=%q stderr=%q", firstCode, firstStdout, firstStderr)
 	}
 	first := decodeBinaryUpgrade(t, firstStdout)
-	if first.DatabaseSchemaVersion != 1 || first.Applied != 1 || first.Error != nil {
+	if first.DatabaseSchemaVersion != 4 || first.Applied != 4 || first.Error != nil {
 		t.Fatalf("first binary upgrade result = %+v", first)
 	}
 	identityID, identityEpoch, identityCreated := installationIdentity(t, databaseURL)
@@ -279,7 +305,7 @@ func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing
 		t.Fatalf("second binary upgrade: code=%d stdout=%q stderr=%q", secondCode, secondStdout, secondStderr)
 	}
 	second := decodeBinaryUpgrade(t, secondStdout)
-	if second.DatabaseSchemaVersion != 1 || second.Applied != 0 || second.Error != nil {
+	if second.DatabaseSchemaVersion != 4 || second.Applied != 0 || second.Error != nil {
 		t.Fatalf("second binary upgrade result = %+v", second)
 	}
 	secondID, secondEpoch, secondCreated := installationIdentity(t, databaseURL)
@@ -383,59 +409,7 @@ func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing
 
 func integrationDatabase(t *testing.T) string {
 	t.Helper()
-	adminURL := os.Getenv("ALMANAC_TEST_DATABASE_URL")
-	if adminURL == "" {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL must select the isolated PostgreSQL fixture")
-	}
-	parsed, err := url.Parse(adminURL)
-	if err != nil || parsed.Scheme != "postgres" || parsed.Hostname() != "127.0.0.1" || parsed.Port() != "15487" || parsed.Path != "/almanac_f1_storage" || parsed.User == nil || parsed.User.Username() != "almanac" {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL must select the pinned local F1-T05 fixture")
-	}
-	password, hasPassword := parsed.User.Password()
-	if !hasPassword || password != "almanac_f1_t05_local_only" || parsed.RawQuery != "sslmode=disable" {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL does not match the synthetic local fixture credentials")
-	}
-	config, err := ParseDatabaseURL(adminURL)
-	if err != nil {
-		t.Fatal("ALMANAC_TEST_DATABASE_URL is invalid")
-	}
-	connectCtx, cancelConnect := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancelConnect()
-	admin, err := pgx.ConnectConfig(connectCtx, config)
-	if err != nil {
-		t.Fatal("connect to the verified local PostgreSQL fixture failed")
-	}
-	t.Cleanup(func() { closeIntegrationConn(admin) })
-	var currentDatabase, currentUser string
-	var version int
-	if err := admin.QueryRow(connectCtx, "SELECT current_database(), current_user, current_setting('server_version_num')::integer").Scan(&currentDatabase, &currentUser, &version); err != nil {
-		t.Fatal("verify PostgreSQL fixture identity failed")
-	}
-	if currentDatabase != "almanac_f1_storage" || currentUser != "almanac" || version != 180006 {
-		t.Fatalf("connected server is not the expected PostgreSQL 18.6 fixture (database=%q user=%q version=%d)", currentDatabase, currentUser, version)
-	}
-	var suffix [12]byte
-	if _, err := rand.Read(suffix[:]); err != nil {
-		t.Fatal(err)
-	}
-	databaseName := "almanac_test_" + hex.EncodeToString(suffix[:])
-	childURL := parsed.Clone()
-	childURL.Path = "/" + databaseName
-	createCtx, cancelCreate := context.WithTimeout(t.Context(), 10*time.Second)
-	_, err = admin.Exec(createCtx, "CREATE DATABASE "+pgx.Identifier{databaseName}.Sanitize())
-	cancelCreate()
-	if err != nil {
-		t.Fatal("create unique disposable test database failed")
-	}
-	t.Cleanup(func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if _, err := admin.Exec(cleanupCtx, "DROP DATABASE "+pgx.Identifier{databaseName}.Sanitize()+" WITH (FORCE)"); err != nil {
-			t.Errorf("drop test-owned database %s failed", databaseName)
-		}
-		_ = admin.Close(cleanupCtx)
-	})
-	return childURL.String()
+	return testpostgres.Database(t)
 }
 
 func runAlmanac(t *testing.T, binary string, args, extraEnv []string) (int, []byte, []byte) {
@@ -513,20 +487,7 @@ func decodeBinaryUpgrade(t *testing.T, data []byte) struct {
 
 func integrationConnect(t *testing.T, databaseURL string) *pgx.Conn {
 	t.Helper()
-	config, err := ParseDatabaseURL(databaseURL)
-	if err != nil {
-		t.Fatal("test database URL is invalid")
-	}
-	connectCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	conn, err := pgx.ConnectConfig(connectCtx, config)
-	if err != nil {
-		t.Fatal("connect to test-owned database failed")
-	}
-	t.Cleanup(func() {
-		closeIntegrationConn(conn)
-	})
-	return conn
+	return testpostgres.Connect(t, databaseURL)
 }
 
 func closeIntegrationConn(conn *pgx.Conn) {

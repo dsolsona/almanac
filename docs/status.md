@@ -8,8 +8,9 @@ The catalogue also includes a date picker, switches, shared loading feedback,
 aligned timeline charts and exact-value tables.
 A Go executable now serves the embedded UI with operational health, a fixed-origin
 API proxy, version/help commands and bounded shutdown. Explicit PostgreSQL upgrades
-establish immutable schema history and installation metadata. Authentication,
-management operations, observation storage and providers remain unimplemented.
+establish immutable schema history and installation metadata. Local authentication
+now has a verified application service; public authentication transport, management
+operations, observation storage and providers remain unimplemented.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -21,7 +22,7 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–05 done; F1 incomplete | Catalogue, UI-only runtime and PostgreSQL upgrade foundation verified; identity and product journeys remain |
+| Product implementation | F1-T01–12 done; F1 incomplete | Catalogue, runtime, storage and local authentication service verified; public authentication and product journeys remain |
 
 ## Coverage
 
@@ -82,6 +83,37 @@ and product-journey acceptance remain outstanding.
   are complete, integrated at `28bafab`. PostgreSQL18.6 explicit upgrades and their
   isolated integration lane are verified. Next foundation work is local identity,
   protected onboarding and authenticated backend operations, within SPEC-0004.
+- [F1-T06](tasks/F1-T06.md) is complete: reviewed internal password/session
+  primitives at `334fb33`, with merged foundation fixes. It does not expose login
+  or complete onboarding. Next is transactional initial-owner persistence.
+- [F1-T07](tasks/F1-T07.md) is complete at `1f0bf0c`: atomic initial-owner persistence,
+  stacked on the identity-primitives increment. Independent reviews and 14 real
+  PostgreSQL integration checks passed; authentication endpoints remain subsequent work.
+- [F1-T08](tasks/F1-T08.md) is complete at `ce1aec3`: offline common-password
+  screening, stacked on initial-owner persistence. Full/race gates and independent
+  reviews passed. Login/startup must apply the complete creation policy before
+  accepting new passwords; persistent sessions are the next prerequisite.
+- [F1-T09](tasks/F1-T09.md) is verified: persistent session issuance, validation and
+  revocation at `0cccb8d`, stacked on password policy. Full gate passed30 UI/45 Go;
+  PostgreSQL18.6 passed25 integration tests under race in5.731s. Task and final
+  reviews approved the corrected authority and logout boundary cases.
+  Login/throttling, first-password rotation and API/CLI/UI remain future work.
+- [F1-T10](tasks/F1-T10.md) is verified at `493bde4`: atomic password rotation,
+  session replacement and initial onboarding completion. Full gate passed 30 UI/46
+  Go tests; PostgreSQL 18.6 passed 31 integration tests under race in 9.993s.
+  Task and final reviews approved the corrected denial and rollback evidence.
+  External password proof, shared login throttling and HTTP remain later.
+- [F1-T11](tasks/F1-T11.md) is verified at `24810e5`: shared login admission and
+  rolling failure limits. Full gate passed 30 UI/48 Go; PostgreSQL 18.6 passed 39
+  integration tests under race in 13.030s. Review drove explicit READ COMMITTED
+  transactions, with a reproduced over-admission regression now fixed. Application
+  authentication and HTTP remain the next integration work.
+- [F1-T12](tasks/F1-T12.md) is verified at `3d8fd7d`: protected initial setup, login,
+  password rotation, authentication and logout through one backend service.
+  Independent task and whole-branch reviews approved. Full gate passed 30 UI/52 Go;
+  combined PostgreSQL 18.6 passed 51 tests under race. Final test-only additions
+  passed 12 authentication integration tests under race in 10.086s. Public HTTP,
+  cookie/CSRF protections and UI/CLI journeys are the next delivery work.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

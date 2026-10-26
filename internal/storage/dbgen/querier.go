@@ -6,11 +6,42 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
+	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
+	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
+	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
+	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
+	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
+	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
+	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
+	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
+	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
+	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
+	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
+	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
+	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
+	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
+	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
+	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
+	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
+	LockSessionInstallation(ctx context.Context) (LockSessionInstallationRow, error)
+	LockSessionUser(ctx context.Context, userID pgtype.UUID) (LockSessionUserRow, error)
+	LoginAttemptKeys(ctx context.Context, arg LoginAttemptKeysParams) (LoginAttemptKeysRow, error)
+	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
+	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
+	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
+	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
+	SessionVerifierExists(ctx context.Context, verifier []byte) (bool, error)
+	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

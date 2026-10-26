@@ -23,4 +23,24 @@ in progress. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
 generated operational contracts and lifecycle checks. [F1-T05](F1-T05.md) is the
 completed PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
 covers explicit schema upgrades and isolated real-database verification. Identity
-work remains a subsequent foundation task.
+work continues with [F1-T06](F1-T06.md) and its
+[bounded primitives plan](../plans/0006-identity-primitives.md), before the
+transactional bootstrap/login service and API/CLI/UI wiring.
+
+[F1-T07](F1-T07.md) adds atomic initial-owner persistence under its
+[plan](../plans/0007-initial-owner-persistence.md), stacked on F1-T06.
+
+[F1-T08](F1-T08.md) adds offline common-password screening under its
+[plan](../plans/0008-offline-password-policy.md), before password-creation flows.
+
+[F1-T09](F1-T09.md) adds persistent local sessions under its
+[plan](../plans/0009-persistent-local-sessions.md), before login/API exposure.
+
+[F1-T10](F1-T10.md) adds atomic password rotation and onboarding completion under
+its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure.
+
+[F1-T11](F1-T11.md) adds shared login admission and failure limits under its
+[plan](../plans/0011-shared-login-throttle.md), before password checks are exposed.
+
+[F1-T12](F1-T12.md) connects the local authentication application service under its
+[plan](../plans/0012-local-authentication-service.md), before HTTP/UI/CLI delivery.
