@@ -5,7 +5,8 @@
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
 - Implementation: in progress
-- Related ADR: [ADR-0009](../adr/0009-contracts-and-cli-parity.md)
+- Related ADRs: [ADR-0009](../adr/0009-contracts-and-cli-parity.md),
+  [ADR-0016](../adr/0016-authentication-retry-behavior.md)
 
 ## Purpose and contracts
 
@@ -65,6 +66,17 @@ and never silently overwrite. Create/command requests accept an idempotency key
 scoped to actor and operation, retained 24h. Same key/different body conflicts. The
 observation delivery contract uses its own seven-day replay horizon, not 24h command
 receipts. Both mechanisms authorize every replay.
+
+Authentication context, login, password change and logout are excluded from the
+24-hour management receipts under [ADR-0016](../adr/0016-authentication-retry-behavior.md).
+They reject a supplied Idempotency-Key with501 `capability_unavailable`. After a
+lost login/password-change response, clients check session context and ask for
+sign-in when needed, without automatically resubmitting the mutation. A valid
+session does not by itself prove a particular password change succeeded. Preserve
+an unknown outcome if context cannot be checked. Noninteractive CLI calls report
+the uncertainty and recovery instructions without prompting or replaying. Logout
+remains idempotent under normal authorization/CSRF checks. This narrow exception
+does not remove receipts from ordinary management actions.
 
 Long operations return 202 plus a job/location and state; terminal status distinguishes
 success, failure, cancellation and partial result. Polling/watching a job cannot

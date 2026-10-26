@@ -262,6 +262,21 @@ func (s *Service) Authenticate(ctx context.Context, secret string) (storage.Sess
 	return access, err
 }
 
+// Inspect validates a session without extending its idle lifetime.
+func (s *Service) Inspect(ctx context.Context, secret string) (storage.SessionAccess, error) {
+	ctx, cancel := bounded(ctx)
+	defer cancel()
+	digest, err := identity.SessionSecretVerifier(secret)
+	if err != nil {
+		return storage.SessionAccess{}, ErrUnauthenticated
+	}
+	access, err := storage.InspectSession(ctx, s.databaseURL, digest, s.currentTime())
+	if errors.Is(err, storage.ErrInvalidSession) {
+		return storage.SessionAccess{}, ErrUnauthenticated
+	}
+	return access, err
+}
+
 func (s *Service) Logout(ctx context.Context, secret, requestID string) (bool, error) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()

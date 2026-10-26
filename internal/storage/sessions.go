@@ -156,6 +156,15 @@ func IssueSession(ctx context.Context, databaseURL string, input IssueSessionInp
 }
 
 func AuthenticateSession(ctx context.Context, databaseURL string, verifier [32]byte, now time.Time) (SessionAccess, error) {
+	return inspectSession(ctx, databaseURL, verifier, now, true)
+}
+
+// InspectSession validates current session authority without extending its idle lifetime.
+func InspectSession(ctx context.Context, databaseURL string, verifier [32]byte, now time.Time) (SessionAccess, error) {
+	return inspectSession(ctx, databaseURL, verifier, now, false)
+}
+
+func inspectSession(ctx context.Context, databaseURL string, verifier [32]byte, now time.Time, touch bool) (SessionAccess, error) {
 	if now.IsZero() {
 		return SessionAccess{}, ErrInvalidSessionInput
 	}
@@ -206,21 +215,26 @@ func AuthenticateSession(ctx context.Context, databaseURL string, verifier [32]b
 	if invalidSessionState(installation, user, session, nowTime) {
 		return SessionAccess{}, ErrInvalidSession
 	}
-	lastSeenAt := session.LastSeenAt.Time.UTC()
-	if nowTime.After(lastSeenAt) {
-		lastSeenAt = nowTime
-	}
-	rows, err := queries.TouchSession(ctx, dbgen.TouchSessionParams{LastSeenAt: timestamp(lastSeenAt), ID: session.ID})
-	if err != nil {
-		return SessionAccess{}, operationError(ctx, "storage: session touch failed", err)
-	}
-	if rows != 1 {
-		return SessionAccess{}, ErrInvalidSession
+	if touch {
+		lastSeenAt := session.LastSeenAt.Time.UTC()
+		if nowTime.After(lastSeenAt) {
+			lastSeenAt = nowTime
+		}
+		rows, err := queries.TouchSession(ctx, dbgen.TouchSessionParams{LastSeenAt: timestamp(lastSeenAt), ID: session.ID})
+		if err != nil {
+			return SessionAccess{}, operationError(ctx, "storage: session touch failed", err)
+		}
+		if rows != 1 {
+			return SessionAccess{}, ErrInvalidSession
+		}
+		session.LastSeenAt = timestamp(lastSeenAt)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return SessionAccess{}, operationError(ctx, "storage: session authentication commit failed", err)
+		if touch {
+			return SessionAccess{}, operationError(ctx, "storage: session authentication commit failed", err)
+		}
+		return SessionAccess{}, operationError(ctx, "storage: session inspection commit failed", err)
 	}
-	session.LastSeenAt = timestamp(lastSeenAt)
 	return sessionAccess(session, user, installation), nil
 }
 

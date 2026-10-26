@@ -58,6 +58,15 @@ func (e ProxyProblemCode) Valid() bool {
 	}
 }
 
+// AuthResponse defines model for AuthResponse.
+type AuthResponse struct {
+	CsrfToken string        `json:"csrf_token"`
+	Session   *SafeIdentity `json:"session"`
+}
+
+// EmptyAuthRequest defines model for EmptyAuthRequest.
+type EmptyAuthRequest = map[string]interface{}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Component HealthResponseComponent `json:"component"`
@@ -69,6 +78,30 @@ type HealthResponseComponent string
 
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
+
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+}
+
+// PasswordRequest defines model for PasswordRequest.
+type PasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// Problem defines model for Problem.
+type Problem struct {
+	Code        string `json:"code"`
+	FieldErrors []struct {
+		Code    string `json:"code"`
+		Field   string `json:"field"`
+		Message string `json:"message"`
+	} `json:"field_errors"`
+	Message   string `json:"message"`
+	RequestId string `json:"request_id"`
+}
 
 // ProxyProblem Example: {"code":"backend_unavailable","field_errors":[],"message":"Configured backend is unavailable","request_id":"0123456789abcdef0123456789abcdef"}
 type ProxyProblem struct {
@@ -87,8 +120,46 @@ type ProxyProblem struct {
 // ProxyProblemCode defines model for ProxyProblem.Code.
 type ProxyProblemCode string
 
+// SafeIdentity defines model for SafeIdentity.
+type SafeIdentity struct {
+	Login      string `json:"login"`
+	Restricted bool   `json:"restricted"`
+	Role       string `json:"role"`
+	UserId     string `json:"user_id"`
+}
+
+// AuthenticationMethodNotAllowed defines model for AuthenticationMethodNotAllowed.
+type AuthenticationMethodNotAllowed = Problem
+
+// AuthenticationProblem defines model for AuthenticationProblem.
+type AuthenticationProblem = Problem
+
+// PostAuthContextJSONRequestBody defines body for PostAuthContext for application/json ContentType.
+type PostAuthContextJSONRequestBody = EmptyAuthRequest
+
+// PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
+type PostAuthLoginJSONRequestBody = LoginRequest
+
+// PostAuthLogoutJSONRequestBody defines body for PostAuthLogout for application/json ContentType.
+type PostAuthLogoutJSONRequestBody = EmptyAuthRequest
+
+// PostAuthPasswordJSONRequestBody defines body for PostAuthPassword for application/json ContentType.
+type PostAuthPasswordJSONRequestBody = PasswordRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// PostAuthContext Read the current authentication context
+	// (POST /api/v1/auth/context)
+	PostAuthContext(w http.ResponseWriter, r *http.Request)
+	// PostAuthLogin Create a local session
+	// (POST /api/v1/auth/login)
+	PostAuthLogin(w http.ResponseWriter, r *http.Request)
+	// PostAuthLogout Revoke the current session
+	// (POST /api/v1/auth/logout)
+	PostAuthLogout(w http.ResponseWriter, r *http.Request)
+	// PostAuthPassword Change the current password
+	// (POST /api/v1/auth/password)
+	PostAuthPassword(w http.ResponseWriter, r *http.Request)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -105,6 +176,62 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// PostAuthContext operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthContext(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthContext(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthLogin operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthLogin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthLogout operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthLogout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAuthPassword operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAuthPassword(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +381,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/context", wrapper.PostAuthContext)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/password", wrapper.PostAuthPassword)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/logout", wrapper.PostAuthLogout)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/livez", wrapper.GetLiveness)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReadiness)
 

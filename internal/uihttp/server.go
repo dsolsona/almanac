@@ -103,6 +103,19 @@ func (h healthHandler) GetReadiness(w http.ResponseWriter, r *http.Request) {
 	writeHealth(w, api.HealthResponse{Status: api.Ok, Component: api.Ui})
 }
 
+func (h healthHandler) PostAuthContext(w http.ResponseWriter, r *http.Request) {
+	h.server.proxy().ServeHTTP(w, r)
+}
+func (h healthHandler) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
+	h.server.proxy().ServeHTTP(w, r)
+}
+func (h healthHandler) PostAuthPassword(w http.ResponseWriter, r *http.Request) {
+	h.server.proxy().ServeHTTP(w, r)
+}
+func (h healthHandler) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+	h.server.proxy().ServeHTTP(w, r)
+}
+
 func writeHealth(w http.ResponseWriter, value api.HealthResponse) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.MarshalWrite(w, value)

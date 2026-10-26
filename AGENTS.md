@@ -193,6 +193,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   shell execution targets or bypass permission controls. If an operation requires
   new approval while the maintainer is unavailable, leave it pending and continue
   independent authorized work.
+- Check the saved approval for the actual invocation before submitting a command.
+  Do not assume a command-family approval covers a new argument combination or
+  shell form. Reuse known approved invocations unchanged where possible; leave
+  uncertain operations pending instead of requesting approval. Do not add wrappers
+  or broaden targets to evade this restriction.
 - The coordinator must carry this command restriction into every implementer
   brief and enforce it during review. Do not request new command approvals for
   direct formatter, compiler or helper-script invocations. Route them through

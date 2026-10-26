@@ -59,4 +59,11 @@ func TestLoginProofUsesOneVerificationForAllSnapshotCases(t *testing.T) {
 	}
 }
 
+func TestInspectRejectsMalformedSecretWithoutDatabaseAccess(t *testing.T) {
+	s := &Service{databaseURL: "not-a-database-url", now: time.Now}
+	if _, err := s.Inspect(t.Context(), "malformed"); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("Inspect malformed secret error = %v, want ErrUnauthenticated", err)
+	}
+}
+
 const supportedTestVerifier = "$argon2id$v=19$m=19456,t=2,p=1$MDEyMzQ1Njc4OWFiY2RlZg$MDEyMzQ1Njc4OWFiY2RlZzAxMjM0NTY3ODlhYmNkZWY"

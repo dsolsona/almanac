@@ -46,6 +46,9 @@ func TestSessionOperationsRejectMalformedInputsBeforeDatabaseAccess(t *testing.T
 	if _, err := AuthenticateSession(ctx, badURL, verifier, time.Time{}); !errors.Is(err, ErrInvalidSessionInput) {
 		t.Fatalf("zero-time authentication error = %v, want ErrInvalidSessionInput", err)
 	}
+	if _, err := InspectSession(ctx, badURL, verifier, time.Time{}); !errors.Is(err, ErrInvalidSessionInput) {
+		t.Fatalf("zero-time inspection error = %v, want ErrInvalidSessionInput", err)
+	}
 	if _, err := RevokeSession(ctx, badURL, verifier, time.Time{}, "request"); !errors.Is(err, ErrInvalidSessionInput) {
 		t.Fatalf("zero-time revoke error = %v, want ErrInvalidSessionInput", err)
 	}
