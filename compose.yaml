@@ -1,0 +1,86 @@
+name: almanac-local
+
+services:
+  init:
+    image: ${COMPOSE_PROJECT_NAME:-almanac-local}:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "0:0"
+    network_mode: none
+    command: ["/bin/sh", "/usr/local/lib/almanac/init.sh"]
+    restart: "no"
+    volumes:
+      - app-secrets:/run/almanac-secrets
+      - postgres-secret:/run/postgres-secret
+
+  postgres:
+    image: postgres:18.6@sha256:9770878138a2e83abcb10856d30cc3f24dae0d317bb956db6ab9159de6c3c80d
+    environment:
+      POSTGRES_DB: almanac
+      POSTGRES_USER: almanac
+      POSTGRES_PASSWORD_FILE: /run/postgres-secret/password
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - postgres-secret:/run/postgres-secret:ro
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U almanac -d almanac"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  migrate:
+    image: ${COMPOSE_PROJECT_NAME:-almanac-local}:dev
+    user: "10001:10001"
+    command: ["/usr/local/bin/almanac", "db", "upgrade"]
+    environment:
+      ALMANAC_DATABASE_URL_FILE: /run/almanac-secrets/database-url
+    volumes:
+      - app-secrets:/run/almanac-secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: ${COMPOSE_PROJECT_NAME:-almanac-local}:dev
+    user: "10001:10001"
+    command: ["/usr/local/bin/almanac", "serve", "--components=backend,ui"]
+    environment:
+      ALMANAC_LISTEN: 0.0.0.0:8080
+      ALMANAC_COMPONENTS: backend,ui
+      ALMANAC_DATABASE_URL_FILE: /run/almanac-secrets/database-url
+      ALMANAC_INITIAL_ADMIN_LOGIN: admin
+      ALMANAC_INITIAL_ADMIN_PASSWORD_FILE: /run/almanac-secrets/initial-admin-password
+      ALMANAC_PUBLIC_ORIGIN: https://localhost:${ALMANAC_PORT:-18088}
+      ALMANAC_TLS_CERT_FILE: /run/almanac-secrets/tls.crt
+      ALMANAC_TLS_KEY_FILE: /run/almanac-secrets/tls.key
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    volumes:
+      - app-secrets:/run/almanac-secrets:ro
+    ports:
+      - "127.0.0.1:${ALMANAC_PORT:-18088}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--cacert", "/run/almanac-secrets/tls.crt", "https://localhost:8080/readyz"]
+      interval: 3s
+      timeout: 4s
+      retries: 30
+      start_period: 5s
+    stop_grace_period: 35s
+    restart: unless-stopped
+
+volumes:
+  app-secrets:
+  postgres-secret:
+  postgres-data:

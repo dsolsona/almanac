@@ -2,7 +2,7 @@
 
 Start with [AGENTS.md](../AGENTS.md) for project constraints and ways of working.
 Then read [SPEC-0001: System overview](specs/0001-system-overview.md) and the specs
-and ADRs relevant to the task. F1 foundation is verified in the unmerged PR stack;
+and ADRs relevant to the task. F1 foundation is verified and merged;
 see [delivery status](status.md) for current evidence and remaining scope.
 For the complete design package, begin with the
 [review guide](review-guide.md).

@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -35,11 +35,29 @@ generate:
 preview:
 	cd web && npm run dev -- --host 127.0.0.1 --port 5198 --strictPort
 
+bootstrap:
+	docker compose -f compose.yaml build
+	$(MAKE) run
+
+run start:
+	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; export ALMANAC_PORT=$$port; image=$${COMPOSE_PROJECT_NAME:-almanac-local}:dev; docker image inspect "$$image" >/dev/null 2>&1 || { echo 'Almanac local image is missing; run make bootstrap first' >&2; exit 2; }; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
+
+stop:
+	docker compose -f compose.yaml stop
+
+logs:
+	docker compose -f compose.yaml logs app
+
+credentials:
+	@echo 'This is the initial password only. It is no longer current after you rotate it during onboarding.' >&2
+	docker compose -f compose.yaml exec -T app sh -c 'cat /run/almanac-secrets/initial-admin-password; printf "\n"'
+
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
+	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
 	  if [ -n "$${TEST_FILE:-}" ]; then \

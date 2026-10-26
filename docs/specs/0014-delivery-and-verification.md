@@ -146,5 +146,5 @@ not a reason to invent legal conclusions during design.
   sizing must follow measurement; the spec makes no supported-throughput claim today.
 - F1 foundation, including combined runtime, protected CLI/browser onboarding and
   repeatable executable/database journeys, has verified evidence in
-  [delivery status](../status.md). The PR stack awaits merge. F2 and later product
+  [delivery status](../status.md). The foundation stack merged at `9c25fef`. F2 and later product
   journeys remain unimplemented; no release or workload acceptance is claimed.

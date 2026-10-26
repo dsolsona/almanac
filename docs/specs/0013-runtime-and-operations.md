@@ -108,6 +108,36 @@ Never reopen a database snapshot with its restored bearer tokens still valid.
 
 ## Delivery and observability
 
+### Local Compose workflow
+
+The maintainer requested a container-only local workflow on 2026-10-26.
+`make bootstrap` builds and starts the application and PostgreSQL with Docker
+Compose, automatically preparing protected local credentials, a localhost TLS
+certificate and the schema. Only Docker with Compose and Make are host prerequisites.
+`make run` starts the prepared stack without reinstalling host tools; `make stop`
+stops it without deleting data. Repeating bootstrap preserves users, passwords and
+database contents. This explicitly brings local Compose packaging forward from F5;
+production images, Helm and restore qualification remain separate release work.
+
+Use named volumes and a dedicated Compose project, separate from integration
+fixtures and the design catalogue. Expose only the app on loopback (HTTPS port 18088
+by default); PostgreSQL stays on the Compose network. The application runs without
+root and reads protected secret files. Initialization and migrations must complete
+before serving. Readiness failures return an unsuccessful command result rather
+than announcing a usable app. Startup prints its URL and how to obtain the initial
+admin password; secret disclosure is an explicit terminal action, never container
+logs. A generated local certificate may need a browser exception; bootstrap never
+changes host trust or disables application authentication/TLS checks.
+After validating saved credential state and certificate/key correspondence, startup
+renews expired or soon-expiring local certificates using the existing private key.
+Only the public certificate is atomically replaced; database/admin credentials and
+data are preserved. Invalid saved credentials must not trigger regeneration.
+
+Stop/restart and repeated bootstrap must preserve completed onboarding. Occupied
+ports, missing prerequisites, invalid saved state, and schema/init failures must
+fail visibly without deleting or adopting unrelated resources. No reset occurs as
+part of bootstrap, run, or stop.
+
 Provide Docker images for server and agent, a Compose example with PostgreSQL and
 a demo metrics source, and Helm charts for server/agent. Keep demo credentials and
 synthetic data explicitly local; production requires initial-password onboarding.
