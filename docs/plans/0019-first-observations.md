@@ -60,6 +60,8 @@ management API before connected-agent and datasource work.
 profiles before agent-management command parity.
 [F2-T11](../tasks/F2-T11.md) supplies all seven agent-management CLI operations,
 protected one-time token output and real executable acceptance before connectivity.
+[F2-T12](../tasks/F2-T12.md) validates current agent credentials against PostgreSQL
+as the authentication prerequisite for coordination and configuration operations.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

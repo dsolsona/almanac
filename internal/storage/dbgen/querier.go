@@ -21,6 +21,7 @@ type Querier interface {
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
+	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
 	FindAgentSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
@@ -47,6 +48,8 @@ type Querier interface {
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
 	// would otherwise walk inactive history. Recheck base rows after any lock wait.
 	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
+	LockAgentAccessAgent(ctx context.Context, agentID pgtype.UUID) (LockAgentAccessAgentRow, error)
+	LockAgentAccessCredential(ctx context.Context, arg LockAgentAccessCredentialParams) (AlmanacAgentCredential, error)
 	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
