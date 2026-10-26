@@ -128,6 +128,9 @@ and product-journey acceptance remain outstanding.
   passed30 web/75 Go, race69, and PostgreSQL18.6 passed62 integration tests including
   the real executable journey and shutdown/loss boundaries (command14.272s).
   Independent reviews approved. Combined serving, onboarding screens and CLI setup follow.
+- [F1-T15](tasks/F1-T15.md) is ready: protected-file noninteractive setup through
+  HTTPS, generated API operations and explicit uncertain-response handling. It builds
+  on the backend runtime and does not introduce persisted CLI profiles or UI screens.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

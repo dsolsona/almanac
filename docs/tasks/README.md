@@ -50,3 +50,7 @@ its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure
 
 [F1-T14](F1-T14.md) wires the runnable authentication backend under its
 [plan](../plans/0014-authentication-backend-runtime.md), before combined serving and UI/CLI.
+
+[F1-T15](F1-T15.md) adds noninteractive initial administrator setup through the
+verified API under its [plan](../plans/0015-noninteractive-setup.md), including
+uncertain-response handling without mutation replay.
