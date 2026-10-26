@@ -8,6 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlmanacAgent struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	DisplayName string             `json:"display_name"`
+	Enabled     bool               `json:"enabled"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacAgentCredential struct {
+	ID              pgtype.UUID        `json:"id"`
+	AgentID         pgtype.UUID        `json:"agent_id"`
+	Verifier        []byte             `json:"verifier"`
+	CredentialEpoch pgtype.UUID        `json:"credential_epoch"`
+	IssuedAt        pgtype.Timestamptz `json:"issued_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type AlmanacAuditEvent struct {
 	ID         pgtype.UUID        `json:"id"`
 	Actor      string             `json:"actor"`
@@ -35,6 +55,16 @@ type AlmanacLoginAttempt struct {
 	StartedAt  pgtype.Timestamptz `json:"started_at"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
 	State      string             `json:"state"`
+}
+
+type AlmanacManagementReceipt struct {
+	ActorID        pgtype.UUID        `json:"actor_id"`
+	Operation      string             `json:"operation"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Digest         []byte             `json:"digest"`
+	Result         []byte             `json:"result"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 }
 
 type AlmanacSchemaMigration struct {

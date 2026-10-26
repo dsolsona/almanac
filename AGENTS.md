@@ -196,6 +196,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   shell execution targets or bypass permission controls. If an operation requires
   new approval while the maintainer is unavailable, leave it pending and continue
   independent authorized work.
+- Reuse exact approved command invocations, including arguments, environment
+  assignments and shell wrappers. A familiar command name or Make target is not
+  evidence that a variation is approved. Do not request approval for a variation
+  after a sandbox failure: use an already-approved full check or leave the check
+  pending. Carry this restriction into every worker brief.
 - Check the saved approval for the actual invocation before submitting a command.
   Do not assume a command-family approval covers a new argument combination or
   shell form. Reuse known approved invocations unchanged where possible; leave

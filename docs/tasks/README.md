@@ -71,3 +71,5 @@ actual onboarding/restart verification.
 
 F2 begins with [F2-T01](F2-T01.md), local VictoriaMetrics and VictoriaTraces fixtures
 under the [first observations plan](../plans/0019-first-observations.md).
+[F2-T02](F2-T02.md) adds guarded registration persistence and safe retry receipts;
+it precedes the management service and API/UI/CLI exposure.

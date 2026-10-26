@@ -40,6 +40,8 @@ Specs: [SPEC-0014 F2](../specs/0014-delivery-and-verification.md),
 The requested local provider fixtures are the first bounded task:
 [F2-T01](../tasks/F2-T01.md). They establish real VictoriaMetrics/TraceQL source
 checks before Almanac adapter acceptance, without changing the product sequence.
+[F2-T02](../tasks/F2-T02.md) is the first application implementation task:
+transactional registration with current-authority checks, audit and safe receipts.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

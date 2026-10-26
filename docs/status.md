@@ -78,6 +78,10 @@ local VictoriaMetrics and VictoriaTraces Compose sources: actual numeric Prometh
 and TraceQL results survive stop/start, and the combined Compose acceptance passes.
 Agent management and collector implementation remain outstanding; source fixtures
 do not constitute collection through Almanac.
+[F2-T02](tasks/F2-T02.md) adds verified internal agent registration, credential
+verifier persistence, atomic audit and safe retry receipts. Its integrated candidate
+passes 73 web/105 Go unit tests and 75 real PostgreSQL integration tests. Management
+service, HTTP/CLI/UI, token lifecycle and actual agent connectivity remain outstanding.
 
 ## Coverage
 

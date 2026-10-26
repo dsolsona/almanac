@@ -29,7 +29,8 @@ generate:
 	  format) test -x .local/bin/gofmt || { echo 'Pinned gofmt missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	    find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -w ;; \
 	  sqlc) test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; .local/bin/sqlc generate -f sqlc.yaml ;; \
-	  *) echo 'GENERATE_MODE must be api, format, or sqlc' >&2; exit 2 ;; \
+	  go-guidelines) test -x .local/bin/go-modern-guidelines || { echo 'Go guidelines missing; run make setup SETUP_MODE=go' >&2; exit 2; }; .local/bin/go-modern-guidelines list --go-version 1.27.3; .local/bin/go-modern-guidelines explain json_v2 stdlib_uuid errors_as_type ;; \
+	  *) echo 'GENERATE_MODE must be api, format, sqlc, or go-guidelines' >&2; exit 2 ;; \
 	esac
 
 preview:
