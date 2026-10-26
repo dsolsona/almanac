@@ -6,12 +6,14 @@ The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
 The catalogue also includes a date picker, switches, shared loading feedback,
 aligned timeline charts and exact-value tables.
-A Go executable now serves the embedded UI with operational health, a fixed-origin
-API proxy, version/help commands and bounded shutdown. Explicit PostgreSQL upgrades
-establish immutable schema history and installation metadata. Local authentication
-now has a verified application service and protected HTTP handlers. Executable
-backend serving, authentication UI/CLI, management operations, observation storage
-and providers remain unimplemented.
+A Go executable serves the embedded UI and authentication API with operational
+health, a fixed-origin API proxy, version/help commands and bounded shutdown.
+Explicit PostgreSQL upgrades establish immutable schema history and installation
+metadata. Local authentication has a verified application service and protected
+HTTP handlers. Noninteractive administrator setup and browser sign-in, restricted
+password setup, signed-in identity and logout are verified in the combined runtime.
+Reusable CLI login/profiles, user management, observation storage and providers
+remain unimplemented; Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -24,7 +26,7 @@ requirements may legitimately create additional specifications and ADRs.
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
 | ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
-| Product implementation | F1-T01–13 done; F1 incomplete | Catalogue, runtime foundation, storage and local authentication HTTP handlers verified; backend serving and UI/CLI journeys remain |
+| Product implementation | F1-T01–18 done; F1 incomplete | Catalogue, runtime foundation, storage, local authentication HTTP, combined runtime, noninteractive setup and browser onboarding verified; general CLI login/profiles, user management, observation storage, providers and Google SSO remain |
 
 ## Coverage
 
@@ -143,10 +145,10 @@ and product-journey acceptance remain outstanding.
   are exercised; browser onboarding screens and secure remote UI integration follow.
 - [F1-T17](tasks/F1-T17.md) and [F1-T18](tasks/F1-T18.md) deliver browser sign-in,
   restricted initial-password setup and signed-in identity/logout in combined mode.
-  Product `fd82f8a`, fixture/catalogue correction `75eb742`:72 web/102 Go tests,
-  race95, real PostgreSQL18.6 integration66 (command26.864s), catalogue96 (51.2s).
+  Product `fd82f8a`, fixture/catalogue correction `75eb742`: 72 web/102 Go tests,
+  race 95, real PostgreSQL 18.6 integration 66 (command 26.864 s), catalogue 96 (51.2 s).
   Task reviews approve; final whole-branch review precedes publication. Actual
-  Chromium156.0.8078.4 screens were inspected at360/1024/1440px in both themes.
+  Chromium 156.0.8078.4 screens were inspected at 360/1024/1440 px in both themes.
   Lost responses are exercised after real commits, without automatic replay.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
