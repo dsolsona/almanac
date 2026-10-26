@@ -36,6 +36,46 @@ function installFetch(createResponse?: Response) {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal; if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close; vi.useRealTimers(); });
 
 describe('agent administration screen', () => {
+  it('finishes a pending refresh after fragment-only history navigation', async () => {
+    const user = userEvent.setup();
+    let finish!: (value: Response) => void;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response({ items: [agent()], next_cursor: '' }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; })));
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByRole('button', { name: 'west-1' });
+    await user.click(screen.getByRole('button', { name: 'Refresh agents' }));
+    await act(async () => { history.replaceState({}, '', '/#main'); dispatchEvent(new PopStateEvent('popstate')); });
+    await act(async () => { finish(response({ items: [agentB()], next_cursor: '' })); });
+    expect(await screen.findByRole('button', { name: 'east-1' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Refresh agents' })).toBeEnabled();
+  });
+
+  it('offers navigation to the list when a shared detail identifier is invalid', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/?agent=invalid');
+    installFetch();
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByText('Invalid agent identifier.');
+    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    expect(await screen.findByRole('button', { name: 'west-1' })).toBeVisible();
+    expect(location.search).toBe('');
+  });
+
+  it('ignores an old access warning after a newer page read succeeds', async () => {
+    let confirm!: (value: AuthContext) => void;
+    const auth = makeAuth();
+    vi.mocked(auth.context).mockResolvedValueOnce(admin).mockImplementationOnce(() => new Promise<AuthContext>((resolve) => { confirm = resolve; }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response({ code: 'unauthenticated', message: 'rejected', request_id: 'r', field_errors: [] }, 401))
+      .mockResolvedValueOnce(response({ items: [agentB()], next_cursor: '' })));
+    render(<AuthPage client={auth} />);
+    await waitFor(() => expect(auth.context).toHaveBeenCalledTimes(2));
+    await act(async () => { history.pushState({}, '', '/?agents_cursor=next'); dispatchEvent(new PopStateEvent('popstate')); });
+    await screen.findByRole('button', { name: 'east-1' });
+    await act(async () => { confirm(admin); });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'east-1' })).toBeVisible();
+  });
+
   it('keeps local validation feedback inside the open registration dialog', async () => {
     const user = userEvent.setup(); installDialogs();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response({ items: [], next_cursor: '' })));

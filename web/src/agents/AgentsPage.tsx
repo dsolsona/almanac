@@ -53,8 +53,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       const next = queryState();
       const nextKey = JSON.stringify(next);
       actionGeneration.current++;
-      readGeneration.current++;
       if (nextKey !== resultKey.current) {
+        readGeneration.current++;
         setAgents([]); setAgent(null); setCredentials([]); setAgentNext(''); setCredentialNext('');
         hasCachedData.current = false; lastSuccessAt.current = ''; setError('');
       }
@@ -109,6 +109,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       if (caught instanceof AgentFailure && caught.kind === 'rejected' && ['unauthenticated', 'forbidden'].includes(caught.code)) {
         setAgents([]); setAgent(null); setCredentials([]); setAgentNext(''); setCredentialNext(''); hasCachedData.current = false; lastSuccessAt.current = '';
         if (caught.code === 'unauthenticated') await recheckSession();
+        if (controller.signal.aborted || generation !== readGeneration.current) return;
         setError('Your session no longer has access to these records. Check your session before continuing.');
         return;
       }
@@ -209,8 +210,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       {agents.length === 0 ? <p>{error && !hasCachedData.current ? 'Agent records could not be loaded.' : 'No agents have been registered.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table><thead><tr><th>Name</th><th>Display name</th><th>Administration</th><th>Created (UTC)</th><th>Updated (UTC)</th></tr></thead><tbody>{agents.map((item) => <tr key={item.id}><td><button className="agents-link" onClick={() => setQuery({ agent: item.id, agents_cursor: '', credentials_cursor: '' })}>{item.name}</button></td><td>{item.display_name}</td><td>{item.enabled ? 'Enabled' : 'Disabled'}</td><td>{date(item.created_at)}</td><td>{date(item.updated_at)}</td></tr>)}</tbody></table></div>}
       {agentNext && <Button variant="outline" onClick={() => setQuery({ agents_cursor: agentNext })}>Next agents</Button>}
     </Panel>}
+    {locationState.agent && <Button variant="outline" onClick={() => setQuery({ agent: '', credentials_cursor: '' })}>Back to agents</Button>}
     {!loading && locationState.agent && agent && <>
-      <Button variant="outline" onClick={() => setQuery({ agent: '', credentials_cursor: '' })}>Back to agents</Button>
       <Panel heading="Agent details" className="agents-panel"><dl className="agents-meta"><div><dt>Name</dt><dd>{agent.name}</dd></div><div><dt>Display name</dt><dd>{agent.display_name}</dd></div><div><dt>Administration</dt><dd>{agent.enabled ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Agent ID</dt><dd>{agent.id}</dd></div><div><dt>Created (UTC)</dt><dd>{date(agent.created_at)}</dd></div><div><dt>Updated (UTC)</dt><dd>{date(agent.updated_at)}</dd></div></dl></Panel>
       <Panel heading="Credential history" className="agents-panel"><p>Scheduled retirement and revocation are separate events. This history does not show whether a credential is currently connected or active.</p>
         {credentials.length === 0 ? <p>No credentials are recorded.</p> : <div className="agents-table-scroll" role="region" aria-label="Credential history" tabIndex={0}><table><thead><tr><th>Credential ID</th><th>Issued (UTC)</th><th>Expires (UTC)</th><th>Scheduled retirement (UTC)</th><th>Revoked (UTC)</th></tr></thead><tbody>{credentials.map((item) => <tr key={item.id}><td>{item.id}</td><td>{date(item.issued_at)}</td><td>{date(item.expires_at)}</td><td>{item.retire_at ? date(item.retire_at) : '—'}</td><td>{item.revoked_at ? date(item.revoked_at) : '—'}</td></tr>)}</tbody></table></div>}
