@@ -20,6 +20,11 @@ initial password explicitly with `make credentials`, then choose your permanent
 password in the onboarding page. The initial password is never printed in startup
 or container logs and stops working after rotation.
 
+Startup automatically renews the localhost certificate when it expires within seven
+days, retaining its private key and all database/admin credentials. Your browser may
+ask you to accept the renewed certificate. Damaged credential state still fails
+without resetting it.
+
 Day to day:
 
 ```sh

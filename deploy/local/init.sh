@@ -54,6 +54,17 @@ check_owner_mode() {
 	[ "$(stat -c '%u:%a' "$file")" = "10001:$want_mode" ]
 }
 
+validate_certificate_pair() {
+	certificate=$1
+	openssl x509 -in "$certificate" -noout >/dev/null 2>&1 || return 1
+	openssl x509 -in "$certificate" -checkhost localhost -noout >/dev/null 2>&1 || return 1
+	openssl x509 -in "$certificate" -checkip 127.0.0.1 -noout >/dev/null 2>&1 || return 1
+	openssl pkey -in "$key_file" -noout >/dev/null 2>&1 || return 1
+	cert_public=$(openssl x509 -in "$certificate" -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | base64 -w0) || return 1
+	key_public=$(openssl pkey -in "$key_file" -pubout -outform DER 2>/dev/null | base64 -w0) || return 1
+	[ "$cert_public" = "$key_public" ]
+}
+
 validate_completed() {
 	check_owner_mode "$marker" 600 || return 1
 	[ "$(cat "$marker")" = 'almanac-local-v1' ] || return 1
@@ -72,18 +83,40 @@ validate_completed() {
 	[ "${#admin_password}" -ge 32 ] || return 1
 	[ "$(wc -c < "$pg_password_file" | tr -d '[:space:]')" = 64 ] || return 1
 	[ "$(wc -c < "$admin_file" | tr -d '[:space:]')" = 64 ] || return 1
-	openssl x509 -in "$cert_file" -noout >/dev/null 2>&1 || return 1
-	openssl x509 -in "$cert_file" -checkhost localhost -noout >/dev/null 2>&1 || return 1
-	openssl x509 -in "$cert_file" -checkip 127.0.0.1 -noout >/dev/null 2>&1 || return 1
-	openssl x509 -in "$cert_file" -checkend 0 -noout >/dev/null 2>&1 || return 1
-	openssl pkey -in "$key_file" -noout >/dev/null 2>&1 || return 1
-	cert_public=$(openssl x509 -in "$cert_file" -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | base64 -w0) || return 1
-	key_public=$(openssl pkey -in "$key_file" -pubout -outform DER 2>/dev/null | base64 -w0) || return 1
-	[ "$cert_public" = "$key_public" ]
+	validate_certificate_pair "$cert_file"
+}
+
+renew_certificate_if_needed() {
+	if openssl x509 -in "$cert_file" -checkend 604800 -noout >/dev/null 2>&1; then
+		return 0
+	fi
+
+	temp_cert=$(mktemp "$app_dir/.tls.crt.XXXXXX") || return 1
+	if ! openssl req -new -x509 -key "$key_file" -sha256 -days 365 \
+		-subj '/CN=localhost' \
+		-addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+		-addext 'basicConstraints=critical,CA:TRUE' \
+		-out "$temp_cert" >/dev/null 2>&1; then
+		rm -f "$temp_cert"
+		return 1
+	fi
+	if ! chown 10001:10001 "$temp_cert" || ! chmod 0644 "$temp_cert" || ! check_owner_mode "$temp_cert" 644; then
+		rm -f "$temp_cert"
+		return 1
+	fi
+	if ! validate_certificate_pair "$temp_cert" || ! openssl x509 -in "$temp_cert" -checkend 604800 -noout >/dev/null 2>&1; then
+		rm -f "$temp_cert"
+		return 1
+	fi
+	mv -f "$temp_cert" "$cert_file"
 }
 
 if [ -e "$marker" ] || [ -L "$marker" ]; then
 	if ! validate_completed; then fail_state; fi
+	if ! renew_certificate_if_needed; then
+		echo 'local initializer: localhost certificate renewal failed; saved credentials were preserved' >&2
+		exit 1
+	fi
 	exit 0
 fi
 

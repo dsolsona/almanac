@@ -25,6 +25,19 @@ hashes() {
 	find "$app" "$pg" -type f -exec sh -c 'for file do stat -c "%u:%g:%a %n" "$file"; sha256sum "$file"; done' sh {} + | sort
 }
 
+stable_secret_state() {
+	for file in "$app/database-url" "$app/initial-admin-password" "$app/tls.key" "$app/.initialized" "$pg/password"; do
+		stat -c '%u:%g:%a %n' "$file"
+		sha256sum "$file"
+	done | sort
+}
+
+certificate_matches_key() {
+	cert_public=$(openssl x509 -in "$app/tls.crt" -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | base64 -w0)
+	key_public=$(openssl pkey -in "$app/tls.key" -pubout -outform DER 2>/dev/null | base64 -w0)
+	[ "$cert_public" = "$key_public" ]
+}
+
 sh "$script" "$app" "$pg"
 first=$(hashes)
 sh "$script" "$app" "$pg"
@@ -46,6 +59,51 @@ else
 fi
 if grep -F -f "$app/initial-admin-password" "$root/stdout" "$root/stderr"; then fail 'initializer leaked the admin password'; fi
 if grep -F -f "$pg/password" "$root/stdout" "$root/stderr"; then fail 'initializer leaked the database password'; fi
+
+# A valid certificate nearing expiry is renewed with the same key only.
+stable_before=$(stable_secret_state)
+openssl req -new -x509 -key "$app/tls.key" -sha256 -days 1 \
+	-subj '/CN=localhost' \
+	-addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+	-addext 'basicConstraints=critical,CA:TRUE' \
+	-out "$root/near-expiry.crt" >/dev/null 2>&1
+cp "$root/near-expiry.crt" "$app/tls.crt"
+chown 10001:10001 "$app/tls.crt"
+chmod 0644 "$app/tls.crt"
+near_expiry_hash=$(sha256sum "$app/tls.crt")
+sh "$script" "$app" "$pg"
+[ "$(stable_secret_state)" = "$stable_before" ] || fail 'certificate renewal changed other saved credentials'
+openssl x509 -in "$app/tls.crt" -checkend 604800 -noout >/dev/null 2>&1 || fail 'renewed certificate is not valid beyond the renewal threshold'
+openssl x509 -in "$app/tls.crt" -checkhost localhost -noout >/dev/null 2>&1 || fail 'renewed certificate lost localhost DNS SAN'
+openssl x509 -in "$app/tls.crt" -checkip 127.0.0.1 -noout >/dev/null 2>&1 || fail 'renewed certificate lost loopback IP SAN'
+[ "$(stat -c '%u:%a' "$app/tls.crt")" = '10001:644' ] || fail 'renewed certificate owner or mode is unsafe'
+certificate_matches_key || fail 'renewed certificate does not use the saved private key'
+[ "$(sha256sum "$app/tls.crt")" != "$near_expiry_hash" ] || fail 'near-expiry certificate was not renewed'
+renewed_hash=$(sha256sum "$app/tls.crt")
+sh "$script" "$app" "$pg"
+[ "$(sha256sum "$app/tls.crt")" = "$renewed_hash" ] || fail 'repeat initialization changed the renewed certificate'
+[ "$(stable_secret_state)" = "$stable_before" ] || fail 'repeat initialization changed saved credentials after renewal'
+
+# An already-expired, otherwise valid certificate is also renewed in place.
+stable_before=$(stable_secret_state)
+openssl x509 -in "$app/tls.crt" -signkey "$app/tls.key" -days -1 -out "$root/expired.crt" >/dev/null 2>&1 || fail 'could not create expired certificate fixture'
+openssl x509 -in "$root/expired.crt" -checkend 0 -noout >/dev/null 2>&1 && fail 'expired certificate fixture is not expired'
+cp "$root/expired.crt" "$app/tls.crt"
+chown 10001:10001 "$app/tls.crt"
+chmod 0644 "$app/tls.crt"
+expired_hash=$(sha256sum "$app/tls.crt")
+sh "$script" "$app" "$pg"
+[ "$(stable_secret_state)" = "$stable_before" ] || fail 'expired certificate renewal changed other saved credentials'
+openssl x509 -in "$app/tls.crt" -checkend 604800 -noout >/dev/null 2>&1 || fail 'expired certificate was not renewed beyond the threshold'
+openssl x509 -in "$app/tls.crt" -checkhost localhost -noout >/dev/null 2>&1 || fail 'expired certificate renewal lost localhost DNS SAN'
+openssl x509 -in "$app/tls.crt" -checkip 127.0.0.1 -noout >/dev/null 2>&1 || fail 'expired certificate renewal lost loopback IP SAN'
+[ "$(stat -c '%u:%a' "$app/tls.crt")" = '10001:644' ] || fail 'expired certificate renewal owner or mode is unsafe'
+certificate_matches_key || fail 'expired certificate renewal does not use the saved private key'
+[ "$(sha256sum "$app/tls.crt")" != "$expired_hash" ] || fail 'expired certificate was not replaced'
+renewed_hash=$(sha256sum "$app/tls.crt")
+sh "$script" "$app" "$pg"
+[ "$(sha256sum "$app/tls.crt")" = "$renewed_hash" ] || fail 'repeat initialization changed the expired-certificate renewal'
+[ "$(stable_secret_state)" = "$stable_before" ] || fail 'repeat initialization changed saved credentials after expired-certificate renewal'
 
 saved=$app/initial-admin-password
 mv "$saved" "$app/password.save"

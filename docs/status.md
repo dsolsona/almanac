@@ -40,6 +40,8 @@ The follow-up implementation `b50c4d5` is published as
 [PR #16](https://github.com/dsolsona/almanac/pull/16), with task and whole-branch
 review approval. Its real Compose gate includes occupied-port recovery and
 unchanged PostgreSQL container identity across app recreation.
+PR review corrections also pass expired-certificate renewal and active-command
+SIGINT/SIGTERM cleanup checks, including removal of each test-owned image tag.
 
 | F1 outcome | Reproducible evidence |
 | --- | --- |

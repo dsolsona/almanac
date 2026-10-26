@@ -128,6 +128,10 @@ than announcing a usable app. Startup prints its URL and how to obtain the initi
 admin password; secret disclosure is an explicit terminal action, never container
 logs. A generated local certificate may need a browser exception; bootstrap never
 changes host trust or disables application authentication/TLS checks.
+After validating saved credential state and certificate/key correspondence, startup
+renews expired or soon-expiring local certificates using the existing private key.
+Only the public certificate is atomically replaced; database/admin credentials and
+data are preserved. Invalid saved credentials must not trigger regeneration.
 
 Stop/restart and repeated bootstrap must preserve completed onboarding. Occupied
 ports, missing prerequisites, invalid saved state, and schema/init failures must

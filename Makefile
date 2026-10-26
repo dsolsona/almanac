@@ -57,7 +57,7 @@ verify:
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
-	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs; \
+	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
 	  if [ -n "$${TEST_FILE:-}" ]; then \
