@@ -75,3 +75,5 @@ under the [first observations plan](../plans/0019-first-observations.md).
 it precedes the management service and API/UI/CLI exposure.
 [F2-T03](F2-T03.md) implements the internal administrator proof and one-time
 agent-token issuance service before management endpoints are exposed.
+[F2-T04](F2-T04.md) extends guarded storage with safe administrative reads,
+credential revocation and agent disablement before rotation and public exposure.

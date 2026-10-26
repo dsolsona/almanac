@@ -174,8 +174,8 @@ func CreateAgent(ctx context.Context, databaseURL string, input CreateAgentInput
 			if !bytes.Equal(receipt.Digest, digest[:]) {
 				return AgentCreation{}, ErrAgentConflict
 			}
-			var saved agentReceiptResult
-			if json.Unmarshal(receipt.Result, &saved) != nil || saved.Version != 1 {
+			saved, decodeErr := decodeAgentCreationReceipt(receipt.Result)
+			if decodeErr != nil || !validAgentCreationReceipt(saved) {
 				return AgentCreation{}, errors.New("storage: invalid agent receipt")
 			}
 			if err := tx.Commit(ctx); err != nil {
@@ -231,6 +231,22 @@ func CreateAgent(ctx context.Context, databaseURL string, input CreateAgentInput
 		return AgentCreation{}, operationError(ctx, "storage: agent registration commit failed", err)
 	}
 	return created, nil
+}
+
+func validAgentCreationReceipt(saved agentReceiptResult) bool {
+	if saved.Version != 1 {
+		return false
+	}
+	agentID, ok := canonicalUUID(saved.Agent.ID)
+	if !ok || !validAgentRecord(saved.Agent, agentID.String()) || !saved.Agent.Enabled || saved.Agent.Version != 1 || !saved.Agent.CreatedAt.Equal(saved.Agent.UpdatedAt) {
+		return false
+	}
+	credentialID, ok := canonicalUUID(saved.Credential.ID)
+	if !ok || saved.Credential.AgentID != agentID.String() || !saved.Credential.IssuedAt.Equal(saved.Agent.CreatedAt) ||
+		saved.Credential.ExpiresAt.IsZero() || !saved.Credential.ExpiresAt.After(saved.Credential.IssuedAt) {
+		return false
+	}
+	return credentialID.Valid
 }
 
 func validateCreateAgentInput(input CreateAgentInput) (time.Duration, pgtype.UUID, pgtype.UUID, error) {

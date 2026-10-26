@@ -44,6 +44,8 @@ checks before Almanac adapter acceptance, without changing the product sequence.
 transactional registration with current-authority checks, audit and safe receipts.
 [F2-T03](../tasks/F2-T03.md) connects password verification and one-time token
 issuance to that transaction before exposing management operations.
+[F2-T04](../tasks/F2-T04.md) supplies safe reads, revoke and disable with current
+authority, optimistic versions and safe historical receipts. Rotation follows.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

@@ -52,6 +52,9 @@ directories you change, then the relevant specs and ADRs.
 - The implementer submits code and evidence for review; it cannot accept its own
   task, relax checks, change product contracts or start later milestones. After
   two unsuccessful correction rounds on one issue, take over or reframe the task.
+- Start a new task turn when assigning corrections to a completed implementer.
+  A message to an idle agent does not restart it. Check its state after dispatch
+  before reporting that implementation is running.
 - On a new session, read [delivery status](docs/status.md), inspect git state and
   find the active plan/task before dispatch. Do not assume prior processes,
   worktrees or verification results are still valid.
