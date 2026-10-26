@@ -60,6 +60,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return setup(ctx, args[1:], stdout, stderr)
 	case "auth":
 		return authCommand(ctx, args[1:], stdout, stderr)
+	case "agents":
+		return agentsCommand(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "almanac: unsupported command %q\n", args[0])
 		return 2
@@ -75,6 +77,13 @@ func printHelp(w io.Writer) {
   almanac auth login --profile-file=FILE --backend-url=ORIGIN --login=LOGIN --password-file=FILE [--ca-file=PEM] [--timeout=30s] [--output=json]
   almanac auth context --profile-file=FILE [--timeout=30s] [--output=json]
   almanac auth logout --profile-file=FILE [--timeout=30s] [--output=json]
+  almanac agents list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--timeout=30s] [--output=json]
+  almanac agents get --profile-file=FILE --agent-id=UUID
+  almanac agents credentials list --profile-file=FILE --agent-id=UUID [--limit=50] [--cursor=CURSOR]
+  almanac agents create --profile-file=FILE --name=NAME --display-name=NAME --current-password-file=FILE --idempotency-key=KEY (--token-file=FILE|--show-token)
+  almanac agents credentials rotate --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm (--token-file=FILE|--show-token)
+  almanac agents credentials revoke --profile-file=FILE --agent-id=UUID --credential-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
+  almanac agents disable --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
 
 Implemented component modes:
   backend  Serve protected local authentication API with PostgreSQL ownership.

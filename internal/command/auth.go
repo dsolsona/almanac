@@ -231,6 +231,8 @@ func writeAuthFailure(stdout, stderr io.Writer, jsonOut bool, operation string, 
 		exit = 2
 	case setupclient.KindAuthentication:
 		exit = 3
+	case setupclient.KindNotFound:
+		exit = 4
 	case setupclient.KindConflict:
 		exit = 5
 	case setupclient.KindCancelled:

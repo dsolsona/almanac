@@ -58,6 +58,8 @@ credential lifecycle forms follow after that first browser journey is verified.
 management API before connected-agent and datasource work.
 [F2-T10](../tasks/F2-T10.md) supplies reusable CLI authentication and protected
 profiles before agent-management command parity.
+[F2-T11](../tasks/F2-T11.md) supplies all seven agent-management CLI operations,
+protected one-time token output and real executable acceptance before connectivity.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

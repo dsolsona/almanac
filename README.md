@@ -215,6 +215,31 @@ retains the original credential for a later explicit context check. A failed sav
 or output write returns a nonzero exit even when the server accepted the action.
 Agent management CLI operations follow this shared profile boundary.
 
+Agent administration uses the same HTTPS management API and requires an
+unrestricted administrator session in the selected profile. Reads request one
+bounded page; provide the returned cursor explicitly to continue. Mutations
+require the administrator's current password in a protected file, an explicit
+idempotency key and the exact current ETag for versioned operations:
+
+```sh
+bin/almanac agents list --profile-file=/home/operator/.almanac/profile.json --output=json
+bin/almanac agents get --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
+bin/almanac agents credentials list --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
+bin/almanac agents create --profile-file=/home/operator/.almanac/profile.json --name=collector-east --display-name='East collector' \
+  --current-password-file=/run/secrets/almanac-password --idempotency-key=registration-2026-10-26 \
+  --token-file=/home/operator/.almanac/collector-east.token --output=json
+```
+
+Credential rotation, revocation and disable also require `--confirm` and an
+exact `--if-match` value returned by `agents get`. Creation and rotation require
+exactly one explicit token destination: a new protected `--token-file` or the
+deliberate `--show-token` option. A fresh token is emitted once; replay returns
+metadata only. Commands never retry a mutation after an uncertain response. A
+lost or rejected token-file write reports an unknown outcome because the issued
+secret cannot be recovered; inspect the agent and deliberately rotate if needed.
+Text mode uses JSON escaping for remote names so control characters do not alter
+terminal output. `--timeout` bounds profile-lock wait and the full API operation.
+
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
 pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:
 

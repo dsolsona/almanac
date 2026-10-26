@@ -166,6 +166,7 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	if status != 403 || !strings.Contains(string(body), `"forbidden"`) || headers.Get("X-Request-ID") == "" {
 		t.Fatalf("restricted management GET status=%d body=%s headers=%v", status, body, headers)
 	}
+	runRestrictedAgentCLI(t, binary, dir, baseURL, passwordFile, certFile)
 	status, body = callAuth("/api/v1/auth/context", `{}`, "")
 	if status != 200 || json.Unmarshal(body, &authContext) != nil {
 		t.Fatal("restricted session context failed")
@@ -184,6 +185,12 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	}
 	if headers.Get("X-Request-ID") == "" || headers.Get("Cache-Control") != "no-store" || headers.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("management response headers=%v", headers)
+	}
+	if cliAccepted := runAgentManagementCLIAcceptance(t, databaseURL, binary, dir, baseURL, certFile, permanentPassword); cliAccepted {
+		status, body, _ = managementGET()
+		if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Items) != 1 || page.Items[0].Name != "cli-agent" {
+			t.Fatal("API did not observe agent created by executable CLI")
+		}
 	}
 	malformedPath, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/agents/%2e%2e/readyz", nil)
 	if err != nil {

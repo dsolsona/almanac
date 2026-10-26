@@ -88,6 +88,43 @@ func TestSessionClientReusesLoginAcrossProcessesAndLogsOut(t *testing.T) {
 	}
 }
 
+func TestAgentContextRefreshesAndRestrictsAuthority(t *testing.T) {
+	for _, tc := range []struct {
+		name, role string
+		restricted bool
+		allow      bool
+	}{
+		{"administrator", "administrator", false, true},
+		{"restricted administrator", "administrator", true, false},
+		{"viewer", "viewer", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/auth/context" {
+					t.Errorf("unexpected path %s", r.URL.Path)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"csrf_token":"fresh-csrf","session":{"user_id":"u-1","login":"admin","role":%q,"restricted":%t}}`, tc.role, tc.restricted)
+			}))
+			defer server.Close()
+			client, err := NewSession(SessionOptions{BackendURL: server.URL, Session: testCookie, CABundle: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})})
+			if err != nil {
+				t.Fatal("construct session client failed")
+			}
+			defer client.Close()
+			ops, editor, err := client.AgentContext(t.Context())
+			if tc.allow {
+				if err != nil || ops == nil || editor == nil {
+					t.Fatalf("administrator access rejected: %v", err)
+				}
+			} else if err == nil || ops != nil || editor != nil {
+				t.Fatal("restricted or non-admin authority accepted")
+			}
+		})
+	}
+}
+
 func TestSessionClientReconcilesMalformedLoginWithoutRepeating(t *testing.T) {
 	var logins, contexts atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

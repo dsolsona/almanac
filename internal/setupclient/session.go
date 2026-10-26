@@ -42,6 +42,35 @@ func (s *SessionClient) Close() { s.client.Close() }
 // Session returns the credential only for protected persistence, never output.
 func (s *SessionClient) Session() string { return s.session }
 
+// AgentOperations is the generated agent-management surface available to an
+// authenticated administrator session. It deliberately excludes arbitrary
+// HTTP requests and the cookie jar.
+type AgentOperations interface {
+	GetAgents(context.Context, *api.GetAgentsParams, ...api.RequestEditorFn) (*http.Response, error)
+	PostAgents(context.Context, *api.PostAgentsParams, api.PostAgentsJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	GetAgent(context.Context, api.AgentId, ...api.RequestEditorFn) (*http.Response, error)
+	GetAgentCredentials(context.Context, api.AgentId, *api.GetAgentCredentialsParams, ...api.RequestEditorFn) (*http.Response, error)
+	PostAgentCredentialRotate(context.Context, api.AgentId, *api.PostAgentCredentialRotateParams, api.PostAgentCredentialRotateJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PostAgentCredentialRevoke(context.Context, api.AgentId, api.AgentId, *api.PostAgentCredentialRevokeParams, api.PostAgentCredentialRevokeJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PostAgentDisable(context.Context, api.AgentId, *api.PostAgentDisableParams, api.PostAgentDisableJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+}
+
+// AgentContext refreshes authority and CSRF state before exposing the narrow
+// generated operation set. The caller must hold the profile lock throughout.
+func (s *SessionClient) AgentContext(ctx context.Context) (AgentOperations, api.RequestEditorFn, error) {
+	auth, err := s.context(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if auth.Session == nil {
+		return nil, nil, &Failure{Kind: KindAuthentication, Code: "unauthenticated", Message: "sign in before managing agents", SessionState: "anonymous"}
+	}
+	if auth.Session.Restricted || auth.Session.Role != "administrator" {
+		return nil, nil, &Failure{Kind: KindAuthentication, Code: "forbidden", Message: "an unrestricted administrator session is required", SessionState: sessionState(auth.Session)}
+	}
+	return s.client.api, s.client.headers(auth.CsrfToken), nil
+}
+
 func (s *SessionClient) restore(value string) {
 	s.session = value
 	cookie := &http.Cookie{Name: "__Host-almanac-session", Value: value, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}

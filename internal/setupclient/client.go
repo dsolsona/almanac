@@ -36,6 +36,7 @@ const (
 	KindConflict       Kind = "conflict"
 	KindCancelled      Kind = "cancelled"
 	KindRemote         Kind = "remote"
+	KindNotFound       Kind = "not_found"
 )
 
 type Failure struct {
