@@ -17,6 +17,9 @@ Agent registration, credential rotation/revocation and disable now have UI/API/C
 coverage. [F2-T11](tasks/F2-T11.md) records verified CLI parity, protected one-time
 token output and real TLS/PostgreSQL acceptance. Connected collectors, datasource
 diagnostics and the first observation journey remain outstanding in F2.
+[F2-T12](tasks/F2-T12.md) adds current-state machine credential authentication,
+including rotation/expiry, revocation, restore epoch and database lock-order checks.
+This prerequisite does not yet expose an agent connection or execution lease.
 User management, observation storage and providers remain unimplemented;
 Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
