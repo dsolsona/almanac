@@ -111,6 +111,12 @@ UI/CLI and remote connectivity remain outstanding. An intermittent pre-existing
 restart-shutdown test failure has safe diagnostics now; its cause remains unproven,
 and it did not recur in this candidate's real-stack gate.
 
+The combined API/index revision exposed another intermittent backend shutdown
+failure in the executable management test. Safe process-exit and shutdown-cause
+booleans now preserve diagnostic evidence without raw logs. The diagnostic candidate
+passes 119 real PostgreSQL integration tests, including executable/browser journeys;
+this passing run does not establish the shutdown failure's root cause or a fix.
+
 ## Coverage
 
 | Requirement | Primary specs |
