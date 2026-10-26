@@ -56,6 +56,8 @@ preserving exact versions, one-time secret handling and explicit mutation retry.
 credential lifecycle forms follow after that first browser journey is verified.
 [F2-T09](../tasks/F2-T09.md) adds those lifecycle forms against the verified
 management API before connected-agent and datasource work.
+[F2-T10](../tasks/F2-T10.md) supplies reusable CLI authentication and protected
+profiles before agent-management command parity.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

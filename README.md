@@ -147,8 +147,8 @@ variables and flags; precedence is flags, environment, then file. Proxy CIDRs ar
 JSON array or a comma-separated environment/flag value. See the
 [runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
 This increment provides the authentication API, browser onboarding and noninteractive
-setup; secure UI proxy integration, general CLI profiles, management and metric
-ingestion follow separately.
+setup. Agent registration and credential administration are available in the
+browser; remote agent connectivity and metric ingestion follow separately.
 
 The first browser sign-in uses the deployment-provided initial password and opens
 restricted setup. Enter that current password and a different permanent password;
@@ -184,6 +184,36 @@ checks session context once when its deadline permits and never repeats the muta
 An authenticated context alone does not establish that rotation succeeded. Recover
 through a deliberate sign-in using the browser or authentication API; the new password may
 already be active. Do not automatically retry setup after an uncertain outcome.
+
+For reusable CLI authentication on Linux, choose a profile explicitly:
+
+```sh
+bin/almanac auth login --profile-file=/home/operator/.almanac/profile.json \
+  --backend-url=https://almanac.example.com --login=admin \
+  --password-file=/run/secrets/almanac-permanent-password --output=json
+bin/almanac auth context --profile-file=/home/operator/.almanac/profile.json --output=json
+bin/almanac auth logout --profile-file=/home/operator/.almanac/profile.json --output=json
+```
+
+Create the parent directory beforehand, owned by the current user and without
+group/other write permission. Profile and companion lock files must be regular0600
+files; profile names ending in `.lock` or starting with `.almanac-profile-tmp-`
+are reserved. The profile stores a session credential, exact backend origin and
+optional CA bundle. Protect it as a secret. It stores no password, cached role or
+CSRF token. Other platforms currently fail explicitly rather than weaken protection.
+
+Login accepts the same optional `--ca-file` and whole-operation `--timeout` bounds
+as setup. Existing profiles retain their origin and CA binding; select a different
+profile to change either. An active session requires explicit logout before another
+login. Context fetches the current identity, including restricted status; it does
+not grant management access to an initial account. Use `setup` for initial rotation.
+
+Each command returns one versioned JSON document with safe identity/session state
+or a stable error. An uncertain login is reconciled once and never retried; any
+recovered credential is saved while the outcome remains unknown. Uncertain logout
+retains the original credential for a later explicit context check. A failed save
+or output write returns a nonzero exit even when the server accepted the action.
+Agent management CLI operations follow this shared profile boundary.
 
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
 pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:

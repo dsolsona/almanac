@@ -12,8 +12,9 @@ Explicit PostgreSQL upgrades establish immutable schema history and installation
 metadata. Local authentication has a verified application service and protected
 HTTP handlers. Noninteractive administrator setup and browser sign-in, restricted
 password setup, signed-in identity and logout are verified in the combined runtime.
-Reusable CLI login/profiles, user management, observation storage and providers
-remain unimplemented; Google SSO is a later increment.
+Reusable CLI login/profiles are verified under [F2-T10](tasks/F2-T10.md).
+User management, observation storage and providers remain unimplemented;
+Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -142,8 +143,16 @@ tokens are verified. The final candidate passes121 real PostgreSQL integration
 tests and133 web/128 Go tests, including actual HTTPS/browser lifecycle actions
 and persisted verifier/retirement/revocation/receipt checks. Empty lifecycle dialogs
 were inspected in both themes on desktop and mobile. CLI authentication/profiles
-and agent-command parity are next; connectivity and first observations remain
-outstanding.
+and agent-command parity follow; connectivity and first observations remain
+outstanding. PR review corrections preserve throttling across navigation and consume
+revoke-dialog requests once, with135 web tests and focused coordinator verification.
+
+[F2-T10](tasks/F2-T10.md) delivers reusable CLI login/context/logout and protected
+Linux profiles. Final checks pass135 web/152 Go tests and145 race tests.
+Real-executable/database acceptance passes121 tests. An intermittent browser rotation assertion
+failed on the first integrated run and did not reproduce after adding precise
+diagnostics; no browser fix is claimed. Agent-management command parity follows
+this authentication boundary.
 
 ## Coverage
 

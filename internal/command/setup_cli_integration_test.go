@@ -152,6 +152,8 @@ func testExecutableSetupCLICompletesPersistsAndRefusesReplay(t *testing.T, compo
 		}
 	})
 	startBackend()
+	assertExecutableAuthProfile(t, binary, baseURL, initialFile, certificateFile, true)
+	assertSetupDatabaseState(t, databaseURL, true, false, 0)
 
 	runSetup := func(passwordFile, nextPasswordFile string) (int, string, string) {
 		t.Helper()
@@ -176,6 +178,8 @@ func testExecutableSetupCLICompletesPersistsAndRefusesReplay(t *testing.T, compo
 	if status != 0 || output != wantSuccess || diagnostics != "" {
 		t.Fatal("setup CLI did not return the exact safe success document")
 	}
+	assertSetupDatabaseState(t, databaseURL, false, true, 0)
+	assertExecutableAuthProfile(t, binary, baseURL, permanentFile, certificateFile, false)
 	assertSetupDatabaseState(t, databaseURL, false, true, 0)
 
 	verifyCredentials := func(password string, wantStatus int) {

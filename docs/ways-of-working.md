@@ -16,9 +16,13 @@ relevant project instructions and cited spec sections, implements only its scope
 runs required checks and submits evidence. It cannot accept its own work, change
 product contracts, relax checks, or start a later milestone on its own.
 
-The coordinator handles unresolved design, security/calculation/concurrency risks,
-and tasks needing broad context. It may implement a task directly when delegation
-would add more overhead than useful work; explain that choice briefly. Do not
+The coordinator resolves interfaces and reviews security/calculation/concurrency
+risks; Luna owns implementation and test writing for complete bounded features.
+Do not delegate only supporting pieces while the coordinator writes the main
+feature. Risk is a reason for precise constraints and review, not automatic
+coordinator implementation. Substantial coordinator coding requires explicit
+maintainer agreement. Prefer one consolidated review, repeating only for changed
+code or unresolved findings. Do not
 silently switch the requested implementer model. If unavailable, report the limitation
 and agree on a replacement. Runtime configuration must request the model explicitly;
 documenting its name does not configure the tool automatically.
@@ -77,9 +81,15 @@ without a coordinator-assigned need and explicit scope.
 6. Update task and delivery status only after that evidence exists. Keep known gaps
    explicit. Commit or publish only within the user's current authorization.
 
+When publishing stacked pull requests, set each base to the preceding branch and
+add the pull request to GitHub's native stack. Branch ancestry and a description
+link alone do not establish stack membership. Verify the returned stack identifier,
+position and size after creation or extension before reporting it as stacked.
+
 Use focused correction requests referencing observed failures and expected behavior.
-After two unsuccessful correction rounds on the same issue, the coordinator takes
-it over or splits/reframes the task. Do not burn cycles by repeating the same prompt.
+After two unsuccessful correction rounds on the same issue, the coordinator
+splits/reframes the task or asks before taking over substantial implementation.
+Do not burn cycles by repeating the same prompt.
 Escalate immediately for conflicting specs, changes to public contracts or dependencies,
 security boundaries, data loss, missing required environment, or suspected bad tests.
 Report the attempted action, evidence and smallest decision needed. Continue independent

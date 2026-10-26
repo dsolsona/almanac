@@ -40,18 +40,23 @@ directories you change, then the relevant specs and ADRs.
 ## Coordinator and implementer workflow
 
 - The primary agent coordinates: prepare bounded tasks, settle interfaces, review
-  actual diffs, integrate results and own verification. Delegate suitable ready
-  implementation tasks to `gpt-6-luna`, explicitly selecting that model. This is
+  actual diffs, integrate results and own verification. Delegate implementation
+  and test writing to `gpt-6-luna`, explicitly selecting that model. This is
   standing project guidance for delegation; no repeated permission is needed within
   the user's authorized task scope. If the model is unavailable, report it; do not
   silently substitute another model.
 - Start with one implementer in an isolated worktree. Give it a fresh task brief
   with the base revision, relevant accepted specs/ADRs, edit scope, interfaces,
   acceptance cases and required checks. Avoid forwarding unrelated chat history.
-  The coordinator may handle tiny or high-risk tasks directly when appropriate.
+  Give Luna complete bounded features, not just small supporting pieces while the
+  coordinator writes most of the feature. Security or complexity requires clearer
+  constraints and review, not automatic coordinator implementation. Substantial
+  coordinator coding requires the maintainer's explicit agreement first.
 - The implementer submits code and evidence for review; it cannot accept its own
   task, relax checks, change product contracts or start later milestones. After
-  two unsuccessful correction rounds on one issue, take over or reframe the task.
+  two unsuccessful correction rounds on one issue, reframe the task or ask before
+  taking over substantial implementation. Prefer one consolidated coordinator
+  review; repeat review only for changed code or unresolved findings.
 - Start a new task turn when assigning corrections to a completed implementer.
   A message to an idle agent does not restart it. Check its state after dispatch
   before reporting that implementation is running.

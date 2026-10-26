@@ -108,7 +108,7 @@ _ensure_web_assets:
 
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/agenthttp|./internal/storage|./internal/identity|./internal/authentication|./internal/agentmanagement|./internal/secretfile) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
+	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/cliprofile|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/agenthttp|./internal/storage|./internal/identity|./internal/authentication|./internal/agentmanagement|./internal/secretfile) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
@@ -134,11 +134,11 @@ _verify_go:
 _verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/setupclient ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected race tests: $$tests"; \
-	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/setupclient ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile
+	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile
 
 _verify_auth_bench:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \

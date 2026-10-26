@@ -87,3 +87,5 @@ administration screens and real browser acceptance.
 history screens with actual browser/backend/database acceptance.
 [F2-T09](F2-T09.md) adds rotation, revocation and disable controls with explicit
 versioned command recovery and one-time replacement-token handling.
+[F2-T10](F2-T10.md) adds reusable CLI authentication and protected profiles before
+agent-management command parity.

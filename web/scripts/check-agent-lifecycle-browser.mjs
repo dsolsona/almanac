@@ -28,11 +28,14 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
     if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith(`${agentPath}/`)) mutations.push(new URL(request.url()).pathname);
   });
   const submit = async (dialog, suffix) => {
+    setStage(`lifecycle ${suffix} password entry`);
     await dialog.getByLabel('Current password', { exact: true }).fill(fixture.permanent);
+    setStage(`lifecycle ${suffix} response wait`);
     const [response] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `${agentPath}${suffix}`),
       dialog.getByLabel('Current password', { exact: true }).press('Enter'),
     ]);
+    setStage(`lifecycle ${suffix} response status ${response.status()}`);
     assert.equal(response.status(), 200);
     return response;
   };
@@ -41,14 +44,20 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await page.getByRole('button', { name: 'Rotate credential', exact: true }).click();
   const rotation = page.getByRole('dialog', { name: 'Rotate credential', exact: true });
   await inspectEmptyDialog(rotation, 'rotation-form');
+  setStage('credential rotation overlap entry');
   await rotation.getByLabel('Overlap (seconds)', { exact: true }).fill('0');
+  setStage('credential rotation no premature mutation');
   assert.equal(mutations.length, 0);
   const rotatedResponse = await submit(rotation, '/credentials/rotate');
+  setStage('credential rotation response decoding');
   const rotated = await rotatedResponse.json();
+  setStage('credential rotation fresh issuance and target');
   assert.equal(rotated.replayed, false);
   assert.equal(rotated.agent.id, registration.agent_id);
   assert.equal(rotated.previous_credential.id, registration.credential_id);
+  setStage('credential rotation exact retirement time');
   assert.equal(rotated.previous_credential.retire_at, rotated.credential.issued_at);
+  setStage('credential rotation expected version and overlap');
   assert.equal((await rotatedResponse.request().allHeaders())['if-match'], `"agent:${registration.agent_id}:1"`);
   assert.equal(rotatedResponse.request().postDataJSON().overlap_seconds, 0);
   setStage('replacement token copy and close');
