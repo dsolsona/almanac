@@ -26,7 +26,41 @@ requirements may legitimately create additional specifications and ADRs.
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
 | ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
-| Product implementation | F1-T01–18 done; F1 incomplete | Catalogue, runtime foundation, storage, local authentication HTTP, combined runtime, noninteractive setup and browser onboarding verified; general CLI login/profiles, user management, observation storage, providers and Google SSO remain |
+| Product implementation | F1 Foundation verified; PR stack awaiting merge | F1-T01–18 deliver the foundation slice; F2 observations and later release requirements remain unimplemented |
+
+## Foundation acceptance
+
+F1 meets the bounded foundation outcomes in [SPEC-0014](specs/0014-delivery-and-verification.md)
+on browser-auth revision `c12d221`, stacked on the unmerged runtime/setup increments.
+This records verified implementation, not a merged release or full-product acceptance.
+
+| F1 outcome | Reproducible evidence |
+| --- | --- |
+| Repeatable local stack | [F1-T16](tasks/F1-T16.md): repeatable integration flow with the real combined executable, protected files, verified TLS, readiness, setup, restart persistence and cleanup. [F1-T05](tasks/F1-T05.md) separately verifies the executable schema-upgrade command. |
+| Health/readiness | [F1-T04](tasks/F1-T04.md)/[F1-T14](tasks/F1-T14.md): operational HTTP, database/schema/setup readiness, ownership and shutdown boundaries. |
+| Protected setup and local administrator login | [F1-T15](tasks/F1-T15.md)/[F1-T18](tasks/F1-T18.md): CLI and actual browser initial-password rotation, reload, logout and uncertain-response recovery against HTTPS/PostgreSQL. |
+| Design catalogue | [F1-T01](tasks/F1-T01.md)–[F1-T03](tasks/F1-T03.md), with the current 96-case theme/viewport matrix and browser authentication captures recorded below. |
+| CLI/API skeleton | Generated operational/authentication contracts, help/version, explicit database upgrade and noninteractive setup through the same authentication operations used by the browser. |
+
+The latest candidate passes `make verify` (73 web/102 Go tests, build/generated and
+production checks) and the following full integration lane (66 tests, PostgreSQL
+18.6, including three actual Chromium journeys):
+
+```sh
+make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable
+```
+
+Prerequisites are pinned tools/Chromium from `make setup` and the validated local
+fixture from `make setup SETUP_MODE=database`. The lane builds current assets and
+the executable, creates disposable databases per test, and cleans up owned
+processes/databases. Reusing installed tools and the validated PostgreSQL fixture
+keeps this repeatable without downloading dependencies or replacing the container
+on every run. Persistent deployment commands are documented in the [README](../README.md).
+
+F2 is the next slice: agent registration/token, Prometheus datasource and remote
+diagnostics, SLI collection/health and direct ingestion. Management parity, remaining
+identity administration, deployment packaging, restore and full UI qualification
+retain their later-slice requirements; Google SSO remains F7.
 
 ## Coverage
 

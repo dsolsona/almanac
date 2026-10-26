@@ -18,8 +18,8 @@ The [visual foundation plan](../plans/0001-visual-foundation.md) is complete.
 verification harness. [F1-T02](F1-T02.md) adds calendars, switches and continuous
 loading feedback; its [plan](../plans/0002-catalogue-controls.md) is also complete.
 [F1-T03](F1-T03.md) provides charts and exact tables; its review and verification
-are tracked in [delivery status](../status.md). The wider F1 milestone remains
-in progress. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
+are tracked in [delivery status](../status.md). F1 foundation is verified through
+F1-T18 in the unmerged PR stack. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
 generated operational contracts and lifecycle checks. [F1-T05](F1-T05.md) is the
 completed PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
 covers explicit schema upgrades and isolated real-database verification. Identity
