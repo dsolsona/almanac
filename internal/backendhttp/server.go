@@ -48,8 +48,8 @@ func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{pair}}, nil
 }
 
-func New(ctx context.Context, cfg config.Config, service *authentication.Service, databaseURL string, tlsConfig *tls.Config) (*Server, error) {
-	if ctx == nil || service == nil || databaseURL == "" || cfg.Components != "backend" {
+func New(ctx context.Context, cfg config.Config, service *authentication.Service, databaseURL string, tlsConfig *tls.Config, assets http.Handler) (*Server, error) {
+	if ctx == nil || service == nil || databaseURL == "" || (cfg.Components != "backend" && !cfg.BackendUI()) || (cfg.BackendUI() && assets == nil) || (cfg.Components == "backend" && assets != nil) {
 		return nil, errors.New("backendhttp: invalid configuration")
 	}
 	s := &Server{databaseURL: databaseURL}
@@ -63,6 +63,9 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.HandleFunc("GET /readyz", s.readiness)
 	for _, path := range []string{"/api/v1/auth/context", "/api/v1/auth/login", "/api/v1/auth/password", "/api/v1/auth/logout"} {
 		mux.Handle(path, auth)
+	}
+	if cfg.BackendUI() {
+		mux.Handle("/", assets)
 	}
 	var clonedTLS *tls.Config
 	if tlsConfig != nil {

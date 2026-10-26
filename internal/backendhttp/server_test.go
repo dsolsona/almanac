@@ -1,6 +1,7 @@
 package backendhttp
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
@@ -13,7 +14,46 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/authentication"
+	"github.com/dsolsona/almanac/internal/config"
 )
+
+func TestNewRejectsUnsupportedComponentsAndAssetMismatches(t *testing.T) {
+	assets := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	service := &authentication.Service{}
+	for _, tc := range []struct {
+		name       string
+		components string
+		assets     http.Handler
+	}{
+		{name: "combined missing assets", components: "backend,ui"},
+		{name: "backend unexpected assets", components: "backend", assets: assets},
+		{name: "alerts unsupported", components: "backend,ui,alerts", assets: assets},
+		{name: "unsupported pair", components: "backend,alerts", assets: assets},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.Config{Components: tc.components}
+			if server, err := New(context.Background(), cfg, service, "postgres://unused", nil, tc.assets); err == nil || server != nil {
+				t.Fatal("invalid component/asset combination was accepted")
+			}
+		})
+	}
+}
+
+func TestNewCombinedRegistersAssetFallback(t *testing.T) {
+	cfg := config.Config{Components: "ui,backend", PublicOrigin: "https://example.test"}
+	assets := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	server, err := New(context.Background(), cfg, &authentication.Service{}, "postgres://unused", nil, assets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.http.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("combined root status = %d", response.Code)
+	}
+}
 
 func TestLoadTLSConfigRequiresProtectedMatchingPair(t *testing.T) {
 	if cfg, err := LoadTLSConfig("", ""); err != nil || cfg != nil {

@@ -136,7 +136,7 @@ and product-journey acceptance remain outstanding.
   rotation, repeat refusal and restart. An inherited shutdown fixture race was
   reproduced and corrected in the backend branch without changing timeout budgets
   or acceptance assertions; the setup branch includes that correction.
-- [F1-T16](tasks/F1-T16.md) is ready: one backend-owned HTTPS listener for the
+- [F1-T16](tasks/F1-T16.md) is in progress: one backend-owned HTTPS listener for the
   existing embedded UI and authentication API, before browser onboarding screens.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.

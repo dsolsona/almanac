@@ -74,9 +74,10 @@ func printHelp(w io.Writer) {
 Implemented component modes:
   backend  Serve protected local authentication API with PostgreSQL ownership.
   ui       Serve the embedded web UI and proxy /api/v1/ to --backend-url.
+  backend,ui or ui,backend  Serve the embedded UI and authentication API on one listener.
 
 Unsupported modes:
-  alerts and combined backend/ui/alerts modes are not implemented yet and fail before listening.`)
+  alerts and other combined modes are not implemented yet and fail before listening.`)
 }
 
 func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -109,7 +110,7 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !cfg.UIOnly() {
-		if cfg.Components != "backend" {
+		if cfg.Components != "backend" && !cfg.BackendUI() {
 			fmt.Fprintf(stderr, "serve: components %q are not implemented; no listener was opened\n", cfg.Components)
 			return 2
 		}
@@ -126,6 +127,15 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (exitCode int) {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
+	var assets http.Handler
+	if cfg.BackendUI() {
+		var err error
+		assets, err = uihttp.NewAssetHandler()
+		if err != nil {
+			logger.Error("embedded UI assets unavailable")
+			return 2
+		}
+	}
 	if !authhttp.ValidPublicOrigin(cfg.PublicOrigin) {
 		fmt.Fprintln(stderr, "serve: public_origin must be a canonical HTTPS origin")
 		return 2
@@ -174,7 +184,7 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 	}
 	lifeCtx, cancelLife := context.WithCancelCause(context.Background())
 	defer cancelLife(context.Canceled)
-	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig)
+	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig, assets)
 	if err != nil {
 		logger.Error("backend server initialization failed")
 		return 2

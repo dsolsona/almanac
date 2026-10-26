@@ -92,6 +92,25 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 	}
 }
 
+func TestNewAssetHandlerServesEmbeddedRoot(t *testing.T) {
+	handler, err := NewAssetHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-cache" || !strings.Contains(response.Body.String(), "Almanac") {
+		t.Fatalf("embedded root = %d %q", response.Code, response.Body.String())
+	}
+	for _, target := range []string{"/design-system", "/missing.js", "/%2e%2e/index.html"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != http.StatusNotFound {
+			t.Errorf("%s returned %d", target, response.Code)
+		}
+	}
+}
+
 func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 	got := make(chan *http.Request, 1)
 	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

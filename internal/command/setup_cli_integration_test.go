@@ -28,6 +28,14 @@ import (
 )
 
 func TestIntegrationExecutableSetupCLICompletesPersistsAndRefusesReplay(t *testing.T) {
+	testExecutableSetupCLICompletesPersistsAndRefusesReplay(t, "backend")
+}
+
+func TestIntegrationExecutableCombinedSetupCLICompletesPersistsAndRefusesReplay(t *testing.T) {
+	testExecutableSetupCLICompletesPersistsAndRefusesReplay(t, "ui,backend")
+}
+
+func testExecutableSetupCLICompletesPersistsAndRefusesReplay(t *testing.T, components string) {
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")
@@ -86,7 +94,7 @@ func TestIntegrationExecutableSetupCLICompletesPersistsAndRefusesReplay(t *testi
 	if err != nil {
 		t.Fatal("resolve built executable path failed")
 	}
-	serveArgs := []string{"serve", "--components=backend", "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=owner", "--initial-admin-password-file=" + initialFile, "--public-origin=" + publicOrigin, "--tls-cert-file=" + certificateFile, "--tls-key-file=" + keyFile, "--shutdown-timeout=5s"}
+	serveArgs := []string{"serve", "--components=" + components, "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=owner", "--initial-admin-password-file=" + initialFile, "--public-origin=" + publicOrigin, "--tls-cert-file=" + certificateFile, "--tls-key-file=" + keyFile, "--shutdown-timeout=5s"}
 	var process *exec.Cmd
 	var processDone chan struct{}
 	var processErr error

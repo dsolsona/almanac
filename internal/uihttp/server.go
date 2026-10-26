@@ -5,22 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json/v2"
-	"io"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/config"
-	webassets "github.com/dsolsona/almanac/web"
 )
 
 var ErrServerClosed = http.ErrServerClosed
@@ -32,8 +27,6 @@ type Server struct {
 	client  *http.Client
 }
 
-var fingerprintedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.`)
-
 func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -42,7 +35,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	assets, err := webassets.Assets()
+	assets, err := NewAssetHandler()
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +51,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 	mux := http.NewServeMux()
 	api.HandlerFromMux(healthHandler{server: s}, mux)
 	mux.Handle("/api/v1/", s.proxy())
-	mux.Handle("/", staticHandler(assets))
+	mux.Handle("/", assets)
 	s.http = &http.Server{Handler: guardPaths(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	return s, nil
 }
@@ -225,39 +218,4 @@ func hasDotSegment(value string) bool {
 		}
 	}
 	return false
-}
-
-func staticHandler(assets fs.FS) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-		if name == "." || name == "" {
-			name = "index.html"
-		}
-		file, err := assets.Open(name)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer file.Close()
-		info, err := file.Stat()
-		if err != nil || info.IsDir() {
-			http.NotFound(w, r)
-			return
-		}
-		if name == "index.html" {
-			w.Header().Set("Cache-Control", "no-cache")
-		} else if fingerprintedAsset.MatchString(path.Base(name)) {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		}
-		reader, ok := file.(io.ReadSeeker)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeContent(w, r, name, info.ModTime(), reader)
-	})
 }

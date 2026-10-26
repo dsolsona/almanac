@@ -218,7 +218,7 @@ func (c Config) Validate() error {
 	if c.ShutdownTimeout <= 0 || c.ShutdownTimeout > 2*time.Minute {
 		return errors.New("config: shutdown_timeout must be positive and at most 2m")
 	}
-	if c.Components == "backend" {
+	if c.Components == "backend" || c.BackendUI() {
 		if strings.TrimSpace(c.DatabaseURLFile) == "" {
 			return errors.New("config: database_url_file is required for backend")
 		}
@@ -232,7 +232,7 @@ func (c Config) Validate() error {
 			return errors.New("config: trusted_proxy_cidrs are required when TLS terminates at a proxy")
 		}
 	}
-	if c.Components != "backend" && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0) {
+	if c.Components != "backend" && !c.BackendUI() && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0) {
 		return errors.New("config: backend-only fields require components=backend")
 	}
 	if c.Components == "ui" {
@@ -274,3 +274,5 @@ func (c *Config) setTrustedProxyList(value string) error {
 }
 
 func (c Config) UIOnly() bool { return c.Components == "ui" }
+
+func (c Config) BackendUI() bool { return c.Components == "backend,ui" || c.Components == "ui,backend" }

@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+	"io/fs"
 	"math/big"
 	"net"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -31,9 +33,18 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage"
 	"github.com/dsolsona/almanac/internal/testpostgres"
+	webassets "github.com/dsolsona/almanac/web"
 )
 
 func TestIntegrationExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T) {
+	testExecutableBackendTLSOwnerLifecycleAndRotation(t, "backend")
+}
+
+func TestIntegrationExecutableCombinedBackendUITLSOwnerLifecycleAndRotation(t *testing.T) {
+	testExecutableBackendTLSOwnerLifecycleAndRotation(t, "backend,ui")
+}
+
+func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components string) {
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")
@@ -82,7 +93,7 @@ func TestIntegrationExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T) 
 	if err != nil {
 		t.Fatal("resolve built executable path failed")
 	}
-	args := []string{"serve", "--components=backend", "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=owner", "--initial-admin-password-file=" + passwordFile, "--public-origin=" + publicOrigin, "--tls-cert-file=" + certFile, "--tls-key-file=" + keyFile, "--shutdown-timeout=5s"}
+	args := []string{"serve", "--components=" + components, "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=owner", "--initial-admin-password-file=" + passwordFile, "--public-origin=" + publicOrigin, "--tls-cert-file=" + certFile, "--tls-key-file=" + keyFile, "--shutdown-timeout=5s"}
 	cmd := exec.Command(binary, args...)
 	cmd.Env = append(os.Environ(), "ALMANAC_TEST_DATABASE_URL=")
 	stderr, stdout := newRuntimeLog(), &strings.Builder{}
@@ -122,6 +133,86 @@ func TestIntegrationExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T) 
 		_ = cmd.Process.Kill()
 		<-wait
 		t.Fatal("backend liveness did not become available")
+	}
+	if strings.Contains(components, "ui") {
+		assets, err := webassets.Assets()
+		if err != nil {
+			t.Fatal("load expected embedded UI assets failed")
+		}
+		response, err := client.Get(baseURL + "/")
+		if err != nil {
+			t.Fatal("read combined embedded UI failed")
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		index, indexErr := fs.ReadFile(assets, "index.html")
+		if readErr != nil || indexErr != nil || response.StatusCode != http.StatusOK || !strings.Contains(response.Header.Get("Content-Type"), "text/html") || !slices.Equal(body, index) || response.Header.Get("Cache-Control") != "no-cache" {
+			t.Fatal("combined runtime did not serve the embedded UI root")
+		}
+		assetURLs := make([]string, 0, 6)
+		foundJS, foundCSS := false, false
+		for _, match := range regexp.MustCompile(`(?:src|href)="([^"]+\.(?:js|css))"`).FindAllStringSubmatch(string(body), -1) {
+			assetURLs = append(assetURLs, match[1])
+			foundJS = foundJS || strings.HasSuffix(match[1], ".js")
+			foundCSS = foundCSS || strings.HasSuffix(match[1], ".css")
+		}
+		if !foundJS || !foundCSS {
+			t.Fatal("combined root did not reference both JavaScript and CSS assets")
+		}
+		assetURLs = append(assetURLs, "/fonts/Bevan-Regular.ttf", "/fonts/Bevan-OFL.txt", "/licenses/echarts/LICENSE")
+		for _, asset := range assetURLs {
+			response, err := client.Get(baseURL + asset)
+			if err != nil {
+				t.Fatalf("read combined asset %s failed", asset)
+			}
+			assetBody, readErr := io.ReadAll(response.Body)
+			response.Body.Close()
+			expected, expectedErr := fs.ReadFile(assets, strings.TrimPrefix(asset, "/"))
+			wantCache := ""
+			if strings.HasPrefix(asset, "/assets/") {
+				wantCache = "public, max-age=31536000, immutable"
+			}
+			contentType := response.Header.Get("Content-Type")
+			if readErr != nil || expectedErr != nil || response.StatusCode != http.StatusOK || !slices.Equal(assetBody, expected) || contentType == "" || response.Header.Get("Cache-Control") != wantCache {
+				t.Fatalf("combined asset %s was unavailable", asset)
+			}
+			head, err := client.Head(baseURL + asset)
+			if err != nil {
+				t.Fatalf("HEAD combined asset %s failed", asset)
+			}
+			headBody, headReadErr := io.ReadAll(head.Body)
+			head.Body.Close()
+			if headReadErr != nil || head.StatusCode != http.StatusOK || len(headBody) != 0 || head.Header.Get("Content-Type") != contentType || head.Header.Get("Cache-Control") != wantCache {
+				t.Fatalf("HEAD combined asset %s returned wrong body or headers", asset)
+			}
+		}
+		for _, target := range []string{"/design-system", "/missing.js", "/api/v1/unknown", "/api/v1/%2e%2e/readyz"} {
+			response, err := client.Get(baseURL + target)
+			if err != nil {
+				t.Fatalf("request combined path %s failed", target)
+			}
+			response.Body.Close()
+			if response.StatusCode != http.StatusNotFound {
+				t.Errorf("combined path %s returned %d", target, response.StatusCode)
+			}
+		}
+		post, err := client.Post(baseURL+"/", "text/plain", strings.NewReader("blocked"))
+		if err != nil {
+			t.Fatal("post combined asset root failed")
+		}
+		post.Body.Close()
+		if post.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("POST combined root returned %d", post.StatusCode)
+		}
+		head, err := client.Head(baseURL + "/")
+		if err != nil {
+			t.Fatal("HEAD combined root failed")
+		}
+		indexHeadBody, headReadErr := io.ReadAll(head.Body)
+		head.Body.Close()
+		if headReadErr != nil || head.StatusCode != http.StatusOK || len(indexHeadBody) != 0 || !strings.Contains(head.Header.Get("Content-Type"), "text/html") || head.Header.Get("Cache-Control") != "no-cache" {
+			t.Fatal("HEAD combined root returned wrong body or cache header")
+		}
 	}
 	response, err := client.Get(baseURL + "/readyz")
 	if err != nil {

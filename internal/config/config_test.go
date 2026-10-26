@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,6 +92,39 @@ func TestValidateComponentsAndBackendOrigin(t *testing.T) {
 	cfg.BackendURL = "https://backend.example:65535"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("maximum valid port rejected: %v", err)
+	}
+}
+
+func TestBackendUIConfiguration(t *testing.T) {
+	for _, components := range []string{"backend,ui", "ui,backend"} {
+		t.Run(components, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Components = components
+			cfg.DatabaseURLFile = "/db"
+			cfg.PublicOrigin = "https://example.test"
+			cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+			if err := cfg.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			if !cfg.BackendUI() {
+				t.Fatal("combined mode not recognized")
+			}
+		})
+	}
+	for _, mutate := range []func(*Config){
+		func(cfg *Config) { cfg.DatabaseURLFile = "" },
+		func(cfg *Config) { cfg.PublicOrigin = "" },
+		func(cfg *Config) { cfg.TrustedProxyCIDRs = nil },
+	} {
+		cfg := Defaults()
+		cfg.Components = "backend,ui"
+		cfg.DatabaseURLFile = "/db"
+		cfg.PublicOrigin = "https://example.test"
+		cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+		mutate(&cfg)
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("invalid combined security/database configuration accepted")
+		}
 	}
 }
 
