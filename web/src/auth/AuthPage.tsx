@@ -266,7 +266,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
 
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="masthead"><a href="/" className="wordmark">ALMANAC</a><ThemeToggle /></header>
+    <header className="masthead"><p className="wordmark">ALMANAC</p><ThemeToggle /></header>
     <main id="main" className="auth-page">
       <h1 ref={heading} tabIndex={-1}>{title}</h1>
       {notice && <div ref={noticeRef} className={`auth-notice auth-notice--${notice.kind}`} role={notice.kind === 'success' ? 'status' : 'alert'} tabIndex={-1}>{notice.text}</div>}
@@ -286,7 +286,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
         </form>
       </Panel>}
       {!checking && !unavailable && context?.session?.restricted && <Panel heading="Choose a permanent password" className="auth-panel">
-        <p>Use a different password with 15–128 Unicode code points. Passwords are never trimmed.</p>
+        <p>Choose a different password with 15–128 characters. Spaces are welcome.</p>
         <form noValidate onSubmit={(event) => void submitPassword(event)}>
           <TextField id="current-password" label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} error={errors.currentPassword} disabled={pending} />
           <TextField id="new-password" label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} error={errors.newPassword} disabled={pending} />

@@ -64,8 +64,8 @@ function validContext(value: unknown): value is AuthContext {
     && typeof value.session.restricted === 'boolean';
 }
 
-async function readBody(response: Response, signal: AbortSignal): Promise<unknown> {
-  if (!response.body) throw new Error('invalid body');
+async function readBytes(response: Response, signal: AbortSignal, maxBytes = MAX_BODY_BYTES): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -88,11 +88,12 @@ async function readBody(response: Response, signal: AbortSignal): Promise<unknow
       if (signal.aborted) throw new Error('operation aborted');
       pendingRead = reader.read();
       const result = await Promise.race([pendingRead, aborted]);
+      if (signal.aborted) throw new Error('operation aborted');
       pendingRead = null;
       if (result.done) { complete = true; break; }
       const value = result.value;
       size += value.byteLength;
-      if (size > MAX_BODY_BYTES) { cancel(); throw new Error('oversized body'); }
+      if (size > maxBytes) { cancel(); throw new Error('oversized body'); }
       chunks.push(value);
     }
   } finally {
@@ -105,6 +106,12 @@ async function readBody(response: Response, signal: AbortSignal): Promise<unknow
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  return bytes;
+}
+
+async function readBody(response: Response, signal: AbortSignal): Promise<unknown> {
+  if (!response.body) throw new Error('invalid body');
+  const bytes = await readBytes(response, signal);
   return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
 }
 
@@ -226,8 +233,13 @@ export function createAuthClient(fetcher: typeof fetch = fetch) {
       return withBudget(options.signal, async (budget) => {
         try {
           const response = await post(fetcher, 'logout', {}, context.csrf_token, budget);
-          if (response.status === 204 && response.body === null) return;
-          discardBody(response);
+          if (response.status !== 204) {
+            discardBody(response);
+            throw unavailable('logout_unconfirmed');
+          }
+          if (response.body === null) return;
+          const body = await readBytes(response, budget.signal, 0);
+          if (body.byteLength === 0) return;
           throw unavailable('logout_unconfirmed');
         } catch {
           throw new AuthFailure('unavailable', 'logout_unconfirmed', 'Sign-out could not be confirmed.');

@@ -236,10 +236,52 @@ describe('browser authentication client', () => {
     const unexpected = vi.fn<typeof fetch>().mockResolvedValue(new Response('body', { status: 200 }));
     await expect(createAuthClient(unexpected).logout(signedIn)).rejects.toMatchObject({ kind: 'unavailable' });
     const bodylessViolation = {
-      status: 204, body: new ReadableStream<Uint8Array>(),
+      status: 204, body: new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new Uint8Array([1])); },
+      }),
     } as Response;
     await expect(createAuthClient(vi.fn<typeof fetch>().mockResolvedValue(bodylessViolation)).logout(signedIn))
       .rejects.toMatchObject({ kind: 'unavailable' });
+  });
+
+  it('accepts a streamed empty 204 logout body', async () => {
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+    const response = { status: 204, body } as Response;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
+    await expect(createAuthClient(fetcher).logout(signedIn)).resolves.toBeUndefined();
+  });
+
+  it('reads and rejects a nonempty 204 logout body, cancelling the stream', async () => {
+    const pull = vi.fn();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array([1])); },
+      pull,
+      cancel,
+    });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue({ status: 204, body } as Response);
+    await expect(createAuthClient(fetcher).logout(signedIn)).rejects.toMatchObject({ kind: 'unavailable' });
+    expect(pull).toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a stalled 204 logout body within its operation deadline and cancels it', async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      pull() { return new Promise<void>(() => undefined); },
+      cancel,
+    });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue({ status: 204, body } as Response);
+    const pending = createAuthClient(fetcher).logout(signedIn);
+    let settled = false;
+    void pending.then(() => { settled = true; }, () => { settled = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    const assertion = expect(pending).rejects.toMatchObject({ kind: 'unavailable' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await assertion;
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('bounds pending fetches by the operation deadline', async () => {
@@ -337,9 +379,17 @@ describe('browser authentication client', () => {
     const add = vi.spyOn(controller.signal, 'addEventListener');
     const remove = vi.spyOn(controller.signal, 'removeEventListener');
     const cancelled = vi.fn();
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(pendingBody(cancelled));
+    let markReadStarted!: () => void;
+    const readStarted = new Promise<void>((resolve) => { markReadStarted = resolve; });
+    const body = new ReadableStream<Uint8Array>({
+      pull() { markReadStarted(); return new Promise<void>(() => undefined); },
+      cancel: cancelled,
+    }, { highWaterMark: 0 });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
     const pending = createAuthClient(fetcher).login({ login: 'owner', password: 'secret' }, context, { signal: controller.signal });
-    await Promise.resolve();
+    await readStarted;
     controller.abort();
     await expect(pending).rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
     expect(cancelled).toHaveBeenCalledOnce();

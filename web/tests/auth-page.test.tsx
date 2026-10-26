@@ -38,6 +38,8 @@ describe('authentication page', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main');
+    expect(screen.getByRole('banner').querySelector('.wordmark')?.tagName).toBe('P');
+    expect(screen.getByRole('banner').querySelector('.wordmark')).not.toHaveAttribute('href');
     expect(screen.getByRole('textbox', { name: 'Login' })).toBeVisible();
     expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'current-password');
   });
@@ -61,6 +63,7 @@ describe('authentication page', () => {
     expect(screen.getByLabelText('Current password')).toHaveAttribute('autocomplete', 'current-password');
     expect(screen.getByLabelText('New password')).toHaveAttribute('autocomplete', 'new-password');
     expect(screen.getByLabelText('Confirm new password')).toHaveAttribute('autocomplete', 'new-password');
+    expect(screen.getByText('Choose a different password with 15–128 characters. Spaces are welcome.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
 

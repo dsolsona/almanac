@@ -74,8 +74,9 @@ async function inspectLayouts(label) {
         await page.getByRole('button', { name: `Switch to ${theme} theme` }).click();
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      assert.equal(await page.locator('input').evaluateAll((inputs) => inputs.every((input) => input.value === '')), true);
       await page.screenshot({ path: join(fixture.artifacts, `${label}-${width}-${theme}.png`),
-        fullPage: true, mask: [page.locator('input[type="password"]')] });
+        fullPage: true, animations: 'disabled' });
     }
   }
 }
