@@ -111,11 +111,12 @@ UI boundaries, not around every backend edit.
 - [x] Establish isolated branch/worktree `feat/f2-agents` / `.worktrees/f2-agents`.
 - [x] Complete code-to-contract readiness audit.
 - [x] Define first bounded task interfaces and management acceptance cases.
-- [ ] Deliver and verify registration through UI/API/CLI.
+- [x] Deliver and verify registration through UI/API/CLI.
 - [ ] Deliver and verify connected-agent status.
 - [ ] Deliver and verify datasource diagnostics.
 - [ ] Deliver and verify collected and directly ingested observations.
 
 F2-T01–T06 establish verified provider fixtures and authenticated management API.
-Browser/CLI management and the complete observation journey remain outstanding;
-individual task records carry their verification evidence.
+F2-T07–T11 complete browser and CLI management. Connected-agent status, datasource
+diagnostics and the complete observation journey remain outstanding; individual
+task records carry their verification evidence.

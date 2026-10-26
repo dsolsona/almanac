@@ -14,11 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	ErrTokenCancelled       = errors.New("token output cancelled")
-	ErrTokenCommitUncertain = errors.New("token output commit could not be confirmed")
-)
-
 type tokenFileOps struct {
 	write   func(int, []byte) (int, error)
 	sync    func(int) error

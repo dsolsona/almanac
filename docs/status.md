@@ -13,6 +13,10 @@ metadata. Local authentication has a verified application service and protected
 HTTP handlers. Noninteractive administrator setup and browser sign-in, restricted
 password setup, signed-in identity and logout are verified in the combined runtime.
 Reusable CLI login/profiles are verified under [F2-T10](tasks/F2-T10.md).
+Agent registration, credential rotation/revocation and disable now have UI/API/CLI
+coverage. [F2-T11](tasks/F2-T11.md) records verified CLI parity, protected one-time
+token output and real TLS/PostgreSQL acceptance. Connected collectors, datasource
+diagnostics and the first observation journey remain outstanding in F2.
 User management, observation storage and providers remain unimplemented;
 Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
