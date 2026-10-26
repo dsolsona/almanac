@@ -12,8 +12,14 @@
 Provide a convenient combined server and independently runnable components without
 requiring distributed deployment for local use. UI-only serving and version/help
 exist through [F1-T04](../tasks/F1-T04.md); explicit database upgrades exist through
-[F1-T05](../tasks/F1-T05.md). Other commands and component modes in the table
-remain unimplemented; unsupported server modes fail before listening.
+[F1-T05](../tasks/F1-T05.md). [F1-T14](../tasks/F1-T14.md) adds backend-only local
+authentication, protected provisioning, health and single-owner lifecycle.
+[F1-T15](../tasks/F1-T15.md) adds noninteractive setup over the HTTPS API.
+[F1-T16](../tasks/F1-T16.md) adds the explicit backend/UI pair on the same listener.
+The
+backend's management, ingestion and agent workloads in the table remain future
+work, as do combined alerts and other commands. Unsupported server modes
+fail before listening.
 
 | Command | Starts | Credentials |
 | --- | --- | --- |
@@ -145,5 +151,7 @@ patches through ordinary tested dependency updates; do not require a new ADR per
 - **REVIEW-R02:** Backend horizontal replication is deferred, not implied by component
   flags. Confirm one active backend is acceptable for the first release.
 - UI-only embedded serving, proxy/outage handling and bounded shutdown have real
-  HTTP/process checks. Combined/separate backend/alert parity, containers, restore
-  and scalability remain unverified and unimplemented.
+  HTTP/process checks. The combined backend/UI pair has real TLS, setup CLI,
+  PostgreSQL and lifecycle coverage under F1-T16. Secure UI-only authentication,
+  combined/separate alert parity, containers, restore and scalability remain
+  unverified and unimplemented.

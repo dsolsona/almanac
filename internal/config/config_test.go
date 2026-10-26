@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,5 +92,95 @@ func TestValidateComponentsAndBackendOrigin(t *testing.T) {
 	cfg.BackendURL = "https://backend.example:65535"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("maximum valid port rejected: %v", err)
+	}
+}
+
+func TestBackendUIConfiguration(t *testing.T) {
+	for _, components := range []string{"backend,ui", "ui,backend"} {
+		t.Run(components, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Components = components
+			cfg.DatabaseURLFile = "/db"
+			cfg.PublicOrigin = "https://example.test"
+			cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+			if err := cfg.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			if !cfg.BackendUI() {
+				t.Fatal("combined mode not recognized")
+			}
+		})
+	}
+	for _, mutate := range []func(*Config){
+		func(cfg *Config) { cfg.DatabaseURLFile = "" },
+		func(cfg *Config) { cfg.PublicOrigin = "" },
+		func(cfg *Config) { cfg.TrustedProxyCIDRs = nil },
+	} {
+		cfg := Defaults()
+		cfg.Components = "backend,ui"
+		cfg.DatabaseURLFile = "/db"
+		cfg.PublicOrigin = "https://example.test"
+		cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+		mutate(&cfg)
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("invalid combined security/database configuration accepted")
+		}
+	}
+}
+
+func TestBackendConfigurationPrecedenceAndProxyParsing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "backend.json")
+	body := `{"components":"backend","database_url_file":"/file/db","initial_admin_login":"file-owner","initial_admin_password_file":"/file/password","public_origin":"https://example.test","tls_cert_file":"/file/cert","tls_key_file":"/file/key","trusted_proxy_cidrs":["10.0.0.0/24"]}`
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	environ := []string{"ALMANAC_DATABASE_URL_FILE=/env/db", "ALMANAC_INITIAL_ADMIN_LOGIN=env-owner", "ALMANAC_INITIAL_ADMIN_PASSWORD_FILE=/env/password", "ALMANAC_PUBLIC_ORIGIN=https://env.example.test", "ALMANAC_TLS_CERT_FILE=/env/cert", "ALMANAC_TLS_KEY_FILE=/env/key", "ALMANAC_TRUSTED_PROXY_CIDRS=192.0.2.0/24"}
+	explicit := map[string]string{"database-url-file": "/flag/db", "initial-admin-login": "flag-owner", "initial-admin-password-file": "/flag/password", "public-origin": "https://flag.example.test", "tls-cert-file": "/flag/cert", "tls-key-file": "/flag/key", "trusted-proxy-cidrs": "198.51.100.0/24"}
+	cfg, err := Load(path, environ, explicit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DatabaseURLFile != "/flag/db" || cfg.InitialAdminLogin != "flag-owner" || cfg.InitialAdminPasswordFile != "/flag/password" || cfg.PublicOrigin != "https://flag.example.test" || cfg.TLSCertFile != "/flag/cert" || cfg.TLSKeyFile != "/flag/key" || len(cfg.TrustedProxyCIDRs) != 1 || cfg.TrustedProxyCIDRs[0].String() != "198.51.100.0/24" {
+		t.Fatalf("unexpected config: %+v", cfg)
+	}
+}
+
+func TestBackendJSONFieldsRejectWrongTypes(t *testing.T) {
+	for _, field := range []string{"database_url_file", "initial_admin_login", "initial_admin_password_file", "public_origin", "tls_cert_file", "tls_key_file", "trusted_proxy_cidrs"} {
+		t.Run(field, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			value := `[]`
+			if field == "trusted_proxy_cidrs" {
+				value = `{}`
+			}
+			body := `{"` + field + `":` + value + `}`
+			if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path, nil, nil); err == nil {
+				t.Fatal("wrong JSON field type was accepted")
+			}
+		})
+	}
+}
+
+func TestBackendConfigurationRejectsInvalidAndIncompatibleFields(t *testing.T) {
+	cases := []struct {
+		name     string
+		environ  []string
+		explicit map[string]string
+	}{
+		{"empty proxy", []string{"ALMANAC_COMPONENTS=backend", "ALMANAC_DATABASE_URL_FILE=/db", "ALMANAC_PUBLIC_ORIGIN=https://example.test", "ALMANAC_TLS_CERT_FILE=/cert", "ALMANAC_TLS_KEY_FILE=/key", "ALMANAC_TRUSTED_PROXY_CIDRS="}, nil},
+		{"invalid proxy", []string{"ALMANAC_COMPONENTS=backend", "ALMANAC_DATABASE_URL_FILE=/db", "ALMANAC_PUBLIC_ORIGIN=https://example.test", "ALMANAC_TLS_CERT_FILE=/cert", "ALMANAC_TLS_KEY_FILE=/key", "ALMANAC_TRUSTED_PROXY_CIDRS=bogus"}, nil},
+		{"missing trust", []string{"ALMANAC_COMPONENTS=backend", "ALMANAC_DATABASE_URL_FILE=/db", "ALMANAC_PUBLIC_ORIGIN=https://example.test"}, nil},
+		{"partial tls", []string{"ALMANAC_COMPONENTS=backend", "ALMANAC_DATABASE_URL_FILE=/db", "ALMANAC_PUBLIC_ORIGIN=https://example.test", "ALMANAC_TLS_CERT_FILE=/cert", "ALMANAC_TRUSTED_PROXY_CIDRS=10.0.0.0/8"}, nil},
+		{"ui backend secret", nil, map[string]string{"database-url-file": "/secret"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Load("", tc.environ, tc.explicit); err == nil {
+				t.Fatal("expected configuration rejection")
+			}
+		})
 	}
 }

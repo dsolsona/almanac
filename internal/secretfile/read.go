@@ -28,3 +28,25 @@ func Read(path string, maxBytes int64) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// ReadCertificate reads a public certificate chain from a regular file. It uses
+// the same opened-target and nonblocking checks as Read, but permits public modes.
+func ReadCertificate(path string) ([]byte, error) {
+	if path == "" {
+		return nil, ErrInvalid
+	}
+	file, err := open(path)
+	if err != nil {
+		return nil, ErrInvalid
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, ErrInvalid
+	}
+	data, err := io.ReadAll(io.LimitReader(file, (64<<10)+1))
+	if err != nil || len(data) > (64<<10) {
+		return nil, ErrInvalid
+	}
+	return data, nil
+}

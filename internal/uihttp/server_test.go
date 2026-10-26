@@ -92,6 +92,25 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 	}
 }
 
+func TestNewAssetHandlerServesEmbeddedRoot(t *testing.T) {
+	handler, err := NewAssetHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-cache" || !strings.Contains(response.Body.String(), "Almanac") {
+		t.Fatalf("embedded root = %d %q", response.Code, response.Body.String())
+	}
+	for _, target := range []string{"/design-system", "/missing.js", "/%2e%2e/index.html"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != http.StatusNotFound {
+			t.Errorf("%s returned %d", target, response.Code)
+		}
+	}
+}
+
 func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 	got := make(chan *http.Request, 1)
 	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -142,6 +161,37 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("TRACE status = %d", resp.StatusCode)
+	}
+}
+
+func TestGeneratedAuthenticationOperationsDelegateToFixedBackendProxy(t *testing.T) {
+	got := make(chan *http.Request, 4)
+	backend := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.Clone(context.Background())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server := testServer(t, backend.URL)
+	frontend := newTestServer(t, server.http.Handler)
+	for _, path := range []string{"context", "login", "password", "logout"} {
+		t.Run(path, func(t *testing.T) {
+			request, err := http.NewRequest(http.MethodPost, frontend.URL+"/api/v1/auth/"+path, strings.NewReader(`{}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("X-Forwarded-For", "198.51.100.9")
+			response, err := testHTTPClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			if response.StatusCode != http.StatusNoContent {
+				t.Fatalf("proxy status=%d", response.StatusCode)
+			}
+			forwarded := awaitValue(t, got, "delegated auth request")
+			if forwarded.URL.Path != "/api/v1/auth/"+path || forwarded.Header.Get("X-Forwarded-For") != "" {
+				t.Fatalf("forwarded auth request path=%q headers=%v", forwarded.URL.Path, forwarded.Header)
+			}
+		})
 	}
 }
 

@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+    "/api/v1/auth/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the current authentication context
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         */
+        post: operations["postAuthContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a local session
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         */
+        post: operations["postAuthLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the current password
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         */
+        post: operations["postAuthPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke the current session
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         */
+        post: operations["postAuthLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/livez": {
         parameters: {
             query?: never;
@@ -42,11 +122,43 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        EmptyAuthRequest: Record<string, never>;
+        LoginRequest: {
+            login: string;
+            /** Format: password */
+            password: string;
+        };
+        PasswordRequest: {
+            /** Format: password */
+            current_password: string;
+            /** Format: password */
+            new_password: string;
+        };
+        SafeIdentity: {
+            user_id: string;
+            login: string;
+            role: string;
+            restricted: boolean;
+        };
+        AuthResponse: {
+            csrf_token: string;
+            session: components["schemas"]["SafeIdentity"] | null;
+        };
+        Problem: {
+            code: string;
+            message: string;
+            request_id: string;
+            field_errors: {
+                field: string;
+                code: string;
+                message: string;
+            }[];
+        };
         HealthResponse: {
             /** @enum {string} */
             status: "ok" | "unavailable";
             /** @enum {string} */
-            component: "ui";
+            component: "ui" | "backend";
         };
         /**
          * @example {
@@ -69,7 +181,38 @@ export interface components {
             message: string;
         };
     };
-    responses: never;
+    responses: {
+        /** @description Authentication proof throttled */
+        AuthenticationRateLimited: {
+            headers: {
+                /** @description Positive wait time in seconds, rounded up to the next whole second. */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Authentication request rejected or unavailable */
+        AuthenticationProblem: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Only POST is supported */
+        AuthenticationMethodNotAllowed: {
+            headers: {
+                Allow?: "POST";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Problem"];
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -77,6 +220,290 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    postAuthContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Authentication context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            400: components["responses"]["AuthenticationProblem"];
+            /** @description Request rejected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["AuthenticationMethodNotAllowed"];
+            408: components["responses"]["AuthenticationProblem"];
+            413: components["responses"]["AuthenticationProblem"];
+            415: components["responses"]["AuthenticationProblem"];
+            /** @description Authentication idempotency is unsupported */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAuthLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Session created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication failed */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["AuthenticationMethodNotAllowed"];
+            408: components["responses"]["AuthenticationProblem"];
+            /** @description Session already present */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            413: components["responses"]["AuthenticationProblem"];
+            415: components["responses"]["AuthenticationProblem"];
+            429: components["responses"]["AuthenticationRateLimited"];
+            /** @description Authentication idempotency is unsupported */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAuthPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["AuthenticationMethodNotAllowed"];
+            408: components["responses"]["AuthenticationProblem"];
+            413: components["responses"]["AuthenticationProblem"];
+            415: components["responses"]["AuthenticationProblem"];
+            /** @description Password rejected */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["AuthenticationRateLimited"];
+            /** @description Authentication idempotency is unsupported */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAuthLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Session cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["AuthenticationMethodNotAllowed"];
+            408: components["responses"]["AuthenticationProblem"];
+            413: components["responses"]["AuthenticationProblem"];
+            415: components["responses"]["AuthenticationProblem"];
+            /** @description Authentication idempotency is unsupported */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getLiveness: {
         parameters: {
             query?: never;

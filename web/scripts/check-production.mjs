@@ -23,7 +23,7 @@ const bundles = (await Promise.all(assets.map((path) => readFile(path, 'utf8')))
 for (const marker of ['/design-system', 'Clear signals.', 'LOCAL COMPONENT CATALOGUE', 'catalogue/Catalogue', 'catalogue.css', 'Example input', 'No SLOs are available']) {
   assert.equal(bundles.includes(marker), false, `catalogue content leaked into production output: ${marker}`);
 }
-assert.match(bundles, /Almanac is being built/, 'production root shell should remain available');
+assert.match(bundles, /Unable to check your session/, 'production root should show the unavailable state without an API');
 assert.ok(allFiles.some((path) => path.endsWith('/fonts/Bevan-Regular.ttf')), 'production heading font is required');
 assert.ok(allFiles.some((path) => path.endsWith('/fonts/Bevan-OFL.txt')), 'production font license is required');
 
@@ -32,7 +32,8 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
   await page.goto('http://127.0.0.1:5199/');
-  await expect(page.getByRole('heading', { name: 'Almanac is being built.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
   await expect(page.getByText(/Clear signals/)).toHaveCount(0);
 
   for (const path of ['/unrecognized-path', '/design-system', '/design-system?catalogue=true']) {
@@ -41,7 +42,7 @@ try {
     await expect(page.getByText(/Clear signals/)).toHaveCount(0);
   }
   await page.goto('http://127.0.0.1:5199/?catalogue=true');
-  await expect(page.getByRole('heading', { name: 'Almanac is being built.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
   await expect(page.getByText(/Clear signals/)).toHaveCount(0);
 } finally {
   await browser.close();

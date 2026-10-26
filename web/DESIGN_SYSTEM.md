@@ -1,8 +1,8 @@
 # Almanac design system
 
 This guide records the shared visual foundation and the controls demonstrated in
-the local `/design-system` development catalogue. The production root is a brand
-shell while product journeys are built.
+the local `/design-system` development catalogue. The production root uses these
+controls for local sign-in, restricted password setup and signed-in identity.
 
 ## Foundations
 

@@ -210,6 +210,14 @@ routing checks cover this initial slice. Manual screen-reader checks, supported
 browser coverage and domain journeys/API/CLI comparisons remain outstanding.
 The whole spec is not verified; screenshots alone are insufficient.
 
+[F1-T18](../tasks/F1-T18.md), under the
+[browser onboarding plan](../plans/0017-browser-onboarding.md), adds real combined-
+runtime sign-in, restricted password setup and identity/logout journeys in Chromium,
+with both themes and360/1024/1440px layouts. Lost login/password responses are tested
+after real backend commits and remain uncertain without replay. Shared controls and
+catalogue exclusion remain intact. This does not establish the later SLO workload
+budgets, manual screen-reader checks or supported-browser release matrix.
+
 ## Change notes
 
 - 2026-10-24: Initial draft preserving the Almanac design and remote setup workflows.

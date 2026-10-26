@@ -12,7 +12,8 @@
   [persistent sessions](../plans/0009-persistent-local-sessions.md),
   [atomic password rotation](../plans/0010-atomic-password-rotation.md),
   [shared login admission](../plans/0011-shared-login-throttle.md),
-  [local authentication service](../plans/0012-local-authentication-service.md)
+  [local authentication service](../plans/0012-local-authentication-service.md),
+  [authentication HTTP](../plans/0013-local-authentication-http.md)
 - Supersedes / superseded by: none
 
 ## Purpose
@@ -420,8 +421,15 @@ rotation and initial completion storage. [F1-T11](../tasks/F1-T11.md) verifies s
 login admission and failure budgets. [F1-T12](../tasks/F1-T12.md) connects these
 operations into an application service for protected initial provisioning, password
 proof/policy, login, rotation, authentication and logout. Its real PostgreSQL journey
-is service-level evidence; public HTTP, cookies/CSRF and UI/CLI journeys remain
-unimplemented.
+is service-level evidence. [F1-T13](../tasks/F1-T13.md) verifies protected cookies,
+CSRF, origin/source validation and the real TLS/API/database handler journey.
+[F1-T14](../tasks/F1-T14.md) verifies executable backend serving and lifecycle.
+[F1-T15](../tasks/F1-T15.md) exercises noninteractive setup through the executable
+CLI, TLS backend and database, including restart persistence and uncertain-response
+handling. [F1-T18](../tasks/F1-T18.md) verifies browser local sign-in, restricted setup,
+reload, logout and lost-response recovery through the real executable/API/database.
+Reusable CLI login, user administration and the remaining identity flows are separate
+work; these increments do not complete this specification.
 
 ## Change notes
 

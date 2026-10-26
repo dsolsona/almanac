@@ -5,6 +5,8 @@
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
 - Related spec: [SPEC-0010](../specs/0010-api-and-cli.md)
+- Authentication retry scope amended by [ADR-0016](0016-authentication-retry-behavior.md);
+  the remaining decision is unchanged.
 
 ## Context and decision
 

@@ -41,3 +41,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0013](0013-provider-capabilities-and-execution.md) | Provider capabilities and execution | accepted |
 | [ADR-0014](0014-maintenance-exclusion-semantics.md) | Exclude maintenance from the evaluated population | accepted |
 | [ADR-0015](0015-timeline-annotation-boundary.md) | Keep timeline annotations separate from measurement policy | accepted |
+| [ADR-0016](0016-authentication-retry-behavior.md) | Recover authentication state without automatic replay | accepted |

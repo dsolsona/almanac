@@ -6,11 +6,14 @@ The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
 The catalogue also includes a date picker, switches, shared loading feedback,
 aligned timeline charts and exact-value tables.
-A Go executable now serves the embedded UI with operational health, a fixed-origin
-API proxy, version/help commands and bounded shutdown. Explicit PostgreSQL upgrades
-establish immutable schema history and installation metadata. Local authentication
-now has a verified application service; public authentication transport, management
-operations, observation storage and providers remain unimplemented.
+A Go executable serves the embedded UI and authentication API with operational
+health, a fixed-origin API proxy, version/help commands and bounded shutdown.
+Explicit PostgreSQL upgrades establish immutable schema history and installation
+metadata. Local authentication has a verified application service and protected
+HTTP handlers. Noninteractive administrator setup and browser sign-in, restricted
+password setup, signed-in identity and logout are verified in the combined runtime.
+Reusable CLI login/profiles, user management, observation storage and providers
+remain unimplemented; Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -22,7 +25,42 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
 | ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
-| Product implementation | F1-T01–12 done; F1 incomplete | Catalogue, runtime, storage and local authentication service verified; public authentication and product journeys remain |
+| ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
+| Product implementation | F1 Foundation verified; PR stack awaiting merge | F1-T01–18 deliver the foundation slice; F2 observations and later release requirements remain unimplemented |
+
+## Foundation acceptance
+
+F1 meets the bounded foundation outcomes in [SPEC-0014](specs/0014-delivery-and-verification.md)
+on browser-auth revision `c12d221`, stacked on the unmerged runtime/setup increments.
+This records verified implementation, not a merged release or full-product acceptance.
+
+| F1 outcome | Reproducible evidence |
+| --- | --- |
+| Repeatable local stack | [F1-T16](tasks/F1-T16.md): repeatable integration flow with the real combined executable, protected files, verified TLS, readiness, setup, restart persistence and cleanup. [F1-T05](tasks/F1-T05.md) separately verifies the executable schema-upgrade command. |
+| Health/readiness | [F1-T04](tasks/F1-T04.md)/[F1-T14](tasks/F1-T14.md): operational HTTP, database/schema/setup readiness, ownership and shutdown boundaries. |
+| Protected setup and local administrator login | [F1-T15](tasks/F1-T15.md)/[F1-T18](tasks/F1-T18.md): CLI and actual browser initial-password rotation, reload, logout and uncertain-response recovery against HTTPS/PostgreSQL. |
+| Design catalogue | [F1-T01](tasks/F1-T01.md)–[F1-T03](tasks/F1-T03.md), with the current 96-case theme/viewport matrix and browser authentication captures recorded below. |
+| CLI/API skeleton | Generated operational/authentication contracts, help/version, explicit database upgrade and noninteractive setup through the same authentication operations used by the browser. |
+
+The latest candidate passes `make verify` (73 web/102 Go tests, build/generated and
+production checks) and the following full integration lane (66 tests, PostgreSQL
+18.6, including three actual Chromium journeys):
+
+```sh
+make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable
+```
+
+Prerequisites are pinned tools/Chromium from `make setup` and the validated local
+fixture from `make setup SETUP_MODE=database`. The lane builds current assets and
+the executable, creates disposable databases per test, and cleans up owned
+processes/databases. Reusing installed tools and the validated PostgreSQL fixture
+keeps this repeatable without downloading dependencies or replacing the container
+on every run. Persistent deployment commands are documented in the [README](../README.md).
+
+F2 is the next slice: agent registration/token, Prometheus datasource and remote
+diagnostics, SLI collection/health and direct ingestion. Management parity, remaining
+identity administration, deployment packaging, restore and full UI qualification
+retain their later-slice requirements; Google SSO remains F7.
 
 ## Coverage
 
@@ -114,11 +152,48 @@ and product-journey acceptance remain outstanding.
   combined PostgreSQL 18.6 passed 51 tests under race. Final test-only additions
   passed 12 authentication integration tests under race in 10.086s. Public HTTP,
   cookie/CSRF protections and UI/CLI journeys are the next delivery work.
+- [F1-T13](tasks/F1-T13.md) is verified at `dc6cfce`: generated authentication routes,
+  protected cookies, session-bound CSRF and strict origin/source handling. Full gate
+  passed30 web/65 Go, race62, and real PostgreSQL18.6 passed55 integration tests under
+  race (HTTP12.243s). Task re-review and whole-branch review approved. Backend runtime
+  exposure and UI/CLI follow this adapter.
+- The maintainer merged PRs #2–#8; local `main` is `5cd60b2`, with the verified
+  F1-T06–12 changes. The authentication HTTP increment remains separate.
+- [F1-T14](tasks/F1-T14.md) is verified at `7b8c2ae`: backend-only startup, protected
+  initial owner, TLS, database/setup readiness and single-owner lifecycle. Full gate
+  passed30 web/75 Go, race69, and PostgreSQL18.6 passed62 integration tests including
+  the real executable journey and shutdown/loss boundaries (command14.272s).
+  Independent reviews approved. Combined serving, onboarding screens and CLI setup follow.
+- [F1-T15](tasks/F1-T15.md) is verified at `9325a3a`: protected-file noninteractive setup through
+  HTTPS, generated API operations and explicit uncertain-response handling. It builds
+  on the backend runtime and does not introduce persisted CLI profiles or UI screens.
+  Full checks passed30 web/98 Go, race92 and63 PostgreSQL18.6 integration tests
+  (command8.774s). Independent reviews approved. The real executable journey covers
+  rotation, repeat refusal and restart. An inherited shutdown fixture race was
+  reproduced and corrected in the backend branch without changing timeout budgets
+  or acceptance assertions; the setup branch includes that correction.
+- [F1-T16](tasks/F1-T16.md) is verified at `94b2074`: one backend-owned HTTPS listener
+  for the existing embedded UI and authentication API. Full checks passed 30 web /
+  102 Go tests, race 95, and 65 PostgreSQL18.6 integration tests (command26.472s).
+  Independent reviews approved. Both component orders and trusted TLS termination
+  are exercised; browser onboarding screens and secure remote UI integration follow.
+- [F1-T17](tasks/F1-T17.md) and [F1-T18](tasks/F1-T18.md) deliver browser sign-in,
+  restricted initial-password setup and signed-in identity/logout in combined mode.
+  Product `fd82f8a`, fixture/catalogue correction `75eb742`: 72 web/102 Go tests,
+  race 95, real PostgreSQL 18.6 integration 66 (command 26.864 s), catalogue 96 (51.2 s).
+  Task and final whole-branch reviews approve. Published as
+  [PR #14](https://github.com/dsolsona/almanac/pull/14), stacked on the combined runtime. Actual
+  Chromium 156.0.8078.4 screens were inspected at 360/1024/1440 px in both themes.
+  Lost responses are exercised after real commits, without automatic replay.
+  The PR review correction clears abandoned setup passwords immediately on logout,
+  including failure. Updated verification passes 73 web/102 Go tests and 66 real
+  PostgreSQL integration tests (command 26.805 s), including the logout/re-login
+  regression. Independent scoped review approves.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
   catalogue browser entry points and Go/operational HTTP/database upgrade gates
-  exist; identity and agent integration remain future work.
+  exist; local identity integration is covered, while agent integration remains future work.
 
 ## PostgreSQL foundation verification
 

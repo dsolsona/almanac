@@ -136,11 +136,32 @@ test('rendered axis labels meet text contrast in light and dark themes', async (
   }
 });
 
-test('reopening charts across navigation and theme changes leaves the page error-free', async ({ page }) => {
+test('reopening charts across navigation and theme changes leaves the page error-free', async ({ page, baseURL }) => {
   const browserErrors: string[] = [];
+  const authContextURL = new URL('/api/v1/auth/context', baseURL).href;
+  let expectedContextFailures = 0;
+  const unavailableContextRequests = new Set<import('@playwright/test').Request>();
+  page.on('response', (response) => {
+    if (response.url() === authContextURL && response.status() === 404) {
+      unavailableContextRequests.add(response.request());
+    }
+  });
   page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.stack ?? error.message}`));
-  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
-  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ''}`));
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    // The static catalogue server has no API. Assert its two expected root-page
+    // failures explicitly while retaining every chart/other console error.
+    if (message.location().url === authContextURL
+      && message.text() === 'Failed to load resource: the server responded with a status of 404 (Not Found)') {
+      expectedContextFailures += 1;
+    } else browserErrors.push(`console: ${message.text()}`);
+  });
+  page.on('requestfailed', (request) => {
+    // The auth client cancels an unwanted 404 body rather than retaining it.
+    // Exempt only that observed response, never chart requests or unknown errors.
+    if (unavailableContextRequests.has(request) && request.failure()?.errorText === 'net::ERR_ABORTED') return;
+    browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ''}`);
+  });
   await page.goto('/design-system');
   await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
 
@@ -158,12 +179,15 @@ test('reopening charts across navigation and theme changes leaves the page error
     await expect(page.getByRole('heading', { name: 'Aligned charts and exact values' })).toBeVisible();
     if (cycle < 2) {
       await page.getByRole('link', { name: 'ALMANAC' }).click();
-      await expect(page.getByRole('heading', { name: 'Almanac is being built.' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
       await page.goBack();
       await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
     }
   }
   expect(browserErrors).toEqual([]);
+  expect(expectedContextFailures).toBe(2);
+  expect(unavailableContextRequests.size).toBe(2);
 });
 
 test('a failed lazy chart import leaves catalogue controls available and reload retries it', async ({ page }) => {

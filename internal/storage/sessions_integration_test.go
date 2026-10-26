@@ -104,6 +104,13 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 	if !initialLastSeen.Equal(wantNow) || initialSessionCount != 2 || initialAuditCount != 3 {
 		t.Fatalf("no-op operations changed last_seen=%v sessions=%d audits=%d; want createdAt, 2, 3", initialLastSeen, initialSessionCount, initialAuditCount)
 	}
+	inspected, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(time.Minute))
+	if err != nil || !inspected.LastSeenAt.Equal(wantNow) {
+		t.Fatalf("read-only inspection = %+v, %v; last_seen should remain unchanged", inspected, err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&initialLastSeen); err != nil || !initialLastSeen.Equal(wantNow) {
+		t.Fatalf("inspection changed persisted last_seen=%v error=%v", initialLastSeen, err)
+	}
 	beforeIdle := wantNow.Add(30*time.Minute - time.Microsecond)
 	touched, err := AuthenticateSession(t.Context(), databaseURL, verifier, beforeIdle)
 	if err != nil || !touched.LastSeenAt.Equal(beforeIdle) || !touched.AbsoluteExpiresAt.Equal(wantNow.Add(12*time.Hour)) {
@@ -141,6 +148,52 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 	var issuedAudits, revokedAudits int
 	if err := conn.QueryRow(t.Context(), "SELECT count(*) FILTER (WHERE action='identity.session.issued'), count(*) FILTER (WHERE action='identity.session.revoked') FROM public.almanac_audit_events").Scan(&issuedAudits, &revokedAudits); err != nil || issuedAudits != 2 || revokedAudits != 1 {
 		t.Fatalf("session audit counts issue=%d revoke=%d error=%v", issuedAudits, revokedAudits, err)
+	}
+}
+
+func TestIntegrationInspectSessionDoesNotExtendIdleExpiry(t *testing.T) {
+	databaseURL := integrationDatabase(t)
+	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 25, 12, 0, 0, 123456789, time.FixedZone("test", 3600))
+	_, err := ProvisionInitialOwner(t.Context(), databaseURL, InitialOwnerInput{
+		Login: "InspectOwner", PasswordVerifier: testPasswordVerifier, Now: now, RequestID: "bootstrap-inspect",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := ReadLocalIdentity(t.Context(), databaseURL, "inspectowner")
+	if err != nil || !identity.Found {
+		t.Fatalf("read inspect identity found=%t error=%v", identity.Found, err)
+	}
+	wantNow := now.UTC().Truncate(time.Microsecond)
+	var verifier [32]byte
+	verifier[0] = 44
+	if _, err := IssueSession(t.Context(), databaseURL, IssueSessionInput{
+		UserID: identity.UserID, ExpectedCredentialEpoch: identity.CredentialEpoch,
+		ExpectedCredentialRevision: identity.CredentialRevision, Verifier: verifier,
+		Now: now, RequestID: "issue-inspect-expiry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, databaseURL)
+	var beforeInspect time.Time
+	if err := conn.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&beforeInspect); err != nil {
+		t.Fatal("read persisted last_seen_at failed")
+	}
+	if access, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(29*time.Minute)); err != nil || !access.LastSeenAt.Equal(wantNow) {
+		t.Fatalf("read-only inspection near idle expiry = %+v, %v", access, err)
+	}
+	if _, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(30*time.Minute)); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("inspection extended idle expiry: %v", err)
+	}
+	var afterInspect time.Time
+	if err := conn.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&afterInspect); err != nil {
+		t.Fatal("read persisted last_seen_at after inspection failed")
+	}
+	if !beforeInspect.Equal(wantNow) || !afterInspect.Equal(beforeInspect) {
+		t.Fatalf("Inspect changed persisted last_seen_at: before=%v after=%v", beforeInspect, afterInspect)
 	}
 }
 

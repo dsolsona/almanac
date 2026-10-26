@@ -144,7 +144,7 @@ not a reason to invent legal conclusions during design.
   the main scope decision for reaching a working version quickly.
 - **REVIEW-V02:** Capacity scenario and verification bounds are provisional. Production
   sizing must follow measurement; the spec makes no supported-throughput claim today.
-- The shared catalogue, UI-only Go runtime and explicit PostgreSQL upgrade
-  foundation have build, unit, browser, HTTP/process and database evidence in
-  [delivery status](../status.md). Full F1 onboarding and later product journeys
-  remain unimplemented; no release or workload acceptance is claimed.
+- F1 foundation, including combined runtime, protected CLI/browser onboarding and
+  repeatable executable/database journeys, has verified evidence in
+  [delivery status](../status.md). The PR stack awaits merge. F2 and later product
+  journeys remain unimplemented; no release or workload acceptance is claimed.

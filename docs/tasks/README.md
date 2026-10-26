@@ -18,8 +18,8 @@ The [visual foundation plan](../plans/0001-visual-foundation.md) is complete.
 verification harness. [F1-T02](F1-T02.md) adds calendars, switches and continuous
 loading feedback; its [plan](../plans/0002-catalogue-controls.md) is also complete.
 [F1-T03](F1-T03.md) provides charts and exact tables; its review and verification
-are tracked in [delivery status](../status.md). The wider F1 milestone remains
-in progress. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
+are tracked in [delivery status](../status.md). F1 foundation is verified through
+F1-T18 in the unmerged PR stack. [F1-T04](F1-T04.md) adds the verified Go UI-only executable,
 generated operational contracts and lifecycle checks. [F1-T05](F1-T05.md) is the
 completed PostgreSQL upgrade task; its [plan](../plans/0005-storage-foundation.md)
 covers explicit schema upgrades and isolated real-database verification. Identity
@@ -44,3 +44,23 @@ its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure
 
 [F1-T12](F1-T12.md) connects the local authentication application service under its
 [plan](../plans/0012-local-authentication-service.md), before HTTP/UI/CLI delivery.
+
+[F1-T13](F1-T13.md) adds the protected local authentication HTTP boundary under its
+[plan](../plans/0013-local-authentication-http.md), before runtime/UI/CLI wiring.
+
+[F1-T14](F1-T14.md) wires the runnable authentication backend under its
+[plan](../plans/0014-authentication-backend-runtime.md), before combined serving and UI/CLI.
+
+[F1-T15](F1-T15.md) adds noninteractive initial administrator setup through the
+verified API under its [plan](../plans/0015-noninteractive-setup.md), including
+uncertain-response handling without mutation replay.
+
+[F1-T16](F1-T16.md) adds the explicit combined backend/UI runtime under its
+[plan](../plans/0016-combined-backend-ui-runtime.md), before browser onboarding.
+
+[F1-T17](F1-T17.md) establishes the browser authentication client under the
+[browser onboarding plan](../plans/0017-browser-onboarding.md), before its screens
+and real browser acceptance.
+
+[F1-T18](F1-T18.md) defines the dependent sign-in and initial-password screens,
+with actual browser/backend/database acceptance in the same increment.
