@@ -128,14 +128,19 @@ and product-journey acceptance remain outstanding.
   passed30 web/75 Go, race69, and PostgreSQL18.6 passed62 integration tests including
   the real executable journey and shutdown/loss boundaries (command14.272s).
   Independent reviews approved. Combined serving, onboarding screens and CLI setup follow.
-- [F1-T15](tasks/F1-T15.md) is in progress: protected-file noninteractive setup through
+- [F1-T15](tasks/F1-T15.md) is verified at `9325a3a`: protected-file noninteractive setup through
   HTTPS, generated API operations and explicit uncertain-response handling. It builds
   on the backend runtime and does not introduce persisted CLI profiles or UI screens.
+  Full checks passed30 web/98 Go, race92 and63 PostgreSQL18.6 integration tests
+  (command8.774s). Independent reviews approved. The real executable journey covers
+  rotation, repeat refusal and restart. An inherited shutdown fixture race was
+  reproduced and corrected in the backend branch without changing timeout budgets
+  or acceptance assertions; the setup branch includes that correction.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
   catalogue browser entry points and Go/operational HTTP/database upgrade gates
-  exist; identity and agent integration remain future work.
+  exist; local identity integration is covered, while agent integration remains future work.
 
 ## PostgreSQL foundation verification
 

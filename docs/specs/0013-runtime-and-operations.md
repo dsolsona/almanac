@@ -13,7 +13,8 @@ Provide a convenient combined server and independently runnable components witho
 requiring distributed deployment for local use. UI-only serving and version/help
 exist through [F1-T04](../tasks/F1-T04.md); explicit database upgrades exist through
 [F1-T05](../tasks/F1-T05.md). [F1-T14](../tasks/F1-T14.md) adds backend-only local
-authentication, protected provisioning, health and single-owner lifecycle. The
+authentication, protected provisioning, health and single-owner lifecycle.
+[F1-T15](../tasks/F1-T15.md) adds noninteractive setup over the HTTPS API. The
 backend's management, ingestion and agent workloads in the table remain future
 work, as do combined serving, alerts and other commands. Unsupported server modes
 fail before listening.

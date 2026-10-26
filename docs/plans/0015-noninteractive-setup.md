@@ -18,12 +18,12 @@ network side effects; cleanup errors hiding the actual setup outcome.
 
 ## Task 1: Noninteractive setup client and command
 
-- [ ] Write failing client/command boundary tests for the named acceptance cases.
-- [ ] Enable generated client operations and implement bounded verified TLS workflow.
-- [ ] Add protected-file command inputs, safe JSON/text results and exit mappings.
-- [ ] Exercise lost-response behavior without replay or inferred completion.
-- [ ] Verify the real executable setup journey against PostgreSQL/backend/TLS.
-- [ ] Run integrated checks, review actual diffs, correct findings and record acceptance.
+- [x] Write failing client/command boundary tests for the named acceptance cases.
+- [x] Enable generated client operations and implement bounded verified TLS workflow.
+- [x] Add protected-file command inputs, safe JSON/text results and exit mappings.
+- [x] Exercise lost-response behavior without replay or inferred completion.
+- [x] Verify the real executable setup journey against PostgreSQL/backend/TLS.
+- [x] Run integrated checks, review actual diffs, correct findings and record acceptance.
 - [ ] Publish the verified increment stacked on the backend runtime PR.
 
 Preserve preview5198 and serialize the existing PostgreSQL fixture. General CLI login,
