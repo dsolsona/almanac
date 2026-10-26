@@ -49,11 +49,12 @@ password plus new password/confirmation so reload never depends on retained logi
 credentials. Existing catalogue and unknown paths remain separate.
 
 - [x] Finalize the screen and real-browser fixture brief against the accepted specs.
-- [ ] Implement accessible states and uncertainty recovery with component tests.
-- [ ] Exercise the production binary/API/database in Chromium across themes and
+- [x] Implement accessible states and uncertainty recovery with component tests.
+- [x] Exercise the production binary/API/database in Chromium across themes and
   desktop/mobile layouts; inspect actual pages and preserve sanitized first failures.
-- [ ] Run integrated checks, independently review, reconcile docs and publish the
-  complete browser increment stacked on the combined-runtime PR.
+- [x] Run integrated checks, independently review tasks and reconcile docs.
+- [ ] Complete whole-branch review and publish the browser increment stacked on
+  the combined-runtime PR.
 
 Google SSO, recovery, user management, ordinary account settings, persisted CLI
 profiles and secure standalone UI proxy integration remain separate increments.

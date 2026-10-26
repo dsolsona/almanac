@@ -54,8 +54,9 @@ Use `--components=backend,ui` (or `ui,backend`) with the same settings to serve
 the embedded frontend and authentication API on one HTTPS listener. This mode
 reuses the backend's database ownership and shutdown lifecycle; it does not proxy
 API requests to another server. Health responses identify the owning backend.
-Backend-only mode does not serve the frontend. Browser onboarding screens remain
-separate work; the current frontend content is unchanged.
+Backend-only mode does not serve the frontend. Open the configured HTTPS public
+origin in combined mode to sign in, complete initial administrator password setup,
+inspect your signed-in identity and sign out.
 
 Backend serving requires a protected database URL file. The initial password and
 TLS private key files must also deny group and other permissions; the public
@@ -77,9 +78,17 @@ Backend settings have matching snake_case JSON fields, `ALMANAC_` environment
 variables and flags; precedence is flags, environment, then file. Proxy CIDRs are a
 JSON array or a comma-separated environment/flag value. See the
 [runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
-This increment provides the authentication API and noninteractive setup; secure UI
-proxy integration, onboarding screens, general CLI profiles, management and metric
+This increment provides the authentication API, browser onboarding and noninteractive
+setup; secure UI proxy integration, general CLI profiles, management and metric
 ingestion follow separately.
+
+The first browser sign-in uses the deployment-provided initial password and opens
+restricted setup. Enter that current password and a different permanent password;
+successful setup opens the signed-in identity screen. Reloading during setup asks
+for the current password again. If a login or password-change response is lost,
+the page checks session state and keeps the unknown outcome visible. It never
+automatically resubmits the action. The new password may already be active, so use
+a deliberate sign-in when prompted.
 
 Complete initial administrator setup through HTTPS:
 
@@ -105,7 +114,7 @@ administrator session refuses another password rotation.
 A lost or ambiguous login/password response reports `outcome_unknown:true`; setup
 checks session context once when its deadline permits and never repeats the mutation.
 An authenticated context alone does not establish that rotation succeeded. Recover
-through a deliberate sign-in using the authentication API; the new password may
+through a deliberate sign-in using the browser or authentication API; the new password may
 already be active. Do not automatically retry setup after an uncertain outcome.
 
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
@@ -116,8 +125,11 @@ make verify VERIFY_MODE=integration GO_PACKAGE=./internal/storage ALMANAC_TEST_D
 ```
 
 Run `make verify VERIFY_MODE=go` for focused Go checks, `make verify VERIFY_MODE=go-race`
-for race checks, or `make verify` for web and Go verification. Browser checks remain
-separate with `make verify VERIFY_MODE=browser`.
+for race checks, or `make verify` for web and Go verification. Catalogue browser
+checks use `make verify VERIFY_MODE=browser`. The full PostgreSQL integration lane
+also exercises browser onboarding against the built combined HTTPS executable;
+it requires the Chromium installation from `make setup`. Ordinary unit checks do
+not start PostgreSQL or run that browser journey.
 
 See [the web design system guide](web/DESIGN_SYSTEM.md) for the local UI setup,
 catalogue and verification commands.

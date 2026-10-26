@@ -141,8 +141,13 @@ and product-journey acceptance remain outstanding.
   102 Go tests, race 95, and 65 PostgreSQL18.6 integration tests (command26.472s).
   Independent reviews approved. Both component orders and trusted TLS termination
   are exercised; browser onboarding screens and secure remote UI integration follow.
-- [F1-T17](tasks/F1-T17.md) is verified at `e6e9904`: bounded same-origin browser authentication
-  operations before sign-in/onboarding screens and real Chromium acceptance.
+- [F1-T17](tasks/F1-T17.md) and [F1-T18](tasks/F1-T18.md) deliver browser sign-in,
+  restricted initial-password setup and signed-in identity/logout in combined mode.
+  Product `fd82f8a`, fixture/catalogue correction `75eb742`:72 web/102 Go tests,
+  race95, real PostgreSQL18.6 integration66 (command26.864s), catalogue96 (51.2s).
+  Task reviews approve; final whole-branch review precedes publication. Actual
+  Chromium156.0.8078.4 screens were inspected at360/1024/1440px in both themes.
+  Lost responses are exercised after real commits, without automatic replay.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

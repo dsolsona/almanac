@@ -21,7 +21,8 @@ ingestion and agent protocols remain unimplemented. Local authentication HTTP ha
 are verified under [F1-T13](../tasks/F1-T13.md), with backend executable exposure
 under [F1-T14](../tasks/F1-T14.md). Noninteractive administrator setup is implemented
 under [F1-T15](../tasks/F1-T15.md), using generated client operations and ephemeral
-sessions. Authentication UI, reusable CLI login and profiles remain subsequent work.
+sessions. Browser local sign-in and administrator onboarding use the same operations
+under [F1-T18](../tasks/F1-T18.md); reusable CLI login and profiles remain subsequent work.
 
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and

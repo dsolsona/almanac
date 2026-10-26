@@ -176,7 +176,7 @@ The foundation provides these fixed entry points:
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
 | `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, setup client, storage, identity, authentication and secret-file unit race checks |
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
-| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially; GO_PACKAGE=all (default) or one of those package paths |
+| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding; GO_PACKAGE=all (default) or one of those package paths |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
@@ -201,8 +201,18 @@ execution selector. Pure unit cases belong in ordinary test files so the fast la
 runs them. Discovery alone does not prove a test was executed.
 The authentication service and real TLS authentication handlers are covered here,
 including bounded upload rejection and cookie/security boundaries. Executable backend
-lifecycle and noninteractive setup run through actual TLS and PostgreSQL. Browser
-authentication, ingestion and complete product journeys remain future work.
+lifecycle, noninteractive setup and browser authentication run through actual TLS
+and PostgreSQL. The command integration suite launches a disposable combined runtime
+for initial setup, lost-login and lost-password-response journeys. It requires the
+installed Chromium from `make setup`, uses ephemeral ECDSA certificates and scoped
+browser certificate trust, and never disables application authentication. Lost
+responses follow actual committed backend operations, with subsequent deliberate
+sign-in and database assertions. An unreachable session created by a lost rotation
+response retains normal expiry; logout revokes the browser's own session only.
+Traces/video and secret-bearing error output are disabled for these flows. Sanitized
+stage diagnostics and screenshots of empty or masked fields live under ignored
+`.local/browser-auth-*` directories. Unit checks do not start this stack. Ingestion
+and the remaining product journeys are still future work.
 
 For browser iteration, select a file and a single viewport/theme, for example
 `make verify VERIFY_MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.

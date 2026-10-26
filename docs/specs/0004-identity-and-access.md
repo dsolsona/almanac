@@ -426,8 +426,10 @@ CSRF, origin/source validation and the real TLS/API/database handler journey.
 [F1-T14](../tasks/F1-T14.md) verifies executable backend serving and lifecycle.
 [F1-T15](../tasks/F1-T15.md) exercises noninteractive setup through the executable
 CLI, TLS backend and database, including restart persistence and uncertain-response
-handling. Browser onboarding, reusable CLI login and the remaining identity flows
-are separate work; these increments do not complete this specification.
+handling. [F1-T18](../tasks/F1-T18.md) verifies browser local sign-in, restricted setup,
+reload, logout and lost-response recovery through the real executable/API/database.
+Reusable CLI login, user administration and the remaining identity flows are separate
+work; these increments do not complete this specification.
 
 ## Change notes
 
