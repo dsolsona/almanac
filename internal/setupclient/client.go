@@ -1,4 +1,5 @@
-// Package setupclient implements the noninteractive first administrator setup flow.
+// Package setupclient implements HTTPS authentication for administrator setup and
+// reusable CLI sessions.
 package setupclient
 
 import (
@@ -35,6 +36,7 @@ const (
 	KindConflict       Kind = "conflict"
 	KindCancelled      Kind = "cancelled"
 	KindRemote         Kind = "remote"
+	KindNotFound       Kind = "not_found"
 )
 
 type Failure struct {
@@ -69,8 +71,12 @@ type Client struct {
 var requestIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 func New(options Options) (*Client, error) {
+	return newClient(options, true)
+}
+
+func newClient(options Options, requireLogin bool) (*Client, error) {
 	u, err := url.Parse(options.BackendURL)
-	if err != nil || !authhttp.ValidPublicOrigin(options.BackendURL) || u.User != nil || options.Login == "" || len(options.Login) > 256 || !utf8Valid(options.Login) || len(options.CABundle) > 64<<10 {
+	if err != nil || !authhttp.ValidPublicOrigin(options.BackendURL) || u.User != nil || (requireLogin && options.Login == "") || len(options.Login) > 256 || !utf8Valid(options.Login) || len(options.CABundle) > 64<<10 {
 		return nil, &Failure{Kind: KindInvalid, Code: "invalid_configuration", Message: "backend URL or administrator login is invalid", SessionState: "anonymous"}
 	}
 	pool, err := x509.SystemCertPool()

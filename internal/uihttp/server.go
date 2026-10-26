@@ -49,7 +49,9 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 	}
 	s := &Server{log: logger, backend: target, client: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	mux := http.NewServeMux()
-	api.HandlerFromMux(healthHandler{server: s}, mux)
+	health := healthHandler{server: s}
+	mux.HandleFunc("GET /livez", health.GetLiveness)
+	mux.HandleFunc("GET /readyz", health.GetReadiness)
 	mux.Handle("/api/v1/", s.proxy())
 	mux.Handle("/", assets)
 	s.http = &http.Server{Handler: guardPaths(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
@@ -94,19 +96,6 @@ func (h healthHandler) GetReadiness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeHealth(w, api.HealthResponse{Status: api.Ok, Component: api.Ui})
-}
-
-func (h healthHandler) PostAuthContext(w http.ResponseWriter, r *http.Request) {
-	h.server.proxy().ServeHTTP(w, r)
-}
-func (h healthHandler) PostAuthLogin(w http.ResponseWriter, r *http.Request) {
-	h.server.proxy().ServeHTTP(w, r)
-}
-func (h healthHandler) PostAuthPassword(w http.ResponseWriter, r *http.Request) {
-	h.server.proxy().ServeHTTP(w, r)
-}
-func (h healthHandler) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
-	h.server.proxy().ServeHTTP(w, r)
 }
 
 func writeHealth(w http.ResponseWriter, value api.HealthResponse) {

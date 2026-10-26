@@ -12,7 +12,8 @@ if (process.argv.length !== 2 && !fixtureMode) throw new Error('Unsupported argu
 mkdirSync(join(root, '.local'), { recursive: true });
 const artifacts = mkdtempSync(join(root, '.local/compose-check-'));
 const project = `almanac-check-${process.pid}-${randomBytes(4).toString('hex')}`;
-const env = { ...process.env, COMPOSE_PROJECT_NAME: project, ALMANAC_PORT: '18086' };
+const env = { ...process.env, COMPOSE_PROJECT_NAME: project, ALMANAC_PORT: '18086',
+  ALMANAC_METRICS_PORT: '0', ALMANAC_TRACES_PORT: '0' };
 delete env.COMPOSE_FILE;
 const url = 'https://localhost:18086';
 let stage = 'build and bootstrap';

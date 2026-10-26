@@ -174,9 +174,10 @@ The foundation provides these fixed entry points:
 | `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
 | `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
-| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, setup client, storage, identity, authentication and secret-file unit race checks |
+| `make verify VERIFY_MODE=go-portability` | Compile-only `internal/command` test binaries for fixed `darwin/amd64`, with ordinary and integration tags, CGO disabled and the pinned offline Go toolchain; ignored outputs and a distinct build cache live under `.local/` |
+| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication and secret-file unit race checks |
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
-| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding; GO_PACKAGE=all (default) or one of those package paths |
+| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
@@ -200,6 +201,9 @@ and fail for unavailable infrastructure or an empty integration-test selection.
 Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's
 execution selector. Pure unit cases belong in ordinary test files so the fast lane
 runs them. Discovery alone does not prove a test was executed.
+The Go portability mode only compiles test binaries; it does not execute Darwin
+tests or prove runtime behavior on macOS. Its target platform, architecture,
+CGO setting, cache, and output paths are fixed in the Makefile.
 The authentication service and real TLS authentication handlers are covered here,
 including bounded upload rejection and cookie/security boundaries. Executable backend
 lifecycle, noninteractive setup and browser authentication run through actual TLS

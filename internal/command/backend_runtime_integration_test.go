@@ -364,7 +364,7 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 	case err := <-wait:
 		if err != nil {
 			logs := stderr.String()
-			t.Fatalf("backend graceful shutdown returned failure: shutdown-failed=%t ownership-lost=%t cleanup-failed=%t", strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"))
+			t.Fatalf("backend graceful shutdown returned failure: shutdown-failed=%t ownership-lost=%t cleanup-failed=%t deadline-exceeded=%t cancelled=%t serve-failed=%t", strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"), strings.Contains(logs, `"deadline_exceeded":true`), strings.Contains(logs, `"cancelled":true`), strings.Contains(logs, `"serve_failed":true`))
 		}
 	case <-time.After(10 * time.Second):
 		_ = cmd.Process.Kill()
@@ -376,7 +376,8 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 	}
 	restartArgs := replaceFlagValue(slices.Clone(args), "--initial-admin-login", "changed-owner")
 	restart := exec.Command(binary, restartArgs...)
-	restart.Stderr, restart.Stdout = io.Discard, io.Discard
+	restartLogs := newRuntimeLog()
+	restart.Stderr, restart.Stdout = restartLogs, io.Discard
 	if err := restart.Start(); err != nil {
 		t.Fatal("restart built backend executable failed")
 	}
@@ -454,13 +455,15 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 	if status != http.StatusOK || json.Unmarshal(body, &normal) != nil || normal.Session == nil || normal.Session.Restricted {
 		t.Fatalf("rotated password did not authenticate after restart: status=%d normal-session=%t", status, normal.Session != nil && !normal.Session.Restricted)
 	}
+	restartShutdownStarted := time.Now()
 	if err := restart.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal("signal restarted backend shutdown failed")
 	}
 	select {
 	case err := <-restartWait:
 		if err != nil {
-			t.Fatal("restarted backend shutdown returned failure")
+			logs := restartLogs.String()
+			t.Fatalf("restarted backend shutdown returned failure: exit=%d elapsed=%s shutdown-failed=%t ownership-lost=%t cleanup-failed=%t deadline-exceeded=%t cancelled=%t serve-failed=%t", restart.ProcessState.ExitCode(), time.Since(restartShutdownStarted), strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"), strings.Contains(logs, `"deadline_exceeded":true`), strings.Contains(logs, `"cancelled":true`), strings.Contains(logs, `"serve_failed":true`))
 		}
 	case <-time.After(10 * time.Second):
 		_ = restart.Process.Kill()

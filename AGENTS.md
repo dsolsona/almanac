@@ -40,18 +40,26 @@ directories you change, then the relevant specs and ADRs.
 ## Coordinator and implementer workflow
 
 - The primary agent coordinates: prepare bounded tasks, settle interfaces, review
-  actual diffs, integrate results and own verification. Delegate suitable ready
-  implementation tasks to `gpt-6-luna`, explicitly selecting that model. This is
+  actual diffs, integrate results and own verification. Delegate implementation
+  and test writing to `gpt-6-luna`, explicitly selecting that model. This is
   standing project guidance for delegation; no repeated permission is needed within
   the user's authorized task scope. If the model is unavailable, report it; do not
   silently substitute another model.
 - Start with one implementer in an isolated worktree. Give it a fresh task brief
   with the base revision, relevant accepted specs/ADRs, edit scope, interfaces,
   acceptance cases and required checks. Avoid forwarding unrelated chat history.
-  The coordinator may handle tiny or high-risk tasks directly when appropriate.
+  Give Luna complete bounded features, not just small supporting pieces while the
+  coordinator writes most of the feature. Security or complexity requires clearer
+  constraints and review, not automatic coordinator implementation. Substantial
+  coordinator coding requires the maintainer's explicit agreement first.
 - The implementer submits code and evidence for review; it cannot accept its own
   task, relax checks, change product contracts or start later milestones. After
-  two unsuccessful correction rounds on one issue, take over or reframe the task.
+  two unsuccessful correction rounds on one issue, reframe the task or ask before
+  taking over substantial implementation. Prefer one consolidated coordinator
+  review; repeat review only for changed code or unresolved findings.
+- Start a new task turn when assigning corrections to a completed implementer.
+  A message to an idle agent does not restart it. Check its state after dispatch
+  before reporting that implementation is running.
 - On a new session, read [delivery status](docs/status.md), inspect git state and
   find the active plan/task before dispatch. Do not assume prior processes,
   worktrees or verification results are still valid.
@@ -196,6 +204,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   shell execution targets or bypass permission controls. If an operation requires
   new approval while the maintainer is unavailable, leave it pending and continue
   independent authorized work.
+- Reuse exact approved command invocations, including arguments, environment
+  assignments and shell wrappers. A familiar command name or Make target is not
+  evidence that a variation is approved. Do not request approval for a variation
+  after a sandbox failure: use an already-approved full check or leave the check
+  pending. Carry this restriction into every worker brief.
 - Check the saved approval for the actual invocation before submitting a command.
   Do not assume a command-family approval covers a new argument combination or
   shell form. Reuse known approved invocations unchanged where possible; leave
@@ -243,7 +256,8 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   with the pinned toolchain. `make preview` serves the local catalogue. Database
   checks use `make setup SETUP_MODE=database` for the isolated PostgreSQL18 fixture
   and `make verify VERIFY_MODE=integration` with its explicit
-  `ALMANAC_TEST_DATABASE_URL`; storage, authentication service and authentication
+  `ALMANAC_TEST_DATABASE_URL`; storage, authentication and agent management services,
+  authentication
   HTTP and executable backend suites run serially by default. Real TLS/API/database,
   backend lifecycle and browser authentication checks exist; full product journeys
   remain subsequent work. Documentation checks use

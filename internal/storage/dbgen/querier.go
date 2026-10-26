@@ -14,34 +14,66 @@ type Querier interface {
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
+	DeleteExpiredAgentLifecycleReceipt(ctx context.Context, arg DeleteExpiredAgentLifecycleReceiptParams) (int64, error)
+	DeleteExpiredAgentReceipt(ctx context.Context, arg DeleteExpiredAgentReceiptParams) (int64, error)
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
+	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
+	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
+	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
+	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
+	FindAgentSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
+	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
+	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
+	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
+	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
+	InsertAgentCredential(ctx context.Context, arg InsertAgentCredentialParams) (InsertAgentCredentialRow, error)
+	InsertAgentLifecycleReceipt(ctx context.Context, arg InsertAgentLifecycleReceiptParams) error
+	InsertAgentReceipt(ctx context.Context, arg InsertAgentReceiptParams) error
 	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
+	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
 	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
+	InsertRotatedAgentCredential(ctx context.Context, arg InsertRotatedAgentCredentialParams) (InsertRotatedAgentCredentialRow, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
 	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
+	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
+	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
+	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
+	// would otherwise walk inactive history. Recheck base rows after any lock wait.
+	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
+	LockAgentAccessAgent(ctx context.Context, agentID pgtype.UUID) (LockAgentAccessAgentRow, error)
+	LockAgentAccessCredential(ctx context.Context, arg LockAgentAccessCredentialParams) (AlmanacAgentCredential, error)
+	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
+	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
+	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
+	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
 	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
 	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockSessionInstallation(ctx context.Context) (LockSessionInstallationRow, error)
 	LockSessionUser(ctx context.Context, userID pgtype.UUID) (LockSessionUserRow, error)
+	LockUnrevokedAgentCredentials(ctx context.Context, agentID pgtype.UUID) (int64, error)
 	LoginAttemptKeys(ctx context.Context, arg LoginAttemptKeysParams) (LoginAttemptKeysRow, error)
 	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
+	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
+	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
 	SessionVerifierExists(ctx context.Context, verifier []byte) (bool, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
+	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
 }
 
 var _ Querier = (*Queries)(nil)

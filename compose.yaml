@@ -71,6 +71,10 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+      provider-ready:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--cacert", "/run/almanac-secrets/tls.crt", "https://localhost:8080/readyz"]
       interval: 3s
@@ -80,7 +84,63 @@ services:
     stop_grace_period: 35s
     restart: unless-stopped
 
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=7d
+      - -memory.allowedBytes=256MiB
+    volumes:
+      - victoriametrics-data:/storage
+    ports:
+      - "127.0.0.1:${ALMANAC_METRICS_PORT:-18428}:8428"
+    healthcheck:
+      test: ["CMD", "/victoria-metrics-prod", "-healthcheck"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  victoriatraces:
+    image: victoriametrics/victoria-traces:v0.12.1@sha256:609abddf298c9642496045296f30a3968b5a4b79b678373e2e7ef29c844f5578
+    command:
+      - -httpListenAddr=:10428
+      - -storageDataPath=/victoria-traces-data
+      - -retentionPeriod=7d
+      - -retention.maxDiskSpaceUsageBytes=2GiB
+      - -memory.allowedBytes=256MiB
+    volumes:
+      - victoriatraces-data:/victoria-traces-data
+    ports:
+      - "127.0.0.1:${ALMANAC_TRACES_PORT:-19428}:10428"
+    restart: unless-stopped
+
+  provider-ready:
+    image: curlimages/curl:8.19.0@sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        deadline=$$(($$(date +%s) + 45))
+        until curl --fail --silent --show-error --max-time 2 --output /dev/null http://victoriametrics:8428/-/ready \
+          && curl --fail --silent --show-error --max-time 2 --output /dev/null http://victoriatraces:10428/select/tempo/api/echo; do
+          if [ "$$(date +%s)" -ge "$$deadline" ]; then
+            echo 'Provider readiness timed out after 45 seconds' >&2
+            exit 1
+          fi
+          sleep 1
+        done
+    depends_on:
+      victoriametrics:
+        condition: service_healthy
+      victoriatraces:
+        condition: service_started
+    restart: "no"
+
 volumes:
   app-secrets:
   postgres-secret:
   postgres-data:
+  victoriametrics-data:
+  victoriatraces-data:

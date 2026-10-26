@@ -116,6 +116,97 @@ paths:
         '415': {$ref: '#/components/responses/AuthenticationProblem'}
         '501': {description: Authentication idempotency is unsupported, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '503': {description: Authentication unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents:
+    get:
+      operationId: getAgents
+      summary: List agents
+      description: Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Agent page, content: {application/json: {schema: {$ref: '#/components/schemas/AgentPage'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: postAgents
+      summary: Create an agent
+      description: Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateAgentRequest'}}}}
+      responses:
+        '201': {description: Agent and one-time credential, content: {application/json: {schema: {$ref: '#/components/schemas/AgentIssuanceFresh'}}}}
+        '200': {description: Creation receipt replay, content: {application/json: {schema: {$ref: '#/components/schemas/AgentIssuanceReplay'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents/{agent_id}:
+    get:
+      operationId: getAgent
+      summary: Read an agent
+      description: Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+      responses:
+        '200': {description: Agent, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Agent'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents/{agent_id}/credentials:
+    get:
+      operationId: getAgentCredentials
+      summary: Read credential history
+      description: Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Credential page, content: {application/json: {schema: {$ref: '#/components/schemas/CredentialPage'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents/{agent_id}/disable:
+    post:
+      operationId: postAgentDisable
+      summary: Disable an agent
+      description: Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordProofRequest'}}}}
+      responses:
+        '200': {description: Disable result, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents/{agent_id}/credentials/rotate:
+    post:
+      operationId: postAgentCredentialRotate
+      summary: Rotate an agent credential
+      description: Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RotateAgentRequest'}}}}
+      responses:
+        '200': {description: Rotation issuance, content: {application/json: {schema: {$ref: '#/components/schemas/RotationIssuanceResponse'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke:
+    post:
+      operationId: postAgentCredentialRevoke
+      summary: Revoke an agent credential
+      description: Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+        - {name: credential_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordProofRequest'}}}}
+      responses:
+        '200': {description: Revoke result, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /livez:
     get:
       operationId: getLiveness
@@ -152,6 +243,24 @@ paths:
               example: {status: unavailable, component: ui}
         '405': {description: Method not allowed}
 components:
+  parameters:
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected.
+      schema: {type: string}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+      schema: {type: string, minLength: 1, maxLength: 128}
   securitySchemes:
     SessionCookie:
       type: apiKey
@@ -169,6 +278,130 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    Agent:
+      type: object
+      required: [id, name, display_name, enabled, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        enabled: {type: boolean}
+        version: {type: string, pattern: '^[1-9][0-9]*$'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AgentCredential:
+      type: object
+      required: [id, agent_id, issued_at, expires_at, revoked_at, retire_at]
+      properties:
+        id: {type: string, format: uuid}
+        agent_id: {type: string, format: uuid}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time, nullable: true}
+        retire_at: {type: string, format: date-time, nullable: true}
+    AgentPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Agent'}}
+        next_cursor: {type: string}
+    CredentialPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AgentCredential'}}
+        next_cursor: {type: string}
+    CreateAgentRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, name, display_name]
+      properties:
+        current_password: {type: string, format: password}
+        name: {type: string}
+        display_name: {type: string}
+        lifetime_seconds: {type: integer, minimum: 0, maximum: 31536000, format: int32}
+    RotateAgentRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password]
+      properties:
+        current_password: {type: string, format: password}
+        lifetime_seconds: {type: integer, minimum: 0, maximum: 31536000, format: int32}
+        overlap_seconds: {type: integer, minimum: 0, maximum: 600, format: int32}
+    PasswordProofRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password]
+      properties:
+        current_password: {type: string, format: password}
+    LifecycleResult:
+      type: object
+      required: [agent, credential, changed, revoked_credential_count, replayed]
+      properties:
+        agent: {$ref: '#/components/schemas/Agent'}
+        credential: {allOf: [{$ref: '#/components/schemas/AgentCredential'}], nullable: true}
+        changed: {type: boolean}
+        revoked_credential_count: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        replayed: {type: boolean}
+    AgentIssuance:
+      type: object
+      required: [agent, credential, replayed, secret_state]
+      properties:
+        agent: {$ref: '#/components/schemas/Agent'}
+        credential: {$ref: '#/components/schemas/AgentCredential'}
+        replayed: {type: boolean}
+        secret_state: {type: string, enum: [issued, secret_unavailable]}
+        token: {type: string}
+    AgentIssuanceFresh:
+      allOf:
+        - {$ref: '#/components/schemas/AgentIssuance'}
+        - type: object
+          required: [replayed, secret_state, token]
+          properties:
+            replayed: {type: boolean, enum: [false]}
+            secret_state: {type: string, enum: [issued]}
+            token: {type: string, minLength: 1}
+    AgentIssuanceReplay:
+      allOf:
+        - {$ref: '#/components/schemas/AgentIssuance'}
+        - type: object
+          required: [replayed, secret_state]
+          properties:
+            replayed: {type: boolean, enum: [true]}
+            secret_state: {type: string, enum: [secret_unavailable]}
+          not: {required: [token]}
+    RotationIssuance:
+      type: object
+      required: [agent, credential, previous_credential, replayed, secret_state]
+      properties:
+        agent: {$ref: '#/components/schemas/Agent'}
+        credential: {$ref: '#/components/schemas/AgentCredential'}
+        previous_credential: {allOf: [{$ref: '#/components/schemas/AgentCredential'}], nullable: true}
+        replayed: {type: boolean}
+        secret_state: {type: string, enum: [issued, secret_unavailable]}
+        token: {type: string}
+    RotationIssuanceResponse:
+      oneOf:
+        - {$ref: '#/components/schemas/RotationIssuanceFresh'}
+        - {$ref: '#/components/schemas/RotationIssuanceReplay'}
+    RotationIssuanceFresh:
+      allOf:
+        - {$ref: '#/components/schemas/RotationIssuance'}
+        - type: object
+          required: [replayed, secret_state, token]
+          properties:
+            replayed: {type: boolean, enum: [false]}
+            secret_state: {type: string, enum: [issued]}
+            token: {type: string, minLength: 1}
+    RotationIssuanceReplay:
+      allOf:
+        - {$ref: '#/components/schemas/RotationIssuance'}
+        - type: object
+          required: [replayed, secret_state]
+          properties:
+            replayed: {type: boolean, enum: [true]}
+            secret_state: {type: string, enum: [secret_unavailable]}
+          not: {required: [token]}
     EmptyAuthRequest:
       type: object
       additionalProperties: false

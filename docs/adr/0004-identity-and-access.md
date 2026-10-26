@@ -28,7 +28,8 @@ Propose database-backed local identities, opaque sessions, fixed human roles, an
 separate resource-scoped Agent, Producer, and Worker principals as specified in
 SPEC-0004. Its detailed
 security and lifetime defaults are accepted starting values, subject to verification.
-The explicitly deferred library selection in REVIEW-I06 remains open.
+The originally deferred library selection in REVIEW-I06 is resolved by
+[ADR-0017](0017-recoverable-secret-encryption.md), accepted on 2026-10-26.
 
 Provision one initial administrator in the database at first startup using a
 password supplied through a protected deployment secret file. Deployment tooling
@@ -90,12 +91,16 @@ cannot retrieve stored plaintext secrets. UI and CLI share authorization contrac
 
 ## Encryption implementation candidate
 
+The following evaluation records the original rationale. The maintainer selected
+Tink and its integration format in [ADR-0017](0017-recoverable-secret-encryption.md).
+
 Prefer evaluating [Tink for Go](https://github.com/tink-crypto/tink-go) for the
 recoverable-secret adapter: it provides authenticated encryption and keysets for
 rotation, reducing application-owned cryptographic plumbing. With the proposed
 SQL-based persistence layer, Almanac still owns the calls at write/authorized-read
 boundaries, resource/field binding, redaction and the resumable re-encryption job.
-This candidate is not yet a selected dependency or ciphertext format (REVIEW-I06).
+At the time of this evaluation, the dependency and ciphertext format remained
+deferred under REVIEW-I06; ADR-0017 now resolves that choice.
 
 The standard library's
 [AES-GCM with random nonces](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce)

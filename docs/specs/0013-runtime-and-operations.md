@@ -119,9 +119,17 @@ stops it without deleting data. Repeating bootstrap preserves users, passwords a
 database contents. This explicitly brings local Compose packaging forward from F5;
 production images, Helm and restore qualification remain separate release work.
 
+The maintainer additionally requested VictoriaMetrics and VictoriaTraces as local
+test sources for F2 on 2026-10-26. Start both through the same Compose workflow,
+with persistent data volumes and pinned images. Their host HTTP ports bind only
+to loopback (18428 and 19428 by default); PostgreSQL stays on the Compose network.
+Verify actual Prometheus-compatible and Tempo-compatible TraceQL metrics queries
+against synthetic data. These test services do not imply that native trace collection
+is delivered before its accepted F6 slice.
+
 Use named volumes and a dedicated Compose project, separate from integration
-fixtures and the design catalogue. Expose only the app on loopback (HTTPS port 18088
-by default); PostgreSQL stays on the Compose network. The application runs without
+fixtures and the design catalogue. Expose the app on loopback (HTTPS port 18088
+by default). The application runs without
 root and reads protected secret files. Initialization and migrations must complete
 before serving. Readiness failures return an unsuccessful command result rather
 than announcing a usable app. Startup prints its URL and how to obtain the initial

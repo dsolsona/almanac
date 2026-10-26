@@ -44,6 +44,9 @@ func testBrowserAuthentication(t *testing.T, scenario string) {
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade browser fixture failed")
 	}
+	if strings.HasPrefix(scenario, "agents") {
+		seedBrowserAgents(t, databaseURL)
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal("reserve browser backend port failed")
@@ -176,6 +179,9 @@ func testBrowserAuthentication(t *testing.T, scenario string) {
 		wantSessions = 1
 	}
 	assertSetupDatabaseState(t, databaseURL, false, true, wantSessions)
+	if strings.HasPrefix(scenario, "agents") {
+		assertBrowserAgentRegistration(t, databaseURL, artifacts, scenario)
+	}
 	if err := backend.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal("signal browser backend shutdown failed")
 	}

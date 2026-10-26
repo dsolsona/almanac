@@ -68,3 +68,24 @@ with actual browser/backend/database acceptance in the same increment.
 [F1-T19](F1-T19.md) adds container-only local bootstrap and daily startup under the
 [local Compose plan](../plans/0018-local-compose.md), with persistent state and
 actual onboarding/restart verification.
+
+F2 begins with [F2-T01](F2-T01.md), local VictoriaMetrics and VictoriaTraces fixtures
+under the [first observations plan](../plans/0019-first-observations.md).
+[F2-T02](F2-T02.md) adds guarded registration persistence and safe retry receipts;
+it precedes the management service and API/UI/CLI exposure.
+[F2-T03](F2-T03.md) implements the internal administrator proof and one-time
+agent-token issuance service before management endpoints are exposed.
+[F2-T04](F2-T04.md) extends guarded storage with safe administrative reads,
+credential revocation and agent disablement before rotation and public exposure.
+[F2-T05](F2-T05.md) completes internal credential rotation and the management
+service operations needed by the subsequent HTTP, CLI and UI boundary.
+[F2-T06](F2-T06.md) exposes those operations through the authenticated management
+API, generated contracts and combined/backend runtimes.
+[F2-T07](F2-T07.md) adds the bounded browser management client before agent
+administration screens and real browser acceptance.
+[F2-T08](F2-T08.md) adds the first agent registration, details and credential
+history screens with actual browser/backend/database acceptance.
+[F2-T09](F2-T09.md) adds rotation, revocation and disable controls with explicit
+versioned command recovery and one-time replacement-token handling.
+[F2-T10](F2-T10.md) adds reusable CLI authentication and protected profiles before
+agent-management command parity.

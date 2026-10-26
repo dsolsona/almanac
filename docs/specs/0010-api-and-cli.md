@@ -16,13 +16,15 @@ Go types/handlers, and generated TypeScript types. Pin generator versions when
 scaffolding. Agent WebSocket messages have separate versioned JSON schemas with
 shared type generation. Operational health types/handlers, CLI version/help and
 UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Explicit database
-upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md). Management,
+upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md).
+Agent management HTTP operations are implemented under [F2-T06](../tasks/F2-T06.md);
 ingestion and agent protocols remain unimplemented. Local authentication HTTP handlers
 are verified under [F1-T13](../tasks/F1-T13.md), with backend executable exposure
 under [F1-T14](../tasks/F1-T14.md). Noninteractive administrator setup is implemented
 under [F1-T15](../tasks/F1-T15.md), using generated client operations and ephemeral
 sessions. Browser local sign-in and administrator onboarding use the same operations
-under [F1-T18](../tasks/F1-T18.md); reusable CLI login and profiles remain subsequent work.
+under [F1-T18](../tasks/F1-T18.md); reusable CLI login and profiles are implemented
+under [F2-T10](../tasks/F2-T10.md).
 
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and
@@ -115,6 +117,24 @@ explicit and audited. Imports offer dry-run/plan, a plan digest, and optimistic 
 if definitions changed since planning, reject and require replanning. Do not fetch
 remote YAML includes, execute shell expressions, or embed credentials in exports.
 
+The initial reusable session commands are `auth login`, `auth context` and
+`auth logout`, each with an explicit `--profile-file`. Login also requires
+`--backend-url`, `--login` and `--password-file`; `--ca-file` is optional. Output
+is text or one schema-version1 JSON document, with safe `identity` and
+`session_state` on success and the established error envelope otherwise. The whole
+operation defaults to30s and permits at most2m, including profile-lock acquisition.
+
+Profiles pin exact origin/CA trust and persist only those bindings plus the session
+credential and schema version. Fresh context supplies current authority and CSRF.
+Existing active sessions cannot be silently replaced. Restricted identities remain
+restricted. Profile storage uses strict bounded JSON, private regular files, a
+checked user-owned non-writable-by-others parent, a stable per-profile process lock
+and atomic replacement with durability checks. Initial support is Linux; unsupported
+platforms fail explicitly. The parent must already exist, and lock/temporary filename
+namespaces are reserved. Local persistence failure never reports remote success as
+CLI success; pre-dispatch local uncertainty is distinct from a possible remote
+authentication mutation. Uncertain logout preserves the recoverable credential.
+
 ## Acceptance criteria
 
 - AC-01: UI and CLI invoke the same authorized operations and produce equivalent
@@ -135,4 +155,6 @@ remote YAML includes, execute shell expressions, or embed credentials in exports
 - **REVIEW-A02:** Command names, limits and exit codes are provisional stable contracts
   to review before release. Keys are scoped machine identities, not browser sessions.
 - Operational contract generation and basic noninteractive CLI behavior are
-  verified; management API/CLI parity, RBAC and idempotency remain unimplemented.
+  verified. Agent management has authenticated authorization, resource versions and
+  safe receipts under F2-T02–F2-T06; full management API/CLI parity and broader
+  resource RBAC remain outstanding.

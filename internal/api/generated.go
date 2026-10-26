@@ -9,14 +9,95 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for AgentIssuanceSecretState.
+const (
+	AgentIssuanceSecretStateIssued            AgentIssuanceSecretState = "issued"
+	AgentIssuanceSecretStateSecretUnavailable AgentIssuanceSecretState = "secret_unavailable"
+)
+
+// Valid indicates whether the value is a known member of the AgentIssuanceSecretState enum.
+func (e AgentIssuanceSecretState) Valid() bool {
+	switch e {
+	case AgentIssuanceSecretStateIssued:
+		return true
+	case AgentIssuanceSecretStateSecretUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentIssuanceFreshReplayed.
+const (
+	AgentIssuanceFreshReplayedFalse AgentIssuanceFreshReplayed = false
+)
+
+// Valid indicates whether the value is a known member of the AgentIssuanceFreshReplayed enum.
+func (e AgentIssuanceFreshReplayed) Valid() bool {
+	switch e {
+	case AgentIssuanceFreshReplayedFalse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentIssuanceFreshSecretState.
+const (
+	AgentIssuanceFreshSecretStateIssued AgentIssuanceFreshSecretState = "issued"
+)
+
+// Valid indicates whether the value is a known member of the AgentIssuanceFreshSecretState enum.
+func (e AgentIssuanceFreshSecretState) Valid() bool {
+	switch e {
+	case AgentIssuanceFreshSecretStateIssued:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentIssuanceReplayReplayed.
+const (
+	AgentIssuanceReplayReplayedTrue AgentIssuanceReplayReplayed = true
+)
+
+// Valid indicates whether the value is a known member of the AgentIssuanceReplayReplayed enum.
+func (e AgentIssuanceReplayReplayed) Valid() bool {
+	switch e {
+	case AgentIssuanceReplayReplayedTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentIssuanceReplaySecretState.
+const (
+	AgentIssuanceReplaySecretStateSecretUnavailable AgentIssuanceReplaySecretState = "secret_unavailable"
+)
+
+// Valid indicates whether the value is a known member of the AgentIssuanceReplaySecretState enum.
+func (e AgentIssuanceReplaySecretState) Valid() bool {
+	switch e {
+	case AgentIssuanceReplaySecretStateSecretUnavailable:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for HealthResponseComponent.
 const (
@@ -69,10 +150,171 @@ func (e ProxyProblemCode) Valid() bool {
 	}
 }
 
+// Defines values for RotationIssuanceSecretState.
+const (
+	RotationIssuanceSecretStateIssued            RotationIssuanceSecretState = "issued"
+	RotationIssuanceSecretStateSecretUnavailable RotationIssuanceSecretState = "secret_unavailable"
+)
+
+// Valid indicates whether the value is a known member of the RotationIssuanceSecretState enum.
+func (e RotationIssuanceSecretState) Valid() bool {
+	switch e {
+	case RotationIssuanceSecretStateIssued:
+		return true
+	case RotationIssuanceSecretStateSecretUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RotationIssuanceFreshReplayed.
+const (
+	RotationIssuanceFreshReplayedFalse RotationIssuanceFreshReplayed = false
+)
+
+// Valid indicates whether the value is a known member of the RotationIssuanceFreshReplayed enum.
+func (e RotationIssuanceFreshReplayed) Valid() bool {
+	switch e {
+	case RotationIssuanceFreshReplayedFalse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RotationIssuanceFreshSecretState.
+const (
+	RotationIssuanceFreshSecretStateIssued RotationIssuanceFreshSecretState = "issued"
+)
+
+// Valid indicates whether the value is a known member of the RotationIssuanceFreshSecretState enum.
+func (e RotationIssuanceFreshSecretState) Valid() bool {
+	switch e {
+	case RotationIssuanceFreshSecretStateIssued:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RotationIssuanceReplayReplayed.
+const (
+	RotationIssuanceReplayReplayedTrue RotationIssuanceReplayReplayed = true
+)
+
+// Valid indicates whether the value is a known member of the RotationIssuanceReplayReplayed enum.
+func (e RotationIssuanceReplayReplayed) Valid() bool {
+	switch e {
+	case RotationIssuanceReplayReplayedTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RotationIssuanceReplaySecretState.
+const (
+	RotationIssuanceReplaySecretStateSecretUnavailable RotationIssuanceReplaySecretState = "secret_unavailable"
+)
+
+// Valid indicates whether the value is a known member of the RotationIssuanceReplaySecretState enum.
+func (e RotationIssuanceReplaySecretState) Valid() bool {
+	switch e {
+	case RotationIssuanceReplaySecretStateSecretUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Agent defines model for Agent.
+type Agent struct {
+	CreatedAt   time.Time          `json:"created_at"`
+	DisplayName string             `json:"display_name"`
+	Enabled     bool               `json:"enabled"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+	Version     string             `json:"version"`
+}
+
+// AgentCredential defines model for AgentCredential.
+type AgentCredential struct {
+	AgentId   openapi_types.UUID `json:"agent_id"`
+	ExpiresAt time.Time          `json:"expires_at"`
+	Id        openapi_types.UUID `json:"id"`
+	IssuedAt  time.Time          `json:"issued_at"`
+	RetireAt  *time.Time         `json:"retire_at"`
+	RevokedAt *time.Time         `json:"revoked_at"`
+}
+
+// AgentIssuance defines model for AgentIssuance.
+type AgentIssuance struct {
+	Agent       Agent                    `json:"agent"`
+	Credential  AgentCredential          `json:"credential"`
+	Replayed    bool                     `json:"replayed"`
+	SecretState AgentIssuanceSecretState `json:"secret_state"`
+	Token       *string                  `json:"token,omitempty"`
+}
+
+// AgentIssuanceSecretState defines model for AgentIssuance.SecretState.
+type AgentIssuanceSecretState string
+
+// AgentIssuanceFresh defines model for AgentIssuanceFresh.
+type AgentIssuanceFresh struct {
+	Agent       Agent                         `json:"agent"`
+	Credential  AgentCredential               `json:"credential"`
+	Replayed    AgentIssuanceFreshReplayed    `json:"replayed"`
+	SecretState AgentIssuanceFreshSecretState `json:"secret_state"`
+	Token       string                        `json:"token"`
+}
+
+// AgentIssuanceFreshReplayed defines model for AgentIssuanceFresh.Replayed.
+type AgentIssuanceFreshReplayed bool
+
+// AgentIssuanceFreshSecretState defines model for AgentIssuanceFresh.SecretState.
+type AgentIssuanceFreshSecretState string
+
+// AgentIssuanceReplay defines model for AgentIssuanceReplay.
+type AgentIssuanceReplay struct {
+	Agent       Agent                          `json:"agent"`
+	Credential  AgentCredential                `json:"credential"`
+	Replayed    AgentIssuanceReplayReplayed    `json:"replayed"`
+	SecretState AgentIssuanceReplaySecretState `json:"secret_state"`
+	Token       *string                        `json:"token,omitempty"`
+}
+
+// AgentIssuanceReplayReplayed defines model for AgentIssuanceReplay.Replayed.
+type AgentIssuanceReplayReplayed bool
+
+// AgentIssuanceReplaySecretState defines model for AgentIssuanceReplay.SecretState.
+type AgentIssuanceReplaySecretState string
+
+// AgentPage defines model for AgentPage.
+type AgentPage struct {
+	Items      []Agent `json:"items"`
+	NextCursor string  `json:"next_cursor"`
+}
+
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
 	CsrfToken string        `json:"csrf_token"`
 	Session   *SafeIdentity `json:"session"`
+}
+
+// CreateAgentRequest defines model for CreateAgentRequest.
+type CreateAgentRequest struct {
+	CurrentPassword string `json:"current_password"`
+	DisplayName     string `json:"display_name"`
+	LifetimeSeconds *int32 `json:"lifetime_seconds,omitempty"`
+	Name            string `json:"name"`
+}
+
+// CredentialPage defines model for CredentialPage.
+type CredentialPage struct {
+	Items      []AgentCredential `json:"items"`
+	NextCursor string            `json:"next_cursor"`
 }
 
 // EmptyAuthRequest defines model for EmptyAuthRequest.
@@ -90,10 +332,24 @@ type HealthResponseComponent string
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
 
+// LifecycleResult defines model for LifecycleResult.
+type LifecycleResult struct {
+	Agent                  Agent            `json:"agent"`
+	Changed                bool             `json:"changed"`
+	Credential             *AgentCredential `json:"credential"`
+	Replayed               bool             `json:"replayed"`
+	RevokedCredentialCount string           `json:"revoked_credential_count"`
+}
+
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
+}
+
+// PasswordProofRequest defines model for PasswordProofRequest.
+type PasswordProofRequest struct {
+	CurrentPassword string `json:"current_password"`
 }
 
 // PasswordRequest defines model for PasswordRequest.
@@ -131,6 +387,63 @@ type ProxyProblem struct {
 // ProxyProblemCode defines model for ProxyProblem.Code.
 type ProxyProblemCode string
 
+// RotateAgentRequest defines model for RotateAgentRequest.
+type RotateAgentRequest struct {
+	CurrentPassword string `json:"current_password"`
+	LifetimeSeconds *int32 `json:"lifetime_seconds,omitempty"`
+	OverlapSeconds  *int32 `json:"overlap_seconds,omitempty"`
+}
+
+// RotationIssuance defines model for RotationIssuance.
+type RotationIssuance struct {
+	Agent              Agent                       `json:"agent"`
+	Credential         AgentCredential             `json:"credential"`
+	PreviousCredential *AgentCredential            `json:"previous_credential"`
+	Replayed           bool                        `json:"replayed"`
+	SecretState        RotationIssuanceSecretState `json:"secret_state"`
+	Token              *string                     `json:"token,omitempty"`
+}
+
+// RotationIssuanceSecretState defines model for RotationIssuance.SecretState.
+type RotationIssuanceSecretState string
+
+// RotationIssuanceFresh defines model for RotationIssuanceFresh.
+type RotationIssuanceFresh struct {
+	Agent              Agent                            `json:"agent"`
+	Credential         AgentCredential                  `json:"credential"`
+	PreviousCredential *AgentCredential                 `json:"previous_credential"`
+	Replayed           RotationIssuanceFreshReplayed    `json:"replayed"`
+	SecretState        RotationIssuanceFreshSecretState `json:"secret_state"`
+	Token              string                           `json:"token"`
+}
+
+// RotationIssuanceFreshReplayed defines model for RotationIssuanceFresh.Replayed.
+type RotationIssuanceFreshReplayed bool
+
+// RotationIssuanceFreshSecretState defines model for RotationIssuanceFresh.SecretState.
+type RotationIssuanceFreshSecretState string
+
+// RotationIssuanceReplay defines model for RotationIssuanceReplay.
+type RotationIssuanceReplay struct {
+	Agent              Agent                             `json:"agent"`
+	Credential         AgentCredential                   `json:"credential"`
+	PreviousCredential *AgentCredential                  `json:"previous_credential"`
+	Replayed           RotationIssuanceReplayReplayed    `json:"replayed"`
+	SecretState        RotationIssuanceReplaySecretState `json:"secret_state"`
+	Token              *string                           `json:"token,omitempty"`
+}
+
+// RotationIssuanceReplayReplayed defines model for RotationIssuanceReplay.Replayed.
+type RotationIssuanceReplayReplayed bool
+
+// RotationIssuanceReplaySecretState defines model for RotationIssuanceReplay.SecretState.
+type RotationIssuanceReplaySecretState string
+
+// RotationIssuanceResponse defines model for RotationIssuanceResponse.
+type RotationIssuanceResponse struct {
+	union json.RawMessage
+}
+
 // SafeIdentity defines model for SafeIdentity.
 type SafeIdentity struct {
 	Login      string `json:"login"`
@@ -138,6 +451,15 @@ type SafeIdentity struct {
 	Role       string `json:"role"`
 	UserId     string `json:"user_id"`
 }
+
+// AgentId defines model for AgentId.
+type AgentId = openapi_types.UUID
+
+// IdempotencyKey defines model for IdempotencyKey.
+type IdempotencyKey = string
+
+// IfMatch defines model for IfMatch.
+type IfMatch = string
 
 // AuthenticationMethodNotAllowed defines model for AuthenticationMethodNotAllowed.
 type AuthenticationMethodNotAllowed = Problem
@@ -147,6 +469,63 @@ type AuthenticationProblem = Problem
 
 // AuthenticationRateLimited defines model for AuthenticationRateLimited.
 type AuthenticationRateLimited = Problem
+
+// GetAgentsParams defines parameters for GetAgents.
+type GetAgentsParams struct {
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// PostAgentsParams defines parameters for PostAgents.
+type PostAgentsParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAgentCredentialsParams defines parameters for GetAgentCredentials.
+type GetAgentCredentialsParams struct {
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// PostAgentCredentialRotateParams defines parameters for PostAgentCredentialRotate.
+type PostAgentCredentialRotateParams struct {
+	// IfMatch Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected.
+	IfMatch IfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentCredentialRevokeParams defines parameters for PostAgentCredentialRevoke.
+type PostAgentCredentialRevokeParams struct {
+	// IfMatch Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected.
+	IfMatch IfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentDisableParams defines parameters for PostAgentDisable.
+type PostAgentDisableParams struct {
+	// IfMatch Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected.
+	IfMatch IfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
+type PostAgentsJSONRequestBody = CreateAgentRequest
+
+// PostAgentCredentialRotateJSONRequestBody defines body for PostAgentCredentialRotate for application/json ContentType.
+type PostAgentCredentialRotateJSONRequestBody = RotateAgentRequest
+
+// PostAgentCredentialRevokeJSONRequestBody defines body for PostAgentCredentialRevoke for application/json ContentType.
+type PostAgentCredentialRevokeJSONRequestBody = PasswordProofRequest
+
+// PostAgentDisableJSONRequestBody defines body for PostAgentDisable for application/json ContentType.
+type PostAgentDisableJSONRequestBody = PasswordProofRequest
 
 // PostAuthContextJSONRequestBody defines body for PostAuthContext for application/json ContentType.
 type PostAuthContextJSONRequestBody = EmptyAuthRequest
@@ -159,6 +538,68 @@ type PostAuthLogoutJSONRequestBody = EmptyAuthRequest
 
 // PostAuthPasswordJSONRequestBody defines body for PostAuthPassword for application/json ContentType.
 type PostAuthPasswordJSONRequestBody = PasswordRequest
+
+// AsRotationIssuanceFresh returns the union data inside the RotationIssuanceResponse as a RotationIssuanceFresh
+func (t RotationIssuanceResponse) AsRotationIssuanceFresh() (RotationIssuanceFresh, error) {
+	var body RotationIssuanceFresh
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRotationIssuanceFresh overwrites any union data inside the RotationIssuanceResponse as the provided RotationIssuanceFresh
+func (t *RotationIssuanceResponse) FromRotationIssuanceFresh(v RotationIssuanceFresh) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRotationIssuanceFresh performs a merge with any union data inside the RotationIssuanceResponse, using the provided RotationIssuanceFresh
+func (t *RotationIssuanceResponse) MergeRotationIssuanceFresh(v RotationIssuanceFresh) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRotationIssuanceReplay returns the union data inside the RotationIssuanceResponse as a RotationIssuanceReplay
+func (t RotationIssuanceResponse) AsRotationIssuanceReplay() (RotationIssuanceReplay, error) {
+	var body RotationIssuanceReplay
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRotationIssuanceReplay overwrites any union data inside the RotationIssuanceResponse as the provided RotationIssuanceReplay
+func (t *RotationIssuanceResponse) FromRotationIssuanceReplay(v RotationIssuanceReplay) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRotationIssuanceReplay performs a merge with any union data inside the RotationIssuanceResponse, using the provided RotationIssuanceReplay
+func (t *RotationIssuanceResponse) MergeRotationIssuanceReplay(v RotationIssuanceReplay) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t RotationIssuanceResponse) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *RotationIssuanceResponse) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -233,6 +674,99 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// GetAgents List agents
+	//
+	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+	//
+	// Corresponds with GET /api/v1/agents (the `GetAgents` operationId).
+	GetAgents(ctx context.Context, params *GetAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentsWithBody Create an agent
+	//
+	// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+	PostAgentsWithBody(ctx context.Context, params *PostAgentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgents Create an agent
+	//
+	// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+	PostAgents(ctx context.Context, params *PostAgentsParams, body PostAgentsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAgent Read an agent
+	//
+	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
+	//
+	// Corresponds with GET /api/v1/agents/{agent_id} (the `GetAgent` operationId).
+	GetAgent(ctx context.Context, agentId AgentId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAgentCredentials Read credential history
+	//
+	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+	//
+	// Corresponds with GET /api/v1/agents/{agent_id}/credentials (the `GetAgentCredentials` operationId).
+	GetAgentCredentials(ctx context.Context, agentId AgentId, params *GetAgentCredentialsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentCredentialRotateWithBody Rotate an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+	PostAgentCredentialRotateWithBody(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentCredentialRotate Rotate an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+	PostAgentCredentialRotate(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, body PostAgentCredentialRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentCredentialRevokeWithBody Revoke an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+	PostAgentCredentialRevokeWithBody(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentCredentialRevoke Revoke an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+	PostAgentCredentialRevoke(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentDisableWithBody Disable an agent
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+	PostAgentDisableWithBody(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentDisable Disable an agent
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+	PostAgentDisable(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostAuthContextWithBody Read the current authentication context
 	//
@@ -315,6 +849,209 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /readyz (the `GetReadiness` operationId).
 	GetReadiness(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetAgents List agents
+//
+// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+//
+// Corresponds with GET /api/v1/agents (the `GetAgents` operationId).
+func (c *Client) GetAgents(ctx context.Context, params *GetAgentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentsWithBody Create an agent
+//
+// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+func (c *Client) PostAgentsWithBody(ctx context.Context, params *PostAgentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgents Create an agent
+//
+// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+func (c *Client) PostAgents(ctx context.Context, params *PostAgentsParams, body PostAgentsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAgent Read an agent
+//
+// Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
+//
+// Corresponds with GET /api/v1/agents/{agent_id} (the `GetAgent` operationId).
+func (c *Client) GetAgent(ctx context.Context, agentId AgentId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentRequest(c.Server, agentId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAgentCredentials Read credential history
+//
+// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+//
+// Corresponds with GET /api/v1/agents/{agent_id}/credentials (the `GetAgentCredentials` operationId).
+func (c *Client) GetAgentCredentials(ctx context.Context, agentId AgentId, params *GetAgentCredentialsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentCredentialsRequest(c.Server, agentId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentCredentialRotateWithBody Rotate an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+func (c *Client) PostAgentCredentialRotateWithBody(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentCredentialRotateRequestWithBody(c.Server, agentId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentCredentialRotate Rotate an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+func (c *Client) PostAgentCredentialRotate(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, body PostAgentCredentialRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentCredentialRotateRequest(c.Server, agentId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentCredentialRevokeWithBody Revoke an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+func (c *Client) PostAgentCredentialRevokeWithBody(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentCredentialRevokeRequestWithBody(c.Server, agentId, credentialId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentCredentialRevoke Revoke an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+func (c *Client) PostAgentCredentialRevoke(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentCredentialRevokeRequest(c.Server, agentId, credentialId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentDisableWithBody Disable an agent
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+func (c *Client) PostAgentDisableWithBody(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentDisableRequestWithBody(c.Server, agentId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentDisable Disable an agent
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+func (c *Client) PostAgentDisable(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentDisableRequest(c.Server, agentId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // PostAuthContextWithBody Read the current authentication context
@@ -497,6 +1234,446 @@ func (c *Client) GetReadiness(ctx context.Context, reqEditors ...RequestEditorFn
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetAgentsRequest constructs an http.Request for the GetAgents method
+func NewGetAgentsRequest(server string, params *GetAgentsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAgentsRequest calls the generic PostAgents builder with application/json body
+func NewPostAgentsRequest(server string, params *PostAgentsParams, body PostAgentsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAgentsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostAgentsRequestWithBody constructs an http.Request for the PostAgents method, with any body, and a specified content type
+func NewPostAgentsRequestWithBody(server string, params *PostAgentsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetAgentRequest constructs an http.Request for the GetAgent method
+func NewGetAgentRequest(server string, agentId AgentId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAgentCredentialsRequest constructs an http.Request for the GetAgentCredentials method
+func NewGetAgentCredentialsRequest(server string, agentId AgentId, params *GetAgentCredentialsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s/credentials", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAgentCredentialRotateRequest calls the generic PostAgentCredentialRotate builder with application/json body
+func NewPostAgentCredentialRotateRequest(server string, agentId AgentId, params *PostAgentCredentialRotateParams, body PostAgentCredentialRotateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAgentCredentialRotateRequestWithBody(server, agentId, params, "application/json", bodyReader)
+}
+
+// NewPostAgentCredentialRotateRequestWithBody constructs an http.Request for the PostAgentCredentialRotate method, with any body, and a specified content type
+func NewPostAgentCredentialRotateRequestWithBody(server string, agentId AgentId, params *PostAgentCredentialRotateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s/credentials/rotate", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewPostAgentCredentialRevokeRequest calls the generic PostAgentCredentialRevoke builder with application/json body
+func NewPostAgentCredentialRevokeRequest(server string, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAgentCredentialRevokeRequestWithBody(server, agentId, credentialId, params, "application/json", bodyReader)
+}
+
+// NewPostAgentCredentialRevokeRequestWithBody constructs an http.Request for the PostAgentCredentialRevoke method, with any body, and a specified content type
+func NewPostAgentCredentialRevokeRequestWithBody(server string, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "credential_id", credentialId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s/credentials/%s/revoke", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewPostAgentDisableRequest calls the generic PostAgentDisable builder with application/json body
+func NewPostAgentDisableRequest(server string, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAgentDisableRequestWithBody(server, agentId, params, "application/json", bodyReader)
+}
+
+// NewPostAgentDisableRequestWithBody constructs an http.Request for the PostAgentDisable method, with any body, and a specified content type
+func NewPostAgentDisableRequestWithBody(server string, agentId AgentId, params *PostAgentDisableParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s/disable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
 }
 
 // NewPostAuthContextRequest calls the generic PostAuthContext builder with application/json body
@@ -757,6 +1934,105 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetAgentsWithResponse List agents
+	//
+	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/agents (the `GetAgents` operationId).
+	GetAgentsWithResponse(ctx context.Context, params *GetAgentsParams, reqEditors ...RequestEditorFn) (*GetAgentsResponse, error)
+
+	// PostAgentsWithBodyWithResponse Create an agent
+	//
+	// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+	PostAgentsWithBodyWithResponse(ctx context.Context, params *PostAgentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentsResponse, error)
+
+	// PostAgentsWithResponse Create an agent
+	//
+	// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+	PostAgentsWithResponse(ctx context.Context, params *PostAgentsParams, body PostAgentsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentsResponse, error)
+
+	// GetAgentWithResponse Read an agent
+	//
+	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/agents/{agent_id} (the `GetAgent` operationId).
+	GetAgentWithResponse(ctx context.Context, agentId AgentId, reqEditors ...RequestEditorFn) (*GetAgentResponse, error)
+
+	// GetAgentCredentialsWithResponse Read credential history
+	//
+	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/agents/{agent_id}/credentials (the `GetAgentCredentials` operationId).
+	GetAgentCredentialsWithResponse(ctx context.Context, agentId AgentId, params *GetAgentCredentialsParams, reqEditors ...RequestEditorFn) (*GetAgentCredentialsResponse, error)
+
+	// PostAgentCredentialRotateWithBodyWithResponse Rotate an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+	PostAgentCredentialRotateWithBodyWithResponse(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentCredentialRotateResponse, error)
+
+	// PostAgentCredentialRotateWithResponse Rotate an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+	PostAgentCredentialRotateWithResponse(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, body PostAgentCredentialRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentCredentialRotateResponse, error)
+
+	// PostAgentCredentialRevokeWithBodyWithResponse Revoke an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+	PostAgentCredentialRevokeWithBodyWithResponse(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentCredentialRevokeResponse, error)
+
+	// PostAgentCredentialRevokeWithResponse Revoke an agent credential
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+	PostAgentCredentialRevokeWithResponse(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentCredentialRevokeResponse, error)
+
+	// PostAgentDisableWithBodyWithResponse Disable an agent
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+	PostAgentDisableWithBodyWithResponse(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentDisableResponse, error)
+
+	// PostAgentDisableWithResponse Disable an agent
+	//
+	// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+	PostAgentDisableWithResponse(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentDisableResponse, error)
+
 	// PostAuthContextWithBodyWithResponse Read the current authentication context
 	//
 	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
@@ -842,6 +2118,356 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /readyz (the `GetReadiness` operationId).
 	GetReadinessWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetReadinessResponse, error)
+}
+
+type GetAgentsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AgentPage
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAgentsResponse) GetJSON200() *AgentPage {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetAgentsResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAgentsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAgentsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostAgentsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AgentIssuanceReplay
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *AgentIssuanceFresh
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAgentsResponse) GetJSON200() *AgentIssuanceReplay {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PostAgentsResponse) GetJSON201() *AgentIssuanceFresh {
+	return r.JSON201
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r PostAgentsResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAgentsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAgentsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAgentsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAgentsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetAgentResponse200Headers the declared response headers of an HTTP 200 response for GetAgent
+type GetAgentResponse200Headers struct {
+	ETag *string
+}
+
+type GetAgentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Agent
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetAgentResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAgentResponse) GetJSON200() *Agent {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetAgentResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAgentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAgentResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAgentCredentialsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CredentialPage
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAgentCredentialsResponse) GetJSON200() *CredentialPage {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetAgentCredentialsResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAgentCredentialsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentCredentialsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentCredentialsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAgentCredentialsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostAgentCredentialRotateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RotationIssuanceResponse
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAgentCredentialRotateResponse) GetJSON200() *RotationIssuanceResponse {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r PostAgentCredentialRotateResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAgentCredentialRotateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAgentCredentialRotateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAgentCredentialRotateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAgentCredentialRotateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostAgentCredentialRevokeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LifecycleResult
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAgentCredentialRevokeResponse) GetJSON200() *LifecycleResult {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r PostAgentCredentialRevokeResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAgentCredentialRevokeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAgentCredentialRevokeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAgentCredentialRevokeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAgentCredentialRevokeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostAgentDisableResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LifecycleResult
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAgentDisableResponse) GetJSON200() *LifecycleResult {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r PostAgentDisableResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAgentDisableResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAgentDisableResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAgentDisableResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAgentDisableResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 // PostAuthContextResponse405Headers the declared response headers of an HTTP 405 response for PostAuthContext
@@ -1398,6 +3024,171 @@ func (r GetReadinessResponse) ContentType() string {
 	return ""
 }
 
+// GetAgentsWithResponse List agents
+//
+// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/agents (the `GetAgents` operationId).
+func (c *ClientWithResponses) GetAgentsWithResponse(ctx context.Context, params *GetAgentsParams, reqEditors ...RequestEditorFn) (*GetAgentsResponse, error) {
+	rsp, err := c.GetAgents(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentsResponse(rsp)
+}
+
+// PostAgentsWithBodyWithResponse Create an agent
+//
+// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+func (c *ClientWithResponses) PostAgentsWithBodyWithResponse(ctx context.Context, params *PostAgentsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentsResponse, error) {
+	rsp, err := c.PostAgentsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentsResponse(rsp)
+}
+
+// PostAgentsWithResponse Create an agent
+//
+// Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
+func (c *ClientWithResponses) PostAgentsWithResponse(ctx context.Context, params *PostAgentsParams, body PostAgentsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentsResponse, error) {
+	rsp, err := c.PostAgents(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentsResponse(rsp)
+}
+
+// GetAgentWithResponse Read an agent
+//
+// Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/agents/{agent_id} (the `GetAgent` operationId).
+func (c *ClientWithResponses) GetAgentWithResponse(ctx context.Context, agentId AgentId, reqEditors ...RequestEditorFn) (*GetAgentResponse, error) {
+	rsp, err := c.GetAgent(ctx, agentId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentResponse(rsp)
+}
+
+// GetAgentCredentialsWithResponse Read credential history
+//
+// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/agents/{agent_id}/credentials (the `GetAgentCredentials` operationId).
+func (c *ClientWithResponses) GetAgentCredentialsWithResponse(ctx context.Context, agentId AgentId, params *GetAgentCredentialsParams, reqEditors ...RequestEditorFn) (*GetAgentCredentialsResponse, error) {
+	rsp, err := c.GetAgentCredentials(ctx, agentId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentCredentialsResponse(rsp)
+}
+
+// PostAgentCredentialRotateWithBodyWithResponse Rotate an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+func (c *ClientWithResponses) PostAgentCredentialRotateWithBodyWithResponse(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentCredentialRotateResponse, error) {
+	rsp, err := c.PostAgentCredentialRotateWithBody(ctx, agentId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentCredentialRotateResponse(rsp)
+}
+
+// PostAgentCredentialRotateWithResponse Rotate an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/rotate (the `PostAgentCredentialRotate` operationId).
+func (c *ClientWithResponses) PostAgentCredentialRotateWithResponse(ctx context.Context, agentId AgentId, params *PostAgentCredentialRotateParams, body PostAgentCredentialRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentCredentialRotateResponse, error) {
+	rsp, err := c.PostAgentCredentialRotate(ctx, agentId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentCredentialRotateResponse(rsp)
+}
+
+// PostAgentCredentialRevokeWithBodyWithResponse Revoke an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+func (c *ClientWithResponses) PostAgentCredentialRevokeWithBodyWithResponse(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentCredentialRevokeResponse, error) {
+	rsp, err := c.PostAgentCredentialRevokeWithBody(ctx, agentId, credentialId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentCredentialRevokeResponse(rsp)
+}
+
+// PostAgentCredentialRevokeWithResponse Revoke an agent credential
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
+func (c *ClientWithResponses) PostAgentCredentialRevokeWithResponse(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentCredentialRevokeResponse, error) {
+	rsp, err := c.PostAgentCredentialRevoke(ctx, agentId, credentialId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentCredentialRevokeResponse(rsp)
+}
+
+// PostAgentDisableWithBodyWithResponse Disable an agent
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+func (c *ClientWithResponses) PostAgentDisableWithBodyWithResponse(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentDisableResponse, error) {
+	rsp, err := c.PostAgentDisableWithBody(ctx, agentId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentDisableResponse(rsp)
+}
+
+// PostAgentDisableWithResponse Disable an agent
+//
+// Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
+func (c *ClientWithResponses) PostAgentDisableWithResponse(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentDisableResponse, error) {
+	rsp, err := c.PostAgentDisable(ctx, agentId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentDisableResponse(rsp)
+}
+
 // PostAuthContextWithBodyWithResponse Read the current authentication context
 //
 // Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
@@ -1542,6 +3333,257 @@ func (c *ClientWithResponses) GetReadinessWithResponse(ctx context.Context, reqE
 		return nil, err
 	}
 	return ParseGetReadinessResponse(rsp)
+}
+
+// ParseGetAgentsResponse parses an HTTP response from a GetAgentsWithResponse call
+func ParseGetAgentsResponse(rsp *http.Response) (*GetAgentsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAgentsResponse parses an HTTP response from a PostAgentsWithResponse call
+func ParsePostAgentsResponse(rsp *http.Response) (*PostAgentsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAgentsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentIssuanceReplay
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AgentIssuanceFresh
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAgentResponse parses an HTTP response from a GetAgentWithResponse call
+func ParseGetAgentResponse(rsp *http.Response) (*GetAgentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Agent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetAgentResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetAgentCredentialsResponse parses an HTTP response from a GetAgentCredentialsWithResponse call
+func ParseGetAgentCredentialsResponse(rsp *http.Response) (*GetAgentCredentialsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentCredentialsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CredentialPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAgentCredentialRotateResponse parses an HTTP response from a PostAgentCredentialRotateWithResponse call
+func ParsePostAgentCredentialRotateResponse(rsp *http.Response) (*PostAgentCredentialRotateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAgentCredentialRotateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RotationIssuanceResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAgentCredentialRevokeResponse parses an HTTP response from a PostAgentCredentialRevokeWithResponse call
+func ParsePostAgentCredentialRevokeResponse(rsp *http.Response) (*PostAgentCredentialRevokeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAgentCredentialRevokeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LifecycleResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAgentDisableResponse parses an HTTP response from a PostAgentDisableWithResponse call
+func ParsePostAgentDisableResponse(rsp *http.Response) (*PostAgentDisableResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAgentDisableResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LifecycleResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParsePostAuthContextResponse parses an HTTP response from a PostAuthContextWithResponse call
@@ -2049,6 +4091,27 @@ func ParseGetReadinessResponse(rsp *http.Response) (*GetReadinessResponse, error
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// GetAgents List agents
+	// (GET /api/v1/agents)
+	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
+	// PostAgents Create an agent
+	// (POST /api/v1/agents)
+	PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams)
+	// GetAgent Read an agent
+	// (GET /api/v1/agents/{agent_id})
+	GetAgent(w http.ResponseWriter, r *http.Request, agentId AgentId)
+	// GetAgentCredentials Read credential history
+	// (GET /api/v1/agents/{agent_id}/credentials)
+	GetAgentCredentials(w http.ResponseWriter, r *http.Request, agentId AgentId, params GetAgentCredentialsParams)
+	// PostAgentCredentialRotate Rotate an agent credential
+	// (POST /api/v1/agents/{agent_id}/credentials/rotate)
+	PostAgentCredentialRotate(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAgentCredentialRotateParams)
+	// PostAgentCredentialRevoke Revoke an agent credential
+	// (POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke)
+	PostAgentCredentialRevoke(w http.ResponseWriter, r *http.Request, agentId AgentId, credentialId openapi_types.UUID, params PostAgentCredentialRevokeParams)
+	// PostAgentDisable Disable an agent
+	// (POST /api/v1/agents/{agent_id}/disable)
+	PostAgentDisable(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAgentDisableParams)
 	// PostAuthContext Read the current authentication context
 	// (POST /api/v1/auth/context)
 	PostAuthContext(w http.ResponseWriter, r *http.Request)
@@ -2077,6 +4140,418 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAgents operation middleware
+func (siw *ServerInterfaceWrapper) GetAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgents operation middleware
+func (siw *ServerInterfaceWrapper) PostAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgent operation middleware
+func (siw *ServerInterfaceWrapper) GetAgent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgent(w, r, agentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentCredentials operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentCredentials(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentCredentialsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentCredentials(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentCredentialRotate operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentCredentialRotate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentCredentialRotateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentCredentialRotate(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentCredentialRevoke operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentCredentialRevoke(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "credential_id" -------------
+	var credentialId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "credential_id", r.PathValue("credential_id"), &credentialId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "credential_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentCredentialRevokeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentCredentialRevoke(w, r, agentId, credentialId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentDisable operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentDisable(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentDisableParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentDisable(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // PostAuthContext operation middleware
 func (siw *ServerInterfaceWrapper) PostAuthContext(w http.ResponseWriter, r *http.Request) {
@@ -2286,6 +4761,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/password", wrapper.PostAuthPassword)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/logout", wrapper.PostAuthLogout)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents", wrapper.GetAgents)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents", wrapper.PostAgents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents/{agent_id}", wrapper.GetAgent)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials", wrapper.GetAgentCredentials)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/disable", wrapper.PostAgentDisable)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials/rotate", wrapper.PostAgentCredentialRotate)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials/{credential_id}/revoke", wrapper.PostAgentCredentialRevoke)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/livez", wrapper.GetLiveness)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReadiness)
 

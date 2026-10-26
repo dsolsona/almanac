@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -29,7 +29,8 @@ generate:
 	  format) test -x .local/bin/gofmt || { echo 'Pinned gofmt missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	    find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -w ;; \
 	  sqlc) test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; .local/bin/sqlc generate -f sqlc.yaml ;; \
-	  *) echo 'GENERATE_MODE must be api, format, or sqlc' >&2; exit 2 ;; \
+	  go-guidelines) test -x .local/bin/go-modern-guidelines || { echo 'Go guidelines missing; run make setup SETUP_MODE=go' >&2; exit 2; }; .local/bin/go-modern-guidelines list --go-version 1.27.3; .local/bin/go-modern-guidelines explain json_v2 stdlib_uuid errors_as_type ;; \
+	  *) echo 'GENERATE_MODE must be api, format, sqlc, or go-guidelines' >&2; exit 2 ;; \
 	esac
 
 preview:
@@ -54,10 +55,12 @@ credentials:
 
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
+	elif [ "$${VERIFY_MODE:-}" = "go-portability" ]; then $(MAKE) _verify_go_portability; \
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
 	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
+	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then $(MAKE) _verify_providers; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
 	  if [ -n "$${TEST_FILE:-}" ]; then \
@@ -81,7 +84,7 @@ verify:
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, auth-bench, integration, or smoke)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, providers, compose, or smoke)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -94,6 +97,20 @@ _verify_web:
 	cd web && npm run build
 	cd web && node scripts/check-production.mjs
 
+.PHONY: _verify_providers
+_verify_providers:
+	cd web && node scripts/check-local-providers.mjs
+
+.PHONY: _verify_go_portability
+_verify_go_portability: _ensure_web_assets
+	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/cache-darwin-amd64" GOOS=darwin GOARCH=amd64 CGO_ENABLED=0; \
+	  out="$(CURDIR)/.local/portability/darwin-amd64"; mkdir -p "$$out"; \
+	  echo 'Compile internal/command tests for darwin/amd64 (ordinary tags; compile only)'; \
+	  .local/bin/go test -c -o "$$out/command.test" ./internal/command; \
+	  echo 'Compile internal/command tests for darwin/amd64 (integration tag; compile only)'; \
+	  .local/bin/go test -c -tags=integration -o "$$out/command.integration.test" ./internal/command
+
 _ensure_web_assets:
 	@if [ ! -f web/dist/index.html ]; then \
 	  echo 'Building missing embedded web assets'; \
@@ -102,7 +119,7 @@ _ensure_web_assets:
 
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/storage|./internal/identity|./internal/authentication|./internal/secretfile) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
+	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/cliprofile|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/agenthttp|./internal/agentclient|./internal/storage|./internal/identity|./internal/authentication|./internal/agentmanagement|./internal/agentaccess|./internal/secretfile) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
@@ -117,7 +134,7 @@ _verify_go:
 	  .local/bin/go test "$$target"; \
 	  if [ -z "$${GO_PACKAGE:-}" ]; then \
 	    echo 'Compile database acceptance tests without running them'; \
-	    .local/bin/go test -tags=integration -run '^$$' ./internal/storage ./internal/authentication ./internal/authhttp ./internal/command; \
+	    .local/bin/go test -tags=integration -run '^$$' ./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/command; \
 	    $(MAKE) _verify_sqlc_generated; \
 	    mkdir -p bin; .local/bin/go build -o bin/almanac ./cmd/almanac; \
 	    $(MAKE) _report_sizes; \
@@ -128,11 +145,11 @@ _verify_go:
 _verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/setupclient ./internal/storage ./internal/identity ./internal/authentication ./internal/authhttp ./internal/backendhttp ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected race tests: $$tests"; \
-	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/setupclient ./internal/storage ./internal/identity ./internal/authentication ./internal/authhttp ./internal/backendhttp ./internal/secretfile
+	  .local/bin/go test -race ./internal/uihttp ./internal/command ./internal/agentclient ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile
 
 _verify_auth_bench:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
@@ -146,10 +163,10 @@ _verify_integration: _ensure_web_assets
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	  test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-all}" in ./internal/storage|./internal/authentication|./internal/authhttp|./internal/command|all) ;; *) echo 'GO_PACKAGE must select a real database acceptance package or all' >&2; exit 2 ;; esac; \
+	  case "$${GO_PACKAGE:-all}" in ./internal/storage|./internal/authentication|./internal/agentmanagement|./internal/agenthttp|./internal/authhttp|./internal/command|all) ;; *) echo 'GO_PACKAGE must select a real database acceptance package or all' >&2; exit 2 ;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  target="$${GO_PACKAGE:-all}"; \
-	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/storage ./internal/authentication ./internal/authhttp ./internal/command'; fi; \
+	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/command'; fi; \
 	  test_list=$$(mktemp .local/integration-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
 	  if ! .local/bin/go test -tags=integration -list . $$packages > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^TestIntegration/{n++} END{print n+0}' "$$test_list"); \

@@ -546,7 +546,8 @@ func TestIntegrationRotatePasswordSchemaAndOutageErrorsAreSafe(t *testing.T) {
 			t.Fatal(err)
 		}
 		futureSQL := "SELECT 1"
-		future := Migration{Version: 5, Name: "0005_future.sql", SQL: futureSQL, Checksum: sha256.Sum256([]byte(futureSQL))}
+		futureVersion := len(migrations) + 1
+		future := Migration{Version: futureVersion, Name: "0008_future.sql", SQL: futureSQL, Checksum: sha256.Sum256([]byte(futureSQL))}
 		if _, err := UpgradeWithMigrations(t.Context(), fixture.databaseURL, append(migrations, future)); err != nil {
 			t.Fatal("mark database newer than application failed")
 		}

@@ -1,7 +1,7 @@
 # Design review guide
 
 This package covers the presently defined Almanac product: **17 specifications and
-16 ADRs**. SPEC-0001–0003 and ADR-0001–0003 are accepted from completed reviews.
+17 ADRs**. SPEC-0001–0003 and ADR-0001–0003 are accepted from completed reviews.
 SPEC-0004–0015 and ADR-0004–0013 were accepted in Crit review `7fd22977b6c0`
 on 2026-10-24 after all comments were resolved. The maintainer subsequently accepted
 [ADR-0016](adr/0016-authentication-retry-behavior.md) for authentication recovery.
@@ -10,7 +10,8 @@ verified delivery is recorded in [status](status.md).
 Inline REVIEW notes are retained as decision traceability;
 wording such as “propose” or “confirm” records the reviewed choice, not a request to
 repeat approval. Initial numerical limits still require implementation evidence.
-Explicitly deferred choices, notably the encryption library in I06, remain open.
+The maintainer accepted [ADR-0017](adr/0017-recoverable-secret-encryption.md) on
+2026-10-26, resolving I06 with Tink Go 2.8.0 and protected external keysets.
 
 ## Accepted maintenance and annotation additions
 
@@ -75,7 +76,7 @@ This table makes hidden comments and related choices visible in one place.
 | I03 | Password/session/token/reset/rotation lifetime defaults | [Identity](specs/0004-identity-and-access.md) |
 | I04 | Offline authority and revocation delay | [Identity](specs/0004-identity-and-access.md) |
 | I05 | Encryption-key operations and delayed grants | [Identity](specs/0004-identity-and-access.md) |
-| I06 | Tink candidate versus standard-library encryption; key and ciphertext integration | [Identity](specs/0004-identity-and-access.md) |
+| I06 | Resolved: Tink, key loading and ciphertext binding | [ADR-0017](adr/0017-recoverable-secret-encryption.md) |
 | M01–M03 | OpenSLO coverage, cadence constraints, initial history and revisions | [Resource model](specs/0005-openslo-and-resource-model.md) |
 | M04–M07 | Missingness, composites, calendar/exclusion limits, precision/retention | [Calculations](specs/0006-slo-calculation-and-reporting.md) |
 | S01–S03 | Retention, decimal/replay limits, IDs and effective boundaries | [Storage](specs/0007-storage-and-retention.md) |
@@ -111,9 +112,8 @@ This table makes hidden comments and related choices visible in one place.
 
 ## What remains before implementation
 
-Produce implementation tasks for F1/F2 using the accepted records. Resolve the
-Tink-versus-standard-library choice and key/ciphertext format before encryption code;
-approval of that candidate evaluation is not selection of a dependency. Detailed
+Produce implementation tasks using the accepted records. Follow ADR-0017 for the
+selected encryption dependency and key/ciphertext format. Detailed
 OpenAPI/agent schemas, SQL changes, provider fixtures, UI catalogue assets and commands
 are implementation deliverables governed by these specs. Record measured UI and binary
 sizes as required, and retain the release sequence: local users first, composites

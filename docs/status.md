@@ -12,8 +12,16 @@ Explicit PostgreSQL upgrades establish immutable schema history and installation
 metadata. Local authentication has a verified application service and protected
 HTTP handlers. Noninteractive administrator setup and browser sign-in, restricted
 password setup, signed-in identity and logout are verified in the combined runtime.
-Reusable CLI login/profiles, user management, observation storage and providers
-remain unimplemented; Google SSO is a later increment.
+Reusable CLI login/profiles are verified under [F2-T10](tasks/F2-T10.md).
+Agent registration, credential rotation/revocation and disable now have UI/API/CLI
+coverage. [F2-T11](tasks/F2-T11.md) records verified CLI parity, protected one-time
+token output and real TLS/PostgreSQL acceptance. Connected collectors, datasource
+diagnostics and the first observation journey remain outstanding in F2.
+[F2-T12](tasks/F2-T12.md) adds current-state machine credential authentication,
+including rotation/expiry, revocation, restore epoch and database lock-order checks.
+This prerequisite does not yet expose an agent connection or execution lease.
+User management, observation storage and providers remain unimplemented;
+Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.
 
@@ -23,9 +31,10 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0002, ADR-0002 | Accepted | Completed maintainer reviews recorded in document headers |
 | SPEC-0003, ADR-0003 | Accepted | Crit review `b7b16f696fed` approved after all comments resolved |
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
-| ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
+| ADR-0004–0013 | Accepted | Same completed review; encryption-library choice subsequently resolved by ADR-0017 |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
 | ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
+| ADR-0017 | Accepted | Maintainer approved Tink Go 2.8.0, protected external keysets and rotation, 2026-10-26; implementation remains outstanding |
 | Product implementation | F1 Foundation merged at `9c25fef`; local Compose follow-up verified | F1-T01–18 deliver the foundation slice; F1-T19 adds one-command local startup; F2 observations and later release requirements remain unimplemented |
 
 ## Foundation acceptance
@@ -71,6 +80,87 @@ diagnostics, SLI collection/health and direct ingestion. Management parity, rema
 identity administration, deployment packaging, restore and full UI qualification
 retain their later-slice requirements; Google SSO remains F7.
 
+F2 preparation is tracked in the [first observations plan](plans/0019-first-observations.md).
+The first visible checkpoint is agent registration and credential management,
+followed by actual agent connectivity. [F2-T01](tasks/F2-T01.md) supplies verified
+local VictoriaMetrics and VictoriaTraces Compose sources: actual numeric Prometheus
+and TraceQL results survive stop/start, and the combined Compose acceptance passes.
+Agent management and collector implementation remain outstanding; source fixtures
+do not constitute collection through Almanac.
+[F2-T02](tasks/F2-T02.md) adds verified internal agent registration, credential
+verifier persistence, atomic audit and safe retry receipts. Its integrated candidate
+passes 73 web/105 Go unit tests and 75 real PostgreSQL integration tests. Management
+service, HTTP/CLI/UI, token lifecycle and actual agent connectivity remain outstanding.
+[F2-T03](tasks/F2-T03.md) adds the verified internal administrator proof and one-time
+agent-token issuance service. Its corrected candidate passes 73 web/109 Go unit
+tests and 77 real PostgreSQL integration tests, including existing browser journeys.
+Public management, credential lifecycle and connectivity remain outstanding.
+[F2-T04](tasks/F2-T04.md) adds verified safe agent/credential reads, revocation and
+disablement storage. Its corrected candidate passes 73 web/115 Go unit tests and 99
+PostgreSQL integration tests, including ordered pagination indexes and a populated
+database upgrade/query-plan regression. Rotation, public management and actual connectivity
+remain outstanding; internal storage completion is not the F2 user journey.
+
+[F2-T05](tasks/F2-T05.md) adds verified credential rotation with bounded overlap,
+safe retirement history and the remaining internal management service methods.
+Its candidate passes 73 web/119 Go unit tests and 116 PostgreSQL integration tests,
+including real lifecycle ordering and retry/authority boundaries. Public management
+API, UI/CLI and remote agent connectivity remain outstanding.
+
+The F2-T05 query-performance follow-up passes 73 web/119 Go unit tests and 117
+PostgreSQL integration tests. A populated upgrade and actual generated-query plan
+check verify that current-credential lookup skips inactive history for zero, one
+and two current credentials while preserving deterministic locking and receipts.
+
+[F2-T06](tasks/F2-T06.md) exposes agent registration, reads, credential lifecycle
+and disablement through authenticated HTTP routes and generated contracts. Its
+candidate passes 73 web/128 Go unit tests and 118 real PostgreSQL integration
+tests, including TLS, executable and browser authority checks. Agent management
+UI/CLI and remote connectivity remain outstanding. An intermittent pre-existing
+restart-shutdown test failure has safe diagnostics now; its cause remains unproven,
+and it did not recur in this candidate's real-stack gate.
+
+The combined API/index revision exposed another intermittent backend shutdown
+failure in the executable management test. Safe process-exit and shutdown-cause
+booleans now preserve diagnostic evidence without raw logs. The diagnostic candidate
+passes 119 real PostgreSQL integration tests, including executable/browser journeys;
+this passing run does not establish the shutdown failure's root cause or a fix.
+
+[F2-T07](tasks/F2-T07.md) adds a verified browser client for the management API,
+with exact decimal versions, bounded/cancellable responses and explicit uncertain
+mutation outcomes without automatic retry. Coordinator checks pass 98 web/128 Go
+tests plus generated/build/production and process smoke checks. Screens and actual
+browser agent-management acceptance remain outstanding.
+
+[F2-T08](tasks/F2-T08.md) delivers administrator agent registration, paginated
+list/detail/credential history and one-time token handling. Real HTTPS/PostgreSQL
+browser journeys verify fresh issuance, rejected-password recovery, committed
+response loss and same-key replay without token recovery, navigation and actual
+session invalidation. Acceptance passes120 integration tests and114 web/128 Go
+tests. Populated detail views were inspected in both themes at1440/1024/360px.
+Credential lifecycle forms, CLI and connected-agent behavior remain outstanding.
+An intermittent existing backend shutdown failure recurred during this work;
+additional safe test diagnostics preserve its failure classifications, but its
+root cause remains unproven and no shutdown fix is claimed.
+
+[F2-T09](tasks/F2-T09.md) adds agent credential rotation, individual revocation
+and agent disablement through the same management API. Explicit confirmations,
+current-password proofs, original-key/version retries and one-time replacement
+tokens are verified. The final candidate passes121 real PostgreSQL integration
+tests and133 web/128 Go tests, including actual HTTPS/browser lifecycle actions
+and persisted verifier/retirement/revocation/receipt checks. Empty lifecycle dialogs
+were inspected in both themes on desktop and mobile. CLI authentication/profiles
+and agent-command parity follow; connectivity and first observations remain
+outstanding. PR review corrections preserve throttling across navigation and consume
+revoke-dialog requests once, with135 web tests and focused coordinator verification.
+
+[F2-T10](tasks/F2-T10.md) delivers reusable CLI login/context/logout and protected
+Linux profiles. Final checks pass135 web/152 Go tests and145 race tests.
+Real-executable/database acceptance passes121 tests. An intermittent browser rotation assertion
+failed on the first integrated run and did not reproduce after adding precise
+diagnostics; no browser fix is claimed. Agent-management command parity follows
+this authentication boundary.
+
 ## Coverage
 
 | Requirement | Primary specs |
@@ -102,8 +192,8 @@ not product correctness or scalability.
 See [review guide](review-guide.md) for the highest-impact decisions, reading order,
 and decision register. The completed review clarified mandatory initial-password
 rotation, local users before Google SSO, calculation examples, composite sequencing,
-React/API packaging and measurable UI performance. The encryption library remains a
-candidate selection before encryption implementation. Web foundation checks now run;
+React/API packaging and measurable UI performance. Accepted ADR-0017 selects Tink
+and its key/ciphertext format; encryption implementation remains outstanding. Web foundation checks now run;
 Go, operational HTTP and PostgreSQL upgrade checks also run; full persistence
 and product-journey acceptance remain outstanding.
 
@@ -198,7 +288,7 @@ and product-journey acceptance remain outstanding.
   including failure. Updated verification passes 73 web/102 Go tests and 66 real
   PostgreSQL integration tests (command 26.805 s), including the logout/re-login
   regression. Independent scoped review approves.
-- Resolve explicitly deferred choices before their affected task, including encryption
+- Follow accepted [ADR-0017](adr/0017-recoverable-secret-encryption.md) for encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
   catalogue browser entry points and Go/operational HTTP/database upgrade gates

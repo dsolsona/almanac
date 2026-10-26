@@ -44,7 +44,12 @@ func TestNewRejectsUnsupportedComponentsAndAssetMismatches(t *testing.T) {
 func TestNewCombinedRegistersAssetFallback(t *testing.T) {
 	cfg := config.Config{Components: "ui,backend", PublicOrigin: "https://example.test"}
 	assets := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	server, err := New(context.Background(), cfg, &authentication.Service{}, "postgres://unused", nil, assets)
+	databaseURL := "postgres://almanac:password@127.0.0.1:5432/almanac?sslmode=disable"
+	service, err := authentication.New(t.Context(), databaseURL, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(context.Background(), cfg, service, databaseURL, nil, assets)
 	if err != nil {
 		t.Fatal(err)
 	}

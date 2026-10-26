@@ -84,6 +84,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agents
+         * @description Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+         */
+        get: operations["getAgents"];
+        put?: never;
+        /**
+         * Create an agent
+         * @description Requires one matching Origin and a session-purpose X-CSRF-Token. Fresh creation returns the one-time token; an idempotent replay returns metadata without the token.
+         */
+        post: operations["postAgents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an agent
+         * @description Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
+         */
+        get: operations["getAgent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read credential history
+         * @description Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
+         */
+        get: operations["getAgentCredentials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable an agent
+         * @description Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+         */
+        post: operations["postAgentDisable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/credentials/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate an agent credential
+         * @description Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key. Fresh rotation returns a one-time token; receipt replay returns historical metadata without the token.
+         */
+        post: operations["postAgentCredentialRotate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/credentials/{credential_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an agent credential
+         * @description Requires one matching Origin, a session-purpose X-CSRF-Token, strong agent-specific If-Match, and one Idempotency-Key.
+         */
+        post: operations["postAgentCredentialRevoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/livez": {
         parameters: {
             query?: never;
@@ -122,6 +246,111 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Agent: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            enabled: boolean;
+            version: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AgentCredential: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: date-time */
+            issued_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /** Format: date-time */
+            retire_at: string | null;
+        };
+        AgentPage: {
+            items: components["schemas"]["Agent"][];
+            next_cursor: string;
+        };
+        CredentialPage: {
+            items: components["schemas"]["AgentCredential"][];
+            next_cursor: string;
+        };
+        CreateAgentRequest: {
+            /** Format: password */
+            current_password: string;
+            name: string;
+            display_name: string;
+            /** Format: int32 */
+            lifetime_seconds?: number;
+        };
+        RotateAgentRequest: {
+            /** Format: password */
+            current_password: string;
+            /** Format: int32 */
+            lifetime_seconds?: number;
+            /** Format: int32 */
+            overlap_seconds?: number;
+        };
+        PasswordProofRequest: {
+            /** Format: password */
+            current_password: string;
+        };
+        LifecycleResult: {
+            agent: components["schemas"]["Agent"];
+            credential: components["schemas"]["AgentCredential"] | null;
+            changed: boolean;
+            revoked_credential_count: string;
+            replayed: boolean;
+        };
+        AgentIssuance: {
+            agent: components["schemas"]["Agent"];
+            credential: components["schemas"]["AgentCredential"];
+            replayed: boolean;
+            /** @enum {string} */
+            secret_state: "issued" | "secret_unavailable";
+            token?: string;
+        };
+        AgentIssuanceFresh: components["schemas"]["AgentIssuance"] & {
+            /** @enum {boolean} */
+            replayed: false;
+            /** @enum {string} */
+            secret_state: "issued";
+            token: string;
+        };
+        AgentIssuanceReplay: components["schemas"]["AgentIssuance"] & {
+            /** @enum {boolean} */
+            replayed: true;
+            /** @enum {string} */
+            secret_state: "secret_unavailable";
+        };
+        RotationIssuance: {
+            agent: components["schemas"]["Agent"];
+            credential: components["schemas"]["AgentCredential"];
+            previous_credential: components["schemas"]["AgentCredential"] | null;
+            replayed: boolean;
+            /** @enum {string} */
+            secret_state: "issued" | "secret_unavailable";
+            token?: string;
+        };
+        RotationIssuanceResponse: components["schemas"]["RotationIssuanceFresh"] | components["schemas"]["RotationIssuanceReplay"];
+        RotationIssuanceFresh: components["schemas"]["RotationIssuance"] & {
+            /** @enum {boolean} */
+            replayed: false;
+            /** @enum {string} */
+            secret_state: "issued";
+            token: string;
+        };
+        RotationIssuanceReplay: components["schemas"]["RotationIssuance"] & {
+            /** @enum {boolean} */
+            replayed: true;
+            /** @enum {string} */
+            secret_state: "secret_unavailable";
+        };
         EmptyAuthRequest: Record<string, never>;
         LoginRequest: {
             login: string;
@@ -213,7 +442,13 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        AgentId: string;
+        /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
+        IfMatch: string;
+        /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+        IdempotencyKey: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -495,6 +730,270 @@ export interface operations {
             };
             /** @description Authentication unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAgents: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgents: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description Creation receipt replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentIssuanceReplay"];
+                };
+            };
+            /** @description Agent and one-time credential */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentIssuanceFresh"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAgentCredentials: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Credential page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialPage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgentDisable: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
+                "If-Match": components["parameters"]["IfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordProofRequest"];
+            };
+        };
+        responses: {
+            /** @description Disable result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LifecycleResult"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgentCredentialRotate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
+                "If-Match": components["parameters"]["IfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotateAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description Rotation issuance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotationIssuanceResponse"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgentCredentialRevoke: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
+                "If-Match": components["parameters"]["IfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordProofRequest"];
+            };
+        };
+        responses: {
+            /** @description Revoke result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LifecycleResult"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };

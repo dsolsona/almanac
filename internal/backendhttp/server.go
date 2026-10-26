@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agenthttp"
+	"github.com/dsolsona/almanac/internal/agentmanagement"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -58,12 +60,22 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid authentication configuration")
 	}
+	management, err := agentmanagement.New(databaseURL, service, time.Now)
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid agent management configuration")
+	}
+	agents, err := agenthttp.New(management, auth, agenthttp.Options{Preflight: s.authenticationPreflight})
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid agent HTTP configuration")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
 	for _, path := range []string{"/api/v1/auth/context", "/api/v1/auth/login", "/api/v1/auth/password", "/api/v1/auth/logout"} {
 		mux.Handle(path, auth)
 	}
+	mux.Handle("/api/v1/agents", agents)
+	mux.Handle("/api/v1/", agents)
 	if cfg.BackendUI() {
 		mux.Handle("/", assets)
 	}
@@ -71,7 +83,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if tlsConfig != nil {
 		clonedTLS = tlsConfig.Clone()
 	}
-	s.http = &http.Server{Handler: strictPaths(mux), TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	s.http = &http.Server{Handler: strictPaths(mux, agents), TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	return s, nil
 }
 
@@ -118,10 +130,14 @@ type unwrapWriter struct{ http.ResponseWriter }
 
 func (w unwrapWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-func strictPaths(next http.Handler) http.Handler {
+func strictPaths(next http.Handler, managed ...http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pathValue := r.URL.Path
 		if pathValue != r.URL.EscapedPath() || path.Clean(pathValue) != pathValue || strings.ContainsAny(pathValue, "\\%") {
+			if len(managed) > 0 && (pathValue == "/api/v1/agents" || strings.HasPrefix(pathValue, "/api/v1/agents/")) {
+				managed[0].ServeHTTP(unwrapWriter{w}, r)
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}

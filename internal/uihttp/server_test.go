@@ -119,9 +119,11 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 	}))
 	server := testServer(t, backend.URL)
 	frontend := newTestServer(t, server.http.Handler)
-	request, _ := http.NewRequest(http.MethodPut, frontend.URL+"/api/v1/slis/7?x=1", strings.NewReader("body"))
+	request, _ := http.NewRequest(http.MethodPost, frontend.URL+"/api/v1/agents/abcdefab-cdef-4abc-8def-abcdefabcdee/disable?view=history", strings.NewReader("body"))
 	request.Header.Set("Authorization", "Bearer test")
 	request.Header.Set("Cookie", "session=test")
+	request.Header.Set("If-Match", `"agent:abcdefab-cdef-4abc-8def-abcdefabcdee:7"`)
+	request.Header.Set("Idempotency-Key", "proxy,receipt")
 	request.Header.Set("X-Forwarded-Host", "attacker.example")
 	request.Header.Set("X-Real-Ip", "192.0.2.12")
 	response, err := testHTTPClient.Do(request)
@@ -133,11 +135,14 @@ func TestProxyFixedOriginAndRestrictions(t *testing.T) {
 		t.Fatalf("proxy status = %d", response.StatusCode)
 	}
 	forwarded := awaitValue(t, got, "proxied request")
-	if forwarded.URL.Path != "/api/v1/slis/7" || forwarded.URL.RawQuery != "x=1" {
+	if forwarded.URL.Path != "/api/v1/agents/abcdefab-cdef-4abc-8def-abcdefabcdee/disable" || forwarded.URL.RawQuery != "view=history" {
 		t.Errorf("forwarded URL = %s", forwarded.URL)
 	}
 	if forwarded.Header.Get("Authorization") != "Bearer test" || forwarded.Header.Get("Cookie") != "session=test" {
 		t.Error("auth/cookie headers were not forwarded")
+	}
+	if forwarded.Header.Get("If-Match") != `"agent:abcdefab-cdef-4abc-8def-abcdefabcdee:7"` || forwarded.Header.Get("Idempotency-Key") != "proxy,receipt" {
+		t.Error("management conditional/idempotency headers were not forwarded")
 	}
 	if forwarded.Header.Get("X-Forwarded-Host") != "" || forwarded.Header.Get("X-Forwarded-For") != "" || forwarded.Header.Get("X-Real-Ip") != "" {
 		t.Error("untrusted forwarding headers were retained")
