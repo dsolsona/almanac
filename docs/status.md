@@ -98,6 +98,11 @@ Its candidate passes 73 web/119 Go unit tests and 116 PostgreSQL integration tes
 including real lifecycle ordering and retry/authority boundaries. Public management
 API, UI/CLI and remote agent connectivity remain outstanding.
 
+The F2-T05 query-performance follow-up passes 73 web/119 Go unit tests and 117
+PostgreSQL integration tests. A populated upgrade and actual generated-query plan
+check verify that current-credential lookup skips inactive history for zero, one
+and two current credentials while preserving deterministic locking and receipts.
+
 [F2-T06](tasks/F2-T06.md) exposes agent registration, reads, credential lifecycle
 and disablement through authenticated HTTP routes and generated contracts. Its
 candidate passes 73 web/128 Go unit tests and 118 real PostgreSQL integration

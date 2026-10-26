@@ -11,6 +11,7 @@ sql:
       - internal/storage/migrations/0005_agents.sql
       - internal/storage/migrations/0006_agent_pagination_indexes.sql
       - internal/storage/migrations/0007_agent_credential_retirement.sql
+      - internal/storage/migrations/0008_agent_rotation_lookup_index.sql
     gen:
       go:
         package: dbgen
