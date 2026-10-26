@@ -69,34 +69,43 @@ async function readBody(response: Response, signal: AbortSignal): Promise<unknow
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
+  let complete = false;
+  let cancelPromise: Promise<void> | null = null;
+  const cancel = () => {
+    if (cancelPromise) return;
+    try {
+      cancelPromise = reader.cancel();
+      void cancelPromise.then(() => undefined, () => undefined);
+    } catch { /* The operation still rejects with its safe local failure. */ }
+  };
+  let rejectAbort!: (error: Error) => void;
+  const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
+  const onAbort = () => { cancel(); rejectAbort(new Error('operation aborted')); };
+  signal.addEventListener('abort', onAbort, { once: true });
   try {
     while (true) {
-      if (signal.aborted) throw new Error('aborted');
-      const { done, value } = await reader.read();
-      if (done) break;
+      if (signal.aborted) throw new Error('operation aborted');
+      pendingRead = reader.read();
+      const result = await Promise.race([pendingRead, aborted]);
+      pendingRead = null;
+      if (result.done) { complete = true; break; }
+      const value = result.value;
       size += value.byteLength;
-      if (size > MAX_BODY_BYTES) throw new Error('oversized body');
+      if (size > MAX_BODY_BYTES) { cancel(); throw new Error('oversized body'); }
       chunks.push(value);
     }
   } finally {
-    reader.releaseLock();
+    signal.removeEventListener('abort', onAbort);
+    if (!complete && !cancelPromise) cancel();
+    const release = () => { try { reader.releaseLock(); } catch { /* A read can still be settling after cancellation. */ } };
+    if (pendingRead) void pendingRead.then(release, release);
+    else release();
   }
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-}
-
-function abortable<T>(promise: Promise<T>, signal: AbortSignal, cancel?: () => void): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const aborted = () => { try { void cancel?.(); } catch { /* The read race still ends on the abort. */ } reject(new Error('operation aborted')); };
-    if (signal.aborted) { aborted(); return; }
-    signal.addEventListener('abort', aborted, { once: true });
-    promise.then(
-      (value) => { signal.removeEventListener('abort', aborted); resolve(value); },
-      (error: unknown) => { signal.removeEventListener('abort', aborted); reject(error); },
-    );
-  });
 }
 
 function safeProblem(value: unknown): value is components['schemas']['Problem'] {
@@ -128,33 +137,49 @@ const rejectionMessages: Record<string, string> = {
 async function post(fetcher: typeof fetch, path: string, body: unknown, csrf: string | null, budget: Budget): Promise<Response> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (csrf !== null) headers['X-CSRF-Token'] = csrf;
-  const request = fetcher(`${BASE}${path}`, {
+  let request: Promise<Response>;
+  try {
+    request = fetcher(`${BASE}${path}`, {
     method: 'POST', body: JSON.stringify(body), credentials: 'same-origin', mode: 'same-origin',
     cache: 'no-store', redirect: 'error', headers, signal: budget.signal,
-  });
+    });
+  } catch {
+    throw new Error('request failed');
+  }
   return new Promise((resolve, reject) => {
     const aborted = () => reject(new Error('request aborted'));
     if (budget.signal.aborted) { aborted(); return; }
     budget.signal.addEventListener('abort', aborted, { once: true });
     request.then(
-      (response) => { budget.signal.removeEventListener('abort', aborted); resolve(response); },
+      (response) => {
+        budget.signal.removeEventListener('abort', aborted);
+        if (budget.signal.aborted) { discardBody(response); return; }
+        resolve(response);
+      },
       (error: unknown) => { budget.signal.removeEventListener('abort', aborted); reject(error); },
     );
   });
 }
 
+function discardBody(response: Response): void {
+  try {
+    const cancellation = response.body?.cancel();
+    if (cancellation) void cancellation.then(() => undefined, () => undefined);
+  } catch { /* A closed or locked response body needs no public error detail. */ }
+}
+
 async function getValidContext(fetcher: typeof fetch, budget: Budget): Promise<AuthContext> {
   const response = await post(fetcher, 'context', {}, null, budget);
-  if (response.status !== 200) throw unavailable('context_unavailable');
-  const body = await abortable(readBody(response, budget.signal), budget.signal, () => response.body?.cancel());
+  if (response.status !== 200) { discardBody(response); throw unavailable('context_unavailable'); }
+  const body = await readBody(response, budget.signal);
   if (!validContext(body)) throw unavailable('invalid_context');
   return body;
 }
 
 async function parseRejection(response: Response, signal: AbortSignal): Promise<AuthFailure | null> {
-  if (response.status === 501 || response.status >= 500) return null;
+  if (response.status >= 500 && response.status !== 501) { discardBody(response); return null; }
   let body: unknown;
-  try { body = await abortable(readBody(response, signal), signal, () => response.body?.cancel()); } catch { return null; }
+  try { body = await readBody(response, signal); } catch { return null; }
   if (!safeProblem(body) || !allowedCodes[response.status]?.includes(body.code)) return null;
   const header = response.headers.get('Retry-After');
   const parsed = header !== null && /^\d+$/.test(header) ? Number(header) : NaN;
@@ -170,7 +195,7 @@ async function mutation(fetcher: typeof fetch, path: 'login' | 'password', body:
       if (failure) throw failure;
       throw uncertainty();
     }
-    const value = await abortable(readBody(response, budget.signal), budget.signal, () => response.body?.cancel());
+    const value = await readBody(response, budget.signal);
     if (!validate(value)) throw uncertainty();
     return value;
   } catch (error) {
@@ -201,7 +226,8 @@ export function createAuthClient(fetcher: typeof fetch = fetch) {
       return withBudget(options.signal, async (budget) => {
         try {
           const response = await post(fetcher, 'logout', {}, context.csrf_token, budget);
-          if (response.status === 204) return;
+          if (response.status === 204 && response.body === null) return;
+          discardBody(response);
           throw unavailable('logout_unconfirmed');
         } catch {
           throw new AuthFailure('unavailable', 'logout_unconfirmed', 'Sign-out could not be confirmed.');
