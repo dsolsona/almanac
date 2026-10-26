@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Read the current authentication context
-         * @description Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
          */
         post: operations["postAuthContext"];
         delete?: never;
@@ -35,7 +35,7 @@ export interface paths {
         put?: never;
         /**
          * Create a local session
-         * @description Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-preauth cookie established by context, and its X-CSRF-Token. On success, the pre-authentication cookie is deleted and a protected __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
          */
         post: operations["postAuthLogin"];
         delete?: never;
@@ -55,7 +55,7 @@ export interface paths {
         put?: never;
         /**
          * Change the current password
-         * @description Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding), the __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On success, the session cookie is replaced with a newly rotated session. The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
          */
         post: operations["postAuthPassword"];
         delete?: never;
@@ -75,7 +75,7 @@ export interface paths {
         put?: never;
         /**
          * Revoke the current session
-         * @description Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+         * @description Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Supply either the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both cookies are present, the session cookie takes precedence. Success deletes both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
          */
         post: operations["postAuthLogout"];
         delete?: never;

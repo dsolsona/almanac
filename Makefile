@@ -108,7 +108,7 @@ _verify_go:
 _verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage ./internal/identity ./internal/authentication ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
+	  if ! .local/bin/go test -list . ./internal/uihttp ./internal/command ./internal/storage ./internal/identity ./internal/authentication ./internal/authhttp ./internal/secretfile > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
 	  echo "Selected race tests: $$tests"; \

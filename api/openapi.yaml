@@ -8,8 +8,15 @@ paths:
     post:
       operationId: postAuthContext
       summary: Read the current authentication context
-      description: Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
-      security: []
+      description: >-
+        Requires one Origin header equal to the configured public HTTPS origin and a
+        secure TLS request (or correctly trusted proxy forwarding). Authentication
+        cookies are optional on context: without a valid session, context creates
+        or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF
+        token for login; with a valid session, it returns a session-bound CSRF token.
+        Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain.
+        Authentication operations intentionally do not support Idempotency-Key; a
+        supplied key is rejected with 501 capability_unavailable.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
       responses:
         '200': {description: Authentication context, content: {application/json: {schema: {$ref: '#/components/schemas/AuthResponse'}}}}
@@ -25,8 +32,18 @@ paths:
     post:
       operationId: postAuthLogin
       summary: Create a local session
-      description: Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
-      security: []
+      description: >-
+        Requires one Origin header equal to the configured public HTTPS origin and a
+        secure TLS request (or correctly trusted proxy forwarding), the
+        __Host-almanac-preauth cookie established by context, and its X-CSRF-Token.
+        On success, the pre-authentication cookie is deleted and a protected
+        __Host-almanac-session cookie is issued. Both cookies are Secure, HttpOnly,
+        SameSite=Lax, Path=/, and have no Domain. Authentication operations
+        intentionally do not support Idempotency-Key; a supplied key is rejected
+        with 501 capability_unavailable.
+      security:
+        - PreAuthenticationCookie: []
+          CsrfToken: []
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/LoginRequest'}}}}
       responses:
         '200': {description: Session created, content: {application/json: {schema: {$ref: '#/components/schemas/AuthResponse'}}}}
@@ -45,8 +62,17 @@ paths:
     post:
       operationId: postAuthPassword
       summary: Change the current password
-      description: Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
-      security: []
+      description: >-
+        Requires one Origin header equal to the configured public HTTPS origin and a
+        secure TLS request (or correctly trusted proxy forwarding), the
+        __Host-almanac-session cookie, and its session-bound X-CSRF-Token. On
+        success, the session cookie is replaced with a newly rotated session.
+        The cookie is Secure, HttpOnly, SameSite=Lax, Path=/, and has no Domain.
+        Authentication operations intentionally do not support Idempotency-Key; a
+        supplied key is rejected with 501 capability_unavailable.
+      security:
+        - SessionCookie: []
+          CsrfToken: []
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordRequest'}}}}
       responses:
         '200': {description: Password changed, content: {application/json: {schema: {$ref: '#/components/schemas/AuthResponse'}}}}
@@ -65,8 +91,20 @@ paths:
     post:
       operationId: postAuthLogout
       summary: Revoke the current session
-      description: Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
-      security: []
+      description: >-
+        Requires one Origin header equal to the configured public HTTPS origin and a
+        secure TLS request (or correctly trusted proxy forwarding). Supply either
+        the __Host-almanac-session cookie and its session-bound X-CSRF-Token, or
+        the __Host-almanac-preauth cookie and its login X-CSRF-Token. When both
+        cookies are present, the session cookie takes precedence. Success deletes
+        both cookies. They are Secure, HttpOnly, SameSite=Lax, Path=/, and have no
+        Domain. Authentication operations intentionally do not support
+        Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
+      security:
+        - SessionCookie: []
+          CsrfToken: []
+        - PreAuthenticationCookie: []
+          CsrfToken: []
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
       responses:
         '204': {description: Session cleared}
@@ -114,6 +152,22 @@ paths:
               example: {status: unavailable, component: ui}
         '405': {description: Method not allowed}
 components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-almanac-session
+      description: Secure HttpOnly session cookie; required with X-CSRF-Token for password and session logout.
+    PreAuthenticationCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-almanac-preauth
+      description: Secure HttpOnly cookie established by context; required with X-CSRF-Token for login and anonymous logout.
+    CsrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
     EmptyAuthRequest:
       type: object

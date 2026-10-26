@@ -37,6 +37,7 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	var clockMu sync.Mutex
 	nowFunc := func() time.Time { clockMu.Lock(); defer clockMu.Unlock(); now = now.Add(time.Microsecond); return now }
+	currentTime := func() time.Time { clockMu.Lock(); defer clockMu.Unlock(); return now }
 	service, err := authentication.New(t.Context(), databaseURL, nowFunc)
 	if err != nil {
 		t.Fatal(err)
@@ -88,12 +89,14 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 		}
 		return response.StatusCode, data, response.Header
 	}
+	var contextHeaders http.Header
 	readContext := func() api.AuthResponse {
 		t.Helper()
-		status, body, _ := call("/api/v1/auth/context", `{}`, "")
+		status, body, headers := call("/api/v1/auth/context", `{}`, "")
 		if status != http.StatusOK {
 			t.Fatalf("context status=%d", status)
 		}
+		contextHeaders = headers
 		var response api.AuthResponse
 		if err := json.Unmarshal(body, &response); err != nil {
 			t.Fatal(err)
@@ -103,6 +106,10 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 	context := readContext()
 	if context.Session != nil || context.CsrfToken == "" {
 		t.Fatal("anonymous context did not contain an empty session and CSRF token")
+	}
+	preauth := integrationCookie(contextHeaders, preauthCookie)
+	if preauth == nil || preauth.Value == "" || !preauth.Secure || !preauth.HttpOnly || preauth.SameSite != http.SameSiteLaxMode || preauth.Path != "/" || preauth.Domain != "" || preauth.MaxAge != 600 || !preauth.Expires.Equal(currentTime().Add(10*time.Minute).Truncate(time.Second)) {
+		t.Fatal("context pre-authentication cookie attributes or exact expiry were invalid")
 	}
 	status, body, headers := call("/api/v1/auth/login", `{"login":"missing","password":"wrong password"}`, context.CsrfToken)
 	if status != http.StatusUnauthorized || len((&http.Response{Header: headers}).Cookies()) != 0 {
@@ -122,6 +129,14 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 	}
 	if len(headers.Values("Set-Cookie")) < 2 {
 		t.Fatal("login did not set the session and clear the pre-authentication cookie")
+	}
+	loginSessionCookie, loginPreauthCookie := integrationCookie(headers, sessionCookie), integrationCookie(headers, preauthCookie)
+	if !secureSessionCookie(loginSessionCookie) || loginSessionCookie.MaxAge < 1 || loginSessionCookie.MaxAge > 43200 || !deletedCookie(loginPreauthCookie) {
+		t.Fatal("login cookie issuance or pre-authentication deletion attributes were invalid")
+	}
+	loginAccess, err := service.Inspect(t.Context(), loginSessionCookie.Value)
+	if err != nil || !loginSessionCookie.Expires.Equal(loginAccess.AbsoluteExpiresAt.Truncate(time.Second)) {
+		t.Fatal("login cookie expiry did not match the persisted absolute session expiry")
 	}
 	var loggedIn api.AuthResponse
 	if err := json.Unmarshal(body, &loggedIn); err != nil {
@@ -171,9 +186,17 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 		t.Fatal("login did not place the session cookie in the jar")
 	}
 	permanent := "Permanent password phrase 467!"
-	status, body, _ = call("/api/v1/auth/password", `{"current_password":"`+initialPassword+`","new_password":"`+permanent+`"}`, loggedIn.CsrfToken)
+	status, body, headers = call("/api/v1/auth/password", `{"current_password":"`+initialPassword+`","new_password":"`+permanent+`"}`, loggedIn.CsrfToken)
 	if status != http.StatusOK {
 		t.Fatalf("password rotation status=%d", status)
+	}
+	replacementCookie := integrationCookie(headers, sessionCookie)
+	if !secureSessionCookie(replacementCookie) {
+		t.Fatal("password rotation did not issue a protected replacement session cookie")
+	}
+	replacementAccess, inspectErr := service.Inspect(t.Context(), replacementCookie.Value)
+	if inspectErr != nil || !replacementCookie.Expires.Equal(replacementAccess.AbsoluteExpiresAt.Truncate(time.Second)) {
+		t.Fatal("password rotation cookie expiry did not match the persisted absolute session expiry")
 	}
 	var rotated api.AuthResponse
 	if err := json.Unmarshal(body, &rotated); err != nil {
@@ -236,9 +259,12 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 	if !afterInspect.Equal(beforeInspect) {
 		t.Fatal("repeated authentication context requests extended idle session activity")
 	}
-	status, body, _ = call("/api/v1/auth/logout", `{}`, context.CsrfToken)
+	status, body, headers = call("/api/v1/auth/logout", `{}`, context.CsrfToken)
 	if status != http.StatusNoContent || len(body) != 0 {
 		t.Fatalf("logout status=%d body-empty=%t", status, len(body) == 0)
+	}
+	if !deletedCookie(integrationCookie(headers, sessionCookie)) || !deletedCookie(integrationCookie(headers, preauthCookie)) {
+		t.Fatal("logout did not delete both protected authentication cookies")
 	}
 	context = readContext()
 	if context.Session != nil {
@@ -450,6 +476,23 @@ func positiveInteger(value string) bool {
 }
 
 func integrationDatabase(t *testing.T) string { t.Helper(); return testpostgres.Database(t) }
+
+func integrationCookie(headers http.Header, name string) *http.Cookie {
+	for _, cookie := range (&http.Response{Header: headers}).Cookies() {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
+}
+
+func secureSessionCookie(cookie *http.Cookie) bool {
+	return cookie != nil && cookie.Value != "" && cookie.Secure && cookie.HttpOnly && cookie.SameSite == http.SameSiteLaxMode && cookie.Path == "/" && cookie.Domain == "" && !cookie.Expires.IsZero()
+}
+
+func deletedCookie(cookie *http.Cookie) bool {
+	return cookie != nil && cookie.Value == "" && cookie.MaxAge < 0 && cookie.Secure && cookie.HttpOnly && cookie.SameSite == http.SameSiteLaxMode && cookie.Path == "/" && cookie.Domain == ""
+}
 
 func mustURL(t *testing.T, value string) *url.URL {
 	t.Helper()

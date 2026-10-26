@@ -48,9 +48,31 @@ func TestSourceAddressTrustBoundary(t *testing.T) {
 	if got, ok := h.requestSource(forwarded); !ok || got.String() != "198.51.100.9" {
 		t.Fatalf("trusted forwarded source=%v ok=%t", got, ok)
 	}
-	forwarded.Header.Add("X-Forwarded-For", "203.0.113.8")
-	if _, ok := h.requestSource(forwarded); ok {
-		t.Fatal("trusted forwarding chain accepted")
+	for _, tc := range []struct {
+		name           string
+		forwardedFor   []string
+		forwardedProto []string
+	}{
+		{name: "duplicate forwarded proto", forwardedFor: []string{"198.51.100.9"}, forwardedProto: []string{"https", "https"}},
+		{name: "malformed forwarded address", forwardedFor: []string{"not-an-address"}, forwardedProto: []string{"https"}},
+		{name: "ported forwarded address", forwardedFor: []string{"198.51.100.9:443"}, forwardedProto: []string{"https"}},
+		{name: "zoned forwarded address", forwardedFor: []string{"fe80::1%eth0"}, forwardedProto: []string{"https"}},
+		{name: "comma separated forwarding chain", forwardedFor: []string{"198.51.100.9, 203.0.113.8"}, forwardedProto: []string{"https"}},
+		{name: "multiple forwarded headers", forwardedFor: []string{"198.51.100.9", "203.0.113.8"}, forwardedProto: []string{"https"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/", nil)
+			r.RemoteAddr = "10.2.3.4:443"
+			for _, value := range tc.forwardedProto {
+				r.Header.Add("X-Forwarded-Proto", value)
+			}
+			for _, value := range tc.forwardedFor {
+				r.Header.Add("X-Forwarded-For", value)
+			}
+			if _, ok := h.requestSource(r); ok {
+				t.Fatal("invalid trusted forwarding accepted")
+			}
+		})
 	}
 	untrusted := httptest.NewRequest(http.MethodPost, "/", nil)
 	untrusted.TLS = &tls.ConnectionState{}
@@ -62,6 +84,33 @@ func TestSourceAddressTrustBoundary(t *testing.T) {
 	untrusted.TLS = nil
 	if _, ok := h.requestSource(untrusted); ok {
 		t.Fatal("untrusted plaintext accepted")
+	}
+}
+
+func TestTypedRateLimitRetryAfterRoundsUp(t *testing.T) {
+	created, err := New(&authentication.Service{}, Options{PublicOrigin: "https://almanac.example", Now: time.Now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := created.(*Handler)
+	for _, tc := range []struct {
+		name     string
+		duration time.Duration
+		want     string
+	}{
+		{name: "zero", duration: 0, want: "1"},
+		{name: "subsecond", duration: time.Nanosecond, want: "1"},
+		{name: "exact second", duration: time.Second, want: "1"},
+		{name: "fraction above second", duration: time.Second + time.Nanosecond, want: "2"},
+		{name: "fraction below minute", duration: time.Minute - time.Nanosecond, want: "60"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.mapError(w, &authentication.RateLimitError{RetryAfter: tc.duration}, "0123456789abcdef0123456789abcdef", "")
+			if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") != tc.want {
+				t.Fatalf("status=%d retry-after=%q want=%q", w.Code, w.Header().Get("Retry-After"), tc.want)
+			}
+		})
 	}
 }
 
@@ -123,6 +172,38 @@ func TestStorageFailureDoesNotBecomeAnonymousContext(t *testing.T) {
 	}
 }
 
+func TestLogoutStorageFailurePreservesSessionCookie(t *testing.T) {
+	service, err := authentication.New(t.Context(), "postgres://almanac:test@127.0.0.1:1/almanac?sslmode=disable", time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := New(service, Options{PublicOrigin: "https://almanac.example", Now: time.Now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := created.(*Handler)
+	secret, _, err := identity.NewSessionSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce, err := csrfNonce()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", strings.NewReader(`{}`))
+	r.TLS = &tls.ConnectionState{}
+	r.RemoteAddr = "192.0.2.1:443"
+	r.Header.Set("Origin", h.origin)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-CSRF-Token", h.csrf("session", secret, nonce))
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: secret})
+	w := deadlineRecorder{httptest.NewRecorder()}
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("logout storage failure status=%d set-cookie-count=%d", w.Code, len(w.Result().Cookies()))
+	}
+}
+
 func TestOriginAndStrictJSONFailBeforeAuthentication(t *testing.T) {
 	created, err := New(&authentication.Service{}, Options{PublicOrigin: "https://almanac.example", Now: time.Now})
 	if err != nil {
@@ -158,6 +239,44 @@ func TestOriginAndStrictJSONFailBeforeAuthentication(t *testing.T) {
 			h.ServeHTTP(w, r)
 			if w.Code != tc.status {
 				t.Fatalf("status=%d want=%d body=%s", w.Code, tc.status, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestHTTPDecodeMediaAndCanonicalPathRejections(t *testing.T) {
+	created, err := New(&authentication.Service{}, Options{PublicOrigin: "https://almanac.example", Now: time.Now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := created.(*Handler)
+	for _, tc := range []struct {
+		name, path, body, contentType, contentEncoding string
+		want                                           int
+	}{
+		{name: "unsupported media type", path: "/api/v1/auth/context", body: `{}`, contentType: "text/plain", want: http.StatusUnsupportedMediaType},
+		{name: "unsupported content encoding", path: "/api/v1/auth/context", body: `{}`, contentType: "application/json", contentEncoding: "gzip", want: http.StatusUnsupportedMediaType},
+		{name: "trailing JSON value", path: "/api/v1/auth/login", body: `{"login":"a","password":"b"} {}`, contentType: "application/json", want: http.StatusBadRequest},
+		{name: "wrong non-null member type", path: "/api/v1/auth/login", body: `{"login":7,"password":"b"}`, contentType: "application/json", want: http.StatusBadRequest},
+		{name: "empty object", path: "/api/v1/auth/login", body: `{}`, contentType: "application/json", want: http.StatusBadRequest},
+		{name: "null object", path: "/api/v1/auth/login", body: `null`, contentType: "application/json", want: http.StatusBadRequest},
+		{name: "encoded route alias", path: "/api/v1/auth/%63ontext", body: `{}`, contentType: "application/json", want: http.StatusNotFound},
+		{name: "dot segment alias", path: "/api/v1/auth/./context", body: `{}`, contentType: "application/json", want: http.StatusNotFound},
+		{name: "parent segment alias", path: "/api/v1/auth/../auth/context", body: `{}`, contentType: "application/json", want: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			r.TLS = &tls.ConnectionState{}
+			r.RemoteAddr = "192.0.2.1:443"
+			r.Header.Set("Origin", h.origin)
+			r.Header.Set("Content-Type", tc.contentType)
+			if tc.contentEncoding != "" {
+				r.Header.Set("Content-Encoding", tc.contentEncoding)
+			}
+			w := deadlineRecorder{httptest.NewRecorder()}
+			h.ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status=%d want=%d", w.Code, tc.want)
 			}
 		})
 	}
