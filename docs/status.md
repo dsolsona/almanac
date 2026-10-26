@@ -87,9 +87,16 @@ agent-token issuance service. Its corrected candidate passes 73 web/109 Go unit
 tests and 77 real PostgreSQL integration tests, including existing browser journeys.
 Public management, credential lifecycle and connectivity remain outstanding.
 [F2-T04](tasks/F2-T04.md) adds verified safe agent/credential reads, revocation and
-disablement storage. Its final candidate passes 73 web/115 Go unit tests and 98
-PostgreSQL integration tests. Rotation, public management and actual connectivity
+disablement storage. Its corrected candidate passes 73 web/115 Go unit tests and 99
+PostgreSQL integration tests, including ordered pagination indexes and a populated
+database upgrade/query-plan regression. Rotation, public management and actual connectivity
 remain outstanding; internal storage completion is not the F2 user journey.
+
+[F2-T05](tasks/F2-T05.md) adds verified credential rotation with bounded overlap,
+safe retirement history and the remaining internal management service methods.
+Its candidate passes 73 web/119 Go unit tests and 116 PostgreSQL integration tests,
+including real lifecycle ordering and retry/authority boundaries. Public management
+API, UI/CLI and remote agent connectivity remain outstanding.
 
 ## Coverage
 

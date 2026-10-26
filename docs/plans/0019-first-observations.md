@@ -98,10 +98,12 @@ UI boundaries, not around every backend edit.
 - [x] Confirm merged foundation and Compose baseline at `5a3e9bd`.
 - [x] Establish isolated branch/worktree `feat/f2-agents` / `.worktrees/f2-agents`.
 - [x] Complete code-to-contract readiness audit.
-- [ ] Define first bounded task interfaces and management acceptance cases.
+- [x] Define first bounded task interfaces and management acceptance cases.
 - [ ] Deliver and verify registration through UI/API/CLI.
 - [ ] Deliver and verify connected-agent status.
 - [ ] Deliver and verify datasource diagnostics.
 - [ ] Deliver and verify collected and directly ingested observations.
 
-No F2 product behavior or verification is claimed by this plan.
+F2-T01–T05 establish verified provider fixtures and internal agent management.
+Public management and the complete observation journey remain outstanding;
+individual task records carry their verification evidence.
