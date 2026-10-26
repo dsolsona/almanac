@@ -8,6 +8,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/dsolsona/almanac/internal/agentclient"
+	"github.com/dsolsona/almanac/internal/setupclient"
 )
 
 type agentCLICreateDocument struct {
@@ -95,5 +98,26 @@ func TestAgentOutputIsHumanReadableSafeAndReportsWriterFailures(t *testing.T) {
 	}
 	if code := writeAgentFailure(&bytes.Buffer{}, failingAgentWriter{}, "agents list", false, agentInvalid("safe failure")); code != 1 {
 		t.Fatalf("text error writer failure returned %d", code)
+	}
+}
+
+func TestCancellationTextDistinguishesPreDispatchFromUnknownMutation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		unknown bool
+		warn    bool
+		message string
+	}{
+		{name: "before dispatch", message: "agent operation was cancelled or timed out"},
+		{name: "after dispatch", unknown: true, warn: true, message: "agent operation was cancelled or timed out; the mutation may have completed; inspect agent state before deciding what to do next"},
+	} {
+		err := &agentclient.Failure{Kind: setupclient.KindCancelled, Code: "cancelled", Message: tc.message, Unknown: tc.unknown}
+		var stderr bytes.Buffer
+		if exit := writeAgentFailure(&bytes.Buffer{}, &stderr, "agents create", false, err); exit != 6 {
+			t.Fatalf("%s cancellation exit=%d", tc.name, exit)
+		}
+		if got := strings.Contains(stderr.String(), "may have completed"); got != tc.warn {
+			t.Fatalf("%s cancellation warning=%t, want %t", tc.name, got, tc.warn)
+		}
 	}
 }

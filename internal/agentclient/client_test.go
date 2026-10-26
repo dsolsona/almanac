@@ -6,9 +6,13 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -265,6 +269,105 @@ func TestGeneratedIssuanceSupportsFreshAndReplayStatusesAndExplicitZero(t *testi
 	}
 }
 
+func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
+	for _, mutation := range []string{"create", "rotate"} {
+		t.Run(mutation, func(t *testing.T) {
+			var attempts atomic.Int32
+			var warmMu sync.Mutex
+			var warmConnection string
+			committed := make(chan string, 2)
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.URL.Path == "/api/v1/auth/context":
+					warmMu.Lock()
+					warmConnection = r.RemoteAddr
+					warmMu.Unlock()
+					_, _ = fmt.Fprint(w, `{"csrf_token":"fresh-csrf","session":{"user_id":"u-1","login":"admin","role":"administrator","restricted":false}}`)
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/agents":
+					_, _ = fmt.Fprint(w, `{"items":[],"next_cursor":""}`)
+				case r.Method == http.MethodPost:
+					attempt := attempts.Load() + 1
+					warmMu.Lock()
+					warmed := warmConnection
+					warmMu.Unlock()
+					if attempt == 1 && r.RemoteAddr != warmed {
+						t.Errorf("%s did not reuse the warmed TLS connection", mutation)
+					}
+					wantKey := "create-once"
+					if mutation == "rotate" {
+						wantKey = "rotate-once"
+					}
+					if r.Header.Get("Idempotency-Key") != wantKey {
+						t.Errorf("%s request idempotency key was not preserved", mutation)
+					}
+					body, err := io.ReadAll(r.Body)
+					if err != nil || len(body) < 8<<20 {
+						t.Errorf("read committed %s request body failed", mutation)
+					}
+					attempts.Add(1)
+					committed <- r.RemoteAddr
+					hijacker, ok := w.(http.Hijacker)
+					if !ok {
+						t.Error("TLS response writer does not support connection close")
+						return
+					}
+					conn, _, err := hijacker.Hijack()
+					if err != nil {
+						t.Errorf("hijack committed %s connection failed", mutation)
+						return
+					}
+					if tlsConn, ok := conn.(interface{ NetConn() net.Conn }); ok {
+						if tcpConn, ok := tlsConn.NetConn().(*net.TCPConn); ok {
+							_ = tcpConn.SetLinger(0)
+						}
+					}
+					_ = conn.Close()
+				default:
+					t.Errorf("unexpected request for %s: %s %s", mutation, r.Method, r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			server.EnableHTTP2 = false
+			server.StartTLS()
+			defer server.Close()
+
+			client := newTestAgentClient(t, server)
+			if _, err := client.List(t.Context(), 50, ""); err != nil {
+				t.Fatal("warm reused TLS connection failed")
+			}
+			var err error
+			switch mutation {
+			case "create":
+				_, _, _, err = client.Create(t.Context(), api.CreateAgentRequest{Name: strings.Repeat("a", 8<<20), DisplayName: "East", CurrentPassword: "proof"}, "create-once")
+			case "rotate":
+				var id api.AgentId
+				if decodeErr := json.Unmarshal([]byte(`"00000000-0000-0000-0000-000000000001"`), &id); decodeErr != nil {
+					t.Fatal("decode fixture agent ID failed")
+				}
+				_, _, _, err = client.Rotate(t.Context(), id, api.RotateAgentRequest{CurrentPassword: strings.Repeat("p", 8<<20)}, `"agent:00000000-0000-0000-0000-000000000001:1"`, "rotate-once")
+			}
+			failure := asAgentFailure(t, err)
+			if !failure.Unknown || failure.Code != "outcome_unknown" {
+				t.Fatal("connection loss after request dispatch was not classified as unknown")
+			}
+			select {
+			case addr := <-committed:
+				warmMu.Lock()
+				warmed := warmConnection
+				warmMu.Unlock()
+				if addr != warmed {
+					t.Fatal("server did not commit on the reused TLS connection")
+				}
+			default:
+				t.Fatal("server did not read and commit the mutation before dropping its response")
+			}
+			if got := attempts.Load(); got != 1 {
+				t.Fatalf("%s issuance was replayed after connection loss: attempts=%d", mutation, got)
+			}
+		})
+	}
+}
+
 func newTestAgentClient(t *testing.T, server *httptest.Server) *Client {
 	t.Helper()
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
@@ -329,6 +432,8 @@ func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t 
 	cancel()
 	if _, _, _, err := client.Create(ctx, input, "cancel-before-dispatch"); !isFailure(err, setupclient.KindCancelled, false) {
 		t.Fatalf("pre-dispatch cancellation=%#v", err)
+	} else if f := asAgentFailure(t, err); f.Unknown || strings.Contains(f.Message, "may have completed") {
+		t.Fatalf("pre-dispatch cancellation incorrectly warned of an issued mutation: %#v", f)
 	}
 	if posts != 0 {
 		t.Fatal("cancelled operation was dispatched")
@@ -363,7 +468,7 @@ func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t 
 	select {
 	case err = <-done:
 		f = asAgentFailure(t, err)
-		if !f.Unknown || f.Kind != setupclient.KindCancelled {
+		if !f.Unknown || f.Kind != setupclient.KindCancelled || !strings.Contains(f.Message, "may have completed") {
 			t.Fatalf("cancelled body loss classification=%#v", f)
 		}
 	case <-time.After(3 * time.Second):
