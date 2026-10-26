@@ -47,3 +47,6 @@ its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure
 
 [F1-T13](F1-T13.md) adds the protected local authentication HTTP boundary under its
 [plan](../plans/0013-local-authentication-http.md), before runtime/UI/CLI wiring.
+
+[F1-T14](F1-T14.md) wires the runnable authentication backend under its
+[plan](../plans/0014-authentication-backend-runtime.md), before combined serving and UI/CLI.
