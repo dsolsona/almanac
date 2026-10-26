@@ -376,7 +376,8 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 	}
 	restartArgs := replaceFlagValue(slices.Clone(args), "--initial-admin-login", "changed-owner")
 	restart := exec.Command(binary, restartArgs...)
-	restart.Stderr, restart.Stdout = io.Discard, io.Discard
+	restartLogs := newRuntimeLog()
+	restart.Stderr, restart.Stdout = restartLogs, io.Discard
 	if err := restart.Start(); err != nil {
 		t.Fatal("restart built backend executable failed")
 	}
@@ -460,7 +461,8 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 	select {
 	case err := <-restartWait:
 		if err != nil {
-			t.Fatal("restarted backend shutdown returned failure")
+			logs := restartLogs.String()
+			t.Fatalf("restarted backend shutdown returned failure: exit=%d shutdown-failed=%t ownership-lost=%t cleanup-failed=%t", restart.ProcessState.ExitCode(), strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"))
 		}
 	case <-time.After(10 * time.Second):
 		_ = restart.Process.Kill()

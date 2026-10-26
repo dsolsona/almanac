@@ -79,3 +79,5 @@ agent-token issuance service before management endpoints are exposed.
 credential revocation and agent disablement before rotation and public exposure.
 [F2-T05](F2-T05.md) completes internal credential rotation and the management
 service operations needed by the subsequent HTTP, CLI and UI boundary.
+[F2-T06](F2-T06.md) exposes those operations through the authenticated management
+API, generated contracts and combined/backend runtimes.

@@ -23,6 +23,25 @@ let browser;
 let page;
 let failed = false;
 const counts = { login: 0, password: 0 };
+const managementReads = [];
+
+// Exercise the browser's normal same-origin GET behavior against the real API.
+// Requiring an Origin header here would break fetch even for a valid session.
+async function inspectManagementRead(expectedStatus) {
+  const [incoming, result] = await Promise.all([
+    page.waitForRequest((req) => req.method() === 'GET' && new URL(req.url()).pathname === '/api/v1/agents'),
+    page.evaluate(async () => {
+      const response = await fetch('/api/v1/agents', { credentials: 'same-origin' });
+      return { status: response.status, cache: response.headers.get('cache-control'), body: await response.json() };
+    }),
+  ]);
+  assert.equal((await incoming.allHeaders()).origin, undefined);
+  assert.equal(result.status, expectedStatus);
+  assert.equal(result.cache, 'no-store');
+  if (expectedStatus === 200) assert.deepEqual(result.body, { items: [], next_cursor: '' });
+  else assert.equal(result.body.code, expectedStatus === 403 ? 'forbidden' : 'unauthenticated');
+  managementReads.push({ status: expectedStatus, originHeaderPresent: false });
+}
 
 // Send the real mutation with the fixture CA, then deliberately lose its response.
 // This is fault injection after the actual backend transaction, not an API stub.
@@ -119,6 +138,8 @@ try {
   await heading('Set your permanent password');
   await expect(page.getByLabel('Current password', { exact: true })).toHaveValue('');
   if (fixture.scenario === 'onboarding') {
+    stage = 'restricted management read without Origin';
+    await inspectManagementRead(403);
     await inspectLayouts('restricted');
     stage = 'restricted draft logout and sign-in';
     await page.getByLabel('Current password', { exact: true }).fill(fixture.initial);
@@ -157,6 +178,10 @@ try {
   await page.reload();
   await heading('Signed in');
   await expect(page.getByText(fixture.login, { exact: true })).toBeVisible();
+  if (fixture.scenario === 'onboarding') {
+    stage = 'administrator management read without Origin';
+    await inspectManagementRead(200);
+  }
   if (fixture.scenario === 'onboarding') await inspectLayouts('signed-in');
   const cookies = await context.cookies();
   assert.ok(cookies.some((cookie) => cookie.name.startsWith('__Host-') && cookie.httpOnly && cookie.secure && cookie.path === '/' && cookie.sameSite === 'Lax'));
@@ -167,6 +192,10 @@ try {
   stage = 'logout and credential replacement';
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await heading('Sign in');
+  if (fixture.scenario === 'onboarding') {
+    stage = 'signed-out management read without Origin';
+    await inspectManagementRead(401);
+  }
   await signIn(fixture.initial);
   await expect(page.getByRole('alert')).toBeVisible();
   await heading('Sign in');
@@ -179,6 +208,7 @@ try {
   await writeFile(join(fixture.artifacts, 'evidence.json'), JSON.stringify({
     scenario: fixture.scenario, chromium: browser.version(), node: process.version,
     completed: true, mutationCounts: counts,
+    managementReads,
     inspectedWidths: fixture.scenario === 'onboarding' ? [1440, 1024, 360] : [1440],
     inspectedThemes: fixture.scenario === 'onboarding' ? ['light', 'dark'] : ['light'],
   }, null, 2), { mode: 0o600 });

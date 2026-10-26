@@ -48,6 +48,8 @@ issuance to that transaction before exposing management operations.
 authority, optimistic versions and safe historical receipts. Rotation follows.
 [F2-T05](../tasks/F2-T05.md) adds bounded overlap and one-time replacement issuance,
 plus the thin management service methods for those guarded storage operations.
+[F2-T06](../tasks/F2-T06.md) adds their authenticated HTTP contracts and runtime
+routes before CLI and UI management.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

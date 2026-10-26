@@ -392,7 +392,7 @@ func TestIntegrationLoginBudgetsUseOnlyConfiguredProxySource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trustedToken := proxyHandler.(*Handler).csrf("login", trustedPreauth, trustedNonce)
+	trustedToken := proxyHandler.csrf("login", trustedPreauth, trustedNonce)
 	trustedAttempt := func(login, source string) (int, string) {
 		return postFailedLogin(t, proxyClient, proxyServer.URL, login, trustedPreauth, trustedToken, true, source)
 	}
@@ -425,7 +425,7 @@ func TestIntegrationLoginBudgetsUseOnlyConfiguredProxySource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plainToken := plainHandler.(*Handler).csrf("login", plainPreauth, plainNonce)
+	plainToken := plainHandler.csrf("login", plainPreauth, plainNonce)
 	for i := range 20 {
 		status, _ := postFailedLogin(t, plainClient, plainServer.URL, "plain-"+strconv.Itoa(i), plainPreauth, plainToken, false, "198.51.100."+strconv.Itoa(i+1))
 		if status != http.StatusUnauthorized {

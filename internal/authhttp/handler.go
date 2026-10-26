@@ -35,6 +35,21 @@ const (
 	bodyLimit     = 4096
 )
 
+var (
+	ErrSessionRequest = errors.New("authhttp: invalid session request")
+	ErrAuthorization  = errors.New("authhttp: authorization header is not supported")
+	ErrMissingSession = errors.New("authhttp: session is missing or malformed")
+	ErrRequestMethod  = errors.New("authhttp: method is not allowed")
+	ErrRequestOrigin  = errors.New("authhttp: origin is not allowed")
+	ErrRequestTLS     = errors.New("authhttp: secure transport is required")
+	ErrRequestCSRF    = errors.New("authhttp: csrf token is invalid")
+)
+
+type SessionRequest struct {
+	SessionSecret string `json:"-"`
+	Source        netip.Addr
+}
+
 type Options struct {
 	PublicOrigin      string
 	TrustedProxyCIDRs []netip.Prefix
@@ -52,7 +67,7 @@ type Handler struct {
 	key       [32]byte
 }
 
-func New(service *authentication.Service, options Options) (http.Handler, error) {
+func New(service *authentication.Service, options Options) (*Handler, error) {
 	if service == nil || options.Now == nil || !canonicalOrigin(options.PublicOrigin) {
 		return nil, errors.New("authhttp: invalid options")
 	}
@@ -68,6 +83,43 @@ func New(service *authentication.Service, options Options) (http.Handler, error)
 		return nil, errors.New("authhttp: initialization failed")
 	}
 	return h, nil
+}
+
+// ValidateSessionRequest applies the same cookie, origin, transport and CSRF
+// rules used by authentication endpoints. It deliberately does not inspect or
+// touch session authority; guarded services do that for every operation.
+func (h *Handler) ValidateSessionRequest(r *http.Request) (SessionRequest, error) {
+	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost) {
+		return SessionRequest{}, ErrRequestMethod
+	}
+	if values := r.Header.Values("Authorization"); len(values) != 0 {
+		return SessionRequest{}, ErrAuthorization
+	}
+	if r.Method == http.MethodPost {
+		if !singleHeaderEquals(r.Header, "Origin", h.origin) {
+			return SessionRequest{}, ErrRequestOrigin
+		}
+	} else if values := r.Header.Values("Origin"); len(values) != 0 && !singleHeaderEquals(r.Header, "Origin", h.origin) {
+		return SessionRequest{}, ErrRequestOrigin
+	}
+	source, ok := h.requestSource(r)
+	if !ok {
+		return SessionRequest{}, ErrRequestTLS
+	}
+	session, _, invalid := cookieValues(r)
+	if invalid {
+		return SessionRequest{}, ErrSessionRequest
+	}
+	if session == "" {
+		return SessionRequest{}, ErrMissingSession
+	}
+	if _, err := identity.SessionSecretVerifier(session); err != nil {
+		return SessionRequest{}, ErrMissingSession
+	}
+	if r.Method == http.MethodPost && !h.validCSRF(r, "session", session) {
+		return SessionRequest{}, ErrRequestCSRF
+	}
+	return SessionRequest{SessionSecret: session, Source: source}, nil
 }
 
 func canonicalOrigin(raw string) bool {

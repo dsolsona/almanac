@@ -41,7 +41,7 @@ func TestSourceAddressTrustBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	forwarded := httptest.NewRequest(http.MethodPost, "/", nil)
 	forwarded.RemoteAddr = "10.2.3.4:443"
 	forwarded.Header.Add("X-Forwarded-Proto", "https")
@@ -93,7 +93,7 @@ func TestTypedRateLimitRetryAfterRoundsUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	for _, tc := range []struct {
 		name     string
 		duration time.Duration
@@ -120,7 +120,7 @@ func TestDeadlineFailureAndOversizedBodyFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	for _, tc := range []struct {
 		name   string
 		writer http.ResponseWriter
@@ -155,7 +155,7 @@ func TestStorageFailureDoesNotBecomeAnonymousContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := handler.(*Handler)
+	h := handler
 	secret, _, err := identity.NewSessionSecret()
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +182,7 @@ func TestLogoutStorageFailurePreservesSessionCookie(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	secret, _, err := identity.NewSessionSecret()
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestOriginAndStrictJSONFailBeforeAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	for _, tc := range []struct {
 		name, origin, body string
 		duplicateOrigin    bool
@@ -250,7 +250,7 @@ func TestHTTPDecodeMediaAndCanonicalPathRejections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	for _, tc := range []struct {
 		name, path, body, contentType, contentEncoding string
 		want                                           int
@@ -288,7 +288,7 @@ func TestCSRFTokenIsBoundToPurposeAndCookie(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := created.(*Handler)
+	h := created
 	preauth, err := randomPreauth()
 	if err != nil {
 		t.Fatal(err)
@@ -386,7 +386,7 @@ func TestIdempotencyKeyIsRejectedBeforeServiceWork(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/context", strings.NewReader(`not json`))
 	r.TLS = &tls.ConnectionState{}
 	r.RemoteAddr = net.JoinHostPort("192.0.2.10", "443")
-	r.Header.Set("Origin", h.(*Handler).origin)
+	r.Header.Set("Origin", h.origin)
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Idempotency-Key", "request-1")
 	w := deadlineRecorder{httptest.NewRecorder()}
