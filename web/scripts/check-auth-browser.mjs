@@ -12,7 +12,7 @@ for await (const chunk of process.stdin) {
 }
 const fixture = JSON.parse(source);
 source = '';
-assert.ok(['onboarding', 'lost-login', 'lost-password', 'agents', 'agents-close', 'agents-lost'].includes(fixture.scenario));
+assert.ok(['onboarding', 'lost-login', 'lost-password', 'agents', 'agents-close', 'agents-lost', 'agents-lifecycle'].includes(fixture.scenario));
 const origin = new URL(fixture.url);
 assert.equal(origin.protocol, 'https:');
 assert.equal(origin.hostname, 'localhost');
@@ -213,8 +213,8 @@ try {
     scenario: fixture.scenario, chromium: browser.version(), node: process.version,
     completed: true, mutationCounts: counts,
     managementReads,
-    inspectedWidths: ['onboarding', 'agents', 'agents-close'].includes(fixture.scenario) ? [1440, 1024, 360] : [1440],
-    inspectedThemes: ['onboarding', 'agents', 'agents-close'].includes(fixture.scenario) ? ['light', 'dark'] : ['light'],
+    inspectedWidths: ['onboarding', 'agents', 'agents-close', 'agents-lifecycle'].includes(fixture.scenario) ? [1440, 1024, 360] : [1440],
+    inspectedThemes: ['onboarding', 'agents', 'agents-close', 'agents-lifecycle'].includes(fixture.scenario) ? ['light', 'dark'] : ['light'],
   }, null, 2), { mode: 0o600 });
   stage = 'complete';
 } catch (error) {

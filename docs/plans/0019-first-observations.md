@@ -54,6 +54,8 @@ routes before CLI and UI management.
 preserving exact versions, one-time secret handling and explicit mutation retry.
 [F2-T08](../tasks/F2-T08.md) connects registration and history to shared UI controls;
 credential lifecycle forms follow after that first browser journey is verified.
+[F2-T09](../tasks/F2-T09.md) adds those lifecycle forms against the verified
+management API before connected-agent and datasource work.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthPage } from '../src/auth/AuthPage.tsx';
@@ -42,7 +42,7 @@ describe('agent administration screen', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response({ items: [agent()], next_cursor: '' }))
       .mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; })));
     render(<AuthPage client={makeAuth()} />);
-    await screen.findByRole('button', { name: 'west-1' });
+    expect(await screen.findByRole('button', { name: 'west-1' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Refresh agents' }));
     await act(async () => { history.replaceState({}, '', '/#main'); dispatchEvent(new PopStateEvent('popstate')); });
     await act(async () => { finish(response({ items: [agentB()], next_cursor: '' })); });
@@ -119,6 +119,586 @@ describe('agent administration screen', () => {
     expect(screen.getByText('2026-10-22 12:00:00.987654Z')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     await waitFor(() => expect(location.search).toBe(''));
+  });
+
+  it('rotates from the detail ETag with a stable command key and presents a fresh one-time token', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let rotations = 0;
+    let refreshReadsToDefer = 0;
+    const deferredRefresh: Array<{ url: string; resolve: (value: Response) => void }> = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        rotations++;
+        if (rotations === 1) refreshReadsToDefer = 2;
+        return rotations === 1
+          ? response({ agent: agent(), credential: { ...credential(), id: '9f6cf087-266e-44f5-9f93-74d8a048d987' }, previous_credential: credential(), replayed: false, secret_state: 'issued', token: 'replacement-secret' }, 200)
+          : response({ agent: agent(), credential: { ...credential(), id: '9f6cf087-266e-44f5-9f93-74d8a048d987' }, previous_credential: credential(), replayed: true, secret_state: 'secret_unavailable' }, 200);
+      }
+      if (refreshReadsToDefer > 0 && init?.method === 'GET' && (url.includes('/credentials?') || url.endsWith(`/agents/${agentID}`))) {
+        refreshReadsToDefer--;
+        return new Promise<Response>((resolve) => deferredRefresh.push({ url, resolve }));
+      }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce('1a86bd22-c858-47c2-90d3-5d508ed1461d').mockReturnValueOnce('2a86bd22-c858-47c2-90d3-5d508ed1461d');
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/credentials/rotate'), expect.anything());
+    await user.type(within(screen.getByRole('dialog', { name: 'Rotate credential' })).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(screen.getByRole('dialog', { name: 'Rotate credential' })).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
+    await waitFor(() => expect(deferredRefresh).toHaveLength(2));
+    expect(screen.getByRole('status', { name: 'Loading agent records' })).toBeVisible();
+    expect(screen.getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('replacement-secret');
+    const [url, request] = fetcher.mock.calls.find(([, init]) => init?.method === 'POST')!;
+    expect(String(url)).toBe(`/api/v1/agents/${agentID}/credentials/rotate`);
+    expect(request?.headers).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': '1a86bd22-c858-47c2-90d3-5d508ed1461d' });
+    expect(JSON.parse(String(request?.body))).toEqual({ current_password: 'correct horse' });
+    expect(screen.getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('replacement-secret');
+    await act(async () => { deferredRefresh.splice(0).forEach(({ url, resolve }) => resolve(url.includes('/credentials?') ? response({ items: [credential()], next_cursor: '' }) : response(agent(), 200, { ETag: `"agent:${agentID}:3"` }))); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    await user.click(within(screen.getByRole('dialog', { name: 'Agent token' })).getByRole('button', { name: 'Close token' }));
+    expect(screen.queryByText('replacement-secret')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
+    const rotateDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(rotateDialog).getByLabelText('Overlap (seconds)'), '0');
+    await user.type(within(rotateDialog).getByLabelText('Current password'), 'fresh password');
+    await user.click(within(rotateDialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
+    const retryRequest = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')[1]?.[1];
+    expect(JSON.parse(String(retryRequest?.body))).toEqual({ current_password: 'fresh password', overlap_seconds: 0 });
+    expect(retryRequest?.headers).toMatchObject({ 'Idempotency-Key': '2a86bd22-c858-47c2-90d3-5d508ed1461d' });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/one-time token is no longer available/i));
+    expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a fresh rotation token available when the authoritative refresh fails', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let issued = false;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        issued = true;
+        return response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'fresh-token-survives-refresh' }, 200);
+      }
+      if (url.includes('/credentials?') && issued) return response({ type: 'about:blank', title: 'Unavailable', status: 503, code: 'management_unavailable', message: 'untrusted', request_id: 'request-6', field_errors: [] }, 503);
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    const tokenDialog = await screen.findByRole('dialog', { name: 'Agent token' });
+    expect(await screen.findByRole('alert')).toHaveTextContent(/showing stale results/i);
+    expect(within(tokenDialog).getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('fresh-token-survives-refresh');
+    await user.click(within(tokenDialog).getByRole('button', { name: 'Copy token' }));
+    expect(writeText).toHaveBeenCalledWith('fresh-token-survives-refresh');
+    await user.click(within(tokenDialog).getByRole('button', { name: 'Close token' }));
+    expect(screen.queryByText('fresh-token-survives-refresh')).not.toBeInTheDocument();
+  });
+
+  it('requires explicit confirmation before revoking the selected credential', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith(`/credentials/${credentialID}/revoke`)) return response({ agent: agent(), credential: { ...credential(), revoked_at: '2026-10-26T10:00:00Z' }, changed: true, revoked_credential_count: '1', replayed: false });
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Revoke credential' }));
+    expect(screen.getByRole('dialog', { name: 'Revoke credential' })).toHaveTextContent(credentialID);
+    expect(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Revoke credential' })).toBeDisabled();
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
+    fireEvent.submit(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Revoke credential' }).closest('form')!);
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
+    await user.click(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('checkbox', { name: /understand/i }));
+    await user.type(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Revoke credential' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}/credentials/${credentialID}/revoke`, expect.objectContaining({ method: 'POST' })));
+  });
+
+  it('requires explicit confirmation before disabling an agent and refreshes authoritative records', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const disabledAgent = { ...agent(), enabled: false, version: '4' };
+    let disabled = false;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/disable')) { disabled = true; return response({ agent: disabledAgent, credential: null, changed: true, revoked_credential_count: '1', replayed: false }); }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(disabled ? disabledAgent : agent(), 200, { ETag: `"agent:${agentID}:${disabled ? '4' : '3'}"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Disable agent' }));
+    expect(screen.getByRole('dialog', { name: 'Disable agent' })).toHaveTextContent(agentID);
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/disable'), expect.anything());
+    await user.click(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByRole('checkbox', { name: /understand/i }));
+    await user.type(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByRole('button', { name: 'Disable agent' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}/disable`, expect.objectContaining({ method: 'POST' })));
+    await waitFor(() => expect(screen.getByText('Disabled')).toBeVisible());
+    expect(screen.queryByRole('button', { name: 'Disable agent' })).not.toBeInTheDocument();
+  });
+
+  it('disables new lifecycle actions when selected detail refresh is unavailable', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let failDetail = false;
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return failDetail
+        ? response({ type: 'about:blank', title: 'Unavailable', status: 503, code: 'management_unavailable', message: 'untrusted', request_id: 'request-7', field_errors: [] }, 503)
+        : response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    failDetail = true;
+    await user.click(screen.getByRole('button', { name: 'Refresh agent' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/showing stale results/i);
+    expect(screen.getByRole('button', { name: 'Rotate credential' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Revoke credential' })).toBeDisabled();
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/credentials/rotate'), expect.anything());
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
+  });
+
+  it('ignores a late fresh rotation after abandonment and selection change', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let resolveRotation!: (value: Response) => void;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) return new Promise<Response>((resolve) => { resolveRotation = resolve; });
+      if (url.includes('/credentials?')) return response({ items: url.includes(agentIDB) ? [credentialB()] : [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentIDB}`)) return response(agentB(), 200, { ETag: `"agent:${agentIDB}:3"` });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent(), agentB()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
+    fireEvent.submit(within(dialog).getByRole('button', { name: 'Rotate credential' }).closest('form')!);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Register agent' })).toBeDisabled();
+    await user.click(await screen.findByRole('button', { name: 'Abandon command' }));
+    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(await screen.findByRole('button', { name: 'east-1' }));
+    expect(await screen.findByText('East collector')).toBeVisible();
+    await act(async () => { resolveRotation(response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'late-secret' }, 200)); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.queryByText('late-secret')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Agent token' })).not.toBeInTheDocument();
+  });
+
+  it('discards a deferred rotation after same-agent credential cursor navigation and retains its unknown intent', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let resolveRotation!: (value: Response) => void;
+    const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) return new Promise<Response>((resolve) => { resolveRotation = resolve; });
+      if (url.includes('/credentials?')) return Promise.resolve(response({ items: [credential()], next_cursor: '' }));
+      if (url.endsWith(`/agents/${agentID}`)) return Promise.resolve(response(agent(), 200, { ETag: `"agent:${agentID}:3"` }));
+      return Promise.resolve(response({ items: [agent()], next_cursor: '' }));
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'current proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(resolveRotation).toBeTypeOf('function'));
+    await act(async () => { history.pushState({}, '', `/?agent=${agentID}&credentials_cursor=page-two`); dispatchEvent(new PopStateEvent('popstate')); });
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}/credentials?limit=50&cursor=page-two`, expect.objectContaining({ method: 'GET' })));
+    await act(async () => { await Promise.resolve(); });
+    await screen.findByRole('heading', { name: 'Credential action outcome unknown' });
+    await act(async () => { resolveRotation(response({ agent: agent(), credential: { ...credential(), id: '9f6cf087-266e-44f5-9f93-74d8a048d987' }, previous_credential: credential(), replayed: false, secret_state: 'issued', token: 'late-cursor-token' }, 200)); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.queryByRole('dialog', { name: 'Agent token' })).not.toBeInTheDocument();
+    expect(screen.queryByText('late-cursor-token')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Retry rotate credential/i })).toBeVisible();
+  });
+
+  it('does not restore a late rotation token after uncertain logout restores the same user', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let resolveRotation!: (value: Response) => void;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) return new Promise<Response>((resolve) => { resolveRotation = resolve; });
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const auth = makeAuth();
+    auth.logout = vi.fn().mockRejectedValue(new Error('logout response unavailable'));
+    render(<AuthPage client={auth} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/sign-out could not be confirmed/i);
+    expect(screen.getByRole('heading', { name: 'Agent details' })).toBeVisible();
+    await act(async () => { resolveRotation(response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'late-after-logout' }, 200)); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.queryByText('late-after-logout')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
+  });
+
+  it('blocks lifecycle actions while registration is already in flight', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let resolveCreate!: (value: Response) => void;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/api/v1/agents')) return new Promise<Response>((resolve) => { resolveCreate = resolve; });
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    const registration = screen.getByRole('dialog', { name: 'Register agent' });
+    await user.type(within(registration).getByLabelText('Agent name'), 'new-agent');
+    await user.type(within(registration).getByLabelText('Display name'), 'New agent');
+    await user.type(within(registration).getByLabelText('Current password'), 'correct horse');
+    await user.click(within(registration).getByRole('button', { name: 'Register agent' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
+    await user.click(within(registration).getByRole('button', { name: 'Close dialog' }));
+    await user.click(screen.getByRole('button', { name: 'Keep request' }));
+    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    expect(await screen.findByRole('button', { name: 'Rotate credential' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Revoke credential' })).toBeDisabled();
+    await act(async () => { resolveCreate(response({ agent: { ...agent(), id: '9d1b1d80-9863-4b4c-bf43-0a038643cad9' }, credential: { ...credential(), agent_id: '9d1b1d80-9863-4b4c-bf43-0a038643cad9' }, replayed: false, secret_state: 'issued', token: 'late-create-token' }, 201)); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.queryByText('late-create-token')).not.toBeInTheDocument();
+  });
+
+  it('keeps an uncertain rotation across a rejected retry, failed session recheck, and same-user sign-in', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let rotations = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        rotations++;
+        if (rotations === 1) throw new Error('simulated lost response');
+        if (rotations === 2) return response({ type: 'about:blank', title: 'Unauthorized', status: 401, code: 'unauthenticated', message: 'untrusted', request_id: 'request-1', field_errors: [] }, 401);
+        return response({ agent: agent(), credential: { ...credential(), id: '9f6cf087-266e-44f5-9f93-74d8a048d987' }, previous_credential: credential(), replayed: true, secret_state: 'secret_unavailable' }, 200);
+      }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const auth = makeAuth();
+    auth.context = vi.fn().mockResolvedValueOnce(admin).mockRejectedValueOnce(new Error('session unavailable')).mockResolvedValueOnce({ csrf_token: 'csrf-anonymous', session: null });
+    render(<AuthPage client={auth} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    const rotateDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(rotateDialog).getByLabelText('Lifetime (seconds)'), '12345');
+    await user.type(within(rotateDialog).getByLabelText('Overlap (seconds)'), '17');
+    await user.type(within(rotateDialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(rotateDialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: /Retry rotate credential/i }));
+    const rejectedRetryDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(rejectedRetryDialog).getByLabelText('Current password'), 'retry proof');
+    await user.click(within(rejectedRetryDialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
+    expect(await screen.findByText(/original target, command key and resource version remain available/i)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Check session' }));
+    await screen.findByRole('heading', { name: 'Sign in' });
+    auth.login = vi.fn().mockResolvedValue(admin);
+    await user.type(screen.getByLabelText('Login'), 'owner');
+    await user.type(screen.getByLabelText('Password'), 'login proof');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(await screen.findByRole('button', { name: /Retry rotate credential/i }));
+    const retryDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    expect(within(retryDialog).getByText('12345', { selector: 'dd' })).toBeVisible();
+    expect(within(retryDialog).getByText('17', { selector: 'dd' })).toBeVisible();
+    expect(within(retryDialog).queryByLabelText('Lifetime (seconds)')).not.toBeInTheDocument();
+    expect(within(retryDialog).queryByLabelText('Overlap (seconds)')).not.toBeInTheDocument();
+    expect(within(retryDialog).getByText(/keeps the original target, resource version, and rotation options/i)).toBeVisible();
+    await user.type(within(retryDialog).getByLabelText('Current password'), 'fresh proof');
+    await user.click(within(retryDialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(3));
+    const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    const firstHeaders = requests[0]?.[1]?.headers as Record<string, string>;
+    const secondHeaders = requests[1]?.[1]?.headers as Record<string, string>;
+    const thirdHeaders = requests[2]?.[1]?.headers as Record<string, string>;
+    expect(firstHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"` });
+    expect(secondHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
+    expect(thirdHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
+    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ current_password: 'first proof', lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ current_password: 'retry proof', lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ current_password: 'fresh proof', lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(await screen.findByRole('status')).toHaveTextContent(/one-time token is no longer available/i);
+    expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
+  });
+
+  it('keeps explicit recovery after a 403 clears protected data and the detail refresh fails', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let revocations = 0;
+    let protectedReadFails = false;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith(`/credentials/${credentialID}/revoke`)) {
+        revocations++;
+        if (revocations === 1) throw new Error('simulated response loss');
+        return response({ type: 'about:blank', title: 'Forbidden', status: 403, code: 'forbidden', message: 'untrusted', request_id: 'request-2', field_errors: [] }, 403);
+      }
+      if (url.includes('/credentials?')) return protectedReadFails
+        ? response({ type: 'about:blank', title: 'Unavailable', status: 503, code: 'management_unavailable', message: 'untrusted', request_id: 'request-3', field_errors: [] }, 503)
+        : response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const auth = makeAuth();
+    auth.context = vi.fn().mockImplementation(async () => { if (revocations >= 2) protectedReadFails = true; return admin; });
+    render(<AuthPage client={auth} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Revoke credential' }));
+    const revokeDialog = screen.getByRole('dialog', { name: 'Revoke credential' });
+    await user.click(within(revokeDialog).getByRole('checkbox', { name: /understand/i }));
+    await user.type(within(revokeDialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(revokeDialog).getByRole('button', { name: 'Revoke credential' }));
+    expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: /Retry revoke credential/i }));
+    const retryDialog = screen.getByRole('dialog', { name: 'Revoke credential' });
+    await user.click(within(retryDialog).getByRole('checkbox', { name: /understand/i }));
+    await user.type(within(retryDialog).getByLabelText('Current password'), 'retry proof');
+    await user.click(within(retryDialog).getByRole('button', { name: 'Revoke credential' }));
+    await waitFor(() => expect(screen.getAllByRole('alert').some((alert) => /protected agent records were cleared/i.test(alert.textContent ?? ''))).toBe(true));
+    expect(screen.queryByRole('heading', { name: 'Agent details' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check session' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Abandon command' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Check session' }));
+    await waitFor(() => expect(screen.getAllByRole('alert').some((alert) => /Showing stale results|could not be completed/i.test(alert.textContent ?? ''))).toBe(true));
+    expect(screen.getByRole('button', { name: 'Abandon command' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Abandon command' }));
+    expect(screen.queryByRole('button', { name: 'Abandon command' })).not.toBeInTheDocument();
+  });
+
+  it('preserves an unknown command on conflict and requires abandonment before a new key', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let rotations = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        rotations++;
+        if (rotations === 1) throw new Error('simulated response loss');
+        return response({ type: 'about:blank', title: 'Conflict', status: 409, code: 'conflict', message: 'untrusted', request_id: 'request-4', field_errors: [] }, 409);
+      }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce('3a86bd22-c858-47c2-90d3-5d508ed1461d').mockReturnValueOnce('4a86bd22-c858-47c2-90d3-5d508ed1461d');
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await user.click(await screen.findByRole('button', { name: /Retry rotate credential/i }));
+    dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'retry proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('heading', { name: 'Credential action needs reconciliation' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Retry rotate credential/i })).not.toBeInTheDocument();
+    const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(requests).toHaveLength(2);
+    expect((requests[1]?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe((requests[0]?.[1]?.headers as Record<string, string>)['Idempotency-Key']);
+    expect((requests[1]?.[1]?.headers as Record<string, string>)['If-Match']).toBe(`"agent:${agentID}:3"`);
+    await user.click(screen.getByRole('button', { name: 'Abandon command' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'new command proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(3));
+    const newRequest = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')[2];
+    expect((newRequest?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe('4a86bd22-c858-47c2-90d3-5d508ed1461d');
+  });
+
+  it('ignores a deferred auth recheck after the old command is abandoned and a new intent starts', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let resolveRecheck!: (value: AuthContext) => void;
+    let rotations = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        rotations++;
+        if (rotations === 1) return response({ type: 'about:blank', title: 'Unauthorized', status: 401, code: 'unauthenticated', message: 'untrusted', request_id: 'request-8', field_errors: [] }, 401);
+        return response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'new-intent-token' }, 200);
+      }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce('6a86bd22-c858-47c2-90d3-5d508ed1461d').mockReturnValueOnce('7a86bd22-c858-47c2-90d3-5d508ed1461d');
+    const auth = makeAuth();
+    auth.context = vi.fn().mockImplementationOnce(async () => admin).mockImplementationOnce(() => new Promise<AuthContext>((resolve) => { resolveRecheck = resolve; }));
+    render(<AuthPage client={auth} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'old proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(auth.context).toHaveBeenCalledTimes(2));
+    await user.click(await screen.findByRole('button', { name: 'Abandon command' }));
+    await act(async () => { resolveRecheck(admin); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const rotate = await screen.findByRole('button', { name: 'Rotate credential' });
+    await waitFor(() => expect(rotate).toBeEnabled());
+    await user.click(rotate);
+    dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'new proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
+    expect(screen.queryByText(/current password was rejected/i)).not.toBeInTheDocument();
+    const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect((requests[0]?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe('6a86bd22-c858-47c2-90d3-5d508ed1461d');
+    expect((requests[1]?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe('7a86bd22-c858-47c2-90d3-5d508ed1461d');
+  });
+
+  it('describes CSRF rejection as stale session proof and allows retry after the authority check succeeds', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let rotations = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        rotations++;
+        return rotations === 1
+          ? response({ type: 'about:blank', title: 'Forbidden', status: 403, code: 'csrf_invalid', message: 'untrusted', request_id: 'request-9', field_errors: [] }, 403)
+          : response({ agent: agent(), credential: credential(), previous_credential: null, replayed: true, secret_state: 'secret_unavailable' }, 200);
+      }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('8a86bd22-c858-47c2-90d3-5d508ed1461d');
+    const auth = makeAuth(); auth.context = vi.fn().mockResolvedValueOnce(admin).mockResolvedValueOnce(admin);
+    render(<AuthPage client={auth} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByText(/session proof was stale/i)).toBeVisible();
+    expect(screen.queryByText(/password proof failed/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Retry rotate credential/i }));
+    dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'fresh proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
+    const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect((requests[1]?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe((requests[0]?.[1]?.headers as Record<string, string>)['Idempotency-Key']);
+  });
+
+  it('replays an unknown revoke for its captured credential and ETag after refresh shows it revoked', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let detailVersion = 3;
+    let revocations = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith(`/credentials/${credentialID}/revoke`)) {
+        revocations++;
+        if (revocations === 1) throw new Error('simulated committed-response loss');
+        return response({ agent: { ...agent(), version: '4' }, credential: { ...credential(), revoked_at: '2026-10-26T10:00:00Z' }, changed: false, revoked_credential_count: '0', replayed: true }, 200);
+      }
+      if (url.includes('/credentials?')) return detailVersion === 3 ? response({ items: [credential()], next_cursor: '' }) : response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response({ ...agent(), version: String(detailVersion) }, 200, { ETag: `"agent:${agentID}:${detailVersion}"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('5a86bd22-c858-47c2-90d3-5d508ed1461d');
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Revoke credential' }));
+    let dialog = screen.getByRole('dialog', { name: 'Revoke credential' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /understand/i }));
+    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke credential' }));
+    expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
+    detailVersion = 4;
+    await user.click(screen.getByRole('button', { name: 'Refresh agent' }));
+    await screen.findByText('No credentials are recorded.');
+    await user.click(screen.getByRole('button', { name: /Retry revoke credential/i }));
+    dialog = screen.getByRole('dialog', { name: 'Revoke credential' });
+    expect(dialog).toHaveTextContent(credentialID);
+    await user.click(within(dialog).getByRole('checkbox', { name: /understand/i }));
+    await user.type(within(dialog).getByLabelText('Current password'), 'fresh proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke credential' }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
+    const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    const firstHeaders = requests[0]?.[1]?.headers as Record<string, string>;
+    const secondHeaders = requests[1]?.[1]?.headers as Record<string, string>;
+    expect(String(requests[1]?.[0])).toBe(`/api/v1/agents/${agentID}/credentials/${credentialID}/revoke`);
+    expect(secondHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ current_password: 'fresh proof' });
+  });
+
+  it('enforces Retry-After in the submit handler as well as the disabled button', async () => {
+    const user = userEvent.setup(); installDialogs();
+    let rotations = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) {
+        rotations++;
+        return rotations === 1
+          ? response({ type: 'about:blank', title: 'Rate limited', status: 429, code: 'rate_limited', message: 'untrusted', request_id: 'request-5', field_errors: [] }, 429, { 'Retry-After': '1' })
+          : response({ agent: agent(), credential: credential(), previous_credential: null, replayed: true, secret_state: 'secret_unavailable' }, 200);
+      }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/wait 1 seconds/i);
+    dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'fresh proof');
+    const submit = within(dialog).getByRole('button', { name: 'Rotate credential' });
+    expect(submit).toBeDisabled();
+    fireEvent.submit(submit.closest('form')!);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1100)); });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
   });
 
   it('keeps list and credential pagination in their bounded URL cursor parameters', async () => {

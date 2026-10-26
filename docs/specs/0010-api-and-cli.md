@@ -16,7 +16,8 @@ Go types/handlers, and generated TypeScript types. Pin generator versions when
 scaffolding. Agent WebSocket messages have separate versioned JSON schemas with
 shared type generation. Operational health types/handlers, CLI version/help and
 UI-only serving are implemented in [F1-T04](../tasks/F1-T04.md). Explicit database
-upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md). Management,
+upgrades and their JSON/error contract are implemented in [F1-T05](../tasks/F1-T05.md).
+Agent management HTTP operations are implemented under [F2-T06](../tasks/F2-T06.md);
 ingestion and agent protocols remain unimplemented. Local authentication HTTP handlers
 are verified under [F1-T13](../tasks/F1-T13.md), with backend executable exposure
 under [F1-T14](../tasks/F1-T14.md). Noninteractive administrator setup is implemented
@@ -135,4 +136,6 @@ remote YAML includes, execute shell expressions, or embed credentials in exports
 - **REVIEW-A02:** Command names, limits and exit codes are provisional stable contracts
   to review before release. Keys are scoped machine identities, not browser sessions.
 - Operational contract generation and basic noninteractive CLI behavior are
-  verified; management API/CLI parity, RBAC and idempotency remain unimplemented.
+  verified. Agent management has authenticated authorization, resource versions and
+  safe receipts under F2-T02–F2-T06; full management API/CLI parity and broader
+  resource RBAC remain outstanding.

@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
+import { runAgentLifecycleJourney } from './check-agent-lifecycle-browser.mjs';
 
 function tokenEvidence(token) {
   const match = /^almanac_agent_v1_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/.exec(token);
@@ -186,6 +187,9 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
         await page.screenshot({ path: join(fixture.artifacts, `agent-detail-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
       }
+    }
+    if (fixture.scenario === 'agents-lifecycle') {
+      await runAgentLifecycleJourney({ page, context, fixture, setStage, registration: evidence, tokenEvidence });
     }
     setStage('real session invalidation and UI reconciliation');
     // Revoke the real session independently of the UI's local authentication

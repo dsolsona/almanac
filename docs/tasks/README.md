@@ -85,3 +85,5 @@ API, generated contracts and combined/backend runtimes.
 administration screens and real browser acceptance.
 [F2-T08](F2-T08.md) adds the first agent registration, details and credential
 history screens with actual browser/backend/database acceptance.
+[F2-T09](F2-T09.md) adds rotation, revocation and disable controls with explicit
+versioned command recovery and one-time replacement-token handling.

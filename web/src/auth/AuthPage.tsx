@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react';
 import { AuthFailure, createAuthClient, type AuthContext } from './client.ts';
 import { Button, LoadingIndicator, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
-import type { AgentCreateIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
+import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
 
 const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((module) => ({ default: module.AgentsPage })));
@@ -66,6 +66,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const [confirmation, setConfirmation] = useState('');
   const [agentDraft, setAgentDraft] = useState<AgentSafeDraft>(emptyAgentDraft);
   const [agentIntent, setAgentIntent] = useState<AgentCreateIntent | null>(null);
+  const [agentLifecycleIntent, setAgentLifecycleIntent] = useState<AgentLifecycleIntent | null>(null);
   const controller = useRef<AbortController | null>(null);
   const live = useRef(false);
   const busy = useRef(false);
@@ -82,7 +83,8 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     }
     if (nextID !== null) identityRef.current = nextID;
     if (agentIntent && nextID !== null && agentIntent.userID !== nextID) setAgentIntent(null);
-  }, [context?.session?.user_id, context?.session?.restricted, context?.session?.role, agentIntent]);
+    if (nextID !== null && agentLifecycleIntent && agentLifecycleIntent.userID !== nextID) setAgentLifecycleIntent(null);
+  }, [context?.session?.user_id, context?.session?.restricted, context?.session?.role, agentIntent, agentLifecycleIntent]);
 
   useEffect(() => {
     live.current = true;
@@ -284,6 +286,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     setConfirmation('');
     setAgentDraft(emptyAgentDraft);
     setAgentIntent(null);
+    setAgentLifecycleIntent(null);
     requestGeneration.current++;
     setErrors({});
     setNotice(null);
@@ -325,6 +328,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     <main id="main" className={`auth-page${!checking && !unavailable && context?.session?.role === 'administrator' && !context.session.restricted ? ' auth-page--management' : ''}`}>
       <h1 ref={heading} tabIndex={-1}>{title}</h1>
       {notice && <div ref={noticeRef} className={`auth-notice auth-notice--${notice.kind}`} role={notice.kind === 'success' ? 'status' : 'alert'} tabIndex={-1}>{notice.text}</div>}
+      {agentLifecycleIntent && (!context?.session || context.session.user_id !== agentLifecycleIntent.userID || context.session.restricted || context.session.role !== 'administrator') && <Panel heading={agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? 'Credential command needs reconciliation' : agentLifecycleIntent.outcome === 'rejected' ? 'Credential command was rejected' : 'Credential command outcome unknown'} className="auth-panel"><p>{agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} conflicted after an earlier uncertain attempt. Reconcile its original target, command key and resource version before starting another command.` : agentLifecycleIntent.outcome === 'rejected' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} was rejected. Its original target, command key and resource version remain available for a deliberate retry.` : `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} may have completed. Its original target, command key and resource version remain available for a deliberate retry. No password or token was retained.`}</p></Panel>}
       {checking && <div className="auth-loading"><LoadingIndicator label="Checking your session" /></div>}
       {!checking && unavailable && <Panel heading="Session status unavailable" className="auth-panel">
         <p>Almanac could not confirm whether you are signed in. Check again to continue.</p>
@@ -357,7 +361,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
           {showCheckSession && <Button variant="outline" onClick={() => void checkSession(true)} pending={pending}>Check session</Button>}
         </div>
       </Panel>}
-      {!checking && !unavailable && context?.session && !context.session.restricted && context.session.role === 'administrator' && <ScreenBoundary key={context.session.user_id}><Suspense fallback={<div className="auth-loading"><LoadingIndicator label="Loading agent management" /></div>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} /></Suspense></ScreenBoundary>}
+      {!checking && !unavailable && context?.session && !context.session.restricted && context.session.role === 'administrator' && <ScreenBoundary key={context.session.user_id}><Suspense fallback={<div className="auth-loading"><LoadingIndicator label="Loading agent management" /></div>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} lifecycleIntent={agentLifecycleIntent} onLifecycleIntentChange={setAgentLifecycleIntent} /></Suspense></ScreenBoundary>}
       {!checking && !unavailable && context?.session && !context.session.restricted && context.session.role !== 'administrator' && <Panel heading="Agent administration unavailable"><p>Agent administration is available to unrestricted administrators.</p></Panel>}
     </main>
   </>;

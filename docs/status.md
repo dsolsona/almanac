@@ -135,6 +135,16 @@ An intermittent existing backend shutdown failure recurred during this work;
 additional safe test diagnostics preserve its failure classifications, but its
 root cause remains unproven and no shutdown fix is claimed.
 
+[F2-T09](tasks/F2-T09.md) adds agent credential rotation, individual revocation
+and agent disablement through the same management API. Explicit confirmations,
+current-password proofs, original-key/version retries and one-time replacement
+tokens are verified. The final candidate passes121 real PostgreSQL integration
+tests and133 web/128 Go tests, including actual HTTPS/browser lifecycle actions
+and persisted verifier/retirement/revocation/receipt checks. Empty lifecycle dialogs
+were inspected in both themes on desktop and mobile. CLI authentication/profiles
+and agent-command parity are next; connectivity and first observations remain
+outstanding.
+
 ## Coverage
 
 | Requirement | Primary specs |
