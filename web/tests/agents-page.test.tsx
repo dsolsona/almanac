@@ -701,6 +701,48 @@ describe('agent administration screen', () => {
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
   });
 
+  it('retains a lifecycle Retry-After deadline when navigating away and remounting its controls', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.endsWith('/credentials/rotate')) return response({ type: 'about:blank', title: 'Rate limited', status: 429, code: 'rate_limited', message: 'untrusted', request_id: 'request-10', field_errors: [] }, 429, { 'Retry-After': '30' });
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
+    let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/wait 30 seconds/i);
+    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const retry = await screen.findByRole('button', { name: /Retry rotate credential/i });
+    expect(retry).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Refresh agent' }));
+    expect(retry).toBeDisabled();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('does not replay a canceled revoke dialog after navigating away and returning', async () => {
+    const user = userEvent.setup(); installDialogs();
+    vi.stubGlobal('fetch', installFetch());
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(screen.getByRole('button', { name: 'Revoke credential' }));
+    expect(await screen.findByRole('dialog', { name: 'Revoke credential' })).toBeVisible();
+    await user.click(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Close dialog' }));
+    expect(screen.queryByRole('dialog', { name: 'Revoke credential' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    expect(await screen.findByText('West collector')).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Revoke credential' })).not.toBeInTheDocument();
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
+  });
+
   it('keeps list and credential pagination in their bounded URL cursor parameters', async () => {
     const user = userEvent.setup();
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
