@@ -33,4 +33,7 @@ Read [F1-T19](../tasks/F1-T19.md) for exact interfaces and scope.
 - [x] Implement container build, Compose ordering and idempotent initializer.
 - [x] Add Make command interface and focused initializer checks.
 - [x] Verify real startup, onboarding, repeat bootstrap and restart persistence.
-- [ ] Independently review, document actual commands/results and publish.
+- [x] Independently review, document actual commands/results and publish.
+
+Task and whole-branch reviews approve the verified implementation at `b50c4d5`.
+Published as [PR #16](https://github.com/dsolsona/almanac/pull/16).

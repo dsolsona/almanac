@@ -7,7 +7,9 @@
 !cmd/**
 !internal/
 !internal/**
+
 !web/
+web/*
 !web/assets.go
 !web/index.html
 !web/package.json
@@ -15,15 +17,20 @@
 !web/tsconfig.json
 !web/vite.config.ts
 !web/src/
+web/src/*
 !web/src/**
 !web/public/
+web/public/*
 !web/public/**
+
 !deploy/
+deploy/*
 !deploy/local/
+deploy/local/*
 !deploy/local/init.sh
 !deploy/local/init-test.sh
 
-# Secret exclusions come last so no allowlist rule can re-include them.
+# Secret exclusions come after all allowlist rules.
 .env
 .env.*
 **/.env
@@ -36,3 +43,12 @@
 *.secrets
 **/*.secret
 **/*.secrets
+
+# Exclude common generated or vendored artifacts even if a parent is re-included.
+**/node_modules
+**/.local
+**/.git
+**/.worktrees
+web/dist
+web/test-results
+web/playwright-report

@@ -120,7 +120,7 @@ database contents. This explicitly brings local Compose packaging forward from F
 production images, Helm and restore qualification remain separate release work.
 
 Use named volumes and a dedicated Compose project, separate from integration
-fixtures and the design catalogue. Expose only the app on loopback (HTTPS port 8080
+fixtures and the design catalogue. Expose only the app on loopback (HTTPS port 18088
 by default); PostgreSQL stays on the Compose network. The application runs without
 root and reads protected secret files. Initialization and migrations must complete
 before serving. Readiness failures return an unsuccessful command result rather

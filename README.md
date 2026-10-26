@@ -14,7 +14,7 @@ make bootstrap
 This builds the app inside containers, prepares a separate PostgreSQL 18 database,
 generates local credentials and a localhost HTTPS certificate, upgrades the schema,
 and starts the app. No host Go, Node, or OpenSSL installation is needed.
-Open **https://localhost:8080** and accept the generated local certificate in your
+Open **https://localhost:18088** and accept the generated local certificate in your
 browser. No host trust settings are changed. Sign in as **admin**; retrieve the
 initial password explicitly with `make credentials`, then choose your permanent
 password in the onboarding page. The initial password is never printed in startup

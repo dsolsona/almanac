@@ -36,6 +36,10 @@ The foundation stack subsequently merged at `9c25fef`. This is not a full-produc
 release acceptance. [F1-T19](tasks/F1-T19.md) adds the explicitly requested local
 Compose follow-up: `make bootstrap`, `make run` and `make stop`, with container-only
 build/setup, persistent volumes and real browser restart/onboarding evidence.
+The follow-up implementation `b50c4d5` is published as
+[PR #16](https://github.com/dsolsona/almanac/pull/16), with task and whole-branch
+review approval. Its real Compose gate includes occupied-port recovery and
+unchanged PostgreSQL container identity across app recreation.
 
 | F1 outcome | Reproducible evidence |
 | --- | --- |
