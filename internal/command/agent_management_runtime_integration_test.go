@@ -203,7 +203,8 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	select {
 	case err := <-wait:
 		if err != nil {
-			t.Fatalf("backend shutdown failed (stderr-present=%t)", stderr.String() != "")
+			logs := stderr.String()
+			t.Fatalf("backend shutdown failed: exit=%d shutdown-failed=%t deadline-exceeded=%t ownership-lost=%t cleanup-failed=%t", process.ProcessState.ExitCode(), strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, `"deadline_exceeded":true`), strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"))
 		}
 	case <-time.After(10 * time.Second):
 		_ = process.Process.Kill()

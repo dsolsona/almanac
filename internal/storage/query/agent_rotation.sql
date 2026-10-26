@@ -1,15 +1,27 @@
 -- name: LockActiveRotationCredentials :many
-SELECT id, agent_id, issued_at, expires_at, revoked_at, retire_at
-FROM public.almanac_agent_credentials
-WHERE agent_id = sqlc.arg(agent_id)
-  AND credential_epoch = sqlc.arg(credential_epoch)
-  AND revoked_at IS NULL
-  AND issued_at <= sqlc.arg(now)
-  AND expires_at > sqlc.arg(now)
-  AND (retire_at IS NULL OR retire_at > sqlc.arg(now))
-ORDER BY id
+-- Select the current set before ordering locks: a LIMIT-driven primary-key scan
+-- would otherwise walk inactive history. Recheck base rows after any lock wait.
+WITH current_candidates AS MATERIALIZED (
+    SELECT id
+    FROM public.almanac_agent_credentials
+    WHERE agent_id = sqlc.arg(agent_id)
+      AND credential_epoch = sqlc.arg(credential_epoch)
+      AND revoked_at IS NULL
+      AND issued_at <= sqlc.arg(now)
+      AND LEAST(expires_at, retire_at) > sqlc.arg(now)
+)
+SELECT credential.id, credential.agent_id, credential.issued_at,
+       credential.expires_at, credential.revoked_at, credential.retire_at
+FROM public.almanac_agent_credentials AS credential
+WHERE credential.id = ANY (ARRAY(SELECT candidate.id FROM current_candidates AS candidate))
+  AND credential.agent_id = sqlc.arg(agent_id)
+  AND credential.credential_epoch = sqlc.arg(credential_epoch)
+  AND credential.revoked_at IS NULL
+  AND credential.issued_at <= sqlc.arg(now)
+  AND LEAST(credential.expires_at, credential.retire_at) > sqlc.arg(now)
+ORDER BY credential.id
 LIMIT 2
-FOR UPDATE;
+FOR UPDATE OF credential;
 
 -- name: InsertRotatedAgentCredential :one
 INSERT INTO public.almanac_agent_credentials
