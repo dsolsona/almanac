@@ -123,9 +123,11 @@ and product-journey acceptance remain outstanding.
   exposure and UI/CLI follow this adapter.
 - The maintainer merged PRs #2–#8; local `main` is `5cd60b2`, with the verified
   F1-T06–12 changes. The authentication HTTP increment remains separate.
-- [F1-T14](tasks/F1-T14.md) is in progress: backend-only startup, protected initial owner,
-  TLS, database/setup readiness and single-owner lifecycle, with real executable
-  acceptance. Combined serving, onboarding screens and CLI setup follow.
+- [F1-T14](tasks/F1-T14.md) is verified at `7b8c2ae`: backend-only startup, protected
+  initial owner, TLS, database/setup readiness and single-owner lifecycle. Full gate
+  passed30 web/75 Go, race69, and PostgreSQL18.6 passed62 integration tests including
+  the real executable journey and shutdown/loss boundaries (command14.272s).
+  Independent reviews approved. Combined serving, onboarding screens and CLI setup follow.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

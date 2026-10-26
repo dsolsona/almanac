@@ -21,12 +21,12 @@ Use only known approved commands, preserve preview5198 and serialize fixture acc
 
 ## Task 1: Runnable backend lifecycle
 
-- [ ] Write focused failing config/file/lifecycle cases and real DB/process acceptance.
-- [ ] Implement protected configuration and certificate input without weakening existing readers.
-- [ ] Implement the dedicated ownership resource and bounded loss/close behavior.
-- [ ] Wire backend health/auth/TLS and command startup/shutdown; keep unsupported modes explicit.
-- [ ] Verify the real executable journey, restart, duplicate owner and loss behavior.
-- [ ] Independently review actual diff and evidence, correct findings and record acceptance.
+- [x] Write focused failing config/file/lifecycle cases and real DB/process acceptance.
+- [x] Implement protected configuration and certificate input without weakening existing readers.
+- [x] Implement the dedicated ownership resource and bounded loss/close behavior.
+- [x] Wire backend health/auth/TLS and command startup/shutdown; keep unsupported modes explicit.
+- [x] Verify the real executable journey, restart, duplicate owner and loss behavior.
+- [x] Independently review actual diff and evidence, correct findings and record acceptance.
 - [ ] Publish the verified increment as a stacked PR; keep review artifacts locally.
 
 Combined/UI-only authentication integration, onboarding screens and setup CLI follow
