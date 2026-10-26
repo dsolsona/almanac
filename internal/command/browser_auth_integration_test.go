@@ -168,7 +168,14 @@ func testBrowserAuthentication(t *testing.T, scenario string) {
 	if strings.TrimSpace(output.String()) != "PASS browser-auth "+scenario {
 		t.Fatal("browser acceptance did not produce its exact completion marker")
 	}
-	assertSetupDatabaseState(t, databaseURL, false, true, 0)
+	wantSessions := 0
+	if scenario == "lost-password" {
+		// Rotation committed a new session whose cookie the injected loss withheld.
+		// Later deliberate login/logout revokes only the browser's own session;
+		// the unreachable session retains the normal expiry, without replay.
+		wantSessions = 1
+	}
+	assertSetupDatabaseState(t, databaseURL, false, true, wantSessions)
 	if err := backend.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal("signal browser backend shutdown failed")
 	}
