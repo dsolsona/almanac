@@ -143,8 +143,12 @@ process.on('SIGINT', () => onSignal('SIGINT'));
 process.on('SIGTERM', () => onSignal('SIGTERM'));
 
 try {
+  failedStage = 'pull pinned provider images';
+  await compose(['pull', 'victoriametrics', 'victoriatraces', 'provider-ready'], { timeout: 300_000 });
   failedStage = 'start isolated provider services';
-  await compose(['up', '-d', 'provider-ready'], { timeout: 30_000 });
+  // Keep downloads separate. The metrics health window can take 5 + 20*(3+3)
+  // seconds including probe timeouts; leave bounded Docker orchestration headroom.
+  await compose(['up', '-d', '--pull', 'never', 'provider-ready'], { timeout: 150_000 });
   await waitFor('provider-ready completion', async () => {
     const rows = (await compose(['ps', '-a', '--format', 'json'])).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
     const ready = rows.find((row) => row.Service === 'provider-ready');
