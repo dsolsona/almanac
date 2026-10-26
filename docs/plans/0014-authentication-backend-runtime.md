@@ -27,7 +27,10 @@ Use only known approved commands, preserve preview5198 and serialize fixture acc
 - [x] Wire backend health/auth/TLS and command startup/shutdown; keep unsupported modes explicit.
 - [x] Verify the real executable journey, restart, duplicate owner and loss behavior.
 - [x] Independently review actual diff and evidence, correct findings and record acceptance.
-- [ ] Publish the verified increment as a stacked PR; keep review artifacts locally.
+- [x] Publish the verified increment as a stacked PR; keep review artifacts locally.
+
+Published as [PR #11](https://github.com/dsolsona/almanac/pull/11), stacked on the
+authentication HTTP increment. No merge performed.
 
 Combined/UI-only authentication integration, onboarding screens and setup CLI follow
 this runnable API. This plan does not claim those user-facing journeys are complete.

@@ -93,11 +93,6 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 		writeHealth(w, http.StatusServiceUnavailable)
 		return
 	}
-	state, err := storage.CheckCompatibility(ctx, s.databaseURL)
-	if err != nil || state != storage.CompatibilityCurrent {
-		writeHealth(w, http.StatusServiceUnavailable)
-		return
-	}
 	owner, err := storage.ReadInitialOwnerState(ctx, s.databaseURL)
 	if err != nil || !owner.Provisioned {
 		writeHealth(w, http.StatusServiceUnavailable)
@@ -109,10 +104,6 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authenticationPreflight(requestCtx context.Context) error {
 	ctx, cancel := context.WithTimeout(requestCtx, 2*time.Second)
 	defer cancel()
-	state, err := storage.CheckCompatibility(ctx, s.databaseURL)
-	if err != nil || state != storage.CompatibilityCurrent {
-		return errors.New("backendhttp: authentication storage unavailable")
-	}
 	owner, err := storage.ReadInitialOwnerState(ctx, s.databaseURL)
 	if err != nil || !owner.Provisioned || !s.ready.Load() {
 		return errors.New("backendhttp: authentication setup unavailable")
