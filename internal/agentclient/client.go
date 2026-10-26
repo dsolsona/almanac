@@ -45,6 +45,10 @@ func (c *Client) editorWith(key, etag string) api.RequestEditorFn {
 		if err := c.editor(ctx, r); err != nil {
 			return err
 		}
+		// Mutations must never be replayed by net/http after a reused-connection
+		// failure. Keep the idempotency header for caller-visible receipts, but
+		// remove GetBody so Transport cannot reconstruct and resend the request.
+		r.GetBody = nil
 		if key != "" {
 			r.Header.Set("Idempotency-Key", key)
 		}
@@ -458,7 +462,11 @@ func fieldErrorsValid(v jsontext.Value) bool {
 }
 func network(ctx context.Context, unknown bool) error {
 	if ctx.Err() != nil {
-		return &Failure{Kind: setupclient.KindCancelled, Code: "cancelled", Message: "agent operation was cancelled or timed out", Unknown: unknown}
+		message := "agent operation was cancelled or timed out"
+		if unknown {
+			message = "agent operation was cancelled or timed out; the mutation may have completed; inspect agent state before deciding what to do next"
+		}
+		return &Failure{Kind: setupclient.KindCancelled, Code: "cancelled", Message: message, Unknown: unknown}
 	}
 	if unknown {
 		return &Failure{Kind: setupclient.KindRemote, Code: "outcome_unknown", Message: "agent operation outcome is unknown; inspect agent state before deciding what to do next", Unknown: true}

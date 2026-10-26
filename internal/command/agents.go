@@ -374,11 +374,7 @@ func performAgent(ctx context.Context, op, profile, id, credentialID, name, disp
 			return nil, "", false, &agentclient.Failure{Kind: setupclient.KindRemote, Code: "token_output_failed", Message: "agent credential was issued but protected token output failed; the one-time token cannot be recovered", Unknown: true}
 		}
 		if e = tokenSink.Complete([]byte(token)); e != nil {
-			message := "agent credential was issued but protected token output failed; the one-time token cannot be recovered"
-			if errors.Is(e, secretfile.ErrTokenCommitUncertain) {
-				message = "agent credential was issued; token file completion could not be confirmed; inspect the destination and agent state before continuing"
-			}
-			return nil, "", false, &agentclient.Failure{Kind: setupclient.KindRemote, Code: "token_output_failed", Message: message, Unknown: true}
+			return nil, "", false, agentTokenCompleteFailure(e)
 		}
 		if e = tokenSink.Close(); e != nil {
 			tokenSinkClosed = true
@@ -397,6 +393,23 @@ func performAgent(ctx context.Context, op, profile, id, credentialID, name, disp
 		return nil, "", false, agentProfileFailure(e, mutating)
 	}
 	return jsontext.Value(data), token, replay, nil
+}
+
+func agentTokenCompleteFailure(err error) *agentclient.Failure {
+	failure := &agentclient.Failure{
+		Kind:    setupclient.KindRemote,
+		Code:    "token_output_failed",
+		Message: "agent credential was issued but protected token output failed; the one-time token cannot be recovered",
+		Unknown: true,
+	}
+	if errors.Is(err, secretfile.ErrTokenCancelled) {
+		failure.Kind = setupclient.KindCancelled
+		failure.Code = "cancelled"
+		failure.Message = "agent credential was issued but token output was cancelled; the one-time token cannot be recovered; inspect agent state before continuing"
+	} else if errors.Is(err, secretfile.ErrTokenCommitUncertain) {
+		failure.Message = "agent credential was issued; token file completion could not be confirmed; inspect the destination and agent state before continuing"
+	}
+	return failure
 }
 
 func validCLIUUID(s string) bool { return cliUUID.MatchString(s) }
