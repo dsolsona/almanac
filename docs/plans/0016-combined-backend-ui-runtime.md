@@ -32,12 +32,12 @@ Spec: [SPEC-0013](../specs/0013-runtime-and-operations.md) and
 
 Exact files/interfaces and acceptance cases: [F1-T16](../tasks/F1-T16.md).
 
-- [ ] Write and run focused failing config/asset/constructor checks for AC1/2.
-- [ ] Extract the shared asset handler and wire the explicit combined pair.
-- [ ] Extend real executable setup/lifecycle checks for combined mode, retaining
+- [x] Write and run focused failing config/asset/constructor checks for AC1/2.
+- [x] Extract the shared asset handler and wire the explicit combined pair.
+- [x] Extend real executable setup/lifecycle checks for combined mode, retaining
   the backend-only cases and all existing security/drain assertions.
-- [ ] Run focused checks and compile tagged tests; submit the frozen candidate.
-- [ ] Coordinator runs full/race/PostgreSQL/docs checks and independent reviews.
+- [x] Run focused checks and compile tagged tests; submit the frozen candidate.
+- [x] Coordinator runs full/race/PostgreSQL/docs checks and independent reviews.
 - [ ] Record verified evidence and publish stacked on the setup CLI PR.
 
 This increment does not complete combined alerts, secure remote UI authentication,

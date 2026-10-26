@@ -136,8 +136,11 @@ and product-journey acceptance remain outstanding.
   rotation, repeat refusal and restart. An inherited shutdown fixture race was
   reproduced and corrected in the backend branch without changing timeout budgets
   or acceptance assertions; the setup branch includes that correction.
-- [F1-T16](tasks/F1-T16.md) is in progress: one backend-owned HTTPS listener for the
-  existing embedded UI and authentication API, before browser onboarding screens.
+- [F1-T16](tasks/F1-T16.md) is verified at `94b2074`: one backend-owned HTTPS listener
+  for the existing embedded UI and authentication API. Full checks passed 30 web /
+  102 Go tests, race 95, and 65 PostgreSQL18.6 integration tests (command26.472s).
+  Independent reviews approved. Both component orders and trusted TLS termination
+  are exercised; browser onboarding screens and secure remote UI integration follow.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and

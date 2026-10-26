@@ -15,10 +15,10 @@ bin/almanac serve --components=ui --backend-url=http://127.0.0.1:8081
 ```
 
 It listens on `127.0.0.1:8080`, serves the embedded UI, and proxies `/api/v1/`
-requests to the configured backend origin. Alerts and combined modes
+requests to the configured backend origin. Modes containing alerts
 return an explicit unsupported-mode error before binding a listener. The default
 component selection remains `backend,ui,alerts` and therefore requires an explicit
-`--components=ui` or `--components=backend` until combined serving is implemented.
+`--components=ui`, `--components=backend`, or `--components=backend,ui`.
 
 `almanac version --output=json` emits one versioned JSON document. `almanac help`
 lists the commands and component limitations. UI mode accepts a strict JSON config
@@ -49,6 +49,13 @@ bin/almanac serve --components=backend --listen=127.0.0.1:8081 \
   --tls-cert-file=/run/certs/almanac.pem \
   --tls-key-file=/run/secrets/almanac-key.pem
 ```
+
+Use `--components=backend,ui` (or `ui,backend`) with the same settings to serve
+the embedded frontend and authentication API on one HTTPS listener. This mode
+reuses the backend's database ownership and shutdown lifecycle; it does not proxy
+API requests to another server. Health responses identify the owning backend.
+Backend-only mode does not serve the frontend. Browser onboarding screens remain
+separate work; the current frontend content is unchanged.
 
 Backend serving requires a protected database URL file. The initial password and
 TLS private key files must also deny group and other permissions; the public
