@@ -467,7 +467,7 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 		<-restartWait
 		t.Fatal("restarted backend did not drain and exit")
 	}
-	proxyArgs := []string{"serve", "--components=backend", "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=changed-owner", "--initial-admin-password-file=" + passwordFile, "--public-origin=" + publicOrigin, "--trusted-proxy-cidrs=127.0.0.1/32"}
+	proxyArgs := []string{"serve", "--components=" + components, "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=changed-owner", "--initial-admin-password-file=" + passwordFile, "--public-origin=" + publicOrigin, "--trusted-proxy-cidrs=127.0.0.1/32"}
 	proxyProcess := exec.Command(binary, proxyArgs...)
 	proxyProcess.Stdout, proxyProcess.Stderr = io.Discard, io.Discard
 	if err := proxyProcess.Start(); err != nil {
