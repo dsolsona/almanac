@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -453,6 +454,54 @@ WHERE account_key=sha256(convert_to(lower('owner'), 'UTF8')) AND state='failed'`
 	var revision int64
 	if err := query.QueryRow(t.Context(), "SELECT credential_revision FROM public.almanac_users WHERE id=$1", owner.State.AdministratorID).Scan(&revision); err != nil || revision != 2 {
 		t.Fatalf("rate-limited mutation revision=%d err=%v", revision, err)
+	}
+}
+
+func TestIntegrationAdministratorProofThrottlePreventsPasswordWork(t *testing.T) {
+	_, service, _ := newIntegrationService(t)
+	initial := "Administrator proof throttle initial 513!"
+	integrationOwner(t, service, initial)
+	source := netip.MustParseAddr("192.0.2.171")
+	pending, err := service.Login(t.Context(), LoginInput{Login: "owner", Password: initial, Source: source, RequestID: "proof-throttle-pending"})
+	if err != nil {
+		t.Fatal("create restricted session failed")
+	}
+	permanent := "Administrator proof throttle permanent 804!"
+	normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{
+		SessionSecret: pending.Secret, CurrentPassword: initial, NewPassword: permanent,
+		Source: source, RequestID: "proof-throttle-complete-onboarding",
+	})
+	if err != nil {
+		t.Fatal("complete administrator onboarding failed")
+	}
+	var verified atomic.Int64
+	service.hasher = controlledHasher{base: service.hasher, afterVerify: func(_ context.Context, _, _ string, result bool) (bool, error) {
+		verified.Add(1)
+		return result, nil
+	}}
+	for attempt := range 5 {
+		failed, err := service.Login(t.Context(), LoginInput{
+			Login: "owner", Password: "incorrect password",
+			Source:    netip.AddrFrom4([4]byte{192, 0, 2, byte(attempt + 20)}),
+			RequestID: fmt.Sprintf("proof-throttle-failure-%d", attempt),
+		})
+		if !errors.Is(err, ErrUnauthenticated) || failed.Secret != "" {
+			t.Fatal("failed login did not complete normally before account throttle")
+		}
+	}
+	if got := verified.Load(); got != 5 {
+		t.Fatalf("password verification count before throttled proof = %d; want 5", got)
+	}
+	_, err = service.ProveAdministrator(t.Context(), AdministratorProofInput{
+		SessionSecret: normal.Secret, CurrentPassword: permanent,
+		Source: netip.MustParseAddr("192.0.2.171"), RequestID: "proof-throttle-denied",
+	})
+	limit, ok := errors.AsType[*RateLimitError](err)
+	if !ok || limit.RetryAfter <= 0 {
+		t.Fatal("administrator proof did not preserve shared account throttle retry")
+	}
+	if got := verified.Load(); got != 5 {
+		t.Fatalf("rate-limited administrator proof performed password work; verify count = %d", got)
 	}
 }
 

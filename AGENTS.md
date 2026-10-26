@@ -248,7 +248,8 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   with the pinned toolchain. `make preview` serves the local catalogue. Database
   checks use `make setup SETUP_MODE=database` for the isolated PostgreSQL18 fixture
   and `make verify VERIFY_MODE=integration` with its explicit
-  `ALMANAC_TEST_DATABASE_URL`; storage, authentication service and authentication
+  `ALMANAC_TEST_DATABASE_URL`; storage, authentication and agent management services,
+  authentication
   HTTP and executable backend suites run serially by default. Real TLS/API/database,
   backend lifecycle and browser authentication checks exist; full product journeys
   remain subsequent work. Documentation checks use

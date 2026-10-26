@@ -16,6 +16,7 @@ import (
 
 var (
 	ErrUnauthenticated    = errors.New("authentication: unauthenticated")
+	ErrForbidden          = errors.New("authentication: forbidden")
 	ErrInvalidInput       = errors.New("authentication: invalid input")
 	ErrPasswordUnchanged  = errors.New("authentication: password unchanged")
 	ErrInitialCredentials = errors.New("authentication: initial credentials unavailable")
@@ -312,6 +313,10 @@ func (s *Service) currentTime() time.Time {
 	defer s.clockMu.Unlock()
 	return s.now()
 }
+
+// UsesDatabase reports whether this service was composed with the given URL.
+func (s *Service) UsesDatabase(databaseURL string) bool { return s.databaseURL == databaseURL }
+
 func validRequestID(value string) bool {
 	return value != "" && len(value) <= 128 && utf8.ValidString(value)
 }

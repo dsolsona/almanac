@@ -42,6 +42,8 @@ The requested local provider fixtures are the first bounded task:
 checks before Almanac adapter acceptance, without changing the product sequence.
 [F2-T02](../tasks/F2-T02.md) is the first application implementation task:
 transactional registration with current-authority checks, audit and safe receipts.
+[F2-T03](../tasks/F2-T03.md) connects password verification and one-time token
+issuance to that transaction before exposing management operations.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

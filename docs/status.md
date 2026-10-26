@@ -82,6 +82,10 @@ do not constitute collection through Almanac.
 verifier persistence, atomic audit and safe retry receipts. Its integrated candidate
 passes 73 web/105 Go unit tests and 75 real PostgreSQL integration tests. Management
 service, HTTP/CLI/UI, token lifecycle and actual agent connectivity remain outstanding.
+[F2-T03](tasks/F2-T03.md) adds the verified internal administrator proof and one-time
+agent-token issuance service. Its corrected candidate passes 73 web/109 Go unit
+tests and 77 real PostgreSQL integration tests, including existing browser journeys.
+Public management, credential lifecycle and connectivity remain outstanding.
 
 ## Coverage
 
