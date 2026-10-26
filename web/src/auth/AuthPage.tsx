@@ -1,7 +1,18 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react';
 import { AuthFailure, createAuthClient, type AuthContext } from './client.ts';
 import { Button, LoadingIndicator, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
+import type { AgentCreateIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
+
+const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((module) => ({ default: module.AgentsPage })));
+const emptyAgentDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '' };
+
+class ScreenBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(_error: Error, _info: ErrorInfo) { /* Failure details may include user data. */ }
+  render() { return this.state.failed ? <Panel heading="Agent screen unavailable"><p>The agent screen could not be loaded.</p><Button variant="outline" onClick={() => location.reload()}>Reload page</Button></Panel> : this.props.children; }
+}
 
 type Client = ReturnType<typeof createAuthClient>;
 type FieldErrors = Record<string, string>;
@@ -53,11 +64,25 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [agentDraft, setAgentDraft] = useState<AgentSafeDraft>(emptyAgentDraft);
+  const [agentIntent, setAgentIntent] = useState<AgentCreateIntent | null>(null);
   const controller = useRef<AbortController | null>(null);
   const live = useRef(false);
   const busy = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
+  const identityRef = useRef<string | null>(null);
+  const requestGeneration = useRef(0);
+
+  useEffect(() => {
+    const nextID = context?.session?.user_id ?? null;
+    if (nextID !== null && identityRef.current !== null && nextID !== identityRef.current) {
+      setAgentDraft(emptyAgentDraft);
+      setAgentIntent(null);
+    }
+    if (nextID !== null) identityRef.current = nextID;
+    if (agentIntent && nextID !== null && agentIntent.userID !== nextID) setAgentIntent(null);
+  }, [context?.session?.user_id, context?.session?.restricted, context?.session?.role, agentIntent]);
 
   useEffect(() => {
     live.current = true;
@@ -123,6 +148,26 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     }
   }
 
+  async function recheckAgentSession(): Promise<SessionRecheck> {
+    if (busy.current) return { confirmed: false };
+    const generation = ++requestGeneration.current;
+    const request = startRequest();
+    try {
+      const value = await authClient.context({ signal: request.signal });
+      if (!live.current || request.signal.aborted || generation !== requestGeneration.current) return { confirmed: false };
+      setContext(value);
+      setUnavailable(false);
+      return { confirmed: true, context: value };
+    } catch {
+      if (!live.current || request.signal.aborted || generation !== requestGeneration.current) return { confirmed: false };
+      setContext(null);
+      setUnavailable(true);
+      setShowCheckSession(true);
+      setNotice({ kind: 'error', text: 'Your administrator session could not be confirmed. Check your session before continuing.' });
+      return { confirmed: false };
+    }
+  }
+
   function handleFailure(error: unknown, operation: 'login' | 'password' | 'logout') {
     if (!(error instanceof AuthFailure)) {
       setNotice({ kind: 'error', text: operation === 'logout' ? 'Sign-out could not be confirmed.' : 'Authentication is temporarily unavailable. Try again.' });
@@ -174,6 +219,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     setNotice(null);
     setShowCheckSession(false);
     busy.current = true;
+    requestGeneration.current++;
     setPending(true);
     const request = startRequest();
     try {
@@ -212,6 +258,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     setNotice(null);
     setShowCheckSession(false);
     busy.current = true;
+    requestGeneration.current++;
     setPending(true);
     const request = startRequest();
     try {
@@ -231,9 +278,13 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   async function signOut() {
     if (busy.current || !context?.session) return;
     busy.current = true;
+    requestGeneration.current++;
     setCurrentPassword('');
     setNewPassword('');
     setConfirmation('');
+    setAgentDraft(emptyAgentDraft);
+    setAgentIntent(null);
+    requestGeneration.current++;
     setErrors({});
     setNotice(null);
     setPending(true);
@@ -271,7 +322,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="masthead"><p className="wordmark">ALMANAC</p><ThemeToggle /></header>
-    <main id="main" className="auth-page">
+    <main id="main" className={`auth-page${!checking && !unavailable && context?.session?.role === 'administrator' && !context.session.restricted ? ' auth-page--management' : ''}`}>
       <h1 ref={heading} tabIndex={-1}>{title}</h1>
       {notice && <div ref={noticeRef} className={`auth-notice auth-notice--${notice.kind}`} role={notice.kind === 'success' ? 'status' : 'alert'} tabIndex={-1}>{notice.text}</div>}
       {checking && <div className="auth-loading"><LoadingIndicator label="Checking your session" /></div>}
@@ -306,6 +357,8 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
           {showCheckSession && <Button variant="outline" onClick={() => void checkSession(true)} pending={pending}>Check session</Button>}
         </div>
       </Panel>}
+      {!checking && !unavailable && context?.session && !context.session.restricted && context.session.role === 'administrator' && <ScreenBoundary key={context.session.user_id}><Suspense fallback={<div className="auth-loading"><LoadingIndicator label="Loading agent management" /></div>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} /></Suspense></ScreenBoundary>}
+      {!checking && !unavailable && context?.session && !context.session.restricted && context.session.role !== 'administrator' && <Panel heading="Agent administration unavailable"><p>Agent administration is available to unrestricted administrators.</p></Panel>}
     </main>
   </>;
 }

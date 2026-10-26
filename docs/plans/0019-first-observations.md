@@ -52,6 +52,8 @@ plus the thin management service methods for those guarded storage operations.
 routes before CLI and UI management.
 [F2-T07](../tasks/F2-T07.md) supplies the bounded browser client before screens,
 preserving exact versions, one-time secret handling and explicit mutation retry.
+[F2-T08](../tasks/F2-T08.md) connects registration and history to shared UI controls;
+credential lifecycle forms follow after that first browser journey is verified.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and

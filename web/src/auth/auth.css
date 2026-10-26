@@ -11,6 +11,8 @@
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
+.auth-page--management { width: min(100% - 32px, 1240px); }
+.auth-page--management > .auth-panel { max-width: 540px; }
 .auth-page h1:focus { outline: none; }
 .auth-panel { display: grid; gap: var(--space-4); }
 .auth-panel form { display: grid; gap: var(--space-4); min-width: 0; }

@@ -6,10 +6,11 @@ import { AuthPage } from '../src/auth/AuthPage.tsx';
 
 type Client = ReturnType<typeof createAuthClient>;
 const anonymous: AuthContext = { csrf_token: 'csrf-anonymous', session: null };
-const restricted: AuthContext = { csrf_token: 'csrf-restricted', session: { user_id: 'u1', login: 'owner', role: 'Administrator', restricted: true } };
-const signedIn: AuthContext = { csrf_token: 'csrf-normal', session: { user_id: 'u1', login: 'owner', role: 'Administrator', restricted: false } };
+const restricted: AuthContext = { csrf_token: 'csrf-restricted', session: { user_id: 'u1', login: 'owner', role: 'administrator', restricted: true } };
+const signedIn: AuthContext = { csrf_token: 'csrf-normal', session: { user_id: 'u1', login: 'owner', role: 'administrator', restricted: false } };
 
 function clientFor(context: AuthContext = anonymous): Client {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], next_cursor: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
   return {
     context: vi.fn().mockResolvedValue(context),
     login: vi.fn().mockResolvedValue(signedIn),
@@ -23,6 +24,7 @@ afterEach(() => {
   document.documentElement.classList.remove('dark');
   document.documentElement.style.colorScheme = '';
   localStorage.clear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -122,7 +124,7 @@ describe('authentication page', () => {
     render(<AuthPage client={client} />);
     expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
     expect(screen.getByText('owner')).toBeVisible();
-    expect(screen.getByText('Administrator')).toBeVisible();
+    expect(screen.getByText('administrator')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     expect(client.logout).toHaveBeenCalledOnce();

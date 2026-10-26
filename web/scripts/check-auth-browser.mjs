@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
+import { runAgentRegistrationJourney } from './check-agent-browser.mjs';
 
 let source = '';
 for await (const chunk of process.stdin) {
@@ -11,7 +12,7 @@ for await (const chunk of process.stdin) {
 }
 const fixture = JSON.parse(source);
 source = '';
-assert.ok(['onboarding', 'lost-login', 'lost-password'].includes(fixture.scenario));
+assert.ok(['onboarding', 'lost-login', 'lost-password', 'agents', 'agents-close', 'agents-lost'].includes(fixture.scenario));
 const origin = new URL(fixture.url);
 assert.equal(origin.protocol, 'https:');
 assert.equal(origin.hostname, 'localhost');
@@ -183,6 +184,9 @@ try {
     await inspectManagementRead(200);
   }
   if (fixture.scenario === 'onboarding') await inspectLayouts('signed-in');
+  if (fixture.scenario.startsWith('agents')) {
+    await runAgentRegistrationJourney({ page, context, fixture, setStage: (value) => { stage = value; } });
+  }
   const cookies = await context.cookies();
   assert.ok(cookies.some((cookie) => cookie.name.startsWith('__Host-') && cookie.httpOnly && cookie.secure && cookie.path === '/' && cookie.sameSite === 'Lax'));
   assert.equal(await page.evaluate(() => document.cookie), '');
@@ -209,8 +213,8 @@ try {
     scenario: fixture.scenario, chromium: browser.version(), node: process.version,
     completed: true, mutationCounts: counts,
     managementReads,
-    inspectedWidths: fixture.scenario === 'onboarding' ? [1440, 1024, 360] : [1440],
-    inspectedThemes: fixture.scenario === 'onboarding' ? ['light', 'dark'] : ['light'],
+    inspectedWidths: ['onboarding', 'agents', 'agents-close'].includes(fixture.scenario) ? [1440, 1024, 360] : [1440],
+    inspectedThemes: ['onboarding', 'agents', 'agents-close'].includes(fixture.scenario) ? ['light', 'dark'] : ['light'],
   }, null, 2), { mode: 0o600 });
   stage = 'complete';
 } catch (error) {
@@ -219,8 +223,10 @@ try {
   const networkCode = /net::ERR_[A-Z_]+/.exec(String(error))?.[0] ?? 'none';
   await writeFile(join(fixture.artifacts, 'failure.txt'), `Failed stage: ${stage}\nNetwork code: ${networkCode}\n`, { mode: 0o600 });
   try {
-    await page?.screenshot({ path: join(fixture.artifacts, 'failure.png'),
-      mask: [page.locator('input')], timeout: 1000 });
+    if (!fixture.scenario.startsWith('agents')) {
+      await page?.screenshot({ path: join(fixture.artifacts, 'failure.png'),
+        mask: [page.locator('input')], timeout: 1000 });
+    }
   } catch { /* A closed browser still has the sanitized stage diagnostic. */ }
 } finally {
   try { await browser?.close(); } catch { failed = true; }

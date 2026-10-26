@@ -83,3 +83,5 @@ service operations needed by the subsequent HTTP, CLI and UI boundary.
 API, generated contracts and combined/backend runtimes.
 [F2-T07](F2-T07.md) adds the bounded browser management client before agent
 administration screens and real browser acceptance.
+[F2-T08](F2-T08.md) adds the first agent registration, details and credential
+history screens with actual browser/backend/database acceptance.

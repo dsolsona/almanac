@@ -124,6 +124,17 @@ mutation outcomes without automatic retry. Coordinator checks pass 98 web/128 Go
 tests plus generated/build/production and process smoke checks. Screens and actual
 browser agent-management acceptance remain outstanding.
 
+[F2-T08](tasks/F2-T08.md) delivers administrator agent registration, paginated
+list/detail/credential history and one-time token handling. Real HTTPS/PostgreSQL
+browser journeys verify fresh issuance, rejected-password recovery, committed
+response loss and same-key replay without token recovery, navigation and actual
+session invalidation. Acceptance passes120 integration tests and114 web/128 Go
+tests. Populated detail views were inspected in both themes at1440/1024/360px.
+Credential lifecycle forms, CLI and connected-agent behavior remain outstanding.
+An intermittent existing backend shutdown failure recurred during this work;
+additional safe test diagnostics preserve its failure classifications, but its
+root cause remains unproven and no shutdown fix is claimed.
+
 ## Coverage
 
 | Requirement | Primary specs |
