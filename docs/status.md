@@ -141,7 +141,7 @@ and product-journey acceptance remain outstanding.
   102 Go tests, race 95, and 65 PostgreSQL18.6 integration tests (command26.472s).
   Independent reviews approved. Both component orders and trusted TLS termination
   are exercised; browser onboarding screens and secure remote UI integration follow.
-- [F1-T17](tasks/F1-T17.md) is ready: bounded same-origin browser authentication
+- [F1-T17](tasks/F1-T17.md) is verified at `e6e9904`: bounded same-origin browser authentication
   operations before sign-in/onboarding screens and real Chromium acceptance.
 - Resolve explicitly deferred choices before their affected task, including encryption
   library/key format; verify tool/dependency versions when scaffolding.

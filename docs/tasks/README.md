@@ -61,3 +61,6 @@ uncertain-response handling without mutation replay.
 [F1-T17](F1-T17.md) establishes the browser authentication client under the
 [browser onboarding plan](../plans/0017-browser-onboarding.md), before its screens
 and real browser acceptance.
+
+[F1-T18](F1-T18.md) defines the dependent sign-in and initial-password screens,
+with actual browser/backend/database acceptance in the same increment.

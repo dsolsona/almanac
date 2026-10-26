@@ -34,13 +34,13 @@ Spec: [SPEC-0004](../specs/0004-identity-and-access.md),
 
 Exact interfaces, files and checks: [F1-T17](../tasks/F1-T17.md).
 
-- [ ] Write focused request/shape/fault/deadline tests, preserving first failures.
-- [ ] Implement bounded same-origin operations using generated types.
-- [ ] Verify focused and integrated checks and independently review the client.
+- [x] Write focused request/shape/fault/deadline tests, preserving first failures.
+- [x] Implement bounded same-origin operations using generated types.
+- [x] Verify focused and integrated checks and independently review the client.
 
 ## Task 2: Root-page sign-in, restricted setup and real browser acceptance
 
-Prepare a bounded screen/fixture brief after the client interface is reviewed,
+Finalize [F1-T18](../tasks/F1-T18.md) after the client interface is reviewed,
 before dispatch. Reuse shared Button/TextField/Panel/ThemeToggle/LoadingIndicator.
 The root shows loading, unavailable, sign-in, restricted password setup, or a minimal
 signed-in identity view with logout. No fake management actions, Google SSO control,
@@ -48,7 +48,7 @@ new route library or styling system. The restricted form explicitly asks for cur
 password plus new password/confirmation so reload never depends on retained login
 credentials. Existing catalogue and unknown paths remain separate.
 
-- [ ] Finalize the screen and real-browser fixture brief against the accepted specs.
+- [x] Finalize the screen and real-browser fixture brief against the accepted specs.
 - [ ] Implement accessible states and uncertainty recovery with component tests.
 - [ ] Exercise the production binary/API/database in Chromium across themes and
   desktop/mobile layouts; inspect actual pages and preserve sanitized first failures.
