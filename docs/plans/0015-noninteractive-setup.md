@@ -24,7 +24,10 @@ network side effects; cleanup errors hiding the actual setup outcome.
 - [x] Exercise lost-response behavior without replay or inferred completion.
 - [x] Verify the real executable setup journey against PostgreSQL/backend/TLS.
 - [x] Run integrated checks, review actual diffs, correct findings and record acceptance.
-- [ ] Publish the verified increment stacked on the backend runtime PR.
+- [x] Publish the verified increment stacked on the backend runtime PR.
+
+Published as [PR #12](https://github.com/dsolsona/almanac/pull/12), based on the
+backend runtime PR. Product candidate and evidence are recorded in F1-T15.
 
 Preserve preview5198 and serialize the existing PostgreSQL fixture. General CLI login,
 profiles, browser onboarding and combined serving remain separate increments.
