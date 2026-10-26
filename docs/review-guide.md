@@ -1,10 +1,13 @@
 # Design review guide
 
 This package covers the presently defined Almanac product: **17 specifications and
-15 ADRs**. SPEC-0001–0003 and ADR-0001–0003 are accepted from completed reviews.
+16 ADRs**. SPEC-0001–0003 and ADR-0001–0003 are accepted from completed reviews.
 SPEC-0004–0015 and ADR-0004–0013 were accepted in Crit review `7fd22977b6c0`
-on 2026-10-24 after all comments were resolved. No application implementation or
-deployment is claimed. Inline REVIEW notes are retained as decision traceability;
+on 2026-10-24 after all comments were resolved. The maintainer subsequently accepted
+[ADR-0016](adr/0016-authentication-retry-behavior.md) for authentication recovery.
+Design acceptance alone makes no implementation or deployment claim; current
+verified delivery is recorded in [status](status.md).
+Inline REVIEW notes are retained as decision traceability;
 wording such as “propose” or “confirm” records the reviewed choice, not a request to
 repeat approval. Initial numerical limits still require implementation evidence.
 Explicitly deferred choices, notably the encryption library in I06, remain open.
