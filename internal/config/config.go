@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"slices"
@@ -18,17 +19,31 @@ import (
 const maxConfigBytes = 64 << 10
 
 type Config struct {
-	Listen          string        `json:"listen"`
-	Components      string        `json:"components"`
-	BackendURL      string        `json:"backend_url"`
-	ShutdownTimeout time.Duration `json:"-"`
+	Listen                   string         `json:"listen"`
+	Components               string         `json:"components"`
+	BackendURL               string         `json:"backend_url"`
+	DatabaseURLFile          string         `json:"database_url_file"`
+	InitialAdminLogin        string         `json:"initial_admin_login"`
+	InitialAdminPasswordFile string         `json:"initial_admin_password_file"`
+	PublicOrigin             string         `json:"public_origin"`
+	TLSCertFile              string         `json:"tls_cert_file"`
+	TLSKeyFile               string         `json:"tls_key_file"`
+	TrustedProxyCIDRs        []netip.Prefix `json:"trusted_proxy_cidrs"`
+	ShutdownTimeout          time.Duration  `json:"-"`
 }
 
 type fileConfig struct {
-	Listen          *string `json:"listen"`
-	Components      *string `json:"components"`
-	BackendURL      *string `json:"backend_url"`
-	ShutdownTimeout *string `json:"shutdown_timeout"`
+	Listen                   *string   `json:"listen"`
+	Components               *string   `json:"components"`
+	BackendURL               *string   `json:"backend_url"`
+	DatabaseURLFile          *string   `json:"database_url_file"`
+	InitialAdminLogin        *string   `json:"initial_admin_login"`
+	InitialAdminPasswordFile *string   `json:"initial_admin_password_file"`
+	PublicOrigin             *string   `json:"public_origin"`
+	TLSCertFile              *string   `json:"tls_cert_file"`
+	TLSKeyFile               *string   `json:"tls_key_file"`
+	TrustedProxyCIDRs        *[]string `json:"trusted_proxy_cidrs"`
+	ShutdownTimeout          *string   `json:"shutdown_timeout"`
 }
 
 func Defaults() Config {
@@ -67,6 +82,29 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 		if file.BackendURL != nil {
 			cfg.BackendURL = *file.BackendURL
 		}
+		if file.DatabaseURLFile != nil {
+			cfg.DatabaseURLFile = *file.DatabaseURLFile
+		}
+		if file.InitialAdminLogin != nil {
+			cfg.InitialAdminLogin = *file.InitialAdminLogin
+		}
+		if file.InitialAdminPasswordFile != nil {
+			cfg.InitialAdminPasswordFile = *file.InitialAdminPasswordFile
+		}
+		if file.PublicOrigin != nil {
+			cfg.PublicOrigin = *file.PublicOrigin
+		}
+		if file.TLSCertFile != nil {
+			cfg.TLSCertFile = *file.TLSCertFile
+		}
+		if file.TLSKeyFile != nil {
+			cfg.TLSKeyFile = *file.TLSKeyFile
+		}
+		if file.TrustedProxyCIDRs != nil {
+			if err := cfg.setTrustedProxies(*file.TrustedProxyCIDRs); err != nil {
+				return Config{}, err
+			}
+		}
 		if file.ShutdownTimeout != nil {
 			cfg.ShutdownTimeout, err = time.ParseDuration(*file.ShutdownTimeout)
 			if err != nil {
@@ -86,6 +124,22 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 			cfg.Components = value
 		case "ALMANAC_BACKEND_URL":
 			cfg.BackendURL = value
+		case "ALMANAC_DATABASE_URL_FILE":
+			cfg.DatabaseURLFile = value
+		case "ALMANAC_INITIAL_ADMIN_LOGIN":
+			cfg.InitialAdminLogin = value
+		case "ALMANAC_INITIAL_ADMIN_PASSWORD_FILE":
+			cfg.InitialAdminPasswordFile = value
+		case "ALMANAC_PUBLIC_ORIGIN":
+			cfg.PublicOrigin = value
+		case "ALMANAC_TLS_CERT_FILE":
+			cfg.TLSCertFile = value
+		case "ALMANAC_TLS_KEY_FILE":
+			cfg.TLSKeyFile = value
+		case "ALMANAC_TRUSTED_PROXY_CIDRS":
+			if err := cfg.setTrustedProxyList(value); err != nil {
+				return Config{}, err
+			}
 		case "ALMANAC_SHUTDOWN_TIMEOUT":
 			d, err := time.ParseDuration(value)
 			if err != nil {
@@ -102,6 +156,22 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 			cfg.Components = value
 		case "backend-url":
 			cfg.BackendURL = value
+		case "database-url-file":
+			cfg.DatabaseURLFile = value
+		case "initial-admin-login":
+			cfg.InitialAdminLogin = value
+		case "initial-admin-password-file":
+			cfg.InitialAdminPasswordFile = value
+		case "public-origin":
+			cfg.PublicOrigin = value
+		case "tls-cert-file":
+			cfg.TLSCertFile = value
+		case "tls-key-file":
+			cfg.TLSKeyFile = value
+		case "trusted-proxy-cidrs":
+			if err := cfg.setTrustedProxyList(value); err != nil {
+				return Config{}, err
+			}
 		case "shutdown-timeout":
 			d, err := time.ParseDuration(value)
 			if err != nil {
@@ -148,6 +218,23 @@ func (c Config) Validate() error {
 	if c.ShutdownTimeout <= 0 || c.ShutdownTimeout > 2*time.Minute {
 		return errors.New("config: shutdown_timeout must be positive and at most 2m")
 	}
+	if c.Components == "backend" {
+		if strings.TrimSpace(c.DatabaseURLFile) == "" {
+			return errors.New("config: database_url_file is required for backend")
+		}
+		if strings.TrimSpace(c.PublicOrigin) == "" {
+			return errors.New("config: public_origin is required for backend")
+		}
+		if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
+			return errors.New("config: tls_cert_file and tls_key_file must be set together")
+		}
+		if c.TLSCertFile == "" && len(c.TrustedProxyCIDRs) == 0 {
+			return errors.New("config: trusted_proxy_cidrs are required when TLS terminates at a proxy")
+		}
+	}
+	if c.Components != "backend" && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0) {
+		return errors.New("config: backend-only fields require components=backend")
+	}
 	if c.Components == "ui" {
 		u, err := url.Parse(c.BackendURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || strings.HasSuffix(u.Host, ":") || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
@@ -161,6 +248,29 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (c *Config) setTrustedProxies(values []string) error {
+	prefixes := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil || prefix.Addr().Zone() != "" {
+			return errors.New("config: invalid trusted_proxy_cidrs")
+		}
+		prefixes = append(prefixes, prefix.Masked())
+	}
+	c.TrustedProxyCIDRs = prefixes
+	return nil
+}
+
+func (c *Config) setTrustedProxyList(value string) error {
+	parts := strings.Split(value, ",")
+	for _, part := range parts {
+		if strings.TrimSpace(part) != part || part == "" {
+			return errors.New("config: invalid trusted_proxy_cidrs")
+		}
+	}
+	return c.setTrustedProxies(parts)
 }
 
 func (c Config) UIOnly() bool { return c.Components == "ui" }

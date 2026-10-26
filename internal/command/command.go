@@ -9,11 +9,17 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/dsolsona/almanac/internal/authentication"
+	"github.com/dsolsona/almanac/internal/authhttp"
+	"github.com/dsolsona/almanac/internal/backendhttp"
 	"github.com/dsolsona/almanac/internal/config"
+	"github.com/dsolsona/almanac/internal/storage"
 	"github.com/dsolsona/almanac/internal/uihttp"
 )
 
@@ -59,14 +65,15 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, `Usage:
   almanac version [--output=json]
-  almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--backend-url=ORIGIN] [--shutdown-timeout=DURATION]
+  almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--backend-url=ORIGIN] [--database-url-file=FILE] [--initial-admin-login=LOGIN] [--initial-admin-password-file=FILE] [--public-origin=ORIGIN] [--tls-cert-file=FILE] [--tls-key-file=FILE] [--trusted-proxy-cidrs=LIST] [--shutdown-timeout=DURATION]
   almanac db upgrade [--database-url-file=FILE] [--timeout=30s] [--output=json]
 
 Implemented component modes:
+  backend  Serve protected local authentication API with PostgreSQL ownership.
   ui       Serve the embedded web UI and proxy /api/v1/ to --backend-url.
 
 Unsupported modes:
-  backend, alerts, combined backend/ui/alerts are not implemented yet and fail before listening.`)
+  alerts and combined backend/ui/alerts modes are not implemented yet and fail before listening.`)
 }
 
 func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -77,6 +84,13 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.String("components", "", "comma-separated components")
 	fs.String("backend-url", "", "fixed backend origin for UI mode")
 	fs.String("shutdown-timeout", "", "graceful shutdown deadline")
+	fs.String("database-url-file", "", "protected file containing a PostgreSQL URL")
+	fs.String("initial-admin-login", "", "initial administrator login")
+	fs.String("initial-admin-password-file", "", "protected initial administrator password file")
+	fs.String("public-origin", "", "canonical HTTPS public origin")
+	fs.String("tls-cert-file", "", "public TLS certificate chain")
+	fs.String("tls-key-file", "", "protected TLS private key")
+	fs.String("trusted-proxy-cidrs", "", "trusted TLS-terminating proxy CIDRs")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -92,8 +106,11 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !cfg.UIOnly() {
-		fmt.Fprintf(stderr, "serve: components %q are not implemented; only --components=ui is supported; no listener was opened\n", cfg.Components)
-		return 2
+		if cfg.Components != "backend" {
+			fmt.Fprintf(stderr, "serve: components %q are not implemented; no listener was opened\n", cfg.Components)
+			return 2
+		}
+		return serveBackend(ctx, cfg, stderr)
 	}
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 	server, err := uihttp.New(cfg, logger)
@@ -102,6 +119,153 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	return runServer(ctx, server, cfg, logger, stderr)
+}
+
+func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (exitCode int) {
+	logger := slog.New(slog.NewJSONHandler(stderr, nil))
+	if !authhttp.ValidPublicOrigin(cfg.PublicOrigin) {
+		fmt.Fprintln(stderr, "serve: public_origin must be a canonical HTTPS origin")
+		return 2
+	}
+	databaseURL, err := readDatabaseURLFile(cfg.DatabaseURLFile)
+	if err != nil {
+		fmt.Fprintln(stderr, "serve: database URL configuration is invalid")
+		return 2
+	}
+	tlsConfig, err := backendhttp.LoadTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile)
+	if err != nil {
+		fmt.Fprintln(stderr, "serve: TLS configuration is invalid")
+		return 2
+	}
+	startupCtx, stopSignals := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	owner, err := storage.AcquireBackendOwner(startupCtx, databaseURL)
+	if err != nil {
+		logger.Error("backend ownership acquisition failed")
+		return 1
+	}
+	defer func() {
+		if err := owner.Close(); err != nil {
+			logger.Error("backend ownership cleanup failed")
+			exitCode = 1
+		}
+	}()
+	initCtx, cancelInit := context.WithCancelCause(startupCtx)
+	initMonitorDone := make(chan struct{})
+	go func() {
+		defer close(initMonitorDone)
+		select {
+		case <-owner.Done():
+			cancelInit(storage.ErrBackendOwnershipLost)
+		case <-initCtx.Done():
+		}
+	}()
+	defer func() { cancelInit(context.Canceled); <-initMonitorDone }()
+	if err := initCtx.Err(); err != nil {
+		return 1
+	}
+	service, err := authentication.New(initCtx, databaseURL, time.Now)
+	if err != nil {
+		logger.Error("backend authentication initialization failed")
+		return 1
+	}
+	lifeCtx, cancelLife := context.WithCancelCause(context.Background())
+	defer cancelLife(context.Canceled)
+	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig)
+	if err != nil {
+		logger.Error("backend server initialization failed")
+		return 2
+	}
+	defer server.Close()
+	server.RegisterOnShutdown(func() {
+		logger.Info("component draining", "component", "backend")
+	})
+	lossWatcherDone := make(chan struct{})
+	go func() {
+		defer close(lossWatcherDone)
+		select {
+		case <-owner.Done():
+			cancelLife(storage.ErrBackendOwnershipLost)
+		case <-lifeCtx.Done():
+		}
+	}()
+	defer func() { cancelLife(context.Canceled); <-lossWatcherDone }()
+	if err := initCtx.Err(); err != nil {
+		return 1
+	}
+	provision, provisionErr := service.EnsureInitialOwner(initCtx, cfg.InitialAdminLogin, cfg.InitialAdminPasswordFile, "initial-owner-bootstrap")
+	if provisionErr != nil && !errors.Is(provisionErr, authentication.ErrInitialCredentials) {
+		logger.Error("backend initial owner storage failed")
+		return 1
+	}
+	if provisionErr == nil && provision.State.Provisioned {
+		server.SetProvisioned(true)
+	}
+	if errors.Is(provisionErr, authentication.ErrInitialCredentials) {
+		logger.Warn("backend initial owner is not provisioned; correct protected credentials and restart")
+	}
+	if owner.Err() != nil || startupCtx.Err() != nil {
+		return 1
+	}
+	listener, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		logger.Error("backend listener failed", "address", cfg.Listen)
+		return 1
+	}
+	select {
+	case <-owner.Done():
+		_ = listener.Close()
+		logger.Error("backend ownership lost")
+		return 1
+	case <-startupCtx.Done():
+		_ = listener.Close()
+		return 1
+	default:
+	}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(listener) }()
+	logger.Info("component started", "component", "backend", "address", listener.Addr().String())
+	select {
+	case err := <-serveErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return 0
+		}
+		logger.Error("backend server failed")
+		return 1
+	case <-owner.Done():
+		cancelLife(storage.ErrBackendOwnershipLost)
+		_ = server.Close()
+		<-serveErr
+		logger.Error("backend ownership lost")
+		return 1
+	case <-startupCtx.Done():
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	shutdownErr := make(chan error, 1)
+	go func() { shutdownErr <- server.Shutdown(shutdownCtx) }()
+	var shutdownResult error
+	select {
+	case <-owner.Done():
+		cancelLife(storage.ErrBackendOwnershipLost)
+		_ = server.Close()
+		shutdownResult = <-shutdownErr
+	case shutdownResult = <-shutdownErr:
+	}
+	if shutdownResult != nil {
+		_ = server.Close()
+	}
+	cancel()
+	serveResult := <-serveErr
+	if owner.Err() != nil {
+		logger.Error("backend ownership lost during shutdown")
+		return 1
+	}
+	if shutdownResult != nil || (serveResult != nil && !errors.Is(serveResult, http.ErrServerClosed)) {
+		logger.Error("backend shutdown failed")
+		return 1
+	}
+	logger.Info("component stopped", "component", "backend")
+	return 0
 }
 
 func runServer(ctx context.Context, server *uihttp.Server, cfg config.Config, logger *slog.Logger, stderr io.Writer) int {

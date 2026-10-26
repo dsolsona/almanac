@@ -4,6 +4,7 @@ package authhttp
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -38,15 +39,17 @@ type Options struct {
 	PublicOrigin      string
 	TrustedProxyCIDRs []netip.Prefix
 	Now               func() time.Time
+	Preflight         func(context.Context) error
 }
 
 type Handler struct {
-	service *authentication.Service
-	origin  string
-	proxies []netip.Prefix
-	now     func() time.Time
-	clockMu sync.Mutex
-	key     [32]byte
+	service   *authentication.Service
+	origin    string
+	proxies   []netip.Prefix
+	preflight func(context.Context) error
+	now       func() time.Time
+	clockMu   sync.Mutex
+	key       [32]byte
 }
 
 func New(service *authentication.Service, options Options) (http.Handler, error) {
@@ -60,7 +63,7 @@ func New(service *authentication.Service, options Options) (http.Handler, error)
 		}
 		proxies[i] = prefix.Masked()
 	}
-	h := &Handler{service: service, origin: options.PublicOrigin, proxies: proxies, now: options.Now}
+	h := &Handler{service: service, origin: options.PublicOrigin, proxies: proxies, preflight: options.Preflight, now: options.Now}
 	if _, err := rand.Read(h.key[:]); err != nil {
 		return nil, errors.New("authhttp: initialization failed")
 	}
@@ -90,6 +93,9 @@ func canonicalOrigin(raw string) bool {
 	}
 	return u.String() == raw
 }
+
+// ValidPublicOrigin reports whether raw is the canonical HTTPS origin accepted by authentication.
+func ValidPublicOrigin(raw string) bool { return canonicalOrigin(raw) }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -136,6 +142,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !validContentType(r.Header.Values("Content-Type")) {
 		h.problem(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json", id, "", nil)
 		return
+	}
+	if h.preflight != nil {
+		if err := h.preflight(r.Context()); err != nil {
+			h.problem(w, http.StatusServiceUnavailable, "authentication_unavailable", "Authentication is unavailable", id, "", nil)
+			return
+		}
 	}
 	body, status := h.readBody(w, r)
 	if status != 0 {

@@ -158,7 +158,7 @@ export interface components {
             /** @enum {string} */
             status: "ok" | "unavailable";
             /** @enum {string} */
-            component: "ui";
+            component: "ui" | "backend";
         };
         /**
          * @example {

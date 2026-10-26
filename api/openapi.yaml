@@ -223,7 +223,7 @@ components:
       required: [status, component]
       properties:
         status: {type: string, enum: [ok, unavailable]}
-        component: {type: string, enum: [ui]}
+        component: {type: string, enum: [ui, backend]}
     ProxyProblem:
       type: object
       example:

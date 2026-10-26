@@ -32,12 +32,12 @@ func TestHelpAndUnsupportedModes(t *testing.T) {
 	if code := Run(context.Background(), []string{"--help"}, &stdout, &stderr, BuildInfo{}); code != 0 {
 		t.Fatalf("help exit = %d", code)
 	}
-	if !strings.Contains(stdout.String(), "backend/ui/alerts") {
+	if !strings.Contains(stdout.String(), "combined backend/ui/alerts") {
 		t.Fatalf("help omits limitations: %s", stdout.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run(context.Background(), []string{"serve", "--components=backend"}, &stdout, &stderr, BuildInfo{}); code != 2 {
+	if code := Run(context.Background(), []string{"serve", "--components=alerts"}, &stdout, &stderr, BuildInfo{}); code != 2 {
 		t.Fatalf("unsupported mode exit = %d", code)
 	}
 	if !strings.Contains(stderr.String(), "no listener was opened") || stdout.Len() != 0 {
@@ -52,6 +52,14 @@ func TestUsageErrorsUseExitTwo(t *testing.T) {
 	}
 	if stderr.Len() == 0 {
 		t.Fatal("usage diagnostic missing")
+	}
+}
+
+func TestBackendRejectsUnsafeOriginBeforeOpeningDatabaseOrListener(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"serve", "--components=backend", "--database-url-file=/missing", "--public-origin=http://unsafe.example", "--tls-cert-file=cert", "--tls-key-file=key"}, &stdout, &stderr, BuildInfo{})
+	if code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "canonical HTTPS origin") || strings.Contains(stderr.String(), "database URL") {
+		t.Fatalf("unsafe origin was not rejected before runtime initialization: code=%d stderr=%q", code, stderr.String())
 	}
 }
 

@@ -12,12 +12,15 @@ import (
 
 // Defines values for HealthResponseComponent.
 const (
-	Ui HealthResponseComponent = "ui"
+	Backend HealthResponseComponent = "backend"
+	Ui      HealthResponseComponent = "ui"
 )
 
 // Valid indicates whether the value is a known member of the HealthResponseComponent enum.
 func (e HealthResponseComponent) Valid() bool {
 	switch e {
+	case Backend:
+		return true
 	case Ui:
 		return true
 	default:

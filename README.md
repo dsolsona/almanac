@@ -8,17 +8,17 @@ burn rates and alerts across services.
 `make setup` installs the pinned Go and web toolchains. `make build` builds the
 production web assets and embeds them in `bin/almanac`.
 
-The implemented runtime mode is UI-only:
+UI-only mode serves the embedded frontend:
 
 ```sh
 bin/almanac serve --components=ui --backend-url=http://127.0.0.1:8081
 ```
 
 It listens on `127.0.0.1:8080`, serves the embedded UI, and proxies `/api/v1/`
-requests to the configured backend origin. Backend, alerts, and combined modes
+requests to the configured backend origin. Alerts and combined modes
 return an explicit unsupported-mode error before binding a listener. The default
 component selection remains `backend,ui,alerts` and therefore requires an explicit
-`--components=ui` until those components are implemented.
+`--components=ui` or `--components=backend` until combined serving is implemented.
 
 `almanac version --output=json` emits one versioned JSON document. `almanac help`
 lists the commands and component limitations. UI mode accepts a strict JSON config
@@ -37,6 +37,41 @@ not grant group or other permissions. Local automation can use
 `ALMANAC_DATABASE_URL_FILE`, which takes precedence over that environment value.
 The command uses embedded ordered migrations and does not create users or
 application records. `--output=json` emits a single versioned result document.
+
+Backend-only mode exposes local authentication and operational health endpoints:
+
+```sh
+bin/almanac serve --components=backend --listen=127.0.0.1:8081 \
+  --database-url-file=/run/secrets/almanac-database-url \
+  --initial-admin-login=admin \
+  --initial-admin-password-file=/run/secrets/almanac-initial-password \
+  --public-origin=https://almanac.example.com \
+  --tls-cert-file=/run/certs/almanac.pem \
+  --tls-key-file=/run/secrets/almanac-key.pem
+```
+
+Backend serving requires a protected database URL file. The initial password and
+TLS private key files must also deny group and other permissions; the public
+certificate file may be readable. Supply a certificate valid for the public origin.
+For TLS termination at a proxy, omit both TLS files and explicitly configure
+`--trusted-proxy-cidrs`; no proxy is trusted by default. The proxy must supply the
+verified client address and HTTPS protocol metadata described in the
+[authentication contract](api/openapi.yaml).
+
+The first startup provisions the initial administrator, who must change the
+password before ordinary access. Later starts ignore the initial credentials once
+ownership is persisted. Missing, unsafe or weak initial credentials leave `/livez`
+available but `/readyz` and authentication unavailable; correct the configuration
+and restart. Schema or database startup failures stop the process. Only one backend
+may own a database: duplicate startup fails, SIGTERM drains requests before releasing
+ownership, and loss of the ownership connection stops serving with an error exit.
+
+Backend settings have matching snake_case JSON fields, `ALMANAC_` environment
+variables and flags; precedence is flags, environment, then file. Proxy CIDRs are a
+JSON array or a comma-separated environment/flag value. See the
+[runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
+This increment provides the authentication API; secure UI proxy integration,
+onboarding screens, setup CLI, management and metric ingestion follow separately.
 
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
 pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:

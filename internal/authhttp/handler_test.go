@@ -1,6 +1,7 @@
 package authhttp
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"net"
@@ -426,5 +427,40 @@ func TestHandlerOwnsOnlyFourPostRoutes(t *testing.T) {
 				t.Fatal("response request ID was absent or did not match the problem body")
 			}
 		})
+	}
+}
+
+func TestOptionalPreflightRunsAfterAdmissionAndUsesSafeUnavailableProblem(t *testing.T) {
+	preflights := 0
+	h, err := New(&authentication.Service{}, Options{
+		PublicOrigin: "https://almanac.example", Now: time.Now,
+		Preflight: func(context.Context) error { preflights++; return errors.New("private preflight detail") },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	makeRequest := func(method, origin string) *http.Request {
+		r := httptest.NewRequest(method, "/api/v1/auth/context", strings.NewReader(`{}`))
+		r.Header.Set("Origin", origin)
+		r.Header.Set("Content-Type", "application/json")
+		r.RemoteAddr = "198.51.100.7:1234"
+		r.TLS = &tls.ConnectionState{}
+		return r
+	}
+	methodResponse := httptest.NewRecorder()
+	h.ServeHTTP(methodResponse, makeRequest(http.MethodGet, "https://almanac.example"))
+	if methodResponse.Code != http.StatusMethodNotAllowed || methodResponse.Header().Get("Allow") != http.MethodPost || preflights != 0 {
+		t.Fatal("method admission did not precede database preflight")
+	}
+	originResponse := httptest.NewRecorder()
+	h.ServeHTTP(originResponse, makeRequest(http.MethodPost, "https://attacker.example"))
+	if originResponse.Code != http.StatusForbidden || preflights != 0 {
+		t.Fatal("origin admission did not precede database preflight")
+	}
+	readyResponse := httptest.NewRecorder()
+	h.ServeHTTP(readyResponse, makeRequest(http.MethodPost, "https://almanac.example"))
+	requestID := readyResponse.Header().Get("X-Request-ID")
+	if readyResponse.Code != http.StatusServiceUnavailable || preflights != 1 || len(requestID) != 32 || !strings.Contains(readyResponse.Body.String(), `"request_id":"`+requestID+`"`) || strings.Contains(readyResponse.Body.String(), "private preflight detail") || len(readyResponse.Header().Values("Set-Cookie")) != 0 || readyResponse.Header().Get("Cache-Control") != "no-store" || readyResponse.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("preflight failure did not use the safe authentication-unavailable response")
 	}
 }
