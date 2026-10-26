@@ -107,6 +107,12 @@ UI/CLI and remote connectivity remain outstanding. An intermittent pre-existing
 restart-shutdown test failure has safe diagnostics now; its cause remains unproven,
 and it did not recur in this candidate's real-stack gate.
 
+[F2-T07](tasks/F2-T07.md) adds a verified browser client for the management API,
+with exact decimal versions, bounded/cancellable responses and explicit uncertain
+mutation outcomes without automatic retry. Coordinator checks pass 98 web/128 Go
+tests plus generated/build/production and process smoke checks. Screens and actual
+browser agent-management acceptance remain outstanding.
+
 ## Coverage
 
 | Requirement | Primary specs |

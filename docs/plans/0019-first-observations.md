@@ -50,6 +50,8 @@ authority, optimistic versions and safe historical receipts. Rotation follows.
 plus the thin management service methods for those guarded storage operations.
 [F2-T06](../tasks/F2-T06.md) adds their authenticated HTTP contracts and runtime
 routes before CLI and UI management.
+[F2-T07](../tasks/F2-T07.md) supplies the bounded browser client before screens,
+preserving exact versions, one-time secret handling and explicit mutation retry.
 
 1. **Agent registration and credentials.** Define management contracts and the
    missing reauthentication/receipt boundaries; implement transactional agent and
@@ -60,8 +62,8 @@ routes before CLI and UI management.
    never-connected, connected, unreachable and incompatible conditions accurately.
 3. **Datasource and remote query test.** Add Prometheus connection settings and
    assignment, protected source-secret storage, and bounded remote diagnostics.
-   Resolve the explicitly deferred encryption implementation before storing source
-   secrets. Unsaved query previews never write production observations.
+   Follow accepted [ADR-0017](../adr/0017-recoverable-secret-encryption.md) for
+   source-secret encryption. Unsaved query previews never write production observations.
 4. **First observations.** Define an SLI, schedule remote queries, ingest and persist
    counts, display missing/empty/failure states, and exercise direct ingestion.
    UI and CLI offer corresponding operations within this slice.
@@ -73,8 +75,8 @@ transactional audit, missing step-up proof, scoped receipts and machine-token st
 No management endpoint may bypass those requirements to accelerate the first screen.
 The readiness audit confirms all five prerequisites need either extension or new
 implementation; F1 supplies no agent management endpoint or reusable CLI profile.
-The coordinator's next bounded task is to define those management wire contracts
-and their acceptance cases before dispatching persistence and handler implementation.
+The management wire contracts and persistence/handler acceptance now exist in
+F2-T02–T06; the next bounded work connects them to browser and CLI consumers.
 Existing lease/takeover choices are already accepted: the
 [review guide](../review-guide.md) explicitly treats inline proposal wording as
 decision traceability, not a repeated approval requirement.
@@ -106,6 +108,6 @@ UI boundaries, not around every backend edit.
 - [ ] Deliver and verify datasource diagnostics.
 - [ ] Deliver and verify collected and directly ingested observations.
 
-F2-T01–T05 establish verified provider fixtures and internal agent management.
-Public management and the complete observation journey remain outstanding;
+F2-T01–T06 establish verified provider fixtures and authenticated management API.
+Browser/CLI management and the complete observation journey remain outstanding;
 individual task records carry their verification evidence.

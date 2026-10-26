@@ -81,3 +81,5 @@ credential revocation and agent disablement before rotation and public exposure.
 service operations needed by the subsequent HTTP, CLI and UI boundary.
 [F2-T06](F2-T06.md) exposes those operations through the authenticated management
 API, generated contracts and combined/backend runtimes.
+[F2-T07](F2-T07.md) adds the bounded browser management client before agent
+administration screens and real browser acceptance.
