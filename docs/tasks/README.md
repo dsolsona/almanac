@@ -68,3 +68,6 @@ with actual browser/backend/database acceptance in the same increment.
 [F1-T19](F1-T19.md) adds container-only local bootstrap and daily startup under the
 [local Compose plan](../plans/0018-local-compose.md), with persistent state and
 actual onboarding/restart verification.
+
+F2 begins with [F2-T01](F2-T01.md), local VictoriaMetrics and VictoriaTraces fixtures
+under the [first observations plan](../plans/0019-first-observations.md).

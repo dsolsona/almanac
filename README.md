@@ -13,7 +13,8 @@ make bootstrap
 
 This builds the app inside containers, prepares a separate PostgreSQL 18 database,
 generates local credentials and a localhost HTTPS certificate, upgrades the schema,
-and starts the app. No host Go, Node, or OpenSSL installation is needed.
+and starts the app plus local VictoriaMetrics and VictoriaTraces test sources.
+No host Go, Node, or OpenSSL installation is needed.
 Open **https://localhost:18088** and accept the generated local certificate in your
 browser. No host trust settings are changed. Sign in as **admin**; retrieve the
 initial password explicitly with `make credentials`, then choose your permanent
@@ -45,6 +46,30 @@ deployment or restore qualification.
 
 The current app supports initial administrator onboarding, sign-in and sign-out.
 SLI collection, SLO dashboards and alerting are still under development.
+
+### Local data sources
+
+| Source | Host address | Address for an agent on the Compose network |
+| --- | --- | --- |
+| VictoriaMetrics | `http://localhost:18428` | `http://victoriametrics:8428` |
+| VictoriaTraces Tempo API | `http://localhost:19428/select/tempo` | `http://victoriatraces:10428/select/tempo` |
+
+Both services bind host ports to loopback and retain local data in named volumes
+across `make stop`/`make run`. Override `ALMANAC_METRICS_PORT` or
+`ALMANAC_TRACES_PORT` if those ports are occupied. Both use seven-day retention and
+256 MiB cache budgets; these are not total process-memory limits. VictoriaTraces
+also has a 2 GiB disk-retention target. These unauthenticated local test sources
+are not production deployment examples.
+
+VictoriaMetrics exposes the Prometheus-compatible query API. VictoriaTraces exposes
+an experimental Tempo-compatible API using **TraceQL**, including metrics queries;
+its trace explorer is at `http://localhost:19428/select/vmui`. Availability of these
+containers does not yet provide an Almanac agent or a native trace provider.
+
+After developer tooling setup, `make verify VERIFY_MODE=providers` starts an isolated
+provider project, inserts synthetic metrics and spans, checks exact query results
+before and after restart, and removes only its test-owned containers and volumes.
+It does not populate or reset your normal local sources.
 
 ## Runtime foundation
 

@@ -71,6 +71,14 @@ diagnostics, SLI collection/health and direct ingestion. Management parity, rema
 identity administration, deployment packaging, restore and full UI qualification
 retain their later-slice requirements; Google SSO remains F7.
 
+F2 preparation is tracked in the [first observations plan](plans/0019-first-observations.md).
+The first visible checkpoint is agent registration and credential management,
+followed by actual agent connectivity. [F2-T01](tasks/F2-T01.md) supplies verified
+local VictoriaMetrics and VictoriaTraces Compose sources: actual numeric Prometheus
+and TraceQL results survive stop/start, and the combined Compose acceptance passes.
+Agent management and collector implementation remain outstanding; source fixtures
+do not constitute collection through Almanac.
+
 ## Coverage
 
 | Requirement | Primary specs |

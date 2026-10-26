@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -58,6 +58,7 @@ verify:
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
 	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
+	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then $(MAKE) _verify_providers; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
 	  if [ -n "$${TEST_FILE:-}" ]; then \
@@ -81,7 +82,7 @@ verify:
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, auth-bench, integration, or smoke)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-race, auth-bench, integration, providers, compose, or smoke)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -93,6 +94,10 @@ _verify_web:
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts
 	cd web && npm run build
 	cd web && node scripts/check-production.mjs
+
+.PHONY: _verify_providers
+_verify_providers:
+	cd web && node scripts/check-local-providers.mjs
 
 _ensure_web_assets:
 	@if [ ! -f web/dist/index.html ]; then \
