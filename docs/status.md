@@ -99,6 +99,11 @@ Its candidate passes 73 web/119 Go unit tests and 116 PostgreSQL integration tes
 including real lifecycle ordering and retry/authority boundaries. Public management
 API, UI/CLI and remote agent connectivity remain outstanding.
 
+The F2-T05 query-performance follow-up passes 73 web/119 Go unit tests and 117
+PostgreSQL integration tests. A populated upgrade and actual generated-query plan
+check verify that current-credential lookup skips inactive history for zero, one
+and two current credentials while preserving deterministic locking and receipts.
+
 [F2-T06](tasks/F2-T06.md) exposes agent registration, reads, credential lifecycle
 and disablement through authenticated HTTP routes and generated contracts. Its
 candidate passes 73 web/128 Go unit tests and 118 real PostgreSQL integration
@@ -106,6 +111,12 @@ tests, including TLS, executable and browser authority checks. Agent management
 UI/CLI and remote connectivity remain outstanding. An intermittent pre-existing
 restart-shutdown test failure has safe diagnostics now; its cause remains unproven,
 and it did not recur in this candidate's real-stack gate.
+
+The combined API/index revision exposed another intermittent backend shutdown
+failure in the executable management test. Safe process-exit and shutdown-cause
+booleans now preserve diagnostic evidence without raw logs. The diagnostic candidate
+passes 119 real PostgreSQL integration tests, including executable/browser journeys;
+this passing run does not establish the shutdown failure's root cause or a fix.
 
 [F2-T07](tasks/F2-T07.md) adds a verified browser client for the management API,
 with exact decimal versions, bounded/cancellable responses and explicit uncertain

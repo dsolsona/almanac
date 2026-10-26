@@ -274,7 +274,7 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 		return 1
 	}
 	if shutdownResult != nil || (serveResult != nil && !errors.Is(serveResult, http.ErrServerClosed)) {
-		logger.Error("backend shutdown failed")
+		logger.Error("backend shutdown failed", "deadline_exceeded", errors.Is(shutdownResult, context.DeadlineExceeded), "cancelled", errors.Is(shutdownResult, context.Canceled), "serve_failed", serveResult != nil && !errors.Is(serveResult, http.ErrServerClosed))
 		return 1
 	}
 	logger.Info("component stopped", "component", "backend")
