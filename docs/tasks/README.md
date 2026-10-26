@@ -54,3 +54,6 @@ its [plan](../plans/0010-atomic-password-rotation.md), still before API exposure
 [F1-T15](F1-T15.md) adds noninteractive initial administrator setup through the
 verified API under its [plan](../plans/0015-noninteractive-setup.md), including
 uncertain-response handling without mutation replay.
+
+[F1-T16](F1-T16.md) adds the explicit combined backend/UI runtime under its
+[plan](../plans/0016-combined-backend-ui-runtime.md), before browser onboarding.
