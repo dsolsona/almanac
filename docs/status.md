@@ -23,9 +23,10 @@ requirements may legitimately create additional specifications and ADRs.
 | SPEC-0002, ADR-0002 | Accepted | Completed maintainer reviews recorded in document headers |
 | SPEC-0003, ADR-0003 | Accepted | Crit review `b7b16f696fed` approved after all comments resolved |
 | SPEC-0004–0015 | Accepted | Crit review `7fd22977b6c0` approved with all comments resolved, 2026-10-24 |
-| ADR-0004–0013 | Accepted | Same completed review; deferred encryption-library choice remains explicit |
+| ADR-0004–0013 | Accepted | Same completed review; encryption-library choice subsequently resolved by ADR-0017 |
 | SPEC-0016–0017, ADR-0014–0015 | Accepted | Crit review `0de0c0e42db6` approved with no changes requested, 2026-10-24 |
 | ADR-0016 | Accepted | Maintainer approved authentication outcome recovery without automatic mutation replay, 2026-10-26 |
+| ADR-0017 | Accepted | Maintainer approved Tink Go 2.8.0, protected external keysets and rotation, 2026-10-26; implementation remains outstanding |
 | Product implementation | F1 Foundation merged at `9c25fef`; local Compose follow-up verified | F1-T01–18 deliver the foundation slice; F1-T19 adds one-command local startup; F2 observations and later release requirements remain unimplemented |
 
 ## Foundation acceptance
@@ -137,8 +138,8 @@ not product correctness or scalability.
 See [review guide](review-guide.md) for the highest-impact decisions, reading order,
 and decision register. The completed review clarified mandatory initial-password
 rotation, local users before Google SSO, calculation examples, composite sequencing,
-React/API packaging and measurable UI performance. The encryption library remains a
-candidate selection before encryption implementation. Web foundation checks now run;
+React/API packaging and measurable UI performance. Accepted ADR-0017 selects Tink
+and its key/ciphertext format; encryption implementation remains outstanding. Web foundation checks now run;
 Go, operational HTTP and PostgreSQL upgrade checks also run; full persistence
 and product-journey acceptance remain outstanding.
 
@@ -233,7 +234,7 @@ and product-journey acceptance remain outstanding.
   including failure. Updated verification passes 73 web/102 Go tests and 66 real
   PostgreSQL integration tests (command 26.805 s), including the logout/re-login
   regression. Independent scoped review approves.
-- Resolve explicitly deferred choices before their affected task, including encryption
+- Follow accepted [ADR-0017](adr/0017-recoverable-secret-encryption.md) for encryption
   library/key format; verify tool/dependency versions when scaffolding.
 - Documentation validation uses `python3 scripts/check-docs.py`. Web build, unit and
   catalogue browser entry points and Go/operational HTTP/database upgrade gates

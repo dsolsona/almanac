@@ -22,7 +22,8 @@ Give one Almanac deployment a protected initial owner, named human users, and
 separate least-privilege identities for agents and external producers. This refines
 [SPEC-0001](0001-system-overview.md), [SPEC-0002](0002-agent-behavior.md), and
 [SPEC-0003](0003-ingestion-and-recovery.md). The behavior and initial defaults below are accepted design contracts.
-Explicitly deferred implementation choices, including REVIEW-I06, remain open.
+REVIEW-I06's deferred encryption choice is resolved by accepted
+[ADR-0017](../adr/0017-recoverable-secret-encryption.md).
 
 ## Scope and non-goals
 
@@ -306,14 +307,15 @@ remove them only after validation and backup recovery planning. Missing keys fai
 closed with redacted diagnostics. Backups require a separately protected key backup.
 
 Use a library-backed encryption adapter rather than implementing cryptography.
-[Tink for Go AEAD](https://pkg.go.dev/github.com/tink-crypto/tink-go/v2/aead) is a
-candidate for AES-GCM and associated data; its
+[Tink for Go AEAD](https://pkg.go.dev/github.com/tink-crypto/tink-go/v2/aead) is
+the selected adapter for AES-GCM and associated data under
+[ADR-0017](../adr/0017-recoverable-secret-encryption.md); its
 [keysets](https://developers.google.com/tink/design/keysets) support a primary
 write key and retained read keys during rotation. This is not an automatic database
 field integration: the persistence/application boundary must explicitly encrypt
 before storage and decrypt only for authorized execution. Ordinary management reads
-return redacted metadata without decrypting secret values. Library choice and
-ciphertext format remain a pre-implementation decision under REVIEW-I06.
+return redacted metadata without decrypting secret values. ADR-0017 defines the
+accepted library, ciphertext binding, key loading and rotation decisions.
 
 
 Restore activation rotates the installation credential epoch and invalidates every
@@ -403,6 +405,8 @@ plaintext secrets. UI and CLI retain actionable redacted codes and request IDs.
   against the standard-library AES-GCM alternative. Select and pin the library,
   ciphertext format, key-loading and rotation procedure in ADR-0004 before code;
   neither option removes Almanac's authorization, re-encryption or backup duties.
+  Resolved by accepted [ADR-0017](../adr/0017-recoverable-secret-encryption.md)
+  on 2026-10-26; the original evaluation note is retained for traceability.
 
 ## Verification evidence
 
