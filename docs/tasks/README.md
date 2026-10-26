@@ -57,3 +57,7 @@ uncertain-response handling without mutation replay.
 
 [F1-T16](F1-T16.md) adds the explicit combined backend/UI runtime under its
 [plan](../plans/0016-combined-backend-ui-runtime.md), before browser onboarding.
+
+[F1-T17](F1-T17.md) establishes the browser authentication client under the
+[browser onboarding plan](../plans/0017-browser-onboarding.md), before its screens
+and real browser acceptance.
