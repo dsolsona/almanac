@@ -38,6 +38,7 @@ let failed = false;
 let cleanupFailed = false;
 let initial;
 let permanent;
+let issuedToken;
 let certificate;
 let spki;
 let lastFailure;
@@ -49,7 +50,7 @@ let cleanupPromise;
 
 function redact(value) {
   let text = String(value ?? '');
-  for (const secret of [initial, permanent]) if (secret) text = text.split(secret).join('[REDACTED]');
+  for (const secret of [initial, permanent, issuedToken]) if (secret) text = text.split(secret).join('[REDACTED]');
   return text.replace(/postgres(?:ql)?:\/\/[^\s"']+/g, '[DATABASE URL]')
     .replace(/\b[a-fA-F0-9]{64}\b/g, '[HEX SECRET OR DIGEST]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[PRIVATE KEY]')
@@ -186,14 +187,49 @@ async function checkPermanentLogin() {
     await browser.close();
   }
 }
+async function setCaptureViewport(page, theme, viewport) {
+  const { width, height, name } = viewport;
+  await page.setViewportSize({ width, height });
+  const wantsDark = theme === 'dark';
+  const isDark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
+  if (isDark !== wantsDark) {
+    if (width <= 860) {
+      await page.getByRole('button', { name: 'Menu', exact: true }).click();
+      const drawer = page.getByRole('dialog', { name: 'Navigation menu', exact: true });
+      await drawer.getByRole('button', { name: wantsDark ? 'Switch to dark theme' : 'Switch to light theme', exact: true }).click();
+      await page.keyboard.press('Escape');
+    } else {
+      await page.getByRole('button', { name: wantsDark ? 'Switch to dark theme' : 'Switch to light theme', exact: true }).click();
+    }
+  }
+  await expect.poll(() => page.locator('html').evaluate((element) => element.classList.contains('dark'))).toBe(wantsDark);
+  return name;
+}
+async function captureMobileNavigation(page, theme, artifacts) {
+  const menu = page.getByRole('button', { name: 'Menu', exact: true });
+  await menu.click();
+  const drawer = page.getByRole('dialog', { name: 'Navigation menu', exact: true });
+  const close = drawer.getByRole('button', { name: 'Close navigation', exact: true });
+  await expect(close).toBeFocused();
+  await page.screenshot({ path: join(artifacts, `application-navigation-mobile-${theme}.png`), animations: 'disabled' });
+  await close.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(drawer.getByRole('button', { name: 'Sign out', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeFocused();
+  await expect(page.getByRole('dialog', { name: 'Navigation menu', exact: true })).toHaveCount(0);
+}
 async function checkLocalAgentRegistration() {
   const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${spki}`] });
   if (cancellation) { await browser.close(); ensureActive(); }
   activeBrowser = browser;
+  let journeyPage;
+  let documentMarker;
+  const requests = [];
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    journeyPage = page;
     page.setDefaultTimeout(5000);
-    const requests = [];
     let documentNavigations = 0;
     let contextRequests = 0;
     page.on('request', (incoming) => {
@@ -211,50 +247,85 @@ async function checkLocalAgentRegistration() {
     stage = 'real Compose post-login Agents route';
     documentNavigations = 0;
     contextRequests = 0;
-    const documentMarker = await page.evaluate(() => {
+    documentMarker = await page.evaluate(() => {
       const marker = crypto.randomUUID();
       document.documentElement.dataset.composeDocumentMarker = marker;
       return marker;
     });
-    stage = 'real Compose Agents to Datasources navigation';
-    await page.getByRole('link', { name: 'Datasources', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
-    stage = 'real Compose Add datasource navigation';
-    await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Add datasource', exact: true })).toBeVisible();
-    stage = 'real Compose datasource endpoint literal input';
-    const endpoint = page.locator('#datasource-endpoint');
-    await endpoint.fill('http://localhost');
-    const endpointPresentation = await endpoint.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        value: element.value,
-        font_family: style.fontFamily,
-        font_feature_settings: style.fontFeatureSettings,
-        font_variant_ligatures: style.fontVariantLigatures,
-      };
-    });
-    assert.equal(endpointPresentation.value, 'http://localhost');
-    await endpoint.screenshot({ path: join(artifacts, 'datasource-endpoint-literal.png'), animations: 'disabled' });
-    stage = 'real Compose datasource back navigation';
-    await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
-    stage = 'real Compose Datasources to Agents navigation';
-    await page.getByRole('link', { name: 'Agents', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    const endpointPresentations = [];
+    const endpointCaptures = [];
+    const registrationCaptures = [];
+    const datasourceCaptures = [];
+    const detailCaptures = [];
+    const viewports = [
+      { name: 'desktop', width: 1440, height: 1000 },
+      { name: 'mobile', width: 360, height: 900 },
+    ];
+    for (const theme of ['light', 'dark']) {
+      for (const viewport of viewports) {
+        const viewportName = await setCaptureViewport(page, theme, viewport);
+        if (viewportName === 'mobile') await captureMobileNavigation(page, theme, artifacts);
+        stage = `real Compose ${theme} ${viewportName} Agents to Datasources navigation`;
+        await page.getByRole('link', { name: 'Datasources', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
+        stage = `real Compose ${theme} ${viewportName} Add datasource navigation`;
+        await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Add datasource', exact: true })).toBeVisible();
+        stage = `real Compose ${theme} ${viewportName} datasource endpoint literal input`;
+        const endpoint = page.locator('#datasource-endpoint');
+        await endpoint.fill('http://localhost');
+        const endpointPresentation = await endpoint.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            value: element.value,
+            font_family: style.fontFamily,
+            font_feature_settings: style.fontFeatureSettings,
+            font_variant_ligatures: style.fontVariantLigatures,
+          };
+        });
+        assert.equal(endpointPresentation.value, 'http://localhost');
+        assert.equal(endpointPresentation.font_variant_ligatures, 'none');
+        endpointPresentations.push({ theme, viewport: viewportName, ...endpointPresentation });
+        const endpointCapture = `datasource-endpoint-${viewportName}-${theme}.png`;
+        await endpoint.screenshot({ path: join(artifacts, endpointCapture), animations: 'disabled' });
+        endpointCaptures.push(endpointCapture);
+        await page.screenshot({
+          path: join(artifacts, `datasource-add-${viewportName}-${theme}.png`),
+          fullPage: true, animations: 'disabled',
+        });
+        datasourceCaptures.push(`datasource-add-${viewportName}-${theme}.png`);
+        stage = `real Compose ${theme} ${viewportName} datasource back navigation`;
+        await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
+        stage = `real Compose ${theme} ${viewportName} Datasources to Agents navigation`;
+        await page.getByRole('link', { name: 'Agents', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+        stage = `real Compose ${theme} ${viewportName} Local name suggestion`;
+        await page.getByRole('button', { name: 'Register agent', exact: true }).click();
+        const registration = page.getByRole('dialog', { name: 'Register agent', exact: true });
+        await registration.getByLabel('Display name', { exact: true }).fill('Local');
+        const identifier = registration.getByLabel('Agent name (identifier)', { exact: true });
+        await expect(identifier).toHaveValue('local');
+        const registrationCapture = `local-agent-suggested-${viewportName}-${theme}.png`;
+        await page.screenshot({ path: join(artifacts, registrationCapture), fullPage: true, animations: 'disabled' });
+        registrationCaptures.push(registrationCapture);
+        await registration.getByRole('button', { name: 'Close dialog', exact: true }).click();
+        await expect(page.getByRole('dialog', { name: 'Register agent', exact: true })).toHaveCount(0);
+      }
+    }
     stage = 'real Compose same-document and session continuity assertions';
     assert.equal(await page.locator('html').getAttribute('data-compose-document-marker'), documentMarker);
     assert.equal(documentNavigations, 0);
     assert.equal(contextRequests, 0);
     await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toHaveCount(0);
-    stage = 'real Compose open registration form';
+    await setCaptureViewport(page, 'light', viewports[0]);
+    stage = 'real Compose submit Local registration form';
     await page.getByRole('button', { name: 'Register agent', exact: true }).click();
     const registration = page.getByRole('dialog', { name: 'Register agent', exact: true });
-    stage = 'real Compose Local name suggestion';
     await registration.getByLabel('Display name', { exact: true }).fill('Local');
     const identifier = registration.getByLabel('Agent name (identifier)', { exact: true });
     await expect(identifier).toHaveValue('local');
-    await page.screenshot({ path: join(artifacts, 'local-agent-suggested-before-submit.png'), fullPage: true, animations: 'disabled' });
+    const contextRequestsBeforeRegistration = contextRequests;
     stage = 'real Compose submit Local registration form';
     const created = page.waitForResponse((response) => response.request().method() === 'POST'
       && new URL(response.url()).pathname === '/api/v1/agents');
@@ -263,18 +334,36 @@ async function checkLocalAgentRegistration() {
     stage = 'real Compose validate registration response and one-time token';
     assert.equal(response.status(), 201);
     const result = await response.json();
+    issuedToken = result.token;
     assert.equal(result.agent.name, 'local');
     assert.equal(result.agent.display_name, 'Local');
     assert.match(result.token, /^almanac_agent_v1_[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
     await expect(page.getByRole('dialog', { name: 'Agent token', exact: true })).toBeVisible();
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveText(result.token);
     assert.deepEqual(requests, [{ name: 'local', display_name: 'Local' }]);
-    stage = 'real Compose close token and inspect agent detail URL';
+    stage = 'real Compose close one-time token dialog';
     await page.getByRole('button', { name: 'Close token', exact: true }).click();
+    stage = 'real Compose verify agent detail URL after token close';
     await expect(page).toHaveURL((current) => current.pathname === '/agents' && current.searchParams.has('agent'));
+    stage = 'real Compose verify credential history after token close';
     await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+    stage = 'real Compose verify Local display name after token close';
     await expect(page.getByText('Local', { exact: true })).toBeVisible();
+    await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
     const agentURL = page.url();
+    const registrationAuthContextRequests = contextRequests - contextRequestsBeforeRegistration;
+    assert.equal(registrationAuthContextRequests, 1);
+    for (const theme of ['light', 'dark']) {
+      for (const viewport of viewports) {
+        const viewportName = await setCaptureViewport(page, theme, viewport);
+        stage = `real Compose ${theme} ${viewportName} agent detail screenshot after token closure`;
+        await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+        await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
+        const detailCapture = `agent-detail-after-token-${viewportName}-${theme}.png`;
+        await page.screenshot({ path: join(artifacts, detailCapture), fullPage: true, animations: 'disabled' });
+        detailCaptures.push(detailCapture);
+      }
+    }
     stage = 'real Compose detail to list browser back';
     await page.goBack();
     await expect(page).toHaveURL((current) => current.pathname === '/agents' && !current.searchParams.has('agent'));
@@ -283,6 +372,13 @@ async function checkLocalAgentRegistration() {
     await page.goForward();
     await expect(page).toHaveURL(agentURL);
     await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+    const preReloadCounts = { documentNavigations, contextRequests };
+    const routeOnlyContinuity = {
+      document_navigation_requests: preReloadCounts.documentNavigations,
+      auth_context_requests: preReloadCounts.contextRequests - registrationAuthContextRequests,
+    };
+    assert.equal(routeOnlyContinuity.document_navigation_requests, 0);
+    assert.equal(routeOnlyContinuity.auth_context_requests, 0);
     stage = 'real Compose reload persisted agent and one-time-token absence';
     await page.reload();
     await expect(page.getByText('local', { exact: true })).toBeVisible();
@@ -292,11 +388,48 @@ async function checkLocalAgentRegistration() {
     const persisted = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
       "SELECT count(*) FROM public.almanac_agents WHERE name='local' AND display_name='Local'"]);
     assert.equal(persisted.trim(), '1');
+    const intentionalReloadCounts = {
+      document_navigation_requests: documentNavigations - preReloadCounts.documentNavigations,
+      auth_context_requests: contextRequests - preReloadCounts.contextRequests,
+    };
+    assert.equal(intentionalReloadCounts.document_navigation_requests, 1);
+    assert.equal(intentionalReloadCounts.auth_context_requests, 1);
     writeFileSync(join(artifacts, 'local-agent-registration.json'), JSON.stringify({
       name: 'local', display_name: 'Local', create_requests: requests.length,
-      token_shown_once: true, persisted: true, document_navigations: documentNavigations,
-      auth_context_requests: contextRequests, endpoint_presentation: endpointPresentation,
+      token_shown_once: true, persisted: true,
+      route_only_continuity: routeOnlyContinuity,
+      registration_authority_context_requests: registrationAuthContextRequests,
+      intentional_reload: intentionalReloadCounts,
+      endpoint_presentations: endpointPresentations,
+      screenshots: {
+        datasource_add: datasourceCaptures,
+        datasource_endpoint_literal: endpointCaptures,
+        local_registration_presubmit: registrationCaptures,
+        mobile_navigation: ['application-navigation-mobile-light.png', 'application-navigation-mobile-dark.png'],
+        agent_detail_after_token_closed: detailCaptures,
+      },
     }), { mode: 0o600 });
+  } catch (error) {
+    if (journeyPage) {
+      const visible = async (locator) => { try { return await locator.isVisible(); } catch { return false; } };
+      const pathname = (() => { try { return new URL(journeyPage.url()).pathname; } catch { return 'unavailable'; } })();
+      const safeState = {
+        stage,
+        failure_type: error?.name ?? 'Error',
+        pathname,
+        post_request_created: requests.length > 0,
+        document_marker_matches: documentMarker
+          ? await journeyPage.locator('html').getAttribute('data-compose-document-marker') === documentMarker
+          : false,
+        registration_dialog_visible: await visible(journeyPage.getByRole('dialog', { name: 'Register agent', exact: true })),
+        token_dialog_visible: await visible(journeyPage.getByRole('dialog', { name: 'Agent token', exact: true })),
+        token_output_present: await journeyPage.locator('output[aria-label="Agent token"]').count() > 0,
+        credential_history_visible: await visible(journeyPage.getByRole('region', { name: 'Credential history', exact: true })),
+        local_display_name_visible: await visible(journeyPage.getByText('Local', { exact: true })),
+      };
+      writeFileSync(join(artifacts, 'local-agent-post-create-diagnostic.json'), JSON.stringify(safeState, null, 2), { mode: 0o600 });
+    }
+    throw error;
   } finally {
     activeBrowser = undefined;
     await browser.close();
