@@ -62,6 +62,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return authCommand(ctx, args[1:], stdout, stderr)
 	case "agents":
 		return agentsCommand(ctx, args[1:], stdout, stderr)
+	case "datasources", "providers", "slis":
+		return datasourceCommand(ctx, args, stdout, stderr)
 	case "secrets":
 		return secretsCommand(ctx, args[1:], stdout, stderr)
 	default:
@@ -86,6 +88,13 @@ func printHelp(w io.Writer) {
   almanac agents credentials rotate --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm (--token-file=FILE|--show-token)
   almanac agents credentials revoke --profile-file=FILE --agent-id=UUID --credential-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
   almanac agents disable --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
+  almanac datasources list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--output=json]
+  almanac datasources get --profile-file=FILE --datasource-id=UUID [--output=json]
+  almanac datasources create --profile-file=FILE --input-file=FILE --idempotency-key=KEY [--output=json]
+  almanac datasources update --profile-file=FILE --datasource-id=UUID --if-match=ETAG --input-file=FILE [--output=json]
+  almanac datasources test --profile-file=FILE --input-file=FILE [--wait] [--cancel-on-timeout]
+  almanac providers list --profile-file=FILE [--agent-id=UUID] [--output=json]
+  almanac slis test --profile-file=FILE --datasource-id=UUID --query=PROMQL [--wait] [--cancel-on-timeout]
   almanac secrets provision-source-keyset --file=FILE --keyset-id=UUID [--output=json]
 
 Implemented component modes:

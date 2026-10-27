@@ -75,8 +75,8 @@ try {
   assert.equal(runtime.applied_configuration_revision, '1');
   stage = 'agent detail no-assignment explanation';
   assert.equal(runtime.collection_explanation, 'no_assignment');
-  stage = 'agent detail empty capabilities';
-  assert.deepEqual(runtime.capabilities, []);
+  stage = 'agent detail Prometheus diagnostic capability';
+  assert.deepEqual(runtime.capabilities, [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }]);
   stage = 'agent detail absent collection attempt';
   assert.equal(runtime.last_attempt_at, null);
   stage = 'agent detail absent successful query';
@@ -104,7 +104,10 @@ try {
   stage = 'agent runtime expected execution label';
   await expect(runtimeField('Next expected execution')).toHaveText('Not reported');
   stage = 'agent runtime capabilities label';
-  await expect(panel.getByText('No provider capabilities were reported.', { exact: true })).toBeVisible();
+  stage = 'agent runtime Prometheus capability rendering';
+  const prometheusCapability = panel.locator('.agents-runtime__capabilities li').filter({ has: page.getByText('prometheus', { exact: true }) });
+  await expect(prometheusCapability).toContainText('Configuration formats: prometheus-http-v1');
+  await expect(prometheusCapability).toContainText('Operations: connection_test, query_preview');
 
   stage = 'keyboard skip navigation';
   const skipLink = page.getByRole('link', { name: 'Skip to content', exact: true });

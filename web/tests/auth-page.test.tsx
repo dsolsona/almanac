@@ -137,10 +137,11 @@ describe('authentication page', () => {
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
-    for (const destination of ['SLOs', 'SLIs', 'Datasources', 'Alerts']) {
+    for (const destination of ['SLOs', 'SLIs', 'Alerts']) {
       expect(screen.getByText(destination)).toBeVisible();
       expect(screen.getByText(destination).closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
     }
+    expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('href', '/datasources');
     expect(screen.queryByRole('heading', { name: 'Signed in' })).not.toBeInTheDocument();
     expect(screen.getByText('owner')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible();
