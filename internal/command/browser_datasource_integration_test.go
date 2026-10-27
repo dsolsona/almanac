@@ -10,11 +10,14 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -24,6 +27,8 @@ import (
 // free of credential values.
 func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte, login, password, agentID, datasourceID, query, caPEM string) {
 	t.Helper()
+	authSource := newBrowserAuthSource(t)
+	defer authSource.server.Close()
 	parsedURL, err := url.Parse(baseURL)
 	caPool := x509.NewCertPool()
 	if err != nil || parsedURL.Scheme != "https" || parsedURL.Hostname() != "localhost" || parsedURL.Path != "" && parsedURL.Path != "/" || login == "" || password == "" || !validCLIUUID(agentID) || !validCLIUUID(datasourceID) || query != "vector(1)" || len(certificatePEM) > 16*1024 || len(caPEM) == 0 || len(caPEM) > 16*1024 || !caPool.AppendCertsFromPEM([]byte(caPEM)) {
@@ -47,19 +52,24 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 	}
 	spki := sha256.Sum256(parsedCertificate.RawSubjectPublicKeyInfo)
 	fixture := struct {
-		URL          string `json:"url"`
-		SPKI         string `json:"spki"`
-		Certificate  string `json:"certificate"`
-		Login        string `json:"login"`
-		Password     string `json:"password"`
-		AgentID      string `json:"agent_id"`
-		DatasourceID string `json:"datasource_id"`
-		Query        string `json:"query"`
-		CAPEM        string `json:"ca_pem"`
-		Artifacts    string `json:"artifacts"`
+		URL           string `json:"url"`
+		SPKI          string `json:"spki"`
+		Certificate   string `json:"certificate"`
+		Login         string `json:"login"`
+		Password      string `json:"password"`
+		AgentID       string `json:"agent_id"`
+		DatasourceID  string `json:"datasource_id"`
+		Query         string `json:"query"`
+		CAPEM         string `json:"ca_pem"`
+		AuthEndpoint  string `json:"auth_endpoint"`
+		AuthCAPEM     string `json:"auth_ca_pem"`
+		BasicPassword string `json:"basic_password"`
+		BearerToken   string `json:"bearer_token"`
+		Artifacts     string `json:"artifacts"`
 	}{
 		URL: baseURL, SPKI: base64.StdEncoding.EncodeToString(spki[:]), Certificate: string(certificatePEM),
-		Login: login, Password: password, AgentID: agentID, DatasourceID: datasourceID, Query: query, CAPEM: caPEM, Artifacts: artifacts,
+		Login: login, Password: password, AgentID: agentID, DatasourceID: datasourceID, Query: query, CAPEM: caPEM,
+		AuthEndpoint: authSource.server.URL, AuthCAPEM: string(authSource.certificate), BasicPassword: authSource.basicPassword, BearerToken: authSource.bearerToken, Artifacts: artifacts,
 	}
 	input, err := json.Marshal(fixture)
 	if err != nil || len(input) > 48*1024 {
@@ -73,17 +83,85 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 	var output bytes.Buffer
 	browser.Stdout, browser.Stderr = &output, &output
 	if err := browser.Run(); err != nil {
-		if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) {
+		if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) || strings.Contains(output.String(), authSource.basicPassword) || strings.Contains(output.String(), authSource.bearerToken) {
 			t.Fatal("datasource browser fixture leaked a credential in output")
 		}
 		t.Fatalf("datasource browser acceptance failed: %s; inspect sanitized artifacts in %s", safeBrowserFailureMarker(output.String()), artifacts)
 	}
-	if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) {
+	if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) || strings.Contains(output.String(), authSource.basicPassword) || strings.Contains(output.String(), authSource.bearerToken) {
 		t.Fatal("datasource browser fixture leaked a credential in output")
 	}
 	if strings.TrimSpace(output.String()) != "PASS browser-datasources" {
 		t.Fatalf("datasource browser acceptance did not produce its exact completion marker; inspect sanitized artifacts in %s", artifacts)
 	}
+	basicSeen, bearerSeen, canceled := authSource.evidence()
+	if !basicSeen || !bearerSeen || !canceled {
+		t.Fatalf("saved authentication/cancellation journey incomplete: basic=%t bearer=%t canceled=%t", basicSeen, bearerSeen, canceled)
+	}
+}
+
+type browserAuthSource struct {
+	server        *httptest.Server
+	certificate   []byte
+	basicPassword string
+	bearerToken   string
+	mu            sync.Mutex
+	basicSeen     bool
+	bearerSeen    bool
+	canceled      bool
+}
+
+func (source *browserAuthSource) evidence() (basic, bearer, canceled bool) {
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	return source.basicSeen, source.bearerSeen, source.canceled
+}
+
+func newBrowserAuthSource(t *testing.T) *browserAuthSource {
+	t.Helper()
+	source := &browserAuthSource{basicPassword: "browser-basic-secret", bearerToken: "browser-bearer-secret"}
+	source.server = httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		mode := strings.TrimPrefix(request.URL.Path, "/")
+		mode = strings.SplitN(mode, "/", 2)[0]
+		var valid bool
+		switch mode {
+		case "basic":
+			username, password, ok := request.BasicAuth()
+			valid = ok && username == "browser-user" && password == source.basicPassword
+			if valid {
+				source.mu.Lock()
+				source.basicSeen = true
+				source.mu.Unlock()
+			}
+		case "bearer":
+			valid = request.Header.Get("Authorization") == "Bearer "+source.bearerToken
+			if valid {
+				source.mu.Lock()
+				source.bearerSeen = true
+				source.mu.Unlock()
+			}
+		}
+		if !valid {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if request.URL.Query().Get("query") == "block_until_cancel" {
+			<-request.Context().Done()
+			source.mu.Lock()
+			source.canceled = true
+			source.mu.Unlock()
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1700000000,"1"]}]}}`))
+	}))
+	encodedCertificate := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: source.server.Certificate().Raw})
+	if len(encodedCertificate) == 0 {
+		source.server.Close()
+		t.Fatal("encode saved-credential source certificate failed")
+	}
+	source.certificate = encodedCertificate
+	return source
 }
 
 func safeBrowserFailureMarker(output string) string {

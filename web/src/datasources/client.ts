@@ -16,12 +16,20 @@ export class DatasourceFailure extends Error {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_INT64 = '9223372036854775807';
 const messages: Record<string, string> = {
+  unauthorized: 'Your session has expired. Check your session and try again.',
   unauthenticated: 'Your session has expired. Check your session and try again.',
   forbidden: 'Your role does not allow this operation.',
   not_found: 'The requested datasource or diagnostic was not found.',
   conflict: 'The datasource changed. Refresh it and review the current settings.',
   invalid_datasource_input: 'The datasource settings were rejected. Review the fields and try again.',
+  invalid_request: 'The datasource request input is invalid. Review the request and try again.',
   configuration_pending: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.',
+  configuration_failed: 'The assigned agent could not apply its datasource configuration. Check the agent and try again.',
+  source_secret_unavailable: 'The stored datasource credential is unavailable. Update the credentials before testing again.',
+  invalid_agent: 'The assigned agent is invalid or unavailable.',
+  datasource_unavailable: 'The datasource is unavailable for this operation.',
+  unsupported: 'The assigned agent does not support this diagnostic.',
+  configuration_too_large: 'The datasource configuration exceeds the agent assignment limits.',
   agent_unavailable: 'The assigned agent is unavailable. No diagnostic was started; retry when it is connected.',
   diagnostic_unavailable: 'The assigned agent cannot run this diagnostic right now.',
   request_timeout: 'The request timed out. You can retry when the agent is available.',
@@ -32,14 +40,12 @@ function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function hasCredentialKey(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(hasCredentialKey);
-  if (!object(value)) return false;
-  return Object.entries(value).some(([key, child]) => ['password', 'token', 'password_secret', 'token_secret'].includes(key) || hasCredentialKey(child));
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
 function validDatasource(value: unknown): value is Datasource {
-  if (!object(value)) return false;
+  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'provider', 'configuration_format', 'endpoint', 'tls', 'authentication', 'polling_interval_seconds', 'settling_delay_seconds', 'agent_id', 'created_at', 'updated_at'])) return false;
   let endpoint: URL;
   try { endpoint = new URL(String(value.endpoint)); } catch { return false; }
   const version = typeof value.version === 'string' && /^[1-9][0-9]*$/.test(value.version)
@@ -47,8 +53,9 @@ function validDatasource(value: unknown): value is Datasource {
   return typeof value.id === 'string' && UUID.test(value.id) && version && typeof value.name === 'string' && typeof value.display_name === 'string'
     && value.provider === 'prometheus' && value.configuration_format === 'prometheus-http-v1'
     && typeof value.endpoint === 'string' && ['http:', 'https:'].includes(endpoint.protocol) && !endpoint.username && !endpoint.password && !endpoint.hash
-    && object(value.tls) && typeof value.tls.insecure_skip_verify === 'boolean'
+    && object(value.tls) && exactKeys(value.tls, ['insecure_skip_verify', 'ca_pem']) && typeof value.tls.insecure_skip_verify === 'boolean'
     && (value.tls.ca_pem === null || typeof value.tls.ca_pem === 'string' && value.tls.ca_pem.length <= 64 * 1024) && object(value.authentication)
+    && exactKeys(value.authentication, ['mode', 'username', 'password_configured', 'token_configured'])
     && ['none', 'basic', 'bearer'].includes(String(value.authentication.mode))
     && (value.authentication.username === null || typeof value.authentication.username === 'string')
     && typeof value.authentication.password_configured === 'boolean' && typeof value.authentication.token_configured === 'boolean'
@@ -63,7 +70,8 @@ function validRevision(value: unknown, allowZero: boolean): value is string {
 function validProvider(value: unknown): value is Provider {
   const availabilities = ['available', 'applying', 'offline', 'disabled', 'unreported', 'configuration_failed', 'incompatible', 'planned', 'unsupported'];
   const failureCodes = ['invalid_snapshot', 'incompatible', 'apply_failed'];
-  return object(value) && value.provider === 'prometheus' && value.configuration_format === 'prometheus-http-v1'
+  return object(value) && exactKeys(value, ['applied_configuration_revision', 'availability', 'configuration_failure_code', 'configuration_failure_revision', 'configuration_format', 'desired_configuration_revision', 'operations', 'provider'])
+    && value.provider === 'prometheus' && value.configuration_format === 'prometheus-http-v1'
     && availabilities.includes(String(value.availability)) && Array.isArray(value.operations) && value.operations.length <= 16
     && value.operations.every((operation) => operation === 'connection_test' || operation === 'query_preview')
     && (value.desired_configuration_revision === null || validRevision(value.desired_configuration_revision, false))
@@ -73,7 +81,8 @@ function validProvider(value: unknown): value is Provider {
 }
 
 function validDiagnostic(value: unknown): value is Diagnostic {
-  return object(value) && typeof value.id === 'string' && UUID.test(value.id)
+  return object(value) && exactKeys(value, ['id', 'state', 'operation', 'created_at', 'deadline_at', 'result_class', 'result', 'error_code', 'message'])
+    && typeof value.id === 'string' && UUID.test(value.id)
     && ['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(String(value.state))
     && ['connection_test', 'query_preview'].includes(String(value.operation))
     && typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) && typeof value.deadline_at === 'string' && Number.isFinite(Date.parse(value.deadline_at))
@@ -149,7 +158,6 @@ async function request<T>(path: string, init: RequestInit, expected: number, val
     const code = object(value) && typeof value.code === 'string' ? value.code : 'management_unavailable';
     throw new DatasourceFailure(code, messages[code] ?? 'Datasource management is temporarily unavailable.', response.status);
   }
-  if (hasCredentialKey(value)) throw new DatasourceFailure('invalid_response', 'The server returned an unsafe datasource response.');
   if (!validate(value)) throw new DatasourceFailure('invalid_response', 'The server returned an invalid datasource response.');
   return { value, response };
 }
@@ -164,7 +172,7 @@ export function createDatasourceClient() {
     async providers(agentID?: string, signal?: AbortSignal): Promise<Provider[]> {
       const query = agentID ? `?agent_id=${encodeURIComponent(safeUUID(agentID))}` : '';
       const { value } = await request(`/api/v1/providers${query}`, { method: 'GET', signal }, 200,
-        (body): body is { items: Provider[] } => object(body) && Array.isArray(body.items) && body.items.length <= 256 && body.items.every(validProvider));
+        (body): body is { items: Provider[] } => object(body) && exactKeys(body, ['items']) && Array.isArray(body.items) && body.items.length <= 256 && body.items.every(validProvider));
       return value.items;
     },
     async list(limit = 50, cursor = '', signal?: AbortSignal): Promise<{ items: Datasource[]; next_cursor: string }> {
@@ -172,7 +180,7 @@ export function createDatasourceClient() {
       const params = new URLSearchParams({ limit: String(limit) });
       if (cursor) params.set('cursor', cursor);
       const { value } = await request(`/api/v1/datasources?${params}`, { method: 'GET', signal }, 200,
-        (body): body is { items: Datasource[]; next_cursor: string } => object(body) && Array.isArray(body.items)
+        (body): body is { items: Datasource[]; next_cursor: string } => object(body) && exactKeys(body, ['items', 'next_cursor']) && Array.isArray(body.items)
           && body.items.length <= 200 && body.items.every(validDatasource) && typeof body.next_cursor === 'string' && body.next_cursor.length <= 512);
       return value;
     },
@@ -209,6 +217,19 @@ export function createDatasourceClient() {
       } catch (error) { if (uncertainDiagnosticOutcome(error)) throw new DatasourceFailure('outcome_unknown', 'The diagnostic may still be running. Check its status before starting another test.', error.status, true); throw error; }
       return safeDiagnostic(value);
     },
+    async savedConnectionTest(id: string, etag: string, context: AuthContext, idempotencyKey: string, signal?: AbortSignal): Promise<Diagnostic> {
+      const match = etag.match(/^"datasource:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([1-9][0-9]*)"$/);
+      if (!match || match[1] !== id || match[2]!.length > MAX_INT64.length || match[2]!.length === MAX_INT64.length && match[2]! > MAX_INT64
+        || idempotencyKey.length < 1 || idempotencyKey.length > 128 || !/^[\x21-\x7e]+$/.test(idempotencyKey)) {
+        throw new DatasourceFailure('invalid_request', 'The saved datasource version or idempotency key is invalid.');
+      }
+      let value: Diagnostic;
+      try { ({ value } = await request(`/api/v1/datasources/${safeUUID(id)}/connection-tests`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, 'If-Match': etag, 'Idempotency-Key': idempotencyKey }, body: '{}', signal,
+      }, 202, validDiagnostic)); }
+      catch (error) { if (uncertainDiagnosticOutcome(error)) throw new DatasourceFailure('outcome_unknown', 'The diagnostic may still be running. Check its status before starting another test.', error.status, true); throw error; }
+      return safeDiagnostic(value);
+    },
     async preview(id: string, query: string, context: AuthContext, signal?: AbortSignal): Promise<Diagnostic> {
       let value: Diagnostic;
       try { ({ value } = await request(`/api/v1/datasources/${safeUUID(id)}/query-previews`, {
@@ -232,5 +253,5 @@ export function createDatasourceClient() {
 
 function uncertainDiagnosticOutcome(error: unknown): error is DatasourceFailure {
   return error instanceof DatasourceFailure && (error.status === 0 || error.status >= 500)
-    && !['configuration_pending', 'agent_unavailable', 'diagnostic_unavailable'].includes(error.code);
+    && !['configuration_pending', 'configuration_failed', 'source_secret_unavailable', 'invalid_agent', 'datasource_unavailable', 'agent_unavailable', 'diagnostic_unavailable', 'unsupported', 'configuration_too_large'].includes(error.code);
 }

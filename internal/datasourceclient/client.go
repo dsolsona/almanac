@@ -74,10 +74,19 @@ func (c *Client) Providers(ctx context.Context, agentID string) ([]byte, error) 
 	r, err := c.ops.GetProviders(ctx, params, c.editor)
 	return c.read(r, err, http.StatusOK, func(data []byte) bool {
 		var value api.ProviderPage
-		if json.Unmarshal(data, &value) != nil || !hasFields(data, "items") || len(value.Items) > 256 {
+		var fields map[string]jsontext.Value
+		var raw struct {
+			Items []jsontext.Value `json:"items"`
+		}
+		if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "items") || json.Unmarshal(data, &raw) != nil ||
+			json.Unmarshal(data, &value) != nil || len(value.Items) > 256 || len(raw.Items) != len(value.Items) {
 			return false
 		}
-		for _, descriptor := range value.Items {
+		for index, descriptor := range value.Items {
+			var descriptorFields map[string]jsontext.Value
+			if json.Unmarshal(raw.Items[index], &descriptorFields) != nil || !exactFields(descriptorFields, "applied_configuration_revision", "availability", "configuration_failure_code", "configuration_failure_revision", "configuration_format", "desired_configuration_revision", "operations", "provider") {
+				return false
+			}
 			if descriptor.Provider != api.ProviderDescriptorProviderPrometheus || descriptor.ConfigurationFormat != api.ProviderDescriptorConfigurationFormatPrometheusHttpV1 || !descriptor.Availability.Valid() || len(descriptor.Operations) > 16 {
 				return false
 			}
@@ -155,7 +164,29 @@ func (c *Client) Update(ctx context.Context, rawID, etag string, value api.Datas
 func (c *Client) Test(ctx context.Context, value api.ConnectionTestRequest) ([]byte, error) {
 	r, err := c.ops.PostDatasourceConnectionTest(ctx, value, c.mutationEditor("", ""))
 	data, err := c.read(r, err, http.StatusAccepted, validDiagnostic)
-	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) {
+	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) && !definiteNoDiagnostic(failure.Code) {
+		failure.Unknown = true
+		failure.Code = "outcome_unknown"
+		failure.Message = "diagnostic outcome is unknown; it may still be running, so check agent and diagnostic status before starting another test"
+	}
+	if err != nil {
+		return nil, err
+	}
+	return safeDiagnostic(data)
+}
+
+func (c *Client) TestSaved(ctx context.Context, rawID, etag, key string) ([]byte, error) {
+	id, err := parseID(rawID)
+	if err != nil {
+		return nil, err
+	}
+	if etagVersion(etag, rawID) == "" || !validKey(key) {
+		return nil, invalid()
+	}
+	params := &api.PostSavedDatasourceConnectionTestParams{IfMatch: api.DatasourceIfMatch(etag), IdempotencyKey: api.IdempotencyKey(key)}
+	r, err := c.ops.PostSavedDatasourceConnectionTest(ctx, id, params, api.EmptyAuthRequest{}, c.mutationEditor(key, etag))
+	data, err := c.read(r, err, http.StatusAccepted, validDiagnostic)
+	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) && !definiteNoDiagnostic(failure.Code) {
 		failure.Unknown = true
 		failure.Code = "outcome_unknown"
 		failure.Message = "diagnostic outcome is unknown; it may still be running, so check agent and diagnostic status before starting another test"
@@ -176,7 +207,7 @@ func (c *Client) Preview(ctx context.Context, rawID, query string) ([]byte, erro
 	}
 	r, err := c.ops.PostDatasourceQueryPreview(ctx, id, api.QueryPreviewRequest{Query: query}, c.mutationEditor("", ""))
 	data, err := c.read(r, err, http.StatusAccepted, validDiagnostic)
-	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) {
+	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) && !definiteNoDiagnostic(failure.Code) {
 		failure.Unknown = true
 		failure.Code = "outcome_unknown"
 		failure.Message = "preview outcome is unknown; it may still be running, so check agent and diagnostic status before starting another preview"
@@ -185,6 +216,15 @@ func (c *Client) Preview(ctx context.Context, rawID, query string) ([]byte, erro
 		return nil, err
 	}
 	return safeDiagnostic(data)
+}
+
+func definiteNoDiagnostic(code string) bool {
+	switch code {
+	case "configuration_pending", "configuration_failed", "source_secret_unavailable", "invalid_agent", "datasource_unavailable", "agent_unavailable", "diagnostic_unavailable", "unsupported", "configuration_too_large":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Client) Diagnostic(ctx context.Context, rawID string) ([]byte, error) {
@@ -258,9 +298,6 @@ func (c *Client) readLimit(response *http.Response, err error, expected int, val
 		}
 		return nil, problemFailure(response.StatusCode, problem.Code, problem.RequestID)
 	}
-	if strings.Contains(string(data), `"password_secret"`) || strings.Contains(string(data), `"token_secret"`) || strings.Contains(string(data), `"password"`) || strings.Contains(string(data), `"token"`) {
-		return nil, protocol()
-	}
 	if !validate(data) {
 		return nil, protocol()
 	}
@@ -287,11 +324,12 @@ func validDatasource(data []byte) bool {
 	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" || endpoint.User != nil || endpoint.Fragment != "" || strings.Contains(value.Endpoint, "#") {
 		return false
 	}
-	return !hasSecretValue(data) && !hasPlainSecretKey(data)
+	return true
 }
 
 func validDatasourcePage(data []byte, page api.DatasourcePage) bool {
-	if !hasFields(data, "items", "next_cursor") || len(page.Items) > 200 || len(page.NextCursor) > 512 {
+	var fields map[string]jsontext.Value
+	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "items", "next_cursor") || len(page.Items) > 200 || len(page.NextCursor) > 512 {
 		return false
 	}
 	var raw struct {
@@ -305,7 +343,7 @@ func validDatasourcePage(data []byte, page api.DatasourcePage) bool {
 			return false
 		}
 	}
-	return !hasSecretValue(data) && !hasPlainSecretKey(data)
+	return true
 }
 
 func validDiagnostic(data []byte) bool {
@@ -323,7 +361,7 @@ func validDiagnostic(data []byte) bool {
 	if fields["result"].Kind() != jsontext.KindNull && !validDiagnosticResult(fields["result"], uuidText(value.Id)) {
 		return false
 	}
-	return !hasSecretValue(data) && !hasPlainSecretKey(data)
+	return true
 }
 
 func validDiagnosticResult(data jsontext.Value, diagnosticID string) bool {
@@ -355,24 +393,6 @@ func safeDiagnostic(data []byte) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func hasSecretValue(data []byte) bool {
-	return strings.Contains(string(data), `"password_secret"`) || strings.Contains(string(data), `"token_secret"`)
-}
-func hasPlainSecretKey(data []byte) bool {
-	return strings.Contains(string(data), `"password"`) || strings.Contains(string(data), `"token"`)
-}
-func hasFields(data []byte, names ...string) bool {
-	var value map[string]jsontext.Value
-	if json.Unmarshal(data, &value) != nil {
-		return false
-	}
-	for _, name := range names {
-		if _, ok := value[name]; !ok {
-			return false
-		}
-	}
-	return true
-}
 func exactFields(value map[string]jsontext.Value, names ...string) bool {
 	if len(value) != len(names) {
 		return false
@@ -458,7 +478,7 @@ func network(canceled bool) *Failure {
 	return remote()
 }
 func problemFailure(status int, code, requestID string) *Failure {
-	messages := map[string]string{"unauthenticated": "sign in before managing datasources", "forbidden": "the current role is not allowed to perform this operation", "not_found": "the requested datasource or diagnostic was not found", "conflict": "the datasource changed; retrieve it and review the current settings", "invalid_datasource_input": "datasource settings were rejected", "diagnostic_unavailable": "the assigned agent cannot run this diagnostic", "agent_unavailable": "the assigned agent cannot run this diagnostic", "request_timeout": "the datasource request timed out", "management_unavailable": "datasource management is temporarily unavailable"}
+	messages := map[string]string{"unauthorized": "sign in before managing datasources", "unauthenticated": "sign in before managing datasources", "forbidden": "the current role is not allowed to perform this operation", "not_found": "the requested datasource or diagnostic was not found", "conflict": "the datasource changed; retrieve it and review the current settings", "invalid_request": "datasource request input is invalid", "invalid_datasource_input": "datasource settings were rejected", "configuration_pending": "the agent is applying datasource settings; no diagnostic was started, so wait for readiness and retry", "configuration_failed": "the assigned agent could not apply its datasource configuration", "source_secret_unavailable": "the stored datasource credential is unavailable; update credentials before retrying", "invalid_agent": "the assigned agent is invalid or unavailable", "datasource_unavailable": "the datasource is unavailable for this operation", "unsupported": "the assigned agent does not support this diagnostic", "diagnostic_unavailable": "the assigned agent cannot run this diagnostic", "agent_unavailable": "the assigned agent cannot run this diagnostic", "request_timeout": "the datasource request timed out", "configuration_too_large": "the datasource configuration exceeds the agent assignment limits", "management_unavailable": "datasource management is temporarily unavailable"}
 	message, known := messages[code]
 	backendCode := ""
 	if !known || !diagnosticCodePattern.MatchString(code) {
