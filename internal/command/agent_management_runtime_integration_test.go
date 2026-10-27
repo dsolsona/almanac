@@ -227,7 +227,15 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 		t.Fatal("signal backend for reconnect journey failed")
 	}
 	if err := <-wait; err != nil {
-		t.Fatal("first backend shutdown for reconnect journey failed")
+		logs := stderr.String()
+		exitCode := -1
+		if process.ProcessState != nil {
+			exitCode = process.ProcessState.ExitCode()
+		}
+		t.Fatalf("first backend shutdown for reconnect journey failed: exit=%d shutdown_failed=%t deadline_exceeded=%t cancelled=%t serve_failed=%t ownership_lost=%t cleanup_failed=%t",
+			exitCode, strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, `"deadline_exceeded":true`),
+			strings.Contains(logs, `"cancelled":true`), strings.Contains(logs, `"serve_failed":true`),
+			strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"))
 	}
 	stderr = newRuntimeLog()
 	process = exec.Command(binary, args...)
