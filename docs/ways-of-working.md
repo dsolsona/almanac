@@ -115,6 +115,9 @@ is part of task readiness; a missing approval must not interrupt unattended work
    outcomes independently of the worker's implementation and test assertions.
 5. The coordinator runs the relevant checks on the integrated candidate. Worker
    results from another revision do not prove the combined application works.
+   Freeze that candidate's product and verification sources while the gate runs.
+   Submitted workers make no further edits without a new scoped correction; work
+   on a later correction stays isolated until the current result is recorded.
 6. Update task and delivery status only after that evidence exists. Keep known gaps
    explicit. Commit or publish only within the user's current authorization.
 

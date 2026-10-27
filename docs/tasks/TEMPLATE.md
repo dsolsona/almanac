@@ -49,6 +49,7 @@ Write a short user acceptance checklist before implementation:
 - [ ] Run required boundary checks from docs/testing.md and record their selection.
 - [ ] Inspect changes for scope drift, secrets and generated-source consistency.
 - [ ] Submit evidence and unresolved concerns; do not mark the task done.
+- [ ] Freeze the submitted checkpoint; wait for a scoped correction before editing it again.
 
 Replace this checklist's generic verification entries with existing, runnable commands
 before marking ready. If the task creates a harness, specify its entry-point contract

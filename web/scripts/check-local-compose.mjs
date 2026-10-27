@@ -237,16 +237,16 @@ async function checkLocalAgentRegistration() {
   let journeyPage;
   let documentMarker;
   const requests = [];
+  let agentDetailReadSeen = false;
+  let agentDetailReadSucceeded = false;
+  let credentialHistoryReadSeen = false;
+  let credentialHistoryReadSucceeded = false;
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     journeyPage = page;
     page.setDefaultTimeout(5000);
     let documentNavigations = 0;
     let contextRequests = 0;
-    let agentDetailReadSeen = false;
-    let agentDetailReadSucceeded = false;
-    let credentialHistoryReadSeen = false;
-    let credentialHistoryReadSucceeded = false;
     page.on('request', (incoming) => {
       if (incoming.isNavigationRequest() && incoming.frame() === page.mainFrame()) documentNavigations++;
       if (new URL(incoming.url()).pathname === '/api/v1/auth/context') contextRequests++;
@@ -458,6 +458,10 @@ async function checkLocalAgentRegistration() {
         local_display_name_visible: await visible(journeyPage.getByText('Local', { exact: true })),
       };
       writeFileSync(join(artifacts, 'local-agent-post-create-diagnostic.json'), JSON.stringify(safeState, null, 2), { mode: 0o600 });
+      const noPasswords = await journeyPage.locator('input[type="password"]').evaluateAll((inputs) => inputs.every((input) => input.value === ''));
+      if (!safeState.token_output_present && noPasswords) {
+        await journeyPage.screenshot({ path: join(artifacts, 'local-agent-failed-screen.png'), fullPage: true, animations: 'disabled' });
+      }
     }
     throw error;
   } finally {
