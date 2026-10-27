@@ -117,7 +117,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
 
   useEffect(() => {
     heading.current?.focus();
-  }, [context, unavailable, checking]);
+  }, [context, unavailable, checking, pathname]);
 
   const operational = !checking && !unavailable && Boolean(context?.session && !context.session.restricted);
   useEffect(() => {

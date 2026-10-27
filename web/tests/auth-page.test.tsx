@@ -165,6 +165,7 @@ describe('authentication page', () => {
     await user.click(screen.getByRole('link', { name: 'Agents' }));
     await waitFor(() => expect(location.pathname).toBe('/agents'));
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Agents' })).toHaveFocus();
     expect(screen.queryByText('Checking your session')).not.toBeInTheDocument();
     expect(client.context).toHaveBeenCalledOnce();
   });

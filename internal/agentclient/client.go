@@ -318,7 +318,20 @@ func mutationProblem(ctx context.Context, r *http.Response, b []byte) error {
 		return f
 	}
 	if ctx.Err() != nil {
-		return network(ctx, true)
+		failure := network(ctx, true)
+		if cancelled, ok := errors.AsType[*Failure](failure); ok {
+			metadata := f
+			if !documented || metadata == nil {
+				if fallback := unknownProblem(r, b); fallback != nil {
+					metadata = fallback
+				}
+			}
+			if metadata != nil {
+				cancelled.RequestID = metadata.RequestID
+				cancelled.RetryAfter = metadata.RetryAfter
+			}
+		}
+		return failure
 	}
 	if f == nil {
 		f = unknownProblem(r, b)

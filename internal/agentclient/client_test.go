@@ -628,6 +628,42 @@ func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t 
 	}
 }
 
+func TestMutationCancellationPreservesSafeProblemMetadata(t *testing.T) {
+	const requestID = "0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "documented problem",
+			body: `{"code":"management_unavailable","message":"untrusted detail","request_id":"` + requestID + `","field_errors":[]}`,
+		},
+		{
+			name: "unknown problem fallback",
+			body: `{"code":"unexpected","message":"untrusted detail","request_id":"` + requestID + `","field_errors":[]}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			response := &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     http.Header{"Retry-After": []string{"15"}},
+			}
+			failure := asAgentFailure(t, mutationProblem(ctx, response, []byte(tc.body)))
+			if failure.Kind != setupclient.KindCancelled || failure.Code != "cancelled" || !failure.Unknown {
+				t.Fatalf("cancelled mutation classification=%#v", failure)
+			}
+			if failure.RequestID != requestID || failure.RetryAfter != 15 {
+				t.Fatalf("cancelled mutation lost safe server metadata: %#v", failure)
+			}
+			if strings.Contains(failure.Message, "untrusted detail") {
+				t.Fatalf("cancelled mutation exposed server detail: %#v", failure)
+			}
+		})
+	}
+}
+
 func asAgentFailure(t *testing.T, err error) *Failure {
 	t.Helper()
 	f, ok := errors.AsType[*Failure](err)

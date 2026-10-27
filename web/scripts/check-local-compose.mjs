@@ -326,6 +326,7 @@ async function checkLocalAgentRegistration() {
         stage = `real Compose ${theme} ${viewportName} Datasources to Agents navigation`;
         await navigateWorkspace(page, viewportName, 'Agents');
         await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeFocused();
         stage = `real Compose ${theme} ${viewportName} Local name suggestion`;
         await page.getByRole('button', { name: 'Register agent', exact: true }).click();
         const registration = page.getByRole('dialog', { name: 'Register agent', exact: true });
@@ -363,9 +364,13 @@ async function checkLocalAgentRegistration() {
     issuedToken = result.token;
     assert.equal(result.agent.name, 'local');
     assert.equal(result.agent.display_name, 'Local');
-    assert.match(result.token, /^almanac_agent_v1_[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
+    const tokenValid = typeof result.token === 'string'
+      && /^almanac_agent_v1_[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(result.token);
+    assert.equal(tokenValid, true, 'registration did not return a valid one-time token');
     await expect(page.getByRole('dialog', { name: 'Agent token', exact: true })).toBeVisible();
-    await expect(page.locator('output[aria-label="Agent token"]')).toHaveText(result.token);
+    const displayedToken = await page.locator('output[aria-label="Agent token"]').textContent();
+    assert.equal(typeof result.token === 'string' && result.token.length > 0 && displayedToken === result.token,
+      true, 'the one-time token was not displayed');
     assert.deepEqual(requests, [{ name: 'local', display_name: 'Local' }]);
     stage = 'real Compose close one-time token dialog';
     await page.getByRole('button', { name: 'Close token', exact: true }).click();
@@ -602,8 +607,11 @@ try {
   await checkLocalAgentRegistration();
   stage = 'logs exclude credentials';
   const logs = await compose(['logs', '--no-color']);
-  assert.ok(!logs.includes(initial));
-  assert.ok(!logs.includes(permanent));
+  assert.equal(!logs.includes(initial), true, 'Compose logs exposed the initial password');
+  assert.equal(!logs.includes(permanent), true, 'Compose logs exposed the permanent password');
+  assert.equal(typeof issuedToken === 'string' && issuedToken.length > 0, true,
+    'registration did not issue a one-time token');
+  assert.equal(!logs.includes(issuedToken), true, 'Compose logs exposed the one-time agent token');
   const dbPassword = await compose(['exec', '-T', 'postgres', 'cat', '/run/postgres-secret/password']);
   assert.ok(dbPassword.length >= 32 && !logs.includes(dbPassword));
   writeFileSync(join(artifacts, 'acceptance.json'), JSON.stringify({ project,
