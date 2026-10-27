@@ -6,7 +6,7 @@ import { chromium, expect } from '@playwright/test';
 let input = '';
 for await (const chunk of process.stdin) {
   input += chunk;
-  if (Buffer.byteLength(input) > 32 * 1024) throw new Error('fixture input too large');
+  if (Buffer.byteLength(input) > 48 * 1024) throw new Error('fixture input too large');
 }
 const fixture = JSON.parse(input);
 input = '';
@@ -17,6 +17,9 @@ assert.match(fixture.spki, /^[A-Za-z0-9+/]{43}=$/);
 assert.match(fixture.agent_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 assert.match(fixture.datasource_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 assert.equal(fixture.query, 'vector(1)');
+assert.equal(typeof fixture.ca_pem, 'string');
+assert.ok(fixture.ca_pem.length > 0 && fixture.ca_pem.length <= 16 * 1024);
+assert.match(fixture.ca_pem, /^-----BEGIN CERTIFICATE-----/);
 
 let stage = 'browser launch';
 let browser;
@@ -70,6 +73,7 @@ try {
   await page.getByLabel('Name', { exact: true }).fill(createdName);
   await page.getByLabel('Display name', { exact: true }).fill(createdDisplayName);
   await page.getByLabel('Prometheus endpoint', { exact: true }).fill(source.endpoint);
+  await page.getByLabel('Custom CA PEM', { exact: true }).fill(fixture.ca_pem);
   await page.getByLabel('Assigned agent', { exact: true }).selectOption(fixture.agent_id);
   const createPromise = page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/datasources');
@@ -81,6 +85,7 @@ try {
   const createInput = createRequest.postDataJSON();
   assert.equal(createInput.name, createdName);
   assert.equal(createInput.agent_id, fixture.agent_id);
+  assert.equal(createInput.tls.ca_pem, fixture.ca_pem);
   assert.deepEqual(createInput.authentication.password_secret, { action: 'clear' });
   assert.deepEqual(createInput.authentication.token_secret, { action: 'clear' });
   const created = await createResponse.json();
