@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/datasourceclient"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 func TestDatasourceOperationDispatch(t *testing.T) {
@@ -81,6 +83,42 @@ func TestDatasourceDeadlinePollingRaceRequestsCancellation(t *testing.T) {
 	}
 	if !strings.Contains(failure.Message, "cancellation was requested") {
 		t.Fatalf("deadline message does not report requested cancellation: %q", failure.Message)
+	}
+}
+
+func TestDatasourceWaitResultSerializesTerminalDiagnostic(t *testing.T) {
+	var id openapi_types.UUID
+	if err := json.Unmarshal([]byte(`"8ed93d7e-51e3-4a3e-9222-3e8a612de20a"`), &id); err != nil {
+		t.Fatal("parse diagnostic ID failed")
+	}
+	diagnostic := api.Diagnostic{
+		Id:         id,
+		State:      api.DiagnosticStatePending,
+		Operation:  api.ConnectionTest,
+		CreatedAt:  time.Now(),
+		DeadlineAt: time.Now().Add(time.Minute),
+	}
+	terminal := diagnostic
+	terminal.State = api.DiagnosticStateSucceeded
+	response, err := json.Marshal(terminal)
+	if err != nil {
+		t.Fatal("marshal terminal diagnostic failed")
+	}
+	polls := 0
+	result, err := waitForDatasourceDiagnosticResult(t.Context(), diagnostic, time.Now().Add(time.Second), false,
+		func(context.Context, string) ([]byte, error) {
+			polls++
+			return response, nil
+		}, func(context.Context, string) {})
+	if err != nil {
+		t.Fatalf("wait for terminal diagnostic failed: %v", err)
+	}
+	var got api.Diagnostic
+	if err := json.Unmarshal(result, &got); err != nil || got.State != api.DiagnosticStateSucceeded || got.Id != diagnostic.Id {
+		t.Fatalf("wait result did not contain the terminal diagnostic: state=%q id=%q error=%v", got.State, got.Id, err)
+	}
+	if polls != 1 {
+		t.Fatalf("diagnostic polling calls = %d, want 1", polls)
 	}
 }
 
