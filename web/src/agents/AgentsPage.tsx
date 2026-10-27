@@ -222,7 +222,16 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         if (earlierOutcomeUnknown) { onIntentChange({ ...operation, outcome: 'unknown' }); setConflicted(true); setError('This request conflicts with an earlier registration. Reconcile the agent and credential history before starting another request.'); }
         else { onIntentChange(null); setNameError('An agent with this identifier already exists. Choose a different name.'); setRegisterOpen(true); document.getElementById('agent-name')?.focus(); }
       }
-      else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'invalid_agent_input') { onIntentChange(null); setError('Agent details were rejected. Check the agent name, display name, and lifetime fields.'); setRegisterOpen(true); }
+      else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'invalid_agent_input') {
+        if (earlierOutcomeUnknown) {
+          onIntentChange({ ...operation, outcome: 'unknown', retryRejected: 'other' });
+          setError('The retry was rejected because the registration details were invalid. The original attempt remains unconfirmed. Refresh agent records before deciding; the original request key is retained.');
+        } else {
+          onIntentChange(null);
+          setError('Agent details were rejected. Check the agent name, display name, and lifetime fields.');
+          setRegisterOpen(true);
+        }
+      }
       else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'forbidden') { if (earlierOutcomeUnknown) onIntentChange({ ...operation, outcome: 'unknown', retryRejected: 'permission' }); else onIntentChange(null); setAgents([]); setAgent(null); setCredentials([]); hasCachedData.current = false; lastSuccessAt.current = ''; setError(earlierOutcomeUnknown ? 'This retry was rejected for lack of permission. An earlier attempt remains unknown; confirm authority before reconciling it.' : 'You are not allowed to register agents.'); }
       else if (caught instanceof AgentFailure && caught.kind === 'rejected') { if (earlierOutcomeUnknown) onIntentChange({ ...operation, outcome: 'unknown', retryRejected: 'other' }); else onIntentChange(null); setError(earlierOutcomeUnknown ? 'This retry was rejected. An earlier attempt remains unknown; keep using the same request key while reconciling it.' : 'Registration was rejected. Review the fields and try again.'); }
       else if (caught instanceof AgentFailure && caught.kind === 'uncertain') {
