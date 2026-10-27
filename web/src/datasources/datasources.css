@@ -40,7 +40,7 @@
 .datasource-row small { color: var(--text-2); overflow-wrap: anywhere; }
 .datasource-row__meta { font-family: var(--mono); font-size: .75rem; text-align: right; }
 .datasource-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem 1rem; }
-.datasource-form .ui-field { min-width: 0; }
+.datasource-form .ui-field { min-width: 0; align-content: start; }
 .datasource-form .ui-label { font-size: .875rem; }
 .datasource-form .ui-hint { font-size: .75rem; }
 .ui-control.datasource-endpoint { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; letter-spacing: 0; }
