@@ -63,16 +63,17 @@ func TestIntegrationAgentOwnershipAcquireResumeRenewAndReplay(t *testing.T) {
 		t.Fatalf("renewal = %+v, %v", renewed, err)
 	}
 	// A same-sequence nonce replay returns the original authority bounds.
+	now = now.Add(time.Minute)
 	replay, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
 		ownershipVerifier(secret), first.Generation, 0, nonce, clock)
-	if err != nil || replay.RenewalSequence != 1 || !replay.ExpiresAt.Equal(renewed.ExpiresAt) || !replay.IssuedAt.Equal(renewed.IssuedAt) {
+	if err != nil || replay.RenewalSequence != renewed.RenewalSequence || !replay.ExpiresAt.Equal(renewed.ExpiresAt) || !replay.IssuedAt.Equal(renewed.IssuedAt) {
 		t.Fatalf("renewal replay = %+v, %v", replay, err)
 	}
 	if _, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
 		ownershipVerifier(secret), first.Generation, 0, ownershipNonce(7), clock); !errors.Is(err, ErrAgentOwnershipDenied) {
 		t.Fatalf("stale renewal sequence error = %v", err)
 	}
-	backwards = now.Add(-time.Second)
+	backwards = renewed.IssuedAt.Add(-time.Second)
 	if _, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
 		ownershipVerifier(secret), first.Generation, 1, ownershipNonce(8), func() time.Time { return backwards }); !errors.Is(err, ErrAgentOwnershipInput) {
 		t.Fatalf("backward renewal clock error = %v", err)
