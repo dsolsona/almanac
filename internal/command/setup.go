@@ -31,10 +31,12 @@ type setupErrorDocument struct {
 }
 type setupError struct {
 	Code              string `json:"code"`
+	BackendCode       string `json:"backend_code,omitzero"`
 	Message           string `json:"message"`
 	OutcomeUnknown    bool   `json:"outcome_unknown"`
 	SessionState      string `json:"session_state"`
 	RequestID         string `json:"request_id,omitempty"`
+	HTTPStatus        int    `json:"http_status,omitzero"`
 	RetryAfterSeconds int    `json:"retry_after_seconds,omitzero"`
 }
 

@@ -3,12 +3,27 @@ package prometheus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestSafeDialFallsBackAcrossAllowedLoopbackAddresses(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	address := fmt.Sprintf("localhost:%d", listener.Addr().(*net.TCPAddr).Port)
+	connection, err := safeDialContext(context.Background(), "tcp", address, []string{"localhost"})
+	if err != nil {
+		t.Fatalf("dial reachable allowed localhost address: %v", err)
+	}
+	_ = connection.Close()
+}
 
 func TestQueryPreviewUsesConfiguredBearerAndReturnsBoundedVector(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

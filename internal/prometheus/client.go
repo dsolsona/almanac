@@ -212,7 +212,21 @@ func safeDialContext(ctx context.Context, network, address string, allowed []str
 		}
 	}
 	dialer := net.Dialer{Timeout: 5 * time.Second}
-	return dialer.DialContext(ctx, network, net.JoinHostPort(addresses[0].IP.String(), port))
+	var lastErr error
+	for _, candidate := range addresses {
+		connection, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(candidate.IP.String(), port))
+		if dialErr == nil {
+			return connection, nil
+		}
+		lastErr = dialErr
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+	if lastErr == nil {
+		return nil, errors.New("prometheus: destination unavailable")
+	}
+	return nil, lastErr
 }
 
 func deniedDestination(ip net.IP) bool {

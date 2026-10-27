@@ -34,21 +34,23 @@ type options struct {
 }
 
 type client struct {
-	opts        options
-	token       string
-	resume      string
-	generation  string
-	lease       agentprotocol.Lease
-	revision    string
-	sequence    int64
-	pending     *agentprotocol.Heartbeat
-	agentID     string
-	assignments []agentprotocol.DatasourceAssignment
-	diagnostics *diagnosticRunner
-	serverTime  time.Time
-	serverAt    time.Time
-	established bool
-	http        *http.Client
+	opts                 options
+	token                string
+	resume               string
+	generation           string
+	lease                agentprotocol.Lease
+	revision             string
+	sequence             int64
+	pending              *agentprotocol.Heartbeat
+	agentID              string
+	assignments          []agentprotocol.DatasourceAssignment
+	diagnostics          *diagnosticRunner
+	serverTime           time.Time
+	serverAt             time.Time
+	established          bool
+	desiredRevision      string
+	configurationPending bool
+	http                 *http.Client
 }
 
 func Run(ctx context.Context, args []string) error {
@@ -106,7 +108,7 @@ func newClient(opts options, token string) (*client, error) {
 	if _, err := rand.Read(proof[:]); err != nil {
 		return nil, errors.New("secure random source unavailable")
 	}
-	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]),
+	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0",
 		http: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}}}, nil
@@ -240,15 +242,19 @@ func (c *client) runSession(ctx context.Context) error {
 	c.established = true
 	c.agentID = candidate.agentID
 	c.serverTime, c.serverAt = welcome.Payload.ServerTime, time.Now()
-	c.generation, c.revision = candidate.generation, candidate.revision
+	c.generation = candidate.generation
 	c.lease = welcome.Payload.ExecutionLease
 	// Preserve the local expected sequence until replay resolves a pending
 	// heartbeat. A welcome at pending+1 means the prior ack was lost.
 	if c.pending == nil {
 		c.sequence = welcomeSequence
 	}
-	if err := c.reconcile(ctx, conn); err != nil {
-		return err
+	if c.pending == nil {
+		if err := c.reconcile(ctx, conn); err != nil {
+			return err
+		}
+	} else if c.revision != c.lease.ConfigurationRevision {
+		c.configurationPending = true
 	}
 	interval := time.Duration(welcome.Payload.HeartbeatIntervalMS) * time.Millisecond
 	if c.pending == nil {
@@ -349,6 +355,10 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 		return err
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusServiceUnavailable {
+		c.configurationPending = true
+		return nil
+	}
 	if response.StatusCode != http.StatusOK {
 		return errors.New("configuration fetch failed")
 	}
@@ -357,17 +367,27 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 		return errors.New("configuration snapshot is invalid")
 	}
 	snapshot, err := agentprotocol.DecodeConfigurationSnapshot(body)
-	if err != nil || agentprotocol.ValidateSnapshotLease(snapshot, c.lease) != nil || snapshot.AgentID != c.lease.AgentID {
+	if err != nil || snapshot.AgentID != c.lease.AgentID {
 		return errors.New("configuration snapshot does not match execution lease")
 	}
 	wantETag := `"agent-config:` + snapshot.AgentID + `:` + snapshot.ConfigurationRevision + `"`
 	if response.Header.Get("ETag") != wantETag {
 		return errors.New("configuration validator is invalid")
 	}
+	if agentprotocol.ValidateSnapshotLease(snapshot, c.lease) != nil {
+		return errors.New("configuration snapshot does not match execution lease")
+	}
+	if c.revision == snapshot.ConfigurationRevision {
+		c.configurationPending = false
+		c.desiredRevision = ""
+		return nil
+	}
 	if c.diagnostics != nil {
 		c.diagnostics.reconcileAssignments(snapshot.Assignments)
 	}
 	c.revision = snapshot.ConfigurationRevision
+	c.desiredRevision = ""
+	c.configurationPending = false
 	c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
 	messageID, err := newMessageID()
 	if err != nil {
@@ -422,23 +442,37 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		sequence, err := parseDecimal(ack.Payload.RenewalSequence)
 		pendingSequence, parseErr := parseDecimal(c.pending.RenewalSequence)
 		lease := ack.Payload.ExecutionLease
-		if err != nil || parseErr != nil || sequence != pendingSequence+1 || ack.SessionGeneration != c.generation || lease.AgentID != c.agentID || lease.ConfigurationRevision != c.revision {
+		leaseRevision, leaseErr := parseDecimal(lease.ConfigurationRevision)
+		currentLeaseRevision, currentLeaseErr := parseDecimal(c.lease.ConfigurationRevision)
+		currentAppliedRevision, appliedErr := parseDecimal(c.revision)
+		if err != nil || parseErr != nil || leaseErr != nil || currentLeaseErr != nil || appliedErr != nil || sequence != pendingSequence+1 || ack.SessionGeneration != c.generation || lease.AgentID != c.agentID || leaseRevision < currentLeaseRevision {
 			return errors.New("heartbeat acknowledgement binding is invalid")
 		}
-		if err := c.validateLease(lease, c.currentServerTime()); err != nil {
+		candidate := *c
+		candidate.revision = lease.ConfigurationRevision
+		if err := candidate.validateLease(lease, c.currentServerTime()); err != nil {
 			return err
 		}
 		c.lease = ack.Payload.ExecutionLease
 		c.sequence = sequence
 		c.pending = nil
+		if c.configurationPending || leaseRevision > currentAppliedRevision || revisionAfter(c.desiredRevision, lease.ConfigurationRevision) {
+			if err := c.reconcile(ctx, conn); err != nil {
+				return err
+			}
+		}
+		if c.desiredRevision != "" && !revisionAfter(c.desiredRevision, c.revision) {
+			c.desiredRevision = ""
+		}
 	case agentprotocol.KindConfigurationChanged:
 		var changed agentprotocol.Envelope[agentprotocol.ConfigurationChanged]
-		if json.Unmarshal(raw, &changed) != nil || changed.Validate() != nil {
+		if json.Unmarshal(raw, &changed) != nil || changed.Validate() != nil || changed.SessionGeneration != c.generation {
 			return errors.New("configuration notice is invalid")
 		}
-		if err := c.reconcile(ctx, conn); err != nil {
-			return err
+		if revisionAfter(changed.Payload.DesiredRevision, c.desiredRevision) {
+			c.desiredRevision = changed.Payload.DesiredRevision
 		}
+		c.configurationPending = true
 	case agentprotocol.KindDiagnosticRequest:
 		var request agentprotocol.Envelope[agentprotocol.DiagnosticRequest]
 		if json.Unmarshal(raw, &request) != nil || request.Validate() != nil || request.SessionGeneration != c.generation || c.diagnostics == nil {
@@ -484,6 +518,12 @@ var ErrIncompatible = errors.New("backend protocol incompatible")
 var ErrSessionRejected = errors.New("agent session was rejected; verify the ownership lease and restart only after it expires")
 
 func (c *client) currentServerTime() time.Time { return c.serverTime.Add(time.Since(c.serverAt)) }
+
+func revisionAfter(revision, current string) bool {
+	revisionValue, revisionErr := parseDecimal(revision)
+	currentValue, currentErr := parseDecimal(current)
+	return revisionErr == nil && currentErr == nil && revisionValue > currentValue
+}
 
 func (c *client) validateLease(lease agentprotocol.Lease, now time.Time) error {
 	// The backend preserves the current grant interval across successful renewals;

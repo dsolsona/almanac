@@ -71,9 +71,14 @@ type DatasourceRecord struct {
 }
 
 type DatasourceAgentCapability struct {
-	Enabled      bool
-	Reachability string
-	Capabilities []agentprotocol.Capability
+	Enabled                      bool
+	Reachability                 string
+	Reported                     bool
+	Capabilities                 []agentprotocol.Capability
+	DesiredConfigurationRevision *int64
+	AppliedConfigurationRevision *int64
+	ConfigurationFailureCode     *string
+	ConfigurationFailureRevision *int64
 }
 
 func GetDatasourceAgentCapability(ctx context.Context, databaseURL string, proof DatasourceProof, agentID string, now func() time.Time) (DatasourceAgentCapability, error) {
@@ -95,6 +100,11 @@ func GetDatasourceAgentCapability(ctx context.Context, databaseURL string, proof
 		return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent lookup failed", err)
 	}
 	capability := DatasourceAgentCapability{Enabled: agent.Enabled, Reachability: "unreachable", Capabilities: []agentprotocol.Capability{}}
+	incompatibleAt, incompatibleErr := queries.GetAgentIncompatibleAttempt(ctx, id)
+	hasIncompatibleAttempt := incompatibleErr == nil
+	if incompatibleErr != nil && !errors.Is(incompatibleErr, pgx.ErrNoRows) {
+		return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource incompatible state read failed", incompatibleErr)
+	}
 	runtime, err := queries.GetAgentRuntimeStatus(ctx, id)
 	if err == nil {
 		status, statusErr := runtimeStatus(runtime, normalizedAgentNow(now))
@@ -102,8 +112,32 @@ func GetDatasourceAgentCapability(ctx context.Context, databaseURL string, proof
 			return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent capability state invalid", statusErr)
 		}
 		capability.Reachability, capability.Capabilities = status.Reachability, status.Capabilities
+		capability.Reported = true
+		capability.DesiredConfigurationRevision = new(status.DesiredConfigurationRevision)
+		capability.AppliedConfigurationRevision = new(status.AppliedConfigurationRevision)
+		capability.ConfigurationFailureCode = status.ConfigurationFailureCode
+		capability.ConfigurationFailureRevision = status.ConfigurationFailureRevision
+		if hasIncompatibleAttempt {
+			activityAt := runtime.UpdatedAt.Time
+			if status.LastHeartbeatAt != nil {
+				activityAt = *status.LastHeartbeatAt
+			}
+			if !incompatibleAt.Time.Before(activityAt) {
+				capability.Reachability = "incompatible"
+			}
+		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent capability lookup failed", err)
+	} else {
+		configuration, configurationErr := queries.GetAgentConfiguration(ctx, id)
+		if configurationErr != nil {
+			return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent configuration read failed", configurationErr)
+		}
+		capability.DesiredConfigurationRevision = new(configuration.Revision)
+		capability.AppliedConfigurationRevision = new(int64(0))
+		if hasIncompatibleAttempt {
+			capability.Reachability = "incompatible"
+		}
 	}
 	if err := finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
 		return DatasourceAgentCapability{}, err

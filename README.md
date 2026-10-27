@@ -26,6 +26,12 @@ days, retaining its private key and all database/admin credentials. Your browser
 ask you to accept the renewed certificate. Damaged credential state still fails
 without resetting it.
 
+The first Compose initialization also provisions the protected source-secret keyset
+used for encrypted datasource credentials. It is stored once in the persistent local
+secret volume and reused on later starts; Compose does not replace it during normal
+startup. Existing v1 local credential volumes are upgraded once without changing
+their saved credentials.
+
 Day to day:
 
 ```sh
@@ -135,8 +141,8 @@ For TLS termination at a proxy, omit both TLS files and explicitly configure
 verified client address and HTTPS protocol metadata described in the
 [authentication contract](api/openapi.yaml).
 
-To enable encrypted datasource credentials, provision a source keyset explicitly
-and mount the resulting owner-only file into the backend:
+For non-Compose deployments, provision a source keyset explicitly and mount the
+resulting owner-only file into the backend:
 
 ```sh
 bin/almanac secrets provision-source-keyset \

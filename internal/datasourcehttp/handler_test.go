@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
 	"github.com/dsolsona/almanac/internal/identity"
+	"github.com/dsolsona/almanac/internal/storage"
 )
 
 func TestDatasourceETagRequiresOneCanonicalStrongVersion(t *testing.T) {
@@ -31,6 +33,63 @@ func TestDatasourceETagRequiresOneCanonicalStrongVersion(t *testing.T) {
 		if singleETag(values, id) {
 			t.Errorf("singleETag(%q) = true, want false", values)
 		}
+	}
+}
+
+func TestPublicDiagnosticErrorCodePreservesSafeProviderCauses(t *testing.T) {
+	for raw, want := range map[string]string{
+		"authentication": "authentication_failed", "network": "network_failed", "tls": "tls_failed",
+		"query": "query_failed", "incomplete": "query_failed", "timeout": "request_timeout",
+		"deadline": "request_timeout", "assignment_revoked": "assignment_revoked",
+		"rate_limited": "rate_limited", "unsupported": "unsupported", "private detail": "diagnostic_failed",
+	} {
+		if got := publicDiagnosticErrorCode(raw); got != want {
+			t.Errorf("public diagnostic code for %q = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestConfigurationAdmissionProblemsAreRetryableAndSafe(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		code string
+	}{
+		{name: "pending", err: storage.ErrDiagnosticConfigurationPending, code: "configuration_pending"},
+		{name: "failed", err: storage.ErrDiagnosticConfigurationFailed, code: "configuration_failed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			(&Handler{}).writeStorageError(response, test.err, "0123456789abcdef0123456789abcdef")
+			if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"code":"`+test.code+`"`) {
+				t.Fatalf("configuration admission problem = status %d body %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestProviderAvailabilitySeparatesCapabilityAndRuntimeReadiness(t *testing.T) {
+	failureCode := "apply_failed"
+	tests := []struct {
+		name       string
+		capability storage.DatasourceAgentCapability
+		operations int
+		want       api.ProviderDescriptorAvailability
+	}{
+		{name: "disabled", capability: storage.DatasourceAgentCapability{Reported: true, Enabled: false, Reachability: "connected"}, operations: 2, want: api.ProviderDescriptorAvailabilityDisabled},
+		{name: "never reported", capability: storage.DatasourceAgentCapability{Enabled: true, Reachability: "unreachable"}, want: api.ProviderDescriptorAvailabilityUnreported},
+		{name: "offline but compatible", capability: storage.DatasourceAgentCapability{Reported: true, Enabled: true, Reachability: "unreachable"}, operations: 2, want: api.ProviderDescriptorAvailabilityOffline},
+		{name: "configuration applying", capability: storage.DatasourceAgentCapability{Reported: true, Enabled: true, Reachability: "connected", DesiredConfigurationRevision: new(int64(2)), AppliedConfigurationRevision: new(int64(1))}, operations: 2, want: api.ProviderDescriptorAvailabilityApplying},
+		{name: "configuration failed", capability: storage.DatasourceAgentCapability{Reported: true, Enabled: true, Reachability: "connected", DesiredConfigurationRevision: new(int64(2)), AppliedConfigurationRevision: new(int64(1)), ConfigurationFailureCode: &failureCode, ConfigurationFailureRevision: new(int64(2))}, operations: 2, want: api.ProviderDescriptorAvailabilityConfigurationFailed},
+		{name: "connected without capability", capability: storage.DatasourceAgentCapability{Reported: true, Enabled: true, Reachability: "connected"}, want: api.ProviderDescriptorAvailabilityUnsupported},
+		{name: "available", capability: storage.DatasourceAgentCapability{Reported: true, Enabled: true, Reachability: "connected", DesiredConfigurationRevision: new(int64(2)), AppliedConfigurationRevision: new(int64(2))}, operations: 2, want: api.ProviderDescriptorAvailabilityAvailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := providerAvailability(test.capability, test.operations); got != test.want {
+				t.Fatalf("providerAvailability() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

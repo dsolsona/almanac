@@ -38,3 +38,18 @@ func TestDatasourceETagVersionValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestProblemFailureRetainsOnlyBoundedStatusAndCanonicalRequestID(t *testing.T) {
+	requestID := "0123456789abcdef0123456789abcdef"
+	failure := problemFailure(503, "agent_unavailable", requestID)
+	if failure.Code != "agent_unavailable" || failure.Status != 503 || failure.RequestID != requestID {
+		t.Fatalf("remote failure evidence = %+v", failure)
+	}
+	invalid := problemFailure(503, "unknown_private_detail", "secret-request-id")
+	if invalid.Code != "management_unavailable" || invalid.RequestID != "" || invalid.Status != 503 {
+		t.Fatalf("invalid remote failure evidence was retained: %+v", invalid)
+	}
+	if !validRequestID("8ed93d7e-51e3-4a3e-9222-3e8a612de20a") || validRequestID("8ed93d7e-51e3-4a3e-9222-secret") {
+		t.Fatal("canonical UUID request ID validation failed")
+	}
+}

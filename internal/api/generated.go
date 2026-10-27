@@ -1709,12 +1709,16 @@ type ClientInterface interface {
 
 	// PostDatasourceConnectionTestWithBody Test unsaved Prometheus connection settings on an assigned agent
 	//
+	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
 	PostDatasourceConnectionTestWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+	//
+	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -1742,12 +1746,16 @@ type ClientInterface interface {
 
 	// PostDatasourceQueryPreviewWithBody Run a bounded PromQL preview on the assigned agent
 	//
+	// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
 	PostDatasourceQueryPreviewWithBody(ctx context.Context, datasourceId DatasourceId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostDatasourceQueryPreview Run a bounded PromQL preview on the assigned agent
+	//
+	// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -1774,6 +1782,8 @@ type ClientInterface interface {
 	PostDiagnosticCancel(ctx context.Context, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetProviders List provider descriptors and selected-agent availability
+	//
+	// Readable by viewer, editor, and administrator sessions. When agent_id is supplied, operations reports capability independently of liveness; availability and nullable desired/applied revisions report whether that agent can accept a diagnostic now. Configuration failure details are limited to the safe failure enum and revision.
 	//
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2212,6 +2222,8 @@ func (c *Client) PostDatasources(ctx context.Context, params *PostDatasourcesPar
 
 // PostDatasourceConnectionTestWithBody Test unsaved Prometheus connection settings on an assigned agent
 //
+// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
@@ -2228,6 +2240,8 @@ func (c *Client) PostDatasourceConnectionTestWithBody(ctx context.Context, conte
 }
 
 // PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+//
+// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -2295,6 +2309,8 @@ func (c *Client) PutDatasource(ctx context.Context, datasourceId DatasourceId, p
 
 // PostDatasourceQueryPreviewWithBody Run a bounded PromQL preview on the assigned agent
 //
+// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
@@ -2311,6 +2327,8 @@ func (c *Client) PostDatasourceQueryPreviewWithBody(ctx context.Context, datasou
 }
 
 // PostDatasourceQueryPreview Run a bounded PromQL preview on the assigned agent
+//
+// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -2377,6 +2395,8 @@ func (c *Client) PostDiagnosticCancel(ctx context.Context, diagnosticId openapi_
 }
 
 // GetProviders List provider descriptors and selected-agent availability
+//
+// Readable by viewer, editor, and administrator sessions. When agent_id is supplied, operations reports capability independently of liveness; availability and nullable desired/applied revisions report whether that agent can accept a diagnostic now. Configuration failure details are limited to the safe failure enum and revision.
 //
 // Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 func (c *Client) GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3799,12 +3819,16 @@ type ClientWithResponsesInterface interface {
 
 	// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved Prometheus connection settings on an assigned agent
 	//
+	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
 	PostDatasourceConnectionTestWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceConnectionTestResponse, error)
 
 	// PostDatasourceConnectionTestWithResponse Test unsaved Prometheus connection settings on an assigned agent
+	//
+	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -3834,12 +3858,16 @@ type ClientWithResponsesInterface interface {
 
 	// PostDatasourceQueryPreviewWithBodyWithResponse Run a bounded PromQL preview on the assigned agent
 	//
+	// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
 	PostDatasourceQueryPreviewWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceQueryPreviewResponse, error)
 
 	// PostDatasourceQueryPreviewWithResponse Run a bounded PromQL preview on the assigned agent
+	//
+	// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -3868,6 +3896,8 @@ type ClientWithResponsesInterface interface {
 	PostDiagnosticCancelWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDiagnosticCancelResponse, error)
 
 	// GetProvidersWithResponse List provider descriptors and selected-agent availability
+	//
+	// Readable by viewer, editor, and administrator sessions. When agent_id is supplied, operations reports capability independently of liveness; availability and nullable desired/applied revisions report whether that agent can accept a diagnostic now. Configuration failure details are limited to the safe failure enum and revision.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -4879,6 +4909,8 @@ type PostDatasourceConnectionTestResponse struct {
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
 	JSON202 *Diagnostic
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -4888,6 +4920,11 @@ type PostDatasourceConnectionTestResponse struct {
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
 func (r PostDatasourceConnectionTestResponse) GetJSON202() *Diagnostic {
 	return r.JSON202
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r PostDatasourceConnectionTestResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -5044,6 +5081,8 @@ type PostDatasourceQueryPreviewResponse struct {
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
 	JSON202 *Diagnostic
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -5053,6 +5092,11 @@ type PostDatasourceQueryPreviewResponse struct {
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
 func (r PostDatasourceQueryPreviewResponse) GetJSON202() *Diagnostic {
 	return r.JSON202
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r PostDatasourceQueryPreviewResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -5663,6 +5707,8 @@ func (c *ClientWithResponses) PostDatasourcesWithResponse(ctx context.Context, p
 
 // PostDatasourceConnectionTestWithBodyWithResponse Test unsaved Prometheus connection settings on an assigned agent
 //
+// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
@@ -5675,6 +5721,8 @@ func (c *ClientWithResponses) PostDatasourceConnectionTestWithBodyWithResponse(c
 }
 
 // PostDatasourceConnectionTestWithResponse Test unsaved Prometheus connection settings on an assigned agent
+//
+// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -5728,6 +5776,8 @@ func (c *ClientWithResponses) PutDatasourceWithResponse(ctx context.Context, dat
 
 // PostDatasourceQueryPreviewWithBodyWithResponse Run a bounded PromQL preview on the assigned agent
 //
+// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
@@ -5740,6 +5790,8 @@ func (c *ClientWithResponses) PostDatasourceQueryPreviewWithBodyWithResponse(ctx
 }
 
 // PostDatasourceQueryPreviewWithResponse Run a bounded PromQL preview on the assigned agent
+//
+// If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -5792,6 +5844,8 @@ func (c *ClientWithResponses) PostDiagnosticCancelWithResponse(ctx context.Conte
 }
 
 // GetProvidersWithResponse List provider descriptors and selected-agent availability
+//
+// Readable by viewer, editor, and administrator sessions. When agent_id is supplied, operations reports capability independently of liveness; availability and nullable desired/applied revisions report whether that agent can accept a diagnostic now. Configuration failure details are limited to the safe failure enum and revision.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -6678,6 +6732,13 @@ func ParsePostDatasourceConnectionTestResponse(rsp *http.Response) (*PostDatasou
 		}
 		response.JSON202 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -6815,6 +6876,13 @@ func ParsePostDatasourceQueryPreviewResponse(rsp *http.Response) (*PostDatasourc
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem

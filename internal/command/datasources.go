@@ -22,6 +22,8 @@ import (
 	"github.com/dsolsona/almanac/internal/setupclient"
 )
 
+const maxDatasourceInputBytes = 128 << 10
+
 type datasourceDocument struct {
 	SchemaVersion int            `json:"schema_version"`
 	Operation     string         `json:"operation"`
@@ -150,12 +152,12 @@ func performDatasource(parent context.Context, operation, profile, id, agentID, 
 	if inputFile != "" {
 		var err error
 		if inputFile == "-" {
-			input, err = io.ReadAll(io.LimitReader(os.Stdin, (64<<10)+1))
-			if len(input) > 64<<10 {
+			input, err = io.ReadAll(io.LimitReader(os.Stdin, maxDatasourceInputBytes+1))
+			if len(input) > maxDatasourceInputBytes {
 				err = secretfile.ErrInvalid
 			}
 		} else {
-			input, err = secretfile.Read(inputFile, 64<<10)
+			input, err = secretfile.Read(inputFile, maxDatasourceInputBytes)
 		}
 		if err != nil {
 			return nil, datasourceInvalid("protected datasource input is invalid")
@@ -410,11 +412,14 @@ func writeDatasourceSuccess(stdout, stderr io.Writer, jsonOut bool, operation st
 }
 func writeDatasourceFailure(stdout, stderr io.Writer, operation string, jsonOut bool, err error) int {
 	code, message := "management_unavailable", "datasource management is temporarily unavailable"
+	requestID, backendCode, httpStatus := "", "", 0
 	if failure, ok := errors.AsType[*datasourceclient.Failure](err); ok {
 		code, message = failure.Code, failure.Message
+		requestID, backendCode, httpStatus = failure.RequestID, failure.BackendCode, failure.Status
 	}
 	if failure, ok := errors.AsType[*setupclient.Failure](err); ok {
 		code, message = failure.Code, failure.Message
+		requestID = failure.RequestID
 	}
 	if failure, ok := errors.AsType[*datasourceCommandFailure](err); ok {
 		code, message = failure.code, failure.message
@@ -436,7 +441,7 @@ func writeDatasourceFailure(stdout, stderr io.Writer, operation string, jsonOut 
 		unknown = failure.Unknown
 	}
 	if jsonOut {
-		doc := datasourceDocument{SchemaVersion: 1, Operation: operation, Error: &setupError{Code: code, Message: message, OutcomeUnknown: unknown, SessionState: "unchecked"}}
+		doc := datasourceDocument{SchemaVersion: 1, Operation: operation, Error: &setupError{Code: code, BackendCode: backendCode, Message: message, OutcomeUnknown: unknown, SessionState: "unchecked", RequestID: requestID, HTTPStatus: httpStatus}}
 		if json.MarshalWrite(stdout, doc) != nil || writeNewline(stdout) != nil {
 			fmt.Fprintln(stderr, operation+": output failed")
 			return 1

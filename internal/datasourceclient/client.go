@@ -24,10 +24,12 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 var diagnosticCodePattern = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 
 type Failure struct {
-	Code    string
-	Message string
-	Status  int
-	Unknown bool
+	Code        string
+	BackendCode string
+	Message     string
+	Status      int
+	RequestID   string
+	Unknown     bool
 }
 
 func (f *Failure) Error() string { return f.Message }
@@ -240,12 +242,13 @@ func (c *Client) read(response *http.Response, err error, expected int, validate
 	}
 	if response.StatusCode != expected {
 		var problem struct {
-			Code string `json:"code"`
+			Code      string `json:"code"`
+			RequestID string `json:"request_id"`
 		}
 		if json.Unmarshal(data, &problem) != nil || problem.Code == "" {
 			return nil, remote()
 		}
-		return nil, problemFailure(response.StatusCode, problem.Code)
+		return nil, problemFailure(response.StatusCode, problem.Code, problem.RequestID)
 	}
 	if strings.Contains(string(data), `"password_secret"`) || strings.Contains(string(data), `"token_secret"`) || strings.Contains(string(data), `"password"`) || strings.Contains(string(data), `"token"`) {
 		return nil, protocol()
@@ -317,10 +320,9 @@ func safeDiagnostic(data []byte) ([]byte, error) {
 	if json.Unmarshal(data, &value) != nil {
 		return nil, protocol()
 	}
-	knownCodes := map[string]bool{"authentication_failed": true, "network_failed": true, "tls_failed": true, "query_failed": true, "rate_limited": true, "unsupported": true, "diagnostic_failed": true}
-	if value.ErrorCode != nil && (!diagnosticCodePattern.MatchString(*value.ErrorCode) || !knownCodes[*value.ErrorCode]) {
-		safeCode := "diagnostic_failed"
-		value.ErrorCode = &safeCode
+	knownCodes := map[string]bool{"authentication_failed": true, "network_failed": true, "tls_failed": true, "query_failed": true, "request_timeout": true, "assignment_revoked": true, "rate_limited": true, "unsupported": true, "diagnostic_failed": true}
+	if value.ErrorCode != nil && (!diagnosticCodePattern.MatchString(string(*value.ErrorCode)) || !knownCodes[string(*value.ErrorCode)]) {
+		value.ErrorCode = new(api.DiagnosticErrorCode("diagnostic_failed"))
 	}
 	if value.ErrorCode != nil {
 		safeMessage := "The diagnostic failed. Check agent connectivity and datasource settings."
@@ -436,12 +438,44 @@ func network(canceled bool) *Failure {
 	}
 	return remote()
 }
-func problemFailure(status int, code string) *Failure {
-	messages := map[string]string{"unauthenticated": "sign in before managing datasources", "forbidden": "the current role is not allowed to perform this operation", "not_found": "the requested datasource or diagnostic was not found", "conflict": "the datasource changed; retrieve it and review the current settings", "invalid_datasource_input": "datasource settings were rejected", "diagnostic_unavailable": "the assigned agent cannot run this diagnostic", "request_timeout": "the datasource request timed out", "management_unavailable": "datasource management is temporarily unavailable"}
+func problemFailure(status int, code, requestID string) *Failure {
+	messages := map[string]string{"unauthenticated": "sign in before managing datasources", "forbidden": "the current role is not allowed to perform this operation", "not_found": "the requested datasource or diagnostic was not found", "conflict": "the datasource changed; retrieve it and review the current settings", "invalid_datasource_input": "datasource settings were rejected", "diagnostic_unavailable": "the assigned agent cannot run this diagnostic", "agent_unavailable": "the assigned agent cannot run this diagnostic", "request_timeout": "the datasource request timed out", "management_unavailable": "datasource management is temporarily unavailable"}
 	message, known := messages[code]
+	backendCode := ""
 	if !known || !diagnosticCodePattern.MatchString(code) {
 		code = "management_unavailable"
 		message = messages[code]
+	} else {
+		backendCode = code
 	}
-	return &Failure{Code: code, Message: message, Status: status}
+	if !validRequestID(requestID) {
+		requestID = ""
+	}
+	return &Failure{Code: code, BackendCode: backendCode, Message: message, Status: status, RequestID: requestID}
+}
+
+func validRequestID(value string) bool {
+	if len(value) == 36 {
+		for i, r := range value {
+			if i == 8 || i == 13 || i == 18 || i == 23 {
+				if r != '-' {
+					return false
+				}
+				continue
+			}
+			if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+				return false
+			}
+		}
+		return true
+	}
+	if len(value) != 32 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return false
+		}
+	}
+	return true
 }

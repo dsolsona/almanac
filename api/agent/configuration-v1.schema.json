@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://almanac.dev/schemas/agent/configuration-v1.schema.json",
   "title": "Almanac agent configuration snapshot v1",
-  "description": "Coherent HTTP snapshot returned by GET /api/agent/v1/configuration. The response ETag is \"agent-config:<agent_id>:<configuration_revision>\". This increment intentionally supports only empty assignments until datasource configuration has its accepted schema.",
+  "description": "Coherent HTTP snapshot returned by GET /api/agent/v1/configuration. The response ETag is \"agent-config:<agent_id>:<configuration_revision>\". Datasource assignments are released only when the current heartbeat grant is bound to this exact revision; a grant behind desired configuration receives temporary configuration-unavailable without a snapshot or source credentials.",
   "type": "object",
   "required": ["agent_id", "configuration_revision", "assignments"],
   "properties": {
@@ -10,8 +10,39 @@
     "configuration_revision": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19, "$comment": "The validator also rejects values beyond signed int64 MaxInt64." },
     "assignments": {
       "type": "array",
-      "maxItems": 0
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/datasourceAssignment" }
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "$defs": {
+    "datasourceAssignment": {
+      "type": "object",
+      "required": ["datasource_id", "datasource_version", "name", "provider", "configuration_format", "endpoint", "tls", "authentication_mode", "polling_interval_seconds", "settling_delay_seconds"],
+      "properties": {
+        "datasource_id": { "type": "string", "format": "uuid" },
+        "datasource_version": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 63 },
+        "provider": { "const": "prometheus" },
+        "configuration_format": { "const": "prometheus-http-v1" },
+        "endpoint": { "type": "string", "format": "uri" },
+        "tls": {
+          "type": "object",
+          "required": ["insecure_skip_verify", "ca_pem"],
+          "properties": {
+            "insecure_skip_verify": { "type": "boolean" },
+            "ca_pem": { "type": "string", "maxLength": 65536 }
+          },
+          "additionalProperties": false
+        },
+        "authentication_mode": { "enum": ["none", "basic", "bearer"] },
+        "username": { "type": "string", "maxLength": 256 },
+        "password": { "type": "string", "maxLength": 16384, "writeOnly": true },
+        "bearer_token": { "type": "string", "maxLength": 16384, "writeOnly": true },
+        "polling_interval_seconds": { "type": "integer", "minimum": 15 },
+        "settling_delay_seconds": { "const": 60 }
+      },
+      "additionalProperties": false
+    }
+  }
 }

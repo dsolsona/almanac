@@ -231,6 +231,12 @@ paths:
     get:
       operationId: getProviders
       summary: List provider descriptors and selected-agent availability
+      description: >-
+        Readable by viewer, editor, and administrator sessions. When agent_id is
+        supplied, operations reports capability independently of liveness;
+        availability and nullable desired/applied revisions report whether that
+        agent can accept a diagnostic now. Configuration failure details are
+        limited to the safe failure enum and revision.
       security: [{SessionCookie: []}]
       parameters:
         - {name: agent_id, in: query, schema: {type: string, format: uuid}}
@@ -283,21 +289,35 @@ paths:
     post:
       operationId: postDatasourceConnectionTest
       summary: Test unsaved Prometheus connection settings on an assigned agent
+      description: >-
+        If the agent is connected but has not applied its desired configuration,
+        the request returns 503 configuration_pending and creates no diagnostic
+        receipt. Once a diagnostic receipt is created, the endpoint returns 202
+        with its Location even if dispatch fails; read that receipt for its
+        resulting state.
       security: [{SessionCookie: [], CsrfToken: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ConnectionTestRequest'}}}}
       responses:
         '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        '503': {description: Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/datasources/{datasource_id}/query-previews:
     post:
       operationId: postDatasourceQueryPreview
       summary: Run a bounded PromQL preview on the assigned agent
+      description: >-
+        If the assigned agent is connected but has not applied its desired
+        configuration, the request returns 503 configuration_pending and creates
+        no diagnostic receipt. Once a diagnostic receipt is created, the endpoint
+        returns 202 with its Location even if dispatch fails; read that receipt
+        for its resulting state.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {$ref: '#/components/parameters/DatasourceId'}
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/QueryPreviewRequest'}}}}
       responses:
         '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        '503': {description: Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/diagnostics/{diagnostic_id}:
     get:

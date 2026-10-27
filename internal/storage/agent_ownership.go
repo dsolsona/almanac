@@ -716,6 +716,7 @@ type AgentConfigurationSnapshot struct {
 	AgentID  string
 	Revision int64
 	Snapshot []byte
+	Pending  bool
 }
 
 func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, clock func() time.Time, adapters ...*sourcesecret.Adapter) (AgentConfigurationSnapshot, error) {
@@ -749,9 +750,15 @@ func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialI
 	if err != nil {
 		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read failed", err)
 	}
-	// The current owner may fetch a newer desired configuration after an
-	// assignment change. The next heartbeat receives a grant bound to that
-	// revision after the agent acknowledges it; this read alone grants no work.
+	if grant.ConfigurationRevision > configuration.Revision {
+		return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
+	}
+	if grant.ConfigurationRevision < configuration.Revision {
+		if err := state.tx.Commit(ctx); err != nil {
+			return AgentConfigurationSnapshot{}, operationError(ctx, "storage: pending agent configuration read commit failed", err)
+		}
+		return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision, Pending: true}, nil
+	}
 	var adapter *sourcesecret.Adapter
 	if len(adapters) > 1 {
 		return AgentConfigurationSnapshot{}, ErrAgentOwnershipInput

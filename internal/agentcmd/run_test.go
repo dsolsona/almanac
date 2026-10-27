@@ -44,8 +44,8 @@ func TestHandleHeartbeatAckBindingsAreAtomic(t *testing.T) {
 		{name: "different agent", mutate: func(_ *client, e *agentprotocol.Envelope[agentprotocol.HeartbeatAck]) {
 			e.Payload.ExecutionLease.AgentID = "00000000-0000-4000-8000-000000000002"
 		}},
-		{name: "different configuration revision", mutate: func(_ *client, e *agentprotocol.Envelope[agentprotocol.HeartbeatAck]) {
-			e.Payload.ExecutionLease.ConfigurationRevision = "2"
+		{name: "configuration revision regression", mutate: func(_ *client, e *agentprotocol.Envelope[agentprotocol.HeartbeatAck]) {
+			e.Payload.ExecutionLease.ConfigurationRevision = "0"
 		}},
 		{name: "duplicate sequence", mutate: func(_ *client, e *agentprotocol.Envelope[agentprotocol.HeartbeatAck]) {
 			e.Payload.RenewalSequence = "0"
@@ -94,6 +94,38 @@ func TestHandleHeartbeatAckBindingsAreAtomic(t *testing.T) {
 				t.Fatal("rejected ack partially changed client state")
 			}
 		})
+	}
+}
+
+func TestHeartbeatGrantCanAdvanceBeforeNewConfigurationApplies(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	nonce := testNonce(21)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"type":"about:blank","title":"Service Unavailable","status":503,"code":"agent_configuration_unavailable"}`))
+	}))
+	defer server.Close()
+
+	c := testClient(now, nonce)
+	c.opts.backendURL = server.URL
+	c.http = server.Client()
+	c.configurationPending = true
+	c.assignments = []agentprotocol.DatasourceAssignment{{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "current-source",
+		Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "https://metrics.example.test",
+		TLS: agentprotocol.DatasourceTLS{}, AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}}
+	oldAssignments := append([]agentprotocol.DatasourceAssignment(nil), c.assignments...)
+	ack := testAck(now, nonce)
+	ack.Payload.ExecutionLease.ConfigurationRevision = "2"
+	wire, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatal("marshal revision-advance ack")
+	}
+	if err := c.handleMessage(t.Context(), nil, jsontext.Value(wire)); err != nil {
+		t.Fatalf("accept newer heartbeat grant while configuration is pending: %v", err)
+	}
+	if c.lease.ConfigurationRevision != "2" || c.revision != "1" || !c.configurationPending || c.pending != nil || !reflect.DeepEqual(c.assignments, oldAssignments) {
+		t.Fatalf("grant advance changed applied configuration: lease=%s applied=%s pending=%t assignments=%+v", c.lease.ConfigurationRevision, c.revision, c.configurationPending, c.assignments)
 	}
 }
 
@@ -176,6 +208,7 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 	baseTime := time.Now().UTC().Add(-time.Minute)
 	firstLease := testLease(baseTime, "lease-current", baseTime.Add(time.Hour))
 	committedLease := testLease(baseTime.Add(time.Minute), "lease-next", baseTime.Add(time.Hour+time.Minute))
+	committedLease.ConfigurationRevision = "2"
 	if err := firstLease.Validate(); err != nil {
 		t.Fatalf("initial lease fixture invalid before connection test: %v", err)
 	}
@@ -188,7 +221,7 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/api/agent/v1/configuration", func(w http.ResponseWriter, _ *http.Request) {
 		snapshot := agentprotocol.ConfigurationSnapshot{
-			AgentID: testAgentID, ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{},
+			AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{},
 		}
 		data, err := json.Marshal(snapshot)
 		if err != nil {
@@ -196,7 +229,7 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("ETag", "\"agent-config:"+testAgentID+":1\"")
+		w.Header().Set("ETag", "\"agent-config:"+testAgentID+":2\"")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(data)
 	})
@@ -220,15 +253,15 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 			serverError <- errors.New("decode test hello")
 			return
 		}
-		lease, renewalSequence := firstLease, "0"
+		lease, renewalSequence, configurationRevision := firstLease, "0", "1"
 		if attempt == 2 {
-			lease, renewalSequence = committedLease, "1"
+			lease, renewalSequence, configurationRevision = committedLease, "1", "2"
 		}
 		welcome := agentprotocol.Envelope[agentprotocol.Welcome]{
 			Kind: agentprotocol.KindWelcome, MessageID: "welcome-test", SessionGeneration: "1",
 			Payload: agentprotocol.Welcome{
 				Protocol: agentprotocol.ProtocolV1, RequestNonce: hello.Payload.RequestNonce,
-				ServerTime: time.Now().UTC(), AgentID: testAgentID, ConfigurationRevision: "1",
+				ServerTime: time.Now().UTC(), AgentID: testAgentID, ConfigurationRevision: configurationRevision,
 				RenewalSequence: renewalSequence, HeartbeatIntervalMS: 10_000,
 				ExecutionLease: lease,
 			},
@@ -239,16 +272,6 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 		}
 		if err := writeTestMessage(r.Context(), conn, welcome); err != nil {
 			serverError <- errors.New("write test welcome")
-			return
-		}
-		_, appliedBytes, err := conn.Read(r.Context())
-		if err != nil {
-			serverError <- errors.New("read configuration-applied")
-			return
-		}
-		var applied agentprotocol.Envelope[agentprotocol.ConfigurationApplied]
-		if json.Unmarshal(appliedBytes, &applied) != nil || applied.Validate() != nil || applied.Payload.ConfigurationRevision != "1" {
-			serverError <- errors.New("decode configuration-applied")
 			return
 		}
 		_, heartbeatBytes, err := conn.Read(r.Context())
@@ -283,6 +306,16 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 		}
 		if err := writeTestMessage(r.Context(), conn, ack); err != nil {
 			serverError <- errors.New("write heartbeat ack")
+			return
+		}
+		_, appliedBytes, err := conn.Read(r.Context())
+		if err != nil {
+			serverError <- errors.New("read configuration-applied after newer grant")
+			return
+		}
+		var applied agentprotocol.Envelope[agentprotocol.ConfigurationApplied]
+		if json.Unmarshal(appliedBytes, &applied) != nil || applied.Validate() != nil || applied.Payload.ConfigurationRevision != "2" {
+			serverError <- errors.New("decode configuration-applied after newer grant")
 			return
 		}
 		shutdown := agentprotocol.Envelope[agentprotocol.Shutdown]{
@@ -323,7 +356,7 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 		first.RenewalSequence != original.RenewalSequence || second.RenewalSequence != original.RenewalSequence {
 		t.Fatal("reconnect replaced pending heartbeat nonce or sequence")
 	}
-	if c.pending != nil || c.sequence != 1 || c.lease.LeaseID != committedLease.LeaseID ||
+	if c.pending != nil || c.sequence != 1 || c.lease.LeaseID != committedLease.LeaseID || c.revision != "2" ||
 		!c.lease.ValidUntil.Equal(committedLease.ValidUntil) {
 		t.Fatal("replayed acknowledgement did not commit matching lease state")
 	}

@@ -59,6 +59,8 @@ services:
       ALMANAC_PUBLIC_ORIGIN: https://localhost:${ALMANAC_PORT:-18088}
       ALMANAC_TLS_CERT_FILE: /run/almanac-secrets/tls.crt
       ALMANAC_TLS_KEY_FILE: /run/almanac-secrets/tls.key
+      ALMANAC_SOURCE_SECRET_KEYSET_FILE: /run/almanac-secrets/source-secret-keyset.json
+      ALMANAC_SOURCE_SECRET_KEYSET_ID: 00000000-0000-4000-8000-000000000019
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m

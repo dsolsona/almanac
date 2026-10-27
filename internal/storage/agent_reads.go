@@ -97,7 +97,21 @@ func GetAgent(ctx context.Context, databaseURL string, input AgentReadInput) (Ag
 	if err != nil {
 		return AgentRecord{}, operationError(ctx, "storage: agent read failed", err)
 	}
-	record := agentRecord(row)
+	record, err := populateAgentRuntimeStatus(ctx, queries, agentRecord(row), now)
+	if err != nil {
+		return AgentRecord{}, err
+	}
+	if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
+		return AgentRecord{}, err
+	}
+	return record, nil
+}
+
+func populateAgentRuntimeStatus(ctx context.Context, queries *dbgen.Queries, record AgentRecord, now time.Time) (AgentRecord, error) {
+	agentID, valid := canonicalUUID(record.ID)
+	if !valid {
+		return AgentRecord{}, ErrInvalidAgentInput
+	}
 	incompatibleAt, incompatibleErr := queries.GetAgentIncompatibleAttempt(ctx, agentID)
 	hasIncompatibleAttempt := incompatibleErr == nil
 	if incompatibleErr != nil && !errors.Is(incompatibleErr, pgx.ErrNoRows) {
@@ -132,9 +146,6 @@ func GetAgent(ctx context.Context, databaseURL string, input AgentReadInput) (Ag
 			SchedulerHealth: "degraded", CollectionProgress: "not_started",
 			CollectionExplanation: "no_assignment",
 		}
-	}
-	if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
-		return AgentRecord{}, err
 	}
 	return record, nil
 }
@@ -217,7 +228,11 @@ func ListAgents(ctx context.Context, databaseURL string, input ListAgentsInput) 
 		if i == limit {
 			break
 		}
-		page.Items = append(page.Items, agentRecord(row))
+		record, err := populateAgentRuntimeStatus(ctx, queries, agentRecord(row), now)
+		if err != nil {
+			return AgentPage{}, err
+		}
+		page.Items = append(page.Items, record)
 	}
 	if len(rows) > limit {
 		last := page.Items[len(page.Items)-1]

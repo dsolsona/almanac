@@ -53,14 +53,12 @@ renewal sequence. The first renewal expects sequence `"0"`;
 the heartbeat-ack echoes the nonce and returns the durable renewed lease with a
 positive next sequence. Configuration revisions are positive from the first
 snapshot onward. The HTTP configuration snapshot identifies its agent, positive
-revision, and an `assignments` array. This increment supports an empty array only;
-nonempty datasource assignments await their accepted schema. The response ETag is
-strong and has the form `"agent-config:<agent_id>:<configuration_revision>"`;
-unchanged `If-None-Match` may return 304 without a body. Empty assignments can never
-be paired with a nonempty execution grant. Capabilities are refreshed in hello and
-are not repeated in each heartbeat. These wire details implement accepted
-nonce-correlated renewal and ownership semantics; they do not change ownership
-policy.
+revision, and an `assignments` array. The response ETag is strong and has the form
+`"agent-config:<agent_id>:<configuration_revision>"`; unchanged `If-None-Match` may
+return 304 without a body. Empty assignments can never be paired with a nonempty
+execution grant. Capabilities are refreshed in hello and are not repeated in each
+heartbeat. These wire details implement accepted nonce-correlated renewal and
+ownership semantics; they do not change ownership policy.
 
 This increment defines hello, welcome, heartbeat, heartbeat-ack,
 configuration-changed, configuration-applied/failed, shutdown, and revoked. The
@@ -160,6 +158,18 @@ requests may return 304. Agent validates, prepares and atomically applies it, th
 acknowledges. Startup without valid configuration performs no collection. Failed
 updates keep the last accepted config only until its original execution expiry;
 do not renew invalid configuration indefinitely.
+
+Datasource assignment changes advance desired configuration independently of the
+last applied revision. When a current heartbeat grant trails desired configuration,
+the configuration endpoint returns the existing temporary
+`503 agent_configuration_unavailable` problem without a snapshot or source
+credentials. The agent keeps its last applied assignments, continues heartbeat
+renewal with that applied revision, and retries reconciliation after the heartbeat
+acknowledges a grant for the newer revision. It applies only a snapshot whose agent,
+revision and empty production measurement grant exactly match that lease. A
+configuration notice never causes credentials or queries to use a revision that
+the current grant does not authorize. This also lets a same-process reconnect with
+an older grant reach heartbeat renewal before fetching the newer snapshot.
 
 For query/cadence edits, prepublish the new settings and effective interval bounds.
 Activate only at a common boundary after the agent acknowledges those bounds or its

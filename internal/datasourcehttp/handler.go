@@ -275,6 +275,9 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID st
 	}
 	availability := api.ProviderDescriptorAvailability("available")
 	operations := []string{"connection_test", "query_preview"}
+	var desiredRevision, appliedRevision *string
+	var failureCode *api.ProviderDescriptorConfigurationFailureCode
+	var failureRevision *string
 	if len(query["agent_id"]) == 1 {
 		agentID := query["agent_id"][0]
 		parsed, parseErr := uuid.Parse(agentID)
@@ -288,18 +291,52 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID st
 			return
 		}
 		operations = []string{}
-		if capability.Enabled && capability.Reachability == "connected" {
-			for _, operation := range []string{"connection_test", "query_preview"} {
-				if datasource.SupportsOperation(capability.Capabilities, operation) {
-					operations = append(operations, operation)
-				}
+		for _, operation := range []string{"connection_test", "query_preview"} {
+			if datasource.SupportsOperation(capability.Capabilities, operation) {
+				operations = append(operations, operation)
 			}
 		}
-		if len(operations) == 0 {
-			availability = "unsupported"
+		if capability.DesiredConfigurationRevision != nil {
+			value := strconv.FormatInt(*capability.DesiredConfigurationRevision, 10)
+			desiredRevision = &value
 		}
+		if capability.AppliedConfigurationRevision != nil {
+			value := strconv.FormatInt(*capability.AppliedConfigurationRevision, 10)
+			appliedRevision = &value
+		}
+		if capability.ConfigurationFailureCode != nil {
+			value := api.ProviderDescriptorConfigurationFailureCode(*capability.ConfigurationFailureCode)
+			failureCode = &value
+		}
+		if capability.ConfigurationFailureRevision != nil {
+			value := strconv.FormatInt(*capability.ConfigurationFailureRevision, 10)
+			failureRevision = &value
+		}
+		availability = providerAvailability(capability, len(operations))
 	}
-	h.writeJSON(w, http.StatusOK, api.ProviderPage{Items: []api.ProviderDescriptor{{Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Operations: operations, Availability: availability}}})
+	h.writeJSON(w, http.StatusOK, api.ProviderPage{Items: []api.ProviderDescriptor{{Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Operations: operations, Availability: availability,
+		DesiredConfigurationRevision: desiredRevision, AppliedConfigurationRevision: appliedRevision, ConfigurationFailureCode: failureCode, ConfigurationFailureRevision: failureRevision}}})
+}
+
+func providerAvailability(capability storage.DatasourceAgentCapability, operationCount int) api.ProviderDescriptorAvailability {
+	switch {
+	case !capability.Enabled:
+		return api.ProviderDescriptorAvailabilityDisabled
+	case capability.Reachability == "incompatible":
+		return api.ProviderDescriptorAvailabilityIncompatible
+	case !capability.Reported:
+		return api.ProviderDescriptorAvailabilityUnreported
+	case capability.Reachability != "connected":
+		return api.ProviderDescriptorAvailabilityOffline
+	case capability.ConfigurationFailureCode != nil && capability.ConfigurationFailureRevision != nil && capability.DesiredConfigurationRevision != nil && *capability.ConfigurationFailureRevision == *capability.DesiredConfigurationRevision:
+		return api.ProviderDescriptorAvailabilityConfigurationFailed
+	case capability.DesiredConfigurationRevision != nil && capability.AppliedConfigurationRevision != nil && *capability.AppliedConfigurationRevision < *capability.DesiredConfigurationRevision:
+		return api.ProviderDescriptorAvailabilityApplying
+	case operationCount == 0:
+		return api.ProviderDescriptorAvailabilityUnsupported
+	default:
+		return api.ProviderDescriptorAvailabilityAvailable
+	}
 }
 
 func (h *Handler) connectionTest(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof) {
@@ -370,6 +407,7 @@ func (h *Handler) startDiagnostic(w http.ResponseWriter, r *http.Request, reques
 	}
 	generation, connected := h.agentSessions.SessionGeneration(input.AgentID)
 	if !connected {
+		log.Printf("datasource diagnostic request_id=%s stage=session_lookup agent_session_present=false", requestID)
 		h.writeProblem(w, http.StatusServiceUnavailable, "agent_unavailable", requestID)
 		return
 	}
@@ -383,14 +421,21 @@ func (h *Handler) startDiagnostic(w http.ResponseWriter, r *http.Request, reques
 	input.AgentGeneration = generation
 	record, diagnosticRequest, err := storage.BeginDatasourceDiagnostic(r.Context(), h.databaseURL, input)
 	if err != nil {
+		log.Printf("datasource diagnostic request_id=%s stage=storage_begin agent_session_present=true", requestID)
 		h.writeStorageError(w, err, requestID)
 		return
 	}
 	if err := h.agentSessions.SendDiagnostic(r.Context(), record.AgentID, record.SessionGeneration, diagnosticRequest); err != nil {
+		log.Printf("datasource diagnostic request_id=%s stage=websocket_dispatch agent_session_present=true", requestID)
 		if stateErr := storage.FailDatasourceDiagnosticDispatch(r.Context(), h.databaseURL, record.ID, record.AgentID, record.SessionGeneration, h.now()); stateErr != nil {
 			log.Printf("datasource diagnostic dispatch state update failed for %s", record.ID)
+		} else {
+			record.State = "unknown"
+			record.ErrorCode = "network"
+			record.Message = "The assigned agent session became unavailable"
 		}
-		h.writeProblem(w, http.StatusServiceUnavailable, "agent_unavailable", requestID)
+		w.Header().Set("Location", "/api/v1/diagnostics/"+record.ID)
+		h.writeJSON(w, http.StatusAccepted, diagnosticDTO(record))
 		return
 	}
 	if err := storage.MarkDatasourceDiagnosticRunning(r.Context(), h.databaseURL, record.ID, record.AgentID, record.SessionGeneration, h.now()); err != nil {
@@ -483,7 +528,7 @@ func diagnosticDTO(record storage.DiagnosticRecord) api.Diagnostic {
 	dto := api.Diagnostic{Id: types.UUID(id), State: api.DiagnosticState(record.State), Operation: api.DiagnosticOperation(record.Operation),
 		CreatedAt: record.CreatedAt, DeadlineAt: record.DeadlineAt}
 	if record.ErrorCode != "" {
-		code := record.ErrorCode
+		code := api.DiagnosticErrorCode(publicDiagnosticErrorCode(record.ErrorCode))
 		dto.ErrorCode = &code
 	}
 	if record.Message != "" {
@@ -501,6 +546,27 @@ func diagnosticDTO(record storage.DiagnosticRecord) api.Diagnostic {
 		}
 	}
 	return dto
+}
+
+func publicDiagnosticErrorCode(code string) string {
+	switch code {
+	case "authentication":
+		return "authentication_failed"
+	case "network":
+		return "network_failed"
+	case "tls":
+		return "tls_failed"
+	case "query", "incomplete":
+		return "query_failed"
+	case "timeout", "deadline":
+		return "request_timeout"
+	case "assignment_revoked":
+		return "assignment_revoked"
+	case "rate_limited", "unsupported":
+		return code
+	default:
+		return "diagnostic_failed"
+	}
 }
 
 func canonicalDiagnosticID(value string) bool {
@@ -589,6 +655,10 @@ func (h *Handler) writeStorageError(w http.ResponseWriter, err error, requestID 
 		h.writeProblem(w, 422, "unsupported", requestID)
 	case errors.Is(err, storage.ErrDiagnosticAgentUnavailable):
 		h.writeProblem(w, 503, "agent_unavailable", requestID)
+	case errors.Is(err, storage.ErrDiagnosticConfigurationPending):
+		h.writeProblem(w, 503, "configuration_pending", requestID)
+	case errors.Is(err, storage.ErrDiagnosticConfigurationFailed):
+		h.writeProblem(w, 503, "configuration_failed", requestID)
 	case errors.Is(err, storage.ErrAgentNotFound):
 		h.writeProblem(w, 422, "invalid_agent", requestID)
 	case errors.Is(err, storage.ErrSourceSecretUnavailable):

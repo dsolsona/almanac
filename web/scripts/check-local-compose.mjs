@@ -163,7 +163,8 @@ async function databaseState() {
 }
 async function secretDigest() {
   return createHash('sha256').update(await secret('database-url')).update(await secret('initial-admin-password'))
-    .update(await secret('tls.crt')).update(await secret('tls.key')).digest('hex');
+    .update(await secret('tls.crt')).update(await secret('tls.key'))
+    .update(await secret('source-secret-keyset.json')).digest('hex');
 }
 async function checkPermanentLogin() {
   const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${spki}`] });

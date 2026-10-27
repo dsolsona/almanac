@@ -42,6 +42,18 @@ func TestValidateSessionRequestSharesCookieOriginTransportAndCSRFRules(t *testin
 	if _, err := first.ValidateSessionRequest(post); err != nil {
 		t.Fatalf("valid session POST rejected: %v", err)
 	}
+	put := request(http.MethodPut)
+	put.Header.Set("Origin", "https://example.test")
+	put.Header.Set("X-CSRF-Token", first.csrf("session", secret, [32]byte{3}))
+	if _, err := first.ValidateSessionRequest(put); err != nil {
+		t.Fatalf("valid session PUT rejected: %v", err)
+	}
+	wrongMethodCSRF := request(http.MethodPut)
+	wrongMethodCSRF.Header.Set("Origin", "https://example.test")
+	wrongMethodCSRF.Header.Set("X-CSRF-Token", first.csrf("login", secret, [32]byte{3}))
+	if _, err := first.ValidateSessionRequest(wrongMethodCSRF); err != ErrRequestCSRF {
+		t.Fatalf("wrong-purpose PUT CSRF error = %v", err)
+	}
 	if _, err := other.ValidateSessionRequest(post); err != ErrRequestCSRF {
 		t.Fatalf("foreign-handler CSRF error = %v", err)
 	}

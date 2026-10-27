@@ -235,7 +235,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List provider descriptors and selected-agent availability */
+        /**
+         * List provider descriptors and selected-agent availability
+         * @description Readable by viewer, editor, and administrator sessions. When agent_id is supplied, operations reports capability independently of liveness; availability and nullable desired/applied revisions report whether that agent can accept a diagnostic now. Configuration failure details are limited to the safe failure enum and revision.
+         */
         get: operations["getProviders"];
         put?: never;
         post?: never;
@@ -290,7 +293,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test unsaved Prometheus connection settings on an assigned agent */
+        /**
+         * Test unsaved Prometheus connection settings on an assigned agent
+         * @description If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+         */
         post: operations["postDatasourceConnectionTest"];
         delete?: never;
         options?: never;
@@ -307,7 +313,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run a bounded PromQL preview on the assigned agent */
+        /**
+         * Run a bounded PromQL preview on the assigned agent
+         * @description If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+         */
         post: operations["postDatasourceQueryPreview"];
         delete?: never;
         options?: never;
@@ -1577,6 +1586,15 @@ export interface operations {
                     "application/json": components["schemas"]["Diagnostic"];
                 };
             };
+            /** @description Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Request rejected */
             default: {
                 headers: {
@@ -1611,6 +1629,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */

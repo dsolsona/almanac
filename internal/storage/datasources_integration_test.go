@@ -5,6 +5,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json/v2"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,8 +24,14 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	}
 	now := f.base.Add(4 * time.Second)
 	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}
-	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(ownershipBytes(32, 63)), hello, func() time.Time { return now }); err != nil {
+	resumeVerifier := ownershipVerifier(ownershipBytes(32, 63))
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, hello, func() time.Time { return now }); err != nil {
 		t.Fatal(err)
+	}
+	agentPage, err := ListAgents(t.Context(), f.databaseURL, ListAgentsInput{SessionVerifier: f.verifier, Limit: 50, Now: func() time.Time { return now }})
+	if err != nil || len(agentPage.Items) != 1 || agentPage.Items[0].Runtime == nil || len(agentPage.Items[0].Runtime.Capabilities) != 1 ||
+		agentPage.Items[0].Runtime.Capabilities[0].Provider != "prometheus" || len(agentPage.Items[0].Runtime.Capabilities[0].Operations) != 2 {
+		t.Fatalf("agent list datasource capability metadata = %+v, %v", agentPage.Items, err)
 	}
 	keysetID := "c79c723a-81a2-4e0f-ae09-f2a071b2ef45"
 	keysetPath := filepath.Join(t.TempDir(), "source-keyset.json")
@@ -47,6 +54,39 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	}
 	if createdSource.Version != 1 || !createdSource.TokenConfigured || createdSource.PasswordConfigured || createdSource.ConfigurationRevision != 2 {
 		t.Fatalf("created datasource metadata = %+v", createdSource)
+	}
+	capability, err := GetDatasourceAgentCapability(t.Context(), f.databaseURL, proof, created.Agent.ID, func() time.Time { return now })
+	if err != nil || !capability.Enabled || !capability.Reported || capability.DesiredConfigurationRevision == nil || *capability.DesiredConfigurationRevision != 2 || capability.AppliedConfigurationRevision == nil || *capability.AppliedConfigurationRevision != 1 || capability.ConfigurationFailureCode != nil {
+		t.Fatalf("provider readiness during assignment reconciliation = %+v, %v", capability, err)
+	}
+	pending, err := ReadCurrentAgentConfiguration(t.Context(), f.databaseURL, issued.ID, issued.Verifier, func() time.Time { return now }, secrets)
+	if err != nil || !pending.Pending || pending.Revision != createdSource.ConfigurationRevision || len(pending.Snapshot) != 0 {
+		t.Fatalf("stale execution grant configuration response = %+v, %v", pending, err)
+	}
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: "4bb806a6-bfeb-4f3d-9c9f-1f63a6b4ad85", AgentID: created.Agent.ID,
+		AgentGeneration: 1, DatasourceID: createdSource.ID, Operation: "query_preview", Query: "up", Secrets: secrets, RequestedAt: now, Now: func() time.Time { return now },
+	}); !errors.Is(err, ErrDiagnosticConfigurationPending) {
+		t.Fatalf("diagnostic admission before assignment apply = %v", err)
+	}
+	if _, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, "4bb806a6-bfeb-4f3d-9c9f-1f63a6b4ad85", func() time.Time { return now }); !errors.Is(err, ErrDiagnosticNotFound) {
+		t.Fatalf("configuration-pending diagnostic unexpectedly created a receipt: %v", err)
+	}
+	now = now.Add(9 * time.Second)
+	renewed, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 0, ownershipNonce(64), func() time.Time { return now })
+	if err != nil || renewed.ConfigurationRevision != createdSource.ConfigurationRevision {
+		t.Fatalf("configuration-bound heartbeat grant = %+v, %v", renewed, err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, renewed.ConfigurationRevision, func() time.Time { return now }); err != nil {
+		t.Fatalf("record datasource configuration application: %v", err)
+	}
+	capability, err = GetDatasourceAgentCapability(t.Context(), f.databaseURL, proof, created.Agent.ID, func() time.Time { return now })
+	if err != nil || capability.DesiredConfigurationRevision == nil || *capability.DesiredConfigurationRevision != 2 || capability.AppliedConfigurationRevision == nil || *capability.AppliedConfigurationRevision != 2 {
+		t.Fatalf("provider readiness after assignment application = %+v, %v", capability, err)
+	}
+	current, err := ReadCurrentAgentConfiguration(t.Context(), f.databaseURL, issued.ID, issued.Verifier, func() time.Time { return now }, secrets)
+	if err != nil || current.Pending || current.Revision != renewed.ConfigurationRevision || !bytes.Contains(current.Snapshot, []byte("first-source-token")) {
+		t.Fatalf("matching grant configuration release = %+v, %v", current, err)
 	}
 	now = now.Add(time.Second)
 	diagnostic, diagnosticRequest, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
@@ -151,7 +191,14 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 		t.Fatalf("viewer datasource update error = %v", err)
 	}
 	setIntegrationUserRole(t, f, "editor")
-	now = now.Add(2 * time.Second)
+	now = renewed.IssuedAt.Add(agentMinimumRenewalInterval)
+	renewed, err = RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 1, ownershipNonce(65), func() time.Time { return now })
+	if err != nil || renewed.ConfigurationRevision != updated.ConfigurationRevision {
+		t.Fatalf("updated datasource heartbeat grant = %+v, %v", renewed, err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, renewed.ConfigurationRevision, func() time.Time { return now }); err != nil {
+		t.Fatalf("record updated datasource configuration application: %v", err)
+	}
 	preview, previewRequest, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
 		Proof: proof, DiagnosticID: "0a781dc5-7c3e-4fbd-8744-1af8f26c7c11", AgentID: created.Agent.ID,
 		AgentGeneration: 1, DatasourceID: createdSource.ID, Operation: "query_preview", Query: "vector(1)", Secrets: secrets,

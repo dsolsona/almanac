@@ -23,10 +23,12 @@ const (
 )
 
 var (
-	ErrDiagnosticNotFound         = errors.New("storage: diagnostic not found")
-	ErrDiagnosticConflict         = errors.New("storage: diagnostic conflict")
-	ErrDiagnosticAgentUnavailable = errors.New("storage: diagnostic agent unavailable")
-	ErrDiagnosticUnsupported      = errors.New("storage: diagnostic operation unsupported")
+	ErrDiagnosticNotFound             = errors.New("storage: diagnostic not found")
+	ErrDiagnosticConflict             = errors.New("storage: diagnostic conflict")
+	ErrDiagnosticAgentUnavailable     = errors.New("storage: diagnostic agent unavailable")
+	ErrDiagnosticConfigurationPending = errors.New("storage: diagnostic configuration pending")
+	ErrDiagnosticConfigurationFailed  = errors.New("storage: diagnostic configuration failed")
+	ErrDiagnosticUnsupported          = errors.New("storage: diagnostic operation unsupported")
 )
 
 type DiagnosticRecord struct {
@@ -106,6 +108,12 @@ func BeginDatasourceDiagnostic(ctx context.Context, databaseURL string, input Be
 	}
 	if status.Reachability != "connected" {
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticAgentUnavailable
+	}
+	if status.ConfigurationFailureCode != nil && status.ConfigurationFailureRevision != nil && *status.ConfigurationFailureRevision == status.DesiredConfigurationRevision {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticConfigurationFailed
+	}
+	if status.AppliedConfigurationRevision < status.DesiredConfigurationRevision {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticConfigurationPending
 	}
 	if !datasource.SupportsOperation(status.Capabilities, input.Operation) {
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticUnsupported

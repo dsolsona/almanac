@@ -63,6 +63,10 @@ func (h *ConfigurationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		writeConfigurationProblem(w, http.StatusServiceUnavailable, "agent_configuration_unavailable", id)
 		return
 	}
+	if configuration.Pending {
+		writeConfigurationProblem(w, http.StatusServiceUnavailable, "agent_configuration_unavailable", id)
+		return
+	}
 	etag := `"agent-config:` + configuration.AgentID + `:` + strconv.FormatInt(configuration.Revision, 10) + `"`
 	if values := r.Header.Values("If-None-Match"); len(values) != 0 {
 		matched, valid := ifNoneMatch(values, etag)
