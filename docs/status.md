@@ -2,7 +2,19 @@
 
 ## Current state
 
-Prometheus datasource management and remote diagnostics are verified under
+PR #37 review corrections are verified on combined code checkpoint `845e619`.
+All 17 findings have regressions covering configuration consistency/capacity,
+terminal diagnostic races and wire results, clock skew, upload generations,
+saved credentials, UI recovery/navigation and CLI cancellation/output. Final checks
+passed 149 selected real integration tests, 183 web tests, 303 Go tests and 295
+race tests, plus generated/build/production/smoke and documentation checks.
+The real browser journey tests stored Basic/Bearer credentials and cancellation;
+desktop/mobile screenshots in both themes were inspected. Full evidence and
+preserved first failures are in [F2-T20](tasks/F2-T20.md). An earlier nonzero backend
+shutdown remains unexplained; the final restart journey passed, and sanitized
+shutdown classification is now captured if it recurs.
+
+The original Prometheus datasource management and remote diagnostics increment was verified under
 [F2-T20](tasks/F2-T20.md), on code checkpoint `f6086fe`. UI, CLI and API support
 encrypted credentials, optimistic updates, explicit configuration readiness,
 connection tests and query previews executed by the assigned remote agent.
@@ -10,7 +22,7 @@ Results above 64 KiB use bounded authenticated HTTPS transfer, up to 1 MiB.
 Final checks passed 146 real integration tests, 169 web tests, 290 Go tests and
 282 race tests, plus generated/build/production/smoke, documentation and Compose
 startup/persistence checks. The coordinator inspected desktop/mobile in both themes.
-The consolidated review and scoped corrections are accepted.
+Those results describe the original increment; the review correction evidence above supersedes them.
 
 Work stops after publishing this increment as requested. F2 is still incomplete:
 SLI definitions, scheduled collection, collected observations and direct producer

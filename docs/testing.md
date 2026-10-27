@@ -212,6 +212,12 @@ The process smoke owns an ephemeral port. Generation/build/tests use local pinne
 Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
 They require the matching local fixture, use a fresh disposable database per test,
 and fail for unavailable infrastructure or an empty integration-test selection.
+The integration gate runs command/browser acceptance first and stops at the first
+failed package. It records Go JSON events in `.local/integration-go-test.jsonl`,
+per-package files under `.local/integration-test-json/`, and the numeric Go exit in
+`.local/integration-go-test.exit`; `running` means completion has not been recorded.
+The terminal summary reports package results and slow tests. A successful full gate
+requires every selected package; partial artifacts are not a passing gate.
 Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's
 execution selector. Pure unit cases belong in ordinary test files so the fast lane
 runs them. Discovery alone does not prove a test was executed.
