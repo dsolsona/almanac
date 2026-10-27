@@ -29,6 +29,19 @@ type AlmanacAgentCredential struct {
 	RetireAt        pgtype.Timestamptz `json:"retire_at"`
 }
 
+type AlmanacAgentOwnership struct {
+	AgentID              pgtype.UUID        `json:"agent_id"`
+	Generation           int64              `json:"generation"`
+	ResumeVerifier       []byte             `json:"resume_verifier"`
+	AcquiredAt           pgtype.Timestamptz `json:"acquired_at"`
+	RenewedAt            pgtype.Timestamptz `json:"renewed_at"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	RenewalSequence      int64              `json:"renewal_sequence"`
+	LastNonce            []byte             `json:"last_nonce"`
+	LastRenewalIssuedAt  pgtype.Timestamptz `json:"last_renewal_issued_at"`
+	LastRenewalExpiresAt pgtype.Timestamptz `json:"last_renewal_expires_at"`
+}
+
 type AlmanacAuditEvent struct {
 	ID         pgtype.UUID        `json:"id"`
 	Actor      string             `json:"actor"`

@@ -102,8 +102,8 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       <footer className="app-account">
         <div className="app-account__identity"><span className="app-account__avatar" aria-hidden="true">{login.slice(0, 1).toUpperCase()}</span><span className="app-account__copy"><strong>{login}</strong><small>{role}</small></span></div>
         <ThemeToggle />
-        {showCheckSession && <Button variant="outline" onClick={onCheckSession} pending={pending}>Check session</Button>}
-        <Button variant="outline" onClick={onSignOut} pending={pending}>Sign out</Button>
+        {showCheckSession && <Button variant="outline" onClick={() => { setOpen(false); onCheckSession(); }} pending={pending}>Check session</Button>}
+        <Button variant="outline" onClick={() => { setOpen(false); onSignOut(); }} pending={pending}>Sign out</Button>
       </footer>
     </aside>
     <div className="app-workspace" inert={open || undefined}>

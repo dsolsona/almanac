@@ -34,6 +34,7 @@ type Querier interface {
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
 	InsertAgentCredential(ctx context.Context, arg InsertAgentCredentialParams) (InsertAgentCredentialRow, error)
 	InsertAgentLifecycleReceipt(ctx context.Context, arg InsertAgentLifecycleReceiptParams) error
+	InsertAgentOwnership(ctx context.Context, arg InsertAgentOwnershipParams) error
 	InsertAgentReceipt(ctx context.Context, arg InsertAgentReceiptParams) error
 	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
@@ -53,6 +54,7 @@ type Querier interface {
 	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
+	LockLatestAgentOwnership(ctx context.Context, agentID pgtype.UUID) (AlmanacAgentOwnership, error)
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
@@ -67,6 +69,7 @@ type Querier interface {
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
 	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)

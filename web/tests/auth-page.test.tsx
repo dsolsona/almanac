@@ -169,6 +169,26 @@ describe('authentication page', () => {
     expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument();
   });
 
+  it('closes the mobile drawer and focuses sign-out uncertainty when logout fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 860px)' }) as MediaQueryList);
+    const client = clientFor(signedIn);
+    client.logout = vi.fn().mockRejectedValue(new AuthFailure('unavailable', 'logout_unconfirmed', 'untrusted text'));
+    render(<AuthPage client={client} />);
+    await screen.findByRole('heading', { name: 'Agents' });
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    const drawer = screen.getByRole('dialog', { name: 'Navigation menu' });
+    await user.click(within(drawer).getByRole('button', { name: 'Sign out' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/sign-out could not be confirmed/i);
+    expect(alert).toHaveFocus();
+    expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument();
+    expect(document.querySelector('.app-workspace')).not.toHaveAttribute('inert');
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Check session' })).toBeVisible();
+    expect(client.logout).toHaveBeenCalledOnce();
+  });
+
   it('validates password rotation and announces success only after an explicit successful response', async () => {
     const user = userEvent.setup();
     const client = clientFor(restricted);
