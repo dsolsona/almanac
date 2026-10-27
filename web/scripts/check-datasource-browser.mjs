@@ -11,6 +11,13 @@ for await (const chunk of process.stdin) {
 const fixture = JSON.parse(input);
 input = '';
 const origin = new URL(fixture.url);
+const safeCodes = new Set([
+  'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
+  'conflict', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
+  'invalid_agent', 'invalid_request', 'method_not_allowed', 'not_found', 'origin_rejected',
+  'rate_limited', 'secure_transport_required', 'session_present', 'source_secret_unavailable',
+  'unauthenticated', 'unauthorized', 'unsupported', 'unsupported_media_type',
+]);
 assert.equal(origin.protocol, 'https:');
 assert.equal(origin.hostname, 'localhost');
 assert.match(fixture.spki, /^[A-Za-z0-9+/]{43}=$/);
@@ -29,7 +36,23 @@ try {
   context.setDefaultTimeout(5000);
   const page = await context.newPage();
   let pageErrors = 0;
+  let apiSequence = 0;
+  let latestAPI = { status: null, requestID: 'none', code: 'none' };
+  let latestAPIRead = Promise.resolve();
   page.on('pageerror', () => { pageErrors += 1; });
+  page.on('response', (response) => {
+    let url;
+    try { url = new URL(response.url()); } catch { return; }
+    if (url.origin !== origin.origin || !url.pathname.startsWith('/api/v1/')) return;
+    const sequence = ++apiSequence;
+    const headers = response.headers();
+    const requestID = /^[0-9a-f]{32}$/.test(headers['x-request-id'] ?? '') ? headers['x-request-id'] : 'none';
+    latestAPI = { status: response.status(), requestID, code: 'none' };
+    if (response.status() < 400) return;
+    latestAPIRead = response.json().then((body) => {
+      if (sequence === apiSequence && body && typeof body === 'object' && safeCodes.has(body.code)) latestAPI.code = body.code;
+    }).catch(() => {});
+  });
 
   stage = 'sign-in page';
   await page.goto(fixture.url);
@@ -214,7 +237,11 @@ try {
 } catch (error) {
   const networkCode = typeof error?.message === 'string' ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] ?? 'none' : 'none';
   const errorClass = error?.name === 'TimeoutError' ? 'timeout' : 'other';
-  await writeFile(join(fixture.artifacts, 'failure.txt'), `${stage}\nnetwork=${networkCode} class=${errorClass}\n`, { mode: 0o600 });
+  await latestAPIRead;
+  const safeStage = stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 96);
+  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${latestAPI.status ?? 'none'}\nrequest_id=${latestAPI.requestID}\napi_code=${latestAPI.code}\n`;
+  if (Buffer.byteLength(diagnostic) > 512) throw new Error('sanitized failure artifact exceeded its bound');
+  await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 });
   process.stdout.write('FAIL browser-datasources\n');
   process.exitCode = 1;
 } finally {
