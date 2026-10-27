@@ -88,7 +88,7 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 
 func safeBrowserFailureMarker(output string) string {
 	fields := strings.Fields(strings.TrimSpace(output))
-	if len(fields) != 8 || fields[0] != "FAIL" || fields[1] != "browser-datasources" {
+	if len(fields) != 11 || fields[0] != "FAIL" || fields[1] != "browser-datasources" {
 		return "stage=none network=none api_status=none request_id=none api_code=none"
 	}
 	values := make(map[string]string, 6)
@@ -139,7 +139,25 @@ func safeBrowserFailureMarker(output string) string {
 	if code != "none" && !safeCodes[code] {
 		code = "none"
 	}
-	return "stage=" + stage + " network=" + network + " class=" + class + " api_status=" + status + " request_id=" + requestID + " api_code=" + code
+	diagnosticState := values["diagnostic_state"]
+	validDiagnosticStates := map[string]bool{"pending": true, "running": true, "succeeded": true, "failed": true, "canceled": true, "timed_out": true, "unknown": true}
+	if diagnosticState != "none" && !validDiagnosticStates[diagnosticState] {
+		diagnosticState = "none"
+	}
+	diagnosticErrorCode := values["diagnostic_error_code"]
+	validDiagnosticErrorCodes := map[string]bool{"authentication": true, "authentication_failed": true, "deadline": true,
+		"diagnostic_failed": true, "incomplete": true, "network": true, "network_failed": true, "query": true,
+		"query_failed": true, "rate_limited": true, "tls": true, "tls_failed": true, "timeout": true,
+		"unsupported": true, "assignment_revoked": true}
+	if diagnosticErrorCode != "none" && !validDiagnosticErrorCodes[diagnosticErrorCode] {
+		diagnosticErrorCode = "none"
+	}
+	diagnosticResultClass := values["diagnostic_result_class"]
+	validDiagnosticResultClasses := map[string]bool{"complete": true, "empty": true, "incomplete": true}
+	if diagnosticResultClass != "none" && !validDiagnosticResultClasses[diagnosticResultClass] {
+		diagnosticResultClass = "none"
+	}
+	return "stage=" + stage + " network=" + network + " class=" + class + " api_status=" + status + " request_id=" + requestID + " api_code=" + code + " diagnostic_state=" + diagnosticState + " diagnostic_error_code=" + diagnosticErrorCode + " diagnostic_result_class=" + diagnosticResultClass
 }
 
 func safeBrowserRequestID(value string) bool {

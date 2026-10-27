@@ -11,6 +11,8 @@ let page;
 let authenticated = false;
 let latestAPI = { status: null, requestID: 'none', code: 'none' };
 let latestAPIRead = Promise.resolve();
+let latestDiagnostic = { state: 'none', errorCode: 'none', resultClass: 'none' };
+let latestDiagnosticRead = Promise.resolve();
 const safeCodes = new Set([
   'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
   'conflict', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
@@ -54,6 +56,22 @@ stage = 'browser launch';
     const rawRequestID = headers['x-request-id'] ?? '';
     const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(rawRequestID) ? rawRequestID : 'none';
     latestAPI = { status: response.status(), requestID, code: 'none' };
+    const diagnosticPath = url.pathname.match(/^\/api\/v1\/diagnostics\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+    if (response.request().method() === 'GET' && response.status() === 200 && diagnosticPath) {
+      latestDiagnosticRead = response.json().then((body) => {
+        const states = new Set(['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown']);
+        const resultClasses = new Set(['complete', 'empty', 'incomplete']);
+        const errorCodes = new Set(['authentication', 'authentication_failed', 'deadline', 'diagnostic_failed', 'incomplete',
+          'network', 'network_failed', 'query', 'query_failed', 'rate_limited', 'tls', 'tls_failed', 'timeout',
+          'unsupported', 'assignment_revoked']);
+        if (!body || body.id !== diagnosticPath[1] || !states.has(body.state)) return;
+        latestDiagnostic = {
+          state: body.state,
+          errorCode: errorCodes.has(body.error_code) ? body.error_code : 'none',
+          resultClass: resultClasses.has(body.result_class) ? body.result_class : 'none',
+        };
+      }).catch(() => {});
+    }
     if (response.status() < 400) return;
     latestAPIRead = response.json().then((body) => {
       if (sequence === apiSequence && body && typeof body === 'object' && safeCodes.has(body.code)) latestAPI.code = body.code;
@@ -266,12 +284,15 @@ stage = 'browser launch';
 } catch (error) {
   const networkCode = typeof error?.message === 'string' ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] ?? 'none' : 'none';
   const errorClass = error?.name === 'TimeoutError' ? 'timeout' : 'other';
-  await Promise.race([latestAPIRead.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 1000))]);
+  await Promise.race([Promise.all([latestAPIRead.catch(() => {}), latestDiagnosticRead.catch(() => {})]), new Promise((resolve) => setTimeout(resolve, 1000))]);
   const safeStage = typeof stage === 'string' ? stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 96) : 'fixture input';
   const status = Number.isInteger(latestAPI.status) && latestAPI.status >= 100 && latestAPI.status <= 599 ? latestAPI.status : 'none';
   const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(latestAPI.requestID) ? latestAPI.requestID : 'none';
   const apiCode = safeCodes.has(latestAPI.code) ? latestAPI.code : 'none';
-  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\n`;
+  const diagnosticState = ['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(latestDiagnostic.state) ? latestDiagnostic.state : 'none';
+  const diagnosticErrorCode = ['authentication', 'authentication_failed', 'deadline', 'diagnostic_failed', 'incomplete', 'network', 'network_failed', 'query', 'query_failed', 'rate_limited', 'tls', 'tls_failed', 'timeout', 'unsupported', 'assignment_revoked'].includes(latestDiagnostic.errorCode) ? latestDiagnostic.errorCode : 'none';
+  const diagnosticResultClass = ['complete', 'empty', 'incomplete'].includes(latestDiagnostic.resultClass) ? latestDiagnostic.resultClass : 'none';
+  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\ndiagnostic_state=${diagnosticState}\ndiagnostic_error_code=${diagnosticErrorCode}\ndiagnostic_result_class=${diagnosticResultClass}\n`;
   if (authenticated && page && typeof fixture?.artifacts === 'string') {
     try {
       await page.screenshot({
@@ -285,7 +306,8 @@ stage = 'browser launch';
   if (Buffer.byteLength(diagnostic) <= 512 && typeof fixture?.artifacts === 'string') {
     try { await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 }); } catch {}
   }
-  process.stdout.write(`FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} api_status=${status} request_id=${requestID} api_code=${apiCode}\n`);
+  const marker = `FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} api_status=${status} request_id=${requestID} api_code=${apiCode} diagnostic_state=${diagnosticState} diagnostic_error_code=${diagnosticErrorCode} diagnostic_result_class=${diagnosticResultClass}\n`;
+  process.stdout.write(Buffer.byteLength(marker) <= 512 ? marker : 'FAIL browser-datasources stage=none network=none class=other api_status=none request_id=none api_code=none diagnostic_state=none diagnostic_error_code=none diagnostic_result_class=none\n');
   process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => {});
