@@ -364,6 +364,9 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	if response.Header.Get("ETag") != wantETag {
 		return errors.New("configuration validator is invalid")
 	}
+	if c.diagnostics != nil {
+		c.diagnostics.reconcileAssignments(snapshot.Assignments)
+	}
 	c.revision = snapshot.ConfigurationRevision
 	c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
 	messageID, err := newMessageID()

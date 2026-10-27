@@ -132,6 +132,7 @@ type AlmanacDiagnostic struct {
 	ErrorCode         pgtype.Text        `json:"error_code"`
 	Message           pgtype.Text        `json:"message"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	DeadlineAt        pgtype.Timestamptz `json:"deadline_at"`
 	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
 }

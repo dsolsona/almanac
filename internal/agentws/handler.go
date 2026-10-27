@@ -27,10 +27,11 @@ const (
 )
 
 type Handler struct {
-	access   *agentaccess.Service
-	runtime  *agentruntime.Service
-	auth     *authhttp.Handler
-	registry *Registry
+	access           *agentaccess.Service
+	runtime          *agentruntime.Service
+	auth             *authhttp.Handler
+	registry         *Registry
+	diagnosticResult func(context.Context, string, int64, agentprotocol.DiagnosticResult) error
 }
 
 type outbound struct {
@@ -59,6 +60,12 @@ func New(access *agentaccess.Service, runtime *agentruntime.Service, auth *authh
 		return nil, errors.New("agentws: invalid options")
 	}
 	return &Handler{access: access, runtime: runtime, auth: auth, registry: registry}, nil
+}
+
+func (h *Handler) SetDiagnosticResultHandler(handler func(context.Context, string, int64, agentprotocol.DiagnosticResult) error) {
+	if h != nil {
+		h.diagnosticResult = handler
+	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +219,12 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 				agentprotocol.Envelope[agentprotocol.ConfigurationFailed]{Kind: envelope.Kind, MessageID: envelope.MessageID,
 					SessionGeneration: envelope.SessionGeneration, Payload: failed}) != nil {
 				_ = control.conn.Close(websocket.StatusPolicyViolation, "configuration failure rejected")
+				return
+			}
+		case agentprotocol.KindDiagnosticResult:
+			var result agentprotocol.DiagnosticResult
+			if json.Unmarshal(envelope.Payload, &result) != nil || envelope.SessionGeneration != strconv.FormatInt(session.Generation, 10) || h.diagnosticResult == nil || h.diagnosticResult(ctx, session.AgentID, session.Generation, result) != nil {
+				_ = control.conn.Close(websocket.StatusPolicyViolation, "diagnostic result rejected")
 				return
 			}
 		default:
