@@ -30,6 +30,16 @@ is a readiness blocker, not permission for the worker to invent a contract.
 Map each task outcome to governing acceptance criteria. Include independently derived
 examples and negative/boundary cases; identify the test layer that proves each one.
 
+Write a short user acceptance checklist before implementation:
+
+- User starting state, ordinary input values and actions:
+- Expected visible result and persisted record:
+- Invalid input, actionable feedback and correction path:
+- Navigation into/out of the flow and browser history:
+- Reported defect's exact reproduction, observed failure and confirmed cause:
+- For UI work, accepted reference and concrete side-by-side comparison criteria:
+- Normal container-deployment journey and its fixture/build identity:
+
 ## Execution and verification
 
 - [ ] Confirm base revision, clean owned worktree and isolated test resources.
@@ -57,6 +67,7 @@ evidence; continue independent authorized steps where possible.
 - Commands, exit statuses, selected-test counts and elapsed times:
 - Fixture/service/schema/build identity; cached versus fresh execution:
 - Failure artifacts and reproduction:
+- Original reported case after correction (not just related passing cases):
 - Limitations, unverified behavior and decisions needed:
 
 ## Coordinator acceptance
@@ -64,5 +75,7 @@ evidence; continue independent authorized steps where possible.
 - Diff and contract review:
 - Independently checked expectations and relevant negative cases:
 - Integrated candidate revision and verification evidence:
+- Independently exercised user checklist and container-deployment result:
+- UI reference comparison, themes/mobile and continuous navigation result:
 - Correction rounds and remaining gaps:
 - Final state, integration result and next dependency:

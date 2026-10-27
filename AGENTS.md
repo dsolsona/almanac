@@ -248,6 +248,24 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   flows as applicable. Reused tests must be reviewed against Almanac's contract.
 - For UI changes, inspect real pages in both themes and at mobile widths, including
   keyboard use, focus, empty states, errors, and exact data representations.
+- Start feature briefs with a user acceptance checklist: ordinary user-entered
+  values, expected visible results, correction of errors and navigation between
+  screens. For reported defects, reproduce the reported steps and inputs before
+  changing code; a related passing fixture does not close the report.
+- Evaluate UI structure and interactions against the accepted visual reference,
+  side by side. Record concrete differences in navigation, hierarchy, density,
+  typography and controls; a screenshot that merely renders is not visual acceptance.
+- Verify affected user journeys through the normal container deployment as well as
+  isolated API fixtures. Use the existing isolated Compose check to preserve operator
+  data and credentials. Verify the built revision and default deployment settings.
+- The coordinator independently exercises the integrated user journey before
+  delivery. Worker reports and suite counts support that review; they do not replace
+  it. Keep navigation, form entry, submission, error recovery and resulting records
+  in the acceptance path rather than checking each screen only in isolation.
+- Use precise status: implemented, verified with named evidence, or unresolved.
+  Do not describe a feature as done while a reported acceptance failure is open.
+  A later passing run does not establish a fix for an unexplained earlier failure;
+  retain it as an open investigation with the evidence needed for diagnosis.
 - Report checks actually run, their results, and any gaps. Do not claim that
   tests passed based on an earlier codebase or a different revision.
 - Keep changes reviewable and confined to the current feature. Do not begin

@@ -2,6 +2,13 @@
 
 ## Current state
 
+User acceptance is reopened under [F2-T21](tasks/F2-T21.md): agent registration
+rejects an ordinary capitalized name without actionable guidance; navigation can
+reload authentication and flash loading states; visual structure and endpoint
+punctuation require direct reference/browser verification. Earlier suite results
+below establish their tested cases, not acceptance of these reported flows. Repairs
+and updated acceptance guidance are in progress. No new F2 feature work is underway.
+
 PR #37 review corrections are verified on combined code checkpoint `845e619`.
 All 17 findings have regressions covering configuration consistency/capacity,
 terminal diagnostic races and wire results, clock skew, upload generations,
