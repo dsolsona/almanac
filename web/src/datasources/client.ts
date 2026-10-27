@@ -89,6 +89,8 @@ function safeDiagnostic(value: Diagnostic): Diagnostic {
     network_failed: 'The assigned agent could not reach the datasource.',
     tls_failed: 'The datasource TLS connection could not be verified.',
     query_failed: 'The datasource rejected the query.',
+    request_timeout: 'The datasource diagnostic timed out.',
+    assignment_revoked: 'The datasource assignment changed before the diagnostic could complete.',
     rate_limited: 'The datasource rate limited the diagnostic.',
     unsupported: 'The assigned agent does not support this operation.',
   };
