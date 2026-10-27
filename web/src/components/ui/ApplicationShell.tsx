@@ -3,7 +3,7 @@ import { Button } from './Button.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import './application-shell.css';
 
-const destinations = ['SLOs', 'SLIs', 'Datasources', 'Alerts'];
+const destinations = ['SLOs', 'SLIs', 'Alerts'];
 const selectionParams = ['agent', 'agents_cursor', 'credentials_cursor'];
 const mobileViewport = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 860px)').matches;
 
@@ -22,6 +22,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
   const closeTrigger = useRef<HTMLButtonElement>(null);
   const currentDestination = useRef<HTMLAnchorElement>(null);
   const wasOpen = useRef(false);
+  const datasourceCurrent = location.pathname.startsWith('/datasources');
 
   useLayoutEffect(() => {
     if (open) {
@@ -53,6 +54,10 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
     const query = new URLSearchParams(location.search);
     for (const parameter of selectionParams) query.delete(parameter);
     const next = `/agents${query.size ? `?${query}` : ''}${location.hash}`;
+    if (location.pathname.startsWith('/datasources')) {
+      location.assign(next);
+      return;
+    }
     if (`${location.pathname}${location.search}${location.hash}` !== next) {
       history.pushState({}, '', next);
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -93,7 +98,8 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
     <aside id="app-navigation" className={`app-sidebar${open ? ' is-open' : ''}`} role={open && !embedded ? 'dialog' : undefined} aria-modal={open && !embedded ? 'true' : undefined} aria-label={open && !embedded ? 'Navigation menu' : undefined} onKeyDown={containDrawerFocus}>
       <div className="app-sidebar__brand"><button ref={closeTrigger} className="app-drawer-close" type="button" aria-label="Close navigation" onClick={() => setOpen(false)}>×</button><a className="wordmark" href="/agents" onClick={navigateToAgents}>ALMANAC</a></div>
       <nav className="app-navigation" aria-label="Primary navigation">
-        <a ref={currentDestination} className="app-navigation__current" href="/agents" aria-current="page" onClick={navigateToAgents}><span aria-hidden="true" className="app-navigation__mark">◈</span>Agents</a>
+        <a ref={!datasourceCurrent ? currentDestination : undefined} className={!datasourceCurrent ? 'app-navigation__current' : ''} href="/agents" aria-current={!datasourceCurrent ? 'page' : undefined} onClick={navigateToAgents}><span aria-hidden="true" className="app-navigation__mark">◈</span>Agents</a>
+        <a ref={datasourceCurrent ? currentDestination : undefined} className={datasourceCurrent ? 'app-navigation__current' : 'app-navigation__link'} href="/datasources" aria-current={datasourceCurrent ? 'page' : undefined} onClick={(event) => { if (embedded) event.preventDefault(); setOpen(false); }}><span aria-hidden="true" className="app-navigation__mark">◈</span>Datasources</a>
         {destinations.map((destination) => <div className="app-navigation__planned" key={destination} aria-disabled="true">
           <span><span aria-hidden="true" className="app-navigation__mark">·</span>{destination}</span>
           <small>Not available yet</small>

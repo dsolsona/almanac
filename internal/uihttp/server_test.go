@@ -38,6 +38,8 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 	for _, tc := range []struct{ path, wantType string }{
 		{"/", "text/html"},
 		{"/agents?agent=example&agents_cursor=next&credentials_cursor=history", "text/html"},
+		{"/datasources", "text/html"},
+		{"/datasources/8ed93d7e-51e3-4a3e-9222-3e8a612de20a", "text/html"},
 	} {
 		response, err := testHTTPClient.Get(frontend.URL + tc.path)
 		if err != nil {

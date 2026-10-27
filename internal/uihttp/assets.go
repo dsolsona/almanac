@@ -29,7 +29,7 @@ func staticHandler(assets fs.FS) http.Handler {
 			return
 		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-		if r.URL.Path == "/" || r.URL.Path == "/agents" {
+		if r.URL.Path == "/" || r.URL.Path == "/agents" || r.URL.Path == "/datasources" || r.URL.Path == "/datasources/new" || datasourceDetailPath.MatchString(r.URL.Path) {
 			name = "index.html"
 		}
 		file, err := assets.Open(name)
@@ -56,3 +56,5 @@ func staticHandler(assets fs.FS) http.Handler {
 		http.ServeContent(w, r, name, info.ModTime(), reader)
 	})
 }
+
+var datasourceDetailPath = regexp.MustCompile(`^/datasources/[0-9a-fA-F-]{36}$`)
