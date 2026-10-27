@@ -454,12 +454,12 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     finally { setCancelSubmitting(false); }
   }
 
-  if (loading) return <div className="datasources-loading"><LoadingIndicator label="Loading datasource management" /></div>;
+  if (loading) return <><PageTitle headingRef={heading} title={isNew ? 'Add datasource' : selectedID ? 'Datasource' : 'Datasources'} /><div className="app-route-loading" role="status"><LoadingIndicator label="Loading datasource details" /></div></>;
   if (error && !source && selectedID) return <><PageTitle headingRef={heading} title="Datasources" /><Panel heading="Datasource unavailable"><p ref={errorSummary} role="alert" tabIndex={-1}>{error}</p><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button></Panel></>;
   if (!selectedID && !isNew) return <>
-    <PageTitle headingRef={heading} title="Datasources" />
+    <div className="datasource-list-heading"><PageTitle headingRef={heading} title="Datasources" />{admin && <Button onClick={() => navigate('/datasources/new')}>Add datasource</Button>}</div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
-    <div className="datasource-toolbar"><p>Prometheus sources assigned to collection agents.</p>{admin && <Button onClick={() => navigate('/datasources/new')}>Add datasource</Button>}</div>
+    <div className="datasource-toolbar"><p>Prometheus sources assigned to collection agents.</p></div>
     {items.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <div className="datasource-list" aria-label="Datasources">
       {items.map((item) => <button className="datasource-row" key={item.id} onClick={() => navigate(`/datasources/${item.id}`)}><span><strong>{item.display_name}</strong><small>{item.endpoint}</small></span><span className="datasource-row__meta"><small>{item.authentication.mode === 'none' ? 'No authentication' : `${item.authentication.mode} · secret ${item.authentication[ item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured' ] ? 'configured' : 'not configured'}`}</small><small>Version {item.version}</small></span></button>)}
     </div>}
@@ -475,7 +475,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     <Panel heading="Connection settings"><form className="datasource-form" onSubmit={(event) => void submit(event)}>
       <TextField id="datasource-name" label="Name" value={draft.name} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
       <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, display_name: event.target.value })} />
-      <TextField id="datasource-endpoint" label="Prometheus endpoint" type="url" hint="Use an HTTP or HTTPS URL without embedded credentials." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
+      <TextField id="datasource-endpoint" className="datasource-endpoint" label="Prometheus endpoint" type="url" hint="Use an HTTP or HTTPS URL without embedded credentials." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
       <SelectField id="datasource-agent" label="Assigned agent" value={draft.agent_id} disabled={formDisabled} onChange={(event) => selectAgent(event.target.value)} options={[{ value: '', label: 'Select an agent', disabled: true }, ...agents.map((agent) => ({ value: agent.id, label: datasourceAgentLabel(agent), disabled: !supportsDatasourceDiagnostics(agent) }))]} />
       <TextField id="datasource-polling" label="Polling interval (seconds)" type="number" min={15} max={86400} value={draft.polling_interval_seconds} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, polling_interval_seconds: Number(event.target.value) })} />
       <SelectField id="datasource-auth-mode" label="Authentication" value={draft.authMode} disabled={formDisabled} onChange={(event) => { const authMode = event.target.value as Draft['authMode']; setDraft({ ...draft, authMode, ...(authMode === 'basic' && !draft.passwordConfigured ? { passwordAction: 'replace' as const } : {}), ...(authMode === 'bearer' && !draft.tokenConfigured ? { tokenAction: 'replace' as const } : {}) }); }} options={[{ value: 'none', label: 'None' }, { value: 'basic', label: 'Basic authentication' }, { value: 'bearer', label: 'Bearer token' }]} />
@@ -503,4 +503,9 @@ function DiagnosticView({ value }: { value: Diagnostic }) {
   return <div className="diagnostic-result" aria-live="polite"><div><span className={`datasource-diagnostic-status datasource-diagnostic-status--${value.state}`}>{labels[value.state]}</span>{value.result_class && <span className={`datasource-result-class datasource-result-class--${value.result_class}`}>{value.result_class}</span>}</div><p>Deadline {new Date(value.deadline_at).toLocaleTimeString()}</p>{value.message && <p>{value.message}</p>}{value.error_code && <p>Code: <code>{value.error_code}</code></p>}{value.result && <pre>{JSON.stringify(value.result, null, 2)}</pre>}<span className="sr-only">Diagnostic {labels[value.state].toLowerCase()}</span></div>;
 }
 
-function PageTitle({ title, headingRef }: { title: string; headingRef: RefObject<HTMLHeadingElement | null> }) { return <h1 ref={headingRef} className="agents-heading app-page-heading" tabIndex={-1}>{title}</h1>; }
+function PageTitle({ title, headingRef }: { title: string; headingRef: RefObject<HTMLHeadingElement | null> }) {
+  return <div className="app-page-context">
+    <nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><a href="/datasources" data-app-route>Datasources</a>{title !== 'Datasources' && <><span aria-hidden="true">/</span><span>{title}</span></>}</nav>
+    <h1 ref={headingRef} className="agents-heading app-page-heading" tabIndex={-1}>{title}</h1>
+  </div>;
+}
