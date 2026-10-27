@@ -1,0 +1,6 @@
+{
+  "kind": "configuration-changed",
+  "message_id": "m-config-changed-1",
+  "session_generation": "1",
+  "payload": { "desired_configuration_revision": "2" }
+}

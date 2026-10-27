@@ -185,7 +185,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if _, err := db.Exec(t.Context(), "UPDATE public.almanac_sessions SET restricted=true WHERE verifier=$1", adminVerifier[:]); err != nil {
 		t.Fatal("mark session restricted failed")
 	}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"restricted","display_name":"Restricted"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "restricted-create"})
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"name":"restricted","display_name":"Restricted"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "restricted-create"})
 	assertProblem(t, status, body, 403, "forbidden")
 	assertNoMutation(baseline)
 	if _, err := db.Exec(t.Context(), "UPDATE public.almanac_sessions SET restricted=false WHERE verifier=$1", adminVerifier[:]); err != nil {
@@ -194,15 +194,14 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if _, err := db.Exec(t.Context(), "UPDATE public.almanac_users SET role='viewer' WHERE id=(SELECT user_id FROM public.almanac_sessions WHERE verifier=$1)", adminVerifier[:]); err != nil {
 		t.Fatal("demote administrator fixture failed")
 	}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"viewer","display_name":"Viewer"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "viewer-create"})
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"name":"viewer","display_name":"Viewer"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "viewer-create"})
 	assertProblem(t, status, body, 403, "forbidden")
 	assertNoMutation(baseline)
 	if _, err := db.Exec(t.Context(), "UPDATE public.almanac_users SET role='administrator' WHERE id=(SELECT user_id FROM public.almanac_sessions WHERE verifier=$1)", adminVerifier[:]); err != nil {
 		t.Fatal("restore administrator role failed")
 	}
-	wrongPasswordHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "wrong-password-create"}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"wrong password","name":"wrong-password","display_name":"Wrong Password"}`, true, context.CsrfToken, wrongPasswordHeaders)
-	assertProblem(t, status, body, 401, "unauthenticated")
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"obsolete","name":"obsolete-password","display_name":"Obsolete Password"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "obsolete-password-create"})
+	assertProblem(t, status, body, 400, "invalid_request")
 	assertNoMutation(baseline)
 	revokedSession, err := authService.Login(t.Context(), authentication.LoginInput{Login: "http-agent-admin", Password: permanentPassword, Source: source, RequestID: "http-agent-revoked-login"})
 	if err != nil {
@@ -220,7 +219,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if _, err := db.Exec(t.Context(), "DELETE FROM public.almanac_sessions WHERE verifier=$1", revokedVerifier[:]); err != nil {
 		t.Fatal("revoke session fixture failed")
 	}
-	status, body, _ = callAs(revokedSession.Secret, http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"revoked-session","display_name":"Revoked Session"}`, true, revokedContext.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "revoked-session-create"})
+	status, body, _ = callAs(revokedSession.Secret, http.MethodPost, "/api/v1/agents", `{"name":"revoked-session","display_name":"Revoked Session"}`, true, revokedContext.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "revoked-session-create"})
 	assertProblem(t, status, body, 401, "unauthenticated")
 	assertNoMutation(baseline)
 	expiredSession, err := authService.Login(t.Context(), authentication.LoginInput{Login: "http-agent-admin", Password: permanentPassword, Source: source, RequestID: "http-agent-expired-login"})
@@ -242,19 +241,19 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if _, err := db.Exec(t.Context(), "UPDATE public.almanac_sessions SET created_at=$2,last_seen_at=$2 WHERE verifier=$1", expiredVerifier[:], expiredAt); err != nil {
 		t.Fatal("expire session fixture failed")
 	}
-	status, body, _ = callAs(expiredSession.Secret, http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"expired-session","display_name":"Expired Session"}`, true, expiredContext.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "expired-session-create"})
+	status, body, _ = callAs(expiredSession.Secret, http.MethodPost, "/api/v1/agents", `{"name":"expired-session","display_name":"Expired Session"}`, true, expiredContext.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "expired-session-create"})
 	assertProblem(t, status, body, 401, "unauthenticated")
 	assertNoMutation(baseline)
 	invalidCreateHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-invalid-create"}
 	for _, invalidBody := range []string{
-		`{"current_password":"` + permanentPassword + `","name":"invalid","display_name":"Invalid","lifetime_seconds":null}`,
-		`{"current_password":"` + permanentPassword + `","name":"invalid","name":"duplicate","display_name":"Invalid"}`,
-		`{"current_password":"` + permanentPassword + `","name":"invalid","display_name":"Invalid","unknown":true}`,
-		`{"current_password":"` + permanentPassword + `","name":"invalid","display_name":"Invalid","lifetime_seconds":1e2}`,
-		`{"current_password":"` + permanentPassword + `","name":"invalid"}`,
+		`{"name":"invalid","display_name":"Invalid","lifetime_seconds":null}`,
+		`{"name":"invalid","name":"duplicate","display_name":"Invalid"}`,
+		`{"name":"invalid","display_name":"Invalid","unknown":true}`,
+		`{"name":"invalid","display_name":"Invalid","lifetime_seconds":1e2}`,
+		`{"name":"invalid"}`,
 		`{"current_password":null,"name":"invalid","display_name":"Invalid"}`,
-		`{"current_password":"` + permanentPassword + `","name":7,"display_name":"Invalid"}`,
-		`{"current_password":"` + permanentPassword + `","name":"invalid","display_name":"Invalid"} {}`,
+		`{"name":7,"display_name":"Invalid"}`,
+		`{"name":"invalid","display_name":"Invalid"} {}`,
 	} {
 		status, _, _ = call(http.MethodPost, "/api/v1/agents", invalidBody, true, context.CsrfToken, invalidCreateHeaders)
 		if status != 400 {
@@ -342,7 +341,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 		t.Fatalf("managed response headers=%v", headers)
 	}
 	createHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-create-comma,key"}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"http-agent","display_name":"HTTP Agent"}`, true, context.CsrfToken, createHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"name":"http-agent","display_name":"HTTP Agent"}`, true, context.CsrfToken, createHeaders)
 	if status != 201 {
 		t.Fatalf("create status=%d", status)
 	}
@@ -363,8 +362,8 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 		t.Fatal("fresh create token did not match persisted credential")
 	}
 	afterCreate := countSnapshot()
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"wrong password","name":"http-agent","display_name":"HTTP Agent"}`, true, context.CsrfToken, createHeaders)
-	assertProblem(t, status, body, 401, "unauthenticated")
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"obsolete","name":"http-agent","display_name":"HTTP Agent"}`, true, context.CsrfToken, createHeaders)
+	assertProblem(t, status, body, 400, "invalid_request")
 	assertNoMutation(afterCreate)
 	agent, ok := issuance["agent"].(map[string]any)
 	if !ok {
@@ -375,7 +374,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 		t.Fatal("fresh issuance agent ID was not a string")
 	}
 	tag := `"agent:` + agentID + `:1"`
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"http-agent","display_name":"HTTP Agent"}`, true, context.CsrfToken, createHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"name":"http-agent","display_name":"HTTP Agent"}`, true, context.CsrfToken, createHeaders)
 	if status != 200 {
 		t.Fatalf("creation replay status=%d", status)
 	}
@@ -446,7 +445,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 		t.Fatalf("historical rotation replay invalid (status=%d, decode-error=%t, token-member-present=%t, replayed=%t, version=%s)", status, decodeReplayErr, replayTokenPresent, rotationReplay.Replayed, rotationReplay.Agent.Version)
 	}
 	beforeLostResponse := countSnapshot()
-	lostRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/agents", strings.NewReader(`{"current_password":"`+permanentPassword+`","name":"lost-response","display_name":"Lost Response"}`))
+	lostRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/agents", strings.NewReader(`{"name":"lost-response","display_name":"Lost Response"}`))
 	if err != nil {
 		t.Fatal("create lost-response request failed")
 	}
@@ -468,7 +467,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if afterLostResponse[0] != beforeLostResponse[0]+1 || afterLostResponse[1] != beforeLostResponse[1]+1 || afterLostResponse[2] != beforeLostResponse[2]+1 {
 		t.Fatalf("lost-response command did not persist exactly once (agent-delta=%d credential-delta=%d receipt-delta=%d)", afterLostResponse[0]-beforeLostResponse[0], afterLostResponse[1]-beforeLostResponse[1], afterLostResponse[2]-beforeLostResponse[2])
 	}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"current_password":"`+permanentPassword+`","name":"lost-response","display_name":"Lost Response"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-lost-response"})
+	status, body, _ = call(http.MethodPost, "/api/v1/agents", `{"name":"lost-response","display_name":"Lost Response"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-lost-response"})
 	if status != 200 {
 		t.Fatalf("lost-response replay status=%d", status)
 	}

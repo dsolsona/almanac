@@ -31,6 +31,14 @@ assert specific tool versions merely because a reference setup uses them.
 
 ## Gate selection
 
+Start an end-to-end feature with one real user journey as soon as it is wired.
+Diagnose shared failures there before multiplying them across scenarios. For UI,
+inspect an actual rendered page before completing the broad theme/viewport matrix.
+Use focused checks for corrections, then the required integrated gate once the
+candidate is ready. This sequencing never waives a failed required gate.
+Command availability is governed by [command discipline](commands.md); do not
+request new approvals or improvise invocation variations to obtain a focused run.
+
 - **Edit loop:** formatting/type checks and focused affected tests. It must support
   selecting one Go package/test, UI test or browser journey. It never implicitly
   installs dependencies or runs every browser/project.
@@ -123,6 +131,11 @@ compatibility fixtures/tests still govern each supported query dialect separatel
 
 ## Correctness and failure evidence
 
+Tests added to cover already-correct behavior may pass on their first run. Do not
+change correct production behavior merely to manufacture a red result. Label
+deliberate mutation checks separately from reproduced defects, and preserve any
+interim implementation or fixture mistake accurately in the handoff.
+
 For calculations, use independently derived expected values, boundary/property tests,
 zero traffic, missingness, revisions and maintenance unions. Tests that just reproduce
 the implementation formula are insufficient. For storage/auth/leases, test concurrent
@@ -175,10 +188,11 @@ The foundation provides these fixed entry points:
 | `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
 | `make verify VERIFY_MODE=go-portability` | Compile-only `internal/command` test binaries for fixed `darwin/amd64`, with ordinary and integration tags, CGO disabled and the pinned offline Go toolchain; ignored outputs and a distinct build cache live under `.local/` |
-| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication and secret-file unit race checks |
+| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication, source-secret, Prometheus datasource and diagnostic unit race checks |
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
-| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths |
+| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths. Preserves per-package Go JSON events under `.local/integration-test-json/`, the combined event stream at `.local/integration-go-test.jsonl`, the numeric Go test status at `.local/integration-go-test.exit`, and a slowest-test summary. |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
+| Focused onboarding invocation in [command discipline](commands.md) | Real HTTPS/PostgreSQL onboarding with the current built candidate; fails if the selected named journey does not execute and pass |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
@@ -198,6 +212,12 @@ The process smoke owns an ephemeral port. Generation/build/tests use local pinne
 Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
 They require the matching local fixture, use a fresh disposable database per test,
 and fail for unavailable infrastructure or an empty integration-test selection.
+The integration gate runs command/browser acceptance first and stops at the first
+failed package. It records Go JSON events in `.local/integration-go-test.jsonl`,
+per-package files under `.local/integration-test-json/`, and the numeric Go exit in
+`.local/integration-go-test.exit`; `running` means completion has not been recorded.
+The terminal summary reports package results and slow tests. A successful full gate
+requires every selected package; partial artifacts are not a passing gate.
 Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's
 execution selector. Pure unit cases belong in ordinary test files so the fast lane
 runs them. Discovery alone does not prove a test was executed.

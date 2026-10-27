@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentmanagement"
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -79,6 +80,35 @@ func TestAgentRequestGrammar(t *testing.T) {
 	}
 }
 
+func TestIfNoneMatchConditions(t *testing.T) {
+	current := `"agent-config:abcdefab-cdef-4abc-8def-abcdefabcdee:2"`
+	for _, test := range []struct {
+		name    string
+		values  []string
+		matched bool
+		valid   bool
+	}{
+		{name: "current", values: []string{current}, matched: true, valid: true},
+		{name: "weak current", values: []string{`W/` + current}, matched: true, valid: true},
+		{name: "valid older tag", values: []string{`"agent-config:abcdefab-cdef-4abc-8def-abcdefabcdee:1"`}, valid: true},
+		{name: "list with current", values: []string{`"old,tag", ` + current}, matched: true, valid: true},
+		{name: "multiple header lines", values: []string{`"old"`, current}, matched: true, valid: true},
+		{name: "wildcard", values: []string{"*"}, matched: true, valid: true},
+		{name: "empty", values: []string{""}},
+		{name: "unterminated tag", values: []string{`"old`}},
+		{name: "unquoted tag", values: []string{"old"}},
+		{name: "trailing comma", values: []string{current + ","}},
+		{name: "wildcard in list", values: []string{"*, " + current}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			matched, valid := ifNoneMatch(test.values, current)
+			if matched != test.matched || valid != test.valid {
+				t.Fatalf("ifNoneMatch(%q) = %t,%t; want %t,%t", test.values, matched, valid, test.matched, test.valid)
+			}
+		})
+	}
+}
+
 func TestIssuanceJSONKeepsLargeVersionsAsStringsAndOmitsMissingToken(t *testing.T) {
 	value := api.AgentIssuance{Agent: api.Agent{Version: "9007199254740993"}, SecretState: api.AgentIssuanceSecretStateSecretUnavailable, Replayed: true}
 	data, err := json.Marshal(value)
@@ -137,6 +167,39 @@ func TestAgentDTOMapsExactDecimalVersionsAndCounts(t *testing.T) {
 	}
 	if _, present := got["credential"]; !present || got["credential"] != nil {
 		t.Fatalf("lifecycle credential is not explicit null: %s", data)
+	}
+}
+
+func TestAgentDTOExposesSeparateRuntimeStateAndNoAssignment(t *testing.T) {
+	failureCode := "apply_failed"
+	failureRevision := int64(2)
+	value := storage.AgentRecord{
+		ID: "abcdefab-cdef-4abc-8def-abcdefabcdee", Version: 1,
+		Runtime: &storage.AgentRuntimeStatus{
+			Reachability: "connected", Protocol: agentprotocol.ProtocolV1,
+			SoftwareVersion: "test-agent", Capabilities: []agentprotocol.Capability{},
+			DesiredConfigurationRevision: 1, AppliedConfigurationRevision: 0,
+			SchedulerHealth: "starting", CollectionProgress: "not_started",
+			ConfigurationFailureCode:     &failureCode,
+			ConfigurationFailureRevision: &failureRevision,
+			CollectionExplanation:        "no_assignment",
+		},
+	}
+	dto := agentDTO(value)
+	if dto.Runtime == nil || string(dto.Runtime.Reachability) != "connected" || dto.Runtime.DesiredConfigurationRevision != "1" || dto.Runtime.AppliedConfigurationRevision != "0" {
+		t.Fatalf("runtime summary = %#v", dto.Runtime)
+	}
+	if dto.Runtime.LastHeartbeatAt != nil || dto.Runtime.LastSuccessfulQueryAt != nil || string(dto.Runtime.CollectionExplanation) != "no_assignment" {
+		t.Fatalf("runtime summary invented activity: %#v", dto.Runtime)
+	}
+	if dto.Runtime.ConfigurationFailureCode == nil || *dto.Runtime.ConfigurationFailureCode != api.AgentRuntimeStatusConfigurationFailureCodeApplyFailed {
+		t.Fatalf("configuration failure code was not exposed: %#v", dto.Runtime.ConfigurationFailureCode)
+	}
+	if dto.Runtime.ConfigurationFailureRevision == nil || *dto.Runtime.ConfigurationFailureRevision != "2" {
+		t.Fatalf("configuration failure revision was not exposed: %#v", dto.Runtime.ConfigurationFailureRevision)
+	}
+	if dtoNever := agentDTO(storage.AgentRecord{ID: value.ID, Version: 1}); dtoNever.Runtime != nil {
+		t.Fatalf("never-connected agent has runtime state: %#v", dtoNever.Runtime)
 	}
 }
 

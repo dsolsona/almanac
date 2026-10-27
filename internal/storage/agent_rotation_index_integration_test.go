@@ -96,8 +96,8 @@ VALUES($1,'agent.credential.rotate','preserved-index-upgrade',decode(repeat('ab'
 		t.Fatal("read pre-upgrade receipt failed")
 	}
 	upgraded, err := Upgrade(t.Context(), databaseURL)
-	if err != nil || upgraded.Applied != 1 || upgraded.DatabaseSchemaVersion != 8 {
-		t.Fatalf("upgrade populated schema 7 to 8 = %+v, %v", upgraded, err)
+	if err != nil || upgraded.Applied != 5 || upgraded.DatabaseSchemaVersion != 12 {
+		t.Fatalf("upgrade populated schema 7 to 12 = %+v, %v", upgraded, err)
 	}
 	var historyCount int
 	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_agent_credentials WHERE agent_id=$1", targetAgent).Scan(&historyCount); err != nil || historyCount != 16000 {

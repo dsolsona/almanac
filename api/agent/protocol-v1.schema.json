@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://almanac.dev/schemas/agent/protocol-v1.schema.json",
+  "title": "Almanac agent protocol v1 envelope",
+  "description": "Typed JSON control messages carried by almanac.agent.v1 WebSocket sessions.",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/welcome" },
+    { "$ref": "#/$defs/heartbeat" },
+    { "$ref": "#/$defs/heartbeatAck" },
+    { "$ref": "#/$defs/configurationChanged" },
+    { "$ref": "#/$defs/configurationApplied" },
+    { "$ref": "#/$defs/configurationFailed" },
+    { "$ref": "#/$defs/diagnosticRequest" },
+    { "$ref": "#/$defs/diagnosticResult" },
+    { "$ref": "#/$defs/diagnosticCancel" },
+    { "$ref": "#/$defs/shutdown" },
+    { "$ref": "#/$defs/revoked" }
+  ],
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$", "maxLength": 19, "$comment": "The validator also rejects values beyond signed int64 MaxInt64." },
+    "positiveDecimal": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19, "$comment": "The validator also rejects values beyond signed int64 MaxInt64." },
+    "nonce": { "type": "string", "contentEncoding": "base64url", "pattern": "^[A-Za-z0-9_-]{43}$", "minLength": 43, "maxLength": 43, "not": { "const": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } },
+    "agentId": { "type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
+    "measurementGrant": {
+      "type": "object",
+      "required": ["sli_id", "measurement_revision"],
+      "properties": {
+        "sli_id": { "$ref": "#/$defs/agentId" },
+        "measurement_revision": { "$ref": "#/$defs/positiveDecimal" }
+      },
+      "additionalProperties": true
+    },
+    "lease": {
+      "type": "object",
+      "required": ["lease_id", "agent_id", "session_generation", "configuration_revision", "allowed_measurements", "valid_from", "valid_until"],
+      "properties": {
+        "lease_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "agent_id": { "$ref": "#/$defs/agentId" },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "configuration_revision": { "$ref": "#/$defs/positiveDecimal" },
+        "allowed_measurements": { "type": "array", "maxItems": 10000, "uniqueItems": true, "items": { "$ref": "#/$defs/measurementGrant" }, "$comment": "The Go validator additionally requires at most one entry per sli_id, even when measurement revisions differ." },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_until": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "capability": {
+      "type": "object",
+      "required": ["provider", "configuration_formats", "operations"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "configuration_formats": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 128 }, "uniqueItems": true },
+        "operations": { "type": "array", "maxItems": 16, "items": { "enum": ["collect", "connection_test", "query_preview", "backfill"] }, "uniqueItems": true }
+      },
+      "additionalProperties": true
+    },
+    "hello": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "hello" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "anyOf": [{ "const": "0" }, { "$ref": "#/$defs/positiveDecimal" }] },
+        "payload": {
+          "type": "object",
+          "required": ["protocol_versions", "software_version", "capabilities", "resume_token", "request_nonce"],
+          "properties": {
+            "protocol_versions": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 64 }, "uniqueItems": true },
+            "software_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "capabilities": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/capability" } },
+            "resume_token": { "$ref": "#/$defs/nonce" },
+            "request_nonce": { "$ref": "#/$defs/nonce" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "welcome": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "welcome" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": {
+          "type": "object",
+          "required": ["protocol", "request_nonce", "server_time", "agent_id", "configuration_revision", "renewal_sequence", "heartbeat_interval_ms", "execution_lease"],
+          "properties": {
+            "protocol": { "const": "almanac.agent.v1" },
+            "request_nonce": { "$ref": "#/$defs/nonce" },
+            "server_time": { "type": "string", "format": "date-time" },
+            "agent_id": { "$ref": "#/$defs/agentId" },
+            "configuration_revision": { "$ref": "#/$defs/positiveDecimal" },
+            "renewal_sequence": { "$ref": "#/$defs/decimal" },
+            "heartbeat_interval_ms": { "type": "integer", "minimum": 1, "maximum": 30000 },
+            "execution_lease": { "$ref": "#/$defs/lease" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "heartbeat": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "heartbeat" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": {
+          "type": "object",
+          "required": ["request_nonce", "applied_configuration_revision", "scheduler", "collection_progress", "lease_id", "renewal_sequence"],
+          "properties": {
+            "request_nonce": { "$ref": "#/$defs/nonce" },
+            "applied_configuration_revision": { "$ref": "#/$defs/decimal" },
+            "scheduler": { "type": "string", "enum": ["starting", "ready", "degraded", "stopped"] },
+            "collection_progress": { "type": "string", "enum": ["not_started", "idle", "running", "blocked"] },
+            "last_attempt_at": { "type": ["string", "null"], "format": "date-time" },
+            "last_successful_query_at": { "type": ["string", "null"], "format": "date-time" },
+            "next_expected_execution_at": { "type": ["string", "null"], "format": "date-time" },
+            "lease_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "renewal_sequence": { "$ref": "#/$defs/decimal" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "heartbeatAck": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "heartbeat-ack" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": {
+          "type": "object",
+          "required": ["request_nonce", "execution_lease", "renewal_sequence"],
+          "properties": {
+            "request_nonce": { "$ref": "#/$defs/nonce" },
+            "execution_lease": { "$ref": "#/$defs/lease" },
+            "renewal_sequence": { "$ref": "#/$defs/positiveDecimal" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "configurationChanged": { "$ref": "#/$defs/revisionEnvelope" },
+    "configurationApplied": { "$ref": "#/$defs/appliedEnvelope" },
+    "configurationFailed": { "$ref": "#/$defs/failedEnvelope" },
+    "shutdown": { "$ref": "#/$defs/shutdownEnvelope" },
+    "revoked": { "$ref": "#/$defs/revokedEnvelope" },
+    "revisionEnvelope": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "configuration-changed" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["desired_configuration_revision"], "properties": { "desired_configuration_revision": { "$ref": "#/$defs/positiveDecimal" } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+    "appliedEnvelope": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "configuration-applied" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["configuration_revision"], "properties": { "configuration_revision": { "$ref": "#/$defs/positiveDecimal" } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+    "failedEnvelope": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "configuration-failed" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["configuration_revision", "failure_code"], "properties": { "configuration_revision": { "$ref": "#/$defs/positiveDecimal" }, "failure_code": { "enum": ["invalid_snapshot", "incompatible", "apply_failed"] } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+    "diagnosticRequest": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "diagnostic-request" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": {
+          "type": "object",
+          "required": ["diagnostic_id", "agent_id", "operation", "deadline_at", "datasource"],
+          "properties": {
+            "diagnostic_id": { "$ref": "#/$defs/agentId" },
+            "agent_id": { "$ref": "#/$defs/agentId" },
+            "operation": { "enum": ["connection_test", "query_preview"] },
+            "deadline_at": { "type": "string", "format": "date-time" },
+            "datasource": { "$ref": "configuration-v1.schema.json#/$defs/datasourceAssignment" },
+            "query": { "type": "string", "maxLength": 4096 }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "diagnosticResult": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "diagnostic-result" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "$ref": "#/$defs/diagnosticResultPayload" }
+      },
+      "additionalProperties": true,
+      "$comment": "The WebSocket envelope validator limits this typed result payload to 64 KiB; larger validated results use the separate authenticated HTTPS operation, bounded to 1 MiB."
+    },
+    "diagnosticCancel": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "diagnostic-cancel" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["diagnostic_id"], "properties": { "diagnostic_id": { "$ref": "#/$defs/agentId" } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+    "diagnosticResultPayload": {
+      "type": "object",
+      "required": ["diagnostic_id", "state", "series"],
+      "properties": {
+        "diagnostic_id": { "$ref": "#/$defs/agentId" },
+        "state": { "enum": ["succeeded", "failed", "canceled", "timed_out"] },
+        "result_class": { "enum": ["complete", "empty", "incomplete"] },
+        "series": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": ["labels", "time", "value"],
+            "properties": {
+              "labels": { "type": "object", "maxProperties": 32, "additionalProperties": { "type": "string", "maxLength": 256 }, "$comment": "The Go validator also limits each label name to 128 bytes." },
+              "time": { "type": "string", "maxLength": 32 },
+              "value": { "type": "string", "maxLength": 64 }
+            },
+            "additionalProperties": true
+          }
+        },
+        "error_code": { "enum": ["authentication", "incomplete", "network", "query", "rate_limited", "tls", "timeout", "unsupported", "assignment_revoked", "deadline"] },
+        "message": { "type": "string", "maxLength": 512 }
+      },
+      "additionalProperties": true,
+      "x-maxSerializedBytes": 1048576
+    },
+    "shutdownEnvelope": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "shutdown" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["reason"], "properties": { "reason": { "enum": ["server_shutdown", "maintenance"] } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+    "revokedEnvelope": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "revoked" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["reason"], "properties": { "reason": { "enum": ["credential_revoked", "agent_disabled", "ownership_replaced"] } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    }
+  }
+}

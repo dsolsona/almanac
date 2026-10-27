@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dsolsona/almanac/internal/agentclient"
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/setupclient"
 )
 
@@ -98,6 +99,55 @@ func TestAgentOutputIsHumanReadableSafeAndReportsWriterFailures(t *testing.T) {
 	}
 	if code := writeAgentFailure(&bytes.Buffer{}, failingAgentWriter{}, "agents list", false, agentInvalid("safe failure")); code != 1 {
 		t.Fatalf("text error writer failure returned %d", code)
+	}
+}
+
+func TestAgentDetailTextShowsRuntimeWithoutCombiningHealthSignals(t *testing.T) {
+	result := jsontext.Value(`{"agent":{"id":"00000000-0000-0000-0000-000000000001","name":"east","display_name":"East","enabled":false,"version":"9223372036854775807","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z","runtime":{"reachability":"connected","protocol":"almanac-agent/1","software_version":"1.2.3","capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}],"last_heartbeat_at":"2026-10-26T10:00:00.123456Z","desired_configuration_revision":"9223372036854775807","applied_configuration_revision":"0","scheduler_health":"ready","collection_progress":"running","last_attempt_at":"2026-10-26T09:59:00Z","last_successful_query_at":null,"next_expected_execution_at":null,"collection_explanation":"no_assignment"}},"etag":"\"agent:00000000-0000-0000-0000-000000000001:9223372036854775807\""}`)
+	text := renderAgentText("agents get", result, "", false)
+	for _, want := range []string{
+		"Connection state: Disabled by administrator",
+		"Reported reachability: connected (not operational while disabled)",
+		`Protocol: "almanac-agent/1"`,
+		`Software version: "1.2.3"`,
+		"Desired configuration revision: 9223372036854775807",
+		"Applied configuration revision: Not applied",
+		"Scheduler health: ready",
+		"Collection progress: running",
+		"Last heartbeat: 2026-10-26T10:00:00.123456Z",
+		"Last attempt: 2026-10-26T09:59:00Z",
+		"Last successful query: Not reported",
+		"No datasources are assigned to this agent.",
+		"Observation acceptance freshness: Not available",
+		"prometheus",
+		"prometheus-http-v1",
+		"live_query",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("agent detail text omitted %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "healthy") || strings.Contains(text, "grant_id") || strings.Contains(text, "token") {
+		t.Fatalf("agent detail text claimed health or disclosed an unrelated identifier: %s", text)
+	}
+	emptyCapabilities := jsontext.Value(strings.Replace(string(result), `"capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}]`, `"capabilities":[]`, 1))
+	if emptyText := renderAgentText("agents get", emptyCapabilities, "", false); !strings.Contains(emptyText, "No provider capabilities were reported.") {
+		t.Fatalf("empty capabilities were not explicit: %s", emptyText)
+	}
+	neverConnected := jsontext.Value(`{"agent":{"id":"00000000-0000-0000-0000-000000000001","name":"east","display_name":"East","enabled":true,"version":"1","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"},"etag":"\"agent:00000000-0000-0000-0000-000000000001:1\""}`)
+	if neverConnectedText := renderAgentText("agents get", neverConnected, "", false); !strings.Contains(neverConnectedText, "Connection state: Never connected") || !strings.Contains(neverConnectedText, "No heartbeat has been received.") {
+		t.Fatalf("absent runtime was not represented as never connected: %s", neverConnectedText)
+	}
+}
+
+func TestAgentDetailTextShowsConfigurationFailureCode(t *testing.T) {
+	failure := api.AgentRuntimeStatusConfigurationFailureCodeApplyFailed
+	revision := "2"
+	agent := api.Agent{Enabled: true, Runtime: &api.AgentRuntimeStatus{ConfigurationFailureCode: &failure, ConfigurationFailureRevision: &revision}}
+	var output strings.Builder
+	renderAgentRuntime(&output, agent)
+	if !strings.Contains(output.String(), "Configuration failure: apply_failed (revision 2)") {
+		t.Fatalf("agent detail omitted safe configuration failure code: %s", output.String())
 	}
 }
 

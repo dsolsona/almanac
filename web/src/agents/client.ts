@@ -3,6 +3,7 @@ import type { AuthContext } from '../auth/client.ts';
 export type { AuthContext } from '../auth/client.ts';
 
 export type Agent = components['schemas']['Agent'];
+export type AgentRuntimeStatus = components['schemas']['AgentRuntimeStatus'];
 export type AgentCredential = components['schemas']['AgentCredential'];
 export type AgentPage = components['schemas']['AgentPage'];
 export type CredentialPage = components['schemas']['CredentialPage'];
@@ -21,13 +22,15 @@ export class AgentFailure extends Error {
   readonly kind: AgentFailureKind;
   readonly code: string;
   readonly retryAfterSeconds: number | null;
+  readonly requestID: string | null;
 
-  constructor(kind: AgentFailureKind, code: string, message: string, retryAfterSeconds: number | null = null) {
+  constructor(kind: AgentFailureKind, code: string, message: string, retryAfterSeconds: number | null = null, requestID: string | null = null) {
     super(message);
     this.name = 'AgentFailure';
     this.kind = kind;
     this.code = code;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.requestID = requestID;
   }
 }
 
@@ -55,7 +58,7 @@ const statusCodes: Record<number, string[]> = {
   422: ['invalid_agent_input'], 429: ['rate_limited'], 503: ['management_unavailable'],
 };
 
-type Budget = { signal: AbortSignal; expired: () => boolean; cleanup: () => void };
+type Budget = { signal: AbortSignal; expired: () => boolean; timedOut: () => boolean; cleanup: () => void };
 function failure(kind: AgentFailureKind, code: string): AgentFailure {
   const message = code === 'outcome_unknown' ? 'The operation may have completed. Refresh agent details before deciding what to do next.'
     : code === 'cancelled' ? 'The request was cancelled.'
@@ -71,8 +74,9 @@ function withBudget<T>(signal: AbortSignal | undefined, action: (budget: Budget)
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
-  const deadline = setTimeout(abort, DEADLINE_MS);
-  const budget: Budget = { signal: controller.signal, expired: () => controller.signal.aborted,
+  let timedOut = false;
+  const deadline = setTimeout(() => { timedOut = true; abort(); }, DEADLINE_MS);
+  const budget: Budget = { signal: controller.signal, expired: () => controller.signal.aborted, timedOut: () => timedOut,
     cleanup: () => { clearTimeout(deadline); signal?.removeEventListener('abort', abort); } };
   return action(budget).finally(budget.cleanup);
 }
@@ -108,7 +112,33 @@ function validDate(value: unknown): value is string {
 function validAgent(value: unknown): value is Agent {
   return isObject(value) && validUUID(value.id) && typeof value.name === 'string' && typeof value.display_name === 'string'
     && typeof value.enabled === 'boolean' && validDecimal(value.version, true)
-    && validDate(value.created_at) && validDate(value.updated_at);
+    && validDate(value.created_at) && validDate(value.updated_at)
+    && (value.runtime === undefined || value.runtime === null || validRuntime(value.runtime));
+}
+function validStringList(value: unknown, limit: number): value is string[] {
+  return Array.isArray(value) && value.length <= limit && value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 128);
+}
+function validCapability(value: unknown): value is AgentRuntimeStatus['capabilities'][number] {
+  return isObject(value) && typeof value.provider === 'string' && value.provider.length > 0 && value.provider.length <= 128
+    && validStringList(value.configuration_formats, 64) && validStringList(value.operations, 16);
+}
+function validRuntime(value: unknown): value is AgentRuntimeStatus {
+  return isObject(value)
+    && (value.reachability === 'connected' || value.reachability === 'unreachable' || value.reachability === 'incompatible')
+    && typeof value.protocol === 'string' && value.protocol.length > 0 && value.protocol.length <= 128
+    && typeof value.software_version === 'string' && value.software_version.length > 0 && value.software_version.length <= 128
+    && Array.isArray(value.capabilities) && value.capabilities.length <= 256 && value.capabilities.every(validCapability)
+    && (value.last_heartbeat_at === null || validDate(value.last_heartbeat_at))
+    && validDecimal(value.desired_configuration_revision, true) && validDecimal(value.applied_configuration_revision)
+    && (value.scheduler_health === 'starting' || value.scheduler_health === 'ready' || value.scheduler_health === 'degraded' || value.scheduler_health === 'stopped')
+    && (value.collection_progress === 'not_started' || value.collection_progress === 'idle' || value.collection_progress === 'running' || value.collection_progress === 'blocked')
+    && ((value.configuration_failure_code === null && value.configuration_failure_revision === null)
+      || ((value.configuration_failure_code === 'invalid_snapshot' || value.configuration_failure_code === 'incompatible' || value.configuration_failure_code === 'apply_failed')
+        && validDecimal(value.configuration_failure_revision, true)))
+    && (value.last_attempt_at === null || validDate(value.last_attempt_at))
+    && (value.last_successful_query_at === null || validDate(value.last_successful_query_at))
+    && (value.next_expected_execution_at === null || validDate(value.next_expected_execution_at))
+    && value.collection_explanation === 'no_assignment';
 }
 function validCredential(value: unknown, agentID?: string): value is AgentCredential {
   return isObject(value) && validUUID(value.id) && validUUID(value.agent_id) && (agentID === undefined || value.agent_id === agentID)
@@ -209,7 +239,8 @@ function parseProblem(value: unknown, status: number, response: Response): Agent
   const retryHeader = response.headers.get('Retry-After');
   const retryValue = retryHeader && /^\d+$/.test(retryHeader) ? Number(retryHeader) : NaN;
   const retry = Number.isSafeInteger(retryValue) && retryValue > 0 ? retryValue : null;
-  return new AgentFailure(kind, value.code, safeMessages[value.code], retry);
+  const requestID = /^[0-9a-f]{32}$/.test(value.request_id) ? value.request_id : null;
+  return new AgentFailure(kind, value.code, safeMessages[value.code], retry, requestID);
 }
 async function rejected(response: Response, signal: AbortSignal): Promise<AgentFailure | null> {
   try { return parseProblem(await readJSON(response, signal), response.status, response); }
@@ -280,23 +311,40 @@ function read<T>(fetcher: typeof fetch, path: string, signal: AbortSignal | unde
   });
 }
 function mutate<T>(fetcher: typeof fetch, path: string, body: unknown, context: AuthContext, key: string, etag: string | undefined,
-  signal: AbortSignal | undefined, validate: (value: unknown, status: number) => value is T): Promise<T> {
+  signal: AbortSignal | undefined, validate: (value: unknown, status: number) => value is T, diagnoseUncertain = false): Promise<T> {
   return withBudget(signal, async (budget) => {
+    let response: Response;
     try {
       const headers: Record<string, string> = { 'X-CSRF-Token': context.csrf_token, 'Idempotency-Key': key };
       if (etag !== undefined) headers['If-Match'] = etag;
-      const response = await request(fetcher, path, 'POST', budget, body, headers);
-      if (response.status < 200 || response.status >= 300) {
-        const problem = await rejected(response, budget.signal);
-        if (problem) throw problem;
-        throw failure('uncertain', 'outcome_unknown');
-      }
-      const value = await readJSON(response, budget.signal);
-      if (!validate(value, response.status)) throw failure('uncertain', 'outcome_unknown');
-      return value;
+      response = await request(fetcher, path, 'POST', budget, body, headers);
     } catch (error) {
       if (error instanceof AgentFailure && error.kind === 'rejected') throw error;
-      throw failure('uncertain', 'outcome_unknown');
+      if (!diagnoseUncertain) throw failure('uncertain', 'outcome_unknown');
+      if (budget.timedOut()) throw failure('uncertain', 'request_timeout');
+      if (budget.signal.aborted) throw failure('uncertain', 'request_cancelled');
+      throw failure('uncertain', 'connection_failed');
+    }
+    if (response.status < 200 || response.status >= 300) {
+      const problem = await rejected(response, budget.signal);
+      if (problem?.kind === 'rejected') throw problem;
+      if (problem && diagnoseUncertain) throw new AgentFailure('uncertain', problem.code, problem.message, problem.retryAfterSeconds, problem.requestID);
+      if (problem) throw failure('uncertain', 'outcome_unknown');
+      if (!diagnoseUncertain) throw failure('uncertain', 'outcome_unknown');
+      if (budget.timedOut()) throw failure('uncertain', 'request_timeout');
+      if (budget.signal.aborted) throw failure('uncertain', 'request_cancelled');
+      throw failure('uncertain', 'unexpected_response');
+    }
+    try {
+      const value = await readJSON(response, budget.signal);
+      if (!validate(value, response.status)) throw failure('uncertain', 'invalid_response');
+      return value;
+    } catch (error) {
+      if (!diagnoseUncertain) throw failure('uncertain', 'outcome_unknown');
+      if (error instanceof AgentFailure) throw error;
+      if (budget.timedOut()) throw failure('uncertain', 'request_timeout');
+      if (budget.signal.aborted) throw failure('uncertain', 'request_cancelled');
+      throw failure('uncertain', 'invalid_response');
     }
   });
 }
@@ -346,7 +394,7 @@ export function createAgentClient(fetcher: typeof fetch = fetch) {
     create(input: CreateAgentInput, context: AuthContext, idempotencyKey: string, options: AgentMutationOptions = {}): Promise<AgentIssuance> {
       return promiseCall(() => {
         validateMutation(idempotencyKey);
-        return mutate(fetcher, BASE, input, context, idempotencyKey, undefined, options.signal, validAgentIssuance);
+        return mutate(fetcher, BASE, input, context, idempotencyKey, undefined, options.signal, validAgentIssuance, true);
       });
     },
     rotate(agentID: string, input: RotateAgentInput, context: AuthContext, etag: string, idempotencyKey: string, options: AgentMutationOptions = {}): Promise<RotationIssuance> {

@@ -4,6 +4,61 @@ info:
   version: 1.0.0
   description: Anonymous operational endpoints for the independently runnable UI.
 paths:
+  /api/agent/v1/configuration:
+    get:
+      operationId: getAgentConfiguration
+      summary: Read the authenticated agent's current configuration snapshot
+      description: Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+      security: [{AgentBearer: []}]
+      parameters:
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: Full revisioned configuration snapshot
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentConfigurationSnapshot'}
+        '304': {description: Snapshot unchanged}
+        '401': {description: Agent credential invalid}
+        '400': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Configuration unavailable, including while the current heartbeat grant trails desired configuration. No snapshot or source credentials are returned in that case. The agent keeps its last applied configuration and retries after heartbeat renewal., content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/agent/v1/diagnostics/{diagnostic_id}/result:
+    post:
+      operationId: postAgentDiagnosticResult
+      summary: Submit a bounded diagnostic result over verified HTTPS
+      description: >-
+        Agent-only operation authenticated by the current registered agent bearer
+        credential over verified TLS. The body is one JSON DiagnosticResultPayload
+        with a maximum serialized size of 1 MiB. This route is only for results
+        whose serialized result body exceeds the 64 KiB WebSocket inline limit.
+        The supplied positive session generation, credential principal, current
+        ownership generation, diagnostic assignment and deadline are checked
+        transactionally. Replaying the same accepted typed result is idempotent;
+        changed, stale, canceled or timed-out results are rejected without
+        changing the receipt.
+      security: [{AgentBearer: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DiagnosticId'}
+        - name: X-Agent-Session-Generation
+          in: header
+          required: true
+          description: Current positive canonical decimal ownership generation.
+          schema: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DiagnosticResultPayload'}
+      responses:
+        '204': {description: Result accepted or exact accepted replay}
+        '400': {description: Invalid result, generation, or request headers, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Agent credential is invalid or revoked, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: Diagnostic receipt not found for this agent, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Stale ownership generation or result conflicts with an existing terminal receipt, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '413': {description: Result body exceeds 1 MiB, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Temporary storage or agent access failure, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/auth/context:
     post:
       operationId: postAuthContext
@@ -207,6 +262,135 @@ paths:
       responses:
         '200': {description: Revoke result, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
         'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/providers:
+    get:
+      operationId: getProviders
+      summary: List provider descriptors and selected-agent availability
+      description: >-
+        Readable by viewer, editor, and administrator sessions. When agent_id is
+        supplied, operations reports capability independently of liveness;
+        availability and nullable desired/applied revisions report whether that
+        agent can accept a diagnostic now. Configuration failure details are
+        limited to the safe failure enum and revision.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: agent_id, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Provider catalog, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderPage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources:
+    get:
+      operationId: getDatasources
+      summary: List redacted datasource metadata
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Datasource page, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourcePage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: postDatasources
+      summary: Create and assign a datasource
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourceWrite'}}}}
+      responses:
+        '201': {description: Created redacted datasource, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Datasource'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/{datasource_id}:
+    get:
+      operationId: getDatasource
+      summary: Read redacted datasource detail
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+      responses:
+        '200': {description: Datasource, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Datasource'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    put:
+      operationId: putDatasource
+      summary: Replace datasource settings and assignment
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+        - {$ref: '#/components/parameters/DatasourceIfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourceWrite'}}}}
+      responses:
+        '200': {description: Updated redacted datasource, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Datasource'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/connection-tests:
+    post:
+      operationId: postDatasourceConnectionTest
+      summary: Test unsaved Prometheus connection settings on an assigned agent
+      description: >-
+        If the agent is connected but has not applied its desired configuration,
+        the request returns 503 configuration_pending and creates no diagnostic
+        receipt. Once a diagnostic receipt is created, the endpoint returns 202
+        with its Location even if dispatch fails; read that receipt for its
+        resulting state.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ConnectionTestRequest'}}}}
+      responses:
+        '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        '503': {description: Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/{datasource_id}/query-previews:
+    post:
+      operationId: postDatasourceQueryPreview
+      summary: Run a bounded PromQL preview on the assigned agent
+      description: >-
+        If the assigned agent is connected but has not applied its desired
+        configuration, the request returns 503 configuration_pending and creates
+        no diagnostic receipt. Once a diagnostic receipt is created, the endpoint
+        returns 202 with its Location even if dispatch fails; read that receipt
+        for its resulting state.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/QueryPreviewRequest'}}}}
+      responses:
+        '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        '503': {description: Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/{datasource_id}/connection-tests:
+    post:
+      operationId: postSavedDatasourceConnectionTest
+      summary: Test the saved datasource settings on its assigned agent
+      description: Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+        - {$ref: '#/components/parameters/DatasourceIfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
+      responses:
+        '202': {description: Diagnostic accepted or idempotent replay, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        '409': {description: Stale datasource version or idempotency key conflict, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Pre-admission agent/configuration unavailable; no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/diagnostics/{diagnostic_id}:
+    get:
+      operationId: getDiagnostic
+      summary: Read a bounded diagnostic receipt
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: diagnostic_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Diagnostic status and safe result, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/diagnostics/{diagnostic_id}/cancel:
+    post:
+      operationId: postDiagnosticCancel
+      summary: Cancel a pending diagnostic
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: diagnostic_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
+      responses:
+        '200': {description: Current diagnostic status, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /livez:
     get:
       operationId: getLiveness
@@ -249,6 +433,22 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    DatasourceId:
+      name: datasource_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    DiagnosticId:
+      name: diagnostic_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    DatasourceIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>".
+      schema: {type: string}
     IfMatch:
       name: If-Match
       in: header
@@ -262,6 +462,10 @@ components:
       description: One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
       schema: {type: string, minLength: 1, maxLength: 128}
   securitySchemes:
+    AgentBearer:
+      type: http
+      scheme: bearer
+      description: Registered agent credential; accepted only over verified TLS.
     SessionCookie:
       type: apiKey
       in: cookie
@@ -278,6 +482,161 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    ProviderPage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderDescriptor'}}
+    ProviderDescriptor:
+      type: object
+      required: [provider, configuration_format, operations, availability, desired_configuration_revision, applied_configuration_revision, configuration_failure_code, configuration_failure_revision]
+      properties:
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        operations: {type: array, items: {type: string}}
+        availability: {type: string, enum: [available, applying, offline, disabled, unreported, configuration_failed, incompatible, planned, unsupported]}
+        desired_configuration_revision: {type: string, pattern: '^[1-9][0-9]*$', nullable: true}
+        applied_configuration_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$', nullable: true}
+        configuration_failure_code: {type: string, enum: [invalid_snapshot, incompatible, apply_failed], nullable: true}
+        configuration_failure_revision: {type: string, pattern: '^[1-9][0-9]*$', nullable: true}
+    DatasourcePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Datasource'}}
+        next_cursor: {type: string}
+    Datasource:
+      type: object
+      required: [id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        version: {type: string, pattern: '^[1-9][0-9]*$'}
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls: {$ref: '#/components/schemas/DatasourceTLS'}
+        authentication: {$ref: '#/components/schemas/DatasourceAuthentication'}
+        polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
+        settling_delay_seconds: {type: integer, enum: [60]}
+        agent_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DatasourceTLS:
+      type: object
+      additionalProperties: false
+      required: [insecure_skip_verify, ca_pem]
+      properties:
+        insecure_skip_verify: {type: boolean}
+        ca_pem: {type: string, nullable: true, maxLength: 65536}
+    DatasourceAuthentication:
+      type: object
+      additionalProperties: false
+      required: [mode, username, password_configured, token_configured]
+      properties:
+        mode: {type: string, enum: [none, basic, bearer]}
+        username: {type: string, nullable: true}
+        password_configured: {type: boolean}
+        token_configured: {type: boolean}
+    DatasourceWrite:
+      type: object
+      additionalProperties: false
+      required: [name, display_name, provider, configuration_format, endpoint, tls, authentication, polling_interval_seconds, agent_id]
+      properties:
+        name: {type: string}
+        display_name: {type: string}
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls: {$ref: '#/components/schemas/DatasourceTLS'}
+        authentication:
+          type: object
+          additionalProperties: false
+          required: [mode, username, password_secret, token_secret]
+          properties:
+            mode: {type: string, enum: [none, basic, bearer]}
+            username: {type: string, nullable: true}
+            password_secret: {$ref: '#/components/schemas/SecretAction'}
+            token_secret: {$ref: '#/components/schemas/SecretAction'}
+        polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
+        agent_id: {type: string, format: uuid}
+    SecretAction:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: {type: string, enum: [replace, retain, clear]}
+        value: {type: string, format: password, maxLength: 16384}
+    ConnectionTestRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, configuration_format, endpoint, tls, authentication, agent_id]
+      properties:
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls: {$ref: '#/components/schemas/DatasourceTLS'}
+        authentication:
+          type: object
+          additionalProperties: false
+          required: [mode, username, password_secret, token_secret]
+          properties:
+            mode: {type: string, enum: [none, basic, bearer]}
+            username: {type: string, nullable: true}
+            password_secret: {$ref: '#/components/schemas/SecretAction'}
+            token_secret: {$ref: '#/components/schemas/SecretAction'}
+        agent_id: {type: string, format: uuid}
+    QueryPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 4096}
+    Diagnostic:
+      type: object
+      required: [id, state, operation, created_at, deadline_at, result_class, result, error_code, message]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [pending, running, succeeded, failed, canceled, timed_out, unknown]}
+        operation: {type: string, enum: [connection_test, query_preview]}
+        created_at: {type: string, format: date-time}
+        deadline_at: {type: string, format: date-time}
+        result_class: {type: string, enum: [complete, empty, incomplete], nullable: true}
+        result:
+          type: object
+          nullable: true
+          description: >-
+            Present only for succeeded diagnostics. The typed result payload is
+            bounded to 1 MiB; other states return null while retaining only the
+            normalized top-level error classification.
+        error_code: {type: string, enum: [authentication_failed, network_failed, tls_failed, query_failed, request_timeout, assignment_revoked, rate_limited, unsupported, diagnostic_failed], nullable: true}
+        message: {type: string, nullable: true, maxLength: 512}
+    DiagnosticResultPayload:
+      type: object
+      additionalProperties: false
+      description: >-
+        Typed agent result. The HTTP transport accepts more than 64 KiB through 1 MiB of
+        serialized JSON; WebSocket inline results remain limited to 64 KiB.
+      x-maxSerializedBytes: 1048576
+      required: [diagnostic_id, state]
+      properties:
+        diagnostic_id: {type: string, format: uuid}
+        state: {type: string, enum: [succeeded, failed, canceled, timed_out]}
+        result_class: {type: string, enum: [complete, empty, incomplete]}
+        series:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [labels, time, value]
+            properties:
+              labels: {type: object, maxProperties: 32, additionalProperties: {type: string, maxLength: 256}, description: Label names are limited to 128 UTF-8 bytes.}
+              time: {type: string, maxLength: 32}
+              value: {type: string, maxLength: 64}
+        error_code: {type: string, enum: [authentication, incomplete, network, query, rate_limited, tls, timeout, unsupported, assignment_revoked, deadline], maxLength: 64}
+        message: {type: string, maxLength: 512}
     Agent:
       type: object
       required: [id, name, display_name, enabled, version, created_at, updated_at]
@@ -289,6 +648,64 @@ components:
         version: {type: string, pattern: '^[1-9][0-9]*$'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        runtime:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/AgentRuntimeStatus'}]
+    AgentRuntimeStatus:
+      type: object
+      required: [reachability, protocol, software_version, capabilities, last_heartbeat_at, desired_configuration_revision, applied_configuration_revision, scheduler_health, collection_progress, configuration_failure_code, configuration_failure_revision, last_attempt_at, last_successful_query_at, next_expected_execution_at, collection_explanation]
+      properties:
+        reachability: {type: string, enum: [connected, unreachable, incompatible]}
+        protocol: {type: string}
+        software_version: {type: string}
+        capabilities: {type: array, items: {$ref: '#/components/schemas/AgentCapability'}}
+        last_heartbeat_at: {type: string, format: date-time, nullable: true}
+        desired_configuration_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        applied_configuration_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        scheduler_health: {type: string, enum: [starting, ready, degraded, stopped]}
+        collection_progress: {type: string, enum: [not_started, idle, running, blocked]}
+        configuration_failure_code: {type: string, enum: [invalid_snapshot, incompatible, apply_failed], nullable: true}
+        configuration_failure_revision: {type: string, pattern: '^[1-9][0-9]*$', nullable: true}
+        last_attempt_at: {type: string, format: date-time, nullable: true}
+        last_successful_query_at: {type: string, format: date-time, nullable: true}
+        next_expected_execution_at: {type: string, format: date-time, nullable: true}
+        collection_explanation: {type: string, enum: [no_assignment]}
+    AgentCapability:
+      type: object
+      required: [provider, configuration_formats, operations]
+      properties:
+        provider: {type: string}
+        configuration_formats: {type: array, items: {type: string}}
+        operations: {type: array, items: {type: string}}
+    AgentConfigurationSnapshot:
+      type: object
+      required: [agent_id, configuration_revision, assignments]
+      properties:
+        agent_id: {type: string, format: uuid}
+        configuration_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        assignments: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentDatasourceAssignment'}}
+    AgentDatasourceAssignment:
+      type: object
+      required: [datasource_id, datasource_version, name, provider, configuration_format, endpoint, tls, authentication_mode, polling_interval_seconds, settling_delay_seconds]
+      properties:
+        datasource_id: {type: string, format: uuid}
+        datasource_version: {type: string, pattern: '^[1-9][0-9]*$'}
+        name: {type: string, maxLength: 63}
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls:
+          type: object
+          required: [insecure_skip_verify, ca_pem]
+          properties:
+            insecure_skip_verify: {type: boolean}
+            ca_pem: {type: string, maxLength: 65536}
+        authentication_mode: {type: string, enum: [none, basic, bearer]}
+        username: {type: string, maxLength: 256}
+        password: {type: string, maxLength: 16384, writeOnly: true}
+        bearer_token: {type: string, maxLength: 16384, writeOnly: true}
+        polling_interval_seconds: {type: integer, minimum: 15}
+        settling_delay_seconds: {type: integer, minimum: 60, maximum: 60}
     AgentCredential:
       type: object
       required: [id, agent_id, issued_at, expires_at, revoked_at, retire_at]
@@ -314,9 +731,8 @@ components:
     CreateAgentRequest:
       type: object
       additionalProperties: false
-      required: [current_password, name, display_name]
+      required: [name, display_name]
       properties:
-        current_password: {type: string, format: password}
         name: {type: string}
         display_name: {type: string}
         lifetime_seconds: {type: integer, minimum: 0, maximum: 31536000, format: int32}

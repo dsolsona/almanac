@@ -28,16 +28,16 @@ func TestReadRequiresProtectedRegularFileWithinLimit(t *testing.T) {
 
 func TestReadAcceptsExactMaximumAndRejectsOneByteOver(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "maximum")
-	if err := os.WriteFile(path, make([]byte, 16384), 0o600); err != nil {
+	if err := os.WriteFile(path, make([]byte, MaxPrivateFileBytes), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := Read(path, 16384); err != nil || len(got) != 16384 {
+	if got, err := Read(path, MaxPrivateFileBytes); err != nil || len(got) != MaxPrivateFileBytes {
 		t.Fatalf("exact private-file limit length=%d err=%v", len(got), err)
 	}
-	if err := os.WriteFile(path, make([]byte, 16385), 0o600); err != nil {
+	if err := os.WriteFile(path, make([]byte, MaxPrivateFileBytes+1), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Read(path, 16384); err == nil {
+	if _, err := Read(path, MaxPrivateFileBytes); err == nil {
 		t.Fatal("private file one byte over the limit was accepted")
 	}
 }
@@ -55,7 +55,7 @@ func TestReadInspectsSymlinkTargetAndRejectsInvalidLimit(t *testing.T) {
 	if _, err := Read(link, 6); err == nil {
 		t.Fatal("unsafe symlink target was accepted")
 	}
-	for _, limit := range []int64{0, 16385} {
+	for _, limit := range []int64{0, MaxPrivateFileBytes + 1} {
 		if _, err := Read(target, limit); err == nil {
 			t.Fatalf("limit %d was accepted", limit)
 		}

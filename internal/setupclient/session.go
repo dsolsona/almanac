@@ -55,6 +55,21 @@ type AgentOperations interface {
 	PostAgentDisable(context.Context, api.AgentId, *api.PostAgentDisableParams, api.PostAgentDisableJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 }
 
+// DatasourceOperations exposes only the generated datasource and diagnostic
+// routes to callers that have refreshed their human session.
+type DatasourceOperations interface {
+	GetDatasources(context.Context, *api.GetDatasourcesParams, ...api.RequestEditorFn) (*http.Response, error)
+	GetProviders(context.Context, *api.GetProvidersParams, ...api.RequestEditorFn) (*http.Response, error)
+	GetDatasource(context.Context, api.DatasourceId, ...api.RequestEditorFn) (*http.Response, error)
+	PostDatasources(context.Context, *api.PostDatasourcesParams, api.PostDatasourcesJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PutDatasource(context.Context, api.DatasourceId, *api.PutDatasourceParams, api.PutDatasourceJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PostDatasourceConnectionTest(context.Context, api.PostDatasourceConnectionTestJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PostSavedDatasourceConnectionTest(context.Context, api.DatasourceId, *api.PostSavedDatasourceConnectionTestParams, api.PostSavedDatasourceConnectionTestJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PostDatasourceQueryPreview(context.Context, api.DatasourceId, api.PostDatasourceQueryPreviewJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	GetDiagnostic(context.Context, api.DatasourceId, ...api.RequestEditorFn) (*http.Response, error)
+	PostDiagnosticCancel(context.Context, api.DatasourceId, api.PostDiagnosticCancelJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+}
+
 // AgentContext refreshes authority and CSRF state before exposing the narrow
 // generated operation set. The caller must hold the profile lock throughout.
 func (s *SessionClient) AgentContext(ctx context.Context) (AgentOperations, api.RequestEditorFn, error) {
@@ -69,6 +84,22 @@ func (s *SessionClient) AgentContext(ctx context.Context) (AgentOperations, api.
 		return nil, nil, &Failure{Kind: KindAuthentication, Code: "forbidden", Message: "an unrestricted administrator session is required", SessionState: sessionState(auth.Session)}
 	}
 	return s.client.api, s.client.headers(auth.CsrfToken), nil
+}
+
+// DatasourceContext rechecks the session on every command before exposing the
+// bounded generated API surface. Server authorization remains authoritative.
+func (s *SessionClient) DatasourceContext(ctx context.Context) (DatasourceOperations, api.RequestEditorFn, *api.SafeIdentity, error) {
+	auth, err := s.context(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if auth.Session == nil {
+		return nil, nil, nil, &Failure{Kind: KindAuthentication, Code: "unauthenticated", Message: "sign in before managing datasources", SessionState: "anonymous"}
+	}
+	if auth.Session.Restricted {
+		return nil, nil, auth.Session, &Failure{Kind: KindAuthentication, Code: "forbidden", Message: "an unrestricted session is required", SessionState: sessionState(auth.Session)}
+	}
+	return s.client.api, s.client.headers(auth.CsrfToken), auth.Session, nil
 }
 
 func (s *SessionClient) restore(value string) {

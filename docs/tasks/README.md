@@ -89,3 +89,27 @@ history screens with actual browser/backend/database acceptance.
 versioned command recovery and one-time replacement-token handling.
 [F2-T10](F2-T10.md) adds reusable CLI authentication and protected profiles before
 agent-management command parity.
+
+[F2-T11](F2-T11.md) completes agent-management CLI parity.
+[F2-T12](F2-T12.md) adds current-state machine credential authentication.
+[F2-T13](F2-T13.md) adds durable ownership acquisition, same-process resume and
+nonce-correlated renewal before remote connection and execution grants.
+[F2-T14](F2-T14.md) changes registration to use the administrator session and
+adds actionable failure recovery under [ADR-0019](../adr/0019-session-authorized-agent-registration.md).
+
+[F2-T15](F2-T15.md) makes daily container startup build the current checkout using
+the Docker cache before starting the application.
+
+[F2-T16](F2-T16.md) provides the application shell, responsive navigation and
+agent workspace under the accepted SPEC-0012 shell amendment.
+
+[F2-T17](F2-T17.md) delivers the connected-agent runtime and observable status as
+one usable increment, beginning with shared protocol contracts before consumers.
+
+[F2-T18](F2-T18.md) verifies the protected source-secret adapter used by datasource
+persistence and authorized agent release.
+
+[F2-T20](F2-T20.md) delivers Prometheus datasource management and bounded remote
+connection/query diagnostics through the API, agent, UI and CLI. It depends on the
+connected-agent runtime and protected source-secret adapter; collection and
+production observations remain a later increment.

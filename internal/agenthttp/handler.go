@@ -177,7 +177,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if route == "create" {
-		h.create(w, r, body, authorized.SessionSecret, authorized.Source, id)
+		h.create(w, r, body, authorized.SessionSecret, id)
 		return
 	}
 	if route == "rotate" {
@@ -325,7 +325,6 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, int) {
 }
 
 type createBody struct {
-	CurrentPassword *string        `json:"current_password"`
 	Name            *string        `json:"name"`
 	DisplayName     *string        `json:"display_name"`
 	LifetimeSeconds jsontext.Value `json:"lifetime_seconds"`
@@ -365,9 +364,9 @@ func seconds(value jsontext.Value, max int64, zeroDefault bool) (int64, bool) {
 	return n, true
 }
 
-func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, session string, source netip.Addr, id string) {
+func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, session, id string) {
 	var body createBody
-	if !decode(data, &body) || body.CurrentPassword == nil || body.Name == nil || body.DisplayName == nil {
+	if !decode(data, &body) || body.Name == nil || body.DisplayName == nil {
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
@@ -376,7 +375,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, se
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
-	result, err := h.service.Create(r.Context(), agentmanagement.CreateInput{SessionSecret: session, CurrentPassword: *body.CurrentPassword, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), Name: *body.Name, DisplayName: *body.DisplayName, Lifetime: time.Duration(lifetime) * time.Second})
+	result, err := h.service.Create(r.Context(), agentmanagement.CreateInput{SessionSecret: session, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), Name: *body.Name, DisplayName: *body.DisplayName, Lifetime: time.Duration(lifetime) * time.Second})
 	if err != nil {
 		h.writeError(w, err, id)
 		return
@@ -465,7 +464,43 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request, data []byte, ag
 }
 
 func agentDTO(v storage.AgentRecord) api.Agent {
-	return api.Agent{Id: googleuuid.MustParse(v.ID), Name: v.Name, DisplayName: v.DisplayName, Enabled: v.Enabled, Version: strconv.FormatInt(v.Version, 10), CreatedAt: v.CreatedAt.UTC(), UpdatedAt: v.UpdatedAt.UTC()}
+	dto := api.Agent{Id: googleuuid.MustParse(v.ID), Name: v.Name, DisplayName: v.DisplayName, Enabled: v.Enabled, Version: strconv.FormatInt(v.Version, 10), CreatedAt: v.CreatedAt.UTC(), UpdatedAt: v.UpdatedAt.UTC()}
+	if v.Runtime == nil {
+		return dto
+	}
+	apiCapabilities := make([]api.AgentCapability, len(v.Runtime.Capabilities))
+	for i, capability := range v.Runtime.Capabilities {
+		apiCapabilities[i] = api.AgentCapability{Provider: capability.Provider, ConfigurationFormats: capability.ConfigurationFormats, Operations: capability.Operations}
+	}
+	dto.Runtime = &api.AgentRuntimeStatus{
+		Reachability: api.AgentRuntimeStatusReachability(v.Runtime.Reachability),
+		Protocol:     v.Runtime.Protocol, SoftwareVersion: v.Runtime.SoftwareVersion, Capabilities: apiCapabilities,
+		LastHeartbeatAt:              v.Runtime.LastHeartbeatAt,
+		DesiredConfigurationRevision: strconv.FormatInt(v.Runtime.DesiredConfigurationRevision, 10),
+		AppliedConfigurationRevision: strconv.FormatInt(v.Runtime.AppliedConfigurationRevision, 10),
+		SchedulerHealth:              api.AgentRuntimeStatusSchedulerHealth(v.Runtime.SchedulerHealth),
+		CollectionProgress:           api.AgentRuntimeStatusCollectionProgress(v.Runtime.CollectionProgress),
+		ConfigurationFailureCode:     configurationFailureCodeDTO(v.Runtime.ConfigurationFailureCode),
+		ConfigurationFailureRevision: configurationFailureRevisionDTO(v.Runtime.ConfigurationFailureRevision),
+		LastAttemptAt:                v.Runtime.LastAttemptAt, LastSuccessfulQueryAt: v.Runtime.LastSuccessfulQueryAt,
+		NextExpectedExecutionAt: v.Runtime.NextExpectedExecutionAt,
+		CollectionExplanation:   api.AgentRuntimeStatusCollectionExplanation(v.Runtime.CollectionExplanation),
+	}
+	return dto
+}
+func configurationFailureCodeDTO(value *string) *api.AgentRuntimeStatusConfigurationFailureCode {
+	if value == nil {
+		return nil
+	}
+	result := api.AgentRuntimeStatusConfigurationFailureCode(*value)
+	return &result
+}
+func configurationFailureRevisionDTO(value *int64) *string {
+	if value == nil {
+		return nil
+	}
+	result := strconv.FormatInt(*value, 10)
+	return &result
 }
 func creationCredentialDTO(v storage.AgentCredentialRecord) api.AgentCredential {
 	return api.AgentCredential{Id: googleuuid.MustParse(v.ID), AgentId: googleuuid.MustParse(v.AgentID), IssuedAt: v.IssuedAt.UTC(), ExpiresAt: v.ExpiresAt.UTC()}

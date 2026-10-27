@@ -8,9 +8,11 @@ import (
 
 var ErrInvalid = errors.New("secret file is invalid")
 
+const MaxPrivateFileBytes = 128 << 10
+
 // Read returns bytes from a regular file with no group or other permission bits.
 func Read(path string, maxBytes int64) ([]byte, error) {
-	if path == "" || maxBytes < 1 || maxBytes > 16384 {
+	if path == "" || maxBytes < 1 || maxBytes > MaxPrivateFileBytes {
 		return nil, ErrInvalid
 	}
 	file, err := open(path)

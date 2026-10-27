@@ -89,13 +89,14 @@ func New(service *authentication.Service, options Options) (*Handler, error) {
 // rules used by authentication endpoints. It deliberately does not inspect or
 // touch session authority; guarded services do that for every operation.
 func (h *Handler) ValidateSessionRequest(r *http.Request) (SessionRequest, error) {
-	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost) {
+	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPut) {
 		return SessionRequest{}, ErrRequestMethod
 	}
+	unsafeMethod := r.Method == http.MethodPost || r.Method == http.MethodPut
 	if values := r.Header.Values("Authorization"); len(values) != 0 {
 		return SessionRequest{}, ErrAuthorization
 	}
-	if r.Method == http.MethodPost {
+	if unsafeMethod {
 		if !singleHeaderEquals(r.Header, "Origin", h.origin) {
 			return SessionRequest{}, ErrRequestOrigin
 		}
@@ -116,10 +117,22 @@ func (h *Handler) ValidateSessionRequest(r *http.Request) (SessionRequest, error
 	if _, err := identity.SessionSecretVerifier(session); err != nil {
 		return SessionRequest{}, ErrMissingSession
 	}
-	if r.Method == http.MethodPost && !h.validCSRF(r, "session", session) {
+	if unsafeMethod && !h.validCSRF(r, "session", session) {
 		return SessionRequest{}, ErrRequestCSRF
 	}
 	return SessionRequest{SessionSecret: session, Source: source}, nil
+}
+
+// ValidateTLSRequest applies direct-TLS or trusted-proxy transport validation
+// without imposing cookie, origin, or session-authentication requirements.
+func (h *Handler) ValidateTLSRequest(r *http.Request) error {
+	if h == nil || r == nil {
+		return ErrRequestTLS
+	}
+	if _, ok := h.requestSource(r); !ok {
+		return ErrRequestTLS
+	}
+	return nil
 }
 
 func canonicalOrigin(raw string) bool {

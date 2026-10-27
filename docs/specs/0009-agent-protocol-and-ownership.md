@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related: [SPEC-0002](0002-agent-behavior.md), [SPEC-0004](0004-identity-and-access.md), [ADR-0002](../adr/0002-agent-communication.md), [ADR-0012](../adr/0012-agent-leases-and-protocol.md)
 
 ## Protocol and versioning
@@ -25,11 +25,82 @@ bounded HTTPS result operation if they exceed64 KiB, up to 1 MiB. No raw trace p
 | Direction | Message kinds |
 | --- | --- |
 | Agent → backend | hello, heartbeat, configuration-applied/failed, command-accepted/completed/failed, progress |
-| Backend → agent | welcome, configuration-changed, diagnostic-request/cancel, historical-work-available, shutdown/revoked |
+| Backend → agent | welcome, heartbeat-ack, configuration-changed, diagnostic-request/cancel, historical-work-available, shutdown/revoked |
+
+Every envelope carries a decimal-string `session_generation`. A first-acquire hello
+uses the reserved value `"0"` to mean that ownership is not yet confirmed; a hello
+from a live process resuming known ownership carries its positive generation. All
+non-hello messages require a positive generation selected by the backend. Each
+hello includes a caller-generated 32-byte resume token and fresh 32-byte request
+nonce. The token is process-memory-only. A first acquire uses its proof before
+creating ownership; retries with the same proof recover the pending generation,
+and reconnects from that live process resume the known generation. Token possession
+alone never displaces another live owner.
+
+The welcome echoes the hello nonce and provides the selected protocol, positive
+generation, UTC server time, authenticated `agent_id`, positive desired configuration
+revision, current ownership renewal sequence, heartbeat interval, and durable
+execution lease. The lease repeats and
+must match agent ID, generation, and configuration revision. Its
+`allowed_measurements` entries bind one canonical SLI ID to one positive measurement
+revision; duplicate SLI IDs are invalid. An empty grant list permits no query.
+
+A heartbeat includes a fresh nonce, last successfully applied configuration
+revision (`"0"` means not yet applied), explicit scheduler health (`starting`,
+`ready`, `degraded`, or `stopped`) and separate collection progress
+(`not_started`, `idle`, `running`, or `blocked`), current lease ID and expected
+renewal sequence. The first renewal expects sequence `"0"`;
+the heartbeat-ack echoes the nonce and returns the durable renewed lease with a
+positive next sequence. Configuration revisions are positive from the first
+snapshot onward. The HTTP configuration snapshot identifies its agent, positive
+revision, and an `assignments` array. The response ETag is strong and has the form
+`"agent-config:<agent_id>:<configuration_revision>"`; unchanged `If-None-Match` may
+return 304 without a body. Empty assignments can never be paired with a nonempty
+execution grant. Capabilities are refreshed in hello and are not repeated in each
+heartbeat. These wire details implement accepted nonce-correlated renewal and
+ownership semantics; they do not change ownership policy.
+
+This increment defines hello, welcome, heartbeat, heartbeat-ack,
+configuration-changed, configuration-applied/failed, shutdown, and revoked. The
+diagnostic and historical-work message kinds remain unsupported until their owning
+increment; an unrecognized or unsupported kind fails closed. Configuration failures
+use bounded safe codes (`invalid_snapshot`, `incompatible`, `apply_failed`), and
+shutdown/revocation use enumerated safe reasons rather than arbitrary diagnostic
+text.
+
+Handshake rejection uses WebSocket policy close status with one of the stable safe
+reasons `active_owner`, `credential_revoked`, `incompatible_protocol`, or
+`session_rejected`. The agent treats active ownership, revocation, and protocol
+incompatibility as actionable terminal outcomes; transient transport and backend
+availability errors reconnect with bounded backoff. Server `shutdown` is a
+server-to-agent application message that requests reconnect. A locally stopped
+agent ends the WebSocket with a normal close and does not send a server-only
+`shutdown` message.
+
+Hello validation first enforces a bounded, nonempty, unique protocol-version list;
+negotiation then selects v1 or reports incompatibility. An authenticated, well-formed
+hello with no supported version records only a bounded per-agent attempt timestamp,
+creates no ownership and issues no execution grant. Recording requires no active
+owner, or the matching active generation and memory-only resume proof. A copied
+credential without that proof cannot replace a healthy runtime status. Management
+reads report `reachability: incompatible` only when that attempt is newer than the
+stored runtime activity. When no compatible runtime has been observed,
+`protocol: incompatible` is a safe sentinel meaning no version was negotiated, and
+`software_version: unknown` means no peer software version was accepted. A later
+successful v1 hello clears the attempt atomically with runtime status update. The
+attempt record stores no untrusted version string or other peer-provided detail.
+For an agent with prior runtime observations, the incompatible marker changes only
+reachability; protocol, software version, capabilities, configuration revisions,
+heartbeat and collection timestamps continue to describe the last accepted runtime.
 
 The backend's welcome records selected protocol, ownership generation, server time,
 desired config revision, heartbeat interval and an execution lease. Schemas and
 generated examples live under `api/agent/` at implementation; OpenAPI owns HTTP paths.
+An authenticated `configuration-failed` report is recorded only for the current
+desired revision and one of the bounded failure codes above. It does not advance the
+last successfully applied revision; management status exposes the failure code and
+revision together and marks scheduling degraded and collection blocked. Successful
+application of the desired revision clears both failure fields.
 
 ## Separate versions and authorization
 
@@ -87,6 +158,18 @@ requests may return 304. Agent validates, prepares and atomically applies it, th
 acknowledges. Startup without valid configuration performs no collection. Failed
 updates keep the last accepted config only until its original execution expiry;
 do not renew invalid configuration indefinitely.
+
+Datasource assignment changes advance desired configuration independently of the
+last applied revision. When a current heartbeat grant trails desired configuration,
+the configuration endpoint returns the existing temporary
+`503 agent_configuration_unavailable` problem without a snapshot or source
+credentials. The agent keeps its last applied assignments, continues heartbeat
+renewal with that applied revision, and retries reconciliation after the heartbeat
+acknowledges a grant for the newer revision. It applies only a snapshot whose agent,
+revision and empty production measurement grant exactly match that lease. A
+configuration notice never causes credentials or queries to use a revision that
+the current grant does not authorize. This also lets a same-process reconnect with
+an older grant reach heartbeat renewal before fetching the newer snapshot.
 
 For query/cadence edits, prepublish the new settings and effective interval bounds.
 Activate only at a common boundary after the agent acknowledges those bounds or its

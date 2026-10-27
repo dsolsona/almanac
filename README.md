@@ -26,6 +26,12 @@ days, retaining its private key and all database/admin credentials. Your browser
 ask you to accept the renewed certificate. Damaged credential state still fails
 without resetting it.
 
+The first Compose initialization also provisions the protected source-secret keyset
+used for encrypted datasource credentials. It is stored once in the persistent local
+secret volume and reused on later starts; Compose does not replace it during normal
+startup. Existing v1 local credential volumes are upgraded once without changing
+their saved credentials.
+
 Day to day:
 
 ```sh
@@ -34,7 +40,8 @@ make stop      # Stop containers, preserving all data and credentials
 make logs      # View application logs
 ```
 
-Run `make bootstrap` again after source changes to rebuild. Repeating it preserves
+`make run` and its `make start` alias build the current checkout with Docker's cache
+before starting the app, including on a fresh checkout. Repeating startup preserves
 your users, passwords and data. The app runs in the background; readiness failures
 make startup fail visibly. Recreating only the app gives it a fresh network connection,
 including after a failed port bind; the database container and volumes are reused.
@@ -134,6 +141,30 @@ For TLS termination at a proxy, omit both TLS files and explicitly configure
 verified client address and HTTPS protocol metadata described in the
 [authentication contract](api/openapi.yaml).
 
+For non-Compose deployments, provision a source keyset explicitly and mount the
+resulting owner-only file into the backend:
+
+```sh
+bin/almanac secrets provision-source-keyset \
+  --file=/run/secrets/almanac-source-keyset.json \
+  --keyset-id=00000000-0000-4000-8000-000000000001 --output=json
+```
+
+Configure both `--source-secret-keyset-file` and `--source-secret-keyset-id` on
+`serve`, or set the matching `source_secret_keyset_file` and
+`source_secret_keyset_id` JSON properties. The environment equivalents are
+`ALMANAC_SOURCE_SECRET_KEYSET_FILE` and `ALMANAC_SOURCE_SECRET_KEYSET_ID`.
+The cleartext Tink keyset is deployment key material: protect the file and its
+mount. Datasource credential writes remain unavailable when the keyset is not
+configured or cannot be loaded.
+
+Back up this keyset separately from PostgreSQL and retain decryption keys needed
+by existing data and backups. The F2 datasource increment supplies provisioning,
+encrypted persistence and authorized release. Managed rotation, resumable
+re-encryption and restore acceptance remain initial-release requirements in
+[ADR-0017](docs/adr/0017-recoverable-secret-encryption.md) and
+[SPEC-0014](docs/specs/0014-delivery-and-verification.md).
+
 The first startup provisions the initial administrator, who must change the
 password before ordinary access. Later starts ignore the initial credentials once
 ownership is persisted. Missing, unsafe or weak initial credentials leave `/livez`
@@ -148,7 +179,8 @@ JSON array or a comma-separated environment/flag value. See the
 [runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
 This increment provides the authentication API, browser onboarding and noninteractive
 setup. Agent registration and credential administration are available in the
-browser; remote agent connectivity and metric ingestion follow separately.
+browser. A separate `almanac-agent` executable connects and applies the current
+empty configuration; datasource queries and metric ingestion follow separately.
 
 The first browser sign-in uses the deployment-provided initial password and opens
 restricted setup. Enter that current password and a different permanent password;
@@ -217,16 +249,18 @@ Agent management CLI operations follow this shared profile boundary.
 
 Agent administration uses the same HTTPS management API and requires an
 unrestricted administrator session in the selected profile. Reads request one
-bounded page; provide the returned cursor explicitly to continue. Mutations
-require the administrator's current password in a protected file, an explicit
-idempotency key and the exact current ETag for versioned operations:
+bounded page; provide the returned cursor explicitly to continue. Registration
+uses that current session without asking for the password again. Credential
+rotation, revocation and disable require the administrator's current password
+in a protected file. Mutations use an explicit idempotency key; versioned
+operations also require the exact current ETag:
 
 ```sh
 bin/almanac agents list --profile-file=/home/operator/.almanac/profile.json --output=json
 bin/almanac agents get --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
 bin/almanac agents credentials list --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
 bin/almanac agents create --profile-file=/home/operator/.almanac/profile.json --name=collector-east --display-name='East collector' \
-  --current-password-file=/run/secrets/almanac-password --idempotency-key=registration-2026-10-26 \
+  --idempotency-key=registration-2026-10-27 \
   --token-file=/home/operator/.almanac/collector-east.token --output=json
 ```
 
@@ -239,6 +273,51 @@ lost or rejected token-file write reports an unknown outcome because the issued
 secret cannot be recovered; inspect the agent and deliberately rotate if needed.
 Text mode uses JSON escaping for remote names so control characters do not alter
 terminal output. `--timeout` bounds profile-lock wait and the full API operation.
+
+Build both executables, then run the separate outbound-only agent process on the
+host that should own the registered agent:
+
+```sh
+make build
+bin/almanac-agent run --backend-url=https://almanac.example.com \
+  --token-file=/run/secrets/almanac-agent-token
+```
+
+Create the credential with `agents create` and its `--token-file` option as shown
+above, then deliver that protected file to the agent host through your deployment
+secret mechanism. The file must be a regular file with no group or other
+permissions; the agent rejects broader permissions and does not print the token.
+Keep one process running for this credential. A second process using a copied token
+cannot take over the active owner. Stop the process with SIGINT or SIGTERM; it
+reconnects after temporary backend loss and exits with a distinct safe message for
+credential rejection, revocation, active-owner conflict or protocol incompatibility.
+The resume proof exists only in process memory. After a process restart, a new
+process cannot resume the prior owner; wait for its ownership lease to expire
+(up to one hour, or sooner if the credential expires) before starting the
+replacement process. There is no force-takeover command in this increment.
+
+The backend URL must be an HTTPS origin without a path, query or fragment. System
+certificate roots are used by default. To add a private CA while retaining normal
+certificate verification, pass its PEM certificate bundle with `--ca-file`:
+
+```sh
+bin/almanac-agent run --backend-url=https://almanac.example.com \
+  --token-file=/run/secrets/almanac-agent-token \
+  --ca-file=/run/certs/almanac-private-ca.pem
+```
+
+This increment applies versioned configuration and reports connection and heartbeat
+state through `agents get`. Its configuration has no datasource assignments, so it
+does not execute queries or report collection success. Empty configuration grants
+no query authority. A rejected configuration reports its bounded failure code and
+revision in agent status while leaving the last successfully applied revision intact.
+
+An authenticated agent that offers only unsupported protocol versions is reported
+with reachability `incompatible`. If no compatible runtime has been observed, its
+protocol is shown as `incompatible` and software version as `unknown`; these are
+safe status markers, not peer-supplied version values. If a compatible runtime
+already exists, its observed fields remain intact while the newer incompatible
+attempt changes reachability. A successful compatible connection clears that state.
 
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
 pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:

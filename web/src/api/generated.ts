@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/agent/v1/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated agent's current configuration snapshot
+         * @description Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+         */
+        get: operations["getAgentConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/v1/diagnostics/{diagnostic_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a bounded diagnostic result over verified HTTPS
+         * @description Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+         */
+        post: operations["postAgentDiagnosticResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/context": {
         parameters: {
             query?: never;
@@ -208,6 +248,156 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List provider descriptors and selected-agent availability
+         * @description Readable by viewer, editor, and administrator sessions. When agent_id is supplied, operations reports capability independently of liveness; availability and nullable desired/applied revisions report whether that agent can accept a diagnostic now. Configuration failure details are limited to the safe failure enum and revision.
+         */
+        get: operations["getProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List redacted datasource metadata */
+        get: operations["getDatasources"];
+        put?: never;
+        /** Create and assign a datasource */
+        post: operations["postDatasources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/{datasource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read redacted datasource detail */
+        get: operations["getDatasource"];
+        /** Replace datasource settings and assignment */
+        put: operations["putDatasource"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/connection-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test unsaved Prometheus connection settings on an assigned agent
+         * @description If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+         */
+        post: operations["postDatasourceConnectionTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/{datasource_id}/query-previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a bounded PromQL preview on the assigned agent
+         * @description If the assigned agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
+         */
+        post: operations["postDatasourceQueryPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/{datasource_id}/connection-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test the saved datasource settings on its assigned agent
+         * @description Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+         */
+        post: operations["postSavedDatasourceConnectionTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{diagnostic_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a bounded diagnostic receipt */
+        get: operations["getDiagnostic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{diagnostic_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a pending diagnostic */
+        post: operations["postDiagnosticCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/livez": {
         parameters: {
             query?: never;
@@ -246,6 +436,149 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ProviderPage: {
+            items: components["schemas"]["ProviderDescriptor"][];
+        };
+        ProviderDescriptor: {
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            operations: string[];
+            /** @enum {string} */
+            availability: "available" | "applying" | "offline" | "disabled" | "unreported" | "configuration_failed" | "incompatible" | "planned" | "unsupported";
+            desired_configuration_revision: string | null;
+            applied_configuration_revision: string | null;
+            /** @enum {string|null} */
+            configuration_failure_code: "invalid_snapshot" | "incompatible" | "apply_failed" | null;
+            configuration_failure_revision: string | null;
+        };
+        DatasourcePage: {
+            items: components["schemas"]["Datasource"][];
+            next_cursor: string;
+        };
+        Datasource: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            version: string;
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: components["schemas"]["DatasourceTLS"];
+            authentication: components["schemas"]["DatasourceAuthentication"];
+            polling_interval_seconds: number;
+            /** @enum {integer} */
+            settling_delay_seconds: 60;
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DatasourceTLS: {
+            insecure_skip_verify: boolean;
+            ca_pem: string | null;
+        };
+        DatasourceAuthentication: {
+            /** @enum {string} */
+            mode: "none" | "basic" | "bearer";
+            username: string | null;
+            password_configured: boolean;
+            token_configured: boolean;
+        };
+        DatasourceWrite: {
+            name: string;
+            display_name: string;
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: components["schemas"]["DatasourceTLS"];
+            authentication: {
+                /** @enum {string} */
+                mode: "none" | "basic" | "bearer";
+                username: string | null;
+                password_secret: components["schemas"]["SecretAction"];
+                token_secret: components["schemas"]["SecretAction"];
+            };
+            polling_interval_seconds: number;
+            /** Format: uuid */
+            agent_id: string;
+        };
+        SecretAction: {
+            /** @enum {string} */
+            action: "replace" | "retain" | "clear";
+            /** Format: password */
+            value?: string;
+        };
+        ConnectionTestRequest: {
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: components["schemas"]["DatasourceTLS"];
+            authentication: {
+                /** @enum {string} */
+                mode: "none" | "basic" | "bearer";
+                username: string | null;
+                password_secret: components["schemas"]["SecretAction"];
+                token_secret: components["schemas"]["SecretAction"];
+            };
+            /** Format: uuid */
+            agent_id: string;
+        };
+        QueryPreviewRequest: {
+            query: string;
+        };
+        Diagnostic: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "pending" | "running" | "succeeded" | "failed" | "canceled" | "timed_out" | "unknown";
+            /** @enum {string} */
+            operation: "connection_test" | "query_preview";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deadline_at: string;
+            /** @enum {string|null} */
+            result_class: "complete" | "empty" | "incomplete" | null;
+            /** @description Present only for succeeded diagnostics. The typed result payload is bounded to 1 MiB; other states return null while retaining only the normalized top-level error classification. */
+            result: Record<string, never> | null;
+            /** @enum {string|null} */
+            error_code: "authentication_failed" | "network_failed" | "tls_failed" | "query_failed" | "request_timeout" | "assignment_revoked" | "rate_limited" | "unsupported" | "diagnostic_failed" | null;
+            message: string | null;
+        };
+        /** @description Typed agent result. The HTTP transport accepts more than 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB. */
+        DiagnosticResultPayload: {
+            /** Format: uuid */
+            diagnostic_id: string;
+            /** @enum {string} */
+            state: "succeeded" | "failed" | "canceled" | "timed_out";
+            /** @enum {string} */
+            result_class?: "complete" | "empty" | "incomplete";
+            series?: {
+                /** @description Label names are limited to 128 UTF-8 bytes. */
+                labels: {
+                    [key: string]: string;
+                };
+                time: string;
+                value: string;
+            }[];
+            /** @enum {string} */
+            error_code?: "authentication" | "incomplete" | "network" | "query" | "rate_limited" | "tls" | "timeout" | "unsupported" | "assignment_revoked" | "deadline";
+            message?: string;
+        };
         Agent: {
             /** Format: uuid */
             id: string;
@@ -257,6 +590,67 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            runtime?: components["schemas"]["AgentRuntimeStatus"] | null;
+        };
+        AgentRuntimeStatus: {
+            /** @enum {string} */
+            reachability: "connected" | "unreachable" | "incompatible";
+            protocol: string;
+            software_version: string;
+            capabilities: components["schemas"]["AgentCapability"][];
+            /** Format: date-time */
+            last_heartbeat_at: string | null;
+            desired_configuration_revision: string;
+            applied_configuration_revision: string;
+            /** @enum {string} */
+            scheduler_health: "starting" | "ready" | "degraded" | "stopped";
+            /** @enum {string} */
+            collection_progress: "not_started" | "idle" | "running" | "blocked";
+            /** @enum {string|null} */
+            configuration_failure_code: "invalid_snapshot" | "incompatible" | "apply_failed" | null;
+            configuration_failure_revision: string | null;
+            /** Format: date-time */
+            last_attempt_at: string | null;
+            /** Format: date-time */
+            last_successful_query_at: string | null;
+            /** Format: date-time */
+            next_expected_execution_at: string | null;
+            /** @enum {string} */
+            collection_explanation: "no_assignment";
+        };
+        AgentCapability: {
+            provider: string;
+            configuration_formats: string[];
+            operations: string[];
+        };
+        AgentConfigurationSnapshot: {
+            /** Format: uuid */
+            agent_id: string;
+            configuration_revision: string;
+            assignments: components["schemas"]["AgentDatasourceAssignment"][];
+        };
+        AgentDatasourceAssignment: {
+            /** Format: uuid */
+            datasource_id: string;
+            datasource_version: string;
+            name: string;
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: {
+                insecure_skip_verify: boolean;
+                ca_pem: string;
+            };
+            /** @enum {string} */
+            authentication_mode: "none" | "basic" | "bearer";
+            username?: string;
+            password?: string;
+            bearer_token?: string;
+            polling_interval_seconds: number;
+            settling_delay_seconds: number;
         };
         AgentCredential: {
             /** Format: uuid */
@@ -281,8 +675,6 @@ export interface components {
             next_cursor: string;
         };
         CreateAgentRequest: {
-            /** Format: password */
-            current_password: string;
             name: string;
             display_name: string;
             /** Format: int32 */
@@ -444,6 +836,10 @@ export interface components {
     };
     parameters: {
         AgentId: string;
+        DatasourceId: string;
+        DiagnosticId: string;
+        /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
+        DatasourceIfMatch: string;
         /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
         IfMatch: string;
         /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -455,6 +851,142 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAgentConfiguration: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Full revisioned configuration snapshot */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentConfigurationSnapshot"];
+                };
+            };
+            /** @description Snapshot unchanged */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Agent credential invalid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Configuration unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgentDiagnosticResult: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Current positive canonical decimal ownership generation. */
+                "X-Agent-Session-Generation": string;
+            };
+            path: {
+                diagnostic_id: components["parameters"]["DiagnosticId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticResultPayload"];
+            };
+        };
+        responses: {
+            /** @description Result accepted or exact accepted replay */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid result */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Agent credential is invalid or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Diagnostic receipt not found for this agent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Stale ownership generation or result conflicts with an existing terminal receipt */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Result body exceeds 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary storage or agent access failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     postAuthContext: {
         parameters: {
             query?: never;
@@ -999,6 +1531,390 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getProviders: {
+        parameters: {
+            query?: {
+                agent_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDatasources: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Datasource page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasourcePage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDatasources: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasourceWrite"];
+            };
+        };
+        responses: {
+            /** @description Created redacted datasource */
+            201: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Datasource"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDatasource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Datasource */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Datasource"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    putDatasource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
+                "If-Match": components["parameters"]["DatasourceIfMatch"];
+            };
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasourceWrite"];
+            };
+        };
+        responses: {
+            /** @description Updated redacted datasource */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Datasource"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDatasourceConnectionTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Diagnostic accepted */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDatasourceQueryPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Diagnostic accepted */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postSavedDatasourceConnectionTest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
+                "If-Match": components["parameters"]["DatasourceIfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Diagnostic accepted or idempotent replay */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Stale datasource version or idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Pre-admission agent/configuration unavailable; no diagnostic receipt was created */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDiagnostic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diagnostic status and safe result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDiagnosticCancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Current diagnostic status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/setupclient"
@@ -526,8 +527,42 @@ func invalidRequest() error {
 	return &Failure{Kind: setupclient.KindInvalid, Code: "invalid_request", Message: "agent command parameters are invalid"}
 }
 func validAgent(a api.Agent) bool {
-	return uuid.MatchString(uuidText(a.Id)) && len(a.Name) > 0 && len(a.DisplayName) > 0 && decimal(a.Version, true) && !a.CreatedAt.IsZero() && !a.UpdatedAt.IsZero()
+	return uuid.MatchString(uuidText(a.Id)) && len(a.Name) > 0 && len(a.DisplayName) > 0 && decimal(a.Version, true) && !a.CreatedAt.IsZero() && !a.UpdatedAt.IsZero() && (a.Runtime == nil || validAgentRuntime(*a.Runtime))
 }
+func validAgentRuntime(runtime api.AgentRuntimeStatus) bool {
+	if !runtime.Reachability.Valid() || !runtime.SchedulerHealth.Valid() || !runtime.CollectionProgress.Valid() || !runtime.CollectionExplanation.Valid() ||
+		!validRuntimeText(runtime.Protocol) || !validRuntimeText(runtime.SoftwareVersion) || !decimal(runtime.DesiredConfigurationRevision, true) || !decimal(runtime.AppliedConfigurationRevision, false) ||
+		!validOptionalRuntimeTime(runtime.LastHeartbeatAt) || !validOptionalRuntimeTime(runtime.LastAttemptAt) || !validOptionalRuntimeTime(runtime.LastSuccessfulQueryAt) || !validOptionalRuntimeTime(runtime.NextExpectedExecutionAt) ||
+		len(runtime.Capabilities) > 256 {
+		return false
+	}
+	if runtime.ConfigurationFailureCode == nil {
+		if runtime.ConfigurationFailureRevision != nil {
+			return false
+		}
+	} else if !runtime.ConfigurationFailureCode.Valid() || runtime.ConfigurationFailureRevision == nil || !decimal(*runtime.ConfigurationFailureRevision, true) {
+		return false
+	}
+	for _, capability := range runtime.Capabilities {
+		if !validRuntimeText(capability.Provider) || !validRuntimeStringList(capability.ConfigurationFormats, 64) || !validRuntimeStringList(capability.Operations, 16) {
+			return false
+		}
+	}
+	return true
+}
+func validRuntimeText(value string) bool { return value != "" && len(value) <= 128 }
+func validRuntimeStringList(values []string, limit int) bool {
+	if values == nil || len(values) > limit {
+		return false
+	}
+	for _, value := range values {
+		if !validRuntimeText(value) {
+			return false
+		}
+	}
+	return true
+}
+func validOptionalRuntimeTime(value *time.Time) bool { return value == nil || !value.IsZero() }
 func validCredential(c api.AgentCredential) bool {
 	return uuid.MatchString(uuidText(c.Id)) && uuid.MatchString(uuidText(c.AgentId)) && !c.IssuedAt.IsZero() && !c.ExpiresAt.IsZero() && (c.RevokedAt == nil || !c.RevokedAt.IsZero()) && (c.RetireAt == nil || !c.RetireAt.IsZero())
 }
@@ -570,7 +605,96 @@ func rawString(value jsontext.Value) bool {
 }
 func rawBool(value jsontext.Value) bool { return string(value) == "true" || string(value) == "false" }
 func validAgentRaw(raw []byte, a api.Agent) bool {
-	return hasFields(raw, "id", "name", "display_name", "enabled", "version", "created_at", "updated_at") && rawString(rawField(raw, "id")) && rawString(rawField(raw, "name")) && rawString(rawField(raw, "display_name")) && rawBool(rawField(raw, "enabled")) && rawString(rawField(raw, "version")) && rawString(rawField(raw, "created_at")) && rawString(rawField(raw, "updated_at")) && validAgent(a)
+	if !hasFields(raw, "id", "name", "display_name", "enabled", "version", "created_at", "updated_at") || !rawString(rawField(raw, "id")) || !rawString(rawField(raw, "name")) || !rawString(rawField(raw, "display_name")) || !rawBool(rawField(raw, "enabled")) || !rawString(rawField(raw, "version")) || !rawString(rawField(raw, "created_at")) || !rawString(rawField(raw, "updated_at")) || !validAgent(a) {
+		return false
+	}
+	if !hasField(raw, "runtime") {
+		return a.Runtime == nil
+	}
+	if jsonNullField(raw, "runtime") {
+		return a.Runtime == nil
+	}
+	return a.Runtime != nil && validAgentRuntimeRaw(rawField(raw, "runtime"), *a.Runtime)
+}
+func validAgentRuntimeRaw(raw jsontext.Value, runtime api.AgentRuntimeStatus) bool {
+	if !hasFields(raw, "reachability", "protocol", "software_version", "capabilities", "last_heartbeat_at", "desired_configuration_revision", "applied_configuration_revision", "scheduler_health", "collection_progress", "configuration_failure_code", "configuration_failure_revision", "last_attempt_at", "last_successful_query_at", "next_expected_execution_at", "collection_explanation") ||
+		!rawString(rawField(raw, "reachability")) || !rawString(rawField(raw, "protocol")) || !rawString(rawField(raw, "software_version")) ||
+		!rawString(rawField(raw, "desired_configuration_revision")) || !rawString(rawField(raw, "applied_configuration_revision")) || !rawString(rawField(raw, "scheduler_health")) ||
+		!rawString(rawField(raw, "collection_progress")) || !rawString(rawField(raw, "collection_explanation")) || !rawNullableRuntimeString(rawField(raw, "configuration_failure_code")) ||
+		!rawNullableRuntimeString(rawField(raw, "configuration_failure_revision")) || !rawNullableRuntimeTime(rawField(raw, "last_heartbeat_at")) ||
+		!rawNullableRuntimeTime(rawField(raw, "last_attempt_at")) || !rawNullableRuntimeTime(rawField(raw, "last_successful_query_at")) || !rawNullableRuntimeTime(rawField(raw, "next_expected_execution_at")) {
+		return false
+	}
+	capabilities, ok := rawArray(rawField(raw, "capabilities"))
+	if !ok || len(capabilities) != len(runtime.Capabilities) || len(capabilities) > 256 {
+		return false
+	}
+	for i, rawCapability := range capabilities {
+		if !validAgentCapabilityRaw(rawCapability, runtime.Capabilities[i]) {
+			return false
+		}
+	}
+	return validAgentRuntime(runtime)
+}
+func rawNullableRuntimeString(raw jsontext.Value) bool {
+	return string(raw) == "null" || rawString(raw)
+}
+func validAgentCapabilityRaw(raw jsontext.Value, capability api.AgentCapability) bool {
+	if !hasFields(raw, "provider", "configuration_formats", "operations") || !rawString(rawField(raw, "provider")) {
+		return false
+	}
+	var formats, operations []string
+	if !rawStringArray(rawField(raw, "configuration_formats"), &formats, 64) || !rawStringArray(rawField(raw, "operations"), &operations, 16) {
+		return false
+	}
+	return len(formats) == len(capability.ConfigurationFormats) && len(operations) == len(capability.Operations)
+}
+func rawArray(raw jsontext.Value) ([]jsontext.Value, bool) {
+	if !strings.HasPrefix(strings.TrimSpace(string(raw)), "[") {
+		return nil, false
+	}
+	var values []jsontext.Value
+	if json.Unmarshal(raw, &values) != nil || values == nil {
+		return nil, false
+	}
+	return values, true
+}
+
+func rawStringArray(raw jsontext.Value, destination *[]string, limit int) bool {
+	values, ok := rawArray(raw)
+	if !ok || len(values) > limit {
+		return false
+	}
+	result := make([]string, len(values))
+	for i, value := range values {
+		if !rawString(value) || json.Unmarshal(value, &result[i]) != nil {
+			return false
+		}
+	}
+	*destination = result
+	return true
+}
+func rawNullableRuntimeTime(raw jsontext.Value) bool {
+	if string(raw) == "null" {
+		return true
+	}
+	if !rawString(raw) {
+		return false
+	}
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil && !parsed.IsZero()
+}
+func hasField(raw []byte, name string) bool {
+	var fields map[string]jsontext.Value
+	if json.Unmarshal(raw, &fields) != nil {
+		return false
+	}
+	_, ok := fields[name]
+	return ok
 }
 func validAgentRawField(raw []byte, name string, a api.Agent) bool {
 	return validAgentRaw(rawField(raw, name), a)

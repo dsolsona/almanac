@@ -4,6 +4,10 @@ Status: active project workflow. The maintainer agreed to a coordinator with
 `gpt-6-luna` implementers and fast, evidence-based verification on 2026-10-24.
 This workflow does not alter accepted product contracts or authorize publishing.
 
+On 2026-10-27 the maintainer approved larger usable increments, up to two independent
+Luna implementers, early real-journey and visual checks, consolidated review and
+strict reuse of approved command invocations to reduce delivery time and rework.
+
 ## Roles
 
 The primary agent is the coordinator. It owns task decomposition, architectural
@@ -26,6 +30,12 @@ code or unresolved findings. Do not
 silently switch the requested implementer model. If unavailable, report the limitation
 and agree on a replacement. Runtime configuration must request the model explicitly;
 documenting its name does not configure the tool automatically.
+
+For a full vertical increment, Luna owns implementation, debugging, test writing and
+task evidence through a review-ready diff. The coordinator settles interfaces and
+provides one concrete brief, then reviews the consolidated result. Avoid incremental
+coordinator reviews or status-only turns while the implementer is progressing; report
+only material conflicts or blockers.
 
 ## Start or resume a session
 
@@ -55,10 +65,19 @@ conversation or private investigation notes. For reusable components, the coordi
 reviews suitability and provides the relevant constraints; existing code never
 overrides Almanac's contract.
 
-Start with one active implementer. Use isolated worktrees for implementation, with
+Use up to two active Luna implementers when interfaces are agreed and edits and
+fixtures are independent. A useful split is backend/agent and UI/CLI, not two
+workers guessing the same contract. Otherwise use one. Use isolated worktrees, with
 unique ports, test databases and artifact directories. The shared baseline must
 contain the task's approved dependencies. Never have workers edit the same checkout
 or mutate a shared test database. Only the coordinator integrates results.
+
+Assign each shared verification port or database lane explicitly. Its owner may
+continue checks after diagnosed corrections using approved commands until releasing
+the lane or receiving a reassignment; do not request the same reservation before
+every invocation. Coordinate handoffs directly between active implementers and
+report live handles and terminal results to the coordinator. An observation failure
+alone does not authorize restarting a gate: inspect its existing process first.
 
 Increase concurrency only for tasks with stable interfaces, disjoint edits and
 independent fixtures. A shared contract/schema change precedes its consumers; it
@@ -66,6 +85,24 @@ cannot be delegated as conflicting parallel guesses. No worker may delegate furt
 without a coordinator-assigned need and explicit scope.
 
 ## Implement, review, integrate
+
+Size tasks around a usable outcome, such as a connected agent or a datasource query
+test. Keep internal service/storage/HTTP steps within that bounded outcome where
+practical; do not require a PR per layer. Publish reviewable vertical increments,
+not arbitrary file-count batches. Accepted contracts remain prerequisites.
+
+Run a minimal real user journey as soon as the path is wired, before broad checks.
+Inspect the real rendered application early for UI work. Then use focused checks
+while editing, one consolidated coordinator review, and the integrated gate before
+publication. Review corrected areas and unresolved findings without restarting the
+whole review. Do not repeat a passing gate without changed inputs or a specific
+unresolved concern. Keep required boundary evidence; this changes sequencing, not
+acceptance standards. Finish the current milestone's usable outcomes before optional
+polish or unrelated refactors.
+
+Follow [command discipline](commands.md). A new test selector or Make mode does not
+inherit approval merely because a similar command worked. Exact command availability
+is part of task readiness; a missing approval must not interrupt unattended work.
 
 1. The implementer confirms scope, reads applicable Modern Go guidance before Go
    edits, writes relevant behavior checks and implements the task.
@@ -107,10 +144,9 @@ milestone progress/evidence in [status.md](status.md). Do not duplicate product
 requirements across these documents. Record durable workflow lessons in AGENTS.md;
 keep transient logs and private investigation material out of repository content.
 
-The first three bounded F1 tasks form a delegation pilot. Record elapsed time,
-review/correction rounds, repeated failure causes and available usage data. Compare
-accepted results and total rework, not just implementation speed. Decide whether to
-expand delegation after that evidence; no cost savings or quality parity is assumed.
+Record meaningful elapsed time, correction rounds and repeated failure causes in
+task evidence. Compare accepted usable outcomes and rework, not activity or number
+of PRs. Avoid exhaustive process reporting that does not change the next action.
 
 ## Delivery and acceptance
 

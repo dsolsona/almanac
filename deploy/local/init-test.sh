@@ -4,6 +4,7 @@ set -eu
 script=/usr/local/lib/almanac/init.sh
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT HUP INT TERM
+chmod 0755 "$root"
 app=$root/app
 pg=$root/postgres
 mkdir -p "$app" "$pg"
@@ -26,7 +27,7 @@ hashes() {
 }
 
 stable_secret_state() {
-	for file in "$app/database-url" "$app/initial-admin-password" "$app/tls.key" "$app/.initialized" "$pg/password"; do
+	for file in "$app/database-url" "$app/initial-admin-password" "$app/source-secret-keyset.json" "$app/tls.key" "$app/.initialized" "$pg/password"; do
 		stat -c '%u:%g:%a %n' "$file"
 		sha256sum "$file"
 	done | sort
@@ -44,9 +45,10 @@ sh "$script" "$app" "$pg"
 second=$(hashes)
 [ "$first" = "$second" ] || fail 'repeat initialization changed saved files'
 
-for item in database-url initial-admin-password tls.key .initialized; do
+for item in database-url initial-admin-password source-secret-keyset.json tls.key .initialized; do
 	[ "$(stat -c '%u:%a' "$app/$item")" = '10001:600' ] || fail "$item owner or mode is unsafe"
 done
+[ "$(cat "$app/.initialized")" = 'almanac-local-v2' ] || fail 'completion marker version is incorrect'
 [ "$(stat -c '%u:%a' "$app/tls.crt")" = '10001:644' ] || fail 'certificate owner or mode is unsafe'
 [ "$(stat -c '%u:%a' "$pg/password")" = '10001:444' ] || fail 'database-only password mode is unsafe'
 openssl x509 -in "$app/tls.crt" -checkhost localhost -noout >/dev/null 2>&1 || fail 'localhost SAN is missing'
@@ -148,5 +150,23 @@ partial_pg=$root/partial-pg
 mkdir -p "$partial" "$partial_pg"
 printf x > "$partial/database-url"
 if sh "$script" "$partial" "$partial_pg" >/dev/null 2>&1; then fail 'accepted partial initialization state'; fi
+
+# Upgrade a valid v1 local installation exactly once for datasource key support.
+legacy_app=$root/legacy-app
+legacy_pg=$root/legacy-pg
+cp -a "$app" "$legacy_app"
+cp -a "$pg" "$legacy_pg"
+legacy_credentials_before=$(for file in database-url initial-admin-password tls.crt tls.key; do sha256sum "$legacy_app/$file"; done; sha256sum "$legacy_pg/password")
+rm "$legacy_app/source-secret-keyset.json"
+printf '%s\n' 'almanac-local-v1' > "$legacy_app/.initialized"
+chown 10001:10001 "$legacy_app/.initialized"
+chmod 0600 "$legacy_app/.initialized"
+sh "$script" "$legacy_app" "$legacy_pg"
+[ "$(cat "$legacy_app/.initialized")" = 'almanac-local-v2' ] || fail 'legacy marker was not upgraded'
+[ "$(stat -c '%u:%a' "$legacy_app/source-secret-keyset.json")" = '10001:600' ] || fail 'legacy keyset owner or mode is unsafe'
+[ "$(for file in database-url initial-admin-password tls.crt tls.key; do sha256sum "$legacy_app/$file"; done; sha256sum "$legacy_pg/password")" = "$legacy_credentials_before" ] || fail 'legacy upgrade changed an existing credential'
+legacy_state=$(find "$legacy_app" "$legacy_pg" -type f -exec sh -c 'for file do sha256sum "$file"; done' sh {} + | sort)
+sh "$script" "$legacy_app" "$legacy_pg"
+[ "$(find "$legacy_app" "$legacy_pg" -type f -exec sh -c 'for file do sha256sum "$file"; done' sh {} + | sort)" = "$legacy_state" ] || fail 'repeat legacy upgrade changed saved key material'
 
 echo 'PASS initializer checks'

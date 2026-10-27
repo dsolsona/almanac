@@ -85,6 +85,15 @@ not a currently available command. The deployment contract must define its invoc
 
 ### Human roles and management parity
 
+Agent registration, including its initial credential and receipt replay, uses an
+active unrestricted administrator session without an additional password prompt
+or login-freshness threshold, per [ADR-0019](../adr/0019-session-authorized-agent-registration.md).
+Current authority is rechecked transactionally; expiry, revocation, restricted
+onboarding, disabled users, role changes and installation epoch changes still
+deny access. Browser requests retain CSRF, origin and secure-transport checks.
+UI and CLI do not collect a password for this operation. Rotation, revocation,
+disablement and other credential operations retain their existing requirements.
+
 Authorization is deny-by-default on every API operation, including list filtering,
 exports, asynchronous result reads, and individual items in ingestion batches.
 UI visibility is not an authorization boundary. Human roles apply deployment-wide.
@@ -353,6 +362,13 @@ for throttling; `503` for unavailable authorization storage. No failure returns
 plaintext secrets. UI and CLI retain actionable redacted codes and request IDs.
 
 ## Acceptance criteria
+
+- AC-REG-01: A current unrestricted administrator registers an agent through UI,
+  API or CLI without supplying a password again; the initial token is returned
+  once after commit. Replay checks current authority and returns metadata only.
+- AC-REG-02: Missing, restricted, expired or revoked sessions, disabled users,
+  non-administrators and stale installation authority cannot register or replay;
+  transactional checks prevent authority changes from bypassing this boundary.
 
 - AC-01: Concurrent startup provisions one initial administrator. Initial login can
   only rotate the password or log out; API/CLI bypass attempts fail. Rotation requires

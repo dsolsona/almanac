@@ -17,6 +17,7 @@ function makeAuth(context: AuthContext = admin): AuthClient {
 }
 function agent() { return { id: agentID, name: 'west-1', display_name: 'West collector', enabled: true, version: '3', created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function agentB() { return { ...agent(), id: agentIDB, name: 'east-1', display_name: 'East collector' }; }
+function runtime(overrides: Record<string, unknown> = {}) { return { reachability: 'connected', protocol: 'almanac-agent/1', software_version: '1.2.3', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] }], last_heartbeat_at: '2026-10-22T13:14:15.123456Z', desired_configuration_revision: '9223372036854775807', applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running', configuration_failure_code: null, configuration_failure_revision: null, last_attempt_at: '2026-10-22T13:13:00Z', last_successful_query_at: null, next_expected_execution_at: '2026-10-22T13:15:00Z', collection_explanation: 'no_assignment', ...overrides }; }
 function credential() { return { id: credentialID, agent_id: agentID, issued_at: '2026-10-20T12:00:00.123456Z', expires_at: '2027-10-20T12:00:00.654321Z', revoked_at: null, retire_at: '2026-10-22T12:00:00.987654Z' }; }
 function credentialB() { return { ...credential(), id: 'f0863cd5-79a6-4ef5-90d1-1c67765b17d2', agent_id: agentIDB }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
@@ -36,6 +37,81 @@ function installFetch(createResponse?: Response) {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal; if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close; vi.useRealTimers(); });
 
 describe('agent administration screen', () => {
+  it('registers from the signed-in administrator session without asking for a password again', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = installFetch();
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByRole('button', { name: 'west-1' });
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Register agent' });
+    expect(within(dialog).queryByLabelText('Current password')).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Agent name'), 'session-agent');
+    await user.type(within(dialog).getByLabelText('Display name'), 'Session Agent');
+    await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
+    expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
+    const create = fetcher.mock.calls.find(([url, init]) => String(url) === '/api/v1/agents' && init?.method === 'POST');
+    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'session-agent', display_name: 'Session Agent' });
+  });
+
+  it('shows only a validated request ID and safe guidance for an unavailable registration response', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const requestID = '0123456789abcdef0123456789abcdef';
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
+      .mockResolvedValueOnce(response({ type: 'about:blank', title: 'Unavailable', status: 503, code: 'management_unavailable', message: 'private backend detail', request_id: requestID, field_errors: [] }, 503));
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByText('No agents have been registered.');
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    await user.type(screen.getByLabelText('Agent name'), 'outage-agent');
+    await user.type(screen.getByLabelText('Display name'), 'Outage Agent');
+    await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    expect(screen.getByText(requestID, { exact: true })).toBeVisible();
+    expect(screen.getByText(/temporarily unavailable/)).toBeVisible();
+    expect(screen.queryByText('private backend detail')).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('announces settled uncertainty and clears an earlier retry rejection before a later outage', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const requestID = 'abcdef0123456789abcdef0123456789';
+    const unavailable = response({ type: 'about:blank', title: 'Unavailable', status: 503, code: 'management_unavailable', message: 'private detail', request_id: requestID, field_errors: [] }, 503);
+    let creates = 0;
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method !== 'POST') return response({ items: [], next_cursor: '' });
+      creates++;
+      if (creates === 1) throw new Error('lost response');
+      if (creates === 2) return response({ type: 'about:blank', title: 'Unauthorized', status: 401, code: 'unauthenticated', message: 'private detail', request_id: requestID, field_errors: [] }, 401);
+      return unavailable;
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByText('No agents have been registered.');
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    await user.type(screen.getByLabelText('Agent name'), 'retry-agent');
+    await user.type(screen.getByLabelText('Display name'), 'Retry Agent');
+    await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    expect(screen.getByRole('status')).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Retry registration' }));
+    await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
+    expect(await screen.findByRole('heading', { name: 'Session needs checking' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Retry registration' }));
+    await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    expect(screen.getByText(/temporarily unavailable/)).toBeVisible();
+    expect(screen.getByText(requestID, { exact: true })).toBeVisible();
+    expect(screen.queryByText(/last retry was rejected because the session/)).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveFocus();
+    const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(posts).toHaveLength(3);
+    const keys = posts.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
+    expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]); expect(keys[2]).toBe(keys[0]);
+    expect(JSON.parse(String(posts[2]?.[1]?.body))).toEqual({ name: 'retry-agent', display_name: 'Retry Agent' });
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+  });
+
   it('finishes a pending refresh after fragment-only history navigation', async () => {
     const user = userEvent.setup();
     let finish!: (value: Response) => void;
@@ -84,9 +160,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Registration could not be submitted. Correct the highlighted field.');
-    expect(screen.getByLabelText('Current password')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('Enter your current password to register the agent.')).toBeVisible();
+    expect(alert).toHaveTextContent('Enter an agent name, display name, and a lifetime from 0 to 31536000 seconds when provided.');
     expect(screen.getByRole('dialog', { name: 'Register agent' })).toContainElement(alert);
     await waitFor(() => expect(alert).toHaveFocus());
     expect(screen.getAllByRole('alert')).toHaveLength(1);
@@ -119,6 +193,90 @@ describe('agent administration screen', () => {
     expect(screen.getByText('2026-10-22 12:00:00.987654Z')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     await waitFor(() => expect(location.search).toBe(''));
+  });
+
+  it('shows connection, collection, capability, revision and query signals without merging them', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime({ configuration_failure_code: 'apply_failed', configuration_failure_revision: '2' }) };
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const panel = await screen.findByRole('region', { name: 'Agent runtime' });
+    expect(panel.querySelector('.agents-runtime__state')).toHaveTextContent('Connected');
+    expect(panel).toHaveTextContent('almanac-agent/1');
+    expect(panel).toHaveTextContent('1.2.3');
+    expect(panel).toHaveTextContent('prometheus');
+    expect(panel).toHaveTextContent('live_query');
+    expect(panel).toHaveTextContent('9223372036854775807');
+    expect(panel).toHaveTextContent('Applied configuration revisionNot applied');
+    expect(panel).toHaveTextContent('Configuration failureapply_failed (revision 2)');
+    expect(panel).toHaveTextContent('2026-10-22 13:14:15.123456Z');
+    expect(panel).toHaveTextContent('No successful query has been reported.');
+    expect(panel).toHaveTextContent('No datasources are assigned to this agent.');
+    expect(panel).toHaveTextContent('Backend observation acceptance freshness is not available.');
+  });
+
+  it.each([
+    { name: 'never connected', enabled: true, runtime: undefined, expected: 'Never connected' },
+    { name: 'unreachable', enabled: true, runtime: runtime({ reachability: 'unreachable' }), expected: 'Unreachable' },
+    { name: 'incompatible', enabled: true, runtime: runtime({ reachability: 'incompatible' }), expected: 'Incompatible' },
+    { name: 'disabled despite a recent connection', enabled: false, runtime: runtime(), expected: 'Disabled by administrator' },
+  ])('presents $name without implying healthy operation', async ({ enabled, runtime: agentRuntime, expected }) => {
+    const user = userEvent.setup();
+    const live = { ...agent(), enabled, ...(agentRuntime === undefined ? {} : { runtime: agentRuntime }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const panel = await screen.findByRole('region', { name: 'Agent runtime' });
+    expect(panel.querySelector('.agents-runtime__state')).toHaveTextContent(expected);
+    if (expected === 'Never connected') expect(panel).toHaveTextContent('No heartbeat has been received');
+    if (expected === 'Disabled by administrator') expect(panel).toHaveTextContent('not operational while disabled');
+  });
+
+  it('shows an explicit empty capability state', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime({ capabilities: [] }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    expect(await screen.findByText('No provider capabilities were reported.')).toBeVisible();
+  });
+
+  it('renders repeated provider capability tuples as distinct entries', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime({ capabilities: [
+      { provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] },
+      { provider: 'prometheus', configuration_formats: ['prometheus-remote-write-v1'], operations: ['backfill'] },
+    ] }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const capabilities = await screen.findByRole('list');
+    const entries = within(capabilities).getAllByRole('listitem');
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toHaveTextContent('prometheus-http-v1');
+    expect(entries[1]).toHaveTextContent('prometheus-remote-write-v1');
   });
 
   it('rotates from the detail ETag with a stable command key and presents a fresh one-time token', async () => {
@@ -385,7 +543,6 @@ describe('agent administration screen', () => {
     const registration = screen.getByRole('dialog', { name: 'Register agent' });
     await user.type(within(registration).getByLabelText('Agent name'), 'new-agent');
     await user.type(within(registration).getByLabelText('Display name'), 'New agent');
-    await user.type(within(registration).getByLabelText('Current password'), 'correct horse');
     await user.click(within(registration).getByRole('button', { name: 'Register agent' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     await user.click(within(registration).getByRole('button', { name: 'Close dialog' }));
@@ -774,15 +931,14 @@ describe('agent administration screen', () => {
     await user.type(screen.getByLabelText('Agent name'), 'new-east');
     await user.type(screen.getByLabelText('Display name'), 'East collector');
     await user.type(screen.getByLabelText('Lifetime (seconds)'), '0');
-    await user.type(screen.getByLabelText('Current password'), 'correct horse');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     expect(location.search).toContain('agents_cursor=page-two');
     expect(screen.getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('one-time-secret');
     const request = fetcher.mock.calls.find(([, init]) => init?.method === 'POST');
     expect(request?.[1]?.headers).toMatchObject({ 'Idempotency-Key': expect.any(String), 'X-CSRF-Token': 'csrf-admin' });
-    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector', current_password: 'correct horse', lifetime_seconds: 0 });
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector', lifetime_seconds: 0 });
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
     expect(writeText).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Copy token' }));
     expect(writeText).toHaveBeenCalledWith('one-time-secret');
@@ -807,7 +963,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     expect(await screen.findByText('east-1')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'new-agent'); await user.type(screen.getByLabelText('Display name'), 'New agent'); await user.type(screen.getByLabelText('Current password'), 'proof');
+    await user.type(screen.getByLabelText('Agent name'), 'new-agent'); await user.type(screen.getByLabelText('Display name'), 'New agent');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     expect(location.search).toContain(`agent=${agentIDB}`);
@@ -817,7 +973,7 @@ describe('agent administration screen', () => {
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
   });
 
-  it('retains an uncertain intent and reuses its original key after deliberate retry with a fresh password', async () => {
+  it('retains an uncertain intent and reuses its original key after deliberate retry', async () => {
     const user = userEvent.setup(); installDialogs();
     const fetcher = vi.fn()
       .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
@@ -831,12 +987,14 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.type(screen.getByLabelText('Agent name'), 'new-east');
     await user.type(screen.getByLabelText('Display name'), 'East collector');
-    await user.type(screen.getByLabelText('Current password'), 'first proof');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
-    expect(await screen.findByRole('heading', { name: 'Outcome unknown' })).toBeVisible();
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    expect(screen.getByText(/No response was received from Almanac/)).toBeVisible();
+    expect(screen.getByText(/refresh agent records before deciding/i)).toBeVisible();
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Agents' }));
+    expect(screen.getByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Retry registration' }));
-    await user.type(screen.getByLabelText('Current password'), 'fresh proof');
     await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/token is no longer available/i));
     const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
@@ -844,7 +1002,7 @@ describe('agent administration screen', () => {
     const firstKey = new Headers(posts[0]?.[1]?.headers).get('Idempotency-Key');
     const retryKey = new Headers(posts[1]?.[1]?.headers).get('Idempotency-Key');
     expect(firstKey).toBeTruthy(); expect(retryKey).toBe(firstKey);
-    expect(JSON.parse(String(posts[1]?.[1]?.body))).toMatchObject({ name: 'new-east', display_name: 'East collector', current_password: 'fresh proof' });
+    expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector' });
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
     expect(location.search).toContain(`agent=${agentID}`);
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
@@ -858,11 +1016,11 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'new-east'); await user.type(screen.getByLabelText('Display name'), 'East collector'); await user.type(screen.getByLabelText('Current password'), 'proof');
+    await user.type(screen.getByLabelText('Agent name'), 'new-east'); await user.type(screen.getByLabelText('Display name'), 'East collector');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(auth.context).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole('heading', { name: 'Current password needs refreshing' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Session needs checking' })).toBeVisible();
   });
 
   it('distinguishes an unavailable session recheck and requires a later successful check', async () => {
@@ -873,13 +1031,13 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display'); await user.type(screen.getByLabelText('Current password'), 'proof');
+    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Session status unavailable' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Current password needs refreshing' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Check session' }));
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(await screen.findByRole('heading', { name: 'Registration was not accepted' })).toBeVisible();
   });
 
@@ -896,28 +1054,25 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display'); await user.type(screen.getByLabelText('Current password'), 'must not persist');
+    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
-    expect(await screen.findByRole('heading', { name: 'Outcome unknown' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Retry registration' }));
-    await user.type(screen.getByLabelText('Current password'), 'wrong proof');
     await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     await user.type(screen.getByLabelText('Login'), 'owner'); await user.type(screen.getByLabelText('Password'), 'login proof');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('heading', { name: 'Outcome unknown' })).toBeVisible();
-    expect(screen.getByText(/earlier attempt remains unknown/i)).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    expect(screen.getByText(/earlier result remains unconfirmed/i)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Retry registration' }));
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
-    await user.type(screen.getByLabelText('Current password'), 'fresh proof');
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
     expect(posts).toHaveLength(3);
     const keys = posts.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
     expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]); expect(keys[2]).toBe(keys[0]);
-    expect(JSON.parse(String(posts[2]?.[1]?.body))).toMatchObject({ name: 'safe-name', display_name: 'Safe display', current_password: 'fresh proof' });
-    expect(screen.queryByText('must not persist')).not.toBeInTheDocument();
+    expect(JSON.parse(String(posts[2]?.[1]?.body))).toMatchObject({ name: 'safe-name', display_name: 'Safe display' });
   });
 
   it('honors validated Retry-After by blocking registration and announcing the wait', async () => {
@@ -927,7 +1082,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display'); await user.type(screen.getByLabelText('Current password'), 'proof');
+    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('status')).toHaveTextContent(/try registration again in (1|2) seconds/i);
     expect(screen.getByRole('button', { name: 'Retry registration' })).toBeDisabled();
@@ -974,13 +1129,13 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display'); await user.type(screen.getByLabelText('Current password'), 'proof');
+    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getAllByRole('button', { name: 'Abandon request' }).at(-1)!);
     await act(async () => { finish(response({ agent: agent(), credential: credential(), replayed: false, secret_state: 'issued', token: 'one-time-secret' }, 201)); });
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Outcome unknown' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Registration not confirmed' })).not.toBeInTheDocument();
   });
 
   it('invalidates a create across uncertain logout and a later identity change', async () => {
@@ -992,13 +1147,13 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'old-user-name'); await user.type(screen.getByLabelText('Display name'), 'Old user'); await user.type(screen.getByLabelText('Current password'), 'proof');
+    await user.type(screen.getByLabelText('Agent name'), 'old-user-name'); await user.type(screen.getByLabelText('Display name'), 'Old user');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByRole('button', { name: 'Keep request' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/sign-out could not be confirmed/i);
-    expect(screen.getByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
     await act(async () => { finish(response({ agent: agent(), credential: credential(), replayed: false, secret_state: 'issued', token: 'one-time-secret' }, 201)); });
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
     auth.logout = vi.fn().mockResolvedValue(undefined); auth.context = vi.fn().mockResolvedValueOnce({ csrf_token: 'csrf-anon', session: null }); auth.login = vi.fn().mockResolvedValue(newAdmin);
@@ -1011,13 +1166,13 @@ describe('agent administration screen', () => {
     expect(screen.getByLabelText('Display name')).toHaveValue('');
   });
 
-  it('clears the safe draft and password on an explicit logout before same-user sign-in', async () => {
+  it('clears the safe draft on an explicit logout before same-user sign-in', async () => {
     const user = userEvent.setup(); installDialogs();
     const auth = makeAuth(); auth.context = vi.fn().mockResolvedValueOnce(admin).mockResolvedValueOnce({ csrf_token: 'csrf-anon', session: null });
     render(<AuthPage client={auth} />);
     await screen.findByRole('button', { name: 'Register agent' });
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'private-draft'); await user.type(screen.getByLabelText('Display name'), 'Private draft'); await user.type(screen.getByLabelText('Current password'), 'do not retain');
+    await user.type(screen.getByLabelText('Agent name'), 'private-draft'); await user.type(screen.getByLabelText('Display name'), 'Private draft');
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
@@ -1026,21 +1181,20 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     expect(screen.getByLabelText('Agent name')).toHaveValue('');
     expect(screen.getByLabelText('Display name')).toHaveValue('');
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
   });
 
-  it('blocks duplicate submits synchronously and clears the password as soon as create dispatches', async () => {
+  it('blocks duplicate submits synchronously', async () => {
     const user = userEvent.setup(); installDialogs(); let finish!: (value: Response) => void;
     const fetcher = vi.fn().mockImplementationOnce(async () => response({ items: [], next_cursor: '' })).mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
     vi.stubGlobal('fetch', fetcher);
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display'); await user.type(screen.getByLabelText('Current password'), 'proof');
-    const form = screen.getByLabelText('Current password').closest('form')!;
+    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
+    const form = screen.getByLabelText('Agent name').closest('form')!;
     fireEvent.submit(form); fireEvent.submit(form);
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
     finish(response({ agent: agent(), credential: credential(), replayed: false, secret_state: 'issued', token: 'one-time-secret' }, 201));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
   });

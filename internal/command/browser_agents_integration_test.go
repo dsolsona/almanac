@@ -13,7 +13,7 @@ import (
 )
 
 func TestIntegrationExecutableBrowserAgentRegistration(t *testing.T) {
-	for _, scenario := range []string{"agents", "agents-close", "agents-lost"} {
+	for _, scenario := range []string{"agents", "agents-close", "agents-lost", "agents-unavailable"} {
 		t.Run(scenario, func(t *testing.T) { testBrowserAuthentication(t, scenario) })
 	}
 }
@@ -72,8 +72,9 @@ func assertBrowserAgentRegistration(t *testing.T, databaseURL, artifacts, scenar
 	if scenario == "agents-lost" {
 		wantRequests = 2
 		wantName = "browser-lost"
-	} else if scenario == "agents-close" {
-		wantRequests = 2 // A rejected password proof precedes the fresh issuance.
+	} else if scenario == "agents-unavailable" {
+		wantRequests = 2
+		wantName = "browser-unavailable"
 	}
 	if evidence.Replayed != (scenario == "agents-lost") || evidence.CreateRequests != wantRequests {
 		t.Fatal("browser registration dispatch/replay evidence differs")

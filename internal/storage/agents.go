@@ -51,13 +51,14 @@ type CreateAgentInput struct {
 }
 
 type AgentRecord struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	DisplayName string    `json:"display_name"`
-	Enabled     bool      `json:"enabled"`
-	Version     int64     `json:"version"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	DisplayName string              `json:"display_name"`
+	Enabled     bool                `json:"enabled"`
+	Version     int64               `json:"version"`
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+	Runtime     *AgentRuntimeStatus `json:"-"`
 }
 
 type AgentCredentialRecord struct {
@@ -158,11 +159,6 @@ func CreateAgent(ctx context.Context, databaseURL string, input CreateAgentInput
 	if installation.CredentialEpoch.String() != epoch.String() || user.CredentialRevision != input.Proof.CredentialRevision {
 		return AgentCreation{}, ErrInvalidSession
 	}
-	verifiedAt := input.Proof.VerifiedAt.UTC().Truncate(time.Microsecond)
-	if now.Before(verifiedAt) || !now.Before(verifiedAt.Add(30*time.Second)) {
-		return AgentCreation{}, ErrInvalidSession
-	}
-
 	actorID := userID
 	receipt, err := queries.FindAgentReceipt(ctx, dbgen.FindAgentReceiptParams{ActorID: actorID, IdempotencyKey: input.IdempotencyKey})
 	if err == nil {
@@ -218,7 +214,7 @@ func CreateAgent(ctx context.Context, databaseURL string, input CreateAgentInput
 		return AgentCreation{}, ErrInvalidAgentInput
 	}
 	completionTime = completionTime.UTC().Truncate(time.Microsecond)
-	if completionTime.Before(now) || !completionTime.Before(verifiedAt.Add(30*time.Second)) || invalidSessionState(installation, user, session, completionTime) {
+	if completionTime.Before(now) || invalidSessionState(installation, user, session, completionTime) {
 		return AgentCreation{}, ErrInvalidSession
 	}
 	if err := queries.InsertAgentReceipt(ctx, dbgen.InsertAgentReceiptParams{

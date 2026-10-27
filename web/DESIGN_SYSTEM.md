@@ -2,7 +2,7 @@
 
 This guide records the shared visual foundation and the controls demonstrated in
 the local `/design-system` development catalogue. The production root uses these
-controls for local sign-in, restricted password setup and signed-in identity.
+controls for local sign-in, restricted password setup and the signed-in application shell.
 
 ## Foundations
 
@@ -86,6 +86,8 @@ Import controls from `src/components/ui/` and prefer native semantics:
   dialog containing a Monday-first, keyboard-navigable month grid.
 - `LoadingIndicator` announces an indeterminate status with a transform-only
   moving segment and a static reduced-motion state.
+- `ApplicationShell` provides desktop navigation, a focus-contained mobile drawer,
+  account controls and visibly unavailable planned destinations.
 
 ## Catalogue and scope
 
@@ -98,8 +100,9 @@ component suite, production build and production exclusion check. Set
 mobile widths in both themes. `TEST_FILE` can select one component test filename
 with the unit mode.
 
-The catalogue demonstrates actual shared control exports and local-only state.
-It includes palette and type specimens, disabled/pending/invalid/empty/loading/
+The catalogue demonstrates actual shared control exports and local-only state,
+including the signed-in application shell. It includes palette and type specimens,
+disabled/pending/invalid/empty/loading/
 error/long-content examples, switches, date selection, a working dialog, and a
 lazy charts section. Its local save example completes only when the explicit
 finish control is pressed. It is imported only by the development build; examples

@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useRef, useState, type ReactNode } from 'react';
-import { Button, DatePicker, Dialog, LoadingIndicator, Panel, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
+import { ApplicationShell, Button, DatePicker, Dialog, LoadingIndicator, Panel, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
 import '../styles/catalogue.css';
 
 const ChartsSection = lazy(() => import('./ChartsSection.tsx').then((module) => ({ default: module.ChartsSection })));
@@ -32,6 +32,7 @@ export function Catalogue() {
   const [pending, setPending] = useState(false);
   const [count, setCount] = useState(0);
   const [feedback, setFeedback] = useState('No local action yet.');
+  const [shellFeedback, setShellFeedback] = useState('This is a local application shell example.');
   const [demoDate, setDemoDate] = useState('2026-10-25');
   const [chartsOpen, setChartsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -49,7 +50,7 @@ export function Catalogue() {
     <a className="skip-link" href="#catalogue-main">Skip to catalogue</a>
     <header className="masthead"><a href="/" className="wordmark">ALMANAC</a><span className="catalogue-label">LOCAL COMPONENT CATALOGUE</span><ThemeToggle /></header>
     <nav className="catalogue-nav" aria-label="Catalogue sections">
-      <a href="#foundations">Foundations</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#status">Status</a><a href="#panels">Panels</a><a href="#dialog">Dialog</a><a href="#controls">Controls</a><button type="button" aria-expanded={chartsOpen} aria-controls={chartsOpen ? 'charts' : undefined} onClick={() => setChartsOpen(true)}>Charts</button>
+      <a href="#foundations">Foundations</a><a href="#application-shell">Application shell</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#status">Status</a><a href="#panels">Panels</a><a href="#dialog">Dialog</a><a href="#controls">Controls</a><button type="button" aria-expanded={chartsOpen} aria-controls={chartsOpen ? 'charts' : undefined} onClick={() => setChartsOpen(true)}>Charts</button>
     </nav>
     <main id="catalogue-main" className="catalogue-main">
       <section className="catalogue-intro">
@@ -64,6 +65,13 @@ export function Catalogue() {
           <Panel heading="Palette"><div className="swatch-grid">{colors.map(([label, token]) => <div className="swatch" key={token}><span className="swatch__sample" style={{ background: `var(${token})` }} aria-hidden="true"/><span>{label}</span><code>{token}</code></div>)}</div></Panel>
           <Panel heading="Typography"><div className="type-specimens"><p className="wordmark type-wordmark">ALMANAC</p><h3 className="type-heading">Paper, ink and signal</h3><p>System sans keeps reading comfortable, including dense operational labels and descriptions.</p><p className="mono">AGENT-07 · 99.95% · 1,482 ms</p><p className="numeric">1234567890 <span>tabular figures</span></p></div></Panel>
         </div>
+      </section>
+
+      <section className="catalogue-section" id="application-shell" aria-labelledby="application-shell-heading">
+        <div className="section-heading"><p className="eyebrow mono">APPLICATION / NAVIGATION</p><h2 id="application-shell-heading">Signed-in application shell</h2><p>The same responsive navigation, unavailable destinations, identity footer and theme control used by signed-in operators.</p></div>
+        <ApplicationShell embedded login="operator" role="administrator" pending={false} showCheckSession={false} onCheckSession={() => setShellFeedback('Session check is local to this preview.')} onSignOut={() => setShellFeedback('Sign-out is local to this preview.')}>
+          <h2 className="app-page-heading">Agents</h2><Panel heading="Agent records"><p>No agents have been registered in this preview.</p><Button onClick={() => setShellFeedback('The application shell keeps its navigation available.')}>Register agent</Button><p role="status">{shellFeedback}</p></Panel>
+        </ApplicationShell>
       </section>
 
       <section className="catalogue-section" id="buttons" aria-labelledby="buttons-heading">

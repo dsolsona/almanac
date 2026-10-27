@@ -74,6 +74,17 @@ scoped to actor and operation, retained 24h. Same key/different body conflicts. 
 observation delivery contract uses its own seven-day replay horizon, not 24h command
 receipts. Both mechanisms authorize every replay.
 
+Administrators can test a saved datasource through
+`POST /api/v1/datasources/{id}/connection-tests`, supplying `{}`, its exact
+`If-Match` version and an `Idempotency-Key`. Admission reads the saved assignment,
+connection settings and retained credentials together; clients never need to
+retrieve or resubmit those credentials. The operation returns a diagnostic receipt
+and `Location`, like an unsaved connection test. It accepts no settings overrides.
+The CLI exposes this through `datasources test --datasource-id ... --if-match ...
+--idempotency-key ...`; unsaved tests use the separate `--input-file` form. Testing
+edited settings with retained credentials requires saving first or explicitly
+providing replacement credentials for an unsaved test.
+
 Authentication context, login, password change and logout are excluded from the
 24-hour management receipts under [ADR-0016](../adr/0016-authentication-retry-behavior.md).
 They reject a supplied Idempotency-Key with501 `capability_unavailable`. After a
@@ -136,6 +147,17 @@ CLI success; pre-dispatch local uncertainty is distinct from a possible remote
 authentication mutation. Uncertain logout preserves the recoverable credential.
 
 ## Acceptance criteria
+
+Agent registration uses the current administrator session as defined by
+[ADR-0019](../adr/0019-session-authorized-agent-registration.md).
+`POST /api/v1/agents` accepts name, display name and optional lifetime without
+`current_password`; the CLI create operation likewise needs no password file.
+Retain idempotency keys, CSRF, current authorization, audit and one-time token
+semantics. For a failed response, explain the observed cause when known
+(connection failure, service unavailable, timeout or unexpected response), retain
+the pending registration and offer deliberate recovery. Never infer rollback
+from a connection failure, automatically repeat a mutation, or describe an
+unconfirmed registration as an empty list with no qualification.
 
 - AC-01: UI and CLI invoke the same authorized operations and produce equivalent
   resource outcomes; the operation inventory has no unexplained UI-only mutations.

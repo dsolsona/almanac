@@ -84,7 +84,7 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	case "agents credentials list":
 		allowed["agent-id"], allowed["limit"], allowed["cursor"] = true, true, true
 	case "agents create":
-		allowed["name"], allowed["display-name"], allowed["current-password-file"], allowed["idempotency-key"], allowed["lifetime-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true, true
+		allowed["name"], allowed["display-name"], allowed["idempotency-key"], allowed["lifetime-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true
 	case "agents credentials rotate":
 		allowed["agent-id"], allowed["if-match"], allowed["current-password-file"], allowed["idempotency-key"], allowed["confirm"], allowed["lifetime-seconds"], allowed["overlap-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true, true, true, true
 	case "agents credentials revoke":
@@ -126,7 +126,10 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 		}
 	}
 	mutating := operation == "agents create" || operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable"
-	if mutating && (!seen["current-password-file"] || passwordFile == "" || !seen["idempotency-key"] || !validKey(key)) {
+	if mutating && (!seen["idempotency-key"] || !validKey(key)) {
+		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("a valid idempotency-key is required"))
+	}
+	if operation != "agents create" && mutating && (!seen["current-password-file"] || passwordFile == "") {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("current-password-file and a valid idempotency-key are required"))
 	}
 	if (operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable") && (!seen["if-match"] || !validETag(ifMatch, id)) {
@@ -213,6 +216,7 @@ func renderAgentText(operation string, result jsontext.Value, token string, show
 			return "Agent details retrieved.\n"
 		}
 		fmt.Fprintf(&out, "Agent %s (%s)\nName: %s\nEnabled: %t\nVersion: %s\nETag: %s\n", strconv.Quote(detail.Agent.DisplayName), cliAgentID(detail.Agent.Id), strconv.Quote(detail.Agent.Name), detail.Agent.Enabled, detail.Agent.Version, detail.ETag)
+		renderAgentRuntime(&out, detail.Agent)
 	case "agents credentials list":
 		var page api.CredentialPage
 		if json.Unmarshal(result, &page) != nil {
@@ -247,6 +251,85 @@ func renderAgentText(operation string, result jsontext.Value, token string, show
 	}
 	return out.String()
 }
+
+func renderAgentRuntime(out *strings.Builder, agent api.Agent) {
+	runtime := agent.Runtime
+	if !agent.Enabled {
+		fmt.Fprintln(out, "Connection state: Disabled by administrator")
+	} else if runtime == nil {
+		fmt.Fprintln(out, "Connection state: Never connected")
+	} else {
+		fmt.Fprintf(out, "Connection state: %s\n", runtimeReachabilityLabel(runtime.Reachability))
+	}
+	if runtime == nil {
+		fmt.Fprintln(out, "No heartbeat has been received.")
+		fmt.Fprintln(out, "Observation acceptance freshness: Not available.")
+		return
+	}
+	fmt.Fprintf(out, "Reported reachability: %s", runtime.Reachability)
+	if !agent.Enabled {
+		fmt.Fprint(out, " (not operational while disabled)")
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "Protocol: %s\nSoftware version: %s\n", strconv.Quote(runtime.Protocol), strconv.Quote(runtime.SoftwareVersion))
+	fmt.Fprintf(out, "Last heartbeat: %s\n", cliRuntimeTime(runtime.LastHeartbeatAt))
+	fmt.Fprintf(out, "Desired configuration revision: %s\n", runtime.DesiredConfigurationRevision)
+	appliedRevision := runtime.AppliedConfigurationRevision
+	if appliedRevision == "0" {
+		appliedRevision = "Not applied"
+	}
+	fmt.Fprintf(out, "Applied configuration revision: %s\n", appliedRevision)
+	fmt.Fprintf(out, "Scheduler health: %s\nCollection progress: %s\n", runtime.SchedulerHealth, runtime.CollectionProgress)
+	if runtime.ConfigurationFailureCode != nil {
+		fmt.Fprintf(out, "Configuration failure: %s (revision %s)\n", *runtime.ConfigurationFailureCode, *runtime.ConfigurationFailureRevision)
+	}
+	fmt.Fprintf(out, "Last attempt: %s\nLast successful query: %s\nNext expected execution: %s\n",
+		cliRuntimeTime(runtime.LastAttemptAt), cliRuntimeTime(runtime.LastSuccessfulQueryAt), cliRuntimeTime(runtime.NextExpectedExecutionAt))
+	if runtime.CollectionExplanation == api.NoAssignment {
+		fmt.Fprintln(out, "No datasources are assigned to this agent.")
+	}
+	if len(runtime.Capabilities) == 0 {
+		fmt.Fprintln(out, "No provider capabilities were reported.")
+	} else {
+		fmt.Fprintln(out, "Provider capabilities:")
+		for _, capability := range runtime.Capabilities {
+			fmt.Fprintf(out, "  Provider: %s\n    Configuration formats: %s\n    Operations: %s\n",
+				strconv.Quote(capability.Provider), quotedRuntimeList(capability.ConfigurationFormats), quotedRuntimeList(capability.Operations))
+		}
+	}
+	fmt.Fprintln(out, "Observation acceptance freshness: Not available.")
+}
+
+func runtimeReachabilityLabel(reachability api.AgentRuntimeStatusReachability) string {
+	switch reachability {
+	case api.AgentRuntimeStatusReachabilityConnected:
+		return "Connected"
+	case api.AgentRuntimeStatusReachabilityUnreachable:
+		return "Unreachable"
+	case api.AgentRuntimeStatusReachabilityIncompatible:
+		return "Incompatible"
+	default:
+		return "Unknown"
+	}
+}
+
+func cliRuntimeTime(value *time.Time) string {
+	if value == nil {
+		return "Not reported"
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func quotedRuntimeList(values []string) string {
+	if len(values) == 0 {
+		return "None reported"
+	}
+	quoted := make([]string, len(values))
+	for index, value := range values {
+		quoted[index] = strconv.Quote(value)
+	}
+	return strings.Join(quoted, ", ")
+}
 func cliAgentID(id api.AgentId) string {
 	b, _ := json.Marshal(id)
 	var s string
@@ -262,7 +345,7 @@ func cliOptionalTime(t *time.Time) string {
 func performAgent(ctx context.Context, op, profile, id, credentialID, name, display, etag, passwordFile, key, tokenFile string, show bool, limit int, cursor string, lifetime int, lifetimeSet bool, overlap int, overlapSet bool) (jsontext.Value, string, bool, error) {
 	var password []byte
 	mutating := op == "agents create" || op == "agents credentials rotate" || op == "agents credentials revoke" || op == "agents disable"
-	if mutating {
+	if mutating && op != "agents create" {
 		var e error
 		password, e = secretfile.Read(passwordFile, 512)
 		if e != nil || len(password) == 0 || !utf8.Valid(password) {
@@ -333,7 +416,7 @@ func performAgent(ctx context.Context, op, profile, id, credentialID, name, disp
 	case "agents create":
 		life := optionalSeconds(lifetime, lifetimeSet)
 		var b []byte
-		b, token, replay, e = client.Create(ctx, api.CreateAgentRequest{Name: name, DisplayName: display, CurrentPassword: string(password), LifetimeSeconds: life}, key)
+		b, token, replay, e = client.Create(ctx, api.CreateAgentRequest{Name: name, DisplayName: display, LifetimeSeconds: life}, key)
 		data = b
 	case "agents credentials rotate":
 		var idv api.AgentId

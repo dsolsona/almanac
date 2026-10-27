@@ -1,7 +1,8 @@
 # First observations delivery plan
 
-> Use subagent-driven development: one bounded `gpt-6-luna` implementer at a time;
-> the coordinator owns interfaces, review, integration and acceptance.
+> Use subagent-driven development: up to two `gpt-6-luna` implementers on independent
+> scopes with stable shared interfaces; the coordinator owns integration and
+> acceptance. Follow the current [ways of working](../ways-of-working.md).
 
 Goal: an administrator registers a remote agent, creates a Prometheus datasource,
 tests a query on that agent, creates an SLI and sees collected counts and health.
@@ -85,8 +86,9 @@ transactional audit, missing step-up proof, scoped receipts and machine-token st
 No management endpoint may bypass those requirements to accelerate the first screen.
 The readiness audit confirms all five prerequisites need either extension or new
 implementation; F1 supplies no agent management endpoint or reusable CLI profile.
-The management wire contracts and persistence/handler acceptance now exist in
-F2-T02–T06; the next bounded work connects them to browser and CLI consumers.
+The management wire contracts, persistence, handlers and browser/CLI consumers
+now exist in F2-T02–T11. The next usable increment connects the remote agent and
+exposes its actual status, completing checkpoint 2 above.
 Existing lease/takeover choices are already accepted: the
 [review guide](../review-guide.md) explicitly treats inline proposal wording as
 decision traceability, not a repeated approval requirement.
@@ -114,11 +116,12 @@ UI boundaries, not around every backend edit.
 - [x] Complete code-to-contract readiness audit.
 - [x] Define first bounded task interfaces and management acceptance cases.
 - [x] Deliver and verify registration through UI/API/CLI.
-- [ ] Deliver and verify connected-agent status.
-- [ ] Deliver and verify datasource diagnostics.
+- [x] Deliver and verify connected-agent status.
+- [x] Deliver and verify datasource diagnostics.
 - [ ] Deliver and verify collected and directly ingested observations.
 
 F2-T01–T06 establish verified provider fixtures and authenticated management API.
-F2-T07–T11 complete browser and CLI management. Connected-agent status, datasource
-diagnostics and the complete observation journey remain outstanding; individual
-task records carry their verification evidence.
+F2-T07–T11 complete browser and CLI management. F2-T17/T19 deliver connected-agent
+status. F2-T18/T20 deliver encrypted datasource management and remote diagnostics.
+The complete observation journey remains outstanding and paused; individual task
+records carry their verification evidence.

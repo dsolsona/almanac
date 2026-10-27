@@ -6,8 +6,11 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -50,6 +53,24 @@ type AgentCredentialPage struct {
 	NextCursor string                       `json:"next_cursor"`
 }
 
+type AgentRuntimeStatus struct {
+	Reachability                 string
+	Protocol                     string
+	SoftwareVersion              string
+	Capabilities                 []agentprotocol.Capability
+	LastHeartbeatAt              *time.Time
+	DesiredConfigurationRevision int64
+	AppliedConfigurationRevision int64
+	SchedulerHealth              string
+	CollectionProgress           string
+	ConfigurationFailureCode     *string
+	ConfigurationFailureRevision *int64
+	LastAttemptAt                *time.Time
+	LastSuccessfulQueryAt        *time.Time
+	NextExpectedExecutionAt      *time.Time
+	CollectionExplanation        string
+}
+
 type agentCursor struct {
 	Version int       `json:"version"`
 	Kind    string    `json:"kind"`
@@ -76,10 +97,115 @@ func GetAgent(ctx context.Context, databaseURL string, input AgentReadInput) (Ag
 	if err != nil {
 		return AgentRecord{}, operationError(ctx, "storage: agent read failed", err)
 	}
+	record, err := populateAgentRuntimeStatus(ctx, queries, agentRecord(row), now)
+	if err != nil {
+		return AgentRecord{}, err
+	}
 	if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
 		return AgentRecord{}, err
 	}
-	return agentRecord(row), nil
+	return record, nil
+}
+
+func populateAgentRuntimeStatus(ctx context.Context, queries *dbgen.Queries, record AgentRecord, now time.Time) (AgentRecord, error) {
+	agentID, valid := canonicalUUID(record.ID)
+	if !valid {
+		return AgentRecord{}, ErrInvalidAgentInput
+	}
+	incompatibleAt, incompatibleErr := queries.GetAgentIncompatibleAttempt(ctx, agentID)
+	hasIncompatibleAttempt := incompatibleErr == nil
+	if incompatibleErr != nil && !errors.Is(incompatibleErr, pgx.ErrNoRows) {
+		return AgentRecord{}, operationError(ctx, "storage: incompatible agent state read failed", incompatibleErr)
+	}
+	runtimeRow, runtimeErr := queries.GetAgentRuntimeStatus(ctx, agentID)
+	if runtimeErr == nil {
+		record.Runtime, runtimeErr = runtimeStatus(runtimeRow, now)
+		if runtimeErr != nil {
+			return AgentRecord{}, operationError(ctx, "storage: agent runtime capability state invalid", runtimeErr)
+		}
+		if hasIncompatibleAttempt {
+			activityAt := runtimeRow.UpdatedAt.Time
+			if runtimeRow.LastHeartbeatAt.Valid {
+				activityAt = runtimeRow.LastHeartbeatAt.Time
+			}
+			if !incompatibleAt.Time.Before(activityAt) {
+				record.Runtime.Reachability = "incompatible"
+			}
+		}
+	} else if !errors.Is(runtimeErr, pgx.ErrNoRows) {
+		return AgentRecord{}, operationError(ctx, "storage: agent runtime status read failed", runtimeErr)
+	} else if hasIncompatibleAttempt {
+		configuration, err := queries.GetAgentConfiguration(ctx, agentID)
+		if err != nil {
+			return AgentRecord{}, operationError(ctx, "storage: incompatible agent configuration read failed", err)
+		}
+		record.Runtime = &AgentRuntimeStatus{
+			Reachability: "incompatible", Protocol: "incompatible", SoftwareVersion: "unknown",
+			Capabilities: []agentprotocol.Capability{}, LastHeartbeatAt: nil,
+			DesiredConfigurationRevision: configuration.Revision, AppliedConfigurationRevision: 0,
+			SchedulerHealth: "degraded", CollectionProgress: "not_started",
+			CollectionExplanation: "no_assignment",
+		}
+	}
+	return record, nil
+}
+
+func runtimeStatus(row dbgen.GetAgentRuntimeStatusRow, now time.Time) (*AgentRuntimeStatus, error) {
+	var capabilities []agentprotocol.Capability
+	if json.Unmarshal(row.Capabilities, &capabilities) != nil || capabilities == nil {
+		return nil, errors.New("storage: agent runtime capabilities invalid")
+	}
+	for _, capability := range capabilities {
+		if strings.TrimSpace(capability.Provider) == "" || capability.ConfigurationFormats == nil || capability.Operations == nil {
+			return nil, errors.New("storage: agent runtime capabilities invalid")
+		}
+	}
+	heartbeatAt := nullableTimestamp(row.LastHeartbeatAt)
+	activityAt := heartbeatAt
+	if activityAt == nil {
+		activityAt = nullableTimestamp(row.UpdatedAt)
+	}
+	reachability := "unreachable"
+	if activityAt != nil && !now.After(activityAt.Add(30*time.Second)) {
+		reachability = "connected"
+	}
+	return &AgentRuntimeStatus{
+		Reachability: reachability, Protocol: row.Protocol, SoftwareVersion: row.SoftwareVersion,
+		Capabilities: capabilities, LastHeartbeatAt: heartbeatAt,
+		DesiredConfigurationRevision: row.DesiredConfigurationRevision,
+		AppliedConfigurationRevision: row.AppliedConfigurationRevision,
+		SchedulerHealth:              row.SchedulerHealth, CollectionProgress: row.CollectionProgress,
+		ConfigurationFailureCode:     nullableText(row.ConfigurationFailureCode),
+		ConfigurationFailureRevision: nullableInt64(row.ConfigurationFailureRevision),
+		LastAttemptAt:                nullableTimestamp(row.LastAttemptAt),
+		LastSuccessfulQueryAt:        nullableTimestamp(row.LastSuccessfulQueryAt),
+		NextExpectedExecutionAt:      nullableTimestamp(row.NextExpectedExecutionAt),
+		CollectionExplanation:        "no_assignment",
+	}, nil
+}
+
+func nullableText(value pgtype.Text) *string {
+	if !value.Valid {
+		return nil
+	}
+	result := value.String
+	return &result
+}
+
+func nullableInt64(value pgtype.Int8) *int64 {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Int64
+	return &result
+}
+
+func nullableTimestamp(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Time.UTC()
+	return &result
 }
 
 func ListAgents(ctx context.Context, databaseURL string, input ListAgentsInput) (AgentPage, error) {
@@ -102,7 +228,11 @@ func ListAgents(ctx context.Context, databaseURL string, input ListAgentsInput) 
 		if i == limit {
 			break
 		}
-		page.Items = append(page.Items, agentRecord(row))
+		record, err := populateAgentRuntimeStatus(ctx, queries, agentRecord(row), now)
+		if err != nil {
+			return AgentPage{}, err
+		}
+		page.Items = append(page.Items, record)
 	}
 	if len(rows) > limit {
 		last := page.Items[len(page.Items)-1]
@@ -162,6 +292,10 @@ func ListAgentCredentials(ctx context.Context, databaseURL string, input ListAge
 }
 
 func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	return beginAgentReadWithRoles(ctx, databaseURL, verifier, clock, "administrator")
+}
+
+func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	conn, err := connectCurrentSchema(ctx, databaseURL)
 	if err != nil {
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
@@ -214,7 +348,7 @@ func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, 
 	if session.Restricted || user.MustChangePassword || !installation.OnboardingCompletedAt.Valid {
 		return fail(ErrAgentForbidden)
 	}
-	if user.Role != "administrator" {
+	if !slices.Contains(roles, user.Role) {
 		return fail(ErrAgentForbidden)
 	}
 	return conn, q, tx, user, installation, session, now, nil

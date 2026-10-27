@@ -18,6 +18,10 @@ function tokenEvidence(token) {
 // raw HTTP bodies, clipboard values or token-bearing screenshots are retained.
 export async function runAgentRegistrationJourney({ page, context, fixture, setStage }) {
   const origin = new URL(fixture.url).origin;
+  const expectSelectedAgentURL = async (agentID, stage) => {
+    setStage(`${stage}; expected pathname=/agents agent=${agentID}`);
+    await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === agentID);
+  };
   let createRequests = 0;
   let firstKey;
   let firstSemantics;
@@ -31,26 +35,64 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   setStage('agent list second page');
   await page.getByRole('button', { name: 'Next agents', exact: true }).click();
   await expect(page.getByRole('button', { name: 'fixture-051', exact: true })).toBeVisible();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.has('agents_cursor'));
   setStage('agent list browser back');
   await page.goBack();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent') && !url.searchParams.has('agents_cursor'));
+  await expect(page.getByRole('button', { name: 'fixture-001', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'fixture-001', exact: true }).click();
-  setStage('credential history first page');
+  const selectedAgentID = '10000000-0000-4000-8000-000000000001';
+  await expectSelectedAgentURL(selectedAgentID, 'agent selection URL and browser history');
+  const selectedURL = page.url();
+  await page.goBack();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
+  await expect(page.getByRole('button', { name: 'fixture-001', exact: true })).toBeVisible();
+  await page.goForward();
+  await expectSelectedAgentURL(selectedAgentID, 'agent selection browser forward');
   const history = page.getByRole('region', { name: 'Credential history', exact: true }).and(page.locator('[tabindex="0"]'));
+  setStage('agent selection browser forward URL confirmed; waiting for credential history region');
+  await expect(history).toBeVisible();
+  setStage('direct agent selection URL reload');
+  await page.goto(selectedURL);
+  await expectSelectedAgentURL(selectedAgentID, 'direct agent selection URL reload');
+  await expect(page.getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
+  setStage('credential history first page');
   await expect(history.locator('tbody tr')).toHaveCount(50);
   setStage('credential history second page');
   await page.getByRole('button', { name: 'Next credential history', exact: true }).click();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
   await expect(history.locator('tbody tr')).toHaveCount(1);
   await expect(history).toContainText('20000000-0000-4000-8000-000000000051');
+  setStage('credential history cursor browser history');
+  await page.goBack();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && !url.searchParams.has('credentials_cursor'));
+  await expect(history.locator('tbody tr')).toHaveCount(50);
+  await page.goForward();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
+  await expect(history.locator('tbody tr')).toHaveCount(1);
   setStage('credential history reload');
   await page.reload();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
   await expect(history.locator('tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
 
   const lost = fixture.scenario === 'agents-lost';
-  const rejectedProof = fixture.scenario === 'agents-close';
-  const expectedCreates = lost || rejectedProof ? 2 : 1;
-  const name = lost ? 'browser-lost' : 'browser-normal';
+  const unavailable = fixture.scenario === 'agents-unavailable';
+  const expectedCreates = lost || unavailable ? 2 : 1;
+  const name = lost ? 'browser-lost' : unavailable ? 'browser-unavailable' : 'browser-normal';
   let evidence;
+  const selectTheme = async (theme) => {
+    const dark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
+    if (dark === (theme === 'dark')) return;
+    if (await page.evaluate(() => window.innerWidth <= 860)) {
+      await page.getByRole('button', { name: 'Menu', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Navigation menu' }).getByRole('button', { name: `Switch to ${theme} theme` }).click();
+      await page.keyboard.press('Escape');
+    } else {
+      await page.getByRole('button', { name: `Switch to ${theme} theme` }).click();
+    }
+  };
   if (lost) {
     await page.route('**/api/v1/agents', async (route) => {
       try {
@@ -84,36 +126,80 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     }, { times: 1 });
   }
 
-  setStage(lost ? 'committed registration response loss' : 'fresh registration');
+  if (unavailable) {
+    let abortedFirstCreate = false;
+    await page.route('**/api/v1/agents', async (route) => {
+      if (route.request().method() === 'POST' && !abortedFirstCreate) {
+        abortedFirstCreate = true;
+        const incoming = route.request();
+        const headers = await incoming.allHeaders();
+        firstKey = headers['idempotency-key'];
+        const body = incoming.postDataJSON();
+        firstSemantics = { name: body.name, display_name: body.display_name, lifetime_seconds: body.lifetime_seconds };
+        setStage('first registration request intercepted');
+        await route.abort('failed');
+      }
+      else await route.continue();
+    }, { times: 1 });
+  }
+
+  setStage(lost ? 'committed registration response loss' : unavailable ? 'registration connection failure' : 'fresh registration');
   await page.getByRole('button', { name: 'Register agent', exact: true }).click();
+  if (unavailable) setStage('registration dialog opened');
   let registration = page.getByRole('dialog', { name: 'Register agent', exact: true });
   await registration.getByLabel('Agent name', { exact: true }).fill(name);
   await registration.getByLabel('Display name', { exact: true }).fill('Browser acceptance agent');
-  let rejectedKey;
-  if (rejectedProof) {
-    setStage('rejected password proof and confirmed session');
-    const rejectedResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents');
-    await registration.getByLabel('Current password', { exact: true }).fill('Deliberately incorrect fixture password');
-    await registration.getByLabel('Current password', { exact: true }).press('Enter');
-    const response = await rejectedResponse;
-    assert.equal(response.status(), 401);
-    rejectedKey = (await response.request().allHeaders())['idempotency-key'];
-    await expect(page.getByRole('alert')).toContainText(/password/i);
-    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+  let freshResponse = !lost && !unavailable
+    ? page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents')
+    : null;
+  await registration.getByRole('button', { name: 'Register agent', exact: true }).click();
+
+  if (unavailable) {
+    setStage('waiting for connection feedback');
+    await expect(page.getByRole('heading', { name: 'Registration not confirmed', exact: true })).toBeVisible();
+    setStage('registration recovery heading visible');
+    assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
+    const status = page.getByRole('status');
+    await expect(status).toContainText('Registration is not confirmed. The agent records currently shown may not include this request.');
+    setStage('connection status content verified');
+    const currentTheme = await page.locator('html').evaluate((element) => element.classList.contains('dark')) ? 'dark' : 'light';
+    await page.screenshot({ path: join(fixture.artifacts, `agent-registration-unavailable-focus-${currentTheme}.png`), fullPage: true, animations: 'disabled' });
+    setStage('connection focus screenshot captured');
+    setStage('checking settled status focus');
+    await expect(status).toBeFocused();
+    setStage('connection status focus verified');
+    for (const width of [1440, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const theme of ['light', 'dark']) {
+        await selectTheme(theme);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+        await page.screenshot({ path: join(fixture.artifacts, `agent-registration-unavailable-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
+      }
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await selectTheme('light');
+    setStage('connection feedback screenshots captured');
+    await expect(page.locator('section[aria-labelledby="panel-agent-records"]')).toContainText('Registration is not confirmed. The agent records currently shown may not include this request.');
+    await expect(page.getByText(/No response was received from Almanac/)).toBeVisible();
+    await expect(page.getByLabel('Current password')).toHaveCount(0);
+    assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
+    assert.equal(createRequests, 1);
+    setStage('connection failure same-request retry');
+    await page.getByRole('link', { name: 'Agents', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Registration not confirmed', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry registration', exact: true }).click();
     registration = page.getByRole('dialog', { name: 'Retry registration', exact: true });
-    if (!await registration.isVisible()) await page.getByRole('button', { name: 'Retry registration', exact: true }).click();
-    await expect(registration.getByLabel('Current password', { exact: true })).toHaveValue('');
+    await expect(registration.getByRole('button', { name: 'Retry registration', exact: true })).toBeVisible();
+    freshResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents');
+    await registration.getByRole('button', { name: 'Retry registration', exact: true }).click();
   }
-  await registration.getByLabel('Current password', { exact: true }).fill(fixture.permanent);
-  const freshResponse = lost ? null : page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents');
-  await registration.getByLabel('Current password', { exact: true }).press('Enter');
 
   if (lost) {
     // The safe intent exists while the first POST is still pending. Wait for
     // the client's actual lost-response recovery, not that early intent state.
-    await expect(page.getByRole('alert')).toContainText('Outcome unknown. Reenter your current password');
     await expect(page.getByRole('dialog', { name: 'Retry registration', exact: true })).not.toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Outcome unknown', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Registration not confirmed', exact: true })).toBeVisible();
+    await expect(page.getByText(/Registration may still have completed/)).toBeVisible();
     assert.equal(createRequests, 1);
     setStage('lost-response retry dialog');
     // Observe rejection immediately: UI assertions below may fail before this
@@ -121,9 +207,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     const retryResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents').then((response) => ({ response }), () => ({ response: null }));
     registration = page.getByRole('dialog', { name: 'Retry registration', exact: true });
     if (!await registration.isVisible()) await page.getByRole('button', { name: 'Retry registration', exact: true }).click();
-    await expect(registration.getByLabel('Current password', { exact: true })).toHaveValue('');
-    await registration.getByLabel('Current password', { exact: true }).fill(fixture.permanent);
-    await registration.getByLabel('Current password', { exact: true }).press('Enter');
+    await registration.getByRole('button', { name: 'Retry registration', exact: true }).click();
     setStage('lost-response retry response');
     const { response } = await retryResponse;
     assert.ok(response);
@@ -149,9 +233,15 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     setStage('one-time token issuance evidence');
     const token = await dialog.locator('output[aria-label="Agent token"]').textContent();
     assert.ok(token);
+    assert.ok(freshResponse);
     const response = await freshResponse;
     assert.equal(response.status(), 201);
-    if (rejectedProof) assert.equal((await response.request().allHeaders())['idempotency-key'], rejectedKey);
+    if (unavailable) assert.equal((await response.request().allHeaders())['idempotency-key'], firstKey);
+    if (unavailable) {
+      const retry = response.request().postDataJSON();
+      assert.equal((await response.request().allHeaders())['idempotency-key'], firstKey);
+      assert.deepEqual({ name: retry.name, display_name: retry.display_name, lifetime_seconds: retry.lifetime_seconds }, firstSemantics);
+    }
     const issued = await response.json();
     evidence = { agent_id: issued.agent.id, ...tokenEvidence(token) };
     assert.equal(evidence.credential_id, issued.credential.id);
@@ -182,8 +272,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     for (const width of [1440, 1024, 360]) {
       await page.setViewportSize({ width, height: 900 });
       for (const theme of ['light', 'dark']) {
-        const dark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
-        if (dark !== (theme === 'dark')) await page.getByRole('button', { name: `Switch to ${theme} theme` }).click();
+        await selectTheme(theme);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
         await page.screenshot({ path: join(fixture.artifacts, `agent-detail-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
       }
@@ -210,7 +299,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     await page.getByLabel('Login', { exact: true }).fill(fixture.login);
     await page.getByLabel('Password', { exact: true }).fill(fixture.permanent);
     await page.getByLabel('Password', { exact: true }).press('Enter');
-    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
   }
   assert.ok(evidence?.agent_id);
   await writeFile(join(fixture.artifacts, 'agent-registration.json'), JSON.stringify({ ...evidence, replayed: lost, create_requests: createRequests }), { mode: 0o600 });

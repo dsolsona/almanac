@@ -1,4 +1,5 @@
 export { Button } from './Button.tsx';
+export { ApplicationShell } from './ApplicationShell.tsx';
 export type { ButtonVariant } from './Button.tsx';
 export { TextField } from './TextField.tsx';
 export { SelectField } from './SelectField.tsx';

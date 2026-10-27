@@ -145,6 +145,39 @@ func TestBackendConfigurationPrecedenceAndProxyParsing(t *testing.T) {
 	}
 }
 
+func TestSourceSecretKeysetConfigurationRequiresBackendPairAndHonorsPrecedence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "backend.json")
+	body := `{"components":"backend","database_url_file":"/file/db","public_origin":"https://example.test","trusted_proxy_cidrs":["127.0.0.1/32"],"source_secret_keyset_file":"/file/keyset","source_secret_keyset_id":"00000000-0000-4000-8000-000000000001"}`
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path, []string{"ALMANAC_SOURCE_SECRET_KEYSET_FILE=/env/keyset"}, map[string]string{"source-secret-keyset-file": "/flag/keyset"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SourceSecretKeysetFile != "/flag/keyset" || cfg.SourceSecretKeysetID != "00000000-0000-4000-8000-000000000001" {
+		t.Fatalf("source-secret keyset precedence mismatch: %+v", cfg)
+	}
+	for _, mutate := range []func(*Config){
+		func(c *Config) { c.SourceSecretKeysetID = "" },
+		func(c *Config) { c.SourceSecretKeysetFile = "" },
+	} {
+		invalid := cfg
+		mutate(&invalid)
+		if err := invalid.Validate(); err == nil {
+			t.Fatal("partial source-secret keyset configuration was accepted")
+		}
+	}
+	ui := Defaults()
+	ui.Components = "ui"
+	ui.BackendURL = "http://127.0.0.1:8080"
+	ui.SourceSecretKeysetFile = "/keyset"
+	ui.SourceSecretKeysetID = "00000000-0000-4000-8000-000000000001"
+	if err := ui.Validate(); err == nil {
+		t.Fatal("backend key material was accepted by UI-only configuration")
+	}
+}
+
 func TestBackendJSONFieldsRejectWrongTypes(t *testing.T) {
 	for _, field := range []string{"database_url_file", "initial_admin_login", "initial_admin_password_file", "public_origin", "tls_cert_file", "tls_key_file", "trusted_proxy_cidrs"} {
 		t.Run(field, func(t *testing.T) {

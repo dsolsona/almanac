@@ -2,6 +2,85 @@
 
 ## Current state
 
+PR #37 review corrections are verified on combined code checkpoint `845e619`.
+All 17 findings have regressions covering configuration consistency/capacity,
+terminal diagnostic races and wire results, clock skew, upload generations,
+saved credentials, UI recovery/navigation and CLI cancellation/output. Final checks
+passed 149 selected real integration tests, 183 web tests, 303 Go tests and 295
+race tests, plus generated/build/production/smoke and documentation checks.
+The real browser journey tests stored Basic/Bearer credentials and cancellation;
+desktop/mobile screenshots in both themes were inspected. Full evidence and
+preserved first failures are in [F2-T20](tasks/F2-T20.md). An earlier nonzero backend
+shutdown remains unexplained; the final restart journey passed, and sanitized
+shutdown classification is now captured if it recurs.
+
+The original Prometheus datasource management and remote diagnostics increment was verified under
+[F2-T20](tasks/F2-T20.md), on code checkpoint `f6086fe`. UI, CLI and API support
+encrypted credentials, optimistic updates, explicit configuration readiness,
+connection tests and query previews executed by the assigned remote agent.
+Results above 64 KiB use bounded authenticated HTTPS transfer, up to 1 MiB.
+Final checks passed 146 real integration tests, 169 web tests, 290 Go tests and
+282 race tests, plus generated/build/production/smoke, documentation and Compose
+startup/persistence checks. The coordinator inspected desktop/mobile in both themes.
+Those results describe the original increment; the review correction evidence above supersedes them.
+
+Work stops after publishing this increment as requested. F2 is still incomplete:
+SLI definitions, scheduled collection, collected observations and direct producer
+ingestion remain outstanding in the [delivery plan](plans/0019-first-observations.md).
+Full source-key rotation/re-encryption and restore acceptance remain initial-release
+gates under [ADR-0017](adr/0017-recoverable-secret-encryption.md) and
+[SPEC-0014](specs/0014-delivery-and-verification.md).
+
+The coordinator accepted the PR #36 review corrections under
+[F2-T17](tasks/F2-T17.md). The corrected candidate passes
+the 217-test Go race gate, focused agent client/page web suites (32/47), all 142
+selected PostgreSQL integration tests, and the exact full `make verify` gate (156 web,
+228 Go, builds, generated/production checks and smoke checks). Integration included
+the real TLS/process and browser agent journey. A same-generation hello health reset
+found by the first integration attempt is corrected. Its
+configuration-failure status fields extend migration 0010 and generated OpenAPI
+outputs integrated into the datasource increment above. The coordinator inspected
+the final browser screenshots at desktop/mobile widths in both themes.
+
+The connected-agent increment under [F2-T17](tasks/F2-T17.md) and
+[F2-T19](tasks/F2-T19.md) passes 142 real PostgreSQL integration tests, including
+separate TLS backend/agent processes, configuration application, browser status,
+backend restart/resume, incompatible handshakes, copied-token fencing and revocation.
+The coordinator inspected desktop/mobile screenshots in both themes. Full checks
+passed 156 web and 222 Go tests. The expanded race gate passed 211 tests after
+correcting a canceled outbound enqueue; the real integration run preceded that
+isolated correction. Collected/direct observations remain the next F2 increment;
+connected status alone does not establish healthy collection.
+
+Durable agent ownership is verified under [F2-T13](tasks/F2-T13.md): transactional
+acquisition, same-process resume, nonce-correlated renewal and generation fencing.
+The combined candidate passes 138 real PostgreSQL integration tests and the full
+gate (146 web/189 Go tests, build/generated/production checks). A deterministic
+stalled-TLS shutdown regression drove a correction that closes pre-request
+connections while draining active requests. The exact socket behind the earlier
+intermittent shutdown failures was not recorded; this fixes the reproduced class,
+without claiming forensic proof of every historical failure. F2-T17 extends this
+foundation with remote transport, configuration application, health and grants.
+
+The signed-in application shell is verified under [F2-T16](tasks/F2-T16.md):
+desktop navigation, accessible mobile menu, account controls and direct `/agents`
+links replace the identity confirmation page. Planned destinations are explicitly
+marked “Not available yet.” Evidence: 145 web/178 Go tests, 42 focused catalogue
+browser checks and 129 selected real database tests including browser journeys.
+The datasource increment above extends this shell; observations remain outstanding.
+The maintainer approved the accelerated delivery workflow on 2026-10-27; see
+[ways of working](ways-of-working.md) and [command discipline](commands.md).
+
+Registration usability correction is verified under [F2-T14](tasks/F2-T14.md).
+[ADR-0019](adr/0019-session-authorized-agent-registration.md) accepts registration
+using the current administrator session without an additional password prompt.
+UI/API/CLI registration and explicit same-request recovery pass real-stack checks.
+Final evidence: 140 web tests, 178 Go tests, 129 selected database tests and the
+race gate passed. An earlier reported registration failure was not reproduced;
+one intermediate combined-runtime restart shutdown exceeded its five-second
+deadline and remains an unresolved intermittent observation. Neither is claimed
+fixed by a subsequent passing run; details are preserved in the task record.
+
 The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
 The catalogue also includes a date picker, switches, shared loading feedback,
@@ -15,12 +94,13 @@ password setup, signed-in identity and logout are verified in the combined runti
 Reusable CLI login/profiles are verified under [F2-T10](tasks/F2-T10.md).
 Agent registration, credential rotation/revocation and disable now have UI/API/CLI
 coverage. [F2-T11](tasks/F2-T11.md) records verified CLI parity, protected one-time
-token output and real TLS/PostgreSQL acceptance. Connected collectors, datasource
-diagnostics and the first observation journey remain outstanding in F2.
+token output and real TLS/PostgreSQL acceptance. Datasource diagnostics and the
+first observation journey remain outstanding in F2.
 [F2-T12](tasks/F2-T12.md) adds current-state machine credential authentication,
 including rotation/expiry, revocation, restore epoch and database lock-order checks.
 This prerequisite does not yet expose an agent connection or execution lease.
-User management, observation storage and providers remain unimplemented;
+User management and observation storage remain unimplemented; Prometheus diagnostics
+are implemented in F2-T20, while additional native providers remain future work;
 Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.

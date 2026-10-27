@@ -196,6 +196,95 @@ func TestGeneratedReadsValidatePaginationETagAndLargeVersions(t *testing.T) {
 	}
 }
 
+func TestGetValidatesOptionalRuntimeAndPreservesExactRevisions(t *testing.T) {
+	const id = "00000000-0000-0000-0000-000000000001"
+	const base = `{"id":"` + id + `","name":"east","display_name":"East","enabled":true,"version":"1","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"}`
+	validRuntime := `{"reachability":"connected","protocol":"almanac-agent/1","software_version":"1.2.3","capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}],"last_heartbeat_at":"2026-10-26T10:00:00.123456Z","desired_configuration_revision":"9223372036854775807","applied_configuration_revision":"0","scheduler_health":"ready","collection_progress":"running","configuration_failure_code":null,"configuration_failure_revision":null,"last_attempt_at":null,"last_successful_query_at":null,"next_expected_execution_at":null,"collection_explanation":"no_assignment"}`
+	responseBody := base
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/auth/context" {
+			_, _ = fmt.Fprint(w, `{"csrf_token":"fresh-csrf","session":{"user_id":"u-1","login":"admin","role":"administrator","restricted":false}}`)
+			return
+		}
+		if r.URL.Path == "/api/v1/agents/"+id {
+			w.Header().Set("ETag", `"agent:`+id+`:1"`)
+			_, _ = fmt.Fprint(w, responseBody)
+			return
+		}
+		t.Errorf("unexpected request path %q", r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	session, err := setupclient.NewSession(setupclient.SessionOptions{BackendURL: server.URL, CABundle: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), Session: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})
+	if err != nil {
+		t.Fatal("create session failed")
+	}
+	defer session.Close()
+	client, err := New(t.Context(), session)
+	if err != nil {
+		t.Fatal("create agent client failed")
+	}
+	var agentID api.AgentId
+	if err := json.Unmarshal([]byte(`"`+id+`"`), &agentID); err != nil {
+		t.Fatal("parse agent ID failed")
+	}
+	responseBody = strings.TrimSuffix(base, "}") + `,"runtime":` + validRuntime + `}`
+	detail, _, err := client.Get(t.Context(), agentID)
+	if err != nil || !strings.Contains(string(detail), `"desired_configuration_revision":"9223372036854775807"`) || !strings.Contains(string(detail), `"applied_configuration_revision":"0"`) {
+		t.Fatalf("valid runtime revisions did not remain exact: data=%s err=%v", detail, err)
+	}
+	failureRuntime := strings.Replace(validRuntime, `"configuration_failure_code":null,"configuration_failure_revision":null`,
+		`"configuration_failure_code":"apply_failed","configuration_failure_revision":"2"`, 1)
+	responseBody = strings.TrimSuffix(base, "}") + `,"runtime":` + failureRuntime + `}`
+	if _, _, err := client.Get(t.Context(), agentID); err != nil {
+		t.Fatalf("Get() rejected valid configuration failure detail: %v", err)
+	}
+	capability := `{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}`
+	formats := strings.TrimSuffix(strings.Repeat(`"format",`, 63), ",") + `,"format"`
+	operations := strings.TrimSuffix(strings.Repeat(`"operation",`, 15), ",") + `,"operation"`
+	boundaryRuntime := strings.Replace(validRuntime, `"capabilities":[`+capability+`]`, `"capabilities":[`+strings.TrimSuffix(strings.Repeat(capability+`,`, 255), ",")+`,`+capability+`]`, 1)
+	boundaryRuntime = strings.Replace(boundaryRuntime, `"configuration_formats":["prometheus-http-v1"]`, `"configuration_formats":[`+formats+`]`, 1)
+	boundaryRuntime = strings.Replace(boundaryRuntime, `"operations":["live_query"]`, `"operations":[`+operations+`]`, 1)
+	responseBody = strings.TrimSuffix(base, "}") + `,"runtime":` + boundaryRuntime + `}`
+	if _, _, err := client.Get(t.Context(), agentID); err != nil {
+		t.Fatalf("Get() rejected maximum supported runtime capability lists: %v", err)
+	}
+
+	invalidRuntimes := []string{
+		strings.Replace(validRuntime, `"connected"`, `"online"`, 1),
+		strings.Replace(validRuntime, `"ready"`, `"healthy"`, 1),
+		strings.Replace(validRuntime, `"running"`, `"complete"`, 1),
+		strings.Replace(validRuntime, `"no_assignment"`, `"none"`, 1),
+		strings.Replace(validRuntime, `"desired_configuration_revision":"9223372036854775807"`, `"desired_configuration_revision":7`, 1),
+		strings.Replace(validRuntime, `"desired_configuration_revision":"9223372036854775807"`, `"desired_configuration_revision":"0"`, 1),
+		strings.Replace(validRuntime, `"applied_configuration_revision":"0"`, `"applied_configuration_revision":"00"`, 1),
+		strings.Replace(validRuntime, `"last_heartbeat_at":"2026-10-26T10:00:00.123456Z"`, `"last_heartbeat_at":"not-a-date"`, 1),
+		strings.Replace(validRuntime, `"capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}]`, `"capabilities":null`, 1),
+		strings.Replace(validRuntime, `,"scheduler_health":"ready"`, "", 1),
+		strings.Replace(validRuntime, `,"configuration_failure_revision":null`, "", 1),
+		strings.Replace(validRuntime, `"configuration_failure_code":null`, `"configuration_failure_code":"source_password"`, 1),
+		strings.Replace(validRuntime, `"configuration_failure_revision":null`, `"configuration_failure_revision":"2"`, 1),
+		strings.Replace(validRuntime, `"provider":"prometheus"`, `"provider":""`, 1),
+		strings.Replace(validRuntime, `"configuration_formats":["prometheus-http-v1"]`, `"configuration_formats":null`, 1),
+		strings.Replace(validRuntime, `"configuration_formats":["prometheus-http-v1"]`, `"configuration_formats":[`+strings.TrimSuffix(strings.Repeat(`"format",`, 64), ",")+`,"format"]`, 1),
+		strings.Replace(validRuntime, `"operations":["live_query"]`, `"operations":[`+strings.TrimSuffix(strings.Repeat(`"operation",`, 16), ",")+`,"operation"]`, 1),
+		strings.Replace(validRuntime, `"capabilities":[`+capability+`]`, `"capabilities":[`+strings.TrimSuffix(strings.Repeat(capability+`,`, 256), ",")+`,`+capability+`]`, 1),
+	}
+	for i, runtime := range invalidRuntimes {
+		responseBody = strings.TrimSuffix(base, "}") + `,"runtime":` + runtime + `}`
+		if _, _, err := client.Get(t.Context(), agentID); err == nil {
+			t.Errorf("Get() accepted malformed runtime case %d", i)
+		}
+	}
+	for _, neverConnected := range []string{base, strings.TrimSuffix(base, "}") + `,"runtime":null}`} {
+		responseBody = neverConnected
+		if _, _, err := client.Get(t.Context(), agentID); err != nil {
+			t.Errorf("Get() rejected absent runtime: %v", err)
+		}
+	}
+}
+
 func TestGeneratedIssuanceSupportsFreshAndReplayStatusesAndExplicitZero(t *testing.T) {
 	const agentID = "00000000-0000-0000-0000-000000000001"
 	const initialCredential = "00000000-0000-0000-0000-000000000002"
@@ -243,11 +332,11 @@ func TestGeneratedIssuanceSupportsFreshAndReplayStatusesAndExplicitZero(t *testi
 	defer server.Close()
 	client := newTestAgentClient(t, server)
 	zero := int32(0)
-	created, token, replay, err := client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", CurrentPassword: "proof", LifetimeSeconds: &zero}, "create-key")
+	created, token, replay, err := client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", LifetimeSeconds: &zero}, "create-key")
 	if err != nil || replay || token != "fresh-create-secret" || strings.Contains(string(created), "future_secret") || strings.Contains(string(created), token) {
 		t.Fatalf("fresh create result was wrong: replay=%t err=%v", replay, err)
 	}
-	if _, token, replay, err = client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", CurrentPassword: "proof", LifetimeSeconds: &zero}, "create-key"); err != nil || !replay || token != "" {
+	if _, token, replay, err = client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", LifetimeSeconds: &zero}, "create-key"); err != nil || !replay || token != "" {
 		t.Fatalf("create replay failed: replay=%t token=%q err=%v", replay, token, err)
 	}
 	var id api.AgentId
@@ -338,7 +427,7 @@ func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
 			var err error
 			switch mutation {
 			case "create":
-				_, _, _, err = client.Create(t.Context(), api.CreateAgentRequest{Name: strings.Repeat("a", 8<<20), DisplayName: "East", CurrentPassword: "proof"}, "create-once")
+				_, _, _, err = client.Create(t.Context(), api.CreateAgentRequest{Name: strings.Repeat("a", 8<<20), DisplayName: "East"}, "create-once")
 			case "rotate":
 				var id api.AgentId
 				if decodeErr := json.Unmarshal([]byte(`"00000000-0000-0000-0000-000000000001"`), &id); decodeErr != nil {
@@ -427,7 +516,7 @@ func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t 
 	}))
 	defer server.Close()
 	client := newTestAgentClient(t, server)
-	input := api.CreateAgentRequest{Name: "east", DisplayName: "East", CurrentPassword: "proof"}
+	input := api.CreateAgentRequest{Name: "east", DisplayName: "East"}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, _, _, err := client.Create(ctx, input, "cancel-before-dispatch"); !isFailure(err, setupclient.KindCancelled, false) {
