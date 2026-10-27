@@ -15,21 +15,23 @@ import (
 
 const (
 	maxActiveDiagnostics      = 4
+	maxDiagnosticCommandIDs   = 512
 	maxDiagnosticReceipts     = 256
 	maxDiagnosticReceiptBytes = 8 << 20
-	diagnosticReceiptPeriod   = 24 * time.Hour
 )
 
 var errDiagnosticCapacity = errors.New("agent diagnostic capacity reached")
 
 type diagnosticRunner struct {
-	mu           sync.Mutex
-	client       *client
-	results      chan completedDiagnosticResult
-	active       map[string]activeDiagnostic
-	completed    map[string]diagnosticReceipt
-	order        []string
-	receiptBytes int
+	mu             sync.Mutex
+	client         *client
+	results        chan completedDiagnosticResult
+	active         map[string]activeDiagnostic
+	commandIDs     map[string]time.Time
+	commandOrder   []string
+	completed      map[string]diagnosticReceipt
+	completedOrder []string
+	receiptBytes   int
 }
 
 type completedDiagnosticResult struct {
@@ -50,7 +52,8 @@ type diagnosticReceipt struct {
 }
 
 func newDiagnosticRunner(agent *client) *diagnosticRunner {
-	return &diagnosticRunner{client: agent, results: make(chan completedDiagnosticResult, maxActiveDiagnostics), active: make(map[string]activeDiagnostic), completed: make(map[string]diagnosticReceipt)}
+	return &diagnosticRunner{client: agent, results: make(chan completedDiagnosticResult, maxActiveDiagnostics), active: make(map[string]activeDiagnostic),
+		commandIDs: make(map[string]time.Time), completed: make(map[string]diagnosticReceipt)}
 }
 
 func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.DiagnosticRequest) error {
@@ -66,30 +69,36 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 		return errors.New("agent diagnostic capability rejected")
 	}
 	r.mu.Lock()
-	r.pruneLocked(time.Now())
+	now := time.Now()
+	r.pruneLocked(now)
 	if _, ok := r.active[request.DiagnosticID]; ok {
 		r.mu.Unlock()
 		return nil
 	}
-	if saved, ok := r.completed[request.DiagnosticID]; ok {
+	if _, ok := r.commandIDs[request.DiagnosticID]; ok {
+		if saved, cached := r.completed[request.DiagnosticID]; cached {
+			r.mu.Unlock()
+			r.offer(saved.completedDiagnosticResult)
+			return nil
+		}
 		r.mu.Unlock()
-		r.offer(saved.completedDiagnosticResult)
 		return nil
 	}
-	if !request.DeadlineAt.After(time.Now()) {
+	if !request.DeadlineAt.After(now) {
 		result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID, State: "timed_out"}
 		completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt}
-		r.rememberLocked(request.DiagnosticID, completed, time.Now())
 		r.mu.Unlock()
 		r.offer(completed)
 		return nil
 	}
-	if len(r.active) >= maxActiveDiagnostics {
+	if len(r.commandIDs) >= maxDiagnosticCommandIDs || len(r.active) >= maxActiveDiagnostics {
 		r.mu.Unlock()
 		return errDiagnosticCapacity
 	}
+	r.commandIDs[request.DiagnosticID] = request.DeadlineAt
+	r.commandOrder = append(r.commandOrder, request.DiagnosticID)
 	deadline := request.DeadlineAt
-	if maxProviderDeadline := time.Now().Add(20 * time.Second); deadline.After(maxProviderDeadline) {
+	if maxProviderDeadline := now.Add(20 * time.Second); deadline.After(maxProviderDeadline) {
 		deadline = maxProviderDeadline
 	}
 	ctx, cancel := context.WithDeadline(parent, deadline)
@@ -198,22 +207,37 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 }
 
 func (r *diagnosticRunner) pruneLocked(now time.Time) {
-	kept := r.order[:0]
-	for _, id := range r.order {
+	kept := r.commandOrder[:0]
+	for _, id := range r.commandOrder {
+		deadline, ok := r.commandIDs[id]
+		if ok && now.Before(deadline) {
+			kept = append(kept, id)
+			continue
+		}
+		delete(r.commandIDs, id)
+		if receipt, exists := r.completed[id]; exists {
+			r.receiptBytes -= receipt.size
+			delete(r.completed, id)
+		}
+	}
+	r.commandOrder = kept
+	kept = r.completedOrder[:0]
+	for _, id := range r.completedOrder {
 		receipt, ok := r.completed[id]
 		if ok && now.Before(receipt.expires) {
 			kept = append(kept, id)
 		} else {
-			if ok {
-				r.receiptBytes -= receipt.size
-			}
 			delete(r.completed, id)
 		}
 	}
-	r.order = kept
+	r.completedOrder = kept
 }
 
 func (r *diagnosticRunner) rememberLocked(id string, completed completedDiagnosticResult, now time.Time) {
+	deadline, tracked := r.commandIDs[id]
+	if !tracked || !now.Before(deadline) {
+		return
+	}
 	encoded, err := completed.result.CanonicalJSON()
 	if err != nil {
 		completed.result = diagnosticFailure(id, "incomplete")
@@ -223,13 +247,13 @@ func (r *diagnosticRunner) rememberLocked(id string, completed completedDiagnost
 	if prior, ok := r.completed[id]; ok {
 		r.receiptBytes -= prior.size
 	} else {
-		r.order = append(r.order, id)
+		r.completedOrder = append(r.completedOrder, id)
 	}
-	r.completed[id] = diagnosticReceipt{completedDiagnosticResult: completed, expires: now.Add(diagnosticReceiptPeriod), size: size}
+	r.completed[id] = diagnosticReceipt{completedDiagnosticResult: completed, expires: deadline, size: size}
 	r.receiptBytes += size
-	for len(r.order) > maxDiagnosticReceipts || r.receiptBytes > maxDiagnosticReceiptBytes {
-		oldest := r.order[0]
-		r.order = r.order[1:]
+	for len(r.completedOrder) > maxDiagnosticReceipts || r.receiptBytes > maxDiagnosticReceiptBytes {
+		oldest := r.completedOrder[0]
+		r.completedOrder = r.completedOrder[1:]
 		if receipt, ok := r.completed[oldest]; ok {
 			r.receiptBytes -= receipt.size
 			delete(r.completed, oldest)
@@ -249,6 +273,10 @@ func diagnosticFailure(id, code string) agentprotocol.DiagnosticResult {
 		code = "network"
 	}
 	return agentprotocol.DiagnosticResult{DiagnosticID: id, State: "failed", ErrorCode: code, Message: diagnosticMessage(code)}
+}
+
+func diagnosticCapacityResult(request agentprotocol.DiagnosticRequest) completedDiagnosticResult {
+	return completedDiagnosticResult{result: diagnosticFailure(request.DiagnosticID, "rate_limited"), deadlineAt: request.DeadlineAt}
 }
 
 func diagnosticMessage(code string) string {
