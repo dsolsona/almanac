@@ -8,11 +8,11 @@ const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((modul
 const LazyDatasourcesPage = lazy(() => import('../datasources/DatasourcesPage.tsx').then((module) => ({ default: module.DatasourcesPage })));
 const emptyAgentDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '' };
 
-class ScreenBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class ScreenBoundary extends Component<{ screen: string; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   componentDidCatch(_error: Error, _info: ErrorInfo) { /* Failure details may include user data. */ }
-  render() { return this.state.failed ? <Panel heading="Agent screen unavailable"><p>The agent screen could not be loaded.</p><Button variant="outline" onClick={() => location.reload()}>Reload page</Button></Panel> : this.props.children; }
+  render() { return this.state.failed ? <Panel heading={`${this.props.screen} screen unavailable`}><p>{this.props.screen} could not be loaded.</p><Button variant="outline" onClick={() => location.reload()}>Reload page</Button></Panel> : this.props.children; }
 }
 
 type Client = ReturnType<typeof createAuthClient>;
@@ -53,6 +53,7 @@ function validContext(value: unknown): value is AuthContext {
 
 export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const authClient = useRef(client).current;
+  const [pathname, setPathname] = useState(() => window.location.pathname);
   const [context, setContext] = useState<AuthContext | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -109,15 +110,23 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   }, [authClient]);
 
   useEffect(() => {
+    const changed = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', changed);
+    return () => window.removeEventListener('popstate', changed);
+  }, []);
+
+  useEffect(() => {
     heading.current?.focus();
-  }, [context, unavailable, checking]);
+  }, [context, unavailable, checking, pathname]);
 
   const operational = !checking && !unavailable && Boolean(context?.session && !context.session.restricted);
   useEffect(() => {
-    if (!operational || location.pathname !== '/') return;
-    history.replaceState({}, '', `/agents${location.search}${location.hash}`);
+    if (!operational || pathname !== '/') return;
+    const next = `/agents${location.search}${location.hash}`;
+    history.replaceState({}, '', next);
+    setPathname('/agents');
     window.dispatchEvent(new PopStateEvent('popstate'));
-  }, [operational]);
+  }, [operational, pathname]);
 
   useEffect(() => {
     if (notice?.kind === 'error' || notice?.kind === 'uncertain') noticeRef.current?.focus();
@@ -333,11 +342,12 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const lifecycleNotice = agentLifecycleIntent && (!context?.session || context.session.user_id !== agentLifecycleIntent.userID || context.session.restricted || context.session.role !== 'administrator') && <Panel heading={agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? 'Credential command needs reconciliation' : agentLifecycleIntent.outcome === 'rejected' ? 'Credential command was rejected' : 'Credential command outcome unknown'} className="auth-panel"><p>{agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} conflicted after an earlier uncertain attempt. Reconcile its original target, command key and resource version before starting another command.` : agentLifecycleIntent.outcome === 'rejected' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} was rejected. Its original target, command key and resource version remain available for a deliberate retry.` : `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} may have completed. Its original target, command key and resource version remain available for a deliberate retry. No password or token was retained.`}</p></Panel>;
 
   if (operational && context?.session) return <ApplicationShell login={context.session.login} role={context.session.role} pending={pending} showCheckSession={showCheckSession} onCheckSession={() => void checkSession(true)} onSignOut={() => void signOut()}>
-    {location.pathname.startsWith('/datasources') ? <ScreenBoundary key={`datasources:${context.session.user_id}`}><Suspense fallback={<div className="auth-loading"><LoadingIndicator label="Loading datasource management" /></div>}><LazyDatasourcesPage context={context} /></Suspense></ScreenBoundary> : <>
+    {pathname.startsWith('/datasources') ? <ScreenBoundary screen="Datasource" key={`datasources:${context.session.user_id}`}><Suspense fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><span>Datasources</span></nav><h1 className="app-page-heading">Datasources</h1><div className="app-route-loading" role="status"><LoadingIndicator label="Opening datasource management" /></div></>}><LazyDatasourcesPage context={context} /></Suspense></ScreenBoundary> : <>
+    <nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><span>Agents</span></nav>
     <h1 id="agents-title" className="agents-heading app-page-heading" ref={heading} tabIndex={-1}>Agents</h1>
     {notice && <div ref={noticeRef} className={`auth-notice auth-notice--${notice.kind}`} role={notice.kind === 'success' ? 'status' : 'alert'} tabIndex={-1}>{notice.text}</div>}
     {lifecycleNotice}
-    {context.session.role === 'administrator' ? <ScreenBoundary key={context.session.user_id}><Suspense fallback={<div className="auth-loading"><LoadingIndicator label="Loading agent management" /></div>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} lifecycleIntent={agentLifecycleIntent} onLifecycleIntentChange={setAgentLifecycleIntent} /></Suspense></ScreenBoundary> : <Panel heading="Agent administration unavailable"><p>Agent administration is available to unrestricted administrators.</p></Panel>}
+    {context.session.role === 'administrator' ? <ScreenBoundary screen="Agent" key={context.session.user_id}><Suspense fallback={<div className="app-route-loading" role="status"><LoadingIndicator label="Opening agent administration" /></div>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} lifecycleIntent={agentLifecycleIntent} onLifecycleIntentChange={setAgentLifecycleIntent} /></Suspense></ScreenBoundary> : <Panel heading="Agent administration unavailable"><p>Agent administration is available to unrestricted administrators.</p></Panel>}
     </>}
   </ApplicationShell>;
 

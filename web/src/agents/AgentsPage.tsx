@@ -6,16 +6,24 @@ import { AgentLifecycleControls } from './AgentLifecycleControls.tsx';
 import { Button, Dialog, LoadingIndicator, Panel, TextField } from '../components/ui/index.ts';
 import './agents.css';
 
-export type AgentSafeDraft = { name: string; displayName: string; lifetime: string };
+export type AgentSafeDraft = { name: string; displayName: string; lifetime: string; nameEdited?: boolean };
 export type AgentRecoveryCause = 'connection' | 'service' | 'timeout' | 'response';
 export type AgentCreateIntent = { key: string; name: string; displayName: string; lifetimeSeconds?: number; userID: string; outcome: 'unknown' | 'rejected' | 'conflict'; retryRejected?: 'session' | 'permission' | 'other'; recoveryCause?: AgentRecoveryCause; requestID?: string };
 export type AgentLifecycleIntent = { kind: 'rotate' | 'revoke' | 'disable'; key: string; userID: string; agentID: string; credentialID?: string; etag: string; lifetimeSeconds?: number; overlapSeconds?: number; retryAfterDeadline?: number; outcome: 'unknown' | 'rejected' | 'conflict'; retryRejected?: 'password' | 'session' | 'permission' | 'other' | 'conflict' };
 export type SessionRecheck = { confirmed: true; context: AuthContext } | { confirmed: false };
 type Props = { context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; draft: AgentSafeDraft; onDraftChange: (draft: AgentSafeDraft) => void; intent: AgentCreateIntent | null; onIntentChange: (intent: AgentCreateIntent | null) => void; lifecycleIntent: AgentLifecycleIntent | null; onLifecycleIntentChange: (intent: AgentLifecycleIntent | null) => void };
-const emptyDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '' };
+const emptyDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '', nameEdited: false };
 const safeError = 'The request could not be completed. Check the session and try again.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const AGENT_NAME = /^[a-z][a-z0-9-]{0,62}$/;
+const agentNameError = 'Use 1–63 lowercase letters, numbers, or hyphens, starting with a letter.';
 const LIMIT = 50;
+function suggestAgentName(displayName: string) {
+  const slug = displayName.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) return '';
+  const identifier = /^[a-z]/.test(slug) ? slug : `agent-${slug}`;
+  return identifier.slice(0, 63).replace(/-+$/g, '');
+}
 function recoveryCause(code: string): AgentRecoveryCause {
   if (code === 'management_unavailable') return 'service';
   if (code === 'request_timeout') return 'timeout';
@@ -61,6 +69,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   const [throttleUntil, setThrottleUntil] = useState(0); const [now, setNow] = useState(Date.now());
   const [conflicted, setConflicted] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState('');
+  const [nameError, setNameError] = useState('');
   const [proofRejected, setProofRejected] = useState<'session' | 'unavailable' | false>(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [abandonPrompt, setAbandonPrompt] = useState(false);
@@ -150,8 +159,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   }, [isAdmin, suspended, locationState.agent, locationState.agents_cursor, locationState.credentials_cursor]);
   useEffect(() => { void load(); return () => readController.current?.abort(); }, [load]);
 
-  function resetSafeDraft() { onDraftChange(emptyDraft); }
-  function openRegister() { setError(''); setRegisterOpen(true); }
+  function resetSafeDraft() { onDraftChange(emptyDraft); setNameError(''); }
+  function openRegister() { setError(''); setNameError(''); setRegisterOpen(true); }
   function closeRegister() {
     setRegisterOpen(false);
     if (intent) setAbandonPrompt(true);
@@ -178,6 +187,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     if (!operation) {
       const lifetime = draft.lifetime === '' ? undefined : Number(draft.lifetime);
       if (!draft.name || !draft.displayName || (draft.lifetime !== '' && (!Number.isInteger(lifetime) || lifetime! < 0 || lifetime! > 31536000))) { setError('Enter an agent name, display name, and a lifetime from 0 to 31536000 seconds when provided.'); return; }
+      if (!AGENT_NAME.test(draft.name)) { setNameError(agentNameError); document.getElementById('agent-name')?.focus(); return; }
+      setNameError('');
       operation = { key: crypto.randomUUID(), name: draft.name, displayName: draft.displayName, ...(lifetime === undefined ? {} : { lifetimeSeconds: lifetime }), userID: currentUser, outcome: 'unknown' };
     }
     const input = { name: operation.name, display_name: operation.displayName, ...(operation.lifetimeSeconds === undefined ? {} : { lifetime_seconds: operation.lifetimeSeconds }) };
@@ -207,7 +218,20 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         setProofRejected(refreshed.confirmed ? 'session' : 'unavailable'); setError(refreshed.confirmed ? 'The request was rejected because its session protection was stale. Check the session, then deliberately retry with the same request.' : 'The request was rejected, but your session could not be confirmed. Check the session before retrying.');
       } else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'rate_limited' && caught.retryAfterSeconds) {
         onIntentChange({ ...operation, outcome: earlierOutcomeUnknown ? 'unknown' : 'rejected' }); setThrottleUntil(Date.now() + caught.retryAfterSeconds * 1000); setRateLimited(true); setError('Registration is temporarily limited.');
-      } else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'conflict') { onIntentChange({ ...operation, outcome: earlierOutcomeUnknown ? 'unknown' : 'conflict' }); setConflicted(true); setError('This request conflicts with an earlier registration. Reconcile the agent and credential history before starting another request.'); }
+      } else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'conflict') {
+        if (earlierOutcomeUnknown) { onIntentChange({ ...operation, outcome: 'unknown' }); setConflicted(true); setError('This request conflicts with an earlier registration. Reconcile the agent and credential history before starting another request.'); }
+        else { onIntentChange(null); setNameError('An agent with this identifier already exists. Choose a different name.'); setRegisterOpen(true); document.getElementById('agent-name')?.focus(); }
+      }
+      else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'invalid_agent_input') {
+        if (earlierOutcomeUnknown) {
+          onIntentChange({ ...operation, outcome: 'unknown', retryRejected: 'other' });
+          setError('The retry was rejected because the registration details were invalid. The original attempt remains unconfirmed. Refresh agent records before deciding; the original request key is retained.');
+        } else {
+          onIntentChange(null);
+          setError('Agent details were rejected. Check the agent name, display name, and lifetime fields.');
+          setRegisterOpen(true);
+        }
+      }
       else if (caught instanceof AgentFailure && caught.kind === 'rejected' && caught.code === 'forbidden') { if (earlierOutcomeUnknown) onIntentChange({ ...operation, outcome: 'unknown', retryRejected: 'permission' }); else onIntentChange(null); setAgents([]); setAgent(null); setCredentials([]); hasCachedData.current = false; lastSuccessAt.current = ''; setError(earlierOutcomeUnknown ? 'This retry was rejected for lack of permission. An earlier attempt remains unknown; confirm authority before reconciling it.' : 'You are not allowed to register agents.'); }
       else if (caught instanceof AgentFailure && caught.kind === 'rejected') { if (earlierOutcomeUnknown) onIntentChange({ ...operation, outcome: 'unknown', retryRejected: 'other' }); else onIntentChange(null); setError(earlierOutcomeUnknown ? 'This retry was rejected. An earlier attempt remains unknown; keep using the same request key while reconciling it.' : 'Registration was rejected. Review the fields and try again.'); }
       else if (caught instanceof AgentFailure && caught.kind === 'uncertain') {
@@ -265,7 +289,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     <Dialog open={registerOpen} onClose={closeRegister} title={intent ? 'Retry registration' : 'Register agent'} triggerRef={registerTrigger}>
       <form className="agents-form" noValidate onSubmit={(event) => void submit(event)}>
         {error && registerOpen && <div ref={errorRef} className="agents-error" role="alert" tabIndex={-1}>{error}</div>}
-        {!intent && <><TextField id="agent-name" label="Agent name" value={draft.name} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })} disabled={submitBusy} /><TextField id="agent-display-name" label="Display name" value={draft.displayName} onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })} disabled={submitBusy} /><TextField id="agent-lifetime" label="Lifetime (seconds)" type="number" min="0" max="31536000" value={draft.lifetime} onChange={(event) => onDraftChange({ ...draft, lifetime: event.target.value })} hint="Leave blank or enter 0 to use the server default (0–31536000 seconds)." disabled={submitBusy} /></>}
+        {!intent && <><TextField id="agent-display-name" label="Display name" value={draft.displayName} onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value, ...(!draft.nameEdited ? { name: suggestAgentName(event.target.value) } : {}) })} disabled={submitBusy} /><TextField id="agent-name" label="Agent name (identifier)" value={draft.name} onChange={(event) => { setNameError(''); onDraftChange({ ...draft, name: event.target.value, nameEdited: true }); }} hint="Suggested from the display name. This stable identifier uses 1–63 lowercase letters, numbers, or hyphens, starting with a letter." error={nameError} disabled={submitBusy} /><TextField id="agent-lifetime" label="Lifetime (seconds)" type="number" min="0" max="31536000" value={draft.lifetime} onChange={(event) => onDraftChange({ ...draft, lifetime: event.target.value })} hint="Leave blank or enter 0 to use the server default (0–31536000 seconds)." disabled={submitBusy} /></>}
 
         <Button type="submit" pending={submitBusy} disabled={lifecycleBusy || Boolean(lifecycleIntent) || Date.now() < throttleUntil || conflicted}>{intent ? 'Retry registration' : 'Register agent'}</Button>
       </form>

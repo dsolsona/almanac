@@ -2,6 +2,27 @@
 
 ## Current state
 
+PR #38 review corrections are verified at `a9f6d28`: cancellation retains safe
+request metadata, workspace navigation focuses the Agents heading, and Compose
+acceptance verifies the issued token never appears in service logs. The full gate
+passed 190 web and 305 Go tests; race verification and the real Compose journey
+(including desktop/mobile focus and cancellation cleanup) passed. See
+[F2-T21](tasks/F2-T21.md) for regression and deployment evidence.
+
+Workspace usability repairs under [F2-T21](tasks/F2-T21.md) are verified on product
+checkpoint `a5acd61` with final test-only correction `744a4d3`. The normal isolated
+Compose journey registers `Local`, shows the suggested identifier and one-time
+token, verifies the credential record, history/reload and PostgreSQL persistence.
+Internal navigation retains the document/session with zero reload/context calls;
+literal endpoint text and real desktop/mobile light/dark pages were inspected.
+The same display-name/identifier pattern applies to datasource creation, and saved
+identifiers cannot be edited. Passing checks: 190 web tests, 304 Go tests, 296 race
+tests, 42 catalogue browser checks, real Compose and documentation/build/smoke gates.
+Guidance now requires exact user-case evidence, deployed journeys, reference
+comparison, independent coordinator acceptance and frozen verification candidates.
+Earlier results below establish only their tested cases. No new F2 feature work
+is underway; the maintainer deployment and its data remain untouched.
+
 PR #37 review corrections are verified on combined code checkpoint `845e619`.
 All 17 findings have regressions covering configuration consistency/capacity,
 terminal diagnostic races and wire results, clock skew, upload generations,

@@ -113,3 +113,7 @@ persistence and authorized agent release.
 connection/query diagnostics through the API, agent, UI and CLI. It depends on the
 connected-agent runtime and protected source-secret adapter; collection and
 production observations remain a later increment.
+
+[F2-T21](F2-T21.md) restores usable agent registration, persistent coherent
+navigation and literal endpoint presentation, with independent user and container
+deployment acceptance.

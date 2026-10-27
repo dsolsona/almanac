@@ -53,12 +53,12 @@ func TestAgentContextRejectsExpiredAndCancelledSessions(t *testing.T) {
 
 func TestValidateIssuanceSeparatesFreshSecretFromReplay(t *testing.T) {
 	fresh := `{"agent":{"id":"00000000-0000-0000-0000-000000000001","name":"east","display_name":"East","enabled":true,"version":"9223372036854775807","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"},"credential":{"id":"00000000-0000-0000-0000-000000000002","agent_id":"00000000-0000-0000-0000-000000000001","issued_at":"2026-10-26T10:00:00Z","expires_at":"2026-10-27T10:00:00Z","revoked_at":null,"retire_at":null},"replayed":false,"secret_state":"issued","token":"secret-value"}`
-	data, token, replay, err := validateIssuance(&http.Response{StatusCode: 201}, []byte(fresh), "", false)
+	data, token, replay, err := validateIssuance(t.Context(), &http.Response{StatusCode: 201}, []byte(fresh), "", false)
 	if err != nil || replay || token != "secret-value" || strings.Contains(string(data), token) || !strings.Contains(string(data), `"version":"9223372036854775807"`) {
 		t.Fatalf("fresh issuance did not isolate its secret or preserve version: replay=%t token=%q data=%s err=%v", replay, token, data, err)
 	}
 	replayed := strings.Replace(strings.Replace(fresh, `"replayed":false`, `"replayed":true`, 1), `"secret_state":"issued","token":"secret-value"`, `"secret_state":"secret_unavailable"`, 1)
-	data, token, replay, err = validateIssuance(&http.Response{StatusCode: 200}, []byte(replayed), "", false)
+	data, token, replay, err = validateIssuance(t.Context(), &http.Response{StatusCode: 200}, []byte(replayed), "", false)
 	if err != nil || !replay || token != "" || strings.Contains(string(data), "token") {
 		t.Fatalf("replay exposed or required a token: replay=%t token=%q data=%s err=%v", replay, token, data, err)
 	}
@@ -66,13 +66,13 @@ func TestValidateIssuanceSeparatesFreshSecretFromReplay(t *testing.T) {
 
 func TestValidateIssuanceRejectsContradictoryTokenDiscriminants(t *testing.T) {
 	bad := `{"agent":{"id":"00000000-0000-0000-0000-000000000001","name":"east","display_name":"East","enabled":true,"version":"1","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"},"credential":{"id":"00000000-0000-0000-0000-000000000002","agent_id":"00000000-0000-0000-0000-000000000001","issued_at":"2026-10-26T10:00:00Z","expires_at":"2026-10-27T10:00:00Z","revoked_at":null,"retire_at":null},"replayed":true,"secret_state":"secret_unavailable","token":"unexpected"}`
-	if _, _, _, err := validateIssuance(&http.Response{StatusCode: 200}, []byte(bad), "", false); err == nil {
+	if _, _, _, err := validateIssuance(t.Context(), &http.Response{StatusCode: 200}, []byte(bad), "", false); err == nil {
 		t.Fatal("replayed response with token was accepted")
 	}
-	if _, _, _, err := validateIssuance(&http.Response{StatusCode: 201}, []byte(strings.ReplaceAll(bad, `"replayed":true`, `"replayed":false`)), "", false); err == nil {
+	if _, _, _, err := validateIssuance(t.Context(), &http.Response{StatusCode: 201}, []byte(strings.ReplaceAll(bad, `"replayed":true`, `"replayed":false`)), "", false); err == nil {
 		t.Fatal("fresh response with replay discriminant was accepted")
 	}
-	if _, _, _, err := validateIssuance(&http.Response{StatusCode: 200}, []byte(strings.Replace(bad, `"token":"unexpected"`, `"token":null`, 1)), "", false); err == nil {
+	if _, _, _, err := validateIssuance(t.Context(), &http.Response{StatusCode: 200}, []byte(strings.Replace(bad, `"token":"unexpected"`, `"token":null`, 1)), "", false); err == nil {
 		t.Fatal("replay with explicit null token was accepted")
 	}
 }
@@ -100,12 +100,12 @@ func TestDecimalEnforcesCanonicalSignedInt64(t *testing.T) {
 func TestMutationServerFailurePreservesSafeRetryMetadataAndUnknownOutcome(t *testing.T) {
 	response := &http.Response{StatusCode: http.StatusServiceUnavailable, Header: http.Header{"Retry-After": []string{"17"}}}
 	body := []byte(`{"code":"management_unavailable","message":"database details","request_id":"0123456789abcdef0123456789abcdef","field_errors":[]}`)
-	err := mutationProblem(response, body)
+	err := mutationProblem(t.Context(), response, body)
 	failure, ok := errors.AsType[*Failure](err)
 	if !ok || !failure.Unknown || failure.Code != "outcome_unknown" || failure.RequestID != "0123456789abcdef0123456789abcdef" || failure.RetryAfter != 17 || strings.Contains(failure.Message, "database details") {
 		t.Fatalf("server failure lost safe metadata or disclosed message: %#v", err)
 	}
-	conflict := mutationProblem(&http.Response{StatusCode: http.StatusConflict, Header: make(http.Header)}, []byte(`{"code":"conflict","message":"stale","request_id":"0123456789abcdef0123456789abcdef","field_errors":[]}`))
+	conflict := mutationProblem(t.Context(), &http.Response{StatusCode: http.StatusConflict, Header: make(http.Header)}, []byte(`{"code":"conflict","message":"stale","request_id":"0123456789abcdef0123456789abcdef","field_errors":[]}`))
 	known, ok := errors.AsType[*Failure](conflict)
 	if !ok || known.Unknown || known.Kind != setupclient.KindConflict {
 		t.Fatalf("definitive conflict became uncertain: %#v", conflict)
@@ -139,7 +139,7 @@ func TestResponseValidationRejectsNullStrings(t *testing.T) {
 		`{"code":"conflict","message":null,"request_id":"0123456789abcdef0123456789abcdef","field_errors":[]}`,
 		`{"code":"conflict","message":"stale","request_id":"0123456789abcdef0123456789abcdef","field_errors":[{"field":null,"code":"invalid","message":"bad"}]}`,
 	} {
-		err := mutationProblem(&http.Response{StatusCode: http.StatusConflict, Header: make(http.Header)}, []byte(body))
+		err := mutationProblem(t.Context(), &http.Response{StatusCode: http.StatusConflict, Header: make(http.Header)}, []byte(body))
 		failure, ok := errors.AsType[*Failure](err)
 		if !ok || !failure.Unknown {
 			t.Errorf("null Problem strings were not safely treated as unknown: %#v", err)
@@ -472,6 +472,66 @@ func newTestAgentClient(t *testing.T, server *httptest.Server) *Client {
 	return client
 }
 
+type postAgentsOperationsStub struct {
+	setupclient.AgentOperations
+	post func(context.Context, *api.PostAgentsParams, api.PostAgentsJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+}
+
+func (s postAgentsOperationsStub) PostAgents(ctx context.Context, params *api.PostAgentsParams, body api.PostAgentsJSONRequestBody, editors ...api.RequestEditorFn) (*http.Response, error) {
+	return s.post(ctx, params, body, editors...)
+}
+
+func TestCreateDistinguishesCancellationFromCleanBodyLoss(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		cancel   bool
+		wantKind setupclient.Kind
+		wantCode string
+	}{
+		{name: "explicit cancellation", cancel: true, wantKind: setupclient.KindCancelled, wantCode: "cancelled"},
+		{name: "body loss", wantKind: setupclient.KindRemote, wantCode: "outcome_unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			started := make(chan struct{})
+			release := make(chan struct{})
+			client := &Client{
+				ops: postAgentsOperationsStub{post: func(requestCtx context.Context, _ *api.PostAgentsParams, _ api.PostAgentsJSONRequestBody, _ ...api.RequestEditorFn) (*http.Response, error) {
+					reader, writer := io.Pipe()
+					go func() {
+						_, _ = io.WriteString(writer, "{")
+						close(started)
+						if tc.cancel {
+							<-requestCtx.Done()
+						} else {
+							<-release
+						}
+						_ = writer.Close()
+					}()
+					return &http.Response{StatusCode: http.StatusCreated, Body: reader}, nil
+				}},
+				editor: func(context.Context, *http.Request) error { return nil },
+			}
+			done := make(chan error, 1)
+			go func() {
+				_, _, _, err := client.Create(ctx, api.CreateAgentRequest{Name: "east", DisplayName: "East"}, "response-body")
+				done <- err
+			}()
+			<-started
+			if tc.cancel {
+				cancel()
+			} else {
+				close(release)
+			}
+			failure := asAgentFailure(t, <-done)
+			if failure.Kind != tc.wantKind || failure.Code != tc.wantCode || !failure.Unknown {
+				t.Fatalf("response body classification=%#v; want kind=%q code=%q unknown=true", failure, tc.wantKind, tc.wantCode)
+			}
+		})
+	}
+}
+
 func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t *testing.T) {
 	const requestID = "0123456789abcdef0123456789abcdef"
 	var posts int
@@ -565,6 +625,42 @@ func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t 
 	}
 	if posts != 6 {
 		t.Fatalf("client retried or skipped mutations: requests=%d", posts)
+	}
+}
+
+func TestMutationCancellationPreservesSafeProblemMetadata(t *testing.T) {
+	const requestID = "0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "documented problem",
+			body: `{"code":"management_unavailable","message":"untrusted detail","request_id":"` + requestID + `","field_errors":[]}`,
+		},
+		{
+			name: "unknown problem fallback",
+			body: `{"code":"unexpected","message":"untrusted detail","request_id":"` + requestID + `","field_errors":[]}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			response := &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     http.Header{"Retry-After": []string{"15"}},
+			}
+			failure := asAgentFailure(t, mutationProblem(ctx, response, []byte(tc.body)))
+			if failure.Kind != setupclient.KindCancelled || failure.Code != "cancelled" || !failure.Unknown {
+				t.Fatalf("cancelled mutation classification=%#v", failure)
+			}
+			if failure.RequestID != requestID || failure.RetryAfter != 15 {
+				t.Fatalf("cancelled mutation lost safe server metadata: %#v", failure)
+			}
+			if strings.Contains(failure.Message, "untrusted detail") {
+				t.Fatalf("cancelled mutation exposed server detail: %#v", failure)
+			}
+		})
 	}
 }
 

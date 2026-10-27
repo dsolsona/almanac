@@ -115,6 +115,9 @@ is part of task readiness; a missing approval must not interrupt unattended work
    outcomes independently of the worker's implementation and test assertions.
 5. The coordinator runs the relevant checks on the integrated candidate. Worker
    results from another revision do not prove the combined application works.
+   Freeze that candidate's product and verification sources while the gate runs.
+   Submitted workers make no further edits without a new scoped correction; work
+   on a later correction stays isolated until the current result is recorded.
 6. Update task and delivery status only after that evidence exists. Keep known gaps
    explicit. Commit or publish only within the user's current authorization.
 
@@ -149,6 +152,33 @@ task evidence. Compare accepted usable outcomes and rework, not activity or numb
 of PRs. Avoid exhaustive process reporting that does not change the next action.
 
 ## Delivery and acceptance
+
+Before dispatch, write the task's user acceptance checklist in observable terms:
+what the user enters, what they see, how they move to the next screen, and how they
+correct an error. Choose ordinary inputs as well as contract boundaries. For a bug
+report, record and reproduce its exact steps and values before implementing a fix;
+distinguish confirmed causes from hypotheses and related cases.
+
+The coordinator's final acceptance is a separate user pass over the integrated
+application, not a summary of the implementer's tests. Exercise the affected flow
+through the normal container deployment using the isolated Compose check, with its
+default origin, authentication, configuration and persisted records. Preserve the
+maintainer's data, account and running preview. Custom API/process fixtures remain
+necessary boundary checks, but cannot substitute for deployment-path evidence.
+
+For visual changes, inspect reference and candidate side by side. Assess menu
+organization, page hierarchy, content density, typography, controls and states in
+both themes and at mobile widths. Exercise continuous navigation and browser history,
+not just independent page loads. Verify input text both as a value and as rendered
+text when punctuation or technical data matters. Record specific evidence for these
+criteria; screenshot existence and passing suite counts do not prove usability.
+
+Keep implementation, verification and unresolved findings distinct in handoffs and
+delivery status. An unexplained failed run stays an open investigation even if a
+later run passes; do not list it among corrected defects without causal evidence.
+Close a reported defect only when the original acceptance case works and its
+regression protects that case. These checks strengthen existing acceptance rather
+than adding a new maintainer approval round for routine fixes.
 
 Follow [SPEC-0014](specs/0014-delivery-and-verification.md) for release sequencing.
 The maintainer accepts new product specs and ADRs; routine work within accepted
