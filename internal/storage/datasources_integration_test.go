@@ -5,16 +5,19 @@ package storage
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -96,6 +99,48 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 		t.Fatalf("matching grant configuration release = %+v, %v", current, err)
 	}
 	now = now.Add(time.Second)
+	savedTest, savedTestRequest, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: "7a111111-5377-4ad3-b9b3-44e75fedc211", AgentID: created.Agent.ID,
+		AgentGeneration: 1, DatasourceID: createdSource.ID, ExpectedDatasourceVersion: 1,
+		IdempotencyKey: "saved-connection-test", Operation: "connection_test", Secrets: secrets,
+		RequestedAt: now, Now: func() time.Time { return now },
+	})
+	if err != nil || savedTest.Operation != "connection_test" || savedTest.DatasourceID != createdSource.ID ||
+		savedTestRequest.Datasource.Endpoint != settings.Endpoint || savedTestRequest.Datasource.BearerToken != "first-source-token" {
+		t.Fatalf("saved connection test did not use the committed settings and secret: record=%+v request=%+v err=%v", savedTest, savedTestRequest, err)
+	}
+	replay, replayRequest, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: "7a111111-5377-4ad3-b9b3-44e75fedc212", AgentID: created.Agent.ID,
+		AgentGeneration: 1, DatasourceID: createdSource.ID, ExpectedDatasourceVersion: 1,
+		IdempotencyKey: "saved-connection-test", Operation: "connection_test", Secrets: secrets,
+		RequestedAt: now.Add(time.Second), Now: func() time.Time { return now.Add(time.Second) },
+	})
+	if err != nil || !replay.Replayed || replay.ID != savedTest.ID || replayRequest.DiagnosticID != "" {
+		t.Fatalf("saved connection test idempotency replay = %+v request=%+v err=%v", replay, replayRequest, err)
+	}
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: "7a111111-5377-4ad3-b9b3-44e75fedc213", AgentID: created.Agent.ID,
+		AgentGeneration: 1, DatasourceID: createdSource.ID, ExpectedDatasourceVersion: 2,
+		IdempotencyKey: "saved-connection-test", Operation: "connection_test", Secrets: secrets,
+		RequestedAt: now.Add(time.Second), Now: func() time.Time { return now.Add(time.Second) },
+	}); !errors.Is(err, ErrDiagnosticConflict) {
+		t.Fatalf("saved connection test idempotency key reuse error = %v", err)
+	}
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: "7a111111-5377-4ad3-b9b3-44e75fedc214", AgentID: created.Agent.ID,
+		AgentGeneration: 1, DatasourceID: createdSource.ID, ExpectedDatasourceVersion: 2,
+		IdempotencyKey: "saved-connection-stale-version", Operation: "connection_test", Secrets: secrets,
+		RequestedAt: now.Add(time.Second), Now: func() time.Time { return now.Add(time.Second) },
+	}); !errors.Is(err, ErrDatasourceConflict) {
+		t.Fatalf("saved connection test stale version error = %v", err)
+	}
+	if _, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, "7a111111-5377-4ad3-b9b3-44e75fedc214", func() time.Time { return now.Add(time.Second) }); !errors.Is(err, ErrDiagnosticNotFound) {
+		t.Fatalf("stale saved connection test created a receipt: %v", err)
+	}
+	if canceled, err := CancelDatasourceDiagnostic(t.Context(), f.databaseURL, proof, savedTest.ID, func() time.Time { return now.Add(time.Second) }); err != nil || canceled.State != "canceled" {
+		t.Fatalf("cancel saved connection test = %+v, %v", canceled, err)
+	}
+	now = now.Add(time.Second)
 	diagnostic, diagnosticRequest, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
 		Proof: proof, DiagnosticID: "afa762d3-37c1-48b1-8ec1-e8b5f9336f94", AgentID: created.Agent.ID,
 		AgentGeneration: 1, DatasourceID: createdSource.ID, Operation: "query_preview", Query: "up", Secrets: secrets, RequestedAt: now, Now: func() time.Time { return now },
@@ -124,6 +169,12 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	status, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnostic.ID, func() time.Time { return now.Add(time.Second) })
 	if err != nil || status.State != "canceled" {
 		t.Fatalf("late diagnostic result replaced cancellation = %+v, %v", status, err)
+	}
+	if err := verifyDiagnosticCancellationCompletionRace(t, f, issued.ID, issued.Verifier, created.Agent.ID, createdSource.ID, secrets, now.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyDiagnosticTimeoutCompletionRace(t, f, issued.ID, issued.Verifier, created.Agent.ID, createdSource.ID, secrets, now.Add(4*time.Second)); err != nil {
+		t.Fatal(err)
 	}
 	now = now.Add(time.Second)
 	read, err := GetDatasource(t.Context(), f.databaseURL, createdSource.ID, proof, func() time.Time { return now })
@@ -271,6 +322,9 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	if deadlineState != "pending" || len(deadlineStored) != 0 {
 		t.Fatalf("late result mutated diagnostic receipt: state=%s bytes=%d", deadlineState, len(deadlineStored))
 	}
+	if err := verifyConcurrentDatasourceRevisionWrites(t, f, created.Agent.ID, now.Add(4*time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	setIntegrationUserRole(t, f, "administrator")
 	revoked, err := RevokeAgentCredential(t.Context(), f.databaseURL, RevokeAgentCredentialInput{
 		Proof: f.input("unused", "unused").Proof, AgentID: created.Agent.ID, CredentialID: issued.ID,
@@ -282,6 +336,589 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	}
 	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, previewResult, now.Add(6*time.Second)); !errors.Is(err, ErrInvalidAgentCredential) {
 		t.Fatalf("result retry using revoked credential = %v", err)
+	}
+}
+
+func verifyConcurrentDatasourceRevisionWrites(t *testing.T, f agentFixture, agentID string, now time.Time) error {
+	t.Helper()
+	secondVerifier := insertDiagnosticActor(t, f, "datasource-revision-second")
+	proofs := [2]DatasourceProof{{SessionVerifier: f.verifier}, {SessionVerifier: secondVerifier}}
+	controller := integrationConnect(t, f.databaseURL)
+	controlTx, err := controller.Begin(t.Context())
+	if err != nil {
+		closeIntegrationConn(controller)
+		return fmt.Errorf("begin datasource revision lock barrier: %w", err)
+	}
+	var lockedAgent string
+	if err := controlTx.QueryRow(t.Context(), "SELECT id::text FROM public.almanac_agents WHERE id=$1 FOR UPDATE", agentID).Scan(&lockedAgent); err != nil {
+		rollbackTransaction(controlTx)
+		closeIntegrationConn(controller)
+		return fmt.Errorf("lock agent for concurrent datasource writes: %w", err)
+	}
+	type result struct {
+		record DatasourceRecord
+		err    error
+	}
+	results := make(chan result, 2)
+	for index, name := range []string{"revision-concurrent-a", "revision-concurrent-b"} {
+		go func() {
+			settings := datasource.Settings{Name: name, DisplayName: name, Provider: datasource.PrometheusProvider,
+				ConfigurationFormat: datasource.PrometheusConfiguration, Endpoint: "https://metrics.example.test",
+				AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: datasource.PrometheusSettlingDelay, AgentID: agentID}
+			record, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: proofs[index], Settings: settings,
+				Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"},
+				IdempotencyKey: "revision-write-" + name, RequestID: "revision-write-" + name, Now: func() time.Time { return now }})
+			results <- result{record: record, err: err}
+		}()
+	}
+	observer := integrationConnect(t, f.databaseURL)
+	deadline := time.Now().Add(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		var waiters int
+		if err := observer.QueryRow(t.Context(), `SELECT count(*) FROM pg_stat_activity
+			WHERE datname=current_database() AND state='active' AND wait_event_type='Lock'
+			AND query ILIKE '%FROM public.almanac_agents%'`).Scan(&waiters); err != nil {
+			rollbackTransaction(controlTx)
+			closeIntegrationConn(observer)
+			closeIntegrationConn(controller)
+			return fmt.Errorf("observe concurrent datasource writers: %w", err)
+		}
+		if waiters >= 2 {
+			break
+		}
+		select {
+		case <-ticker.C:
+		case <-t.Context().Done():
+			rollbackTransaction(controlTx)
+			closeIntegrationConn(observer)
+			closeIntegrationConn(controller)
+			return fmt.Errorf("context ended observing concurrent datasource writers: %w", t.Context().Err())
+		}
+	}
+	if time.Now().After(deadline) {
+		rollbackTransaction(controlTx)
+		closeIntegrationConn(observer)
+		closeIntegrationConn(controller)
+		return errors.New("concurrent datasource writes did not wait on the shared agent lock")
+	}
+	if err := controlTx.Commit(t.Context()); err != nil {
+		closeIntegrationConn(observer)
+		closeIntegrationConn(controller)
+		return fmt.Errorf("release concurrent datasource writer barrier: %w", err)
+	}
+	closeIntegrationConn(controller)
+	defer closeIntegrationConn(observer)
+	revisions := make([]int64, 0, 2)
+	for range 2 {
+		select {
+		case output := <-results:
+			if output.err != nil {
+				return fmt.Errorf("concurrent datasource write failed: %w", output.err)
+			}
+			revisions = append(revisions, output.record.ConfigurationRevision)
+		case <-time.After(5 * time.Second):
+			return errors.New("concurrent datasource write did not finish after releasing agent lock")
+		}
+	}
+	if revisions[0] == revisions[1] || max(revisions[0], revisions[1])-min(revisions[0], revisions[1]) != 1 {
+		return fmt.Errorf("concurrent datasource writes chose configuration revisions %v", revisions)
+	}
+	var latest int64
+	if err := observer.QueryRow(t.Context(), "SELECT max(revision) FROM public.almanac_agent_configurations WHERE agent_id=$1", agentID).Scan(&latest); err != nil {
+		return fmt.Errorf("read latest concurrent configuration revision: %w", err)
+	}
+	if latest != max(revisions[0], revisions[1]) {
+		return fmt.Errorf("latest stored configuration revision=%d, write results=%v", latest, revisions)
+	}
+	return nil
+}
+
+func TestIntegrationDatasourceConfigurationSnapshotIsCoherentDuringEdit(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "datasource-config-coherence")
+	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
+		ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := f.base.Add(4 * time.Second)
+	resumeVerifier := ownershipVerifier(ownershipBytes(32, 87))
+	grant, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier,
+		&AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 1, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	settings := datasource.Settings{Name: "coherent-source", DisplayName: "Coherent source", Provider: datasource.PrometheusProvider,
+		ConfigurationFormat: datasource.PrometheusConfiguration, Endpoint: "https://before.example.test", AuthenticationMode: "none",
+		PollingIntervalSeconds: 60, SettlingDelaySeconds: 60, AgentID: created.Agent.ID}
+	source, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{
+		Proof: DatasourceProof{SessionVerifier: f.verifier}, Settings: settings,
+		Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"},
+		IdempotencyKey: "coherent-source", RequestID: "coherent-source", Now: func() time.Time { return now.Add(time.Second) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renewedAt := grant.AcquiredAt.Add(agentMinimumRenewalInterval)
+	renewed, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 0,
+		ownershipNonce(88), func() time.Time { return renewedAt })
+	if err != nil || renewed.ConfigurationRevision != source.ConfigurationRevision {
+		t.Fatalf("renew datasource configuration grant = %+v, %v", renewed, err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1,
+		renewed.ConfigurationRevision, func() time.Time { return renewedAt }); err != nil {
+		t.Fatal(err)
+	}
+	runAt := renewedAt.Add(time.Second)
+	settings.Endpoint = "https://after.example.test"
+	type readResult struct {
+		snapshot AgentConfigurationSnapshot
+		err      error
+	}
+	type writeResult struct {
+		record DatasourceRecord
+		err    error
+	}
+	start := make(chan struct{})
+	reads := make(chan readResult, 1)
+	writes := make(chan writeResult, 1)
+	go func() {
+		<-start
+		snapshot, err := ReadCurrentAgentConfiguration(t.Context(), f.databaseURL, issued.ID, issued.Verifier, func() time.Time { return runAt })
+		reads <- readResult{snapshot: snapshot, err: err}
+	}()
+	go func() {
+		<-start
+		record, err := UpdateDatasource(t.Context(), f.databaseURL, nil, UpdateDatasourceInput{
+			Proof: DatasourceProof{SessionVerifier: f.verifier}, DatasourceID: source.ID, ExpectedVersion: source.Version,
+			Settings: settings, Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"},
+			RequestID: "coherent-source-edit", Now: func() time.Time { return runAt },
+		})
+		writes <- writeResult{record: record, err: err}
+	}()
+	close(start)
+	read := <-reads
+	write := <-writes
+	if read.err != nil || write.err != nil {
+		t.Fatalf("coherent configuration race read=%+v (%v), write=%+v (%v)", read.snapshot, read.err, write.record, write.err)
+	}
+	if write.record.ConfigurationRevision != source.ConfigurationRevision+1 {
+		t.Fatalf("updated datasource configuration revision=%d, want %d", write.record.ConfigurationRevision, source.ConfigurationRevision+1)
+	}
+	if read.snapshot.Pending {
+		if len(read.snapshot.Snapshot) != 0 || read.snapshot.Revision != write.record.ConfigurationRevision {
+			t.Fatalf("post-edit stale grant response was not a no-snapshot pending result: %+v", read.snapshot)
+		}
+		return
+	}
+	if read.snapshot.Revision != source.ConfigurationRevision {
+		t.Fatalf("configuration read observed an unrelated revision %d, want %d", read.snapshot.Revision, source.ConfigurationRevision)
+	}
+	snapshot, err := agentprotocol.DecodeConfigurationSnapshot(read.snapshot.Snapshot)
+	if err != nil || len(snapshot.Assignments) != 1 || snapshot.Assignments[0].DatasourceVersion != "1" || snapshot.Assignments[0].Endpoint != "https://before.example.test" {
+		t.Fatalf("configuration read mixed datasource edit state: snapshot=%+v, %v", snapshot, err)
+	}
+}
+
+func verifyDiagnosticCancellationCompletionRace(t *testing.T, f agentFixture, credentialID string, credentialVerifier [32]byte, agentID, datasourceID string, secrets *sourcesecret.Adapter, now time.Time) error {
+	t.Helper()
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	const diagnosticID = "5c000000-0000-4000-8000-000000000001"
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: diagnosticID, AgentID: agentID, AgentGeneration: 1, DatasourceID: datasourceID,
+		Operation: "query_preview", Query: "vector(1)", Secrets: secrets, RequestedAt: now, Now: func() time.Time { return now },
+	}); err != nil {
+		return fmt.Errorf("begin cancellation/completion race receipt: %w", err)
+	}
+	start := make(chan struct{})
+	type completion struct{ err error }
+	type cancellation struct {
+		record DiagnosticRecord
+		err    error
+	}
+	completed := make(chan completion, 1)
+	canceled := make(chan cancellation, 1)
+	go func() {
+		<-start
+		result := agentprotocol.DiagnosticResult{DiagnosticID: diagnosticID, State: "succeeded", ResultClass: "empty", Series: []agentprotocol.DiagnosticSeries{}}
+		completed <- completion{err: CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, credentialID, credentialVerifier, 1, result, now)}
+	}()
+	go func() {
+		<-start
+		record, err := CancelDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return now })
+		canceled <- cancellation{record: record, err: err}
+	}()
+	close(start)
+	var completeResult completion
+	var cancelResult cancellation
+	select {
+	case completeResult = <-completed:
+	case <-time.After(5 * time.Second):
+		return errors.New("completion did not finish in diagnostic cancellation race")
+	}
+	select {
+	case cancelResult = <-canceled:
+	case <-time.After(5 * time.Second):
+		return errors.New("cancellation did not finish in diagnostic cancellation race")
+	}
+	if cancelResult.err != nil {
+		return fmt.Errorf("race cancellation failed: %w", cancelResult.err)
+	}
+	current, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return now.Add(time.Second) })
+	if err != nil {
+		return fmt.Errorf("read cancellation/completion race receipt: %w", err)
+	}
+	switch current.State {
+	case "canceled":
+		if !errors.Is(completeResult.err, ErrDiagnosticConflict) || cancelResult.record.State != "canceled" {
+			return fmt.Errorf("cancellation won but completion outcome was %v, returned cancellation=%s", completeResult.err, cancelResult.record.State)
+		}
+	case "succeeded":
+		if completeResult.err != nil || cancelResult.record.State != "succeeded" {
+			return fmt.Errorf("completion won but completion outcome was %v, returned cancellation=%s", completeResult.err, cancelResult.record.State)
+		}
+	default:
+		return fmt.Errorf("race left diagnostic in nonterminal state %q", current.State)
+	}
+	return verifyTerminalDiagnosticTransitionWait(t, f, credentialID, credentialVerifier, agentID, datasourceID, secrets, now,
+		"5c000000-0000-4000-8000-000000000003", false)
+}
+
+func verifyDiagnosticTimeoutCompletionRace(t *testing.T, f agentFixture, credentialID string, credentialVerifier [32]byte, agentID, datasourceID string, secrets *sourcesecret.Adapter, now time.Time) error {
+	t.Helper()
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	const diagnosticID = "5c000000-0000-4000-8000-000000000002"
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: diagnosticID, AgentID: agentID, AgentGeneration: 1, DatasourceID: datasourceID,
+		Operation: "query_preview", Query: "vector(1)", Secrets: secrets, RequestedAt: now, Now: func() time.Time { return now },
+	}); err != nil {
+		return fmt.Errorf("begin timeout/completion race receipt: %w", err)
+	}
+	deadline := now.Add(time.Second)
+	conn := integrationConnect(t, f.databaseURL)
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_diagnostics SET deadline_at=$2 WHERE id=$1`, diagnosticID, timestamp(deadline)); err != nil {
+		closeIntegrationConn(conn)
+		return fmt.Errorf("set timeout/completion race deadline: %w", err)
+	}
+	closeIntegrationConn(conn)
+	start := make(chan struct{})
+	type completion struct{ err error }
+	type timeout struct {
+		record DiagnosticRecord
+		err    error
+	}
+	completed := make(chan completion, 1)
+	timedOut := make(chan timeout, 1)
+	go func() {
+		<-start
+		result := agentprotocol.DiagnosticResult{DiagnosticID: diagnosticID, State: "succeeded", ResultClass: "empty", Series: []agentprotocol.DiagnosticSeries{}}
+		completed <- completion{err: CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, credentialID, credentialVerifier, 1, result, deadline.Add(-time.Microsecond))}
+	}()
+	go func() {
+		<-start
+		record, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return deadline })
+		timedOut <- timeout{record: record, err: err}
+	}()
+	close(start)
+	var completeResult completion
+	var timeoutResult timeout
+	select {
+	case completeResult = <-completed:
+	case <-time.After(5 * time.Second):
+		return errors.New("completion did not finish in diagnostic timeout race")
+	}
+	select {
+	case timeoutResult = <-timedOut:
+	case <-time.After(5 * time.Second):
+		return errors.New("timeout read did not finish in diagnostic timeout race")
+	}
+	if timeoutResult.err != nil {
+		return fmt.Errorf("race timeout read failed: %w", timeoutResult.err)
+	}
+	current, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return deadline.Add(time.Second) })
+	if err != nil {
+		return fmt.Errorf("read timeout/completion race receipt: %w", err)
+	}
+	switch current.State {
+	case "timed_out":
+		if !errors.Is(completeResult.err, ErrDiagnosticConflict) || timeoutResult.record.State != "timed_out" {
+			return fmt.Errorf("timeout won but completion outcome was %v, returned timeout=%s", completeResult.err, timeoutResult.record.State)
+		}
+	case "succeeded":
+		if completeResult.err != nil || timeoutResult.record.State != "succeeded" {
+			return fmt.Errorf("completion won but completion outcome was %v, returned timeout=%s", completeResult.err, timeoutResult.record.State)
+		}
+	default:
+		return fmt.Errorf("race left diagnostic in nonterminal state %q", current.State)
+	}
+	return verifyTerminalDiagnosticTransitionWait(t, f, credentialID, credentialVerifier, agentID, datasourceID, secrets, now,
+		"5c000000-0000-4000-8000-000000000004", true)
+}
+
+// Force the stale-read interleaving: the controller commits a succeeded result
+// while Cancel/Get has read pending and is blocked on its conditional UPDATE.
+func verifyTerminalDiagnosticTransitionWait(t *testing.T, f agentFixture, credentialID string, credentialVerifier [32]byte, agentID, datasourceID string, secrets *sourcesecret.Adapter, now time.Time, diagnosticID string, timeout bool) error {
+	t.Helper()
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	deadline := now.Add(30 * time.Second)
+	if timeout {
+		deadline = now.Add(time.Second)
+	}
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: diagnosticID, AgentID: agentID, AgentGeneration: 1, DatasourceID: datasourceID,
+		Operation: "query_preview", Query: "vector(1)", Secrets: secrets, RequestedAt: now, Now: func() time.Time { return now },
+	}); err != nil {
+		return fmt.Errorf("begin forced terminal-transition race: %w", err)
+	}
+	result := agentprotocol.DiagnosticResult{DiagnosticID: diagnosticID, State: "succeeded", ResultClass: "empty", Series: []agentprotocol.DiagnosticSeries{}}
+	encoded, err := result.CanonicalJSON()
+	if err != nil {
+		return fmt.Errorf("encode forced terminal-transition result: %w", err)
+	}
+	digest := sha256.Sum256(encoded)
+	controller := integrationConnect(t, f.databaseURL)
+	tx, err := controller.Begin(t.Context())
+	if err != nil {
+		closeIntegrationConn(controller)
+		return fmt.Errorf("begin terminal-transition controller: %w", err)
+	}
+	if timeout {
+		if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_diagnostics SET deadline_at=$2 WHERE id=$1`, diagnosticID, timestamp(deadline)); err != nil {
+			rollbackTransaction(tx)
+			closeIntegrationConn(controller)
+			return fmt.Errorf("set forced diagnostic timeout deadline: %w", err)
+		}
+	}
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_diagnostics SET state='succeeded', result=$2::jsonb,
+		result_digest=$3, updated_at=$4 WHERE id=$1`, diagnosticID, encoded, digest[:], timestamp(now)); err != nil {
+		rollbackTransaction(tx)
+		closeIntegrationConn(controller)
+		return fmt.Errorf("hold completed diagnostic row: %w", err)
+	}
+	type resultRecord struct {
+		record DiagnosticRecord
+		err    error
+	}
+	finished := make(chan resultRecord, 1)
+	go func() {
+		if timeout {
+			record, readErr := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return deadline })
+			finished <- resultRecord{record: record, err: readErr}
+			return
+		}
+		record, cancelErr := CancelDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return now })
+		finished <- resultRecord{record: record, err: cancelErr}
+	}()
+	observer := integrationConnect(t, f.databaseURL)
+	if err := waitForDiagnosticUpdateLock(t, observer); err != nil {
+		rollbackTransaction(tx)
+		closeIntegrationConn(observer)
+		closeIntegrationConn(controller)
+		return err
+	}
+	if err := tx.Commit(t.Context()); err != nil {
+		closeIntegrationConn(observer)
+		closeIntegrationConn(controller)
+		return fmt.Errorf("commit winning diagnostic completion: %w", err)
+	}
+	closeIntegrationConn(observer)
+	closeIntegrationConn(controller)
+	select {
+	case outcome := <-finished:
+		if outcome.err != nil || outcome.record.State != "succeeded" {
+			return fmt.Errorf("stale terminal transition overwrote completion: record=%+v err=%v", outcome.record, outcome.err)
+		}
+	case <-time.After(5 * time.Second):
+		return errors.New("terminal transition did not finish after completion commit")
+	}
+	return nil
+}
+
+func waitForDiagnosticUpdateLock(t *testing.T, observer *pgx.Conn) error {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		var waiters int
+		if err := observer.QueryRow(t.Context(), `SELECT count(*) FROM pg_stat_activity
+			WHERE datname=current_database() AND state='active' AND wait_event_type='Lock'
+			AND query ILIKE '%UPDATE public.almanac_diagnostics SET state=%'`).Scan(&waiters); err != nil {
+			return fmt.Errorf("observe diagnostic terminal-transition lock: %w", err)
+		}
+		if waiters > 0 {
+			return nil
+		}
+		select {
+		case <-ticker.C:
+		case <-t.Context().Done():
+			return fmt.Errorf("context ended observing diagnostic transition: %w", t.Context().Err())
+		}
+	}
+	return errors.New("diagnostic terminal transition did not wait on the held row")
+}
+
+func TestIntegrationDatasourceAssignmentCountLimitRollsBackOverLimitWrite(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "datasource-assignment-count")
+	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
+		ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := f.base.Add(4 * time.Second)
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(ownershipBytes(32, 91)),
+		&AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	tls := `{"insecure_skip_verify":false,"ca_pem":""}`
+	for index := range 255 {
+		id := fmt.Sprintf("6c000000-0000-4000-8000-%012d", index+1)
+		name := fmt.Sprintf("count-%03d", index+1)
+		if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_datasources
+			(id,name,display_name,version,provider,configuration_format,endpoint,tls,authentication_mode,
+			authentication_username,password_envelope,password_revision,token_envelope,token_revision,
+			polling_interval_seconds,settling_delay_seconds,agent_id,created_at,updated_at)
+			VALUES ($1::uuid,$2,$3,1,'prometheus','prometheus-http-v1','https://metrics.example.test',$4::jsonb,'none',
+			NULL,NULL,0,NULL,0,60,60,$5::uuid,$6,$6)`, id, name, name, tls, created.Agent.ID, now); err != nil {
+			closeIntegrationConn(conn)
+			t.Fatalf("seed datasource assignment %d: %v", index+1, err)
+		}
+	}
+	closeIntegrationConn(conn)
+	settings := datasource.Settings{Name: "count-final", DisplayName: "Count final", Provider: datasource.PrometheusProvider,
+		ConfigurationFormat: datasource.PrometheusConfiguration, Endpoint: "https://metrics.example.test", AuthenticationMode: "none",
+		PollingIntervalSeconds: 60, SettlingDelaySeconds: 60, AgentID: created.Agent.ID}
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	final, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: proof, Settings: settings,
+		Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"},
+		IdempotencyKey: "count-limit-256", RequestID: "count-limit-256", Now: func() time.Time { return now.Add(time.Second) }})
+	if err != nil {
+		t.Fatalf("exactly 256 assignments were rejected: %v", err)
+	}
+	agentID, _ := canonicalUUID(created.Agent.ID)
+	conn = integrationConnect(t, f.databaseURL)
+	var installationID string
+	if err := conn.QueryRow(t.Context(), "SELECT installation_id::text FROM public.almanac_installation WHERE singleton=true").Scan(&installationID); err != nil {
+		closeIntegrationConn(conn)
+		t.Fatal(err)
+	}
+	snapshot, err := buildDatasourceConfigurationSnapshot(t.Context(), dbgen.New(conn), installationID, agentID, final.ConfigurationRevision, nil)
+	closeIntegrationConn(conn)
+	var decoded agentprotocol.ConfigurationSnapshot
+	if err != nil || json.Unmarshal(snapshot, &decoded) != nil || len(decoded.Assignments) != 256 {
+		t.Fatalf("256-assignment snapshot has %d assignments, error=%v", len(decoded.Assignments), err)
+	}
+	settings.Name, settings.DisplayName = "count-over", "Count over"
+	if _, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: proof, Settings: settings,
+		Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"},
+		IdempotencyKey: "count-limit-257", RequestID: "count-limit-257", Now: func() time.Time { return now.Add(2 * time.Second) }}); !errors.Is(err, ErrDatasourceConfigurationTooLarge) {
+		t.Fatalf("257th assignment write error = %v", err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	var datasourceCount, auditCount, receiptCount int
+	var latestRevision int64
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_datasources WHERE agent_id=$1", created.Agent.ID).Scan(&datasourceCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT max(revision) FROM public.almanac_agent_configurations WHERE agent_id=$1", created.Agent.ID).Scan(&latestRevision); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_audit_events WHERE actor=$1 AND action='datasource.created'", f.userID).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_management_receipts WHERE actor_id=$1 AND operation='datasource.create'", f.userID).Scan(&receiptCount); err != nil {
+		t.Fatal(err)
+	}
+	if datasourceCount != 256 || latestRevision != final.ConfigurationRevision || auditCount != 1 || receiptCount != 1 {
+		t.Fatalf("over-limit write was not atomic: sources=%d revision=%d audit=%d receipts=%d final_revision=%d", datasourceCount, latestRevision, auditCount, receiptCount, final.ConfigurationRevision)
+	}
+}
+
+func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrite(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "datasource-config-byte-limit")
+	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
+		ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := f.base.Add(4 * time.Second)
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(ownershipBytes(32, 93)),
+		&AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	keysetID := "e79c723a-81a2-4e0f-ae09-f2a071b2ef45"
+	keysetPath := filepath.Join(t.TempDir(), "source-keyset.json")
+	if err := sourcesecret.Provision(keysetPath, keysetID); err != nil {
+		t.Fatal(err)
+	}
+	secrets, err := sourcesecret.Load(keysetPath, keysetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	password := strings.Repeat("s", 16<<10)
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	successfulWrites := 0
+	for index := range 64 {
+		name := fmt.Sprintf("large-token-%02d", index+1)
+		settings := datasource.Settings{Name: name, DisplayName: name, Provider: datasource.PrometheusProvider,
+			ConfigurationFormat: datasource.PrometheusConfiguration, Endpoint: "https://metrics.example.test",
+			AuthenticationMode: "bearer", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60, AgentID: created.Agent.ID}
+		_, err := CreateDatasource(t.Context(), f.databaseURL, secrets, CreateDatasourceInput{Proof: proof, Settings: settings,
+			Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "replace", Value: password},
+			IdempotencyKey: "large-token-" + fmt.Sprint(index+1), RequestID: "large-token-" + fmt.Sprint(index+1),
+			Now: func() time.Time { return now.Add(time.Duration(index+1) * time.Second) }})
+		if errors.Is(err, ErrDatasourceConfigurationTooLarge) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("secret-bearing datasource write %d: %v", index+1, err)
+		}
+		successfulWrites++
+	}
+	if successfulWrites == 0 || successfulWrites >= 64 {
+		t.Fatalf("expected a secret-bearing configuration to exceed 1 MiB before 64 writes; successful=%d", successfulWrites)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	var sourceCount, auditCount, receiptCount int
+	var latestRevision int64
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_datasources WHERE agent_id=$1", created.Agent.ID).Scan(&sourceCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT max(revision) FROM public.almanac_agent_configurations WHERE agent_id=$1", created.Agent.ID).Scan(&latestRevision); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_audit_events WHERE actor=$1 AND action='datasource.created'", f.userID).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_management_receipts WHERE actor_id=$1 AND operation='datasource.create'", f.userID).Scan(&receiptCount); err != nil {
+		t.Fatal(err)
+	}
+	var installationID string
+	if err := conn.QueryRow(t.Context(), "SELECT installation_id::text FROM public.almanac_installation WHERE singleton=true").Scan(&installationID); err != nil {
+		t.Fatal(err)
+	}
+	agentUUID, validAgent := canonicalUUID(created.Agent.ID)
+	if !validAgent {
+		t.Fatal("test agent ID was not canonical")
+	}
+	snapshotBytes, err := buildDatasourceConfigurationSnapshot(t.Context(), dbgen.New(conn), installationID, agentUUID, latestRevision, secrets)
+	var snapshot agentprotocol.ConfigurationSnapshot
+	if err != nil || json.Unmarshal(snapshotBytes, &snapshot) != nil || len(snapshot.Assignments) != successfulWrites ||
+		!bytes.Contains(snapshotBytes, []byte(password)) || len(snapshotBytes) > agentprotocol.MaxConfigurationBytes {
+		t.Fatalf("prospective secret-bearing configuration bytes=%d assignments=%d successful=%d err=%v", len(snapshotBytes), len(snapshot.Assignments), successfulWrites, err)
+	}
+	if sourceCount != successfulWrites || latestRevision != int64(successfulWrites+1) || auditCount != successfulWrites || receiptCount != successfulWrites {
+		t.Fatalf("over-limit secret write was not atomic: sources=%d revision=%d audit=%d receipts=%d successful=%d", sourceCount, latestRevision, auditCount, receiptCount, successfulWrites)
 	}
 }
 

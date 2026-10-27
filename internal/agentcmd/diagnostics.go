@@ -37,6 +37,7 @@ type diagnosticRunner struct {
 type completedDiagnosticResult struct {
 	result     agentprotocol.DiagnosticResult
 	deadlineAt time.Time
+	generation string
 }
 
 type activeDiagnostic struct {
@@ -57,7 +58,11 @@ func newDiagnosticRunner(agent *client) *diagnosticRunner {
 }
 
 func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.DiagnosticRequest) error {
-	if r == nil || r.client == nil || request.Validate() != nil || request.AgentID != r.client.agentID || request.DeadlineAt.After(time.Now().Add(30*time.Second)) {
+	if r == nil || r.client == nil || request.Validate() != nil || request.AgentID != r.client.agentID {
+		return errors.New("agent diagnostic request rejected")
+	}
+	now := r.client.currentServerTime()
+	if now.IsZero() || request.DeadlineAt.After(now.Add(30*time.Second)) {
 		return errors.New("agent diagnostic request rejected")
 	}
 	if request.Operation == "query_preview" && !slices.Contains(r.client.assignments, request.Datasource) {
@@ -69,7 +74,6 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 		return errors.New("agent diagnostic capability rejected")
 	}
 	r.mu.Lock()
-	now := time.Now()
 	r.pruneLocked(now)
 	if _, ok := r.active[request.DiagnosticID]; ok {
 		r.mu.Unlock()
@@ -86,7 +90,7 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	}
 	if !request.DeadlineAt.After(now) {
 		result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID, State: "timed_out"}
-		completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt}
+		completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt, generation: r.client.generation}
 		r.mu.Unlock()
 		r.offer(completed)
 		return nil
@@ -101,7 +105,12 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	if maxProviderDeadline := now.Add(20 * time.Second); deadline.After(maxProviderDeadline) {
 		deadline = maxProviderDeadline
 	}
-	ctx, cancel := context.WithDeadline(parent, deadline)
+	remaining := deadline.Sub(now)
+	if remaining <= 0 {
+		r.mu.Unlock()
+		return errors.New("agent diagnostic request expired")
+	}
+	ctx, cancel := context.WithTimeout(parent, remaining)
 	active := activeDiagnostic{cancel: cancel}
 	if request.Operation == "query_preview" {
 		assignment := request.Datasource
@@ -109,8 +118,9 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 		active.datasource = &assignment
 	}
 	r.active[request.DiagnosticID] = active
+	generation := r.client.generation
 	r.mu.Unlock()
-	go r.execute(ctx, request)
+	go r.execute(ctx, request, generation)
 	return nil
 }
 
@@ -152,7 +162,7 @@ func (r *diagnosticRunner) close() {
 	}
 }
 
-func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest) {
+func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest, generation string) {
 	result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID}
 	settings := datasource.Settings{Name: request.Datasource.Name, DisplayName: request.Datasource.Name,
 		Provider: request.Datasource.Provider, ConfigurationFormat: request.Datasource.ConfigurationFormat,
@@ -200,8 +210,8 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 	}
 	r.mu.Lock()
 	delete(r.active, request.DiagnosticID)
-	completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt}
-	r.rememberLocked(request.DiagnosticID, completed, time.Now())
+	completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt, generation: generation}
+	r.rememberLocked(request.DiagnosticID, completed, r.client.currentServerTime())
 	r.mu.Unlock()
 	r.offer(completed)
 }

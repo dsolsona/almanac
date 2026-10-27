@@ -95,6 +95,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.queryPreview(w, r, requestID, proof, id)
 		return
 	}
+	if strings.HasSuffix(path, "/connection-tests") {
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v1/datasources/"), "/connection-tests")
+		h.savedConnectionTest(w, r, requestID, proof, id)
+		return
+	}
 	if path == "/api/v1/providers" {
 		h.providers(w, r, requestID, proof)
 		return
@@ -400,6 +405,46 @@ func (h *Handler) queryPreview(w http.ResponseWriter, r *http.Request, requestID
 		DatasourceID: datasourceID, Operation: "query_preview", Query: request.Query, Secrets: h.secrets, RequestedAt: requestedAt, Now: h.now})
 }
 
+func (h *Handler) savedConnectionTest(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, datasourceID string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
+		return
+	}
+	if !canonicalDiagnosticID(datasourceID) || r.URL.RawQuery != "" || r.URL.ForceQuery ||
+		!singleETag(r.Header.Values("If-Match"), datasourceID) ||
+		!singlePrintableHeader(r.Header, "Idempotency-Key", 1, 128) || !jsonContent(r) {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	body, err := readBody(r)
+	var empty map[string]any
+	if err != nil || json.Unmarshal(body, &empty, json.RejectUnknownMembers(true)) != nil || len(empty) != 0 {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	versionText := strings.TrimSuffix(strings.TrimPrefix(r.Header.Get("If-Match"), "\"datasource:"+datasourceID+":"), "\"")
+	version, _ := strconv.ParseInt(versionText, 10, 64)
+	replayed, found, err := storage.ReplayDatasourceConnectionTest(r.Context(), h.databaseURL, proof, datasourceID, version, r.Header.Get("Idempotency-Key"), h.now)
+	if err != nil {
+		h.writeStorageError(w, err, requestID)
+		return
+	}
+	if found {
+		w.Header().Set("Location", "/api/v1/diagnostics/"+replayed.ID)
+		h.writeJSON(w, http.StatusAccepted, diagnosticDTO(replayed))
+		return
+	}
+	source, err := storage.GetDatasource(r.Context(), h.databaseURL, datasourceID, proof, h.now)
+	if err != nil {
+		h.writeStorageError(w, err, requestID)
+		return
+	}
+	h.startDiagnostic(w, r, requestID, proof, storage.BeginDiagnosticInput{AgentID: source.Settings.AgentID,
+		DatasourceID: datasourceID, ExpectedDatasourceVersion: version, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		Operation: "connection_test", Secrets: h.secrets, RequestedAt: h.now().UTC().Truncate(time.Microsecond), Now: h.now})
+}
+
 func (h *Handler) startDiagnostic(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, input storage.BeginDiagnosticInput) {
 	if h.agentSessions == nil {
 		h.writeProblem(w, http.StatusServiceUnavailable, "agent_unavailable", requestID)
@@ -423,6 +468,11 @@ func (h *Handler) startDiagnostic(w http.ResponseWriter, r *http.Request, reques
 	if err != nil {
 		log.Printf("datasource diagnostic request_id=%s stage=storage_begin agent_session_present=true", requestID)
 		h.writeStorageError(w, err, requestID)
+		return
+	}
+	if record.Replayed {
+		w.Header().Set("Location", "/api/v1/diagnostics/"+record.ID)
+		h.writeJSON(w, http.StatusAccepted, diagnosticDTO(record))
 		return
 	}
 	if err := h.agentSessions.SendDiagnostic(r.Context(), record.AgentID, record.SessionGeneration, diagnosticRequest); err != nil {
@@ -674,6 +724,8 @@ func (h *Handler) writeStorageError(w http.ResponseWriter, err error, requestID 
 		h.writeProblem(w, 404, "not_found", requestID)
 	case errors.Is(err, storage.ErrDiagnosticUnsupported):
 		h.writeProblem(w, 422, "unsupported", requestID)
+	case errors.Is(err, storage.ErrDatasourceConfigurationTooLarge):
+		h.writeProblem(w, 422, "configuration_too_large", requestID)
 	case errors.Is(err, storage.ErrDiagnosticAgentUnavailable):
 		h.writeProblem(w, 503, "agent_unavailable", requestID)
 	case errors.Is(err, storage.ErrDiagnosticConfigurationPending):

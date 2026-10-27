@@ -80,6 +80,29 @@ func TestDecodeBoundsAndValidatesPayload(t *testing.T) {
 	}
 }
 
+func TestDiagnosticResultKeepsSuccessfulEmptySeriesOnWire(t *testing.T) {
+	result := DiagnosticResult{DiagnosticID: "00000000-0000-4000-8000-000000000001", State: "succeeded", ResultClass: "empty", Series: []DiagnosticSeries{}}
+	body, err := result.CanonicalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"series":[]`) {
+		t.Fatalf("successful empty result omitted its series array: %s", body)
+	}
+	var roundTrip DiagnosticResult
+	if err := json.Unmarshal(body, &roundTrip); err != nil || roundTrip.Series == nil || len(roundTrip.Series) != 0 {
+		t.Fatalf("empty result round trip = %#v, %v", roundTrip, err)
+	}
+	warning := DiagnosticResult{DiagnosticID: result.DiagnosticID, State: "succeeded", ResultClass: "incomplete", Series: []DiagnosticSeries{}}
+	body, err = warning.CanonicalJSON()
+	if err != nil || !strings.Contains(string(body), `"series":[]`) {
+		t.Fatalf("warning result did not retain its empty series array: %s, %v", body, err)
+	}
+	if err := json.Unmarshal(body, &roundTrip); err != nil || roundTrip.ResultClass != "incomplete" || roundTrip.Series == nil {
+		t.Fatalf("warning result round trip = %#v, %v", roundTrip, err)
+	}
+}
+
 func TestDecodeEnforcesProtocolVersionAndCapabilityUniqueness(t *testing.T) {
 	for _, message := range []string{
 		strings.Replace(validHello, `"protocol_versions":["almanac.agent.v1"]`, `"protocol_versions":["almanac.agent.v1","almanac.agent.v1"]`, 1),
@@ -308,6 +331,11 @@ func TestConfigurationSnapshotValidatesTypedDatasourceAssignments(t *testing.T) 
 func TestDiagnosticProtocolBoundsRequestsAndResults(t *testing.T) {
 	deadline := time.Date(2026, 10, 27, 12, 0, 30, 0, time.UTC)
 	assignment := DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "3", Name: "metrics-east", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+	queryEndpoint := assignment
+	queryEndpoint.Endpoint = "https://metrics.example.test?tenant=blue"
+	if err := queryEndpoint.Validate(); err == nil {
+		t.Fatal("datasource assignment accepted an endpoint query string")
+	}
 	request := DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000003", AgentID: "00000000-0000-4000-8000-000000000001", Operation: "query_preview", DeadlineAt: deadline, Datasource: assignment, Query: "up"}
 	if err := (Envelope[DiagnosticRequest]{Kind: KindDiagnosticRequest, MessageID: "dreq-1", SessionGeneration: "1", Payload: request}).Validate(); err != nil {
 		t.Fatalf("valid diagnostic request rejected: %v", err)
@@ -405,7 +433,7 @@ func TestProtocolSchemasAndEmptyConfigurationExample(t *testing.T) {
 			if err := json.Unmarshal(data, &protocolSchema); err != nil {
 				t.Fatal(err)
 			}
-			want := []string{"#/$defs/hello", "#/$defs/welcome", "#/$defs/heartbeat", "#/$defs/heartbeatAck", "#/$defs/configurationChanged", "#/$defs/configurationApplied", "#/$defs/configurationFailed", "#/$defs/diagnosticResult", "#/$defs/shutdown", "#/$defs/revoked"}
+			want := []string{"#/$defs/hello", "#/$defs/welcome", "#/$defs/heartbeat", "#/$defs/heartbeatAck", "#/$defs/configurationChanged", "#/$defs/configurationApplied", "#/$defs/configurationFailed", "#/$defs/diagnosticRequest", "#/$defs/diagnosticResult", "#/$defs/diagnosticCancel", "#/$defs/shutdown", "#/$defs/revoked"}
 			got := make(map[string]struct{}, len(protocolSchema.OneOf))
 			for _, item := range protocolSchema.OneOf {
 				got[item.Ref] = struct{}{}

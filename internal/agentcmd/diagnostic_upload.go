@@ -18,6 +18,7 @@ const diagnosticUploadWorkers = maxActiveDiagnostics
 type diagnosticUpload struct {
 	result     agentprotocol.DiagnosticResult
 	deadlineAt time.Time
+	generation string
 	body       []byte
 }
 
@@ -42,13 +43,13 @@ func (c *client) startDiagnosticUploads(ctx context.Context, workers *sync.WaitG
 }
 
 func (c *client) queueDiagnosticUpload(ctx context.Context, completed completedDiagnosticResult, body []byte) bool {
-	if len(body) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(body) > agentprotocol.MaxHTTPSDiagnosticResultBytes || !completed.deadlineAt.After(time.Now()) {
+	if len(body) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(body) > agentprotocol.MaxHTTPSDiagnosticResultBytes || completed.generation == "" || !completed.deadlineAt.After(c.currentServerTime()) {
 		return false
 	}
 	select {
 	case <-ctx.Done():
 		return false
-	case c.diagnosticUploads <- diagnosticUpload{result: completed.result, deadlineAt: completed.deadlineAt, body: body}:
+	case c.diagnosticUploads <- diagnosticUpload{result: completed.result, deadlineAt: completed.deadlineAt, generation: completed.generation, body: body}:
 		return true
 	default:
 		return false
@@ -56,14 +57,16 @@ func (c *client) queueDiagnosticUpload(ctx context.Context, completed completedD
 }
 
 func (c *client) uploadDiagnostic(parent context.Context, upload diagnosticUpload) bool {
-	if c == nil || c.http == nil || c.opts.backendURL == "" || c.generation == "" || len(upload.body) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(upload.body) > agentprotocol.MaxHTTPSDiagnosticResultBytes {
+	if c == nil || c.http == nil || c.opts.backendURL == "" || upload.generation == "" || len(upload.body) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(upload.body) > agentprotocol.MaxHTTPSDiagnosticResultBytes {
 		return false
 	}
-	deadline := upload.deadlineAt
-	if parentDeadline, ok := parent.Deadline(); ok && parentDeadline.Before(deadline) {
-		deadline = parentDeadline
+	// The upload deadline uses backend time; the parent context deadline uses
+	// local time. WithTimeout preserves the parent deadline independently.
+	remaining := upload.deadlineAt.Sub(c.currentServerTime())
+	if remaining <= 0 {
+		return false
 	}
-	ctx, cancel := context.WithDeadline(parent, deadline)
+	ctx, cancel := context.WithTimeout(parent, remaining)
 	defer cancel()
 	u, err := url.Parse(c.opts.backendURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
@@ -80,7 +83,7 @@ func (c *client) uploadDiagnostic(parent context.Context, upload diagnosticUploa
 		}
 		request.Header.Set("Authorization", "Bearer "+c.token)
 		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("X-Agent-Session-Generation", c.generation)
+		request.Header.Set("X-Agent-Session-Generation", upload.generation)
 		response, requestErr := c.http.Do(request)
 		if requestErr == nil {
 			_ = response.Body.Close()

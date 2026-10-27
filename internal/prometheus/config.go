@@ -14,7 +14,7 @@ var ErrInvalidEndpoint = errors.New("prometheus: invalid endpoint")
 // reachable from an agent, and rejects embedded credentials and fragments.
 func ValidateEndpoint(raw string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u == nil || u.Opaque != "" || u.User != nil || u.Fragment != "" ||
+	if err != nil || u == nil || u.Opaque != "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery ||
 		(u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Hostname() == "" {
 		return ErrInvalidEndpoint
 	}

@@ -2,7 +2,9 @@ package storage
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
@@ -11,6 +13,37 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/google/uuid"
 )
+
+func TestDatasourceConfigurationSnapshotEnforcesExactCountAndByteLimits(t *testing.T) {
+	base := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000001", DatasourceVersion: "1",
+		Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "https://metrics.example.test",
+		AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+	assignments := make([]agentprotocol.DatasourceAssignment, 256)
+	for i := range assignments {
+		assignments[i] = base
+	}
+	if _, err := encodeDatasourceConfigurationSnapshot("00000000-0000-4000-8000-000000000002", 1, assignments); err != nil {
+		t.Fatalf("exact assignment count rejected: %v", err)
+	}
+	if _, err := encodeDatasourceConfigurationSnapshot("00000000-0000-4000-8000-000000000002", 1, append(assignments, base)); !errors.Is(err, ErrDatasourceConfigurationTooLarge) {
+		t.Fatalf("one assignment above the limit error = %v", err)
+	}
+
+	assignments = []agentprotocol.DatasourceAssignment{base}
+	encoded, err := encodeDatasourceConfigurationSnapshot("00000000-0000-4000-8000-000000000002", 1, assignments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignments[0].TLS.CAPEM = strings.Repeat("x", agentprotocol.MaxConfigurationBytes-len(encoded))
+	encoded, err = encodeDatasourceConfigurationSnapshot("00000000-0000-4000-8000-000000000002", 1, assignments)
+	if err != nil || len(encoded) != agentprotocol.MaxConfigurationBytes {
+		t.Fatalf("exact serialized byte limit length=%d, error=%v", len(encoded), err)
+	}
+	assignments[0].TLS.CAPEM += "x"
+	if _, err := encodeDatasourceConfigurationSnapshot("00000000-0000-4000-8000-000000000002", 1, assignments); !errors.Is(err, ErrDatasourceConfigurationTooLarge) {
+		t.Fatalf("one serialized byte above limit error = %v", err)
+	}
+}
 
 func TestReleaseDatasourceAssignmentDecryptsOnlyWithExpectedBinding(t *testing.T) {
 	const (

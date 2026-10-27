@@ -134,7 +134,7 @@ type DiagnosticResult struct {
 	DiagnosticID string             `json:"diagnostic_id"`
 	State        string             `json:"state"`
 	ResultClass  string             `json:"result_class,omitempty"`
-	Series       []DiagnosticSeries `json:"series,omitempty"`
+	Series       []DiagnosticSeries `json:"series"`
 	ErrorCode    string             `json:"error_code,omitempty"`
 	Message      string             `json:"message,omitempty"`
 }
@@ -865,7 +865,7 @@ func validDatasourceName(value string) bool {
 
 func validDatasourceEndpoint(value string) bool {
 	u, err := url.Parse(value)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Opaque != "" || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || strings.ContainsAny(u.Host, "\\\r\n\t") {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Opaque != "" || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery || strings.ContainsAny(u.Host, "\\\r\n\t") {
 		return false
 	}
 	if port := u.Port(); port != "" {

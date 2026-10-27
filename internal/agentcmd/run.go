@@ -46,13 +46,18 @@ type client struct {
 	agentID              string
 	assignments          []agentprotocol.DatasourceAssignment
 	diagnostics          *diagnosticRunner
-	serverTime           time.Time
-	serverAt             time.Time
+	serverClock          *serverClockEstimate
 	established          bool
 	desiredRevision      string
 	configurationPending bool
 	http                 *http.Client
 	diagnosticUploads    chan diagnosticUpload
+}
+
+type serverClockEstimate struct {
+	mu         sync.RWMutex
+	serverTime time.Time
+	serverAt   time.Time
 }
 
 func Run(ctx context.Context, args []string) error {
@@ -117,7 +122,7 @@ func newClient(opts options, token string) (*client, error) {
 	if _, err := rand.Read(proof[:]); err != nil {
 		return nil, errors.New("secure random source unavailable")
 	}
-	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0", diagnosticUploads: make(chan diagnosticUpload, maxActiveDiagnostics),
+	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0", serverClock: &serverClockEstimate{}, diagnosticUploads: make(chan diagnosticUpload, maxActiveDiagnostics),
 		http: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}}}, nil
@@ -238,7 +243,7 @@ func (c *client) runSession(ctx context.Context) error {
 	if err != nil || validateWelcomeSequence(c.sequence, c.pending, welcomeSequence) != nil {
 		return errors.New("backend renewal state is invalid")
 	}
-	if !c.serverTime.IsZero() && welcome.Payload.ServerTime.Before(c.serverTime) {
+	if previousServerTime := c.serverClockTime(); !previousServerTime.IsZero() && welcome.Payload.ServerTime.Before(previousServerTime) {
 		return errors.New("backend time moved backwards")
 	}
 	candidate := *c
@@ -250,7 +255,7 @@ func (c *client) runSession(ctx context.Context) error {
 	}
 	c.established = true
 	c.agentID = candidate.agentID
-	c.serverTime, c.serverAt = welcome.Payload.ServerTime, time.Now()
+	c.setServerTime(welcome.Payload.ServerTime)
 	c.generation = candidate.generation
 	c.lease = welcome.Payload.ExecutionLease
 	// Preserve the local expected sequence until replay resolves a pending
@@ -338,7 +343,7 @@ func (c *client) runSession(ctx context.Context) error {
 				return err
 			}
 			message := agentprotocol.Envelope[agentprotocol.DiagnosticResult]{Kind: agentprotocol.KindDiagnosticResult,
-				MessageID: messageID, SessionGeneration: c.generation, Payload: diagnosticResult.result}
+				MessageID: messageID, SessionGeneration: diagnosticResult.generation, Payload: diagnosticResult.result}
 			if err := message.Validate(); err != nil {
 				return errors.New("agent diagnostic result is invalid")
 			}
@@ -500,7 +505,9 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		}
 		if err := c.diagnostics.start(ctx, request.Payload); err != nil {
 			if errors.Is(err, errDiagnosticCapacity) {
-				c.diagnostics.offer(diagnosticCapacityResult(request.Payload))
+				completed := diagnosticCapacityResult(request.Payload)
+				completed.generation = c.generation
+				c.diagnostics.offer(completed)
 				return nil
 			}
 			return errors.New("backend diagnostic request was rejected")
@@ -537,7 +544,32 @@ var ErrCredential = errors.New("agent credential rejected")
 var ErrIncompatible = errors.New("backend protocol incompatible")
 var ErrSessionRejected = errors.New("agent session was rejected; verify the ownership lease and restart only after it expires")
 
-func (c *client) currentServerTime() time.Time { return c.serverTime.Add(time.Since(c.serverAt)) }
+func (c *client) setServerTime(serverTime time.Time) {
+	if c.serverClock == nil {
+		c.serverClock = &serverClockEstimate{}
+	}
+	c.serverClock.mu.Lock()
+	c.serverClock.serverTime, c.serverClock.serverAt = serverTime, time.Now()
+	c.serverClock.mu.Unlock()
+}
+
+func (c *client) serverClockTime() time.Time {
+	if c.serverClock == nil {
+		return time.Time{}
+	}
+	c.serverClock.mu.RLock()
+	defer c.serverClock.mu.RUnlock()
+	return c.serverClock.serverTime
+}
+
+func (c *client) currentServerTime() time.Time {
+	if c.serverClock == nil {
+		return time.Time{}
+	}
+	c.serverClock.mu.RLock()
+	defer c.serverClock.mu.RUnlock()
+	return c.serverClock.serverTime.Add(time.Since(c.serverClock.serverAt))
+}
 
 func revisionAfter(revision, current string) bool {
 	revisionValue, revisionErr := parseDecimal(revision)

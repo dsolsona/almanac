@@ -11,7 +11,9 @@
     { "$ref": "#/$defs/configurationChanged" },
     { "$ref": "#/$defs/configurationApplied" },
     { "$ref": "#/$defs/configurationFailed" },
+    { "$ref": "#/$defs/diagnosticRequest" },
     { "$ref": "#/$defs/diagnosticResult" },
+    { "$ref": "#/$defs/diagnosticCancel" },
     { "$ref": "#/$defs/shutdown" },
     { "$ref": "#/$defs/revoked" }
   ],
@@ -184,6 +186,29 @@
       },
       "additionalProperties": true
     },
+    "diagnosticRequest": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "diagnostic-request" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": {
+          "type": "object",
+          "required": ["diagnostic_id", "agent_id", "operation", "deadline_at", "datasource"],
+          "properties": {
+            "diagnostic_id": { "$ref": "#/$defs/agentId" },
+            "agent_id": { "$ref": "#/$defs/agentId" },
+            "operation": { "enum": ["connection_test", "query_preview"] },
+            "deadline_at": { "type": "string", "format": "date-time" },
+            "datasource": { "$ref": "configuration-v1.schema.json#/$defs/datasourceAssignment" },
+            "query": { "type": "string", "maxLength": 4096 }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
     "diagnosticResult": {
       "type": "object",
       "required": ["kind", "message_id", "session_generation", "payload"],
@@ -196,9 +221,20 @@
       "additionalProperties": true,
       "$comment": "The WebSocket envelope validator limits this typed result payload to 64 KiB; larger validated results use the separate authenticated HTTPS operation, bounded to 1 MiB."
     },
+    "diagnosticCancel": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "diagnostic-cancel" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "type": "object", "required": ["diagnostic_id"], "properties": { "diagnostic_id": { "$ref": "#/$defs/agentId" } }, "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
     "diagnosticResultPayload": {
       "type": "object",
-      "required": ["diagnostic_id", "state"],
+      "required": ["diagnostic_id", "state", "series"],
       "properties": {
         "diagnostic_id": { "$ref": "#/$defs/agentId" },
         "state": { "enum": ["succeeded", "failed", "canceled", "timed_out"] },

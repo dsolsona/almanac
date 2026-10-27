@@ -35,10 +35,13 @@ func TestDiagnosticHTTPSUploadRetries(t *testing.T) {
 	if err != nil || len(body) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(body) > agentprotocol.MaxHTTPSDiagnosticResultBytes {
 		t.Fatalf("large canonical result size = %d, err=%v", len(body), err)
 	}
-	c := &client{opts: options{backendURL: server.URL}, token: "test-credential", generation: "7", http: server.Client()}
+	c := &client{opts: options{backendURL: server.URL}, token: "test-credential", generation: "8", http: server.Client()}
+	// The backend clock is deliberately ahead. The local parent deadline still
+	// caps the request through context.WithTimeout without mixing clock domains.
+	c.setServerTime(time.Now().Add(2 * time.Hour))
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(5*time.Second))
 	defer cancel()
-	if !c.uploadDiagnostic(ctx, diagnosticUpload{result: result, deadlineAt: time.Now().Add(4 * time.Second), body: body}) {
+	if !c.uploadDiagnostic(ctx, diagnosticUpload{result: result, deadlineAt: c.currentServerTime().Add(4 * time.Second), generation: "7", body: body}) {
 		t.Fatal("HTTPS result upload did not succeed after retry")
 	}
 	if calls.Load() != 2 || bodyBytes.Load() != int64(len(body)) {
@@ -50,11 +53,12 @@ func TestDiagnosticUploadQueueRejectsBodiesOutsideTransferBounds(t *testing.T) {
 	c := &client{diagnosticUploads: make(chan diagnosticUpload, 1)}
 	result := agentprotocol.DiagnosticResult{DiagnosticID: "00000000-0000-4000-8000-000000000003", State: "succeeded", ResultClass: "complete"}
 	tooLarge := make([]byte, agentprotocol.MaxHTTPSDiagnosticResultBytes+1)
-	if c.queueDiagnosticUpload(t.Context(), completedDiagnosticResult{result: result, deadlineAt: time.Now().Add(time.Second)}, tooLarge) {
+	c.setServerTime(time.Now())
+	if c.queueDiagnosticUpload(t.Context(), completedDiagnosticResult{result: result, deadlineAt: c.currentServerTime().Add(time.Second), generation: "7"}, tooLarge) {
 		t.Fatal("oversized result was queued for transfer")
 	}
 	inline := make([]byte, agentprotocol.MaxInlineDiagnosticResultBytes)
-	if c.queueDiagnosticUpload(t.Context(), completedDiagnosticResult{result: result, deadlineAt: time.Now().Add(time.Second)}, inline) {
+	if c.queueDiagnosticUpload(t.Context(), completedDiagnosticResult{result: result, deadlineAt: c.currentServerTime().Add(time.Second), generation: "7"}, inline) {
 		t.Fatal("inline result was queued for HTTPS transfer")
 	}
 }

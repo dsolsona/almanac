@@ -11,6 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteExpiredDatasourceDiagnosticReceipt = `-- name: DeleteExpiredDatasourceDiagnosticReceipt :execrows
+DELETE FROM public.almanac_management_receipts
+WHERE actor_id = $1 AND operation = 'datasource.connection_test'
+  AND idempotency_key = $2 AND expires_at <= $3
+`
+
+type DeleteExpiredDatasourceDiagnosticReceiptParams struct {
+	ActorID        pgtype.UUID        `json:"actor_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Now            pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredDatasourceDiagnosticReceipt, arg.ActorID, arg.IdempotencyKey, arg.Now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredDatasourceReceipt = `-- name: DeleteExpiredDatasourceReceipt :execrows
 DELETE FROM public.almanac_management_receipts
 WHERE actor_id = $1 AND operation = 'datasource.create'
@@ -29,6 +49,30 @@ func (q *Queries) DeleteExpiredDatasourceReceipt(ctx context.Context, arg Delete
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const findDatasourceDiagnosticReceipt = `-- name: FindDatasourceDiagnosticReceipt :one
+SELECT digest, result, expires_at FROM public.almanac_management_receipts
+WHERE actor_id = $1 AND operation = 'datasource.connection_test'
+  AND idempotency_key = $2
+`
+
+type FindDatasourceDiagnosticReceiptParams struct {
+	ActorID        pgtype.UUID `json:"actor_id"`
+	IdempotencyKey string      `json:"idempotency_key"`
+}
+
+type FindDatasourceDiagnosticReceiptRow struct {
+	Digest    []byte             `json:"digest"`
+	Result    []byte             `json:"result"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) FindDatasourceDiagnosticReceipt(ctx context.Context, arg FindDatasourceDiagnosticReceiptParams) (FindDatasourceDiagnosticReceiptRow, error) {
+	row := q.db.QueryRow(ctx, findDatasourceDiagnosticReceipt, arg.ActorID, arg.IdempotencyKey)
+	var i FindDatasourceDiagnosticReceiptRow
+	err := row.Scan(&i.Digest, &i.Result, &i.ExpiresAt)
+	return i, err
 }
 
 const findDatasourceReceipt = `-- name: FindDatasourceReceipt :one
@@ -224,6 +268,33 @@ func (q *Queries) InsertDatasource(ctx context.Context, arg InsertDatasourcePara
 	return i, err
 }
 
+const insertDatasourceDiagnosticReceipt = `-- name: InsertDatasourceDiagnosticReceipt :exec
+INSERT INTO public.almanac_management_receipts(actor_id, operation, idempotency_key, digest, result, created_at, expires_at)
+VALUES ($1, 'datasource.connection_test', $2, $3,
+        $4, $5, $6)
+`
+
+type InsertDatasourceDiagnosticReceiptParams struct {
+	ActorID        pgtype.UUID        `json:"actor_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Digest         []byte             `json:"digest"`
+	Result         []byte             `json:"result"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertDatasourceDiagnosticReceipt(ctx context.Context, arg InsertDatasourceDiagnosticReceiptParams) error {
+	_, err := q.db.Exec(ctx, insertDatasourceDiagnosticReceipt,
+		arg.ActorID,
+		arg.IdempotencyKey,
+		arg.Digest,
+		arg.Result,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const insertDatasourceReceipt = `-- name: InsertDatasourceReceipt :exec
 INSERT INTO public.almanac_management_receipts(actor_id, operation, idempotency_key, digest, result, created_at, expires_at)
 VALUES ($1, 'datasource.create', $2, $3,
@@ -309,6 +380,37 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockDatasource = `-- name: LockDatasource :one
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
+	row := q.db.QueryRow(ctx, lockDatasource, id)
+	var i AlmanacDatasource
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Version,
+		&i.Provider,
+		&i.ConfigurationFormat,
+		&i.Endpoint,
+		&i.Tls,
+		&i.AuthenticationMode,
+		&i.AuthenticationUsername,
+		&i.PasswordEnvelope,
+		&i.PasswordRevision,
+		&i.TokenEnvelope,
+		&i.TokenRevision,
+		&i.PollingIntervalSeconds,
+		&i.SettlingDelaySeconds,
+		&i.AgentID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateAgentDesiredConfigurationRevision = `-- name: UpdateAgentDesiredConfigurationRevision :execrows

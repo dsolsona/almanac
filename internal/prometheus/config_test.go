@@ -12,6 +12,8 @@ func TestValidateEndpointAllowsPrivateHTTPAndRejectsEmbeddedCredentials(t *testi
 		{name: "verified HTTPS", endpoint: "https://metrics.example.test"},
 		{name: "userinfo is rejected", endpoint: "https://user:password@metrics.example.test", wantErr: true},
 		{name: "fragment is rejected", endpoint: "https://metrics.example.test/#secret", wantErr: true},
+		{name: "query parameters are rejected", endpoint: "https://metrics.example.test?tenant=blue", wantErr: true},
+		{name: "empty query is rejected", endpoint: "https://metrics.example.test?", wantErr: true},
 		{name: "unsupported scheme is rejected", endpoint: "ftp://metrics.example.test", wantErr: true},
 		{name: "empty host is rejected", endpoint: "https:///metrics", wantErr: true},
 	}

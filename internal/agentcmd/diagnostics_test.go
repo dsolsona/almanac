@@ -24,7 +24,7 @@ func TestDiagnosticRunnerExecutesPrometheusPreviewAndDeduplicates(t *testing.T) 
 	}))
 	defer server.Close()
 	assignment := testDiagnosticAssignment(server.URL)
-	agent := &client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}}
+	agent := testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment})
 	runner := newDiagnosticRunner(agent)
 	defer runner.close()
 	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000003", AgentID: testAgentID,
@@ -71,7 +71,7 @@ func TestDiagnosticRunnerDoesNotReexecuteDuplicateAfterResultBodyEviction(t *tes
 	}))
 	defer server.Close()
 	assignment := testDiagnosticAssignment(server.URL)
-	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	runner := newDiagnosticRunner(testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment}))
 	defer runner.close()
 	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000013", AgentID: testAgentID,
 		Operation: "query_preview", DeadlineAt: time.Now().Add(10 * time.Second).UTC().Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
@@ -118,7 +118,7 @@ func TestDiagnosticRunnerCancellationStopsProviderRequest(t *testing.T) {
 	}))
 	defer server.Close()
 	assignment := testDiagnosticAssignment(server.URL)
-	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	runner := newDiagnosticRunner(testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment}))
 	defer runner.close()
 	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000004", AgentID: testAgentID,
 		Operation: "query_preview", DeadlineAt: time.Now().Add(10 * time.Second).UTC().Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
@@ -150,7 +150,7 @@ func TestDiagnosticRunnerDoesNotExecuteExpiredRequest(t *testing.T) {
 	}))
 	defer server.Close()
 	assignment := testDiagnosticAssignment(server.URL)
-	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	runner := newDiagnosticRunner(testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment}))
 	defer runner.close()
 	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000005", AgentID: testAgentID,
 		Operation: "query_preview", DeadlineAt: time.Now().Add(-time.Second).UTC().Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
@@ -170,6 +170,33 @@ func TestDiagnosticRunnerDoesNotExecuteExpiredRequest(t *testing.T) {
 	}
 }
 
+func TestDiagnosticRunnerUsesBackendTimeEstimateWhenLocalClockIsSkewed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+	}))
+	defer server.Close()
+	assignment := testDiagnosticAssignment(server.URL)
+	agent := testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment})
+	backendNow := time.Now().Add(-2 * time.Hour).UTC()
+	agent.setServerTime(backendNow)
+	runner := newDiagnosticRunner(agent)
+	defer runner.close()
+	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000019", AgentID: testAgentID,
+		Operation: "query_preview", DeadlineAt: backendNow.Add(5 * time.Second).Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
+	if err := runner.start(t.Context(), request); err != nil {
+		t.Fatalf("backend-valid deadline rejected with local clock skew: %v", err)
+	}
+	select {
+	case result := <-runner.results:
+		if result.result.State != "succeeded" || result.generation != "7" {
+			t.Fatalf("diagnostic result = %+v", result)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("backend-deadline diagnostic did not complete")
+	}
+}
+
 func TestDiagnosticRunnerCancelsWhenAssignmentIsRevoked(t *testing.T) {
 	started := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +205,7 @@ func TestDiagnosticRunnerCancelsWhenAssignmentIsRevoked(t *testing.T) {
 	}))
 	defer server.Close()
 	assignment := testDiagnosticAssignment(server.URL)
-	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	runner := newDiagnosticRunner(testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment}))
 	defer runner.close()
 	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000006", AgentID: testAgentID,
 		Operation: "query_preview", DeadlineAt: time.Now().Add(10 * time.Second).UTC().Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
@@ -227,7 +254,7 @@ func TestDiagnosticRunnerRejectsNewIDsAtCapacityAndReclaimsExpiredTombstones(t *
 	}))
 	defer server.Close()
 	assignment := testDiagnosticAssignment(server.URL)
-	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	runner := newDiagnosticRunner(testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment}))
 	defer runner.close()
 	now := time.Now()
 	runner.mu.Lock()
@@ -280,4 +307,11 @@ func testDiagnosticAssignment(endpoint string) agentprotocol.DatasourceAssignmen
 	return agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "1",
 		Name: "metrics-east", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: endpoint,
 		TLS: agentprotocol.DatasourceTLS{}, AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+}
+
+func testDiagnosticClient(agentID string, assignments []agentprotocol.DatasourceAssignment) *client {
+	now := time.Now().UTC()
+	agent := &client{agentID: agentID, assignments: assignments, generation: "7"}
+	agent.setServerTime(now)
+	return agent
 }

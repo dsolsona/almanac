@@ -18,6 +18,7 @@ type Querier interface {
 	DeleteExpiredAgentExecutionGrants(ctx context.Context, arg DeleteExpiredAgentExecutionGrantsParams) error
 	DeleteExpiredAgentLifecycleReceipt(ctx context.Context, arg DeleteExpiredAgentLifecycleReceiptParams) (int64, error)
 	DeleteExpiredAgentReceipt(ctx context.Context, arg DeleteExpiredAgentReceiptParams) (int64, error)
+	DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error)
 	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
@@ -29,6 +30,7 @@ type Querier interface {
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
 	FindAgentSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
+	FindDatasourceDiagnosticReceipt(ctx context.Context, arg FindDatasourceDiagnosticReceiptParams) (FindDatasourceDiagnosticReceiptRow, error)
 	FindDatasourceReceipt(ctx context.Context, arg FindDatasourceReceiptParams) (FindDatasourceReceiptRow, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
@@ -52,6 +54,7 @@ type Querier interface {
 	InsertAgentOwnership(ctx context.Context, arg InsertAgentOwnershipParams) error
 	InsertAgentReceipt(ctx context.Context, arg InsertAgentReceiptParams) error
 	InsertDatasource(ctx context.Context, arg InsertDatasourceParams) (AlmanacDatasource, error)
+	InsertDatasourceDiagnosticReceipt(ctx context.Context, arg InsertDatasourceDiagnosticReceiptParams) error
 	InsertDatasourceReceipt(ctx context.Context, arg InsertDatasourceReceiptParams) error
 	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
@@ -71,6 +74,7 @@ type Querier interface {
 	LockAgentAccessCredential(ctx context.Context, arg LockAgentAccessCredentialParams) (AlmanacAgentCredential, error)
 	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
+	LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
 	LockLatestAgentOwnership(ctx context.Context, agentID pgtype.UUID) (AlmanacAgentOwnership, error)
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)

@@ -17,6 +17,9 @@ RETURNING *;
 -- name: GetDatasource :one
 SELECT * FROM public.almanac_datasources WHERE id = sqlc.arg(id);
 
+-- name: LockDatasource :one
+SELECT * FROM public.almanac_datasources WHERE id = sqlc.arg(id) FOR UPDATE;
+
 -- name: ListDatasources :many
 SELECT * FROM public.almanac_datasources
 WHERE (sqlc.narg(agent_id)::uuid IS NULL OR agent_id = sqlc.narg(agent_id))
@@ -72,4 +75,19 @@ WHERE actor_id = sqlc.arg(actor_id) AND operation = 'datasource.create'
 -- name: InsertDatasourceReceipt :exec
 INSERT INTO public.almanac_management_receipts(actor_id, operation, idempotency_key, digest, result, created_at, expires_at)
 VALUES (sqlc.arg(actor_id), 'datasource.create', sqlc.arg(idempotency_key), sqlc.arg(digest),
+        sqlc.arg(result), sqlc.arg(created_at), sqlc.arg(expires_at));
+
+-- name: FindDatasourceDiagnosticReceipt :one
+SELECT digest, result, expires_at FROM public.almanac_management_receipts
+WHERE actor_id = sqlc.arg(actor_id) AND operation = 'datasource.connection_test'
+  AND idempotency_key = sqlc.arg(idempotency_key);
+
+-- name: DeleteExpiredDatasourceDiagnosticReceipt :execrows
+DELETE FROM public.almanac_management_receipts
+WHERE actor_id = sqlc.arg(actor_id) AND operation = 'datasource.connection_test'
+  AND idempotency_key = sqlc.arg(idempotency_key) AND expires_at <= sqlc.arg(now);
+
+-- name: InsertDatasourceDiagnosticReceipt :exec
+INSERT INTO public.almanac_management_receipts(actor_id, operation, idempotency_key, digest, result, created_at, expires_at)
+VALUES (sqlc.arg(actor_id), 'datasource.connection_test', sqlc.arg(idempotency_key), sqlc.arg(digest),
         sqlc.arg(result), sqlc.arg(created_at), sqlc.arg(expires_at));

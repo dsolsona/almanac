@@ -385,7 +385,7 @@ func testClient(now time.Time, nonce string) *client {
 			Scheduler: "ready", CollectionProgress: "idle",
 			LeaseID: lease.LeaseID, RenewalSequence: "0",
 		},
-		serverTime: now, serverAt: time.Now(),
+		serverClock: &serverClockEstimate{serverTime: now, serverAt: time.Now()},
 	}
 }
 

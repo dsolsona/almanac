@@ -766,38 +766,56 @@ func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialI
 	if len(adapters) == 1 {
 		adapter = adapters[0]
 	}
-	rows, err := state.queries.ListDatasources(ctx, dbgen.ListDatasourcesParams{
-		AgentID: state.agentID, AfterCreatedAt: timestamp(time.Time{}), AfterID: pgtype.UUID{Valid: true}, RowLimit: 257,
-	})
-	if err != nil {
-		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent datasource configuration read failed", err)
-	}
-	if len(rows) > 256 {
-		return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
-	}
 	installationID, err := loadInstallationID(ctx, state.tx)
 	if err != nil {
 		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent datasource installation lookup failed", err)
+	}
+	snapshotBytes, err := buildDatasourceConfigurationSnapshot(ctx, state.queries, installationID, state.agentID, configuration.Revision, adapter)
+	if err != nil {
+		return AgentConfigurationSnapshot{}, err
+	}
+	if err := state.tx.Commit(ctx); err != nil {
+		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read commit failed", err)
+	}
+	return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision, Snapshot: snapshotBytes}, nil
+}
+
+func buildDatasourceConfigurationSnapshot(ctx context.Context, queries *dbgen.Queries, installationID string, agentID pgtype.UUID, revision int64, adapter *sourcesecret.Adapter) ([]byte, error) {
+	rows, err := queries.ListDatasources(ctx, dbgen.ListDatasourcesParams{
+		AgentID: agentID, AfterCreatedAt: timestamp(time.Time{}), AfterID: pgtype.UUID{Valid: true}, RowLimit: 257,
+	})
+	if err != nil {
+		return nil, operationError(ctx, "storage: agent datasource configuration read failed", err)
 	}
 	assignments := make([]agentprotocol.DatasourceAssignment, 0, len(rows))
 	for _, row := range rows {
 		assignment, assignmentErr := releaseDatasourceAssignment(installationID, row, adapter)
 		if assignmentErr != nil {
-			return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
+			return nil, ErrAgentOwnershipDenied
 		}
 		assignments = append(assignments, assignment)
 	}
-	snapshotBytes, err := json.Marshal(agentprotocol.ConfigurationSnapshot{
-		AgentID: state.agentID.String(), ConfigurationRevision: strconv.FormatInt(configuration.Revision, 10), Assignments: assignments,
-	})
+	snapshotBytes, err := encodeDatasourceConfigurationSnapshot(uuidFromPG(agentID), revision, assignments)
 	if err != nil {
-		return AgentConfigurationSnapshot{}, errors.New("storage: agent datasource configuration encoding failed")
+		return nil, err
 	}
-	if err := state.tx.Commit(ctx); err != nil {
-		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read commit failed", err)
+	if _, err := agentprotocol.DecodeConfigurationSnapshot(snapshotBytes); err != nil {
+		return nil, ErrDatasourceConfigurationTooLarge
 	}
-	return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision,
-		Snapshot: snapshotBytes}, nil
+	return snapshotBytes, nil
+}
+
+func encodeDatasourceConfigurationSnapshot(agentID string, revision int64, assignments []agentprotocol.DatasourceAssignment) ([]byte, error) {
+	if len(assignments) > 256 {
+		return nil, ErrDatasourceConfigurationTooLarge
+	}
+	snapshotBytes, err := json.Marshal(agentprotocol.ConfigurationSnapshot{
+		AgentID: agentID, ConfigurationRevision: strconv.FormatInt(revision, 10), Assignments: assignments,
+	})
+	if err != nil || len(snapshotBytes) > agentprotocol.MaxConfigurationBytes {
+		return nil, ErrDatasourceConfigurationTooLarge
+	}
+	return snapshotBytes, nil
 }
 
 func releaseDatasourceAssignment(installationID string, row dbgen.AlmanacDatasource, adapter *sourcesecret.Adapter) (agentprotocol.DatasourceAssignment, error) {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strconv"
 	"time"
 
@@ -20,9 +21,10 @@ import (
 )
 
 var (
-	ErrDatasourceNotFound      = errors.New("storage: datasource not found")
-	ErrDatasourceConflict      = errors.New("storage: datasource conflict")
-	ErrSourceSecretUnavailable = errors.New("storage: source-secret key is unavailable")
+	ErrDatasourceNotFound              = errors.New("storage: datasource not found")
+	ErrDatasourceConflict              = errors.New("storage: datasource conflict")
+	ErrDatasourceConfigurationTooLarge = errors.New("storage: datasource configuration exceeds protocol limits")
+	ErrSourceSecretUnavailable         = errors.New("storage: source-secret key is unavailable")
 )
 
 const datasourceCreateReceiptTTL = 24 * time.Hour
@@ -202,6 +204,11 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource installation lookup failed", err)
 	}
 	agentID, _ := canonicalUUID(input.Settings.AgentID)
+	if _, err := queries.LockAgentAccessAgent(ctx, agentID); errors.Is(err, pgx.ErrNoRows) {
+		return DatasourceRecord{}, ErrAgentNotFound
+	} else if err != nil {
+		return DatasourceRecord{}, operationError(ctx, "storage: datasource agent lock failed", err)
+	}
 	agent, err := queries.GetDatasourceAgentCapabilities(ctx, agentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, ErrAgentNotFound
@@ -271,6 +278,9 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	}
 	configurationRevision, err := advanceAgentConfiguration(ctx, queries, agentID, now)
 	if err != nil {
+		return DatasourceRecord{}, err
+	}
+	if _, err := buildDatasourceConfigurationSnapshot(ctx, queries, installationID, agentID, configurationRevision, secrets); err != nil {
 		return DatasourceRecord{}, err
 	}
 	if err := queries.InsertAgentAudit(ctx, dbgen.InsertAgentAuditParams{Actor: user.ID.String(), SubjectID: created.ID, Action: "datasource.created", OccurredAt: timestamp(now), RequestID: input.RequestID}); err != nil {
@@ -389,7 +399,7 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	current, err := queries.GetDatasource(ctx, id)
+	current, err := queries.LockDatasource(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, ErrDatasourceNotFound
 	}
@@ -398,6 +408,10 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	}
 	if current.Version != input.ExpectedVersion {
 		return DatasourceRecord{}, ErrDatasourceConflict
+	}
+	newAgentID, _ := canonicalUUID(input.Settings.AgentID)
+	if err := lockDatasourceAgents(ctx, queries, current.AgentID, newAgentID); err != nil {
+		return DatasourceRecord{}, err
 	}
 	installationID, err := loadInstallationID(ctx, tx)
 	if err != nil {
@@ -419,7 +433,6 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if err != nil {
 		return DatasourceRecord{}, err
 	}
-	newAgentID, _ := canonicalUUID(input.Settings.AgentID)
 	agent, err := queries.GetDatasourceAgentCapabilities(ctx, newAgentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, ErrAgentNotFound
@@ -465,6 +478,18 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if oldAgentID != newAgentID {
 		newConfigurationRevision, err = advanceAgentConfiguration(ctx, queries, newAgentID, now)
 		if err != nil {
+			return DatasourceRecord{}, err
+		}
+	}
+	if oldAgentID == newAgentID {
+		if _, err := buildDatasourceConfigurationSnapshot(ctx, queries, installationID, newAgentID, newConfigurationRevision, secrets); err != nil {
+			return DatasourceRecord{}, err
+		}
+	} else {
+		if _, err := buildDatasourceConfigurationSnapshot(ctx, queries, installationID, oldAgentID, oldConfigurationRevision, secrets); err != nil {
+			return DatasourceRecord{}, err
+		}
+		if _, err := buildDatasourceConfigurationSnapshot(ctx, queries, installationID, newAgentID, newConfigurationRevision, secrets); err != nil {
 			return DatasourceRecord{}, err
 		}
 	}
@@ -521,6 +546,33 @@ func beginDatasourceAdminWrite(ctx context.Context, databaseURL string, verifier
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, ErrAgentForbidden
 	}
 	return conn, q, tx, user, installation, session, started, nil
+}
+
+func lockDatasourceAgents(ctx context.Context, queries *dbgen.Queries, ids ...pgtype.UUID) error {
+	ordered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id.Valid {
+			ordered = append(ordered, uuidFromPG(id))
+		}
+	}
+	slices.Sort(ordered)
+	for i, id := range ordered {
+		if i > 0 && id == ordered[i-1] {
+			continue
+		}
+		agentID, err := uuid.Parse(id)
+		if err != nil {
+			return ErrAgentNotFound
+		}
+		_, err = queries.LockAgentAccessAgent(ctx, uuidToPG(agentID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrAgentNotFound
+		}
+		if err != nil {
+			return operationError(ctx, "storage: datasource agent lock failed", err)
+		}
+	}
+	return nil
 }
 
 func loadInstallationID(ctx context.Context, tx pgx.Tx) (string, error) {
