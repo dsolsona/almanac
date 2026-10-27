@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, LoadingIndicator, Panel, SelectField, StatusBadge, TextField } from '../components/ui/index.ts';
+import { Button, LoadingIndicator, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createDatasourceClient, DatasourceFailure, type Datasource, type DatasourceWrite, type Diagnostic, type Provider } from './client.ts';
 import './datasources.css';
 
@@ -428,9 +428,11 @@ function SecretInput({ id, label, configured, action, value, disabled, onAction,
 }
 
 function DiagnosticView({ value }: { value: Diagnostic }) {
-  const status: 'healthy' | 'warning' | 'breached' | 'no-data' | 'stale' = value.state === 'succeeded' ? 'healthy' : value.state === 'pending' || value.state === 'running' ? 'warning' : value.state === 'failed' || value.state === 'timed_out' ? 'breached' : 'stale';
-  const resultStatus = value.result_class === 'complete' ? 'healthy' : value.result_class === 'empty' ? 'no-data' : value.result_class === 'incomplete' ? 'warning' : null;
-  return <div className="diagnostic-result" aria-live="polite"><div><StatusBadge status={status} />{resultStatus && <StatusBadge status={resultStatus} />}</div><p>Deadline {new Date(value.deadline_at).toLocaleTimeString()}</p>{value.message && <p>{value.message}</p>}{value.error_code && <p>Code: <code>{value.error_code}</code></p>}{value.result && <pre>{JSON.stringify(value.result, null, 2)}</pre>}<span className="sr-only">Diagnostic {value.state.replace('_', ' ')}</span></div>;
+  const labels: Record<Diagnostic['state'], string> = {
+    pending: 'Pending', running: 'Running', succeeded: 'Succeeded', failed: 'Failed',
+    canceled: 'Canceled', timed_out: 'Timed out', unknown: 'Unknown',
+  };
+  return <div className="diagnostic-result" aria-live="polite"><div><span className={`datasource-diagnostic-status datasource-diagnostic-status--${value.state}`}>{labels[value.state]}</span>{value.result_class && <span className={`datasource-result-class datasource-result-class--${value.result_class}`}>{value.result_class}</span>}</div><p>Deadline {new Date(value.deadline_at).toLocaleTimeString()}</p>{value.message && <p>{value.message}</p>}{value.error_code && <p>Code: <code>{value.error_code}</code></p>}{value.result && <pre>{JSON.stringify(value.result, null, 2)}</pre>}<span className="sr-only">Diagnostic {labels[value.state].toLowerCase()}</span></div>;
 }
 
 function PageTitle({ title, headingRef }: { title: string; headingRef: RefObject<HTMLHeadingElement | null> }) { return <h1 ref={headingRef} className="agents-heading app-page-heading" tabIndex={-1}>{title}</h1>; }

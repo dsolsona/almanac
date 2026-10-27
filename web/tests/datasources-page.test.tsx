@@ -11,7 +11,9 @@ const sourceID = '8ed93d7e-51e3-4a3e-9222-3e8a612de20a';
 const agentID = 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c';
 function source() { return { id: sourceID, name: 'metrics-prod', display_name: 'Production metrics', version: '4', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'bearer', username: null, password_configured: false, token_configured: true }, polling_interval_seconds: 60, settling_delay_seconds: 60, agent_id: agentID, created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
-function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }], providerAvailability: string[] = ['available'], previewStatuses: number[] = []) {
+function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }], providerAvailability: string[] = ['available'], previewStatuses: number[] = [], previewResult: Record<string, unknown> = {
+	id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: 'complete', result: { series: [] }, error_code: null, message: null,
+}) {
   const calls: { url: string; init?: RequestInit }[] = [];
   let providerRequest = 0;
   let previewRequest = 0;
@@ -27,10 +29,9 @@ function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, na
     if (url === `/api/v1/datasources/${sourceID}`) return response(source(), 200, { ETag: `"datasource:${sourceID}:4"` });
     if (url === `/api/v1/datasources/${sourceID}/query-previews` && init?.method === 'POST') {
       const status = previewStatuses[Math.min(previewRequest++, previewStatuses.length - 1)] ?? 500;
-      return status === 503 ? response({ code: 'configuration_pending', message: 'safe contract response' }, status) : response({
-        id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: 'complete', result: { series: [] }, error_code: null, message: null,
-      }, status);
+      return status === 503 ? response({ code: 'configuration_pending', message: 'safe contract response' }, status) : response(previewResult, status);
     }
+    if (url.startsWith('/api/v1/diagnostics/')) return response(previewResult);
     if (url.startsWith('/api/v1/datasources') && init?.method === 'POST') return response(source(), 201, { ETag: `"datasource:${sourceID}:4"` });
     return response({ items: [source()], next_cursor: '' });
   });
@@ -107,6 +108,23 @@ describe('datasource page', () => {
     await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
     expect(screen.queryByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).not.toBeInTheDocument();
     expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
+  });
+
+  it('labels diagnostic failure as Failed with a safe provider cause, never as an SLO breach', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    installFetch([], ['available'], [202], {
+      id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'failed', operation: 'query_preview',
+      created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: null,
+      result: null, error_code: 'query_failed', message: 'private provider detail',
+    });
+    render(<DatasourcesPage context={editor} />);
+    await user.click(await screen.findByRole('button', { name: 'Run preview' }));
+    expect(await screen.findByText('Failed')).toBeVisible();
+    expect(screen.getAllByText('The datasource rejected the query.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('query_failed').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Breached')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('private provider detail');
   });
 
   it('invalidates readiness after an administrator saves and waits before enabling preview', async () => {
