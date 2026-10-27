@@ -27,13 +27,32 @@ try {
   let pageErrors = 0;
   page.on('pageerror', () => { pageErrors += 1; });
 
-  stage = 'permanent administrator login';
+  stage = 'initial navigation';
   await page.goto(fixture.url);
+  stage = 'sign-in heading wait';
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  stage = 'login field fill';
   await page.getByLabel('Login', { exact: true }).fill(fixture.login);
+  stage = 'password field fill';
   await page.getByLabel('Password', { exact: true }).fill(fixture.password);
+  assert.ok((await page.getByLabel('Password', { exact: true }).inputValue()).length > 0);
   fixture.password = '';
+  const loginResponsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/v1/auth/login');
+  stage = 'admin sign-in submit';
   await page.getByLabel('Password', { exact: true }).press('Enter');
+  stage = 'admin sign-in response';
+  const loginResponse = await loginResponsePromise;
+  let loginCode = 'none';
+  try {
+    const result = await loginResponse.json();
+    if (typeof result.code === 'string' && /^[a-z_]{1,64}$/.test(result.code)) loginCode = result.code;
+  } catch { /* Successful responses need not contain an error code. */ }
+  const loginStatus = loginResponse.status();
+  const pathname = await page.evaluate(() => location.pathname);
+  const safePath = pathname === '/' || pathname === '/agents' ? pathname : 'unknown';
+  stage = `administrator landing after login status=${loginStatus} code=${loginCode} path=${safePath}`;
+  assert.equal(loginStatus, 200);
   await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
 
   stage = 'real agent detail route and API response';
