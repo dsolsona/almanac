@@ -7,6 +7,8 @@ let stage = 'fixture input';
 let fixture;
 let origin;
 let browser;
+let page;
+let authenticated = false;
 let latestAPI = { status: null, requestID: 'none', code: 'none' };
 const safeCodes = new Set([
   'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
@@ -38,7 +40,7 @@ stage = 'browser launch';
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
   context.setDefaultTimeout(5000);
-  const page = await context.newPage();
+  page = await context.newPage();
   let pageErrors = 0;
   let apiSequence = 0;
   page.on('pageerror', () => { pageErrors += 1; });
@@ -66,6 +68,7 @@ stage = 'browser launch';
   fixture.password = '';
   stage = 'authenticated administrator landing';
   await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+  authenticated = true;
 
   stage = 'saved datasource detail request';
   const detailResponsePromise = page.waitForResponse((response) => response.request().method() === 'GET'
@@ -256,6 +259,16 @@ stage = 'browser launch';
   const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(latestAPI.requestID) ? latestAPI.requestID : 'none';
   const apiCode = safeCodes.has(latestAPI.code) ? latestAPI.code : 'none';
   const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\n`;
+  if (authenticated && page && typeof fixture?.artifacts === 'string') {
+    try {
+      await page.screenshot({
+        path: join(fixture.artifacts, 'failure.png'),
+        timeout: 2000,
+        animations: 'disabled',
+        mask: [page.locator('input, textarea, [contenteditable="true"], [data-secret-display], [data-secret-value], [class*="secret"]')],
+      });
+    } catch {}
+  }
   if (Buffer.byteLength(diagnostic) <= 512 && typeof fixture?.artifacts === 'string') {
     try { await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 }); } catch {}
   }
