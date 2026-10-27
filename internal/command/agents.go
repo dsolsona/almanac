@@ -216,6 +216,7 @@ func renderAgentText(operation string, result jsontext.Value, token string, show
 			return "Agent details retrieved.\n"
 		}
 		fmt.Fprintf(&out, "Agent %s (%s)\nName: %s\nEnabled: %t\nVersion: %s\nETag: %s\n", strconv.Quote(detail.Agent.DisplayName), cliAgentID(detail.Agent.Id), strconv.Quote(detail.Agent.Name), detail.Agent.Enabled, detail.Agent.Version, detail.ETag)
+		renderAgentRuntime(&out, detail.Agent)
 	case "agents credentials list":
 		var page api.CredentialPage
 		if json.Unmarshal(result, &page) != nil {
@@ -249,6 +250,82 @@ func renderAgentText(operation string, result jsontext.Value, token string, show
 		fmt.Fprintf(&out, "Agent: %s (%s)\nEnabled: %t\nVersion: %s\nChanged: %t\n", strconv.Quote(lifecycle.Agent.DisplayName), cliAgentID(lifecycle.Agent.Id), lifecycle.Agent.Enabled, lifecycle.Agent.Version, lifecycle.Changed)
 	}
 	return out.String()
+}
+
+func renderAgentRuntime(out *strings.Builder, agent api.Agent) {
+	runtime := agent.Runtime
+	if !agent.Enabled {
+		fmt.Fprintln(out, "Connection state: Disabled by administrator")
+	} else if runtime == nil {
+		fmt.Fprintln(out, "Connection state: Never connected")
+	} else {
+		fmt.Fprintf(out, "Connection state: %s\n", runtimeReachabilityLabel(runtime.Reachability))
+	}
+	if runtime == nil {
+		fmt.Fprintln(out, "No heartbeat has been received.")
+		fmt.Fprintln(out, "Observation acceptance freshness: Not available.")
+		return
+	}
+	fmt.Fprintf(out, "Reported reachability: %s", runtime.Reachability)
+	if !agent.Enabled {
+		fmt.Fprint(out, " (not operational while disabled)")
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "Protocol: %s\nSoftware version: %s\n", strconv.Quote(runtime.Protocol), strconv.Quote(runtime.SoftwareVersion))
+	fmt.Fprintf(out, "Last heartbeat: %s\n", cliRuntimeTime(runtime.LastHeartbeatAt))
+	fmt.Fprintf(out, "Desired configuration revision: %s\n", runtime.DesiredConfigurationRevision)
+	appliedRevision := runtime.AppliedConfigurationRevision
+	if appliedRevision == "0" {
+		appliedRevision = "Not applied"
+	}
+	fmt.Fprintf(out, "Applied configuration revision: %s\n", appliedRevision)
+	fmt.Fprintf(out, "Scheduler health: %s\nCollection progress: %s\n", runtime.SchedulerHealth, runtime.CollectionProgress)
+	fmt.Fprintf(out, "Last attempt: %s\nLast successful query: %s\nNext expected execution: %s\n",
+		cliRuntimeTime(runtime.LastAttemptAt), cliRuntimeTime(runtime.LastSuccessfulQueryAt), cliRuntimeTime(runtime.NextExpectedExecutionAt))
+	if runtime.CollectionExplanation == api.NoAssignment {
+		fmt.Fprintln(out, "No datasources are assigned to this agent.")
+	}
+	if len(runtime.Capabilities) == 0 {
+		fmt.Fprintln(out, "No provider capabilities were reported.")
+	} else {
+		fmt.Fprintln(out, "Provider capabilities:")
+		for _, capability := range runtime.Capabilities {
+			fmt.Fprintf(out, "  Provider: %s\n    Configuration formats: %s\n    Operations: %s\n",
+				strconv.Quote(capability.Provider), quotedRuntimeList(capability.ConfigurationFormats), quotedRuntimeList(capability.Operations))
+		}
+	}
+	fmt.Fprintln(out, "Observation acceptance freshness: Not available.")
+}
+
+func runtimeReachabilityLabel(reachability api.AgentRuntimeStatusReachability) string {
+	switch reachability {
+	case api.Connected:
+		return "Connected"
+	case api.Unreachable:
+		return "Unreachable"
+	case api.Incompatible:
+		return "Incompatible"
+	default:
+		return "Unknown"
+	}
+}
+
+func cliRuntimeTime(value *time.Time) string {
+	if value == nil {
+		return "Not reported"
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func quotedRuntimeList(values []string) string {
+	if len(values) == 0 {
+		return "None reported"
+	}
+	quoted := make([]string, len(values))
+	for index, value := range values {
+		quoted[index] = strconv.Quote(value)
+	}
+	return strings.Join(quoted, ", ")
 }
 func cliAgentID(id api.AgentId) string {
 	b, _ := json.Marshal(id)

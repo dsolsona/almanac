@@ -10,7 +10,7 @@ const restricted: AuthContext = { csrf_token: 'csrf-restricted', session: { user
 const signedIn: AuthContext = { csrf_token: 'csrf-normal', session: { user_id: 'u1', login: 'owner', role: 'administrator', restricted: false } };
 
 function clientFor(context: AuthContext = anonymous): Client {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], next_cursor: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+	vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [], next_cursor: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
   return {
     context: vi.fn().mockResolvedValue(context),
     login: vi.fn().mockResolvedValue(signedIn),
@@ -186,6 +186,7 @@ describe('authentication page', () => {
     expect(document.querySelector('.app-workspace')).not.toHaveAttribute('inert');
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Check session' })).toBeVisible();
+    expect(await screen.findByText('No agents have been registered.')).toBeVisible();
     expect(client.logout).toHaveBeenCalledOnce();
   });
 

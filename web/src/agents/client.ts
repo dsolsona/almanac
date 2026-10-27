@@ -3,6 +3,7 @@ import type { AuthContext } from '../auth/client.ts';
 export type { AuthContext } from '../auth/client.ts';
 
 export type Agent = components['schemas']['Agent'];
+export type AgentRuntimeStatus = components['schemas']['AgentRuntimeStatus'];
 export type AgentCredential = components['schemas']['AgentCredential'];
 export type AgentPage = components['schemas']['AgentPage'];
 export type CredentialPage = components['schemas']['CredentialPage'];
@@ -111,7 +112,30 @@ function validDate(value: unknown): value is string {
 function validAgent(value: unknown): value is Agent {
   return isObject(value) && validUUID(value.id) && typeof value.name === 'string' && typeof value.display_name === 'string'
     && typeof value.enabled === 'boolean' && validDecimal(value.version, true)
-    && validDate(value.created_at) && validDate(value.updated_at);
+    && validDate(value.created_at) && validDate(value.updated_at)
+    && (value.runtime === undefined || value.runtime === null || validRuntime(value.runtime));
+}
+function validStringList(value: unknown, limit: number): value is string[] {
+  return Array.isArray(value) && value.length <= limit && value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 128);
+}
+function validCapability(value: unknown): value is AgentRuntimeStatus['capabilities'][number] {
+  return isObject(value) && typeof value.provider === 'string' && value.provider.length > 0 && value.provider.length <= 128
+    && validStringList(value.configuration_formats, 64) && validStringList(value.operations, 16);
+}
+function validRuntime(value: unknown): value is AgentRuntimeStatus {
+  return isObject(value)
+    && (value.reachability === 'connected' || value.reachability === 'unreachable' || value.reachability === 'incompatible')
+    && typeof value.protocol === 'string' && value.protocol.length > 0 && value.protocol.length <= 128
+    && typeof value.software_version === 'string' && value.software_version.length > 0 && value.software_version.length <= 128
+    && Array.isArray(value.capabilities) && value.capabilities.length <= 256 && value.capabilities.every(validCapability)
+    && (value.last_heartbeat_at === null || validDate(value.last_heartbeat_at))
+    && validDecimal(value.desired_configuration_revision, true) && validDecimal(value.applied_configuration_revision)
+    && (value.scheduler_health === 'starting' || value.scheduler_health === 'ready' || value.scheduler_health === 'degraded' || value.scheduler_health === 'stopped')
+    && (value.collection_progress === 'not_started' || value.collection_progress === 'idle' || value.collection_progress === 'running' || value.collection_progress === 'blocked')
+    && (value.last_attempt_at === null || validDate(value.last_attempt_at))
+    && (value.last_successful_query_at === null || validDate(value.last_successful_query_at))
+    && (value.next_expected_execution_at === null || validDate(value.next_expected_execution_at))
+    && value.collection_explanation === 'no_assignment';
 }
 function validCredential(value: unknown, agentID?: string): value is AgentCredential {
   return isObject(value) && validUUID(value.id) && validUUID(value.agent_id) && (agentID === undefined || value.agent_id === agentID)

@@ -6,6 +6,14 @@ const id = '9c5b4ef2-75e8-4e76-a4de-baa6a4d77277';
 const credentialId = '499c01d1-bbbd-4b75-8e86-8f802bd9ca10';
 const replacementCredentialId = '2b3c7c0a-9d85-4e82-bd38-4b567e8c27f0';
 const agent: Agent = { id, name: 'edge-a', display_name: 'Edge A', enabled: true, version: '9223372036854775807', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' };
+const runtime = {
+  reachability: 'connected', protocol: 'almanac-agent/1', software_version: '1.2.3',
+  capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] }],
+  last_heartbeat_at: '2026-01-02T03:04:05.123456Z', desired_configuration_revision: '9223372036854775807',
+  applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running',
+  last_attempt_at: '2026-01-02T03:03:00Z', last_successful_query_at: null,
+  next_expected_execution_at: '2026-01-02T03:05:00Z', collection_explanation: 'no_assignment',
+} as const;
 const credential = { id: credentialId, agent_id: id, issued_at: '2026-01-01T00:00:00Z', expires_at: '2026-12-31T00:00:00Z', revoked_at: null, retire_at: null };
 const revokedCredential = { ...credential, revoked_at: '2026-02-01T00:00:00Z' };
 const disabledAgent = { ...agent, enabled: false };
@@ -31,6 +39,63 @@ describe('browser agent management client', () => {
     await expect(createAgentClient(fetcher).get(id)).resolves.toEqual({ agent, etag: `"agent:${id}:${agent.version}"` });
     const mismatch = vi.fn<typeof fetch>().mockResolvedValue(json(agent, 200, { ETag: `"agent:${id}:1"` }));
     await expect(createAgentClient(mismatch).get(id)).rejects.toMatchObject({ kind: 'unavailable', code: 'invalid_response' });
+  });
+
+  it('accepts and preserves complete optional runtime data with exact decimal revisions', async () => {
+    const withRuntime = { ...agent, runtime };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(withRuntime, 200, { ETag: `"agent:${id}:${agent.version}"` }));
+    await expect(createAgentClient(fetcher).get(id)).resolves.toEqual({ agent: withRuntime, etag: `"agent:${id}:${agent.version}"` });
+
+    for (const neverConnected of [agent, { ...agent, runtime: null }]) {
+      const list = vi.fn<typeof fetch>().mockResolvedValue(json({ items: [neverConnected], next_cursor: '' }));
+      await expect(createAgentClient(list).list()).resolves.toMatchObject({ items: [neverConnected] });
+    }
+  });
+
+  it('rejects unknown and malformed runtime data instead of accepting it as healthy', async () => {
+    const invalid = [
+      { ...runtime, reachability: 'online' },
+      { ...runtime, scheduler_health: 'healthy' },
+      { ...runtime, collection_progress: 'complete' },
+      { ...runtime, collection_explanation: 'none' },
+      { ...runtime, desired_configuration_revision: 7 },
+      { ...runtime, desired_configuration_revision: '0' },
+      { ...runtime, applied_configuration_revision: '00' },
+      { ...runtime, last_heartbeat_at: 'not-a-timestamp' },
+      { ...runtime, capabilities: null },
+      { ...runtime, capabilities: [{ provider: '', configuration_formats: [], operations: [] }] },
+      Object.fromEntries(Object.entries(runtime).filter(([key]) => key !== 'scheduler_health')),
+    ];
+    for (const invalidRuntime of invalid) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ ...agent, runtime: invalidRuntime }, 200, { ETag: `"agent:${id}:${agent.version}"` }));
+      await expect(createAgentClient(fetcher).get(id)).rejects.toMatchObject({ kind: 'unavailable', code: 'invalid_response' });
+    }
+  });
+
+  it('accepts capability boundaries and rejects values beyond them', async () => {
+    const capability = runtime.capabilities[0];
+    const boundaryRuntime = {
+      ...runtime,
+      desired_configuration_revision: '1',
+      applied_configuration_revision: '0',
+      capabilities: Array.from({ length: 256 }, (_, index) => ({
+        ...capability,
+        configuration_formats: index === 0 ? Array.from({ length: 64 }, () => 'format') : [],
+        operations: index === 0 ? Array.from({ length: 16 }, () => 'operation') : [],
+      })),
+    };
+    const accepted = vi.fn<typeof fetch>().mockResolvedValue(json({ ...agent, runtime: boundaryRuntime }, 200, { ETag: `"agent:${id}:${agent.version}"` }));
+    await expect(createAgentClient(accepted).get(id)).resolves.toMatchObject({ agent: { runtime: boundaryRuntime } });
+
+    const invalid = [
+      { ...boundaryRuntime, capabilities: [...boundaryRuntime.capabilities, capability] },
+      { ...boundaryRuntime, capabilities: [{ ...capability, configuration_formats: Array.from({ length: 65 }, () => 'format') }] },
+      { ...boundaryRuntime, capabilities: [{ ...capability, operations: Array.from({ length: 17 }, () => 'operation') }] },
+    ];
+    for (const invalidRuntime of invalid) {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ ...agent, runtime: invalidRuntime }, 200, { ETag: `"agent:${id}:${agent.version}"` }));
+      await expect(createAgentClient(fetcher).get(id)).rejects.toMatchObject({ kind: 'unavailable', code: 'invalid_response' });
+    }
   });
 
   it('sends create with explicit caller key and CSRF, exposing only validated fresh issuance', async () => {

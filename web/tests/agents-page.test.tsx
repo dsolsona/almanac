@@ -17,6 +17,7 @@ function makeAuth(context: AuthContext = admin): AuthClient {
 }
 function agent() { return { id: agentID, name: 'west-1', display_name: 'West collector', enabled: true, version: '3', created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function agentB() { return { ...agent(), id: agentIDB, name: 'east-1', display_name: 'East collector' }; }
+function runtime(overrides: Record<string, unknown> = {}) { return { reachability: 'connected', protocol: 'almanac-agent/1', software_version: '1.2.3', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] }], last_heartbeat_at: '2026-10-22T13:14:15.123456Z', desired_configuration_revision: '9223372036854775807', applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running', last_attempt_at: '2026-10-22T13:13:00Z', last_successful_query_at: null, next_expected_execution_at: '2026-10-22T13:15:00Z', collection_explanation: 'no_assignment', ...overrides }; }
 function credential() { return { id: credentialID, agent_id: agentID, issued_at: '2026-10-20T12:00:00.123456Z', expires_at: '2027-10-20T12:00:00.654321Z', revoked_at: null, retire_at: '2026-10-22T12:00:00.987654Z' }; }
 function credentialB() { return { ...credential(), id: 'f0863cd5-79a6-4ef5-90d1-1c67765b17d2', agent_id: agentIDB }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
@@ -192,6 +193,89 @@ describe('agent administration screen', () => {
     expect(screen.getByText('2026-10-22 12:00:00.987654Z')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     await waitFor(() => expect(location.search).toBe(''));
+  });
+
+  it('shows connection, collection, capability, revision and query signals without merging them', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime() };
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const panel = await screen.findByRole('region', { name: 'Agent runtime' });
+    expect(panel.querySelector('.agents-runtime__state')).toHaveTextContent('Connected');
+    expect(panel).toHaveTextContent('almanac-agent/1');
+    expect(panel).toHaveTextContent('1.2.3');
+    expect(panel).toHaveTextContent('prometheus');
+    expect(panel).toHaveTextContent('live_query');
+    expect(panel).toHaveTextContent('9223372036854775807');
+    expect(panel).toHaveTextContent('Applied configuration revisionNot applied');
+    expect(panel).toHaveTextContent('2026-10-22 13:14:15.123456Z');
+    expect(panel).toHaveTextContent('No successful query has been reported.');
+    expect(panel).toHaveTextContent('No datasources are assigned to this agent.');
+    expect(panel).toHaveTextContent('Backend observation acceptance freshness is not available.');
+  });
+
+  it.each([
+    { name: 'never connected', enabled: true, runtime: undefined, expected: 'Never connected' },
+    { name: 'unreachable', enabled: true, runtime: runtime({ reachability: 'unreachable' }), expected: 'Unreachable' },
+    { name: 'incompatible', enabled: true, runtime: runtime({ reachability: 'incompatible' }), expected: 'Incompatible' },
+    { name: 'disabled despite a recent connection', enabled: false, runtime: runtime(), expected: 'Disabled by administrator' },
+  ])('presents $name without implying healthy operation', async ({ enabled, runtime: agentRuntime, expected }) => {
+    const user = userEvent.setup();
+    const live = { ...agent(), enabled, ...(agentRuntime === undefined ? {} : { runtime: agentRuntime }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const panel = await screen.findByRole('region', { name: 'Agent runtime' });
+    expect(panel.querySelector('.agents-runtime__state')).toHaveTextContent(expected);
+    if (expected === 'Never connected') expect(panel).toHaveTextContent('No heartbeat has been received');
+    if (expected === 'Disabled by administrator') expect(panel).toHaveTextContent('not operational while disabled');
+  });
+
+  it('shows an explicit empty capability state', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime({ capabilities: [] }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    expect(await screen.findByText('No provider capabilities were reported.')).toBeVisible();
+  });
+
+  it('renders repeated provider capability tuples as distinct entries', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime({ capabilities: [
+      { provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] },
+      { provider: 'prometheus', configuration_formats: ['prometheus-remote-write-v1'], operations: ['backfill'] },
+    ] }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const capabilities = await screen.findByRole('list');
+    const entries = within(capabilities).getAllByRole('listitem');
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toHaveTextContent('prometheus-http-v1');
+    expect(entries[1]).toHaveTextContent('prometheus-remote-write-v1');
   });
 
   it('rotates from the detail ETag with a stable command key and presents a fresh one-time token', async () => {
