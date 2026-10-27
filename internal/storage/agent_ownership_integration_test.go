@@ -318,8 +318,28 @@ func TestIntegrationAgentOwnershipCounterExhaustionFailsClosed(t *testing.T) {
 	}
 	maximum := int64(^uint64(0) >> 1)
 	conn := integrationConnect(t, f.databaseURL)
-	if _, err := conn.Exec(t.Context(), "UPDATE public.almanac_agent_ownership SET generation=$2, renewal_sequence=$2, last_nonce=$3, last_renewal_issued_at=renewed_at, last_renewal_expires_at=expires_at WHERE agent_id=$1", created.Agent.ID, maximum, ownershipBytes(32, 32)); err != nil {
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal("begin counter exhaustion fixture failed")
+	}
+	if _, err := tx.Exec(t.Context(), "DELETE FROM public.almanac_agent_execution_grants WHERE agent_id=$1", created.Agent.ID); err != nil {
+		t.Fatal("remove initial grant for counter fixture failed")
+	}
+	nonce := ownershipBytes(32, 32)
+	if _, err := tx.Exec(t.Context(), "UPDATE public.almanac_agent_ownership SET generation=$2, renewal_sequence=$2, last_nonce=$3, last_renewal_issued_at=renewed_at, last_renewal_expires_at=expires_at WHERE agent_id=$1", created.Agent.ID, maximum, nonce); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_agent_execution_grants
+(lease_id,agent_id,generation,configuration_revision,allowed_measurements,valid_from,valid_until,renewal_sequence,request_nonce,retain_until)
+VALUES($1,$2,$3,$4,'[]'::jsonb,$5,$6,$3,$7,$6::timestamptz+interval '7 days')`, owner.LeaseID, created.Agent.ID, maximum,
+		owner.ConfigurationRevision, owner.LeaseValidFrom, owner.LeaseValidUntil, nonce); err != nil {
+		t.Fatal("insert coherent max-counter execution grant failed")
+	}
+	if _, err := tx.Exec(t.Context(), "UPDATE public.almanac_agent_ownership SET current_lease_id=$2 WHERE agent_id=$1", created.Agent.ID, owner.LeaseID); err != nil {
+		t.Fatal("point max-counter owner at execution grant failed")
+	}
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal("commit counter exhaustion fixture failed")
 	}
 	closeIntegrationConn(conn)
 	if _, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier,

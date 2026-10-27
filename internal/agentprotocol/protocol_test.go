@@ -31,6 +31,21 @@ func TestDecodeAcceptsUnownedHelloAndOptionalFields(t *testing.T) {
 	}
 }
 
+func TestDecodeAcceptsStructurallyValidUnsupportedProtocolForNegotiation(t *testing.T) {
+	message := strings.Replace(validHello, `"protocol_versions":["almanac.agent.v1"]`, `"protocol_versions":["almanac.agent.future"]`, 1)
+	envelope, err := Decode([]byte(message))
+	if err != nil {
+		t.Fatalf("decode structurally valid unsupported protocol: %v", err)
+	}
+	if envelope.Kind != KindHello {
+		t.Fatalf("decoded kind = %q, want hello", envelope.Kind)
+	}
+	var hello Hello
+	if err := json.Unmarshal(envelope.Payload, &hello); err != nil || len(hello.ProtocolVersions) != 1 || hello.ProtocolVersions[0] != "almanac.agent.future" {
+		t.Fatalf("decoded unsupported hello = %+v, %v", hello, err)
+	}
+}
+
 func TestDecodeRejectsUnknownKindsAndUnconfirmedNonHello(t *testing.T) {
 	unknown := strings.Replace(validHello, `"hello"`, `"future-operation"`, 1)
 	if _, err := Decode([]byte(unknown)); err == nil {

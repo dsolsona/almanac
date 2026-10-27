@@ -2,6 +2,16 @@
 
 ## Current state
 
+The connected-agent increment under [F2-T17](tasks/F2-T17.md) and
+[F2-T19](tasks/F2-T19.md) passes 142 real PostgreSQL integration tests, including
+separate TLS backend/agent processes, configuration application, browser status,
+backend restart/resume, incompatible handshakes, copied-token fencing and revocation.
+The coordinator inspected desktop/mobile screenshots in both themes. Full checks
+passed 156 web and 222 Go tests. The expanded race gate passed 211 tests after
+correcting a canceled outbound enqueue; the real integration run preceded that
+isolated correction. Datasource diagnostics and collected/direct observations remain the
+next F2 increments; connected status alone does not establish healthy collection.
+
 Durable agent ownership is verified under [F2-T13](tasks/F2-T13.md): transactional
 acquisition, same-process resume, nonce-correlated renewal and generation fencing.
 The combined candidate passes 138 real PostgreSQL integration tests and the full
@@ -9,15 +19,15 @@ gate (146 web/189 Go tests, build/generated/production checks). A deterministic
 stalled-TLS shutdown regression drove a correction that closes pre-request
 connections while draining active requests. The exact socket behind the earlier
 intermittent shutdown failures was not recorded; this fixes the reproduced class,
-without claiming forensic proof of every historical failure. Remote transport,
-configuration application, health and execution grants remain outstanding.
+without claiming forensic proof of every historical failure. F2-T17 extends this
+foundation with remote transport, configuration application, health and grants.
 
 The signed-in application shell is verified under [F2-T16](tasks/F2-T16.md):
 desktop navigation, accessible mobile menu, account controls and direct `/agents`
 links replace the identity confirmation page. Planned destinations are explicitly
 marked “Not available yet.” Evidence: 145 web/178 Go tests, 42 focused catalogue
 browser checks and 129 selected real database tests including browser journeys.
-Agent connectivity, datasource diagnostics and observations remain outstanding.
+Datasource diagnostics and observations remain outstanding.
 The maintainer approved the accelerated delivery workflow on 2026-10-27; see
 [ways of working](ways-of-working.md) and [command discipline](commands.md).
 
@@ -44,8 +54,8 @@ password setup, signed-in identity and logout are verified in the combined runti
 Reusable CLI login/profiles are verified under [F2-T10](tasks/F2-T10.md).
 Agent registration, credential rotation/revocation and disable now have UI/API/CLI
 coverage. [F2-T11](tasks/F2-T11.md) records verified CLI parity, protected one-time
-token output and real TLS/PostgreSQL acceptance. Connected collectors, datasource
-diagnostics and the first observation journey remain outstanding in F2.
+token output and real TLS/PostgreSQL acceptance. Datasource diagnostics and the
+first observation journey remain outstanding in F2.
 [F2-T12](tasks/F2-T12.md) adds current-state machine credential authentication,
 including rotation/expiry, revocation, restore epoch and database lock-order checks.
 This prerequisite does not yet expose an agent connection or execution lease.

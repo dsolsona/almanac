@@ -654,8 +654,8 @@ SELECT $1, decode(repeat('01',32),'hex'), 1, credential_epoch, false, $2, $2 FRO
 			t.Fatal("seed schema 3 audit failed")
 		}
 		closeIntegrationConn(conn)
-		if result, err := Upgrade(t.Context(), databaseURL); err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 9 {
-			t.Fatalf("schema 3 to 9 = %+v, %v", result, err)
+		if result, err := Upgrade(t.Context(), databaseURL); err != nil || result.Applied != 7 || result.DatabaseSchemaVersion != 10 {
+			t.Fatalf("schema 3 to 10 = %+v, %v", result, err)
 		}
 		conn = integrationConnect(t, databaseURL)
 		defer closeIntegrationConn(conn)
@@ -726,7 +726,7 @@ SELECT $1, decode(repeat('01',32),'hex'), 1, credential_epoch, false, $2, $2 FRO
 				t.Fatal(err)
 			}
 			conn := integrationConnect(t, databaseURL)
-			if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (10, '0010_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
+			if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (11, '0011_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
 				t.Fatal(err)
 			}
 			closeIntegrationConn(conn)

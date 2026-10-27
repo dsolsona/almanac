@@ -75,6 +75,20 @@ ON CONFLICT (agent_id) DO UPDATE SET
         THEN public.almanac_agent_runtime_status.next_expected_execution_at ELSE NULL END,
     updated_at = EXCLUDED.updated_at;
 
+-- name: UpsertAgentIncompatibleAttempt :exec
+INSERT INTO public.almanac_agent_incompatible_attempts (agent_id, attempted_at)
+VALUES ($1, $2)
+ON CONFLICT (agent_id) DO UPDATE SET attempted_at = EXCLUDED.attempted_at;
+
+-- name: DeleteAgentIncompatibleAttempt :exec
+DELETE FROM public.almanac_agent_incompatible_attempts
+WHERE agent_id = $1;
+
+-- name: GetAgentIncompatibleAttempt :one
+SELECT attempted_at
+FROM public.almanac_agent_incompatible_attempts
+WHERE agent_id = $1;
+
 -- name: UpdateAgentRuntimeHeartbeat :execrows
 UPDATE public.almanac_agent_runtime_status AS status
 SET last_heartbeat_at = sqlc.arg(received_at),

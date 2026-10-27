@@ -166,6 +166,59 @@ func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credential
 	return created, nil
 }
 
+// RecordAgentIncompatibleAttempt records only a safe timestamp for a well-formed
+// hello that cannot negotiate a supported protocol. It never creates ownership
+// or execution authority.
+func RecordAgentIncompatibleAttempt(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time) (int64, error) {
+	credentialUUID, valid := canonicalUUID(credentialID)
+	if !valid || generation < 0 || clock == nil {
+		return 0, ErrAgentOwnershipInput
+	}
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	if err != nil {
+		return 0, err
+	}
+	defer closeAgentOwnershipTransaction(state)
+	owner, ownerErr := state.queries.LockLatestAgentOwnership(ctx, state.agentID)
+	hasOwner := ownerErr == nil
+	if errors.Is(ownerErr, pgx.ErrNoRows) {
+		ownerErr = nil
+	}
+	if ownerErr != nil {
+		return 0, operationError(ctx, "storage: incompatible attempt owner lookup failed", ownerErr)
+	}
+	now := normalizedAgentNow(clock)
+	if !currentAgentCredentialValid(state.installation, state.agent.Enabled, state.credential, credentialVerifier, now) {
+		return 0, ErrInvalidAgentCredential
+	}
+	if hasOwner && (now.Before(owner.AcquiredAt.Time) || now.Before(owner.RenewedAt.Time)) {
+		return 0, ErrAgentOwnershipInput
+	}
+	if generation > 0 && !hasOwner {
+		return 0, ErrAgentOwnershipDenied
+	}
+	if hasOwner && now.Before(owner.ExpiresAt.Time) {
+		if generation > 0 && owner.Generation != generation || subtle.ConstantTimeCompare(owner.ResumeVerifier, resumeVerifier[:]) != 1 {
+			return 0, ErrAgentOwnershipConflict
+		}
+	} else if generation > 0 {
+		return 0, ErrAgentOwnershipDenied
+	}
+	configuration, err := ensureAgentConfiguration(ctx, state.queries, state.agentID, now)
+	if err != nil {
+		return 0, operationError(ctx, "storage: incompatible attempt configuration unavailable", err)
+	}
+	if err := state.queries.UpsertAgentIncompatibleAttempt(ctx, dbgen.UpsertAgentIncompatibleAttemptParams{
+		AgentID: state.agentID, AttemptedAt: timestamp(now),
+	}); err != nil {
+		return 0, operationError(ctx, "storage: incompatible attempt save failed", err)
+	}
+	if err := state.tx.Commit(ctx); err != nil {
+		return 0, operationError(ctx, "storage: incompatible attempt commit failed", err)
+	}
+	return configuration.Revision, nil
+}
+
 func ResumeAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time) (AgentOwnershipResult, error) {
 	return ResumeAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, nil, clock)
 }
@@ -535,11 +588,14 @@ func saveAgentRuntimeHello(ctx context.Context, queries *dbgen.Queries, agentID 
 	if hello.Protocol == "" || len(hello.Protocol) > 64 || hello.SoftwareVersion == "" || len(hello.SoftwareVersion) > 128 || len(hello.Capabilities) == 0 || revision <= 0 {
 		return ErrAgentOwnershipInput
 	}
-	return queries.UpsertAgentRuntimeHello(ctx, dbgen.UpsertAgentRuntimeHelloParams{
+	if err := queries.UpsertAgentRuntimeHello(ctx, dbgen.UpsertAgentRuntimeHelloParams{
 		AgentID: agentID, Generation: generation, Protocol: hello.Protocol,
 		SoftwareVersion: hello.SoftwareVersion, Capabilities: hello.Capabilities,
 		DesiredConfigurationRevision: revision, UpdatedAt: timestamp(at),
-	})
+	}); err != nil {
+		return err
+	}
+	return queries.DeleteAgentIncompatibleAttempt(ctx, agentID)
 }
 
 func updateAgentRuntimeHeartbeat(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, generation int64, heartbeat AgentRuntimeHeartbeat) error {

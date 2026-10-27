@@ -95,14 +95,40 @@ func GetAgent(ctx context.Context, databaseURL string, input AgentReadInput) (Ag
 		return AgentRecord{}, operationError(ctx, "storage: agent read failed", err)
 	}
 	record := agentRecord(row)
+	incompatibleAt, incompatibleErr := queries.GetAgentIncompatibleAttempt(ctx, agentID)
+	hasIncompatibleAttempt := incompatibleErr == nil
+	if incompatibleErr != nil && !errors.Is(incompatibleErr, pgx.ErrNoRows) {
+		return AgentRecord{}, operationError(ctx, "storage: incompatible agent state read failed", incompatibleErr)
+	}
 	runtimeRow, runtimeErr := queries.GetAgentRuntimeStatus(ctx, agentID)
 	if runtimeErr == nil {
 		record.Runtime, runtimeErr = runtimeStatus(runtimeRow, now)
 		if runtimeErr != nil {
 			return AgentRecord{}, operationError(ctx, "storage: agent runtime capability state invalid", runtimeErr)
 		}
+		if hasIncompatibleAttempt {
+			activityAt := runtimeRow.UpdatedAt.Time
+			if runtimeRow.LastHeartbeatAt.Valid {
+				activityAt = runtimeRow.LastHeartbeatAt.Time
+			}
+			if !incompatibleAt.Time.Before(activityAt) {
+				record.Runtime.Reachability = "incompatible"
+			}
+		}
 	} else if !errors.Is(runtimeErr, pgx.ErrNoRows) {
 		return AgentRecord{}, operationError(ctx, "storage: agent runtime status read failed", runtimeErr)
+	} else if hasIncompatibleAttempt {
+		configuration, err := queries.GetAgentConfiguration(ctx, agentID)
+		if err != nil {
+			return AgentRecord{}, operationError(ctx, "storage: incompatible agent configuration read failed", err)
+		}
+		record.Runtime = &AgentRuntimeStatus{
+			Reachability: "incompatible", Protocol: "incompatible", SoftwareVersion: "unknown",
+			Capabilities: []agentprotocol.Capability{}, LastHeartbeatAt: nil,
+			DesiredConfigurationRevision: configuration.Revision, AppliedConfigurationRevision: 0,
+			SchedulerHealth: "degraded", CollectionProgress: "not_started",
+			CollectionExplanation: "no_assignment",
+		}
 	}
 	if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
 		return AgentRecord{}, err

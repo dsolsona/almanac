@@ -149,7 +149,8 @@ JSON array or a comma-separated environment/flag value. See the
 [runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
 This increment provides the authentication API, browser onboarding and noninteractive
 setup. Agent registration and credential administration are available in the
-browser; remote agent connectivity and metric ingestion follow separately.
+browser. A separate `almanac-agent` executable connects and applies the current
+empty configuration; datasource queries and metric ingestion follow separately.
 
 The first browser sign-in uses the deployment-provided initial password and opens
 restricted setup. Enter that current password and a different permanent password;
@@ -242,6 +243,50 @@ lost or rejected token-file write reports an unknown outcome because the issued
 secret cannot be recovered; inspect the agent and deliberately rotate if needed.
 Text mode uses JSON escaping for remote names so control characters do not alter
 terminal output. `--timeout` bounds profile-lock wait and the full API operation.
+
+Build both executables, then run the separate outbound-only agent process on the
+host that should own the registered agent:
+
+```sh
+make build
+bin/almanac-agent run --backend-url=https://almanac.example.com \
+  --token-file=/run/secrets/almanac-agent-token
+```
+
+Create the credential with `agents create` and its `--token-file` option as shown
+above, then deliver that protected file to the agent host through your deployment
+secret mechanism. The file must be a regular file with no group or other
+permissions; the agent rejects broader permissions and does not print the token.
+Keep one process running for this credential. A second process using a copied token
+cannot take over the active owner. Stop the process with SIGINT or SIGTERM; it
+reconnects after temporary backend loss and exits with a distinct safe message for
+credential rejection, revocation, active-owner conflict or protocol incompatibility.
+The resume proof exists only in process memory. After a process restart, a new
+process cannot resume the prior owner; wait for its ownership lease to expire
+(up to one hour, or sooner if the credential expires) before starting the
+replacement process. There is no force-takeover command in this increment.
+
+The backend URL must be an HTTPS origin without a path, query or fragment. System
+certificate roots are used by default. To add a private CA while retaining normal
+certificate verification, pass its PEM certificate bundle with `--ca-file`:
+
+```sh
+bin/almanac-agent run --backend-url=https://almanac.example.com \
+  --token-file=/run/secrets/almanac-agent-token \
+  --ca-file=/run/certs/almanac-private-ca.pem
+```
+
+This increment applies versioned configuration and reports connection and heartbeat
+state through `agents get`. Its configuration has no datasource assignments, so it
+does not execute queries or report collection success. Empty configuration grants
+no query authority.
+
+An authenticated agent that offers only unsupported protocol versions is reported
+with reachability `incompatible`. If no compatible runtime has been observed, its
+protocol is shown as `incompatible` and software version as `unknown`; these are
+safe status markers, not peer-supplied version values. If a compatible runtime
+already exists, its observed fields remain intact while the newer incompatible
+attempt changes reachability. A successful compatible connection clears that state.
 
 For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
 pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:

@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related: [SPEC-0002](0002-agent-behavior.md), [SPEC-0004](0004-identity-and-access.md), [ADR-0002](../adr/0002-agent-communication.md), [ADR-0012](../adr/0012-agent-leases-and-protocol.md)
 
 ## Protocol and versioning
@@ -69,6 +69,31 @@ increment; an unrecognized or unsupported kind fails closed. Configuration failu
 use bounded safe codes (`invalid_snapshot`, `incompatible`, `apply_failed`), and
 shutdown/revocation use enumerated safe reasons rather than arbitrary diagnostic
 text.
+
+Handshake rejection uses WebSocket policy close status with one of the stable safe
+reasons `active_owner`, `credential_revoked`, `incompatible_protocol`, or
+`session_rejected`. The agent treats active ownership, revocation, and protocol
+incompatibility as actionable terminal outcomes; transient transport and backend
+availability errors reconnect with bounded backoff. Server `shutdown` is a
+server-to-agent application message that requests reconnect. A locally stopped
+agent ends the WebSocket with a normal close and does not send a server-only
+`shutdown` message.
+
+Hello validation first enforces a bounded, nonempty, unique protocol-version list;
+negotiation then selects v1 or reports incompatibility. An authenticated, well-formed
+hello with no supported version records only a bounded per-agent attempt timestamp,
+creates no ownership and issues no execution grant. Recording requires no active
+owner, or the matching active generation and memory-only resume proof. A copied
+credential without that proof cannot replace a healthy runtime status. Management
+reads report `reachability: incompatible` only when that attempt is newer than the
+stored runtime activity. When no compatible runtime has been observed,
+`protocol: incompatible` is a safe sentinel meaning no version was negotiated, and
+`software_version: unknown` means no peer software version was accepted. A later
+successful v1 hello clears the attempt atomically with runtime status update. The
+attempt record stores no untrusted version string or other peer-provided detail.
+For an agent with prior runtime observations, the incompatible marker changes only
+reachability; protocol, software version, capabilities, configuration revisions,
+heartbeat and collection timestamps continue to describe the last accepted runtime.
 
 The backend's welcome records selected protocol, ownership generation, server time,
 desired config revision, heartbeat interval and an execution lease. Schemas and

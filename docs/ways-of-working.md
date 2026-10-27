@@ -66,6 +66,13 @@ unique ports, test databases and artifact directories. The shared baseline must
 contain the task's approved dependencies. Never have workers edit the same checkout
 or mutate a shared test database. Only the coordinator integrates results.
 
+Assign each shared verification port or database lane explicitly. Its owner may
+continue checks after diagnosed corrections using approved commands until releasing
+the lane or receiving a reassignment; do not request the same reservation before
+every invocation. Coordinate handoffs directly between active implementers and
+report live handles and terminal results to the coordinator. An observation failure
+alone does not authorize restarting a gate: inspect its existing process first.
+
 Increase concurrency only for tasks with stable interfaces, disjoint edits and
 independent fixtures. A shared contract/schema change precedes its consumers; it
 cannot be delegated as conflicting parallel guesses. No worker may delegate further

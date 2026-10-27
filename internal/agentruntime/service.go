@@ -45,8 +45,8 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 	if s == nil || s.ownership == nil || envelope.Kind != agentprotocol.KindHello {
 		return Session{}, ErrInvalidInput
 	}
-	if !containsProtocol(envelope.Payload.ProtocolVersions, agentprotocol.ProtocolV1) {
-		return Session{}, ErrIncompatible
+	if err := envelope.Validate(); err != nil {
+		return Session{}, ErrInvalidInput
 	}
 	resumeToken, err := base64.RawURLEncoding.DecodeString(envelope.Payload.ResumeToken)
 	if err != nil {
@@ -55,6 +55,12 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 	generation, err := strconv.ParseInt(envelope.SessionGeneration, 10, 64)
 	if err != nil || generation < 0 {
 		return Session{}, ErrInvalidInput
+	}
+	if !containsProtocol(envelope.Payload.ProtocolVersions, agentprotocol.ProtocolV1) {
+		if _, err := s.ownership.RecordIncompatibleAttempt(ctx, token, generation, resumeToken); err != nil {
+			return Session{}, err
+		}
+		return Session{}, ErrIncompatible
 	}
 	capabilities, err := json.Marshal(envelope.Payload.Capabilities)
 	if err != nil {
@@ -86,8 +92,12 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 		ConfigurationRevision: strconv.FormatInt(owner.ConfigurationRevision, 10),
 		AllowedMeasurements:   allowed, ValidFrom: owner.LeaseValidFrom.UTC(), ValidUntil: owner.LeaseValidUntil.UTC(),
 	}
+	messageID, err := newMessageID()
+	if err != nil {
+		return Session{}, ErrInvalidInput
+	}
 	welcome := agentprotocol.Envelope[agentprotocol.Welcome]{
-		Kind: agentprotocol.KindWelcome, MessageID: newMessageID(), SessionGeneration: strconv.FormatInt(owner.Generation, 10),
+		Kind: agentprotocol.KindWelcome, MessageID: messageID, SessionGeneration: strconv.FormatInt(owner.Generation, 10),
 		Payload: agentprotocol.Welcome{
 			Protocol: agentprotocol.ProtocolV1, RequestNonce: envelope.Payload.RequestNonce,
 			ServerTime: s.now().UTC(), AgentID: owner.AgentID,
@@ -105,6 +115,9 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 
 func (s *Service) Renew(ctx context.Context, token string, session Session, envelope agentprotocol.Envelope[agentprotocol.Heartbeat], receivedAt time.Time) (agentprotocol.Envelope[agentprotocol.HeartbeatAck], error) {
 	if s == nil || envelope.Kind != agentprotocol.KindHeartbeat || envelope.SessionGeneration != strconv.FormatInt(session.Generation, 10) {
+		return agentprotocol.Envelope[agentprotocol.HeartbeatAck]{}, ErrInvalidInput
+	}
+	if err := envelope.Validate(); err != nil {
 		return agentprotocol.Envelope[agentprotocol.HeartbeatAck]{}, ErrInvalidInput
 	}
 	payload := envelope.Payload
@@ -142,8 +155,12 @@ func (s *Service) Renew(ctx context.Context, token string, session Session, enve
 		ConfigurationRevision: strconv.FormatInt(owner.ConfigurationRevision, 10),
 		AllowedMeasurements:   allowed, ValidFrom: owner.LeaseValidFrom.UTC(), ValidUntil: owner.LeaseValidUntil.UTC(),
 	}
+	messageID, err := newMessageID()
+	if err != nil {
+		return agentprotocol.Envelope[agentprotocol.HeartbeatAck]{}, ErrInvalidInput
+	}
 	ack := agentprotocol.Envelope[agentprotocol.HeartbeatAck]{
-		Kind: agentprotocol.KindHeartbeatAck, MessageID: newMessageID(), SessionGeneration: strconv.FormatInt(owner.Generation, 10),
+		Kind: agentprotocol.KindHeartbeatAck, MessageID: messageID, SessionGeneration: strconv.FormatInt(owner.Generation, 10),
 		Payload: agentprotocol.HeartbeatAck{
 			RequestNonce: payload.RequestNonce, ExecutionLease: lease,
 			RenewalSequence: strconv.FormatInt(owner.RenewalSequence, 10),
@@ -157,6 +174,9 @@ func (s *Service) Renew(ctx context.Context, token string, session Session, enve
 
 func (s *Service) Applied(ctx context.Context, token string, session Session, envelope agentprotocol.Envelope[agentprotocol.ConfigurationApplied]) error {
 	if s == nil || envelope.Kind != agentprotocol.KindConfigurationApplied || envelope.SessionGeneration != strconv.FormatInt(session.Generation, 10) {
+		return ErrInvalidInput
+	}
+	if err := envelope.Validate(); err != nil {
 		return ErrInvalidInput
 	}
 	revision, err := strconv.ParseInt(envelope.Payload.ConfigurationRevision, 10, 64)
@@ -175,10 +195,10 @@ func containsProtocol(values []string, expected string) bool {
 	return false
 }
 
-func newMessageID() string {
+func newMessageID() (string, error) {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
-		return "message-id-unavailable"
+		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(value[:])
+	return base64.RawURLEncoding.EncodeToString(value[:]), nil
 }

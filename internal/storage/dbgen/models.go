@@ -49,6 +49,11 @@ type AlmanacAgentExecutionGrant struct {
 	RetainUntil           pgtype.Timestamptz `json:"retain_until"`
 }
 
+type AlmanacAgentIncompatibleAttempt struct {
+	AgentID     pgtype.UUID        `json:"agent_id"`
+	AttemptedAt pgtype.Timestamptz `json:"attempted_at"`
+}
+
 type AlmanacAgentOwnership struct {
 	AgentID              pgtype.UUID        `json:"agent_id"`
 	Generation           int64              `json:"generation"`

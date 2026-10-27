@@ -44,7 +44,7 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 			t.Fatal("write protected runtime file failed")
 		}
 	}
-	certificate, key, err := runtimeTestCertificate()
+	certificate, key, err := browserTestCertificate()
 	if err != nil {
 		t.Fatal("create runtime TLS certificate failed")
 	}
@@ -72,7 +72,7 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	if err != nil {
 		t.Fatal("resolve executable failed")
 	}
-	args := []string{"serve", "--components=backend", "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=agent-owner", "--initial-admin-password-file=" + passwordFile, "--public-origin=" + baseURL, "--tls-cert-file=" + certFile, "--tls-key-file=" + keyFile, "--shutdown-timeout=5s"}
+	args := []string{"serve", "--components=backend,ui", "--listen=" + address, "--database-url-file=" + databaseFile, "--initial-admin-login=agent-owner", "--initial-admin-password-file=" + passwordFile, "--public-origin=" + baseURL, "--tls-cert-file=" + certFile, "--tls-key-file=" + keyFile, "--shutdown-timeout=5s"}
 	process := exec.Command(binary, args...)
 	stderr := newRuntimeLog()
 	process.Stderr = stderr
@@ -82,7 +82,10 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	}
 	wait := make(chan error, 1)
 	done := make(chan struct{})
-	go func() { wait <- process.Wait(); close(done) }()
+	go func(proc *exec.Cmd, result chan<- error, finished chan<- struct{}) {
+		result <- proc.Wait()
+		close(finished)
+	}(process, wait, done)
 	t.Cleanup(func() {
 		_ = process.Process.Kill()
 		select {
@@ -186,9 +189,50 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	if headers.Get("X-Request-ID") == "" || headers.Get("Cache-Control") != "no-store" || headers.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("management response headers=%v", headers)
 	}
+	journey := runConnectedAgentJourney(t, databaseURL, binary, dir, baseURL, certFile, permanentPassword, client)
+	if err := process.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal("signal backend for reconnect journey failed")
+	}
+	if err := <-wait; err != nil {
+		t.Fatal("first backend shutdown for reconnect journey failed")
+	}
+	stderr = newRuntimeLog()
+	process = exec.Command(binary, args...)
+	process.Stderr, process.Stdout = stderr, io.Discard
+	if err := process.Start(); err != nil {
+		t.Fatal("restart backend for reconnect journey failed")
+	}
+	wait = make(chan error, 1)
+	done = make(chan struct{})
+	go func(proc *exec.Cmd, result chan<- error, finished chan<- struct{}) {
+		result <- proc.Wait()
+		close(finished)
+	}(process, wait, done)
+	restarted := false
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
+		response, err := client.Get(baseURL + "/livez")
+		if err == nil {
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				restarted = true
+				break
+			}
+		}
+		select {
+		case err := <-wait:
+			t.Fatalf("restarted backend exited before readiness (failed=%t)", err != nil)
+		default:
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !restarted {
+		t.Fatal("restarted backend did not become live")
+	}
+	waitForAgentReconnect(t, databaseURL, client, baseURL, journey)
+	revokeConnectedAgentCredential(t, binary, journey, client, baseURL)
 	if cliAccepted := runAgentManagementCLIAcceptance(t, databaseURL, binary, dir, baseURL, certFile, permanentPassword); cliAccepted {
 		status, body, _ = managementGET()
-		if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Items) != 1 || page.Items[0].Name != "cli-agent" {
+		if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Items) != 2 || !containsAgentName(page.Items, "cli-agent") || !containsAgentName(page.Items, "connected-agent") {
 			t.Fatal("API did not observe agent created by executable CLI")
 		}
 	}
@@ -218,4 +262,153 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 		<-wait
 		t.Fatal("backend shutdown timed out")
 	}
+}
+
+func containsAgentName(items []api.Agent, name string) bool {
+	for _, item := range items {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+type connectedAgentJourney struct {
+	id           string
+	credentialID string
+	token        string
+	profile      string
+	passwordPath string
+	done         <-chan struct{}
+	result       <-chan error
+	artifacts    string
+}
+
+func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, baseURL, certFile, password string, client *http.Client) connectedAgentJourney {
+	t.Helper()
+	profileDir := filepath.Join(dir, "connected-agent-profile")
+	if err := os.Mkdir(profileDir, 0700); err != nil {
+		t.Fatal("create connected-agent profile directory failed")
+	}
+	passwordPath := filepath.Join(dir, "connected-agent-password")
+	if err := os.WriteFile(passwordPath, []byte(password), 0600); err != nil {
+		t.Fatal("write protected connected-agent password failed")
+	}
+	profile := filepath.Join(profileDir, "profile.json")
+	login := exec.CommandContext(t.Context(), backendBinary, "auth", "login", "--profile-file="+profile, "--backend-url="+baseURL, "--login=agent-owner", "--password-file="+passwordPath, "--ca-file="+certFile)
+	login.Stdout, login.Stderr = io.Discard, io.Discard
+	if err := login.Run(); err != nil {
+		t.Fatal("authenticate connected-agent registration failed")
+	}
+	tokenPath := filepath.Join(dir, "connected-agent-token")
+	create := exec.CommandContext(t.Context(), backendBinary, "agents", "create", "--profile-file="+profile, "--name=connected-agent", "--display-name=Connected Agent", "--idempotency-key=connected-agent-create", "--token-file="+tokenPath, "--output=json")
+	create.Stderr = io.Discard
+	createOutput, err := create.Output()
+	if err != nil {
+		t.Fatal("register connected-agent credential failed")
+	}
+	var created agentCLICreateDocument
+	if err := json.Unmarshal(createOutput, &created); err != nil || created.Result.Agent.ID == "" {
+		t.Fatal("connected-agent registration response was invalid")
+	}
+	tokenBytes, err := os.ReadFile(tokenPath)
+	if err != nil {
+		t.Fatal("read protected connected-agent token failed")
+	}
+	token := strings.TrimSpace(string(tokenBytes))
+	assertAgentWebSocketBoundaries(t, baseURL, token, client)
+	assertIncompatibleAgentAttempt(t, baseURL, token, databaseURL, created.Result.Agent.ID, client, "0", 86, "incompatible_protocol", api.Incompatible)
+	agentBinary, err := filepath.Abs(filepath.Join("..", "..", "bin", "almanac-agent"))
+	if err != nil {
+		t.Fatal("resolve separate agent executable failed")
+	}
+	agent := exec.Command(agentBinary, "run", "--backend-url="+baseURL, "--token-file="+tokenPath, "--ca-file="+certFile)
+	agent.Stdout, agent.Stderr = io.Discard, io.Discard
+	if err := agent.Start(); err != nil {
+		t.Fatal("start separate agent executable failed")
+	}
+	agentDone := make(chan struct{})
+	agentResult := make(chan error, 1)
+	go func() { agentResult <- agent.Wait(); close(agentDone) }()
+	t.Cleanup(func() {
+		if agent.Process != nil {
+			_ = agent.Process.Signal(syscall.SIGTERM)
+			select {
+			case <-agentDone:
+			case <-time.After(7 * time.Second):
+				_ = agent.Process.Kill()
+				<-agentDone
+				t.Error("separate agent did not shut down within bound")
+			}
+		}
+	})
+	db := testpostgres.Connect(t, databaseURL)
+	for deadline := time.Now().Add(35 * time.Second); time.Now().Before(deadline); {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/agents/"+created.Result.Agent.ID, nil)
+		if err != nil {
+			t.Fatal("create connected-agent status request failed")
+		}
+		response, err := client.Do(request)
+		if err == nil {
+			var detail api.Agent
+			body, readErr := io.ReadAll(response.Body)
+			response.Body.Close()
+			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && detail.Runtime != nil && detail.Runtime.Reachability == api.Connected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil {
+				var grants int
+				if err := db.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1", created.Result.Agent.ID).Scan(&grants); err != nil {
+					t.Fatal("read connected-agent heartbeat grants failed")
+				}
+				if grants >= 3 && detail.Runtime.SchedulerHealth == api.Ready && detail.Runtime.CollectionProgress == api.Idle {
+					certificate, err := os.ReadFile(certFile)
+					if err != nil {
+						t.Fatal("read public backend certificate for browser check failed")
+					}
+					artifacts := assertConnectedAgentBrowser(t, baseURL, certificate, "agent-owner", password, created.Result.Agent.ID)
+					assertCopiedAgentCannotReplaceOwner(t, agentBinary, baseURL, token, certFile, databaseURL, created.Result.Agent.ID, client)
+					return connectedAgentJourney{id: created.Result.Agent.ID, credentialID: created.Result.Credential.ID, token: token, profile: profile, passwordPath: passwordPath, done: agentDone, result: agentResult, artifacts: artifacts}
+				}
+			}
+		}
+		select {
+		case <-agentDone:
+			err := <-agentResult
+			t.Fatalf("separate agent exited before two heartbeat renewals (failed=%t)", err != nil)
+		default:
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatal("separate agent did not apply configuration and persist two heartbeat renewals")
+	return connectedAgentJourney{}
+}
+
+func waitForAgentReconnect(t *testing.T, databaseURL string, client *http.Client, baseURL string, journey connectedAgentJourney) {
+	t.Helper()
+	db := testpostgres.Connect(t, databaseURL)
+	for deadline := time.Now().Add(25 * time.Second); time.Now().Before(deadline); {
+		var grants int
+		if err := db.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1", journey.id).Scan(&grants); err != nil {
+			t.Fatal("read reconnected agent grants failed")
+		}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/agents/"+journey.id, nil)
+		if err != nil {
+			t.Fatal("create reconnected agent status request failed")
+		}
+		response, err := client.Do(request)
+		if err == nil {
+			var detail api.Agent
+			body, readErr := io.ReadAll(response.Body)
+			response.Body.Close()
+			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && grants >= 4 && detail.Runtime != nil && detail.Runtime.Reachability == api.Connected && detail.Runtime.AppliedConfigurationRevision == "1" {
+				select {
+				case <-journey.done:
+					err := <-journey.result
+					t.Fatalf("agent process exited during backend reconnect (failed=%t)", err != nil)
+				default:
+				}
+				return
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatal("same agent process did not resume ownership and renew after backend restart")
 }

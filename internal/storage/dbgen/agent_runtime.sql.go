@@ -11,6 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteAgentIncompatibleAttempt = `-- name: DeleteAgentIncompatibleAttempt :exec
+DELETE FROM public.almanac_agent_incompatible_attempts
+WHERE agent_id = $1
+`
+
+func (q *Queries) DeleteAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAgentIncompatibleAttempt, agentID)
+	return err
+}
+
 const deleteExpiredAgentExecutionGrants = `-- name: DeleteExpiredAgentExecutionGrants :exec
 DELETE FROM public.almanac_agent_execution_grants AS grant_row
 WHERE grant_row.agent_id = $1
@@ -145,6 +155,19 @@ func (q *Queries) GetAgentExecutionGrantBySequence(ctx context.Context, arg GetA
 		&i.RequestNonce,
 	)
 	return i, err
+}
+
+const getAgentIncompatibleAttempt = `-- name: GetAgentIncompatibleAttempt :one
+SELECT attempted_at
+FROM public.almanac_agent_incompatible_attempts
+WHERE agent_id = $1
+`
+
+func (q *Queries) GetAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getAgentIncompatibleAttempt, agentID)
+	var attempted_at pgtype.Timestamptz
+	err := row.Scan(&attempted_at)
+	return attempted_at, err
 }
 
 const getAgentRuntimeStatus = `-- name: GetAgentRuntimeStatus :one
@@ -326,6 +349,22 @@ func (q *Queries) UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAge
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertAgentIncompatibleAttempt = `-- name: UpsertAgentIncompatibleAttempt :exec
+INSERT INTO public.almanac_agent_incompatible_attempts (agent_id, attempted_at)
+VALUES ($1, $2)
+ON CONFLICT (agent_id) DO UPDATE SET attempted_at = EXCLUDED.attempted_at
+`
+
+type UpsertAgentIncompatibleAttemptParams struct {
+	AgentID     pgtype.UUID        `json:"agent_id"`
+	AttemptedAt pgtype.Timestamptz `json:"attempted_at"`
+}
+
+func (q *Queries) UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error {
+	_, err := q.db.Exec(ctx, upsertAgentIncompatibleAttempt, arg.AgentID, arg.AttemptedAt)
+	return err
 }
 
 const upsertAgentRuntimeHello = `-- name: UpsertAgentRuntimeHello :exec

@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/dsolsona/almanac/internal/agentaccess"
+	"github.com/dsolsona/almanac/internal/agentownership"
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/agentruntime"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -45,8 +46,10 @@ type sessionControl struct {
 	shutdown chan struct{}
 	queue    chan outbound
 	pending  atomic.Int64
+	queued   atomic.Int64
 	readyMu  sync.RWMutex
 	session  *agentruntime.Session
+	ready    bool
 	done     chan struct{}
 	stopOnce sync.Once
 }
@@ -124,11 +127,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SessionGeneration: envelope.SessionGeneration, Payload: hello,
 	})
 	if err != nil {
-		_ = conn.Close(websocket.StatusPolicyViolation, "agent session rejected")
+		_ = conn.Close(websocket.StatusPolicyViolation, openFailureReason(err))
 		return
 	}
 	control.readyMu.Lock()
 	control.session = &accepted
+	control.ready = true
 	control.readyMu.Unlock()
 	welcome, err := json.Marshal(accepted.Welcome)
 	if err != nil || control.enqueue(ctx, outbound{body: welcome}) != nil {
@@ -196,46 +200,70 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 	}
 }
 
+func openFailureReason(err error) string {
+	switch {
+	case errors.Is(err, agentownership.ErrConflict):
+		return "active_owner"
+	case errors.Is(err, agentownership.ErrInvalidCredential):
+		return "credential_revoked"
+	case errors.Is(err, agentruntime.ErrIncompatible):
+		return "incompatible_protocol"
+	default:
+		return "session_rejected"
+	}
+}
+
 func (h *Handler) writeLoop(ctx context.Context, control *sessionControl) {
 	for {
+		select {
+		case <-control.shutdown:
+			h.writeShutdown(control)
+			return
+		default:
+		}
 		select {
 		case item := <-control.queue:
 			writeCtx, cancel := context.WithTimeout(ctx, writeTimeout)
 			err := control.conn.Write(writeCtx, websocket.MessageText, item.body)
 			cancel()
+			control.pending.Add(-int64(len(item.body)))
+			control.queued.Add(-1)
 			if err != nil {
 				control.cancel()
 				return
 			}
-			control.pending.Add(-int64(len(item.body)))
 			if item.closeAfter {
 				_ = control.conn.Close(item.closeCode, item.closeReason)
 				control.cancel()
 				return
 			}
 		case <-control.shutdown:
-			control.readyMu.RLock()
-			session := control.session
-			control.readyMu.RUnlock()
-			if session != nil {
-				message := agentprotocol.Envelope[agentprotocol.Shutdown]{
-					Kind: agentprotocol.KindShutdown, MessageID: "shutdown",
-					SessionGeneration: strconv.FormatInt(session.Generation, 10),
-					Payload:           agentprotocol.Shutdown{Reason: "server_shutdown"},
-				}
-				if body, err := json.Marshal(message); err == nil {
-					writeCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
-					_ = control.conn.Write(writeCtx, websocket.MessageText, body)
-					cancel()
-				}
-			}
-			_ = control.conn.Close(websocket.StatusGoingAway, "server shutdown")
-			control.cancel()
+			h.writeShutdown(control)
 			return
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func (h *Handler) writeShutdown(control *sessionControl) {
+	control.readyMu.RLock()
+	session := control.session
+	control.readyMu.RUnlock()
+	if session != nil {
+		message := agentprotocol.Envelope[agentprotocol.Shutdown]{
+			Kind: agentprotocol.KindShutdown, MessageID: "shutdown",
+			SessionGeneration: strconv.FormatInt(session.Generation, 10),
+			Payload:           agentprotocol.Shutdown{Reason: "server_shutdown"},
+		}
+		if body, err := json.Marshal(message); err == nil {
+			writeCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+			_ = control.conn.Write(writeCtx, websocket.MessageText, body)
+			cancel()
+		}
+	}
+	_ = control.conn.Close(websocket.StatusGoingAway, "server shutdown")
+	control.cancel()
 }
 
 func (h *Handler) monitorCredential(ctx context.Context, control *sessionControl, token string) {
@@ -246,8 +274,14 @@ func (h *Handler) monitorCredential(ctx context.Context, control *sessionControl
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if _, err := h.access.Authenticate(ctx, token); err == nil {
+			authCtx, cancel := context.WithTimeout(ctx, writeTimeout)
+			_, err := h.access.Authenticate(authCtx, token)
+			cancel()
+			if err == nil {
 				continue
+			} else if !errors.Is(err, agentaccess.ErrInvalidCredential) {
+				control.forceClose()
+				return
 			}
 			control.readyMu.RLock()
 			session := control.session
@@ -262,7 +296,11 @@ func (h *Handler) monitorCredential(ctx context.Context, control *sessionControl
 					if err := control.enqueue(ctx, outbound{body: body, closeAfter: true,
 						closeCode: websocket.StatusPolicyViolation, closeReason: "credential revoked"}); err != nil {
 						control.forceClose()
+						return
 					}
+					timer := time.AfterFunc(writeTimeout, control.forceClose)
+					defer timer.Stop()
+					<-ctx.Done()
 				}
 			}
 			return
@@ -287,19 +325,39 @@ func (c *sessionControl) enqueue(ctx context.Context, value outbound) error {
 		return agentprotocol.ErrMessageTooLarge
 	}
 	for {
+		currentMessages := c.queued.Load()
+		if currentMessages >= agentprotocol.MaxQueueMessages {
+			return errors.New("agentws: outbound queue message limit reached")
+		}
+		if c.queued.CompareAndSwap(currentMessages, currentMessages+1) {
+			break
+		}
+	}
+	for {
 		current := c.pending.Load()
 		if current+length > agentprotocol.MaxQueueBytes {
+			c.queued.Add(-1)
 			return errors.New("agentws: outbound queue byte limit reached")
 		}
 		if c.pending.CompareAndSwap(current, current+length) {
 			break
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		c.pending.Add(-length)
+		c.queued.Add(-1)
+		return err
+	}
 	select {
 	case c.queue <- value:
 		return nil
 	case <-ctx.Done():
 		c.pending.Add(-length)
+		c.queued.Add(-1)
 		return ctx.Err()
+	default:
+		c.pending.Add(-length)
+		c.queued.Add(-1)
+		return errors.New("agentws: outbound queue full")
 	}
 }

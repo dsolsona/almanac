@@ -851,8 +851,8 @@ func TestIntegrationRetirementMigrationPreservesExistingAgentAndIdentityRows(t *
 		t.Fatal(err)
 	}
 	closeIntegrationConn(conn)
-	if result, err := Upgrade(t.Context(), databaseURL); err != nil || result.Applied != 4 || result.DatabaseSchemaVersion != 9 {
-		t.Fatalf("schema 5 to 9 upgrade = %+v, %v", result, err)
+	if result, err := Upgrade(t.Context(), databaseURL); err != nil || result.Applied != 5 || result.DatabaseSchemaVersion != 10 {
+		t.Fatalf("schema 5 to 10 upgrade = %+v, %v", result, err)
 	}
 	conn = integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)

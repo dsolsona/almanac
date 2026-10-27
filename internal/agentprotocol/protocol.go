@@ -6,7 +6,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 )
@@ -384,7 +383,7 @@ func validateEnvelopePayload(kind Kind, generation string, payload any) error {
 }
 
 func (p Hello) Validate() error {
-	if len(p.ProtocolVersions) == 0 || len(p.ProtocolVersions) > 8 || hasDuplicates(p.ProtocolVersions) || !slices.Contains(p.ProtocolVersions, ProtocolV1) {
+	if len(p.ProtocolVersions) == 0 || len(p.ProtocolVersions) > 8 || hasDuplicates(p.ProtocolVersions) {
 		return invalidField("hello.protocol_versions")
 	}
 	for _, version := range p.ProtocolVersions {

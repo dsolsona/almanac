@@ -42,7 +42,14 @@ func (r *Registry) Drain(ctx context.Context) error {
 	}
 	r.mu.Unlock()
 	for _, session := range sessions {
-		session.stopOnce.Do(func() { close(session.shutdown) })
+		session.readyMu.RLock()
+		ready := session.ready
+		session.readyMu.RUnlock()
+		if ready {
+			session.stopOnce.Do(func() { close(session.shutdown) })
+		} else {
+			session.forceClose()
+		}
 	}
 	for _, session := range sessions {
 		select {

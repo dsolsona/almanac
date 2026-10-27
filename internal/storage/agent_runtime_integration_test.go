@@ -17,11 +17,12 @@ func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testin
 	proof := ownershipBytes(32, 71)
 	now := f.base.Add(4 * time.Second)
 	clock := func() time.Time { return now }
-	first, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), clock)
+	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "1.0.0", Capabilities: []byte(`[]`)}
+	first, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), hello, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Generation != 1 || first.ConfigurationRevision != 1 || first.LeaseID == "" || len(first.AllowedMeasurements) != 0 {
+	if first.Generation != 1 || first.ConfigurationRevision != 1 || first.LeaseID == "" || string(first.AllowedMeasurements) != "[]" {
 		t.Fatalf("initial execution state = %+v", first)
 	}
 	var snapshot agentprotocol.ConfigurationSnapshot
@@ -40,18 +41,112 @@ func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testin
 	if ownerCount != 1 || grantCount != 1 || configCount != 1 {
 		t.Fatalf("durable owner/grant/config counts = %d/%d/%d", ownerCount, grantCount, configCount)
 	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation+1, 1, clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("stale-generation applied configuration error = %v", err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 1, clock); err != nil {
+		t.Fatalf("record matching applied configuration: %v", err)
+	}
 
 	nonce := ownershipNonce(72)
 	now = now.Add(10 * time.Second)
-	renewed, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, clock)
-	if err != nil || renewed.RenewalSequence != 1 || renewed.LeaseID != first.LeaseID || renewed.ConfigurationRevision != first.ConfigurationRevision {
+	heartbeat := &AgentRuntimeHeartbeat{ReceivedAt: now, LeaseID: first.LeaseID, AppliedConfigurationRevision: 1,
+		SchedulerHealth: "ready", CollectionProgress: "idle"}
+	renewed, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, heartbeat, clock)
+	if err != nil || renewed.RenewalSequence != 1 || renewed.LeaseID == first.LeaseID || renewed.ConfigurationRevision != first.ConfigurationRevision {
 		t.Fatalf("renewed execution state = %+v, %v", renewed, err)
 	}
-	replay, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, clock)
-	if err != nil || replay.RenewalSequence != 1 || replay.LeaseID != first.LeaseID || !replay.ExpiresAt.Equal(renewed.ExpiresAt) {
+	now = renewed.IssuedAt.Add(time.Minute)
+	replay, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, heartbeat, clock)
+	if err != nil || replay.RenewalSequence != renewed.RenewalSequence || replay.LeaseID != renewed.LeaseID || !replay.IssuedAt.Equal(renewed.IssuedAt) || !replay.ExpiresAt.Equal(renewed.ExpiresAt) {
 		t.Fatalf("renewal replay = %+v, %v", replay, err)
 	}
-	if _, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, ownershipNonce(73), clock); !errors.Is(err, ErrAgentOwnershipDenied) {
-		t.Fatalf("stale renewal error = %v", err)
+	conn = integrationConnect(t, f.databaseURL)
+	var historical, current int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*), count(*) FILTER (WHERE lease_id=$2)
+FROM public.almanac_agent_execution_grants WHERE agent_id=$1`, created.Agent.ID, first.LeaseID).Scan(&grantCount, &historical); err != nil {
+		t.Fatal("read immutable grants after replay failed")
+	}
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1 AND lease_id=$2`, created.Agent.ID, renewed.LeaseID).Scan(&current); err != nil {
+		t.Fatal("read renewed grant failed")
+	}
+	closeIntegrationConn(conn)
+	if grantCount != 2 || historical != 1 || current != 1 {
+		t.Fatalf("initial/renewed immutable grant rows = %d/%d/%d", historical, current, grantCount)
+	}
+
+	tooEarly := &AgentRuntimeHeartbeat{ReceivedAt: renewed.IssuedAt.Add(10*time.Second - time.Microsecond), LeaseID: renewed.LeaseID, AppliedConfigurationRevision: 1, SchedulerHealth: "ready", CollectionProgress: "idle"}
+	if _, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 1, ownershipNonce(73), tooEarly, func() time.Time { return tooEarly.ReceivedAt }); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("renewal before ten-second boundary error = %v", err)
+	}
+	next := &AgentRuntimeHeartbeat{ReceivedAt: renewed.IssuedAt.Add(10 * time.Second), LeaseID: renewed.LeaseID, AppliedConfigurationRevision: 1, SchedulerHealth: "ready", CollectionProgress: "idle"}
+	now = next.ReceivedAt
+	renewedAgain, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 1, ownershipNonce(73), next, clock)
+	if err != nil || renewedAgain.RenewalSequence != 2 || renewedAgain.LeaseID == renewed.LeaseID {
+		t.Fatalf("renewal at ten-second boundary = %+v, %v", renewedAgain, err)
+	}
+	var status struct {
+		Applied  int64
+		Health   string
+		Progress string
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	var currentLeaseID string
+	if err := conn.QueryRow(t.Context(), `SELECT applied_configuration_revision,scheduler_health,collection_progress FROM public.almanac_agent_runtime_status WHERE agent_id=$1`, created.Agent.ID).Scan(&status.Applied, &status.Health, &status.Progress); err != nil {
+		t.Fatal("read persisted heartbeat status failed")
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT current_lease_id FROM public.almanac_agent_ownership WHERE agent_id=$1", created.Agent.ID).Scan(&currentLeaseID); err != nil {
+		t.Fatal("read current execution grant pointer failed")
+	}
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1`, created.Agent.ID).Scan(&grantCount); err != nil {
+		t.Fatal("read retained grant count failed")
+	}
+	closeIntegrationConn(conn)
+	if status.Applied != 1 || status.Health != "ready" || status.Progress != "idle" || grantCount != 3 || currentLeaseID != renewedAgain.LeaseID {
+		t.Fatalf("persisted applied/heartbeat status=%+v retained grants=%d current-lease-match=%t", status, grantCount, currentLeaseID == renewedAgain.LeaseID)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation+1, 1, clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("stale-generation status write error = %v", err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	if _, err := conn.Exec(t.Context(), "UPDATE public.almanac_agent_credentials SET revoked_at=$2 WHERE id=$1", issued.ID, now); err != nil {
+		t.Fatal("revoke runtime test credential failed")
+	}
+	closeIntegrationConn(conn)
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 1, clock); !errors.Is(err, ErrInvalidAgentCredential) {
+		t.Fatalf("revoked-credential status write error = %v", err)
+	}
+	if _, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 2, ownershipNonce(74), next, clock); !errors.Is(err, ErrInvalidAgentCredential) {
+		t.Fatalf("revoked-credential heartbeat error = %v", err)
+	}
+}
+
+func TestIntegrationAgentRuntimeGrantFailureRollsBackOwnership(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "runtime-grant-failure")
+	conn := integrationConnect(t, f.databaseURL)
+	if _, err := conn.Exec(t.Context(), `CREATE FUNCTION public.fail_agent_execution_grant_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected execution grant failure'; END $$`); err != nil {
+		t.Fatal("create grant failure trigger function failed")
+	}
+	if _, err := conn.Exec(t.Context(), `CREATE TRIGGER fail_agent_execution_grant_insert BEFORE INSERT ON public.almanac_agent_execution_grants FOR EACH ROW EXECUTE FUNCTION public.fail_agent_execution_grant_insert()`); err != nil {
+		t.Fatal("create grant failure trigger failed")
+	}
+	closeIntegrationConn(conn)
+	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "1.0.0", Capabilities: []byte(`[]`)}
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(ownershipBytes(32, 81)), hello, func() time.Time { return f.base.Add(4 * time.Second) }); err == nil {
+		t.Fatal("ownership acquisition with forced grant failure unexpectedly succeeded")
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	var ownerships, grants, configurations, statuses int
+	if err := conn.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM public.almanac_agent_ownership WHERE agent_id=$1),
+ (SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1),
+ (SELECT count(*) FROM public.almanac_agent_configurations WHERE agent_id=$1),
+ (SELECT count(*) FROM public.almanac_agent_runtime_status WHERE agent_id=$1)`, created.Agent.ID).Scan(&ownerships, &grants, &configurations, &statuses); err != nil {
+		t.Fatal("read rolled-back runtime state failed")
+	}
+	closeIntegrationConn(conn)
+	if ownerships != 0 || grants != 0 || configurations != 0 || statuses != 0 {
+		t.Fatalf("failed runtime acquisition left rows ownership/grant/config/status=%d/%d/%d/%d", ownerships, grants, configurations, statuses)
 	}
 }

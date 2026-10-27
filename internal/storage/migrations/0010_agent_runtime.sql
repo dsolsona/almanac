@@ -55,3 +55,9 @@ CREATE TABLE public.almanac_agent_runtime_status (
     FOREIGN KEY (agent_id, generation)
         REFERENCES public.almanac_agent_ownership(agent_id, generation)
 );
+
+-- An incompatible hello is observable without creating ownership or an execution grant.
+CREATE TABLE public.almanac_agent_incompatible_attempts (
+    agent_id uuid PRIMARY KEY REFERENCES public.almanac_agents(id),
+    attempted_at timestamptz NOT NULL
+);

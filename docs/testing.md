@@ -131,6 +131,11 @@ compatibility fixtures/tests still govern each supported query dialect separatel
 
 ## Correctness and failure evidence
 
+Tests added to cover already-correct behavior may pass on their first run. Do not
+change correct production behavior merely to manufacture a red result. Label
+deliberate mutation checks separately from reproduced defects, and preserve any
+interim implementation or fixture mistake accurately in the handoff.
+
 For calculations, use independently derived expected values, boundary/property tests,
 zero traffic, missingness, revisions and maintenance unions. Tests that just reproduce
 the implementation formula are insufficient. For storage/auth/leases, test concurrent

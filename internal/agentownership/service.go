@@ -58,6 +58,28 @@ func (s *Service) ResumeWithHello(ctx context.Context, token string, generation 
 	return publicResult(stored), s.mapStorageError(err)
 }
 
+// RecordIncompatibleAttempt safely exposes an unsupported but structurally valid
+// hello without acquiring ownership or an execution grant.
+func (s *Service) RecordIncompatibleAttempt(ctx context.Context, token string, generation int64, resumeSecret []byte) (int64, error) {
+	if !validateProof(resumeSecret) || generation < 0 {
+		return 0, ErrInvalidInput
+	}
+	credentialID, credentialVerifier, err := s.credential(ctx, token)
+	if err != nil {
+		return 0, err
+	}
+	resumeVerifier := sha256.Sum256(resumeSecret)
+	revision, err := storage.RecordAgentIncompatibleAttempt(ctx, s.databaseURL, credentialID, credentialVerifier,
+		resumeVerifier, generation, s.now)
+	if errors.Is(err, storage.ErrAgentOwnershipConflict) {
+		return 0, &ConflictError{}
+	}
+	if err != nil {
+		return 0, s.mapStorageError(err)
+	}
+	return revision, nil
+}
+
 func (s *Service) Renew(ctx context.Context, token string, generation, expectedSequence int64, resumeSecret, nonce []byte) (Result, error) {
 	return s.RenewWithHeartbeat(ctx, token, generation, expectedSequence, resumeSecret, nonce, nil)
 }
