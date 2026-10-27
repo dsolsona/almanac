@@ -267,6 +267,18 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	if deadlineState != "pending" || len(deadlineStored) != 0 {
 		t.Fatalf("late result mutated diagnostic receipt: state=%s bytes=%d", deadlineState, len(deadlineStored))
 	}
+	setIntegrationUserRole(t, f, "administrator")
+	revoked, err := RevokeAgentCredential(t.Context(), f.databaseURL, RevokeAgentCredentialInput{
+		Proof: f.input("unused", "unused").Proof, AgentID: created.Agent.ID, CredentialID: issued.ID,
+		ExpectedVersion: created.Agent.Version, IdempotencyKey: "diagnostic-result-revoke", RequestID: "diagnostic-result-revoke",
+		Now: func() time.Time { return now.Add(5 * time.Second) },
+	})
+	if err != nil || revoked.Credential == nil || revoked.Credential.RevokedAt == nil {
+		t.Fatalf("revoke result-transfer credential: %+v %v", revoked, err)
+	}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, previewResult, now.Add(6*time.Second)); !errors.Is(err, ErrInvalidAgentCredential) {
+		t.Fatalf("result retry using revoked credential = %v", err)
+	}
 }
 
 func largeDiagnosticSeries() []agentprotocol.DiagnosticSeries {
