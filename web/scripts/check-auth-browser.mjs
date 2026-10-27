@@ -23,7 +23,7 @@ let stage = 'launch';
 let browser;
 let page;
 let failed = false;
-const counts = { login: 0, password: 0 };
+const counts = { login: 0, password: 0, logout: 0 };
 const managementReads = [];
 
 // Exercise the browser's normal same-origin GET behavior against the real API.
@@ -133,6 +133,7 @@ try {
     const path = new URL(req.url()).pathname;
     if (req.method() === 'POST' && path === '/api/v1/auth/login') counts.login += 1;
     if (req.method() === 'POST' && path === '/api/v1/auth/password') counts.password += 1;
+    if (req.method() === 'POST' && path === '/api/v1/auth/logout') counts.logout += 1;
   });
   stage = 'initial navigation';
   await page.goto(fixture.url);
@@ -224,6 +225,25 @@ try {
   const storage = await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage) }));
   assert.ok(storage.local.every((key) => key === 'almanac-theme'));
   assert.deepEqual(storage.session, []);
+  if (fixture.scenario === 'onboarding') {
+    stage = 'mobile sign-out uncertain response';
+    const logoutCount = counts.logout;
+    await page.route('**/api/v1/auth/logout', (route) => route.abort('failed'), { times: 1 });
+    await signOut();
+    const logoutAlert = page.getByRole('alert');
+    await expect(logoutAlert).toContainText(/sign-out could not be confirmed/i);
+    assert.equal(counts.logout, logoutCount + 1);
+    await expect(logoutAlert).toBeFocused();
+    await expect(page.getByRole('dialog', { name: 'Navigation menu' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    stage = 'mobile sign-out session recovery';
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Navigation menu' }).getByRole('button', { name: 'Check session', exact: true }).click();
+    await heading('Agents');
+    await expect(page.getByRole('alert')).toContainText(/sign-out could not be confirmed/i);
+    await expect(page.getByRole('dialog', { name: 'Navigation menu' })).toHaveCount(0);
+    await inspectManagementRead(200);
+  }
   stage = 'logout and credential replacement';
   await signOut();
   await heading('Sign in');
