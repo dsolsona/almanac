@@ -95,6 +95,45 @@ type AlmanacAuditEvent struct {
 	RequestID  string             `json:"request_id"`
 }
 
+type AlmanacDatasource struct {
+	ID                     pgtype.UUID        `json:"id"`
+	Name                   string             `json:"name"`
+	DisplayName            string             `json:"display_name"`
+	Version                int64              `json:"version"`
+	Provider               string             `json:"provider"`
+	ConfigurationFormat    string             `json:"configuration_format"`
+	Endpoint               string             `json:"endpoint"`
+	Tls                    []byte             `json:"tls"`
+	AuthenticationMode     string             `json:"authentication_mode"`
+	AuthenticationUsername pgtype.Text        `json:"authentication_username"`
+	PasswordEnvelope       []byte             `json:"password_envelope"`
+	PasswordRevision       int64              `json:"password_revision"`
+	TokenEnvelope          []byte             `json:"token_envelope"`
+	TokenRevision          int64              `json:"token_revision"`
+	PollingIntervalSeconds int32              `json:"polling_interval_seconds"`
+	SettlingDelaySeconds   int32              `json:"settling_delay_seconds"`
+	AgentID                pgtype.UUID        `json:"agent_id"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacDiagnostic struct {
+	ID                pgtype.UUID        `json:"id"`
+	ActorID           pgtype.UUID        `json:"actor_id"`
+	AgentID           pgtype.UUID        `json:"agent_id"`
+	DatasourceID      pgtype.UUID        `json:"datasource_id"`
+	SessionGeneration int64              `json:"session_generation"`
+	Operation         string             `json:"operation"`
+	State             string             `json:"state"`
+	Request           []byte             `json:"request"`
+	Result            []byte             `json:"result"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	Message           pgtype.Text        `json:"message"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	DeadlineAt        pgtype.Timestamptz `json:"deadline_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+}
+
 type AlmanacInstallation struct {
 	Singleton             bool               `json:"singleton"`
 	InstallationID        pgtype.UUID        `json:"installation_id"`

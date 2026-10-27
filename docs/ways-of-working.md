@@ -31,6 +31,12 @@ silently switch the requested implementer model. If unavailable, report the limi
 and agree on a replacement. Runtime configuration must request the model explicitly;
 documenting its name does not configure the tool automatically.
 
+For a full vertical increment, Luna owns implementation, debugging, test writing and
+task evidence through a review-ready diff. The coordinator settles interfaces and
+provides one concrete brief, then reviews the consolidated result. Avoid incremental
+coordinator reviews or status-only turns while the implementer is progressing; report
+only material conflicts or blockers.
+
 ## Start or resume a session
 
 1. Read [AGENTS.md](../AGENTS.md), directory instructions and [status.md](status.md).

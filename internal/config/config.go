@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 )
 
 const maxConfigBytes = 64 << 10
@@ -29,6 +30,8 @@ type Config struct {
 	TLSCertFile              string         `json:"tls_cert_file"`
 	TLSKeyFile               string         `json:"tls_key_file"`
 	TrustedProxyCIDRs        []netip.Prefix `json:"trusted_proxy_cidrs"`
+	SourceSecretKeysetFile   string         `json:"source_secret_keyset_file"`
+	SourceSecretKeysetID     string         `json:"source_secret_keyset_id"`
 	ShutdownTimeout          time.Duration  `json:"-"`
 }
 
@@ -43,6 +46,8 @@ type fileConfig struct {
 	TLSCertFile              *string   `json:"tls_cert_file"`
 	TLSKeyFile               *string   `json:"tls_key_file"`
 	TrustedProxyCIDRs        *[]string `json:"trusted_proxy_cidrs"`
+	SourceSecretKeysetFile   *string   `json:"source_secret_keyset_file"`
+	SourceSecretKeysetID     *string   `json:"source_secret_keyset_id"`
 	ShutdownTimeout          *string   `json:"shutdown_timeout"`
 }
 
@@ -100,6 +105,12 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 		if file.TLSKeyFile != nil {
 			cfg.TLSKeyFile = *file.TLSKeyFile
 		}
+		if file.SourceSecretKeysetFile != nil {
+			cfg.SourceSecretKeysetFile = *file.SourceSecretKeysetFile
+		}
+		if file.SourceSecretKeysetID != nil {
+			cfg.SourceSecretKeysetID = *file.SourceSecretKeysetID
+		}
 		if file.TrustedProxyCIDRs != nil {
 			if err := cfg.setTrustedProxies(*file.TrustedProxyCIDRs); err != nil {
 				return Config{}, err
@@ -136,6 +147,10 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 			cfg.TLSCertFile = value
 		case "ALMANAC_TLS_KEY_FILE":
 			cfg.TLSKeyFile = value
+		case "ALMANAC_SOURCE_SECRET_KEYSET_FILE":
+			cfg.SourceSecretKeysetFile = value
+		case "ALMANAC_SOURCE_SECRET_KEYSET_ID":
+			cfg.SourceSecretKeysetID = value
 		case "ALMANAC_TRUSTED_PROXY_CIDRS":
 			if err := cfg.setTrustedProxyList(value); err != nil {
 				return Config{}, err
@@ -168,6 +183,10 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 			cfg.TLSCertFile = value
 		case "tls-key-file":
 			cfg.TLSKeyFile = value
+		case "source-secret-keyset-file":
+			cfg.SourceSecretKeysetFile = value
+		case "source-secret-keyset-id":
+			cfg.SourceSecretKeysetID = value
 		case "trusted-proxy-cidrs":
 			if err := cfg.setTrustedProxyList(value); err != nil {
 				return Config{}, err
@@ -231,8 +250,14 @@ func (c Config) Validate() error {
 		if c.TLSCertFile == "" && len(c.TrustedProxyCIDRs) == 0 {
 			return errors.New("config: trusted_proxy_cidrs are required when TLS terminates at a proxy")
 		}
+		if (c.SourceSecretKeysetFile == "") != (c.SourceSecretKeysetID == "") {
+			return errors.New("config: source_secret_keyset_file and source_secret_keyset_id must be set together")
+		}
+		if c.SourceSecretKeysetID != "" && !canonicalUUID(c.SourceSecretKeysetID) {
+			return errors.New("config: source_secret_keyset_id must be a canonical UUID")
+		}
 	}
-	if c.Components != "backend" && !c.BackendUI() && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0) {
+	if c.Components != "backend" && !c.BackendUI() && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0 || c.SourceSecretKeysetFile != "" || c.SourceSecretKeysetID != "") {
 		return errors.New("config: backend-only fields require components=backend")
 	}
 	if c.Components == "ui" {
@@ -276,3 +301,8 @@ func (c *Config) setTrustedProxyList(value string) error {
 func (c Config) UIOnly() bool { return c.Components == "ui" }
 
 func (c Config) BackendUI() bool { return c.Components == "backend,ui" || c.Components == "ui,backend" }
+
+func canonicalUUID(value string) bool {
+	parsed, err := uuid.Parse(value)
+	return err == nil && parsed.String() == value
+}

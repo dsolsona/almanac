@@ -227,6 +227,99 @@ paths:
       responses:
         '200': {description: Revoke result, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
         'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/providers:
+    get:
+      operationId: getProviders
+      summary: List provider descriptors and selected-agent availability
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: agent_id, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Provider catalog, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderPage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources:
+    get:
+      operationId: getDatasources
+      summary: List redacted datasource metadata
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Datasource page, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourcePage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: postDatasources
+      summary: Create and assign a datasource
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourceWrite'}}}}
+      responses:
+        '201': {description: Created redacted datasource, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Datasource'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/{datasource_id}:
+    get:
+      operationId: getDatasource
+      summary: Read redacted datasource detail
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+      responses:
+        '200': {description: Datasource, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Datasource'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    put:
+      operationId: putDatasource
+      summary: Replace datasource settings and assignment
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+        - {$ref: '#/components/parameters/DatasourceIfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourceWrite'}}}}
+      responses:
+        '200': {description: Updated redacted datasource, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Datasource'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/connection-tests:
+    post:
+      operationId: postDatasourceConnectionTest
+      summary: Test unsaved Prometheus connection settings on an assigned agent
+      security: [{SessionCookie: [], CsrfToken: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ConnectionTestRequest'}}}}
+      responses:
+        '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/{datasource_id}/query-previews:
+    post:
+      operationId: postDatasourceQueryPreview
+      summary: Run a bounded PromQL preview on the assigned agent
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/QueryPreviewRequest'}}}}
+      responses:
+        '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/diagnostics/{diagnostic_id}:
+    get:
+      operationId: getDiagnostic
+      summary: Read a bounded diagnostic receipt
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: diagnostic_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Diagnostic status and safe result, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/diagnostics/{diagnostic_id}/cancel:
+    post:
+      operationId: postDiagnosticCancel
+      summary: Cancel a pending diagnostic
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: diagnostic_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
+      responses:
+        '200': {description: Current diagnostic status, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /livez:
     get:
       operationId: getLiveness
@@ -269,6 +362,17 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    DatasourceId:
+      name: datasource_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    DatasourceIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>".
+      schema: {type: string}
     IfMatch:
       name: If-Match
       in: header
@@ -302,6 +406,126 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    ProviderPage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderDescriptor'}}
+    ProviderDescriptor:
+      type: object
+      required: [provider, configuration_format, operations, availability]
+      properties:
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        operations: {type: array, items: {type: string}}
+        availability: {type: string, enum: [available, planned, unsupported]}
+    DatasourcePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Datasource'}}
+        next_cursor: {type: string}
+    Datasource:
+      type: object
+      required: [id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        version: {type: string, pattern: '^[1-9][0-9]*$'}
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls: {$ref: '#/components/schemas/DatasourceTLS'}
+        authentication: {$ref: '#/components/schemas/DatasourceAuthentication'}
+        polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
+        settling_delay_seconds: {type: integer, enum: [60]}
+        agent_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DatasourceTLS:
+      type: object
+      additionalProperties: false
+      required: [insecure_skip_verify, ca_pem]
+      properties:
+        insecure_skip_verify: {type: boolean}
+        ca_pem: {type: string, nullable: true, maxLength: 65536}
+    DatasourceAuthentication:
+      type: object
+      additionalProperties: false
+      required: [mode, username, password_configured, token_configured]
+      properties:
+        mode: {type: string, enum: [none, basic, bearer]}
+        username: {type: string, nullable: true}
+        password_configured: {type: boolean}
+        token_configured: {type: boolean}
+    DatasourceWrite:
+      type: object
+      additionalProperties: false
+      required: [name, display_name, provider, configuration_format, endpoint, tls, authentication, polling_interval_seconds, agent_id]
+      properties:
+        name: {type: string}
+        display_name: {type: string}
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls: {$ref: '#/components/schemas/DatasourceTLS'}
+        authentication:
+          type: object
+          additionalProperties: false
+          required: [mode, username, password_secret, token_secret]
+          properties:
+            mode: {type: string, enum: [none, basic, bearer]}
+            username: {type: string, nullable: true}
+            password_secret: {$ref: '#/components/schemas/SecretAction'}
+            token_secret: {$ref: '#/components/schemas/SecretAction'}
+        polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
+        agent_id: {type: string, format: uuid}
+    SecretAction:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: {type: string, enum: [replace, retain, clear]}
+        value: {type: string, format: password, maxLength: 16384}
+    ConnectionTestRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, configuration_format, endpoint, tls, authentication, agent_id]
+      properties:
+        provider: {type: string, enum: [prometheus]}
+        configuration_format: {type: string, enum: [prometheus-http-v1]}
+        endpoint: {type: string, format: uri}
+        tls: {$ref: '#/components/schemas/DatasourceTLS'}
+        authentication:
+          type: object
+          additionalProperties: false
+          required: [mode, username, password_secret, token_secret]
+          properties:
+            mode: {type: string, enum: [none, basic, bearer]}
+            username: {type: string, nullable: true}
+            password_secret: {$ref: '#/components/schemas/SecretAction'}
+            token_secret: {$ref: '#/components/schemas/SecretAction'}
+        agent_id: {type: string, format: uuid}
+    QueryPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 4096}
+    Diagnostic:
+      type: object
+      required: [id, state, operation, created_at, deadline_at, result_class, result, error_code, message]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [pending, running, succeeded, failed, canceled, timed_out, unknown]}
+        operation: {type: string, enum: [connection_test, query_preview]}
+        created_at: {type: string, format: date-time}
+        deadline_at: {type: string, format: date-time}
+        result_class: {type: string, enum: [complete, empty, incomplete], nullable: true}
+        result: {type: object, nullable: true}
+        error_code: {type: string, nullable: true}
+        message: {type: string, nullable: true, maxLength: 512}
     Agent:
       type: object
       required: [id, name, display_name, enabled, version, created_at, updated_at]

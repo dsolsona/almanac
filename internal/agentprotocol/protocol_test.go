@@ -224,7 +224,7 @@ func TestConfigurationSnapshotRequiresTypedEmptyAssignments(t *testing.T) {
 }
 
 func TestConfigurationSnapshotFencesLeaseAuthority(t *testing.T) {
-	snapshot := ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []jsontext.Value{}}
+	snapshot := ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{}}
 	lease := Lease{LeaseID: "lease-1", AgentID: snapshot.AgentID, SessionGeneration: "1", ConfigurationRevision: "1", AllowedMeasurements: []MeasurementGrant{}, ValidFrom: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC), ValidUntil: time.Date(2026, 10, 27, 13, 0, 0, 0, time.UTC)}
 	if err := ValidateSnapshotLease(snapshot, lease); err != nil {
 		t.Fatalf("empty configuration with no authority: %v", err)
@@ -236,7 +236,7 @@ func TestConfigurationSnapshotFencesLeaseAuthority(t *testing.T) {
 }
 
 func TestConfigurationHTTPResponseUsesRevisionBoundETagAndNotModifiedState(t *testing.T) {
-	snapshot := &ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []jsontext.Value{}}
+	snapshot := &ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{}}
 	response := ConfigurationHTTPResponse{StatusCode: 200, ETag: snapshot.ETag(), Snapshot: snapshot}
 	if err := response.Validate(); err != nil {
 		t.Fatalf("valid snapshot response: %v", err)
@@ -287,12 +287,19 @@ func TestConfigurationMessagesAreBoundedAndTyped(t *testing.T) {
 	}
 }
 
-func TestConfigurationSnapshotRejectsAssignmentsUntilDatasourceContract(t *testing.T) {
-	for _, body := range []string{
-		`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1","assignments":[{"future_datasource_contract":true}]}`,
+func TestConfigurationSnapshotValidatesTypedDatasourceAssignments(t *testing.T) {
+	body := `{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"2","assignments":[{"datasource_id":"00000000-0000-4000-8000-000000000002","datasource_version":"3","name":"primary-metrics","provider":"prometheus","configuration_format":"prometheus-http-v1","endpoint":"https://metrics.example.test","tls":{"insecure_skip_verify":false,"ca_pem":""},"authentication_mode":"bearer","bearer_token":"secret-token","polling_interval_seconds":60,"settling_delay_seconds":60}]}`
+	snapshot, err := DecodeConfigurationSnapshot([]byte(body))
+	if err != nil || len(snapshot.Assignments) != 1 || snapshot.Assignments[0].DatasourceID != "00000000-0000-4000-8000-000000000002" {
+		t.Fatalf("DecodeConfigurationSnapshot() = %+v, %v", snapshot, err)
+	}
+	for _, invalid := range []string{
+		strings.Replace(body, `"bearer_token":"secret-token"`, `"bearer_token":""`, 1),
+		strings.Replace(body, `"configuration_format":"prometheus-http-v1"`, `"configuration_format":"unknown"`, 1),
+		strings.Replace(body, `"endpoint":"https://metrics.example.test"`, `"endpoint":"http://user:pw@metrics.example.test"`, 1),
 	} {
-		if _, err := DecodeConfigurationSnapshot([]byte(body)); err == nil {
-			t.Fatal("invalid snapshot accepted")
+		if _, err := DecodeConfigurationSnapshot([]byte(invalid)); err == nil {
+			t.Fatalf("invalid assignment accepted: %s", invalid)
 		}
 	}
 }

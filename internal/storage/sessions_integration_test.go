@@ -645,7 +645,7 @@ func TestIntegrationSessionOperationsFailClosedForIncompatibleOrMissingSchema(t 
 			t.Fatal(err)
 		}
 		conn := integrationConnect(t, databaseURL)
-		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (11, '0011_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
+		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (12, '0012_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
 			t.Fatal("install future schema marker failed")
 		}
 		closeIntegrationConn(conn)
@@ -711,7 +711,7 @@ VALUES ('owner-v2', $1, 'administrator', true, true, 1, $2, $2) RETURNING id`, t
 	}
 	closeIntegrationConn(conn)
 	result, err := Upgrade(t.Context(), databaseURL)
-	if err != nil || result.Applied != 8 || result.DatabaseSchemaVersion != 10 {
+	if err != nil || result.Applied != 9 || result.DatabaseSchemaVersion != 11 {
 		t.Fatalf("schema2 to 10 upgrade = %+v, %v", result, err)
 	}
 	conn = integrationConnect(t, databaseURL)

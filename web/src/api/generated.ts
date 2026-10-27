@@ -228,6 +228,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List provider descriptors and selected-agent availability */
+        get: operations["getProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List redacted datasource metadata */
+        get: operations["getDatasources"];
+        put?: never;
+        /** Create and assign a datasource */
+        post: operations["postDatasources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/{datasource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read redacted datasource detail */
+        get: operations["getDatasource"];
+        /** Replace datasource settings and assignment */
+        put: operations["putDatasource"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/connection-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test unsaved Prometheus connection settings on an assigned agent */
+        post: operations["postDatasourceConnectionTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/datasources/{datasource_id}/query-previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a bounded PromQL preview on the assigned agent */
+        post: operations["postDatasourceQueryPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{diagnostic_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a bounded diagnostic receipt */
+        get: operations["getDiagnostic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{diagnostic_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a pending diagnostic */
+        post: operations["postDiagnosticCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/livez": {
         parameters: {
             query?: never;
@@ -266,6 +387,122 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ProviderPage: {
+            items: components["schemas"]["ProviderDescriptor"][];
+        };
+        ProviderDescriptor: {
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            operations: string[];
+            /** @enum {string} */
+            availability: "available" | "planned" | "unsupported";
+        };
+        DatasourcePage: {
+            items: components["schemas"]["Datasource"][];
+            next_cursor: string;
+        };
+        Datasource: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            version: string;
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: components["schemas"]["DatasourceTLS"];
+            authentication: components["schemas"]["DatasourceAuthentication"];
+            polling_interval_seconds: number;
+            /** @enum {integer} */
+            settling_delay_seconds: 60;
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DatasourceTLS: {
+            insecure_skip_verify: boolean;
+            ca_pem: string | null;
+        };
+        DatasourceAuthentication: {
+            /** @enum {string} */
+            mode: "none" | "basic" | "bearer";
+            username: string | null;
+            password_configured: boolean;
+            token_configured: boolean;
+        };
+        DatasourceWrite: {
+            name: string;
+            display_name: string;
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: components["schemas"]["DatasourceTLS"];
+            authentication: {
+                /** @enum {string} */
+                mode: "none" | "basic" | "bearer";
+                username: string | null;
+                password_secret: components["schemas"]["SecretAction"];
+                token_secret: components["schemas"]["SecretAction"];
+            };
+            polling_interval_seconds: number;
+            /** Format: uuid */
+            agent_id: string;
+        };
+        SecretAction: {
+            /** @enum {string} */
+            action: "replace" | "retain" | "clear";
+            /** Format: password */
+            value?: string;
+        };
+        ConnectionTestRequest: {
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: components["schemas"]["DatasourceTLS"];
+            authentication: {
+                /** @enum {string} */
+                mode: "none" | "basic" | "bearer";
+                username: string | null;
+                password_secret: components["schemas"]["SecretAction"];
+                token_secret: components["schemas"]["SecretAction"];
+            };
+            /** Format: uuid */
+            agent_id: string;
+        };
+        QueryPreviewRequest: {
+            query: string;
+        };
+        Diagnostic: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "pending" | "running" | "succeeded" | "failed" | "canceled" | "timed_out" | "unknown";
+            /** @enum {string} */
+            operation: "connection_test" | "query_preview";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deadline_at: string;
+            /** @enum {string|null} */
+            result_class: "complete" | "empty" | "incomplete" | null;
+            result: Record<string, never> | null;
+            error_code: string | null;
+            message: string | null;
+        };
         Agent: {
             /** Format: uuid */
             id: string;
@@ -497,6 +734,9 @@ export interface components {
     };
     parameters: {
         AgentId: string;
+        DatasourceId: string;
+        /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
+        DatasourceIfMatch: string;
         /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
         IfMatch: string;
         /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -1107,6 +1347,313 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getProviders: {
+        parameters: {
+            query?: {
+                agent_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDatasources: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Datasource page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasourcePage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDatasources: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasourceWrite"];
+            };
+        };
+        responses: {
+            /** @description Created redacted datasource */
+            201: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Datasource"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDatasource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Datasource */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Datasource"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    putDatasource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
+                "If-Match": components["parameters"]["DatasourceIfMatch"];
+            };
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasourceWrite"];
+            };
+        };
+        responses: {
+            /** @description Updated redacted datasource */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Datasource"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDatasourceConnectionTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Diagnostic accepted */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDatasourceQueryPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Diagnostic accepted */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDiagnostic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diagnostic status and safe result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postDiagnosticCancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Current diagnostic status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

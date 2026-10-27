@@ -62,6 +62,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return authCommand(ctx, args[1:], stdout, stderr)
 	case "agents":
 		return agentsCommand(ctx, args[1:], stdout, stderr)
+	case "secrets":
+		return secretsCommand(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "almanac: unsupported command %q\n", args[0])
 		return 2
@@ -84,6 +86,7 @@ func printHelp(w io.Writer) {
   almanac agents credentials rotate --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm (--token-file=FILE|--show-token)
   almanac agents credentials revoke --profile-file=FILE --agent-id=UUID --credential-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
   almanac agents disable --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
+  almanac secrets provision-source-keyset --file=FILE --keyset-id=UUID [--output=json]
 
 Implemented component modes:
   backend  Serve protected local authentication API with PostgreSQL ownership.

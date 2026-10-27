@@ -2,10 +2,15 @@
 package agentprotocol
 
 import (
+	"bytes"
+	"crypto/x509"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -131,11 +136,32 @@ type Lease struct {
 }
 
 type ConfigurationSnapshot struct {
-	AgentID               string `json:"agent_id"`
-	ConfigurationRevision string `json:"configuration_revision"`
-	// Assignments is empty in this increment. Its datasource item contract is
-	// deferred until datasource configuration has an accepted schema.
-	Assignments []jsontext.Value `json:"assignments"`
+	AgentID               string                 `json:"agent_id"`
+	ConfigurationRevision string                 `json:"configuration_revision"`
+	Assignments           []DatasourceAssignment `json:"assignments"`
+}
+
+// DatasourceAssignment is an authorized agent-only configuration view. Secret
+// fields are delivered over the authenticated TLS configuration endpoint only.
+type DatasourceAssignment struct {
+	DatasourceID           string        `json:"datasource_id"`
+	DatasourceVersion      string        `json:"datasource_version"`
+	Name                   string        `json:"name"`
+	Provider               string        `json:"provider"`
+	ConfigurationFormat    string        `json:"configuration_format"`
+	Endpoint               string        `json:"endpoint"`
+	TLS                    DatasourceTLS `json:"tls"`
+	AuthenticationMode     string        `json:"authentication_mode"`
+	Username               string        `json:"username,omitempty"`
+	Password               string        `json:"password,omitempty"`
+	BearerToken            string        `json:"bearer_token,omitempty"`
+	PollingIntervalSeconds int           `json:"polling_interval_seconds"`
+	SettlingDelaySeconds   int           `json:"settling_delay_seconds"`
+}
+
+type DatasourceTLS struct {
+	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	CAPEM              string `json:"ca_pem"`
 }
 
 // Validate checks a decoded, typed v1 envelope and its bounded payload.
@@ -615,10 +641,90 @@ func (s ConfigurationSnapshot) Validate() error {
 	if _, err := positiveDecimal(s.ConfigurationRevision, false); err != nil {
 		return invalidField("configuration_snapshot.configuration_revision")
 	}
-	if s.Assignments == nil || len(s.Assignments) != 0 {
+	if s.Assignments == nil || len(s.Assignments) > 256 {
 		return invalidField("configuration_snapshot.assignments")
 	}
+	seen := make(map[string]struct{}, len(s.Assignments))
+	for i, assignment := range s.Assignments {
+		if err := assignment.Validate(); err != nil {
+			return invalidIndexedField("configuration_snapshot.assignments", i)
+		}
+		if _, exists := seen[assignment.DatasourceID]; exists {
+			return invalidIndexedField("configuration_snapshot.assignments", i)
+		}
+		seen[assignment.DatasourceID] = struct{}{}
+	}
 	return nil
+}
+
+func (a DatasourceAssignment) Validate() error {
+	endpoint, _ := url.Parse(a.Endpoint)
+	if !canonicalUUID(a.DatasourceID) || !positiveDecimalCheck(a.DatasourceVersion, false) ||
+		!validDatasourceName(a.Name) || a.Provider != "prometheus" || a.ConfigurationFormat != "prometheus-http-v1" ||
+		!validDatasourceEndpoint(a.Endpoint) || a.PollingIntervalSeconds < 15 || a.PollingIntervalSeconds > 86400 || a.SettlingDelaySeconds != 60 || len(a.TLS.CAPEM) > 64<<10 {
+		return invalidField("datasource_assignment")
+	}
+	if endpoint.Scheme == "http" && (a.TLS.InsecureSkipVerify || a.TLS.CAPEM != "") {
+		return invalidField("datasource_assignment.tls.ca_pem")
+	}
+	remaining := bytes.TrimSpace([]byte(a.TLS.CAPEM))
+	for len(remaining) > 0 {
+		block, rest := pem.Decode(remaining)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return invalidField("datasource_assignment.tls.ca_pem")
+		}
+		certificates, err := x509.ParseCertificates(block.Bytes)
+		if err != nil || len(certificates) != 1 || !certificates[0].IsCA {
+			return invalidField("datasource_assignment.tls.ca_pem")
+		}
+		remaining = bytes.TrimSpace(rest)
+	}
+	if a.TLS.CAPEM != "" && len(bytes.TrimSpace([]byte(a.TLS.CAPEM))) == 0 {
+		return invalidField("datasource_assignment.tls.ca_pem")
+	}
+	switch a.AuthenticationMode {
+	case "none":
+		if a.Username != "" || a.Password != "" || a.BearerToken != "" {
+			return invalidField("datasource_assignment.authentication")
+		}
+	case "basic":
+		if a.Username == "" || len(a.Username) > 256 || a.Password == "" || len(a.Password) > 16<<10 || a.BearerToken != "" {
+			return invalidField("datasource_assignment.authentication")
+		}
+	case "bearer":
+		if a.Username != "" || a.Password != "" || a.BearerToken == "" || len(a.BearerToken) > 16<<10 {
+			return invalidField("datasource_assignment.authentication")
+		}
+	default:
+		return invalidField("datasource_assignment.authentication_mode")
+	}
+	return nil
+}
+
+func validDatasourceName(value string) bool {
+	if len(value) < 1 || len(value) > 63 || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, r := range value[1:] {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validDatasourceEndpoint(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Opaque != "" || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || strings.ContainsAny(u.Host, "\\\r\n\t") {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		number, parseErr := strconv.Atoi(port)
+		if parseErr != nil || number < 1 || number > 65535 || strconv.Itoa(number) != port {
+			return false
+		}
+	}
+	return true
 }
 
 func invalidField(field string) error { return fmt.Errorf("%w: %s", ErrInvalidMessage, field) }
@@ -627,9 +733,8 @@ func invalidIndexedField(field string, index int) error {
 	return fmt.Errorf("%w: %s[%d]", ErrInvalidMessage, field, index)
 }
 
-// ValidateSnapshotLease ensures a lease grants only measurements present in the
-// exact coherent configuration snapshot. An empty assignment therefore permits
-// only an empty measurement grant.
+// ValidateSnapshotLease keeps datasource diagnostics separate from production
+// observation grants. This increment has no SLI definitions to authorize.
 func ValidateSnapshotLease(snapshot ConfigurationSnapshot, lease Lease) error {
 	if err := snapshot.Validate(); err != nil {
 		return err
@@ -640,7 +745,9 @@ func ValidateSnapshotLease(snapshot ConfigurationSnapshot, lease Lease) error {
 	if snapshot.AgentID != lease.AgentID || snapshot.ConfigurationRevision != lease.ConfigurationRevision {
 		return invalidField("configuration_snapshot.execution_lease_binding")
 	}
-	if len(snapshot.Assignments) == 0 && len(lease.AllowedMeasurements) != 0 {
+	if len(lease.AllowedMeasurements) != 0 {
+		// Datasource-only snapshots contain no SLI definitions; datasource
+		// assignments therefore do not grant production observation queries.
 		return invalidField("execution_lease.allowed_measurements")
 	}
 	return nil

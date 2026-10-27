@@ -5,12 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"math"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -569,10 +569,10 @@ func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owne
 
 func ensureAgentConfiguration(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, createdAt time.Time) (dbgen.GetAgentConfigurationRow, error) {
 	snapshot, err := json.Marshal(struct {
-		AgentID               string           `json:"agent_id"`
-		ConfigurationRevision string           `json:"configuration_revision"`
-		Assignments           []jsontext.Value `json:"assignments"`
-	}{AgentID: agentID.String(), ConfigurationRevision: "1", Assignments: []jsontext.Value{}})
+		AgentID               string                               `json:"agent_id"`
+		ConfigurationRevision string                               `json:"configuration_revision"`
+		Assignments           []agentprotocol.DatasourceAssignment `json:"assignments"`
+	}{AgentID: agentID.String(), ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{}})
 	if err != nil {
 		return dbgen.GetAgentConfigurationRow{}, err
 	}

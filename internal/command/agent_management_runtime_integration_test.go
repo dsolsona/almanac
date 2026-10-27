@@ -358,7 +358,7 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 				if err := db.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1", created.Result.Agent.ID).Scan(&grants); err != nil {
 					t.Fatal("read connected-agent heartbeat grants failed")
 				}
-				if grants >= 3 && detail.Runtime.SchedulerHealth == api.Ready && detail.Runtime.CollectionProgress == api.Idle {
+				if grants >= 3 && detail.Runtime.SchedulerHealth == api.Ready && detail.Runtime.CollectionProgress == api.AgentRuntimeStatusCollectionProgressIdle {
 					certificate, err := os.ReadFile(certFile)
 					if err != nil {
 						t.Fatal("read public backend certificate for browser check failed")

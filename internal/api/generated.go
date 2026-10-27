@@ -116,22 +116,22 @@ func (e AgentRuntimeStatusCollectionExplanation) Valid() bool {
 
 // Defines values for AgentRuntimeStatusCollectionProgress.
 const (
-	Blocked    AgentRuntimeStatusCollectionProgress = "blocked"
-	Idle       AgentRuntimeStatusCollectionProgress = "idle"
-	NotStarted AgentRuntimeStatusCollectionProgress = "not_started"
-	Running    AgentRuntimeStatusCollectionProgress = "running"
+	AgentRuntimeStatusCollectionProgressBlocked    AgentRuntimeStatusCollectionProgress = "blocked"
+	AgentRuntimeStatusCollectionProgressIdle       AgentRuntimeStatusCollectionProgress = "idle"
+	AgentRuntimeStatusCollectionProgressNotStarted AgentRuntimeStatusCollectionProgress = "not_started"
+	AgentRuntimeStatusCollectionProgressRunning    AgentRuntimeStatusCollectionProgress = "running"
 )
 
 // Valid indicates whether the value is a known member of the AgentRuntimeStatusCollectionProgress enum.
 func (e AgentRuntimeStatusCollectionProgress) Valid() bool {
 	switch e {
-	case Blocked:
+	case AgentRuntimeStatusCollectionProgressBlocked:
 		return true
-	case Idle:
+	case AgentRuntimeStatusCollectionProgressIdle:
 		return true
-	case NotStarted:
+	case AgentRuntimeStatusCollectionProgressNotStarted:
 		return true
-	case Running:
+	case AgentRuntimeStatusCollectionProgressRunning:
 		return true
 	default:
 		return false
@@ -183,6 +183,246 @@ func (e AgentRuntimeStatusSchedulerHealth) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionTestRequestAuthenticationMode.
+const (
+	ConnectionTestRequestAuthenticationModeBasic  ConnectionTestRequestAuthenticationMode = "basic"
+	ConnectionTestRequestAuthenticationModeBearer ConnectionTestRequestAuthenticationMode = "bearer"
+	ConnectionTestRequestAuthenticationModeNone   ConnectionTestRequestAuthenticationMode = "none"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionTestRequestAuthenticationMode enum.
+func (e ConnectionTestRequestAuthenticationMode) Valid() bool {
+	switch e {
+	case ConnectionTestRequestAuthenticationModeBasic:
+		return true
+	case ConnectionTestRequestAuthenticationModeBearer:
+		return true
+	case ConnectionTestRequestAuthenticationModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionTestRequestConfigurationFormat.
+const (
+	ConnectionTestRequestConfigurationFormatPrometheusHttpV1 ConnectionTestRequestConfigurationFormat = "prometheus-http-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionTestRequestConfigurationFormat enum.
+func (e ConnectionTestRequestConfigurationFormat) Valid() bool {
+	switch e {
+	case ConnectionTestRequestConfigurationFormatPrometheusHttpV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionTestRequestProvider.
+const (
+	ConnectionTestRequestProviderPrometheus ConnectionTestRequestProvider = "prometheus"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionTestRequestProvider enum.
+func (e ConnectionTestRequestProvider) Valid() bool {
+	switch e {
+	case ConnectionTestRequestProviderPrometheus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceConfigurationFormat.
+const (
+	DatasourceConfigurationFormatPrometheusHttpV1 DatasourceConfigurationFormat = "prometheus-http-v1"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceConfigurationFormat enum.
+func (e DatasourceConfigurationFormat) Valid() bool {
+	switch e {
+	case DatasourceConfigurationFormatPrometheusHttpV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceProvider.
+const (
+	DatasourceProviderPrometheus DatasourceProvider = "prometheus"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceProvider enum.
+func (e DatasourceProvider) Valid() bool {
+	switch e {
+	case DatasourceProviderPrometheus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceSettlingDelaySeconds.
+const (
+	N60 DatasourceSettlingDelaySeconds = 60
+)
+
+// Valid indicates whether the value is a known member of the DatasourceSettlingDelaySeconds enum.
+func (e DatasourceSettlingDelaySeconds) Valid() bool {
+	switch e {
+	case N60:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceAuthenticationMode.
+const (
+	DatasourceAuthenticationModeBasic  DatasourceAuthenticationMode = "basic"
+	DatasourceAuthenticationModeBearer DatasourceAuthenticationMode = "bearer"
+	DatasourceAuthenticationModeNone   DatasourceAuthenticationMode = "none"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceAuthenticationMode enum.
+func (e DatasourceAuthenticationMode) Valid() bool {
+	switch e {
+	case DatasourceAuthenticationModeBasic:
+		return true
+	case DatasourceAuthenticationModeBearer:
+		return true
+	case DatasourceAuthenticationModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceWriteAuthenticationMode.
+const (
+	DatasourceWriteAuthenticationModeBasic  DatasourceWriteAuthenticationMode = "basic"
+	DatasourceWriteAuthenticationModeBearer DatasourceWriteAuthenticationMode = "bearer"
+	DatasourceWriteAuthenticationModeNone   DatasourceWriteAuthenticationMode = "none"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceWriteAuthenticationMode enum.
+func (e DatasourceWriteAuthenticationMode) Valid() bool {
+	switch e {
+	case DatasourceWriteAuthenticationModeBasic:
+		return true
+	case DatasourceWriteAuthenticationModeBearer:
+		return true
+	case DatasourceWriteAuthenticationModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceWriteConfigurationFormat.
+const (
+	DatasourceWriteConfigurationFormatPrometheusHttpV1 DatasourceWriteConfigurationFormat = "prometheus-http-v1"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceWriteConfigurationFormat enum.
+func (e DatasourceWriteConfigurationFormat) Valid() bool {
+	switch e {
+	case DatasourceWriteConfigurationFormatPrometheusHttpV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceWriteProvider.
+const (
+	DatasourceWriteProviderPrometheus DatasourceWriteProvider = "prometheus"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceWriteProvider enum.
+func (e DatasourceWriteProvider) Valid() bool {
+	switch e {
+	case DatasourceWriteProviderPrometheus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticOperation.
+const (
+	ConnectionTest DiagnosticOperation = "connection_test"
+	QueryPreview   DiagnosticOperation = "query_preview"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticOperation enum.
+func (e DiagnosticOperation) Valid() bool {
+	switch e {
+	case ConnectionTest:
+		return true
+	case QueryPreview:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticResultClass.
+const (
+	Complete   DiagnosticResultClass = "complete"
+	Empty      DiagnosticResultClass = "empty"
+	Incomplete DiagnosticResultClass = "incomplete"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticResultClass enum.
+func (e DiagnosticResultClass) Valid() bool {
+	switch e {
+	case Complete:
+		return true
+	case Empty:
+		return true
+	case Incomplete:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticState.
+const (
+	DiagnosticStateCanceled  DiagnosticState = "canceled"
+	DiagnosticStateFailed    DiagnosticState = "failed"
+	DiagnosticStatePending   DiagnosticState = "pending"
+	DiagnosticStateRunning   DiagnosticState = "running"
+	DiagnosticStateSucceeded DiagnosticState = "succeeded"
+	DiagnosticStateTimedOut  DiagnosticState = "timed_out"
+	DiagnosticStateUnknown   DiagnosticState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticState enum.
+func (e DiagnosticState) Valid() bool {
+	switch e {
+	case DiagnosticStateCanceled:
+		return true
+	case DiagnosticStateFailed:
+		return true
+	case DiagnosticStatePending:
+		return true
+	case DiagnosticStateRunning:
+		return true
+	case DiagnosticStateSucceeded:
+		return true
+	case DiagnosticStateTimedOut:
+		return true
+	case DiagnosticStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthResponseComponent.
 const (
 	Backend HealthResponseComponent = "backend"
@@ -213,6 +453,57 @@ func (e HealthResponseStatus) Valid() bool {
 	case Ok:
 		return true
 	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProviderDescriptorAvailability.
+const (
+	Available   ProviderDescriptorAvailability = "available"
+	Planned     ProviderDescriptorAvailability = "planned"
+	Unsupported ProviderDescriptorAvailability = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the ProviderDescriptorAvailability enum.
+func (e ProviderDescriptorAvailability) Valid() bool {
+	switch e {
+	case Available:
+		return true
+	case Planned:
+		return true
+	case Unsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProviderDescriptorConfigurationFormat.
+const (
+	ProviderDescriptorConfigurationFormatPrometheusHttpV1 ProviderDescriptorConfigurationFormat = "prometheus-http-v1"
+)
+
+// Valid indicates whether the value is a known member of the ProviderDescriptorConfigurationFormat enum.
+func (e ProviderDescriptorConfigurationFormat) Valid() bool {
+	switch e {
+	case ProviderDescriptorConfigurationFormatPrometheusHttpV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProviderDescriptorProvider.
+const (
+	ProviderDescriptorProviderPrometheus ProviderDescriptorProvider = "prometheus"
+)
+
+// Valid indicates whether the value is a known member of the ProviderDescriptorProvider enum.
+func (e ProviderDescriptorProvider) Valid() bool {
+	switch e {
+	case ProviderDescriptorProviderPrometheus:
 		return true
 	default:
 		return false
@@ -306,6 +597,27 @@ const (
 func (e RotationIssuanceReplaySecretState) Valid() bool {
 	switch e {
 	case RotationIssuanceReplaySecretStateSecretUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretActionAction.
+const (
+	Clear   SecretActionAction = "clear"
+	Replace SecretActionAction = "replace"
+	Retain  SecretActionAction = "retain"
+)
+
+// Valid indicates whether the value is a known member of the SecretActionAction enum.
+func (e SecretActionAction) Valid() bool {
+	switch e {
+	case Clear:
+		return true
+	case Replace:
+		return true
+	case Retain:
 		return true
 	default:
 		return false
@@ -431,6 +743,30 @@ type AuthResponse struct {
 	Session   *SafeIdentity `json:"session"`
 }
 
+// ConnectionTestRequest defines model for ConnectionTestRequest.
+type ConnectionTestRequest struct {
+	AgentId        openapi_types.UUID `json:"agent_id"`
+	Authentication struct {
+		Mode           ConnectionTestRequestAuthenticationMode `json:"mode"`
+		PasswordSecret SecretAction                            `json:"password_secret"`
+		TokenSecret    SecretAction                            `json:"token_secret"`
+		Username       *string                                 `json:"username"`
+	} `json:"authentication"`
+	ConfigurationFormat ConnectionTestRequestConfigurationFormat `json:"configuration_format"`
+	Endpoint            string                                   `json:"endpoint"`
+	Provider            ConnectionTestRequestProvider            `json:"provider"`
+	Tls                 DatasourceTLS                            `json:"tls"`
+}
+
+// ConnectionTestRequestAuthenticationMode defines model for ConnectionTestRequest.Authentication.Mode.
+type ConnectionTestRequestAuthenticationMode string
+
+// ConnectionTestRequestConfigurationFormat defines model for ConnectionTestRequest.ConfigurationFormat.
+type ConnectionTestRequestConfigurationFormat string
+
+// ConnectionTestRequestProvider defines model for ConnectionTestRequest.Provider.
+type ConnectionTestRequestProvider string
+
 // CreateAgentRequest defines model for CreateAgentRequest.
 type CreateAgentRequest struct {
 	DisplayName     string `json:"display_name"`
@@ -443,6 +779,105 @@ type CredentialPage struct {
 	Items      []AgentCredential `json:"items"`
 	NextCursor string            `json:"next_cursor"`
 }
+
+// Datasource defines model for Datasource.
+type Datasource struct {
+	AgentId                openapi_types.UUID             `json:"agent_id"`
+	Authentication         DatasourceAuthentication       `json:"authentication"`
+	ConfigurationFormat    DatasourceConfigurationFormat  `json:"configuration_format"`
+	CreatedAt              time.Time                      `json:"created_at"`
+	DisplayName            string                         `json:"display_name"`
+	Endpoint               string                         `json:"endpoint"`
+	Id                     openapi_types.UUID             `json:"id"`
+	Name                   string                         `json:"name"`
+	PollingIntervalSeconds int                            `json:"polling_interval_seconds"`
+	Provider               DatasourceProvider             `json:"provider"`
+	SettlingDelaySeconds   DatasourceSettlingDelaySeconds `json:"settling_delay_seconds"`
+	Tls                    DatasourceTLS                  `json:"tls"`
+	UpdatedAt              time.Time                      `json:"updated_at"`
+	Version                string                         `json:"version"`
+}
+
+// DatasourceConfigurationFormat defines model for Datasource.ConfigurationFormat.
+type DatasourceConfigurationFormat string
+
+// DatasourceProvider defines model for Datasource.Provider.
+type DatasourceProvider string
+
+// DatasourceSettlingDelaySeconds defines model for Datasource.SettlingDelaySeconds.
+type DatasourceSettlingDelaySeconds int
+
+// DatasourceAuthentication defines model for DatasourceAuthentication.
+type DatasourceAuthentication struct {
+	Mode               DatasourceAuthenticationMode `json:"mode"`
+	PasswordConfigured bool                         `json:"password_configured"`
+	TokenConfigured    bool                         `json:"token_configured"`
+	Username           *string                      `json:"username"`
+}
+
+// DatasourceAuthenticationMode defines model for DatasourceAuthentication.Mode.
+type DatasourceAuthenticationMode string
+
+// DatasourcePage defines model for DatasourcePage.
+type DatasourcePage struct {
+	Items      []Datasource `json:"items"`
+	NextCursor string       `json:"next_cursor"`
+}
+
+// DatasourceTLS defines model for DatasourceTLS.
+type DatasourceTLS struct {
+	CaPem              *string `json:"ca_pem"`
+	InsecureSkipVerify bool    `json:"insecure_skip_verify"`
+}
+
+// DatasourceWrite defines model for DatasourceWrite.
+type DatasourceWrite struct {
+	AgentId        openapi_types.UUID `json:"agent_id"`
+	Authentication struct {
+		Mode           DatasourceWriteAuthenticationMode `json:"mode"`
+		PasswordSecret SecretAction                      `json:"password_secret"`
+		TokenSecret    SecretAction                      `json:"token_secret"`
+		Username       *string                           `json:"username"`
+	} `json:"authentication"`
+	ConfigurationFormat    DatasourceWriteConfigurationFormat `json:"configuration_format"`
+	DisplayName            string                             `json:"display_name"`
+	Endpoint               string                             `json:"endpoint"`
+	Name                   string                             `json:"name"`
+	PollingIntervalSeconds int                                `json:"polling_interval_seconds"`
+	Provider               DatasourceWriteProvider            `json:"provider"`
+	Tls                    DatasourceTLS                      `json:"tls"`
+}
+
+// DatasourceWriteAuthenticationMode defines model for DatasourceWrite.Authentication.Mode.
+type DatasourceWriteAuthenticationMode string
+
+// DatasourceWriteConfigurationFormat defines model for DatasourceWrite.ConfigurationFormat.
+type DatasourceWriteConfigurationFormat string
+
+// DatasourceWriteProvider defines model for DatasourceWrite.Provider.
+type DatasourceWriteProvider string
+
+// Diagnostic defines model for Diagnostic.
+type Diagnostic struct {
+	CreatedAt   time.Time               `json:"created_at"`
+	DeadlineAt  time.Time               `json:"deadline_at"`
+	ErrorCode   *string                 `json:"error_code"`
+	Id          openapi_types.UUID      `json:"id"`
+	Message     *string                 `json:"message"`
+	Operation   DiagnosticOperation     `json:"operation"`
+	Result      *map[string]interface{} `json:"result"`
+	ResultClass *DiagnosticResultClass  `json:"result_class"`
+	State       DiagnosticState         `json:"state"`
+}
+
+// DiagnosticOperation defines model for Diagnostic.Operation.
+type DiagnosticOperation string
+
+// DiagnosticResultClass defines model for Diagnostic.ResultClass.
+type DiagnosticResultClass string
+
+// DiagnosticState defines model for Diagnostic.State.
+type DiagnosticState string
 
 // EmptyAuthRequest defines model for EmptyAuthRequest.
 type EmptyAuthRequest = map[string]interface{}
@@ -497,6 +932,28 @@ type Problem struct {
 	RequestId string `json:"request_id"`
 }
 
+// ProviderDescriptor defines model for ProviderDescriptor.
+type ProviderDescriptor struct {
+	Availability        ProviderDescriptorAvailability        `json:"availability"`
+	ConfigurationFormat ProviderDescriptorConfigurationFormat `json:"configuration_format"`
+	Operations          []string                              `json:"operations"`
+	Provider            ProviderDescriptorProvider            `json:"provider"`
+}
+
+// ProviderDescriptorAvailability defines model for ProviderDescriptor.Availability.
+type ProviderDescriptorAvailability string
+
+// ProviderDescriptorConfigurationFormat defines model for ProviderDescriptor.ConfigurationFormat.
+type ProviderDescriptorConfigurationFormat string
+
+// ProviderDescriptorProvider defines model for ProviderDescriptor.Provider.
+type ProviderDescriptorProvider string
+
+// ProviderPage defines model for ProviderPage.
+type ProviderPage struct {
+	Items []ProviderDescriptor `json:"items"`
+}
+
 // ProxyProblem Example: {"code":"backend_unavailable","field_errors":[],"message":"Configured backend is unavailable","request_id":"0123456789abcdef0123456789abcdef"}
 type ProxyProblem struct {
 	Code        ProxyProblemCode `json:"code"`
@@ -513,6 +970,11 @@ type ProxyProblem struct {
 
 // ProxyProblemCode defines model for ProxyProblem.Code.
 type ProxyProblemCode string
+
+// QueryPreviewRequest defines model for QueryPreviewRequest.
+type QueryPreviewRequest struct {
+	Query string `json:"query"`
+}
 
 // RotateAgentRequest defines model for RotateAgentRequest.
 type RotateAgentRequest struct {
@@ -579,8 +1041,23 @@ type SafeIdentity struct {
 	UserId     string `json:"user_id"`
 }
 
+// SecretAction defines model for SecretAction.
+type SecretAction struct {
+	Action SecretActionAction `json:"action"`
+	Value  *string            `json:"value,omitempty"`
+}
+
+// SecretActionAction defines model for SecretAction.Action.
+type SecretActionAction string
+
 // AgentId defines model for AgentId.
 type AgentId = openapi_types.UUID
+
+// DatasourceId defines model for DatasourceId.
+type DatasourceId = openapi_types.UUID
+
+// DatasourceIfMatch defines model for DatasourceIfMatch.
+type DatasourceIfMatch = string
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
@@ -647,6 +1124,29 @@ type PostAgentDisableParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetDatasourcesParams defines parameters for GetDatasources.
+type GetDatasourcesParams struct {
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// PostDatasourcesParams defines parameters for PostDatasources.
+type PostDatasourcesParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PutDatasourceParams defines parameters for PutDatasource.
+type PutDatasourceParams struct {
+	// IfMatch Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>".
+	IfMatch DatasourceIfMatch `json:"If-Match"`
+}
+
+// GetProvidersParams defines parameters for GetProviders.
+type GetProvidersParams struct {
+	AgentId *openapi_types.UUID `form:"agent_id,omitempty" json:"agent_id,omitempty"`
+}
+
 // PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
 type PostAgentsJSONRequestBody = CreateAgentRequest
 
@@ -670,6 +1170,21 @@ type PostAuthLogoutJSONRequestBody = EmptyAuthRequest
 
 // PostAuthPasswordJSONRequestBody defines body for PostAuthPassword for application/json ContentType.
 type PostAuthPasswordJSONRequestBody = PasswordRequest
+
+// PostDatasourcesJSONRequestBody defines body for PostDatasources for application/json ContentType.
+type PostDatasourcesJSONRequestBody = DatasourceWrite
+
+// PostDatasourceConnectionTestJSONRequestBody defines body for PostDatasourceConnectionTest for application/json ContentType.
+type PostDatasourceConnectionTestJSONRequestBody = ConnectionTestRequest
+
+// PutDatasourceJSONRequestBody defines body for PutDatasource for application/json ContentType.
+type PutDatasourceJSONRequestBody = DatasourceWrite
+
+// PostDatasourceQueryPreviewJSONRequestBody defines body for PostDatasourceQueryPreview for application/json ContentType.
+type PostDatasourceQueryPreviewJSONRequestBody = QueryPreviewRequest
+
+// PostDiagnosticCancelJSONRequestBody defines body for PostDiagnosticCancel for application/json ContentType.
+type PostDiagnosticCancelJSONRequestBody = EmptyAuthRequest
 
 // AsRotationIssuanceFresh returns the union data inside the RotationIssuanceResponse as a RotationIssuanceFresh
 func (t RotationIssuanceResponse) AsRotationIssuanceFresh() (RotationIssuanceFresh, error) {
@@ -978,6 +1493,96 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
 	PostAuthPassword(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDatasources List redacted datasource metadata
+	//
+	// Corresponds with GET /api/v1/datasources (the `GetDatasources` operationId).
+	GetDatasources(ctx context.Context, params *GetDatasourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDatasourcesWithBody Create and assign a datasource
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+	PostDatasourcesWithBody(ctx context.Context, params *PostDatasourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDatasources Create and assign a datasource
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+	PostDatasources(ctx context.Context, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDatasourceConnectionTestWithBody Test unsaved Prometheus connection settings on an assigned agent
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+	PostDatasourceConnectionTestWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+	PostDatasourceConnectionTest(ctx context.Context, body PostDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDatasource Read redacted datasource detail
+	//
+	// Corresponds with GET /api/v1/datasources/{datasource_id} (the `GetDatasource` operationId).
+	GetDatasource(ctx context.Context, datasourceId DatasourceId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDatasourceWithBody Replace datasource settings and assignment
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+	PutDatasourceWithBody(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDatasource Replace datasource settings and assignment
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+	PutDatasource(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDatasourceQueryPreviewWithBody Run a bounded PromQL preview on the assigned agent
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+	PostDatasourceQueryPreviewWithBody(ctx context.Context, datasourceId DatasourceId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDatasourceQueryPreview Run a bounded PromQL preview on the assigned agent
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+	PostDatasourceQueryPreview(ctx context.Context, datasourceId DatasourceId, body PostDatasourceQueryPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDiagnostic Read a bounded diagnostic receipt
+	//
+	// Corresponds with GET /api/v1/diagnostics/{diagnostic_id} (the `GetDiagnostic` operationId).
+	GetDiagnostic(ctx context.Context, diagnosticId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDiagnosticCancelWithBody Cancel a pending diagnostic
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+	PostDiagnosticCancelWithBody(ctx context.Context, diagnosticId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDiagnosticCancel Cancel a pending diagnostic
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+	PostDiagnosticCancel(ctx context.Context, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetProviders List provider descriptors and selected-agent availability
+	//
+	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
+	GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLiveness Report whether the UI process is alive
 	//
@@ -1352,6 +1957,236 @@ func (c *Client) PostAuthPasswordWithBody(ctx context.Context, contentType strin
 // Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
 func (c *Client) PostAuthPassword(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAuthPasswordRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDatasources List redacted datasource metadata
+//
+// Corresponds with GET /api/v1/datasources (the `GetDatasources` operationId).
+func (c *Client) GetDatasources(ctx context.Context, params *GetDatasourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDatasourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDatasourcesWithBody Create and assign a datasource
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+func (c *Client) PostDatasourcesWithBody(ctx context.Context, params *PostDatasourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDatasourcesRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDatasources Create and assign a datasource
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+func (c *Client) PostDatasources(ctx context.Context, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDatasourcesRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDatasourceConnectionTestWithBody Test unsaved Prometheus connection settings on an assigned agent
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+func (c *Client) PostDatasourceConnectionTestWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDatasourceConnectionTestRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+func (c *Client) PostDatasourceConnectionTest(ctx context.Context, body PostDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDatasourceConnectionTestRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDatasource Read redacted datasource detail
+//
+// Corresponds with GET /api/v1/datasources/{datasource_id} (the `GetDatasource` operationId).
+func (c *Client) GetDatasource(ctx context.Context, datasourceId DatasourceId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDatasourceRequest(c.Server, datasourceId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutDatasourceWithBody Replace datasource settings and assignment
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+func (c *Client) PutDatasourceWithBody(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDatasourceRequestWithBody(c.Server, datasourceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutDatasource Replace datasource settings and assignment
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+func (c *Client) PutDatasource(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDatasourceRequest(c.Server, datasourceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDatasourceQueryPreviewWithBody Run a bounded PromQL preview on the assigned agent
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+func (c *Client) PostDatasourceQueryPreviewWithBody(ctx context.Context, datasourceId DatasourceId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDatasourceQueryPreviewRequestWithBody(c.Server, datasourceId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDatasourceQueryPreview Run a bounded PromQL preview on the assigned agent
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+func (c *Client) PostDatasourceQueryPreview(ctx context.Context, datasourceId DatasourceId, body PostDatasourceQueryPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDatasourceQueryPreviewRequest(c.Server, datasourceId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDiagnostic Read a bounded diagnostic receipt
+//
+// Corresponds with GET /api/v1/diagnostics/{diagnostic_id} (the `GetDiagnostic` operationId).
+func (c *Client) GetDiagnostic(ctx context.Context, diagnosticId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDiagnosticRequest(c.Server, diagnosticId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDiagnosticCancelWithBody Cancel a pending diagnostic
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+func (c *Client) PostDiagnosticCancelWithBody(ctx context.Context, diagnosticId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDiagnosticCancelRequestWithBody(c.Server, diagnosticId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostDiagnosticCancel Cancel a pending diagnostic
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+func (c *Client) PostDiagnosticCancel(ctx context.Context, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDiagnosticCancelRequest(c.Server, diagnosticId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetProviders List provider descriptors and selected-agent availability
+//
+// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
+func (c *Client) GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetProvidersRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2034,6 +2869,441 @@ func NewPostAuthPasswordRequestWithBody(server string, contentType string, body 
 	return req, nil
 }
 
+// NewGetDatasourcesRequest constructs an http.Request for the GetDatasources method
+func NewGetDatasourcesRequest(server string, params *GetDatasourcesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostDatasourcesRequest calls the generic PostDatasources builder with application/json body
+func NewPostDatasourcesRequest(server string, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDatasourcesRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostDatasourcesRequestWithBody constructs an http.Request for the PostDatasources method, with any body, and a specified content type
+func NewPostDatasourcesRequestWithBody(server string, params *PostDatasourcesParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPostDatasourceConnectionTestRequest calls the generic PostDatasourceConnectionTest builder with application/json body
+func NewPostDatasourceConnectionTestRequest(server string, body PostDatasourceConnectionTestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDatasourceConnectionTestRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostDatasourceConnectionTestRequestWithBody constructs an http.Request for the PostDatasourceConnectionTest method, with any body, and a specified content type
+func NewPostDatasourceConnectionTestRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources/connection-tests")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetDatasourceRequest constructs an http.Request for the GetDatasource method
+func NewGetDatasourceRequest(server string, datasourceId DatasourceId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "datasource_id", datasourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutDatasourceRequest calls the generic PutDatasource builder with application/json body
+func NewPutDatasourceRequest(server string, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutDatasourceRequestWithBody(server, datasourceId, params, "application/json", bodyReader)
+}
+
+// NewPutDatasourceRequestWithBody constructs an http.Request for the PutDatasource method, with any body, and a specified content type
+func NewPutDatasourceRequestWithBody(server string, datasourceId DatasourceId, params *PutDatasourceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "datasource_id", datasourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPostDatasourceQueryPreviewRequest calls the generic PostDatasourceQueryPreview builder with application/json body
+func NewPostDatasourceQueryPreviewRequest(server string, datasourceId DatasourceId, body PostDatasourceQueryPreviewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDatasourceQueryPreviewRequestWithBody(server, datasourceId, "application/json", bodyReader)
+}
+
+// NewPostDatasourceQueryPreviewRequestWithBody constructs an http.Request for the PostDatasourceQueryPreview method, with any body, and a specified content type
+func NewPostDatasourceQueryPreviewRequestWithBody(server string, datasourceId DatasourceId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "datasource_id", datasourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources/%s/query-previews", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetDiagnosticRequest constructs an http.Request for the GetDiagnostic method
+func NewGetDiagnosticRequest(server string, diagnosticId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "diagnostic_id", diagnosticId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostDiagnosticCancelRequest calls the generic PostDiagnosticCancel builder with application/json body
+func NewPostDiagnosticCancelRequest(server string, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDiagnosticCancelRequestWithBody(server, diagnosticId, "application/json", bodyReader)
+}
+
+// NewPostDiagnosticCancelRequestWithBody constructs an http.Request for the PostDiagnosticCancel method, with any body, and a specified content type
+func NewPostDiagnosticCancelRequestWithBody(server string, diagnosticId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "diagnostic_id", diagnosticId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/%s/cancel", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetProvidersRequest constructs an http.Request for the GetProviders method
+func NewGetProvidersRequest(server string, params *GetProvidersParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/providers")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.AgentId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "agent_id", *params.AgentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetLivenessRequest constructs an http.Request for the GetLiveness method
 func NewGetLivenessRequest(server string) (*http.Request, error) {
 	var err error
@@ -2311,6 +3581,104 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/auth/password (the `PostAuthPassword` operationId).
 	PostAuthPasswordWithResponse(ctx context.Context, body PostAuthPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPasswordResponse, error)
+
+	// GetDatasourcesWithResponse List redacted datasource metadata
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/datasources (the `GetDatasources` operationId).
+	GetDatasourcesWithResponse(ctx context.Context, params *GetDatasourcesParams, reqEditors ...RequestEditorFn) (*GetDatasourcesResponse, error)
+
+	// PostDatasourcesWithBodyWithResponse Create and assign a datasource
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+	PostDatasourcesWithBodyWithResponse(ctx context.Context, params *PostDatasourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourcesResponse, error)
+
+	// PostDatasourcesWithResponse Create and assign a datasource
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+	PostDatasourcesWithResponse(ctx context.Context, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourcesResponse, error)
+
+	// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved Prometheus connection settings on an assigned agent
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+	PostDatasourceConnectionTestWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceConnectionTestResponse, error)
+
+	// PostDatasourceConnectionTestWithResponse Test unsaved Prometheus connection settings on an assigned agent
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+	PostDatasourceConnectionTestWithResponse(ctx context.Context, body PostDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourceConnectionTestResponse, error)
+
+	// GetDatasourceWithResponse Read redacted datasource detail
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/datasources/{datasource_id} (the `GetDatasource` operationId).
+	GetDatasourceWithResponse(ctx context.Context, datasourceId DatasourceId, reqEditors ...RequestEditorFn) (*GetDatasourceResponse, error)
+
+	// PutDatasourceWithBodyWithResponse Replace datasource settings and assignment
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+	PutDatasourceWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDatasourceResponse, error)
+
+	// PutDatasourceWithResponse Replace datasource settings and assignment
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+	PutDatasourceWithResponse(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDatasourceResponse, error)
+
+	// PostDatasourceQueryPreviewWithBodyWithResponse Run a bounded PromQL preview on the assigned agent
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+	PostDatasourceQueryPreviewWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceQueryPreviewResponse, error)
+
+	// PostDatasourceQueryPreviewWithResponse Run a bounded PromQL preview on the assigned agent
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+	PostDatasourceQueryPreviewWithResponse(ctx context.Context, datasourceId DatasourceId, body PostDatasourceQueryPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourceQueryPreviewResponse, error)
+
+	// GetDiagnosticWithResponse Read a bounded diagnostic receipt
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/diagnostics/{diagnostic_id} (the `GetDiagnostic` operationId).
+	GetDiagnosticWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetDiagnosticResponse, error)
+
+	// PostDiagnosticCancelWithBodyWithResponse Cancel a pending diagnostic
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+	PostDiagnosticCancelWithBodyWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDiagnosticCancelResponse, error)
+
+	// PostDiagnosticCancelWithResponse Cancel a pending diagnostic
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+	PostDiagnosticCancelWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDiagnosticCancelResponse, error)
+
+	// GetProvidersWithResponse List provider descriptors and selected-agent availability
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
+	GetProvidersWithResponse(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*GetProvidersResponse, error)
 
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
@@ -3204,6 +4572,473 @@ func (r PostAuthPasswordResponse) ContentType() string {
 	return ""
 }
 
+type GetDatasourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DatasourcePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDatasourcesResponse) GetJSON200() *DatasourcePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDatasourcesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDatasourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDatasourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDatasourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDatasourcesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostDatasourcesResponse201Headers the declared response headers of an HTTP 201 response for PostDatasources
+type PostDatasourcesResponse201Headers struct {
+	ETag *string
+}
+
+type PostDatasourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Datasource
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *PostDatasourcesResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r PostDatasourcesResponse) GetJSON201() *Datasource {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PostDatasourcesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostDatasourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDatasourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDatasourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostDatasourcesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostDatasourceConnectionTestResponse202Headers the declared response headers of an HTTP 202 response for PostDatasourceConnectionTest
+type PostDatasourceConnectionTestResponse202Headers struct {
+	Location *string
+}
+
+type PostDatasourceConnectionTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *Diagnostic
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *PostDatasourceConnectionTestResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PostDatasourceConnectionTestResponse) GetJSON202() *Diagnostic {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PostDatasourceConnectionTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostDatasourceConnectionTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDatasourceConnectionTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDatasourceConnectionTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostDatasourceConnectionTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetDatasourceResponse200Headers the declared response headers of an HTTP 200 response for GetDatasource
+type GetDatasourceResponse200Headers struct {
+	ETag *string
+}
+
+type GetDatasourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Datasource
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetDatasourceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDatasourceResponse) GetJSON200() *Datasource {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDatasourceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDatasourceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDatasourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDatasourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDatasourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PutDatasourceResponse200Headers the declared response headers of an HTTP 200 response for PutDatasource
+type PutDatasourceResponse200Headers struct {
+	ETag *string
+}
+
+type PutDatasourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Datasource
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PutDatasourceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutDatasourceResponse) GetJSON200() *Datasource {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PutDatasourceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PutDatasourceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutDatasourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutDatasourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutDatasourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PostDatasourceQueryPreviewResponse202Headers the declared response headers of an HTTP 202 response for PostDatasourceQueryPreview
+type PostDatasourceQueryPreviewResponse202Headers struct {
+	Location *string
+}
+
+type PostDatasourceQueryPreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *Diagnostic
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *PostDatasourceQueryPreviewResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PostDatasourceQueryPreviewResponse) GetJSON202() *Diagnostic {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PostDatasourceQueryPreviewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostDatasourceQueryPreviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDatasourceQueryPreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDatasourceQueryPreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostDatasourceQueryPreviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDiagnosticResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Diagnostic
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDiagnosticResponse) GetJSON200() *Diagnostic {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDiagnosticResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDiagnosticResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDiagnosticResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDiagnosticResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDiagnosticResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostDiagnosticCancelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Diagnostic
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostDiagnosticCancelResponse) GetJSON200() *Diagnostic {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PostDiagnosticCancelResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostDiagnosticCancelResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDiagnosticCancelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDiagnosticCancelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostDiagnosticCancelResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetProvidersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProviderPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetProvidersResponse) GetJSON200() *ProviderPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetProvidersResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetProvidersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetProvidersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetProvidersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetProvidersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetLivenessResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3591,6 +5426,188 @@ func (c *ClientWithResponses) PostAuthPasswordWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParsePostAuthPasswordResponse(rsp)
+}
+
+// GetDatasourcesWithResponse List redacted datasource metadata
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/datasources (the `GetDatasources` operationId).
+func (c *ClientWithResponses) GetDatasourcesWithResponse(ctx context.Context, params *GetDatasourcesParams, reqEditors ...RequestEditorFn) (*GetDatasourcesResponse, error) {
+	rsp, err := c.GetDatasources(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDatasourcesResponse(rsp)
+}
+
+// PostDatasourcesWithBodyWithResponse Create and assign a datasource
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+func (c *ClientWithResponses) PostDatasourcesWithBodyWithResponse(ctx context.Context, params *PostDatasourcesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourcesResponse, error) {
+	rsp, err := c.PostDatasourcesWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDatasourcesResponse(rsp)
+}
+
+// PostDatasourcesWithResponse Create and assign a datasource
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
+func (c *ClientWithResponses) PostDatasourcesWithResponse(ctx context.Context, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourcesResponse, error) {
+	rsp, err := c.PostDatasources(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDatasourcesResponse(rsp)
+}
+
+// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved Prometheus connection settings on an assigned agent
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+func (c *ClientWithResponses) PostDatasourceConnectionTestWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceConnectionTestResponse, error) {
+	rsp, err := c.PostDatasourceConnectionTestWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDatasourceConnectionTestResponse(rsp)
+}
+
+// PostDatasourceConnectionTestWithResponse Test unsaved Prometheus connection settings on an assigned agent
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
+func (c *ClientWithResponses) PostDatasourceConnectionTestWithResponse(ctx context.Context, body PostDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourceConnectionTestResponse, error) {
+	rsp, err := c.PostDatasourceConnectionTest(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDatasourceConnectionTestResponse(rsp)
+}
+
+// GetDatasourceWithResponse Read redacted datasource detail
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/datasources/{datasource_id} (the `GetDatasource` operationId).
+func (c *ClientWithResponses) GetDatasourceWithResponse(ctx context.Context, datasourceId DatasourceId, reqEditors ...RequestEditorFn) (*GetDatasourceResponse, error) {
+	rsp, err := c.GetDatasource(ctx, datasourceId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDatasourceResponse(rsp)
+}
+
+// PutDatasourceWithBodyWithResponse Replace datasource settings and assignment
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+func (c *ClientWithResponses) PutDatasourceWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDatasourceResponse, error) {
+	rsp, err := c.PutDatasourceWithBody(ctx, datasourceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDatasourceResponse(rsp)
+}
+
+// PutDatasourceWithResponse Replace datasource settings and assignment
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
+func (c *ClientWithResponses) PutDatasourceWithResponse(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDatasourceResponse, error) {
+	rsp, err := c.PutDatasource(ctx, datasourceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDatasourceResponse(rsp)
+}
+
+// PostDatasourceQueryPreviewWithBodyWithResponse Run a bounded PromQL preview on the assigned agent
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+func (c *ClientWithResponses) PostDatasourceQueryPreviewWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceQueryPreviewResponse, error) {
+	rsp, err := c.PostDatasourceQueryPreviewWithBody(ctx, datasourceId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDatasourceQueryPreviewResponse(rsp)
+}
+
+// PostDatasourceQueryPreviewWithResponse Run a bounded PromQL preview on the assigned agent
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/query-previews (the `PostDatasourceQueryPreview` operationId).
+func (c *ClientWithResponses) PostDatasourceQueryPreviewWithResponse(ctx context.Context, datasourceId DatasourceId, body PostDatasourceQueryPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourceQueryPreviewResponse, error) {
+	rsp, err := c.PostDatasourceQueryPreview(ctx, datasourceId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDatasourceQueryPreviewResponse(rsp)
+}
+
+// GetDiagnosticWithResponse Read a bounded diagnostic receipt
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/diagnostics/{diagnostic_id} (the `GetDiagnostic` operationId).
+func (c *ClientWithResponses) GetDiagnosticWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetDiagnosticResponse, error) {
+	rsp, err := c.GetDiagnostic(ctx, diagnosticId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDiagnosticResponse(rsp)
+}
+
+// PostDiagnosticCancelWithBodyWithResponse Cancel a pending diagnostic
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+func (c *ClientWithResponses) PostDiagnosticCancelWithBodyWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDiagnosticCancelResponse, error) {
+	rsp, err := c.PostDiagnosticCancelWithBody(ctx, diagnosticId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDiagnosticCancelResponse(rsp)
+}
+
+// PostDiagnosticCancelWithResponse Cancel a pending diagnostic
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/diagnostics/{diagnostic_id}/cancel (the `PostDiagnosticCancel` operationId).
+func (c *ClientWithResponses) PostDiagnosticCancelWithResponse(ctx context.Context, diagnosticId openapi_types.UUID, body PostDiagnosticCancelJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDiagnosticCancelResponse, error) {
+	rsp, err := c.PostDiagnosticCancel(ctx, diagnosticId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDiagnosticCancelResponse(rsp)
+}
+
+// GetProvidersWithResponse List provider descriptors and selected-agent availability
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
+func (c *ClientWithResponses) GetProvidersWithResponse(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*GetProvidersResponse, error) {
+	rsp, err := c.GetProviders(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetProvidersResponse(rsp)
 }
 
 // GetLivenessWithResponse Report whether the UI process is alive
@@ -4367,6 +6384,368 @@ func ParsePostAuthPasswordResponse(rsp *http.Response) (*PostAuthPasswordRespons
 	return response, nil
 }
 
+// ParseGetDatasourcesResponse parses an HTTP response from a GetDatasourcesWithResponse call
+func ParseGetDatasourcesResponse(rsp *http.Response) (*GetDatasourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDatasourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DatasourcePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostDatasourcesResponse parses an HTTP response from a PostDatasourcesWithResponse call
+func ParsePostDatasourcesResponse(rsp *http.Response) (*PostDatasourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDatasourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Datasource
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers PostDatasourcesResponse201Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostDatasourceConnectionTestResponse parses an HTTP response from a PostDatasourceConnectionTestWithResponse call
+func ParsePostDatasourceConnectionTestResponse(rsp *http.Response) (*PostDatasourceConnectionTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDatasourceConnectionTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest Diagnostic
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers PostDatasourceConnectionTestResponse202Headers
+		if values := rsp.Header.Values("Location"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Location", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Location = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetDatasourceResponse parses an HTTP response from a GetDatasourceWithResponse call
+func ParseGetDatasourceResponse(rsp *http.Response) (*GetDatasourceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDatasourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Datasource
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetDatasourceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePutDatasourceResponse parses an HTTP response from a PutDatasourceWithResponse call
+func ParsePutDatasourceResponse(rsp *http.Response) (*PutDatasourceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutDatasourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Datasource
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PutDatasourceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostDatasourceQueryPreviewResponse parses an HTTP response from a PostDatasourceQueryPreviewWithResponse call
+func ParsePostDatasourceQueryPreviewResponse(rsp *http.Response) (*PostDatasourceQueryPreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDatasourceQueryPreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest Diagnostic
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers PostDatasourceQueryPreviewResponse202Headers
+		if values := rsp.Header.Values("Location"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Location", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Location = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetDiagnosticResponse parses an HTTP response from a GetDiagnosticWithResponse call
+func ParseGetDiagnosticResponse(rsp *http.Response) (*GetDiagnosticResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDiagnosticResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Diagnostic
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostDiagnosticCancelResponse parses an HTTP response from a PostDiagnosticCancelWithResponse call
+func ParsePostDiagnosticCancelResponse(rsp *http.Response) (*PostDiagnosticCancelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDiagnosticCancelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Diagnostic
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetProvidersResponse parses an HTTP response from a GetProvidersWithResponse call
+func ParseGetProvidersResponse(rsp *http.Response) (*GetProvidersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetProvidersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProviderPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
 func ParseGetLivenessResponse(rsp *http.Response) (*GetLivenessResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4470,6 +6849,33 @@ type ServerInterface interface {
 	// PostAuthPassword Change the current password
 	// (POST /api/v1/auth/password)
 	PostAuthPassword(w http.ResponseWriter, r *http.Request)
+	// GetDatasources List redacted datasource metadata
+	// (GET /api/v1/datasources)
+	GetDatasources(w http.ResponseWriter, r *http.Request, params GetDatasourcesParams)
+	// PostDatasources Create and assign a datasource
+	// (POST /api/v1/datasources)
+	PostDatasources(w http.ResponseWriter, r *http.Request, params PostDatasourcesParams)
+	// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+	// (POST /api/v1/datasources/connection-tests)
+	PostDatasourceConnectionTest(w http.ResponseWriter, r *http.Request)
+	// GetDatasource Read redacted datasource detail
+	// (GET /api/v1/datasources/{datasource_id})
+	GetDatasource(w http.ResponseWriter, r *http.Request, datasourceId DatasourceId)
+	// PutDatasource Replace datasource settings and assignment
+	// (PUT /api/v1/datasources/{datasource_id})
+	PutDatasource(w http.ResponseWriter, r *http.Request, datasourceId DatasourceId, params PutDatasourceParams)
+	// PostDatasourceQueryPreview Run a bounded PromQL preview on the assigned agent
+	// (POST /api/v1/datasources/{datasource_id}/query-previews)
+	PostDatasourceQueryPreview(w http.ResponseWriter, r *http.Request, datasourceId DatasourceId)
+	// GetDiagnostic Read a bounded diagnostic receipt
+	// (GET /api/v1/diagnostics/{diagnostic_id})
+	GetDiagnostic(w http.ResponseWriter, r *http.Request, diagnosticId openapi_types.UUID)
+	// PostDiagnosticCancel Cancel a pending diagnostic
+	// (POST /api/v1/diagnostics/{diagnostic_id}/cancel)
+	PostDiagnosticCancel(w http.ResponseWriter, r *http.Request, diagnosticId openapi_types.UUID)
+	// GetProviders List provider descriptors and selected-agent availability
+	// (GET /api/v1/providers)
+	GetProviders(w http.ResponseWriter, r *http.Request, params GetProvidersParams)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -4996,6 +7402,302 @@ func (siw *ServerInterfaceWrapper) PostAuthPassword(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// GetDatasources operation middleware
+func (siw *ServerInterfaceWrapper) GetDatasources(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDatasourcesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDatasources(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostDatasources operation middleware
+func (siw *ServerInterfaceWrapper) PostDatasources(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostDatasourcesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostDatasources(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostDatasourceConnectionTest operation middleware
+func (siw *ServerInterfaceWrapper) PostDatasourceConnectionTest(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostDatasourceConnectionTest(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDatasource operation middleware
+func (siw *ServerInterfaceWrapper) GetDatasource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "datasource_id" -------------
+	var datasourceId DatasourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "datasource_id", r.PathValue("datasource_id"), &datasourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "datasource_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDatasource(w, r, datasourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutDatasource operation middleware
+func (siw *ServerInterfaceWrapper) PutDatasource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "datasource_id" -------------
+	var datasourceId DatasourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "datasource_id", r.PathValue("datasource_id"), &datasourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "datasource_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutDatasourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch DatasourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutDatasource(w, r, datasourceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostDatasourceQueryPreview operation middleware
+func (siw *ServerInterfaceWrapper) PostDatasourceQueryPreview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "datasource_id" -------------
+	var datasourceId DatasourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "datasource_id", r.PathValue("datasource_id"), &datasourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "datasource_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostDatasourceQueryPreview(w, r, datasourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDiagnostic operation middleware
+func (siw *ServerInterfaceWrapper) GetDiagnostic(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "diagnostic_id" -------------
+	var diagnosticId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "diagnostic_id", r.PathValue("diagnostic_id"), &diagnosticId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "diagnostic_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDiagnostic(w, r, diagnosticId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostDiagnosticCancel operation middleware
+func (siw *ServerInterfaceWrapper) PostDiagnosticCancel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "diagnostic_id" -------------
+	var diagnosticId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "diagnostic_id", r.PathValue("diagnostic_id"), &diagnosticId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "diagnostic_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostDiagnosticCancel(w, r, diagnosticId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProviders operation middleware
+func (siw *ServerInterfaceWrapper) GetProviders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetProvidersParams
+
+	// ------------- Optional query parameter "agent_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "agent_id", r.URL.Query(), &params.AgentId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "agent_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProviders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
 
@@ -5156,6 +7858,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/disable", wrapper.PostAgentDisable)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials/rotate", wrapper.PostAgentCredentialRotate)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials/{credential_id}/revoke", wrapper.PostAgentCredentialRevoke)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/providers", wrapper.GetProviders)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/datasources", wrapper.GetDatasources)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources", wrapper.PostDatasources)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}", wrapper.GetDatasource)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}", wrapper.PutDatasource)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources/connection-tests", wrapper.PostDatasourceConnectionTest)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}/query-previews", wrapper.PostDatasourceQueryPreview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/diagnostics/{diagnostic_id}", wrapper.GetDiagnostic)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/diagnostics/{diagnostic_id}/cancel", wrapper.PostDiagnosticCancel)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/livez", wrapper.GetLiveness)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReadiness)
 

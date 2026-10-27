@@ -168,7 +168,7 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/api/agent/v1/configuration", func(w http.ResponseWriter, _ *http.Request) {
 		snapshot := agentprotocol.ConfigurationSnapshot{
-			AgentID: testAgentID, ConfigurationRevision: "1", Assignments: []jsontext.Value{},
+			AgentID: testAgentID, ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{},
 		}
 		data, err := json.Marshal(snapshot)
 		if err != nil {

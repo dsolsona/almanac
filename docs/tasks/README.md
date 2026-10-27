@@ -105,3 +105,8 @@ agent workspace under the accepted SPEC-0012 shell amendment.
 
 [F2-T17](F2-T17.md) delivers the connected-agent runtime and observable status as
 one usable increment, beginning with shared protocol contracts before consumers.
+
+[F2-T20](F2-T20.md) delivers Prometheus datasource management and bounded remote
+connection/query diagnostics through the API, agent, UI and CLI. It depends on the
+connected-agent runtime and protected source-secret adapter; collection and
+production observations remain a later increment.
