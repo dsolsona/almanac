@@ -122,6 +122,20 @@ func (s *Service) RecordApplied(ctx context.Context, token string, generation, r
 	return nil
 }
 
+func (s *Service) RecordConfigurationFailed(ctx context.Context, token string, generation, revision int64, failureCode string, resumeSecret []byte) error {
+	if !validateProof(resumeSecret) || !validateGeneration(generation) || revision <= 0 {
+		return ErrInvalidInput
+	}
+	credentialID, credentialVerifier, err := s.credential(ctx, token)
+	if err != nil {
+		return err
+	}
+	resumeVerifier := sha256.Sum256(resumeSecret)
+	err = storage.RecordAgentConfigurationFailed(ctx, s.databaseURL, credentialID, credentialVerifier,
+		resumeVerifier, generation, revision, failureCode, s.now)
+	return s.mapStorageError(err)
+}
+
 func (s *Service) credential(ctx context.Context, token string) (string, [32]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return "", [32]byte{}, errors.Join(ErrCancelled, err)

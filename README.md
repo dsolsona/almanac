@@ -279,7 +279,8 @@ bin/almanac-agent run --backend-url=https://almanac.example.com \
 This increment applies versioned configuration and reports connection and heartbeat
 state through `agents get`. Its configuration has no datasource assignments, so it
 does not execute queries or report collection success. Empty configuration grants
-no query authority.
+no query authority. A rejected configuration reports its bounded failure code and
+revision in agent status while leaving the last successfully applied revision intact.
 
 An authenticated agent that offers only unsupported protocol versions is reported
 with reachability `incompatible`. If no compatible runtime has been observed, its

@@ -21,6 +21,7 @@ export function AgentRuntimePanel({ agent }: { agent: Agent }) {
         <div><dt>Applied configuration revision</dt><dd>{runtime.applied_configuration_revision === '0' ? 'Not applied' : runtime.applied_configuration_revision}</dd></div>
         <div><dt>Scheduler health</dt><dd>{runtime.scheduler_health}</dd></div>
         <div><dt>Collection progress</dt><dd>{runtime.collection_progress}</dd></div>
+        {runtime.configuration_failure_code !== null && <div><dt>Configuration failure</dt><dd>{runtime.configuration_failure_code} (revision {runtime.configuration_failure_revision})</dd></div>}
         <div><dt>Last collection attempt</dt><dd>{reportedDate(runtime.last_attempt_at)}</dd></div>
         <div><dt>Last successful query</dt><dd>{runtime.last_successful_query_at === null ? 'No successful query has been reported.' : reportedDate(runtime.last_successful_query_at)}</dd></div>
         <div><dt>Next expected execution</dt><dd>{reportedDate(runtime.next_expected_execution_at)}</dd></div>

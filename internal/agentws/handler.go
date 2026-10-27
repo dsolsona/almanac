@@ -77,7 +77,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.access.Authenticate(r.Context(), token); err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		status := authenticationFailureStatus(err)
+		if status == http.StatusUnauthorized {
+			http.Error(w, "unauthorized", status)
+		} else {
+			http.Error(w, "agent service unavailable", status)
+		}
 		return
 	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -127,7 +132,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SessionGeneration: envelope.SessionGeneration, Payload: hello,
 	})
 	if err != nil {
-		_ = conn.Close(websocket.StatusPolicyViolation, openFailureReason(err))
+		code, reason := openFailure(err)
+		_ = conn.Close(code, reason)
 		return
 	}
 	control.readyMu.Lock()
@@ -146,6 +152,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.readLoop(ctx, control, token)
 	cancel()
 	workers.Wait()
+}
+
+func authenticationFailureStatus(err error) int {
+	if errors.Is(err, agentaccess.ErrInvalidCredential) {
+		return http.StatusUnauthorized
+	}
+	return http.StatusServiceUnavailable
 }
 
 func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token string) {
@@ -193,6 +206,14 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 				_ = control.conn.Close(websocket.StatusPolicyViolation, "configuration acknowledgement rejected")
 				return
 			}
+		case agentprotocol.KindConfigurationFailed:
+			var failed agentprotocol.ConfigurationFailed
+			if json.Unmarshal(envelope.Payload, &failed) != nil || h.runtime.Failed(ctx, token, session,
+				agentprotocol.Envelope[agentprotocol.ConfigurationFailed]{Kind: envelope.Kind, MessageID: envelope.MessageID,
+					SessionGeneration: envelope.SessionGeneration, Payload: failed}) != nil {
+				_ = control.conn.Close(websocket.StatusPolicyViolation, "configuration failure rejected")
+				return
+			}
 		default:
 			_ = control.conn.Close(websocket.StatusPolicyViolation, "unsupported protocol operation")
 			return
@@ -211,6 +232,13 @@ func openFailureReason(err error) string {
 	default:
 		return "session_rejected"
 	}
+}
+
+func openFailure(err error) (websocket.StatusCode, string) {
+	if errors.Is(err, agentownership.ErrUnavailable) || errors.Is(err, agentownership.ErrCancelled) {
+		return websocket.StatusTryAgainLater, "server_unavailable"
+	}
+	return websocket.StatusPolicyViolation, openFailureReason(err)
 }
 
 func (h *Handler) writeLoop(ctx context.Context, control *sessionControl) {

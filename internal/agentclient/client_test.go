@@ -199,7 +199,7 @@ func TestGeneratedReadsValidatePaginationETagAndLargeVersions(t *testing.T) {
 func TestGetValidatesOptionalRuntimeAndPreservesExactRevisions(t *testing.T) {
 	const id = "00000000-0000-0000-0000-000000000001"
 	const base = `{"id":"` + id + `","name":"east","display_name":"East","enabled":true,"version":"1","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"}`
-	validRuntime := `{"reachability":"connected","protocol":"almanac-agent/1","software_version":"1.2.3","capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}],"last_heartbeat_at":"2026-10-26T10:00:00.123456Z","desired_configuration_revision":"9223372036854775807","applied_configuration_revision":"0","scheduler_health":"ready","collection_progress":"running","last_attempt_at":null,"last_successful_query_at":null,"next_expected_execution_at":null,"collection_explanation":"no_assignment"}`
+	validRuntime := `{"reachability":"connected","protocol":"almanac-agent/1","software_version":"1.2.3","capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}],"last_heartbeat_at":"2026-10-26T10:00:00.123456Z","desired_configuration_revision":"9223372036854775807","applied_configuration_revision":"0","scheduler_health":"ready","collection_progress":"running","configuration_failure_code":null,"configuration_failure_revision":null,"last_attempt_at":null,"last_successful_query_at":null,"next_expected_execution_at":null,"collection_explanation":"no_assignment"}`
 	responseBody := base
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -234,6 +234,12 @@ func TestGetValidatesOptionalRuntimeAndPreservesExactRevisions(t *testing.T) {
 	if err != nil || !strings.Contains(string(detail), `"desired_configuration_revision":"9223372036854775807"`) || !strings.Contains(string(detail), `"applied_configuration_revision":"0"`) {
 		t.Fatalf("valid runtime revisions did not remain exact: data=%s err=%v", detail, err)
 	}
+	failureRuntime := strings.Replace(validRuntime, `"configuration_failure_code":null,"configuration_failure_revision":null`,
+		`"configuration_failure_code":"apply_failed","configuration_failure_revision":"2"`, 1)
+	responseBody = strings.TrimSuffix(base, "}") + `,"runtime":` + failureRuntime + `}`
+	if _, _, err := client.Get(t.Context(), agentID); err != nil {
+		t.Fatalf("Get() rejected valid configuration failure detail: %v", err)
+	}
 	capability := `{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}`
 	formats := strings.TrimSuffix(strings.Repeat(`"format",`, 63), ",") + `,"format"`
 	operations := strings.TrimSuffix(strings.Repeat(`"operation",`, 15), ",") + `,"operation"`
@@ -256,6 +262,9 @@ func TestGetValidatesOptionalRuntimeAndPreservesExactRevisions(t *testing.T) {
 		strings.Replace(validRuntime, `"last_heartbeat_at":"2026-10-26T10:00:00.123456Z"`, `"last_heartbeat_at":"not-a-date"`, 1),
 		strings.Replace(validRuntime, `"capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}]`, `"capabilities":null`, 1),
 		strings.Replace(validRuntime, `,"scheduler_health":"ready"`, "", 1),
+		strings.Replace(validRuntime, `,"configuration_failure_revision":null`, "", 1),
+		strings.Replace(validRuntime, `"configuration_failure_code":null`, `"configuration_failure_code":"source_password"`, 1),
+		strings.Replace(validRuntime, `"configuration_failure_revision":null`, `"configuration_failure_revision":"2"`, 1),
 		strings.Replace(validRuntime, `"provider":"prometheus"`, `"provider":""`, 1),
 		strings.Replace(validRuntime, `"configuration_formats":["prometheus-http-v1"]`, `"configuration_formats":null`, 1),
 		strings.Replace(validRuntime, `"configuration_formats":["prometheus-http-v1"]`, `"configuration_formats":[`+strings.TrimSuffix(strings.Repeat(`"format",`, 64), ",")+`,"format"]`, 1),

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testing.T) {
@@ -24,6 +25,10 @@ func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testin
 	}
 	if first.Generation != 1 || first.ConfigurationRevision != 1 || first.LeaseID == "" || string(first.AllowedMeasurements) != "[]" {
 		t.Fatalf("initial execution state = %+v", first)
+	}
+	if err := RecordAgentConfigurationFailed(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
+		ownershipVerifier(proof), first.Generation, 1, "unsafe_detail", clock); !errors.Is(err, ErrAgentOwnershipInput) {
+		t.Fatalf("unsafe configuration failure code error = %v", err)
 	}
 	var snapshot agentprotocol.ConfigurationSnapshot
 	if err := json.Unmarshal(first.ConfigurationSnapshot, &snapshot); err != nil || snapshot.Assignments == nil || len(snapshot.Assignments) != 0 {
@@ -41,20 +46,63 @@ func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testin
 	if ownerCount != 1 || grantCount != 1 || configCount != 1 {
 		t.Fatalf("durable owner/grant/config counts = %d/%d/%d", ownerCount, grantCount, configCount)
 	}
+	if err := RecordAgentConfigurationFailed(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
+		ownershipVerifier(proof), first.Generation+1, 1, "apply_failed", clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("stale-generation configuration failure error = %v", err)
+	}
+	if err := RecordAgentConfigurationFailed(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
+		ownershipVerifier(proof), first.Generation, 1, "apply_failed", clock); err != nil {
+		t.Fatalf("record valid configuration failure: %v", err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	var failureCode pgtype.Text
+	var failureRevision pgtype.Int8
+	var failureHealth, failureProgress string
+	if err := conn.QueryRow(t.Context(), `SELECT configuration_failure_code,configuration_failure_revision,scheduler_health,collection_progress FROM public.almanac_agent_runtime_status WHERE agent_id=$1`, created.Agent.ID).Scan(&failureCode, &failureRevision, &failureHealth, &failureProgress); err != nil {
+		t.Fatal("read configuration failure status failed")
+	}
+	closeIntegrationConn(conn)
+	if !failureCode.Valid || failureCode.String != "apply_failed" || !failureRevision.Valid || failureRevision.Int64 != 1 || failureHealth != "degraded" || failureProgress != "blocked" {
+		t.Fatalf("configuration failure status = %s/%d/%s/%s", failureCode.String, failureRevision.Int64, failureHealth, failureProgress)
+	}
 	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation+1, 1, clock); !errors.Is(err, ErrAgentOwnershipDenied) {
 		t.Fatalf("stale-generation applied configuration error = %v", err)
+	}
+	nonce := ownershipNonce(72)
+	now = now.Add(10 * time.Second)
+	heartbeat := &AgentRuntimeHeartbeat{ReceivedAt: now, LeaseID: first.LeaseID, AppliedConfigurationRevision: 0,
+		SchedulerHealth: "starting", CollectionProgress: "not_started"}
+	renewed, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, heartbeat, clock)
+	if err != nil || renewed.RenewalSequence != 1 || renewed.LeaseID == first.LeaseID || renewed.ConfigurationRevision != first.ConfigurationRevision {
+		t.Fatalf("renewed execution state = %+v, %v", renewed, err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	var appliedRevision int64
+	if err := conn.QueryRow(t.Context(), "SELECT applied_configuration_revision FROM public.almanac_agent_runtime_status WHERE agent_id=$1", created.Agent.ID).Scan(&appliedRevision); err != nil {
+		t.Fatal("read unapplied heartbeat revision failed")
+	}
+	closeIntegrationConn(conn)
+	if appliedRevision != 0 {
+		t.Fatalf("unapplied heartbeat revision = %d, want 0", appliedRevision)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	if err := conn.QueryRow(t.Context(), "SELECT configuration_failure_code,configuration_failure_revision FROM public.almanac_agent_runtime_status WHERE agent_id=$1", created.Agent.ID).Scan(&failureCode, &failureRevision); err != nil {
+		t.Fatal("read failure after unapplied heartbeat failed")
+	}
+	closeIntegrationConn(conn)
+	if !failureCode.Valid || failureCode.String != "apply_failed" || !failureRevision.Valid || failureRevision.Int64 != 1 {
+		t.Fatalf("unapplied heartbeat cleared failure state %+v/%+v", failureCode, failureRevision)
 	}
 	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 1, clock); err != nil {
 		t.Fatalf("record matching applied configuration: %v", err)
 	}
-
-	nonce := ownershipNonce(72)
-	now = now.Add(10 * time.Second)
-	heartbeat := &AgentRuntimeHeartbeat{ReceivedAt: now, LeaseID: first.LeaseID, AppliedConfigurationRevision: 1,
-		SchedulerHealth: "ready", CollectionProgress: "idle"}
-	renewed, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, heartbeat, clock)
-	if err != nil || renewed.RenewalSequence != 1 || renewed.LeaseID == first.LeaseID || renewed.ConfigurationRevision != first.ConfigurationRevision {
-		t.Fatalf("renewed execution state = %+v, %v", renewed, err)
+	conn = integrationConnect(t, f.databaseURL)
+	if err := conn.QueryRow(t.Context(), "SELECT configuration_failure_code,configuration_failure_revision FROM public.almanac_agent_runtime_status WHERE agent_id=$1", created.Agent.ID).Scan(&failureCode, &failureRevision); err != nil {
+		t.Fatal("read failure after successful application failed")
+	}
+	closeIntegrationConn(conn)
+	if failureCode.Valid || failureRevision.Valid {
+		t.Fatalf("successful application retained failure state %q/%d", failureCode.String, failureRevision.Int64)
 	}
 	now = renewed.IssuedAt.Add(time.Minute)
 	replay, err := RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation, 0, nonce, heartbeat, clock)
@@ -85,14 +133,19 @@ FROM public.almanac_agent_execution_grants WHERE agent_id=$1`, created.Agent.ID,
 	if err != nil || renewedAgain.RenewalSequence != 2 || renewedAgain.LeaseID == renewed.LeaseID {
 		t.Fatalf("renewal at ten-second boundary = %+v, %v", renewedAgain, err)
 	}
+	if _, err := ResumeAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
+		ownershipVerifier(proof), first.Generation, hello, clock); err != nil {
+		t.Fatalf("resume same generation after heartbeat: %v", err)
+	}
 	var status struct {
-		Applied  int64
-		Health   string
-		Progress string
+		Heartbeat time.Time
+		Applied   int64
+		Health    string
+		Progress  string
 	}
 	conn = integrationConnect(t, f.databaseURL)
 	var currentLeaseID string
-	if err := conn.QueryRow(t.Context(), `SELECT applied_configuration_revision,scheduler_health,collection_progress FROM public.almanac_agent_runtime_status WHERE agent_id=$1`, created.Agent.ID).Scan(&status.Applied, &status.Health, &status.Progress); err != nil {
+	if err := conn.QueryRow(t.Context(), `SELECT last_heartbeat_at,applied_configuration_revision,scheduler_health,collection_progress FROM public.almanac_agent_runtime_status WHERE agent_id=$1`, created.Agent.ID).Scan(&status.Heartbeat, &status.Applied, &status.Health, &status.Progress); err != nil {
 		t.Fatal("read persisted heartbeat status failed")
 	}
 	if err := conn.QueryRow(t.Context(), "SELECT current_lease_id FROM public.almanac_agent_ownership WHERE agent_id=$1", created.Agent.ID).Scan(&currentLeaseID); err != nil {
@@ -102,7 +155,7 @@ FROM public.almanac_agent_execution_grants WHERE agent_id=$1`, created.Agent.ID,
 		t.Fatal("read retained grant count failed")
 	}
 	closeIntegrationConn(conn)
-	if status.Applied != 1 || status.Health != "ready" || status.Progress != "idle" || grantCount != 3 || currentLeaseID != renewedAgain.LeaseID {
+	if !status.Heartbeat.Equal(next.ReceivedAt) || status.Applied != 1 || status.Health != "ready" || status.Progress != "idle" || grantCount != 3 || currentLeaseID != renewedAgain.LeaseID {
 		t.Fatalf("persisted applied/heartbeat status=%+v retained grants=%d current-lease-match=%t", status, grantCount, currentLeaseID == renewedAgain.LeaseID)
 	}
 	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), first.Generation+1, 1, clock); !errors.Is(err, ErrAgentOwnershipDenied) {

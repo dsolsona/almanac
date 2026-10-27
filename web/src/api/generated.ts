@@ -530,6 +530,9 @@ export interface components {
             scheduler_health: "starting" | "ready" | "degraded" | "stopped";
             /** @enum {string} */
             collection_progress: "not_started" | "idle" | "running" | "blocked";
+            /** @enum {string|null} */
+            configuration_failure_code: "invalid_snapshot" | "incompatible" | "apply_failed" | null;
+            configuration_failure_revision: string | null;
             /** Format: date-time */
             last_attempt_at: string | null;
             /** Format: date-time */

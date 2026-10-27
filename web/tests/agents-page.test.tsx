@@ -17,7 +17,7 @@ function makeAuth(context: AuthContext = admin): AuthClient {
 }
 function agent() { return { id: agentID, name: 'west-1', display_name: 'West collector', enabled: true, version: '3', created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function agentB() { return { ...agent(), id: agentIDB, name: 'east-1', display_name: 'East collector' }; }
-function runtime(overrides: Record<string, unknown> = {}) { return { reachability: 'connected', protocol: 'almanac-agent/1', software_version: '1.2.3', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] }], last_heartbeat_at: '2026-10-22T13:14:15.123456Z', desired_configuration_revision: '9223372036854775807', applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running', last_attempt_at: '2026-10-22T13:13:00Z', last_successful_query_at: null, next_expected_execution_at: '2026-10-22T13:15:00Z', collection_explanation: 'no_assignment', ...overrides }; }
+function runtime(overrides: Record<string, unknown> = {}) { return { reachability: 'connected', protocol: 'almanac-agent/1', software_version: '1.2.3', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] }], last_heartbeat_at: '2026-10-22T13:14:15.123456Z', desired_configuration_revision: '9223372036854775807', applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running', configuration_failure_code: null, configuration_failure_revision: null, last_attempt_at: '2026-10-22T13:13:00Z', last_successful_query_at: null, next_expected_execution_at: '2026-10-22T13:15:00Z', collection_explanation: 'no_assignment', ...overrides }; }
 function credential() { return { id: credentialID, agent_id: agentID, issued_at: '2026-10-20T12:00:00.123456Z', expires_at: '2027-10-20T12:00:00.654321Z', revoked_at: null, retire_at: '2026-10-22T12:00:00.987654Z' }; }
 function credentialB() { return { ...credential(), id: 'f0863cd5-79a6-4ef5-90d1-1c67765b17d2', agent_id: agentIDB }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
@@ -197,7 +197,7 @@ describe('agent administration screen', () => {
 
   it('shows connection, collection, capability, revision and query signals without merging them', async () => {
     const user = userEvent.setup();
-    const live = { ...agent(), runtime: runtime() };
+    const live = { ...agent(), runtime: runtime({ configuration_failure_code: 'apply_failed', configuration_failure_revision: '2' }) };
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
@@ -215,6 +215,7 @@ describe('agent administration screen', () => {
     expect(panel).toHaveTextContent('live_query');
     expect(panel).toHaveTextContent('9223372036854775807');
     expect(panel).toHaveTextContent('Applied configuration revisionNot applied');
+    expect(panel).toHaveTextContent('Configuration failureapply_failed (revision 2)');
     expect(panel).toHaveTextContent('2026-10-22 13:14:15.123456Z');
     expect(panel).toHaveTextContent('No successful query has been reported.');
     expect(panel).toHaveTextContent('No datasources are assigned to this agent.');

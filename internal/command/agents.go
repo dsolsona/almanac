@@ -280,6 +280,9 @@ func renderAgentRuntime(out *strings.Builder, agent api.Agent) {
 	}
 	fmt.Fprintf(out, "Applied configuration revision: %s\n", appliedRevision)
 	fmt.Fprintf(out, "Scheduler health: %s\nCollection progress: %s\n", runtime.SchedulerHealth, runtime.CollectionProgress)
+	if runtime.ConfigurationFailureCode != nil {
+		fmt.Fprintf(out, "Configuration failure: %s (revision %s)\n", *runtime.ConfigurationFailureCode, *runtime.ConfigurationFailureRevision)
+	}
 	fmt.Fprintf(out, "Last attempt: %s\nLast successful query: %s\nNext expected execution: %s\n",
 		cliRuntimeTime(runtime.LastAttemptAt), cliRuntimeTime(runtime.LastSuccessfulQueryAt), cliRuntimeTime(runtime.NextExpectedExecutionAt))
 	if runtime.CollectionExplanation == api.NoAssignment {
@@ -299,11 +302,11 @@ func renderAgentRuntime(out *strings.Builder, agent api.Agent) {
 
 func runtimeReachabilityLabel(reachability api.AgentRuntimeStatusReachability) string {
 	switch reachability {
-	case api.Connected:
+	case api.AgentRuntimeStatusReachabilityConnected:
 		return "Connected"
-	case api.Unreachable:
+	case api.AgentRuntimeStatusReachabilityUnreachable:
 		return "Unreachable"
-	case api.Incompatible:
+	case api.AgentRuntimeStatusReachabilityIncompatible:
 		return "Incompatible"
 	default:
 		return "Unknown"

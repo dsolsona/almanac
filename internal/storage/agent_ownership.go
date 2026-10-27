@@ -667,6 +667,48 @@ func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentia
 	return nil
 }
 
+func RecordAgentConfigurationFailed(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, failureCode string, clock func() time.Time) error {
+	credentialUUID, valid := canonicalUUID(credentialID)
+	if !valid || generation <= 0 || revision <= 0 || clock == nil ||
+		(failureCode != "invalid_snapshot" && failureCode != "incompatible" && failureCode != "apply_failed") {
+		return ErrAgentOwnershipInput
+	}
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	if err != nil {
+		return err
+	}
+	defer closeAgentOwnershipTransaction(state)
+	owner, err := state.queries.LockLatestAgentOwnership(ctx, state.agentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrAgentOwnershipDenied
+	}
+	if err != nil {
+		return operationError(ctx, "storage: agent configuration failure owner lookup failed", err)
+	}
+	now := normalizedAgentNow(clock)
+	if !currentAgentCredentialValid(state.installation, state.agent.Enabled, state.credential, credentialVerifier, now) {
+		return ErrInvalidAgentCredential
+	}
+	if owner.Generation != generation || !now.Before(owner.ExpiresAt.Time) || subtle.ConstantTimeCompare(owner.ResumeVerifier, resumeVerifier[:]) != 1 {
+		return ErrAgentOwnershipDenied
+	}
+	updated, err := state.queries.RecordAgentConfigurationFailed(ctx, dbgen.RecordAgentConfigurationFailedParams{
+		ConfigurationFailureCode:    pgtype.Text{String: failureCode, Valid: true},
+		FailedConfigurationRevision: pgtype.Int8{Int64: revision, Valid: true},
+		ReceivedAt:                  timestamp(now), AgentID: state.agentID, Generation: generation,
+	})
+	if err != nil {
+		return operationError(ctx, "storage: agent configuration failure update failed", err)
+	}
+	if updated != 1 {
+		return ErrAgentOwnershipDenied
+	}
+	if err := state.tx.Commit(ctx); err != nil {
+		return operationError(ctx, "storage: agent configuration failure commit failed", err)
+	}
+	return nil
+}
+
 type AgentConfigurationSnapshot struct {
 	AgentID  string
 	Revision int64

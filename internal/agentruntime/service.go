@@ -186,6 +186,21 @@ func (s *Service) Applied(ctx context.Context, token string, session Session, en
 	return s.ownership.RecordApplied(ctx, token, session.Generation, revision, session.ResumeToken)
 }
 
+func (s *Service) Failed(ctx context.Context, token string, session Session, envelope agentprotocol.Envelope[agentprotocol.ConfigurationFailed]) error {
+	if s == nil || envelope.Kind != agentprotocol.KindConfigurationFailed || envelope.SessionGeneration != strconv.FormatInt(session.Generation, 10) {
+		return ErrInvalidInput
+	}
+	if err := envelope.Validate(); err != nil {
+		return ErrInvalidInput
+	}
+	revision, err := strconv.ParseInt(envelope.Payload.ConfigurationRevision, 10, 64)
+	if err != nil || revision <= 0 {
+		return ErrInvalidInput
+	}
+	return s.ownership.RecordConfigurationFailed(ctx, token, session.Generation, revision,
+		envelope.Payload.FailureCode, session.ResumeToken)
+}
+
 func containsProtocol(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

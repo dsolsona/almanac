@@ -173,7 +173,7 @@ func (q *Queries) GetAgentIncompatibleAttempt(ctx context.Context, agentID pgtyp
 const getAgentRuntimeStatus = `-- name: GetAgentRuntimeStatus :one
 SELECT generation, protocol, software_version, capabilities, last_heartbeat_at,
        desired_configuration_revision, applied_configuration_revision,
-       scheduler_health, collection_progress, last_attempt_at,
+       scheduler_health, collection_progress, configuration_failure_code, configuration_failure_revision, last_attempt_at,
        last_successful_query_at, next_expected_execution_at, updated_at
 FROM public.almanac_agent_runtime_status
 WHERE agent_id = $1
@@ -189,6 +189,8 @@ type GetAgentRuntimeStatusRow struct {
 	AppliedConfigurationRevision int64              `json:"applied_configuration_revision"`
 	SchedulerHealth              string             `json:"scheduler_health"`
 	CollectionProgress           string             `json:"collection_progress"`
+	ConfigurationFailureCode     pgtype.Text        `json:"configuration_failure_code"`
+	ConfigurationFailureRevision pgtype.Int8        `json:"configuration_failure_revision"`
 	LastAttemptAt                pgtype.Timestamptz `json:"last_attempt_at"`
 	LastSuccessfulQueryAt        pgtype.Timestamptz `json:"last_successful_query_at"`
 	NextExpectedExecutionAt      pgtype.Timestamptz `json:"next_expected_execution_at"`
@@ -208,6 +210,8 @@ func (q *Queries) GetAgentRuntimeStatus(ctx context.Context, agentID pgtype.UUID
 		&i.AppliedConfigurationRevision,
 		&i.SchedulerHealth,
 		&i.CollectionProgress,
+		&i.ConfigurationFailureCode,
+		&i.ConfigurationFailureRevision,
 		&i.LastAttemptAt,
 		&i.LastSuccessfulQueryAt,
 		&i.NextExpectedExecutionAt,
@@ -250,6 +254,45 @@ func (q *Queries) InsertAgentExecutionGrant(ctx context.Context, arg InsertAgent
 	return err
 }
 
+const recordAgentConfigurationFailed = `-- name: RecordAgentConfigurationFailed :execrows
+UPDATE public.almanac_agent_runtime_status AS status
+SET configuration_failure_code = $1,
+    configuration_failure_revision = $2,
+    scheduler_health = 'degraded',
+    collection_progress = 'blocked',
+    updated_at = $3
+WHERE status.agent_id = $4 AND status.generation = $5
+  AND status.desired_configuration_revision = $2
+  AND status.applied_configuration_revision < $2
+  AND EXISTS (
+      SELECT 1 FROM public.almanac_agent_ownership AS owner
+      WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
+        AND owner.expires_at > $3
+  )
+`
+
+type RecordAgentConfigurationFailedParams struct {
+	ConfigurationFailureCode    pgtype.Text        `json:"configuration_failure_code"`
+	FailedConfigurationRevision pgtype.Int8        `json:"failed_configuration_revision"`
+	ReceivedAt                  pgtype.Timestamptz `json:"received_at"`
+	AgentID                     pgtype.UUID        `json:"agent_id"`
+	Generation                  int64              `json:"generation"`
+}
+
+func (q *Queries) RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAgentConfigurationFailed,
+		arg.ConfigurationFailureCode,
+		arg.FailedConfigurationRevision,
+		arg.ReceivedAt,
+		arg.AgentID,
+		arg.Generation,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setAgentCurrentExecutionLease = `-- name: SetAgentCurrentExecutionLease :execrows
 UPDATE public.almanac_agent_ownership
 SET current_lease_id = $3
@@ -272,7 +315,14 @@ func (q *Queries) SetAgentCurrentExecutionLease(ctx context.Context, arg SetAgen
 
 const updateAgentAppliedConfiguration = `-- name: UpdateAgentAppliedConfiguration :execrows
 UPDATE public.almanac_agent_runtime_status AS status
-SET applied_configuration_revision = $1, updated_at = $2
+SET applied_configuration_revision = $1,
+    configuration_failure_code = CASE
+        WHEN $1 < status.desired_configuration_revision
+        THEN status.configuration_failure_code ELSE NULL END,
+    configuration_failure_revision = CASE
+        WHEN $1 < status.desired_configuration_revision
+        THEN status.configuration_failure_revision ELSE NULL END,
+    updated_at = $2
 WHERE status.agent_id = $3 AND status.generation = $4
   AND $1 <= status.desired_configuration_revision
   AND EXISTS (
@@ -306,14 +356,26 @@ const updateAgentRuntimeHeartbeat = `-- name: UpdateAgentRuntimeHeartbeat :execr
 UPDATE public.almanac_agent_runtime_status AS status
 SET last_heartbeat_at = $1,
     applied_configuration_revision = $2,
-    scheduler_health = $3,
-    collection_progress = $4,
+    scheduler_health = CASE
+        WHEN status.configuration_failure_code IS NOT NULL
+          AND $2 < status.desired_configuration_revision
+        THEN 'degraded' ELSE $3 END,
+    collection_progress = CASE
+        WHEN status.configuration_failure_code IS NOT NULL
+          AND $2 < status.desired_configuration_revision
+        THEN 'blocked' ELSE $4 END,
+    configuration_failure_code = CASE
+        WHEN $2 >= status.desired_configuration_revision
+        THEN NULL ELSE status.configuration_failure_code END,
+    configuration_failure_revision = CASE
+        WHEN $2 >= status.desired_configuration_revision
+        THEN NULL ELSE status.configuration_failure_revision END,
     last_attempt_at = $5,
     last_successful_query_at = $6,
     next_expected_execution_at = $7,
     updated_at = $1
 WHERE status.agent_id = $8 AND status.generation = $9
-  AND status.desired_configuration_revision = $2
+  AND status.desired_configuration_revision >= $2
   AND EXISTS (
       SELECT 1 FROM public.almanac_agent_ownership AS owner
       WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
@@ -378,12 +440,16 @@ ON CONFLICT (agent_id) DO UPDATE SET
     protocol = EXCLUDED.protocol,
     software_version = EXCLUDED.software_version,
     capabilities = EXCLUDED.capabilities,
-    last_heartbeat_at = NULL,
+    last_heartbeat_at = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.last_heartbeat_at ELSE NULL END,
     desired_configuration_revision = EXCLUDED.desired_configuration_revision,
     applied_configuration_revision = CASE
         WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
         THEN public.almanac_agent_runtime_status.applied_configuration_revision ELSE 0 END,
-    scheduler_health = 'starting',
+    scheduler_health = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.scheduler_health ELSE 'starting' END,
     collection_progress = CASE
         WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
         THEN public.almanac_agent_runtime_status.collection_progress ELSE 'not_started' END,
@@ -396,6 +462,12 @@ ON CONFLICT (agent_id) DO UPDATE SET
     next_expected_execution_at = CASE
         WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
         THEN public.almanac_agent_runtime_status.next_expected_execution_at ELSE NULL END,
+    configuration_failure_code = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.configuration_failure_code ELSE NULL END,
+    configuration_failure_revision = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.configuration_failure_revision ELSE NULL END,
     updated_at = EXCLUDED.updated_at
 `
 

@@ -2,6 +2,18 @@
 
 ## Current state
 
+The coordinator accepted the PR #36 review corrections under
+[F2-T17](tasks/F2-T17.md). The corrected candidate passes
+the 217-test Go race gate, focused agent client/page web suites (32/47), all 142
+selected PostgreSQL integration tests, and the exact full `make verify` gate (156 web,
+228 Go, builds, generated/production checks and smoke checks). Integration included
+the real TLS/process and browser agent journey. A same-generation hello health reset
+found by the first integration attempt is corrected. Its
+configuration-failure status fields extend migration 0010 and generated OpenAPI
+outputs that overlap the separate datasource branch; coordinator integration must
+reconcile those outputs before datasource publication. The coordinator inspected
+the final browser screenshots at desktop/mobile widths in both themes.
+
 The connected-agent increment under [F2-T17](tasks/F2-T17.md) and
 [F2-T19](tasks/F2-T19.md) passes 142 real PostgreSQL integration tests, including
 separate TLS backend/agent processes, configuration application, browser status,

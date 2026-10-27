@@ -93,7 +93,7 @@ func assertIncompatibleAgentAttempt(t *testing.T, baseURL, token, databaseURL, a
 			return detail.Runtime.Reachability
 		}(), decodeErr)
 	}
-	if wantReachability == api.Incompatible && (detail.Runtime.Protocol != "incompatible" || detail.Runtime.SoftwareVersion != "unknown" ||
+	if wantReachability == api.AgentRuntimeStatusReachabilityIncompatible && (detail.Runtime.Protocol != "incompatible" || detail.Runtime.SoftwareVersion != "unknown" ||
 		detail.Runtime.DesiredConfigurationRevision != "1" || detail.Runtime.AppliedConfigurationRevision != "0" ||
 		detail.Runtime.Capabilities == nil || len(detail.Runtime.Capabilities) != 0 || detail.Runtime.LastHeartbeatAt != nil) {
 		t.Fatalf("incompatible-agent status contains fabricated details: %+v", detail.Runtime)
@@ -106,7 +106,7 @@ func assertIncompatibleAgentAttempt(t *testing.T, baseURL, token, databaseURL, a
 		(SELECT count(*) FROM public.almanac_agent_incompatible_attempts WHERE agent_id=$1)`, agentID).Scan(&owners, &grants, &attempts); err != nil {
 		t.Fatal("read incompatible-agent ownership boundary failed")
 	}
-	if wantReachability == api.Incompatible {
+	if wantReachability == api.AgentRuntimeStatusReachabilityIncompatible {
 		if owners != 0 || grants != 0 || attempts != 1 {
 			t.Fatalf("unowned incompatible owner/grant/attempt counts=%d/%d/%d", owners, grants, attempts)
 		}
@@ -173,7 +173,7 @@ func assertCopiedAgentCannotReplaceOwner(t *testing.T, agentBinary, baseURL, tok
 	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
 		t.Fatal("write copied-token fixture failed")
 	}
-	assertIncompatibleAgentAttempt(t, baseURL, token, databaseURL, agentID, client, "0", 87, "active_owner", api.Connected)
+	assertIncompatibleAgentAttempt(t, baseURL, token, databaseURL, agentID, client, "0", 87, "active_owner", api.AgentRuntimeStatusReachabilityConnected)
 	copyAgent := exec.Command(agentBinary, "run", "--backend-url="+baseURL, "--token-file="+tokenPath, "--ca-file="+caFile)
 	copyAgent.Stdout, copyAgent.Stderr = io.Discard, io.Discard
 	if err := copyAgent.Start(); err != nil {
@@ -207,7 +207,7 @@ func assertCopiedAgentCannotReplaceOwner(t *testing.T, agentBinary, baseURL, tok
 	var detail api.Agent
 	body, readErr := io.ReadAll(response.Body)
 	response.Body.Close()
-	if readErr != nil || response.StatusCode != http.StatusOK || json.Unmarshal(body, &detail) != nil || detail.Runtime == nil || detail.Runtime.Reachability != api.Connected {
+	if readErr != nil || response.StatusCode != http.StatusOK || json.Unmarshal(body, &detail) != nil || detail.Runtime == nil || detail.Runtime.Reachability != api.AgentRuntimeStatusReachabilityConnected {
 		t.Fatal("copied-token attempt disrupted the active agent")
 	}
 }

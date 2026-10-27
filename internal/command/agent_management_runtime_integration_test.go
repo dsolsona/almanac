@@ -317,7 +317,7 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 	}
 	token := strings.TrimSpace(string(tokenBytes))
 	assertAgentWebSocketBoundaries(t, baseURL, token, client)
-	assertIncompatibleAgentAttempt(t, baseURL, token, databaseURL, created.Result.Agent.ID, client, "0", 86, "incompatible_protocol", api.Incompatible)
+	assertIncompatibleAgentAttempt(t, baseURL, token, databaseURL, created.Result.Agent.ID, client, "0", 86, "incompatible_protocol", api.AgentRuntimeStatusReachabilityIncompatible)
 	agentBinary, err := filepath.Abs(filepath.Join("..", "..", "bin", "almanac-agent"))
 	if err != nil {
 		t.Fatal("resolve separate agent executable failed")
@@ -353,7 +353,7 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 			var detail api.Agent
 			body, readErr := io.ReadAll(response.Body)
 			response.Body.Close()
-			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && detail.Runtime != nil && detail.Runtime.Reachability == api.Connected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil {
+			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && detail.Runtime != nil && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil {
 				var grants int
 				if err := db.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1", created.Result.Agent.ID).Scan(&grants); err != nil {
 					t.Fatal("read connected-agent heartbeat grants failed")
@@ -398,7 +398,7 @@ func waitForAgentReconnect(t *testing.T, databaseURL string, client *http.Client
 			var detail api.Agent
 			body, readErr := io.ReadAll(response.Body)
 			response.Body.Close()
-			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && grants >= 4 && detail.Runtime != nil && detail.Runtime.Reachability == api.Connected && detail.Runtime.AppliedConfigurationRevision == "1" {
+			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && grants >= 4 && detail.Runtime != nil && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" {
 				select {
 				case <-journey.done:
 					err := <-journey.result

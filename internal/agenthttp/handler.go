@@ -480,11 +480,27 @@ func agentDTO(v storage.AgentRecord) api.Agent {
 		AppliedConfigurationRevision: strconv.FormatInt(v.Runtime.AppliedConfigurationRevision, 10),
 		SchedulerHealth:              api.AgentRuntimeStatusSchedulerHealth(v.Runtime.SchedulerHealth),
 		CollectionProgress:           api.AgentRuntimeStatusCollectionProgress(v.Runtime.CollectionProgress),
+		ConfigurationFailureCode:     configurationFailureCodeDTO(v.Runtime.ConfigurationFailureCode),
+		ConfigurationFailureRevision: configurationFailureRevisionDTO(v.Runtime.ConfigurationFailureRevision),
 		LastAttemptAt:                v.Runtime.LastAttemptAt, LastSuccessfulQueryAt: v.Runtime.LastSuccessfulQueryAt,
 		NextExpectedExecutionAt: v.Runtime.NextExpectedExecutionAt,
 		CollectionExplanation:   api.AgentRuntimeStatusCollectionExplanation(v.Runtime.CollectionExplanation),
 	}
 	return dto
+}
+func configurationFailureCodeDTO(value *string) *api.AgentRuntimeStatusConfigurationFailureCode {
+	if value == nil {
+		return nil
+	}
+	result := api.AgentRuntimeStatusConfigurationFailureCode(*value)
+	return &result
+}
+func configurationFailureRevisionDTO(value *int64) *string {
+	if value == nil {
+		return nil
+	}
+	result := strconv.FormatInt(*value, 10)
+	return &result
 }
 func creationCredentialDTO(v storage.AgentCredentialRecord) api.AgentCredential {
 	return api.AgentCredential{Id: googleuuid.MustParse(v.ID), AgentId: googleuuid.MustParse(v.AgentID), IssuedAt: v.IssuedAt.UTC(), ExpiresAt: v.ExpiresAt.UTC()}

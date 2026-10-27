@@ -79,6 +79,8 @@ type AlmanacAgentRuntimeStatus struct {
 	AppliedConfigurationRevision int64              `json:"applied_configuration_revision"`
 	SchedulerHealth              string             `json:"scheduler_health"`
 	CollectionProgress           string             `json:"collection_progress"`
+	ConfigurationFailureCode     pgtype.Text        `json:"configuration_failure_code"`
+	ConfigurationFailureRevision pgtype.Int8        `json:"configuration_failure_revision"`
 	LastAttemptAt                pgtype.Timestamptz `json:"last_attempt_at"`
 	LastSuccessfulQueryAt        pgtype.Timestamptz `json:"last_successful_query_at"`
 	NextExpectedExecutionAt      pgtype.Timestamptz `json:"next_expected_execution_at"`
