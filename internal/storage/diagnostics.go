@@ -179,8 +179,8 @@ func BeginDatasourceDiagnostic(ctx context.Context, databaseURL string, input Be
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrInvalidAgentInput
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO public.almanac_diagnostics
-		(id, actor_id, agent_id, datasource_id, session_generation, operation, state, request, created_at, deadline_at, expires_at)
-		VALUES ($1,$2,$3,$4,$5,$6,'pending',$7::jsonb,$8,$9,$10)`, diagnosticID, user.ID, agentID, datasourceID,
+		(id, actor_id, agent_id, datasource_id, session_generation, operation, state, request, created_at, updated_at, deadline_at, expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,'pending',$7::jsonb,$8,$8,$9,$10)`, diagnosticID, user.ID, agentID, datasourceID,
 		input.AgentGeneration, input.Operation, requestJSON, timestamp(createdAt), timestamp(deadline), timestamp(deadline.Add(diagnosticReceiptTTL)))
 	if err != nil {
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic create failed", err)
