@@ -58,11 +58,12 @@ test('application shell preview keeps navigation available at each viewport and 
   if (testInfo.project.name.startsWith('mobile')) await preview.getByRole('button', { name: 'Menu' }).click();
   const navigation = preview.getByRole('navigation', { name: 'Primary navigation' });
   await expect(navigation.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
-  for (const destination of ['SLOs', 'SLIs', 'Datasources', 'Alerts']) {
+  for (const destination of ['SLOs', 'SLIs', 'Alerts']) {
     const planned = navigation.locator('[aria-disabled="true"]').filter({ hasText: destination });
     await expect(planned).toContainText('Not available yet');
     await expect(planned.getByRole('link')).toHaveCount(0);
   }
+  await expect(navigation.getByRole('link', { name: 'Datasources' })).toHaveAttribute('href', '/datasources');
   if (testInfo.project.name.startsWith('mobile')) {
     const menu = preview.getByRole('button', { name: 'Menu' });
     const drawer = preview.locator('.app-sidebar.is-open');

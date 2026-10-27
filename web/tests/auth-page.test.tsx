@@ -136,15 +136,37 @@ describe('authentication page', () => {
     render(<AuthPage client={clientFor(signedIn)} />);
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Product' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Operations' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Administration' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
     for (const destination of ['SLOs', 'SLIs', 'Alerts']) {
       expect(screen.getByText(destination)).toBeVisible();
       expect(screen.getByText(destination).closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
     }
     expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('href', '/datasources');
+    expect(screen.getByRole('link', { name: 'Datasources' })).not.toHaveAttribute('aria-disabled');
     expect(screen.queryByRole('heading', { name: 'Signed in' })).not.toBeInTheDocument();
     expect(screen.getByText('owner')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  });
+
+  it('switches between signed-in screens without a document or session reload', async () => {
+    const user = userEvent.setup();
+    const client = clientFor(signedIn);
+    render(<AuthPage client={client} />);
+    await screen.findByRole('heading', { name: 'Agents' });
+    const workspace = document.querySelector('.app-workspace');
+    await user.click(screen.getByRole('link', { name: 'Datasources' }));
+    await waitFor(() => expect(location.pathname).toBe('/datasources'));
+    expect(await screen.findByRole('heading', { name: 'Datasources' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('aria-current', 'page');
+    expect(document.querySelector('.app-workspace')).toBe(workspace);
+    await user.click(screen.getByRole('link', { name: 'Agents' }));
+    await waitFor(() => expect(location.pathname).toBe('/agents'));
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
+    expect(screen.queryByText('Checking your session')).not.toBeInTheDocument();
+    expect(client.context).toHaveBeenCalledOnce();
   });
 
   it('canonicalizes signed-in root links to Agents while preserving their query and fragment', async () => {

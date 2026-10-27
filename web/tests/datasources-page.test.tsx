@@ -77,7 +77,9 @@ describe('datasource page', () => {
     render(<DatasourcesPage context={admin} />);
     await user.type(await screen.findByLabelText('Name'), 'metrics-prod');
     await user.type(screen.getByLabelText('Display name'), 'Production metrics');
-    await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://metrics.example.test');
+    const endpoint = screen.getByLabelText('Prometheus endpoint');
+    await user.type(endpoint, 'http://localhost');
+    expect(endpoint).toHaveValue('http://localhost');
     await user.selectOptions(screen.getByLabelText('Authentication'), 'bearer');
     await user.selectOptions(screen.getByLabelText('Bearer token secret'), 'replace');
     await user.type(screen.getByLabelText('Bearer token value'), 'private-token-value');
