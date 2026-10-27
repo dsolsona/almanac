@@ -37,11 +37,10 @@ preview:
 	cd web && npm run dev -- --host 127.0.0.1 --port 5198 --strictPort
 
 bootstrap:
-	docker compose -f compose.yaml build
 	$(MAKE) run
 
 run start:
-	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; export ALMANAC_PORT=$$port; image=$${COMPOSE_PROJECT_NAME:-almanac-local}:dev; docker image inspect "$$image" >/dev/null 2>&1 || { echo 'Almanac local image is missing; run make bootstrap first' >&2; exit 2; }; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
+	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
 
 stop:
 	docker compose -f compose.yaml stop

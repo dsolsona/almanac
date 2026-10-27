@@ -34,7 +34,8 @@ make stop      # Stop containers, preserving all data and credentials
 make logs      # View application logs
 ```
 
-Run `make bootstrap` again after source changes to rebuild. Repeating it preserves
+`make run` and its `make start` alias build the current checkout with Docker's cache
+before starting the app, including on a fresh checkout. Repeating startup preserves
 your users, passwords and data. The app runs in the background; readiness failures
 make startup fail visibly. Recreating only the app gives it a fresh network connection,
 including after a failed port bind; the database container and volumes are reused.

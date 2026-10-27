@@ -114,7 +114,11 @@ The maintainer requested a container-only local workflow on 2026-10-26.
 `make bootstrap` builds and starts the application and PostgreSQL with Docker
 Compose, automatically preparing protected local credentials, a localhost TLS
 certificate and the schema. Only Docker with Compose and Make are host prerequisites.
-`make run` starts the prepared stack without reinstalling host tools; `make stop`
+`make run` and `make start` perform a cached container build of the current checkout
+before starting the stack, including when the local image is absent. `make bootstrap`
+uses the same path without a duplicate build. Invalid ports fail before build/start
+side effects; build failure preserves a running app and never reports readiness.
+These commands do not install host tools. `make stop`
 stops it without deleting data. Repeating bootstrap preserves users, passwords and
 database contents. This explicitly brings local Compose packaging forward from F5;
 production images, Helm and restore qualification remain separate release work.

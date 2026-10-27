@@ -94,3 +94,6 @@ agent-management command parity.
 [F2-T12](F2-T12.md) adds current-state machine credential authentication.
 [F2-T14](F2-T14.md) changes registration to use the administrator session and
 adds actionable failure recovery under [ADR-0019](../adr/0019-session-authorized-agent-registration.md).
+
+[F2-T15](F2-T15.md) makes daily container startup build the current checkout using
+the Docker cache before starting the application.
