@@ -27,10 +27,54 @@ async function loadAgents(signal: AbortSignal): Promise<Agent[]> {
   return value.items as Agent[];
 }
 
-function supportsDatasourceDiagnostics(agent: Agent): boolean {
-  return agent.enabled && (agent.runtime?.capabilities ?? []).some((capability) => capability.provider === 'prometheus'
+type DatasourceAgentState = 'disabled' | 'unreported' | 'incompatible' | 'unsupported' | 'offline' | 'connected';
+
+function datasourceAgentState(agent: Agent): DatasourceAgentState {
+  if (!agent.enabled) return 'disabled';
+  const runtime = agent.runtime;
+  if (!runtime) return 'unreported';
+  if (runtime.reachability === 'incompatible') return 'incompatible';
+  const capabilities = Array.isArray(runtime.capabilities) ? runtime.capabilities : [];
+  if (capabilities.length === 0) return 'unreported';
+  const supported = capabilities.some((capability) => capability.provider === 'prometheus'
     && capability.configuration_formats.includes('prometheus-http-v1')
     && capability.operations.includes('connection_test') && capability.operations.includes('query_preview'));
+  if (!supported) return 'unsupported';
+  if (runtime.reachability === 'connected') return 'connected';
+  if (runtime.reachability === 'unreachable') return 'offline';
+  return 'unreported';
+}
+
+function supportsDatasourceDiagnostics(agent: Agent): boolean {
+  const state = datasourceAgentState(agent);
+  return state === 'connected' || state === 'offline';
+}
+
+function datasourceAgentLabel(agent: Agent): string {
+  const labels: Record<DatasourceAgentState, string> = {
+    disabled: 'disabled', unreported: 'capabilities not reported', incompatible: 'incompatible protocol',
+    unsupported: 'diagnostics unsupported', offline: 'offline', connected: 'connected',
+  };
+  return `${agent.display_name} · ${labels[datasourceAgentState(agent)]}`;
+}
+
+function datasourceAvailabilityMessage(agent: Agent | undefined, agents: Agent[]): string {
+  if (agent) {
+    switch (datasourceAgentState(agent)) {
+      case 'disabled': return 'The assigned agent is disabled.';
+      case 'unreported': return 'The assigned agent has not reported its datasource capabilities yet.';
+      case 'incompatible': return 'The assigned agent is using an incompatible protocol.';
+      case 'unsupported': return 'The assigned agent does not report the required Prometheus diagnostic operations.';
+      case 'offline': return 'The assigned agent is offline. Diagnostics require a connected agent.';
+      case 'connected': return 'Runs on the assigned agent.';
+    }
+  }
+  if (agents.length === 0) return 'No agents have been registered.';
+  if (agents.some((item) => item.enabled && datasourceAgentState(item) === 'unreported')) return 'Agent capabilities have not been reported yet.';
+  if (agents.every((item) => !item.enabled)) return 'All registered agents are disabled.';
+  if (agents.some((item) => datasourceAgentState(item) === 'incompatible')) return 'An enabled agent is using an incompatible protocol.';
+  if (agents.some((item) => datasourceAgentState(item) === 'offline')) return 'Compatible agents are offline. Diagnostics require a connected agent.';
+  return 'No enabled agent reports the required Prometheus diagnostic operations.';
 }
 
 function asWrite(draft: Draft, isNew: boolean): DatasourceWrite {
@@ -121,17 +165,17 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     const request = new AbortController(); setController(request); setLoading(true);
     void loadAgents(request.signal).then(async (result) => {
       if (request.signal.aborted) return;
-      const active = result.filter(supportsDatasourceDiagnostics);
-      setAgents(active); setDraft((current) => ({ ...current, agent_id: active[0]?.id ?? '' }));
-      if (active[0]) setProviders(await client.providers(active[0].id, request.signal));
+      const eligible = result.filter(supportsDatasourceDiagnostics);
+      setAgents(result); setDraft((current) => ({ ...current, agent_id: eligible[0]?.id ?? '' }));
+      if (eligible[0]) setProviders(await client.providers(eligible[0].id, request.signal));
     }).catch((reason: unknown) => { if (!request.signal.aborted) setError(safeError(reason)); }).finally(() => { if (!request.signal.aborted) setLoading(false); });
     return () => request.abort();
   // locationKey is the route state; cursor is intentionally retained by Back.
   }, [locationKey, selectedID, isNew, loadList, admin, canPreview]);
 
   const selectedAgent = agents.find((agent) => agent.id === draft.agent_id);
-  const connectionAvailable = providers.some((provider) => provider.provider === 'prometheus' && provider.availability === 'available' && provider.operations.includes('connection_test'))
-    || (selectedAgent?.runtime?.capabilities ?? []).some((cap) => cap.provider === 'prometheus' && cap.configuration_formats.includes('prometheus-http-v1') && cap.operations.includes('connection_test'));
+  const connectionAvailable = selectedAgent !== undefined && selectedAgent.enabled && datasourceAgentState(selectedAgent) === 'connected' && (providers.some((provider) => provider.provider === 'prometheus' && provider.availability === 'available' && provider.operations.includes('connection_test'))
+    || (selectedAgent.runtime?.capabilities ?? []).some((cap) => cap.provider === 'prometheus' && cap.configuration_formats.includes('prometheus-http-v1') && cap.operations.includes('connection_test')));
 
   function selectAgent(agentID: string) {
     setDraft((current) => ({ ...current, agent_id: agentID }));
@@ -251,14 +295,14 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       <TextField id="datasource-name" label="Name" value={draft.name} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
       <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, display_name: event.target.value })} />
       <TextField id="datasource-endpoint" label="Prometheus endpoint" type="url" hint="Use an HTTP or HTTPS URL without embedded credentials." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
-      <SelectField id="datasource-agent" label="Assigned agent" value={draft.agent_id} disabled={formDisabled} onChange={(event) => selectAgent(event.target.value)} options={agents.map((agent) => ({ value: agent.id, label: `${agent.display_name}${agent.runtime?.reachability === 'connected' ? ' · connected' : ' · offline'}`, disabled: !supportsDatasourceDiagnostics(agent) }))} />
+      <SelectField id="datasource-agent" label="Assigned agent" value={draft.agent_id} disabled={formDisabled} onChange={(event) => selectAgent(event.target.value)} options={[{ value: '', label: 'Select an agent', disabled: true }, ...agents.map((agent) => ({ value: agent.id, label: datasourceAgentLabel(agent), disabled: !supportsDatasourceDiagnostics(agent) }))]} />
       <TextField id="datasource-polling" label="Polling interval (seconds)" type="number" min={15} max={86400} value={draft.polling_interval_seconds} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, polling_interval_seconds: Number(event.target.value) })} />
       <SelectField id="datasource-auth-mode" label="Authentication" value={draft.authMode} disabled={formDisabled} onChange={(event) => { const authMode = event.target.value as Draft['authMode']; setDraft({ ...draft, authMode, ...(authMode === 'basic' && !draft.passwordConfigured ? { passwordAction: 'replace' as const } : {}), ...(authMode === 'bearer' && !draft.tokenConfigured ? { tokenAction: 'replace' as const } : {}) }); }} options={[{ value: 'none', label: 'None' }, { value: 'basic', label: 'Basic authentication' }, { value: 'bearer', label: 'Bearer token' }]} />
       {draft.authMode === 'basic' && <><TextField id="datasource-username" label="Username" value={draft.username} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, username: event.target.value })} /><SecretInput id="datasource-password" label="Password" action={draft.passwordAction} configured={draft.passwordConfigured} value={draft.password} disabled={formDisabled} onAction={(passwordAction) => setDraft({ ...draft, passwordAction })} onValue={(password) => setDraft({ ...draft, password })} /></>}
       {draft.authMode === 'bearer' && <SecretInput id="datasource-token" label="Bearer token" action={draft.tokenAction} configured={draft.tokenConfigured} value={draft.token} disabled={formDisabled} onAction={(tokenAction) => setDraft({ ...draft, tokenAction })} onValue={(token) => setDraft({ ...draft, token })} />}
       <label className="datasource-check"><input type="checkbox" checked={draft.tls.insecure_skip_verify} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, insecure_skip_verify: event.target.checked } })} />Skip TLS certificate verification <span>Insecure</span></label>
       <label className="datasource-check datasource-check--wide">Custom CA PEM<textarea rows={4} value={draft.tls.ca_pem ?? ''} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, ca_pem: event.target.value || null } })} /></label>
-      {admin && <div className="datasource-actions"><Button type="submit" pending={pending}>{uncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || uncertainSave} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{connectionAvailable ? 'Runs on the assigned agent.' : 'The assigned agent does not report connection test support.'}</span></div>}
+      {admin && <div className="datasource-actions"><Button type="submit" pending={pending}>{uncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || uncertainSave} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents)}</span></div>}
       {readonly && <p className="datasource-readonly">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}
     </form></Panel>
     {source && canPreview && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" disabled={pending} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div>{diagnostic && <DiagnosticView value={diagnostic} />}</Panel>}
