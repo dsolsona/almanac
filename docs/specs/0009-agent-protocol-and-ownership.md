@@ -25,7 +25,48 @@ bounded HTTPS result operation if they exceed64 KiB, up to 1 MiB. No raw trace p
 | Direction | Message kinds |
 | --- | --- |
 | Agent → backend | hello, heartbeat, configuration-applied/failed, command-accepted/completed/failed, progress |
-| Backend → agent | welcome, configuration-changed, diagnostic-request/cancel, historical-work-available, shutdown/revoked |
+| Backend → agent | welcome, heartbeat-ack, configuration-changed, diagnostic-request/cancel, historical-work-available, shutdown/revoked |
+
+Every envelope carries a decimal-string `session_generation`. A first-acquire hello
+uses the reserved value `"0"` to mean that ownership is not yet confirmed; a hello
+from a live process resuming known ownership carries its positive generation. All
+non-hello messages require a positive generation selected by the backend. Each
+hello includes a caller-generated 32-byte resume token and fresh 32-byte request
+nonce. The token is process-memory-only. A first acquire uses its proof before
+creating ownership; retries with the same proof recover the pending generation,
+and reconnects from that live process resume the known generation. Token possession
+alone never displaces another live owner.
+
+The welcome echoes the hello nonce and provides the selected protocol, positive
+generation, UTC server time, authenticated `agent_id`, positive desired configuration
+revision, current ownership renewal sequence, heartbeat interval, and durable
+execution lease. The lease repeats and
+must match agent ID, generation, and configuration revision. Its
+`allowed_measurements` entries bind one canonical SLI ID to one positive measurement
+revision; duplicate SLI IDs are invalid. An empty grant list permits no query.
+
+A heartbeat includes a fresh nonce, last successfully applied configuration
+revision (`"0"` means not yet applied), explicit scheduler/progress state, current
+lease ID and expected renewal sequence. The first renewal expects sequence `"0"`;
+the heartbeat-ack echoes the nonce and returns the durable renewed lease with a
+positive next sequence. Configuration revisions are positive from the first
+snapshot onward. The HTTP configuration snapshot identifies its agent, positive
+revision, and an `assignments` array. This increment supports an empty array only;
+nonempty datasource assignments await their accepted schema. The response ETag is
+strong and has the form `"agent-config:<agent_id>:<configuration_revision>"`;
+unchanged `If-None-Match` may return 304 without a body. Empty assignments can never
+be paired with a nonempty execution grant. Capabilities are refreshed in hello and
+are not repeated in each heartbeat. These wire details implement accepted
+nonce-correlated renewal and ownership semantics; they do not change ownership
+policy.
+
+This increment defines hello, welcome, heartbeat, heartbeat-ack,
+configuration-changed, configuration-applied/failed, shutdown, and revoked. The
+diagnostic and historical-work message kinds remain unsupported until their owning
+increment; an unrecognized or unsupported kind fails closed. Configuration failures
+use bounded safe codes (`invalid_snapshot`, `incompatible`, `apply_failed`), and
+shutdown/revocation use enumerated safe reasons rather than arbitrary diagnostic
+text.
 
 The backend's welcome records selected protocol, ownership generation, server time,
 desired config revision, heartbeat interval and an execution lease. Schemas and

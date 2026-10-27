@@ -1,0 +1,6 @@
+{
+  "kind": "shutdown",
+  "message_id": "m-shutdown-1",
+  "session_generation": "1",
+  "payload": { "reason": "server_shutdown" }
+}

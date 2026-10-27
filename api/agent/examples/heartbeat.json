@@ -1,0 +1,15 @@
+{
+  "kind": "heartbeat",
+  "message_id": "m-heartbeat-1",
+  "session_generation": "1",
+  "payload": {
+    "request_nonce": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+    "applied_configuration_revision": "0",
+    "scheduler": "ready",
+    "last_attempt_at": null,
+    "last_successful_query_at": null,
+    "next_expected_execution_at": null,
+    "lease_id": "lease-example-1",
+    "renewal_sequence": "0"
+  }
+}

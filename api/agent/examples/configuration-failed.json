@@ -1,0 +1,6 @@
+{
+  "kind": "configuration-failed",
+  "message_id": "m-config-failed-1",
+  "session_generation": "1",
+  "payload": { "configuration_revision": "2", "failure_code": "incompatible" }
+}

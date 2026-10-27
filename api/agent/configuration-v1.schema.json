@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://almanac.dev/schemas/agent/configuration-v1.schema.json",
+  "title": "Almanac agent configuration snapshot v1",
+  "description": "Coherent HTTP snapshot returned by GET /api/agent/v1/configuration. The response ETag is \"agent-config:<agent_id>:<configuration_revision>\". This increment intentionally supports only empty assignments until datasource configuration has its accepted schema.",
+  "type": "object",
+  "required": ["agent_id", "configuration_revision", "assignments"],
+  "properties": {
+    "agent_id": { "type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
+    "configuration_revision": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19, "$comment": "The validator also rejects values beyond signed int64 MaxInt64." },
+    "assignments": {
+      "type": "array",
+      "maxItems": 0
+    }
+  },
+  "additionalProperties": true
+}

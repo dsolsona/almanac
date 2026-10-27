@@ -100,3 +100,6 @@ the Docker cache before starting the application.
 
 [F2-T16](F2-T16.md) provides the application shell, responsive navigation and
 agent workspace under the accepted SPEC-0012 shell amendment.
+
+[F2-T17](F2-T17.md) delivers the connected-agent runtime and observable status as
+one usable increment, beginning with shared protocol contracts before consumers.

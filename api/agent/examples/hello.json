@@ -1,0 +1,12 @@
+{
+  "kind": "hello",
+  "message_id": "m-hello-1",
+  "session_generation": "0",
+  "payload": {
+    "protocol_versions": ["almanac.agent.v1"],
+    "software_version": "1.0.0",
+    "capabilities": [],
+    "resume_token": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+    "request_nonce": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+  }
+}
