@@ -88,7 +88,7 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 
 func safeBrowserFailureMarker(output string) string {
 	fields := strings.Fields(strings.TrimSpace(output))
-	if len(fields) != 11 || fields[0] != "FAIL" || fields[1] != "browser-datasources" {
+	if len(fields) != 13 || fields[0] != "FAIL" || fields[1] != "browser-datasources" {
 		return "stage=none network=none api_status=none request_id=none api_code=none"
 	}
 	values := make(map[string]string, 6)
@@ -131,7 +131,7 @@ func safeBrowserFailureMarker(output string) string {
 	}
 	code := values["api_code"]
 	safeCodes := map[string]bool{"agent_unavailable": true, "authentication_unavailable": true, "backend_unavailable": true,
-		"capability_unavailable": true, "conflict": true, "csrf_invalid": true, "datasource_unavailable": true,
+		"capability_unavailable": true, "conflict": true, "configuration_failed": true, "configuration_pending": true, "csrf_invalid": true, "datasource_unavailable": true,
 		"diagnostic_unavailable": true, "forbidden": true, "invalid_agent": true, "invalid_request": true,
 		"method_not_allowed": true, "not_found": true, "origin_rejected": true, "rate_limited": true,
 		"secure_transport_required": true, "session_present": true, "source_secret_unavailable": true,
@@ -157,7 +157,20 @@ func safeBrowserFailureMarker(output string) string {
 	if diagnosticResultClass != "none" && !validDiagnosticResultClasses[diagnosticResultClass] {
 		diagnosticResultClass = "none"
 	}
-	return "stage=" + stage + " network=" + network + " class=" + class + " api_status=" + status + " request_id=" + requestID + " api_code=" + code + " diagnostic_state=" + diagnosticState + " diagnostic_error_code=" + diagnosticErrorCode + " diagnostic_result_class=" + diagnosticResultClass
+	renderedDiagnosticCode := values["rendered_diagnostic_code"]
+	validRenderedCodes := map[string]bool{"authentication_failed": true, "network_failed": true, "tls_failed": true,
+		"query_failed": true, "request_timeout": true, "assignment_revoked": true, "rate_limited": true,
+		"unsupported": true, "diagnostic_failed": true}
+	if renderedDiagnosticCode != "none" && !validRenderedCodes[renderedDiagnosticCode] {
+		renderedDiagnosticCode = "none"
+	}
+	renderedDiagnosticMessage := values["rendered_diagnostic_message"]
+	validRenderedMessages := map[string]bool{"query_rejected": true, "network_failed": true, "tls_failed": true,
+		"authentication_failed": true, "generic_failure": true, "other": true}
+	if renderedDiagnosticMessage != "none" && !validRenderedMessages[renderedDiagnosticMessage] {
+		renderedDiagnosticMessage = "none"
+	}
+	return "stage=" + stage + " network=" + network + " class=" + class + " api_status=" + status + " request_id=" + requestID + " api_code=" + code + " diagnostic_state=" + diagnosticState + " diagnostic_error_code=" + diagnosticErrorCode + " diagnostic_result_class=" + diagnosticResultClass + " rendered_diagnostic_code=" + renderedDiagnosticCode + " rendered_diagnostic_message=" + renderedDiagnosticMessage
 }
 
 func safeBrowserRequestID(value string) bool {

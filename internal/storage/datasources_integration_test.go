@@ -28,6 +28,9 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, hello, func() time.Time { return now }); err != nil {
 		t.Fatal(err)
 	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 1, func() time.Time { return now }); err != nil {
+		t.Fatalf("record initial empty datasource configuration application: %v", err)
+	}
 	agentPage, err := ListAgents(t.Context(), f.databaseURL, ListAgentsInput{SessionVerifier: f.verifier, Limit: 50, Now: func() time.Time { return now }})
 	if err != nil || len(agentPage.Items) != 1 || agentPage.Items[0].Runtime == nil || len(agentPage.Items[0].Runtime.Capabilities) != 1 ||
 		agentPage.Items[0].Runtime.Capabilities[0].Provider != "prometheus" || len(agentPage.Items[0].Runtime.Capabilities[0].Operations) != 2 {

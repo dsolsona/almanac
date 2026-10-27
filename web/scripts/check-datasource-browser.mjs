@@ -15,7 +15,7 @@ let latestDiagnostic = { state: 'none', errorCode: 'none', resultClass: 'none' }
 let latestDiagnosticRead = Promise.resolve();
 const safeCodes = new Set([
   'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
-  'conflict', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
+  'conflict', 'configuration_failed', 'configuration_pending', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
   'invalid_agent', 'invalid_request', 'method_not_allowed', 'not_found', 'origin_rejected',
   'rate_limited', 'secure_transport_required', 'session_present', 'source_secret_unavailable',
   'unauthenticated', 'unauthorized', 'unsupported', 'unsupported_media_type',
@@ -83,6 +83,7 @@ stage = 'browser launch';
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   await page.getByLabel('Login', { exact: true }).fill(fixture.login);
   await page.getByLabel('Password', { exact: true }).fill(fixture.password);
+  const passwordForRedaction = fixture.password;
   await page.getByLabel('Password', { exact: true }).press('Enter');
   fixture.password = '';
   stage = 'authenticated administrator landing';
@@ -243,11 +244,12 @@ stage = 'browser launch';
   assert.equal(invalidPreview.status(), 202);
   const invalidReceipt = await invalidPreview.json();
   assert.match(invalidReceipt.id, /^[0-9a-f-]{36}$/);
-  stage = 'safe failed diagnostic result';
+  stage = 'safe failed diagnostic result code';
   await expect.poll(async () => page.locator('.diagnostic-result').last().innerText(), { timeout: 15000 }).toContain('query_failed');
+  stage = 'safe failed diagnostic result message';
   await expect(page.locator('.diagnostic-result').last()).toContainText('The datasource rejected the query.');
-  await expect(page.locator('.diagnostic-result').last()).toContainText('query_failed');
-  assert.equal(await page.locator('body').innerText().then((text) => text.includes(fixture.password)), false);
+  stage = 'diagnostic result secret redaction';
+  assert.equal(await page.locator('body').innerText().then((text) => text.includes(passwordForRedaction)), false);
 
   stage = 'keyboard skip navigation';
   const skipLink = page.getByRole('link', { name: 'Skip to content', exact: true });
@@ -299,13 +301,34 @@ stage = 'browser launch';
   const diagnosticState = ['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(latestDiagnostic.state) ? latestDiagnostic.state : 'none';
   const diagnosticErrorCode = ['authentication', 'authentication_failed', 'deadline', 'diagnostic_failed', 'incomplete', 'network', 'network_failed', 'query', 'query_failed', 'rate_limited', 'tls', 'tls_failed', 'timeout', 'unsupported', 'assignment_revoked'].includes(latestDiagnostic.errorCode) ? latestDiagnostic.errorCode : 'none';
   const diagnosticResultClass = ['complete', 'empty', 'incomplete'].includes(latestDiagnostic.resultClass) ? latestDiagnostic.resultClass : 'none';
-  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\ndiagnostic_state=${diagnosticState}\ndiagnostic_error_code=${diagnosticErrorCode}\ndiagnostic_result_class=${diagnosticResultClass}\n`;
+  let renderedDiagnosticCode = 'none';
+  let renderedDiagnosticMessage = 'none';
+  if (authenticated && page) {
+    try {
+      const rendered = await page.locator('.diagnostic-result').last().evaluate((element) => ({
+        code: element.querySelector('code')?.textContent?.trim() ?? '',
+        message: [...element.querySelectorAll('p')].map((paragraph) => paragraph.textContent?.trim() ?? '').find((text) => text.length > 0 && !text.startsWith('Deadline ')) ?? '',
+      }));
+      const allowedCodes = ['authentication_failed', 'network_failed', 'tls_failed', 'query_failed', 'request_timeout', 'assignment_revoked', 'rate_limited', 'unsupported', 'diagnostic_failed'];
+      if (allowedCodes.includes(rendered.code)) renderedDiagnosticCode = rendered.code;
+      const messageKinds = new Map([
+        ['The datasource rejected the query.', 'query_rejected'],
+        ['The assigned agent could not reach the datasource.', 'network_failed'],
+        ['The datasource TLS connection could not be verified.', 'tls_failed'],
+        ['The datasource rejected authentication.', 'authentication_failed'],
+        ['The diagnostic failed. Check agent connectivity and datasource settings.', 'generic_failure'],
+      ]);
+      renderedDiagnosticMessage = messageKinds.get(rendered.message) ?? 'other';
+    } catch {}
+  }
+  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\ndiagnostic_state=${diagnosticState}\ndiagnostic_error_code=${diagnosticErrorCode}\ndiagnostic_result_class=${diagnosticResultClass}\nrendered_diagnostic_code=${renderedDiagnosticCode}\nrendered_diagnostic_message=${renderedDiagnosticMessage}\n`;
   if (authenticated && page && typeof fixture?.artifacts === 'string') {
     try {
       await page.screenshot({
         path: join(fixture.artifacts, 'failure.png'),
         timeout: 2000,
         animations: 'disabled',
+        fullPage: true,
         mask: [page.locator('input, textarea, [contenteditable="true"], [data-secret-display], [data-secret-value], [class*="secret"]')],
       });
     } catch {}
@@ -313,8 +336,8 @@ stage = 'browser launch';
   if (Buffer.byteLength(diagnostic) <= 512 && typeof fixture?.artifacts === 'string') {
     try { await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 }); } catch {}
   }
-  const marker = `FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} api_status=${status} request_id=${requestID} api_code=${apiCode} diagnostic_state=${diagnosticState} diagnostic_error_code=${diagnosticErrorCode} diagnostic_result_class=${diagnosticResultClass}\n`;
-  process.stdout.write(Buffer.byteLength(marker) <= 512 ? marker : 'FAIL browser-datasources stage=none network=none class=other api_status=none request_id=none api_code=none diagnostic_state=none diagnostic_error_code=none diagnostic_result_class=none\n');
+  const marker = `FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} api_status=${status} request_id=${requestID} api_code=${apiCode} diagnostic_state=${diagnosticState} diagnostic_error_code=${diagnosticErrorCode} diagnostic_result_class=${diagnosticResultClass} rendered_diagnostic_code=${renderedDiagnosticCode} rendered_diagnostic_message=${renderedDiagnosticMessage}\n`;
+  process.stdout.write(Buffer.byteLength(marker) <= 512 ? marker : 'FAIL browser-datasources stage=none network=none class=other api_status=none request_id=none api_code=none diagnostic_state=none diagnostic_error_code=none diagnostic_result_class=none rendered_diagnostic_code=none rendered_diagnostic_message=none\n');
   process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => {});
