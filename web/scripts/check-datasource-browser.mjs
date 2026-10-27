@@ -189,17 +189,24 @@ stage = 'browser launch';
   stage = 'UI datasource update confirmation';
   await expect(page.getByRole('status').filter({ hasText: 'Datasource settings saved.' })).toBeVisible();
   await expect(page.getByLabel('Display name', { exact: true })).toHaveValue(nextName);
-  stage = 'agent configuration revision applied';
-  await expect.poll(async () => page.evaluate(async (agentID) => {
-    const response = await fetch(`/api/v1/agents/${agentID}`, { credentials: 'same-origin', cache: 'no-store' });
-    if (!response.ok) return false;
+  stage = 'UI reports datasource configuration ready';
+  await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole('button', { name: 'Run preview', exact: true })).toBeEnabled();
+  stage = 'public provider readiness contract';
+  const publicReadiness = await page.evaluate(async (agentID) => {
+    const response = await fetch(`/api/v1/providers?agent_id=${encodeURIComponent(agentID)}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) return null;
     const value = await response.json();
-    const desired = value?.runtime?.desired_configuration_revision;
-    const applied = value?.runtime?.applied_configuration_revision;
-    if (typeof desired !== 'string' || typeof applied !== 'string'
-      || !/^(0|[1-9][0-9]*)$/.test(desired) || !/^(0|[1-9][0-9]*)$/.test(applied)) return false;
-    return desired === applied && BigInt(applied) > 1n;
-  }, fixture.agent_id), { timeout: 20000, intervals: [100, 250, 500, 1000] }).toBe(true);
+    return value;
+  }, fixture.agent_id);
+  assert.ok(publicReadiness && Array.isArray(publicReadiness.items));
+  const prometheusReadiness = publicReadiness.items.find((item) => item.provider === 'prometheus' && item.configuration_format === 'prometheus-http-v1');
+  assert.ok(prometheusReadiness);
+  assert.equal(prometheusReadiness.availability, 'available');
+  assert.match(prometheusReadiness.desired_configuration_revision, /^[1-9][0-9]*$/);
+  assert.match(prometheusReadiness.applied_configuration_revision, /^[1-9][0-9]*$/);
+  assert.equal(prometheusReadiness.desired_configuration_revision, prometheusReadiness.applied_configuration_revision);
+  assert.deepEqual(prometheusReadiness.operations, ['connection_test', 'query_preview']);
 
   stage = 'real successful saved-source preview';
   const queryField = page.getByLabel('PromQL query', { exact: true });

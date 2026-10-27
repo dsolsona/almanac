@@ -37,4 +37,21 @@ describe('datasource client', () => {
     vi.stubGlobal('fetch', fetcher);
     await expect(createDatasourceClient().list()).rejects.toThrow('Datasource management is temporarily unavailable.');
   });
+
+  it('validates readiness revisions while allowing an unapplied zero revision', async () => {
+    const descriptor = { provider: 'prometheus', configuration_format: 'prometheus-http-v1', operations: ['connection_test', 'query_preview'], availability: 'unreported', desired_configuration_revision: null, applied_configuration_revision: '0', configuration_failure_code: null, configuration_failure_revision: null };
+    const fetcher = vi.fn().mockResolvedValue(response({ items: [descriptor] }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().providers(agent)).resolves.toEqual([descriptor]);
+
+    fetcher.mockResolvedValue(response({ items: [{ ...descriptor, desired_configuration_revision: '03' }] }));
+    await expect(createDatasourceClient().providers(agent)).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('preserves a definite configuration-pending response instead of reporting an unknown diagnostic outcome', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ code: 'configuration_pending', message: 'untrusted backend detail' }, 503));
+    vi.stubGlobal('fetch', fetcher);
+    const input = { provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } }, agent_id: agent } as const;
+    await expect(createDatasourceClient().connectionTest(input, context)).rejects.toMatchObject({ code: 'configuration_pending', status: 503, uncertain: false, message: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.' });
+  });
 });

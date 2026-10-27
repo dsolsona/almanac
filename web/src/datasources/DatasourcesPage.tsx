@@ -5,6 +5,7 @@ import { createDatasourceClient, DatasourceFailure, type Datasource, type Dataso
 import './datasources.css';
 
 type Agent = { id: string; name: string; display_name: string; enabled: boolean; runtime?: { reachability?: string; capabilities?: { provider: string; configuration_formats: string[]; operations: string[] }[] } | null };
+type ProviderReadinessState = Provider['availability'] | 'loading' | 'still_applying' | 'error';
 type Draft = Omit<DatasourceWrite, 'authentication'> & { authMode: 'none' | 'basic' | 'bearer'; username: string; password: string; token: string; passwordAction: 'replace' | 'retain' | 'clear'; tokenAction: 'replace' | 'retain' | 'clear'; passwordConfigured: boolean; tokenConfigured: boolean };
 type SaveIntent = { input: DatasourceWrite; key: string; etag?: string; isNew: boolean };
 
@@ -77,6 +78,58 @@ function datasourceAvailabilityMessage(agent: Agent | undefined, agents: Agent[]
   return 'No enabled agent reports the required Prometheus diagnostic operations.';
 }
 
+function providerReadinessState(items: Provider[]): ProviderReadinessState {
+  const provider = items.find((item) => item.provider === 'prometheus' && item.configuration_format === 'prometheus-http-v1');
+  if (!provider) return 'unsupported';
+  if (provider.availability === 'available') {
+    return provider.desired_configuration_revision !== null && provider.applied_configuration_revision === provider.desired_configuration_revision
+      ? 'available' : 'unreported';
+  }
+  return provider.availability;
+}
+
+function providerReadinessMessage(state: ProviderReadinessState, provider: Provider | undefined): string {
+  switch (state) {
+    case 'loading': return 'Checking whether the assigned agent has applied these datasource settings.';
+    case 'applying': {
+      const progress = provider?.desired_configuration_revision && provider.applied_configuration_revision !== null
+        ? ` (revision ${provider.applied_configuration_revision} of ${provider.desired_configuration_revision})` : '';
+      return `The assigned agent is applying datasource settings${progress}. Preview will be available when it finishes.`;
+    }
+    case 'still_applying': return 'The assigned agent is still applying datasource settings. Preview remains unavailable; check readiness again shortly.';
+    case 'offline': return 'The assigned agent is offline. Preview is unavailable until it reconnects.';
+    case 'disabled': return 'The assigned agent is disabled. Preview is unavailable.';
+    case 'unreported': return 'The assigned agent has not reported an applied datasource configuration yet.';
+    case 'configuration_failed': return 'The assigned agent could not apply its latest configuration. Preview is unavailable until it recovers.';
+    case 'incompatible': return 'The assigned agent is using an incompatible protocol.';
+    case 'unsupported': case 'planned': return 'The assigned agent does not support Prometheus query previews.';
+    case 'error': return 'Agent readiness could not be checked. Retry the readiness check before running a preview.';
+    case 'available': return 'The assigned agent has applied the datasource settings. Preview runs on that agent and does not create observations.';
+  }
+}
+
+async function pollProviderReadiness(agentID: string, signal: AbortSignal, deadline: number, onUpdate: (items: Provider[], state: ProviderReadinessState) => void): Promise<ProviderReadinessState> {
+  while (!signal.aborted) {
+    const items = await client.providers(agentID, signal);
+    const state = providerReadinessState(items);
+    onUpdate(items, state);
+    if (state !== 'applying') return state;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return 'still_applying';
+    await new Promise<void>((resolve) => {
+      let timer: number | undefined;
+      const finish = () => {
+        if (timer !== undefined) window.clearTimeout(timer);
+        signal.removeEventListener('abort', finish);
+        resolve();
+      };
+      timer = window.setTimeout(finish, Math.min(500, remaining));
+      signal.addEventListener('abort', finish, { once: true });
+    });
+  }
+  return 'error';
+}
+
 function asWrite(draft: Draft, isNew: boolean): DatasourceWrite {
   const secret = (action: Draft['passwordAction'], value: string) => action === 'replace' ? { action, value } : { action };
   const passwordAction = draft.authMode === 'basic' ? (isNew && draft.passwordAction === 'retain' ? 'clear' : draft.passwordAction) : 'clear';
@@ -103,6 +156,8 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [nextCursor, setNextCursor] = useState('');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [previewReadiness, setPreviewReadiness] = useState<ProviderReadinessState>('loading');
+  const [providerRefresh, setProviderRefresh] = useState(0);
   const [source, setSource] = useState<Datasource | null>(null);
   const [etag, setEtag] = useState('');
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -152,15 +207,16 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   useEffect(() => {
     if (selectedID) {
       const request = new AbortController(); setController(request); setLoading(true); setError(''); setNotice('');
+      setProviders([]); setPreviewReadiness('loading');
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
         if (request.signal.aborted) return;
         setSource(datasource); setEtag(tag); setDraft(fromDatasource(datasource));
-        return Promise.all([admin ? loadAgents(request.signal) : Promise.resolve([]), canPreview ? client.providers(datasource.agent_id, request.signal) : Promise.resolve([] as Provider[])]);
-      }).then((result) => { if (result && !request.signal.aborted) { setAgents(result[0]); setProviders(result[1]); } })
+        return admin ? loadAgents(request.signal) : Promise.resolve([] as Agent[]);
+      }).then((agentItems) => { if (!request.signal.aborted) setAgents(agentItems); })
         .catch((reason: unknown) => { if (!request.signal.aborted) setError(safeError(reason)); }).finally(() => { if (!request.signal.aborted) setLoading(false); });
       return () => request.abort();
     }
-    setSource(null); setEtag(''); setDraft(emptyDraft()); setProviders([]); setDiagnostic(null);
+    setSource(null); setEtag(''); setDraft(emptyDraft()); setProviders([]); setPreviewReadiness('loading'); setDiagnostic(null);
     if (!isNew) { const request = loadList(cursor); return () => request.abort(); }
     const request = new AbortController(); setController(request); setLoading(true);
     void loadAgents(request.signal).then(async (result) => {
@@ -172,6 +228,30 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     return () => request.abort();
   // locationKey is the route state; cursor is intentionally retained by Back.
   }, [locationKey, selectedID, isNew, loadList, admin, canPreview]);
+
+  useEffect(() => {
+    if (!source || !canPreview) return;
+    const request = new AbortController();
+    const deadline = Date.now() + 30_000;
+    const timeout = window.setTimeout(() => request.abort(), 30_000);
+    void pollProviderReadiness(source.agent_id, request.signal, deadline, (items, state) => {
+      setProviders(items);
+      setPreviewReadiness(state);
+    }).then((state) => {
+      if (!request.signal.aborted) setPreviewReadiness(state);
+      else if (Date.now() >= deadline) setPreviewReadiness('still_applying');
+    }).catch((reason: unknown) => {
+      if (request.signal.aborted && Date.now() >= deadline) setPreviewReadiness('still_applying');
+      else if (!request.signal.aborted) {
+        setPreviewReadiness('error');
+        setError(safeError(reason));
+      }
+    });
+    return () => {
+      request.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [source?.agent_id, canPreview, providerRefresh]);
 
   const selectedAgent = agents.find((agent) => agent.id === draft.agent_id);
   const connectionAvailable = selectedAgent !== undefined && selectedAgent.enabled && datasourceAgentState(selectedAgent) === 'connected' && (providers.some((provider) => provider.provider === 'prometheus' && provider.availability === 'available' && provider.operations.includes('connection_test'))
@@ -209,6 +289,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       if (intent.isNew) navigate('/datasources');
       else {
         setSource(saved); setEtag(`"datasource:${saved.id}:${saved.version}"`); setDraft(fromDatasource(saved));
+        setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
       }
     } catch (reason) {
       if (request.signal.aborted) return;
@@ -240,6 +321,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }
 
   async function runDiagnostic(kind: 'connection' | 'preview') {
+    if (kind === 'preview' && previewReadiness !== 'available') return;
     setPending(true); setError(''); setNotice(''); setDiagnostic(null);
     const request = new AbortController(); setController(request);
     let deadlineTimer: number | undefined;
@@ -247,9 +329,40 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       const settings = asWrite(draft, isNew);
       const connectionInput = { provider: 'prometheus' as const, configuration_format: 'prometheus-http-v1' as const, endpoint: settings.endpoint, tls: settings.tls, authentication: settings.authentication, agent_id: settings.agent_id };
       setDraft((current) => ({ ...current, password: '', token: '' }));
-      const created = kind === 'connection' ? await client.connectionTest(connectionInput, context, request.signal)
-        : await client.preview(selectedID!, query, context, request.signal);
+      let created: Diagnostic;
+      if (kind === 'connection') {
+        created = await client.connectionTest(connectionInput, context, request.signal);
+      } else {
+        const readinessDeadline = Date.now() + 30_000;
+        let attempts = 0;
+        while (true) {
+          try {
+            created = await client.preview(selectedID!, query, context, request.signal);
+            break;
+          } catch (reason) {
+            if (!(reason instanceof DatasourceFailure) || reason.code !== 'configuration_pending') throw reason;
+            setPreviewReadiness('applying');
+            setNotice('No preview was started. The agent is applying datasource settings; waiting briefly before retrying this query.');
+            let latestProvider: Provider | undefined;
+            const state = await pollProviderReadiness(source!.agent_id, request.signal, readinessDeadline, (items, nextState) => {
+              setProviders(items);
+              setPreviewReadiness(nextState);
+              latestProvider = items.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1');
+            });
+            if (state !== 'available' || attempts >= 2) {
+              setError(state === 'available'
+                ? 'The agent is ready, but the preview could not be admitted. Retry the preview.'
+                : state === 'still_applying'
+                ? 'No preview was started. The agent is still applying datasource settings. Check readiness and retry when it is ready.'
+                : providerReadinessMessage(state, latestProvider));
+              return;
+            }
+            attempts += 1;
+          }
+        }
+      }
       if (request.signal.aborted) return;
+      if (kind === 'preview') setNotice('');
       setDiagnostic(created);
       const cutoff = Math.min(Date.parse(created.deadline_at), Date.now() + 30_000);
       deadlineTimer = window.setTimeout(() => { setError('The diagnostic deadline passed before a final result arrived.'); request.abort(); }, Math.max(0, cutoff - Date.now()));
@@ -305,7 +418,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       {admin && <div className="datasource-actions"><Button type="submit" pending={pending}>{uncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || uncertainSave} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents)}</span></div>}
       {readonly && <p className="datasource-readonly">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}
     </form></Panel>
-    {source && canPreview && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" disabled={pending} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div>{diagnostic && <DiagnosticView value={diagnostic} />}</Panel>}
+    {source && canPreview && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><p role="status" className="datasource-readiness">{providerReadinessMessage(previewReadiness, providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1'))}</p>{(previewReadiness === 'still_applying' || previewReadiness === 'error') && <Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button>}<label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" disabled={pending} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div>{diagnostic && <DiagnosticView value={diagnostic} />}</Panel>}
     {diagnostic && <Panel heading={diagnostic.operation === 'connection_test' ? 'Connection test' : 'Diagnostic result'}><DiagnosticView value={diagnostic} /></Panel>}
   </>;
 }
