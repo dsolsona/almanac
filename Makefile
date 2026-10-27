@@ -58,6 +58,7 @@ verify:
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
+	elif [ "$${VERIFY_MODE:-}" = "journey" ]; then $(MAKE) _verify_journey; \
 	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
 	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then $(MAKE) _verify_providers; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
@@ -175,6 +176,24 @@ _verify_integration: _ensure_web_assets
 	  sh scripts/setup-database.sh --check; \
 	  $(MAKE) build; \
 	  .local/bin/go test -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m $$packages
+
+_verify_journey:
+	@set -eu; \
+	  case "$${BROWSER_SCENARIO:-onboarding}" in \
+	    onboarding|lost-login|lost-password) expected="TestIntegrationExecutableBrowserAuthentication/$${BROWSER_SCENARIO:-onboarding}"; journey='^TestIntegrationExecutableBrowserAuthentication$$/^'"$${BROWSER_SCENARIO:-onboarding}"'$$' ;; \
+	    agents|agents-close|agents-lost|agents-unavailable) expected="TestIntegrationExecutableBrowserAgentRegistration/$$BROWSER_SCENARIO"; journey='^TestIntegrationExecutableBrowserAgentRegistration$$/^'"$$BROWSER_SCENARIO"'$$' ;; \
+	    agents-lifecycle) expected='TestIntegrationExecutableBrowserAgentLifecycle'; journey='^TestIntegrationExecutableBrowserAgentLifecycle$$' ;; \
+	    *) echo 'BROWSER_SCENARIO must select a documented browser journey' >&2; exit 2 ;; \
+	  esac; \
+	  test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
+	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
+	  sh scripts/setup-database.sh --check; \
+	  $(MAKE) build; \
+	  journey_log=$$(mktemp .local/journey-result.XXXXXX); \
+	  if ! .local/bin/go test -race -tags=integration -p=1 -v -run "$$journey" -count=1 -timeout=2m ./internal/command > "$$journey_log" 2>&1; then cat "$$journey_log"; exit 1; fi; \
+	  cat "$$journey_log"; \
+	  grep -F -- "--- PASS: $$expected (" "$$journey_log" >/dev/null || { echo 'selected browser journey did not execute and pass' >&2; exit 1; }
 
 _verify_sqlc_generated:
 	@set -eu; test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \

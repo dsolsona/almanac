@@ -37,6 +37,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 
 	for _, tc := range []struct{ path, wantType string }{
 		{"/", "text/html"},
+		{"/agents?agent=example&agents_cursor=next&credentials_cursor=history", "text/html"},
 	} {
 		response, err := testHTTPClient.Get(frontend.URL + tc.path)
 		if err != nil {
@@ -51,7 +52,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 			t.Fatalf("index cache control = %q", response.Header.Get("Cache-Control"))
 		}
 	}
-	for _, path := range []string{"/design-system", "/missing.js", "/assets/missing.js"} {
+	for _, path := range []string{"/design-system", "/missing.js", "/assets/missing.js", "/agents/extra"} {
 		response, err := testHTTPClient.Get(frontend.URL + path)
 		if err != nil {
 			t.Fatal(err)
@@ -102,7 +103,7 @@ func TestNewAssetHandlerServesEmbeddedRoot(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-cache" || !strings.Contains(response.Body.String(), "Almanac") {
 		t.Fatalf("embedded root = %d %q", response.Code, response.Body.String())
 	}
-	for _, target := range []string{"/design-system", "/missing.js", "/%2e%2e/index.html"} {
+	for _, target := range []string{"/design-system", "/missing.js", "/%2e%2e/index.html", "/agents/extra"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
 		if response.Code != http.StatusNotFound {

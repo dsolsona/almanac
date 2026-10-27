@@ -47,6 +47,51 @@ test('catalogue foundations and shared controls work at this viewport and theme'
   await expect(page.getByRole('button', { name: 'Pending' })).toBeDisabled();
 });
 
+test('application shell preview keeps navigation available at each viewport and theme', async ({ page }, testInfo) => {
+  await page.goto('/design-system');
+  const preview = page.locator('#application-shell');
+  await preview.scrollIntoViewIfNeeded();
+  await expect(preview.getByRole('heading', { name: 'Signed-in application shell' })).toBeVisible();
+  const dimensions = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+  expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+  await page.screenshot({ path: testInfo.outputPath(`application-shell-${testInfo.project.name}.png`), fullPage: true, animations: 'disabled' });
+  if (testInfo.project.name.startsWith('mobile')) await preview.getByRole('button', { name: 'Menu' }).click();
+  const navigation = preview.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(navigation.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
+  for (const destination of ['SLOs', 'SLIs', 'Datasources', 'Alerts']) {
+    const planned = navigation.locator('[aria-disabled="true"]').filter({ hasText: destination });
+    await expect(planned).toContainText('Not available yet');
+    await expect(planned.getByRole('link')).toHaveCount(0);
+  }
+  if (testInfo.project.name.startsWith('mobile')) {
+    const menu = preview.getByRole('button', { name: 'Menu' });
+    const drawer = preview.locator('.app-sidebar.is-open');
+    const close = drawer.getByRole('button', { name: 'Close navigation' });
+    await expect(close).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath(`application-shell-drawer-${testInfo.project.name}.png`), fullPage: true, animations: 'disabled' });
+    await page.keyboard.press('Shift+Tab');
+    await expect(drawer.getByRole('button', { name: 'Sign out' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeFocused();
+    await expect(drawer).toHaveCount(0);
+    await page.setViewportSize({ width: 360, height: 420 });
+    await menu.click();
+    await drawer.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    const accountBounds = await drawer.getByRole('button', { name: 'Sign out' }).boundingBox();
+    expect(accountBounds).not.toBeNull();
+    expect(accountBounds!.y + accountBounds!.height).toBeLessThanOrEqual(420);
+    await page.setViewportSize({ width: 1440, height: 420 });
+    await expect(preview.locator('.app-sidebar.is-open')).toHaveCount(0);
+    await expect(navigation.getByRole('link', { name: 'Agents' })).toBeFocused();
+  } else {
+    await preview.getByRole('button', { name: 'Sign out' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(preview.getByRole('button', { name: 'Register agent' })).toBeFocused();
+    await navigation.getByRole('link', { name: 'Agents' }).click();
+    await expect(page).toHaveURL(/\/design-system/);
+  }
+});
+
 test('keyboard navigation enters dialog, Escape closes it and restores focus', async ({ page }) => {
   await page.goto('/design-system');
   await expect(page.getByRole('link', { name: 'Skip to catalogue' })).toBeVisible();
@@ -86,13 +131,13 @@ test('theme choice is interactive and remains stored after reload', async ({ pag
     }
   });
   await page.goto('/design-system');
-  const toggle = page.getByRole('button', { name: /switch to dark theme/i });
+  const toggle = page.locator('.masthead').getByRole('button', { name: /switch to dark theme/i });
   await toggle.click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
   await page.reload();
   await expect(page.locator('html')).toHaveClass(/dark/);
-  await expect(page.getByRole('button', { name: /switch to light theme/i })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.masthead').getByRole('button', { name: /switch to light theme/i })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('catalogue is dev-only and unsupported development paths are honest', async ({ page }) => {
@@ -109,7 +154,7 @@ test('coarse pointer controls use the 44px target size', async ({ browser, baseU
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     await expect(page.locator('.ui-button').first()).toHaveCSS('min-height', '44px');
     await expect(page.locator('.ui-control').first()).toHaveCSS('min-height', '44px');
-    await expect(page.locator('.theme-toggle')).toHaveCSS('min-height', '44px');
+    await expect(page.locator('.masthead .theme-toggle')).toHaveCSS('min-height', '44px');
   } finally {
     await context.close();
   }

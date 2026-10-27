@@ -39,8 +39,9 @@ python3 scripts/check-docs.py
 /usr/bin/bash -lc 'make verify VERIFY_MODE=journey BROWSER_SCENARIO=onboarding ALMANAC_TEST_DATABASE_URL=postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
 ```
 
-The onboarding invocation selects a real HTTPS/PostgreSQL browser journey. It is
-currently being qualified; approval to execute it is not evidence that it passes.
+The onboarding invocation selects a real HTTPS/PostgreSQL browser journey. It passed
+on the F2-T16 candidate and checks that the named journey actually executed; it does
+not replace the full required integration gate.
 Fixture credentials above belong only to the isolated local acceptance database.
 Keep real credentials out of commands, logs and published artifacts.
 

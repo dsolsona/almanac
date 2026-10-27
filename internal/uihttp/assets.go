@@ -29,7 +29,7 @@ func staticHandler(assets fs.FS) http.Handler {
 			return
 		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-		if name == "." || name == "" {
+		if r.URL.Path == "/" || r.URL.Path == "/agents" {
 			name = "index.html"
 		}
 		file, err := assets.Open(name)

@@ -907,6 +907,8 @@ describe('agent administration screen', () => {
     expect(screen.getByText(/No response was received from Almanac/)).toBeVisible();
     expect(screen.getByText(/refresh agent records before deciding/i)).toBeVisible();
     expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Agents' }));
+    expect(screen.getByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Retry registration' }));
     await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/token is no longer available/i));
@@ -931,7 +933,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.type(screen.getByLabelText('Agent name'), 'new-east'); await user.type(screen.getByLabelText('Display name'), 'East collector');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(auth.context).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('heading', { name: 'Session needs checking' })).toBeVisible();
   });
@@ -950,7 +952,7 @@ describe('agent administration screen', () => {
     expect(screen.getByRole('heading', { name: 'Session status unavailable' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Current password needs refreshing' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Check session' }));
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(await screen.findByRole('heading', { name: 'Registration was not accepted' })).toBeVisible();
   });
 
@@ -1066,7 +1068,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Keep request' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/sign-out could not be confirmed/i);
-    expect(screen.getByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
     await act(async () => { finish(response({ agent: agent(), credential: credential(), replayed: false, secret_state: 'issued', token: 'one-time-secret' }, 201)); });
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
     auth.logout = vi.fn().mockResolvedValue(undefined); auth.context = vi.fn().mockResolvedValueOnce({ csrf_token: 'csrf-anon', session: null }); auth.login = vi.fn().mockResolvedValue(newAdmin);

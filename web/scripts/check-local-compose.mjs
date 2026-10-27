@@ -176,7 +176,8 @@ async function checkPermanentLogin() {
     await page.getByLabel('Login', { exact: true }).fill('admin');
     await page.getByLabel('Password', { exact: true }).fill(permanent);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/agents(?:\?|$)/);
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   } finally {

@@ -16,6 +16,10 @@
 [SPEC-0017](0017-slo-timeline-annotations.md), approved in Crit review
 `0de0c0e42db6`, govern maintenance and contextual event overlays.
 
+On 2026-10-27 the maintainer confirmed the established Almanac application layout
+and styling, and explicitly selected visible unfinished navigation entries marked
+“Not available yet.” The application-shell contract below records that agreement.
+
 ## Purpose
 
 Give operators a clear path from installation and observation setup to trustworthy
@@ -54,6 +58,29 @@ Feature styles own layout, not private controls or status palettes. Operational
 status includes text and a shape/icon; brand orange does not imply warning.
 Use meaningful headings, labels, inline errors, persistent save feedback, visible
 focus, reduced-motion support and predictable dialog focus restoration.
+
+### Application shell
+
+Use persistent left navigation on desktop and a compact header with an accessible
+navigation drawer on mobile. Preserve the shared typography, colors, spacing and
+controls, including the ALMANAC wordmark. Place account identity, role, theme and
+sign-out controls in the navigation footer. Sign-in and restricted first-login
+password setup remain separate from the operational shell.
+
+Signed-in administrators initially land on the actual Agents list, with access to
+agent details and credential history. Do not place operational screens beneath a
+large sign-in confirmation panel. Keep planned SLOs, SLIs, Datasources and Alerts
+entries visible, noninteractive and explicitly marked “Not available yet”; apply
+the same treatment to other displayed unfinished destinations. Do not link these
+entries to empty dashboards or show illustrative data as product results.
+
+Navigation identifies the current destination. Agent selection and pagination
+remain usable through direct links, reload and browser back/forward. Mobile
+navigation supports keyboard opening, closing, focus containment and focus
+restoration. Permission restrictions and expired sessions must not expose cached
+unauthorized records. Navigation must preserve the existing safe-draft and
+uncertain-command recovery contracts, without persisting secrets in URLs or
+browser storage. Reusable shell components appear in the development catalogue.
 
 ### Operator journeys
 
@@ -188,6 +215,10 @@ view. Error pages preserve navigation and a safe retry path.
 - AC-09: Production bundle and browser evidence meet the agreed performance budgets
   on the documented fixture. Non-chart routes exclude chart code; long ranges keep
   rendered points, table rows and caches bounded without hiding gaps or exact data.
+- AC-10: The operational shell provides desktop and mobile navigation, account
+  controls and a working Agents destination. Unfinished destinations are visibly
+  marked “Not available yet” and cannot navigate. Direct links, browser history,
+  keyboard navigation, authorization and recovery retain their specified behavior.
 
 ## Dependencies and open questions
 

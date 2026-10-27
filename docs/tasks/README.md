@@ -97,3 +97,6 @@ adds actionable failure recovery under [ADR-0019](../adr/0019-session-authorized
 
 [F2-T15](F2-T15.md) makes daily container startup build the current checkout using
 the Docker cache before starting the application.
+
+[F2-T16](F2-T16.md) provides the application shell, responsive navigation and
+agent workspace under the accepted SPEC-0012 shell amendment.

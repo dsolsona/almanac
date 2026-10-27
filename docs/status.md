@@ -2,6 +2,15 @@
 
 ## Current state
 
+The signed-in application shell is verified under [F2-T16](tasks/F2-T16.md):
+desktop navigation, accessible mobile menu, account controls and direct `/agents`
+links replace the identity confirmation page. Planned destinations are explicitly
+marked “Not available yet.” Evidence: 145 web/178 Go tests, 42 focused catalogue
+browser checks and 129 selected real database tests including browser journeys.
+Agent connectivity, datasource diagnostics and observations remain outstanding.
+The maintainer approved the accelerated delivery workflow on 2026-10-27; see
+[ways of working](ways-of-working.md) and [command discipline](commands.md).
+
 Registration usability correction is verified under [F2-T14](tasks/F2-T14.md).
 [ADR-0019](adr/0019-session-authorized-agent-registration.md) accepts registration
 using the current administrator session without an additional password prompt.

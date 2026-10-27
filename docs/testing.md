@@ -187,6 +187,7 @@ The foundation provides these fixed entry points:
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
 | `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
+| Focused onboarding invocation in [command discipline](commands.md) | Real HTTPS/PostgreSQL onboarding with the current built candidate; fails if the selected named journey does not execute and pass |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthFailure, type AuthContext, type createAuthClient } from '../src/auth/client.ts';
@@ -21,6 +21,7 @@ function clientFor(context: AuthContext = anonymous): Client {
 
 afterEach(() => {
   cleanup();
+  history.replaceState({}, '', '/');
   document.documentElement.classList.remove('dark');
   document.documentElement.style.colorScheme = '';
   localStorage.clear();
@@ -100,7 +101,7 @@ describe('authentication page', () => {
     expect(screen.getByLabelText('Password')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
     resolve(signedIn);
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
   });
 
   it('synchronously guards two submit events while the authentication request is pending', async () => {
@@ -122,13 +123,50 @@ describe('authentication page', () => {
     const client = clientFor(signedIn);
     client.context = vi.fn().mockResolvedValueOnce(signedIn).mockResolvedValueOnce(anonymous);
     render(<AuthPage client={client} />);
-    expect(await screen.findByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByText('owner')).toBeVisible();
     expect(screen.getByText('administrator')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     expect(client.logout).toHaveBeenCalledOnce();
     expect(client.context).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the signed-in Agents workspace inside the application shell', async () => {
+    render(<AuthPage client={clientFor(signedIn)} />);
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
+    for (const destination of ['SLOs', 'SLIs', 'Datasources', 'Alerts']) {
+      expect(screen.getByText(destination)).toBeVisible();
+      expect(screen.getByText(destination).closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
+    }
+    expect(screen.queryByRole('heading', { name: 'Signed in' })).not.toBeInTheDocument();
+    expect(screen.getByText('owner')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  });
+
+  it('canonicalizes signed-in root links to Agents while preserving their query and fragment', async () => {
+    history.replaceState({}, '', '/?agent=agent-1&agents_cursor=agents-next&credentials_cursor=credentials-next#main');
+    render(<AuthPage client={clientFor(signedIn)} />);
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
+    await waitFor(() => expect(location.href).toContain('/agents?agent=agent-1&agents_cursor=agents-next&credentials_cursor=credentials-next#main'));
+  });
+
+  it('opens the mobile navigation as a contained drawer and restores focus on Escape', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 860px)' }) as MediaQueryList);
+    render(<AuthPage client={clientFor(signedIn)} />);
+    await screen.findByRole('heading', { name: 'Agents' });
+    const menu = screen.getByRole('button', { name: 'Menu' });
+    await user.click(menu);
+    const drawer = screen.getByRole('dialog', { name: 'Navigation menu' });
+    expect(screen.getByRole('button', { name: 'Close navigation' })).toHaveFocus();
+    await user.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(within(drawer).getByRole('button', { name: 'Sign out' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(menu).toHaveFocus();
+    expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument();
   });
 
   it('validates password rotation and announces success only after an explicit successful response', async () => {
@@ -191,7 +229,7 @@ describe('authentication page', () => {
     await user.type(screen.getByLabelText('Password'), 'secret');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/may have completed/i);
-    expect(screen.getByRole('heading', { name: 'Signed in' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByRole('alert')).toBeVisible();
     expect(screen.queryByText('untrusted text')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Check session' }));

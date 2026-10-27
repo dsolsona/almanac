@@ -14,5 +14,5 @@ const root = createRoot(document.getElementById('root')!);
 if (import.meta.env.DEV && window.location.pathname === '/design-system') {
   void import('./catalogue/Catalogue.tsx').then(({ Catalogue }) => root.render(<Catalogue />));
 } else {
-  root.render(window.location.pathname === '/' ? <AuthPage /> : <NotFound />);
+  root.render(window.location.pathname === '/' || window.location.pathname === '/agents' ? <AuthPage /> : <NotFound />);
 }

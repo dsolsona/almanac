@@ -18,6 +18,10 @@ function tokenEvidence(token) {
 // raw HTTP bodies, clipboard values or token-bearing screenshots are retained.
 export async function runAgentRegistrationJourney({ page, context, fixture, setStage }) {
   const origin = new URL(fixture.url).origin;
+  const expectSelectedAgentURL = async (agentID, stage) => {
+    setStage(`${stage}; expected pathname=/agents agent=${agentID}`);
+    await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === agentID);
+  };
   let createRequests = 0;
   let firstKey;
   let firstSemantics;
@@ -31,26 +35,64 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   setStage('agent list second page');
   await page.getByRole('button', { name: 'Next agents', exact: true }).click();
   await expect(page.getByRole('button', { name: 'fixture-051', exact: true })).toBeVisible();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.has('agents_cursor'));
   setStage('agent list browser back');
   await page.goBack();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent') && !url.searchParams.has('agents_cursor'));
+  await expect(page.getByRole('button', { name: 'fixture-001', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'fixture-001', exact: true }).click();
-  setStage('credential history first page');
+  const selectedAgentID = '10000000-0000-4000-8000-000000000001';
+  await expectSelectedAgentURL(selectedAgentID, 'agent selection URL and browser history');
+  const selectedURL = page.url();
+  await page.goBack();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
+  await expect(page.getByRole('button', { name: 'fixture-001', exact: true })).toBeVisible();
+  await page.goForward();
+  await expectSelectedAgentURL(selectedAgentID, 'agent selection browser forward');
   const history = page.getByRole('region', { name: 'Credential history', exact: true }).and(page.locator('[tabindex="0"]'));
+  setStage('agent selection browser forward URL confirmed; waiting for credential history region');
+  await expect(history).toBeVisible();
+  setStage('direct agent selection URL reload');
+  await page.goto(selectedURL);
+  await expectSelectedAgentURL(selectedAgentID, 'direct agent selection URL reload');
+  await expect(page.getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
+  setStage('credential history first page');
   await expect(history.locator('tbody tr')).toHaveCount(50);
   setStage('credential history second page');
   await page.getByRole('button', { name: 'Next credential history', exact: true }).click();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
   await expect(history.locator('tbody tr')).toHaveCount(1);
   await expect(history).toContainText('20000000-0000-4000-8000-000000000051');
+  setStage('credential history cursor browser history');
+  await page.goBack();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && !url.searchParams.has('credentials_cursor'));
+  await expect(history.locator('tbody tr')).toHaveCount(50);
+  await page.goForward();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
+  await expect(history.locator('tbody tr')).toHaveCount(1);
   setStage('credential history reload');
   await page.reload();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
   await expect(history.locator('tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+  await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
 
   const lost = fixture.scenario === 'agents-lost';
   const unavailable = fixture.scenario === 'agents-unavailable';
   const expectedCreates = lost || unavailable ? 2 : 1;
   const name = lost ? 'browser-lost' : unavailable ? 'browser-unavailable' : 'browser-normal';
   let evidence;
+  const selectTheme = async (theme) => {
+    const dark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
+    if (dark === (theme === 'dark')) return;
+    if (await page.evaluate(() => window.innerWidth <= 860)) {
+      await page.getByRole('button', { name: 'Menu', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Navigation menu' }).getByRole('button', { name: `Switch to ${theme} theme` }).click();
+      await page.keyboard.press('Escape');
+    } else {
+      await page.getByRole('button', { name: `Switch to ${theme} theme` }).click();
+    }
+  };
   if (lost) {
     await page.route('**/api/v1/agents', async (route) => {
       try {
@@ -129,15 +171,13 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     for (const width of [1440, 360]) {
       await page.setViewportSize({ width, height: 900 });
       for (const theme of ['light', 'dark']) {
-        const dark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
-        if (dark !== (theme === 'dark')) await page.getByRole('button', { name: `Switch to ${theme} theme` }).click();
+        await selectTheme(theme);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
         await page.screenshot({ path: join(fixture.artifacts, `agent-registration-unavailable-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
       }
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    const dark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
-    if (dark) await page.getByRole('button', { name: 'Switch to light theme' }).click();
+    await selectTheme('light');
     setStage('connection feedback screenshots captured');
     await expect(page.locator('section[aria-labelledby="panel-agent-records"]')).toContainText('Registration is not confirmed. The agent records currently shown may not include this request.');
     await expect(page.getByText(/No response was received from Almanac/)).toBeVisible();
@@ -145,6 +185,8 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
     assert.equal(createRequests, 1);
     setStage('connection failure same-request retry');
+    await page.getByRole('link', { name: 'Agents', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Registration not confirmed', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Retry registration', exact: true }).click();
     registration = page.getByRole('dialog', { name: 'Retry registration', exact: true });
     await expect(registration.getByRole('button', { name: 'Retry registration', exact: true })).toBeVisible();
@@ -230,8 +272,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     for (const width of [1440, 1024, 360]) {
       await page.setViewportSize({ width, height: 900 });
       for (const theme of ['light', 'dark']) {
-        const dark = await page.locator('html').evaluate((element) => element.classList.contains('dark'));
-        if (dark !== (theme === 'dark')) await page.getByRole('button', { name: `Switch to ${theme} theme` }).click();
+        await selectTheme(theme);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
         await page.screenshot({ path: join(fixture.artifacts, `agent-detail-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
       }
@@ -258,7 +299,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     await page.getByLabel('Login', { exact: true }).fill(fixture.login);
     await page.getByLabel('Password', { exact: true }).fill(fixture.permanent);
     await page.getByLabel('Password', { exact: true }).press('Enter');
-    await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
   }
   assert.ok(evidence?.agent_id);
   await writeFile(join(fixture.artifacts, 'agent-registration.json'), JSON.stringify({ ...evidence, replayed: lost, create_requests: createRequests }), { mode: 0o600 });
