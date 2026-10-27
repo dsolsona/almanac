@@ -33,18 +33,19 @@ type options struct {
 }
 
 type client struct {
-	opts       options
-	token      string
-	resume     string
-	generation string
-	lease      agentprotocol.Lease
-	revision   string
-	sequence   int64
-	pending    *agentprotocol.Heartbeat
-	agentID    string
-	serverTime time.Time
-	serverAt   time.Time
-	http       *http.Client
+	opts        options
+	token       string
+	resume      string
+	generation  string
+	lease       agentprotocol.Lease
+	revision    string
+	sequence    int64
+	pending     *agentprotocol.Heartbeat
+	agentID     string
+	serverTime  time.Time
+	serverAt    time.Time
+	established bool
+	http        *http.Client
 }
 
 func Run(ctx context.Context, args []string) error {
@@ -109,17 +110,15 @@ func newClient(opts options, token string) (*client, error) {
 func (c *client) run(ctx context.Context) error {
 	backoff := time.Second
 	for ctx.Err() == nil {
-		wasConnected := c.agentID != ""
+		c.established = false
 		err := c.runSession(ctx)
 		if err == nil {
 			return nil
 		}
-		if errors.Is(err, ErrOwnerConflict) || errors.Is(err, ErrRevoked) || errors.Is(err, ErrCredential) || errors.Is(err, ErrIncompatible) {
+		if errors.Is(err, ErrOwnerConflict) || errors.Is(err, ErrRevoked) || errors.Is(err, ErrCredential) || errors.Is(err, ErrIncompatible) || errors.Is(err, ErrSessionRejected) {
 			return err
 		}
-		if wasConnected || c.agentID != "" {
-			backoff = time.Second
-		}
+		backoff = retryDelay(backoff, c.established)
 		if !waitRetry(ctx, backoff) {
 			return nil
 		}
@@ -147,6 +146,13 @@ func nextBackoff(current time.Duration) time.Duration {
 		return time.Second
 	}
 	return current * 2
+}
+
+func retryDelay(current time.Duration, established bool) time.Duration {
+	if established {
+		return time.Second
+	}
+	return current
 }
 
 func (c *client) runSession(ctx context.Context) error {
@@ -222,6 +228,7 @@ func (c *client) runSession(ctx context.Context) error {
 	if err := candidate.validateLease(welcome.Payload.ExecutionLease, welcome.Payload.ServerTime); err != nil {
 		return err
 	}
+	c.established = true
 	c.agentID = candidate.agentID
 	c.serverTime, c.serverAt = welcome.Payload.ServerTime, time.Now()
 	c.generation, c.revision = candidate.generation, candidate.revision
@@ -427,6 +434,7 @@ var ErrOwnerConflict = errors.New("agent credential has an active owner")
 var ErrRevoked = errors.New("agent credential revoked")
 var ErrCredential = errors.New("agent credential rejected")
 var ErrIncompatible = errors.New("backend protocol incompatible")
+var ErrSessionRejected = errors.New("agent session was rejected; verify the ownership lease and restart only after it expires")
 
 func (c *client) currentServerTime() time.Time { return c.serverTime.Add(time.Since(c.serverAt)) }
 
@@ -520,15 +528,9 @@ func writeJSON(ctx context.Context, conn *websocket.Conn, value any) error {
 func readJSON(ctx context.Context, conn *websocket.Conn, value any) error {
 	messageType, data, err := conn.Read(ctx)
 	if err != nil {
-		var closeError websocket.CloseError
-		if errors.As(err, &closeError) {
-			switch closeError.Reason {
-			case "active_owner":
-				return ErrOwnerConflict
-			case "credential_revoked":
-				return ErrRevoked
-			case "incompatible_protocol":
-				return ErrIncompatible
+		if closeError, ok := errors.AsType[websocket.CloseError](err); ok {
+			if classified := closeReasonError(closeError.Reason); classified != nil {
+				return classified
 			}
 		}
 		return errors.New("backend message unavailable")
@@ -540,6 +542,21 @@ func readJSON(ctx context.Context, conn *websocket.Conn, value any) error {
 		return err
 	}
 	return json.Unmarshal(data, value)
+}
+
+func closeReasonError(reason string) error {
+	switch reason {
+	case "active_owner":
+		return ErrOwnerConflict
+	case "credential_revoked":
+		return ErrRevoked
+	case "incompatible_protocol":
+		return ErrIncompatible
+	case "session_rejected":
+		return ErrSessionRejected
+	default:
+		return nil
+	}
 }
 
 func readRaw(ctx context.Context, conn *websocket.Conn, value *jsontext.Value) error {

@@ -536,6 +536,13 @@ func validAgentRuntime(runtime api.AgentRuntimeStatus) bool {
 		len(runtime.Capabilities) > 256 {
 		return false
 	}
+	if runtime.ConfigurationFailureCode == nil {
+		if runtime.ConfigurationFailureRevision != nil {
+			return false
+		}
+	} else if !runtime.ConfigurationFailureCode.Valid() || runtime.ConfigurationFailureRevision == nil || !decimal(*runtime.ConfigurationFailureRevision, true) {
+		return false
+	}
 	for _, capability := range runtime.Capabilities {
 		if !validRuntimeText(capability.Provider) || !validRuntimeStringList(capability.ConfigurationFormats, 64) || !validRuntimeStringList(capability.Operations, 16) {
 			return false
@@ -610,10 +617,11 @@ func validAgentRaw(raw []byte, a api.Agent) bool {
 	return a.Runtime != nil && validAgentRuntimeRaw(rawField(raw, "runtime"), *a.Runtime)
 }
 func validAgentRuntimeRaw(raw jsontext.Value, runtime api.AgentRuntimeStatus) bool {
-	if !hasFields(raw, "reachability", "protocol", "software_version", "capabilities", "last_heartbeat_at", "desired_configuration_revision", "applied_configuration_revision", "scheduler_health", "collection_progress", "last_attempt_at", "last_successful_query_at", "next_expected_execution_at", "collection_explanation") ||
+	if !hasFields(raw, "reachability", "protocol", "software_version", "capabilities", "last_heartbeat_at", "desired_configuration_revision", "applied_configuration_revision", "scheduler_health", "collection_progress", "configuration_failure_code", "configuration_failure_revision", "last_attempt_at", "last_successful_query_at", "next_expected_execution_at", "collection_explanation") ||
 		!rawString(rawField(raw, "reachability")) || !rawString(rawField(raw, "protocol")) || !rawString(rawField(raw, "software_version")) ||
 		!rawString(rawField(raw, "desired_configuration_revision")) || !rawString(rawField(raw, "applied_configuration_revision")) || !rawString(rawField(raw, "scheduler_health")) ||
-		!rawString(rawField(raw, "collection_progress")) || !rawString(rawField(raw, "collection_explanation")) || !rawNullableRuntimeTime(rawField(raw, "last_heartbeat_at")) ||
+		!rawString(rawField(raw, "collection_progress")) || !rawString(rawField(raw, "collection_explanation")) || !rawNullableRuntimeString(rawField(raw, "configuration_failure_code")) ||
+		!rawNullableRuntimeString(rawField(raw, "configuration_failure_revision")) || !rawNullableRuntimeTime(rawField(raw, "last_heartbeat_at")) ||
 		!rawNullableRuntimeTime(rawField(raw, "last_attempt_at")) || !rawNullableRuntimeTime(rawField(raw, "last_successful_query_at")) || !rawNullableRuntimeTime(rawField(raw, "next_expected_execution_at")) {
 		return false
 	}
@@ -627,6 +635,9 @@ func validAgentRuntimeRaw(raw jsontext.Value, runtime api.AgentRuntimeStatus) bo
 		}
 	}
 	return validAgentRuntime(runtime)
+}
+func rawNullableRuntimeString(raw jsontext.Value) bool {
+	return string(raw) == "null" || rawString(raw)
 }
 func validAgentCapabilityRaw(raw jsontext.Value, capability api.AgentCapability) bool {
 	if !hasFields(raw, "provider", "configuration_formats", "operations") || !rawString(rawField(raw, "provider")) {

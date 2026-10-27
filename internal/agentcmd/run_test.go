@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -149,6 +150,25 @@ func TestRetryBackoffCapsAndStopsOnCancellation(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("retry cancellation was not prompt: %s", elapsed)
+	}
+}
+
+func TestRetryDelayResetsOnlyAfterCurrentAttemptEstablished(t *testing.T) {
+	if got := retryDelay(16*time.Second, false); got != 16*time.Second {
+		t.Fatalf("failed connection attempt reset retry delay to %s", got)
+	}
+	if got := retryDelay(16*time.Second, true); got != time.Second {
+		t.Fatalf("established connection attempt retry delay = %s, want 1s", got)
+	}
+}
+
+func TestSessionRejectionIsActionableAndTerminal(t *testing.T) {
+	err := closeReasonError("session_rejected")
+	if !errors.Is(err, ErrSessionRejected) || !strings.Contains(err.Error(), "ownership lease") {
+		t.Fatalf("session rejection classification = %v", err)
+	}
+	if err := closeReasonError("server_unavailable"); err != nil {
+		t.Fatalf("retryable close reason became terminal: %v", err)
 	}
 }
 

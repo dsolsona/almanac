@@ -10,7 +10,7 @@ const runtime = {
   reachability: 'connected', protocol: 'almanac-agent/1', software_version: '1.2.3',
   capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['live_query'] }],
   last_heartbeat_at: '2026-01-02T03:04:05.123456Z', desired_configuration_revision: '9223372036854775807',
-  applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running',
+  applied_configuration_revision: '0', scheduler_health: 'ready', collection_progress: 'running', configuration_failure_code: null, configuration_failure_revision: null,
   last_attempt_at: '2026-01-02T03:03:00Z', last_successful_query_at: null,
   next_expected_execution_at: '2026-01-02T03:05:00Z', collection_explanation: 'no_assignment',
 } as const;
@@ -57,6 +57,9 @@ describe('browser agent management client', () => {
       { ...runtime, reachability: 'online' },
       { ...runtime, scheduler_health: 'healthy' },
       { ...runtime, collection_progress: 'complete' },
+      { ...runtime, configuration_failure_code: 'source_password' },
+      { ...runtime, configuration_failure_code: 'apply_failed', configuration_failure_revision: null },
+      { ...runtime, configuration_failure_code: null, configuration_failure_revision: '2' },
       { ...runtime, collection_explanation: 'none' },
       { ...runtime, desired_configuration_revision: 7 },
       { ...runtime, desired_configuration_revision: '0' },
@@ -65,6 +68,7 @@ describe('browser agent management client', () => {
       { ...runtime, capabilities: null },
       { ...runtime, capabilities: [{ provider: '', configuration_formats: [], operations: [] }] },
       Object.fromEntries(Object.entries(runtime).filter(([key]) => key !== 'scheduler_health')),
+      Object.fromEntries(Object.entries(runtime).filter(([key]) => key !== 'configuration_failure_code')),
     ];
     for (const invalidRuntime of invalid) {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ ...agent, runtime: invalidRuntime }, 200, { ETag: `"agent:${id}:${agent.version}"` }));

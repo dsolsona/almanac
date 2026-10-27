@@ -318,7 +318,7 @@ components:
           allOf: [{$ref: '#/components/schemas/AgentRuntimeStatus'}]
     AgentRuntimeStatus:
       type: object
-      required: [reachability, protocol, software_version, capabilities, last_heartbeat_at, desired_configuration_revision, applied_configuration_revision, scheduler_health, collection_progress, last_attempt_at, last_successful_query_at, next_expected_execution_at, collection_explanation]
+      required: [reachability, protocol, software_version, capabilities, last_heartbeat_at, desired_configuration_revision, applied_configuration_revision, scheduler_health, collection_progress, configuration_failure_code, configuration_failure_revision, last_attempt_at, last_successful_query_at, next_expected_execution_at, collection_explanation]
       properties:
         reachability: {type: string, enum: [connected, unreachable, incompatible]}
         protocol: {type: string}
@@ -329,6 +329,8 @@ components:
         applied_configuration_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
         scheduler_health: {type: string, enum: [starting, ready, degraded, stopped]}
         collection_progress: {type: string, enum: [not_started, idle, running, blocked]}
+        configuration_failure_code: {type: string, enum: [invalid_snapshot, incompatible, apply_failed], nullable: true}
+        configuration_failure_revision: {type: string, pattern: '^[1-9][0-9]*$', nullable: true}
         last_attempt_at: {type: string, format: date-time, nullable: true}
         last_successful_query_at: {type: string, format: date-time, nullable: true}
         next_expected_execution_at: {type: string, format: date-time, nullable: true}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dsolsona/almanac/internal/agentclient"
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/setupclient"
 )
 
@@ -136,6 +137,17 @@ func TestAgentDetailTextShowsRuntimeWithoutCombiningHealthSignals(t *testing.T) 
 	neverConnected := jsontext.Value(`{"agent":{"id":"00000000-0000-0000-0000-000000000001","name":"east","display_name":"East","enabled":true,"version":"1","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"},"etag":"\"agent:00000000-0000-0000-0000-000000000001:1\""}`)
 	if neverConnectedText := renderAgentText("agents get", neverConnected, "", false); !strings.Contains(neverConnectedText, "Connection state: Never connected") || !strings.Contains(neverConnectedText, "No heartbeat has been received.") {
 		t.Fatalf("absent runtime was not represented as never connected: %s", neverConnectedText)
+	}
+}
+
+func TestAgentDetailTextShowsConfigurationFailureCode(t *testing.T) {
+	failure := api.AgentRuntimeStatusConfigurationFailureCodeApplyFailed
+	revision := "2"
+	agent := api.Agent{Enabled: true, Runtime: &api.AgentRuntimeStatus{ConfigurationFailureCode: &failure, ConfigurationFailureRevision: &revision}}
+	var output strings.Builder
+	renderAgentRuntime(&output, agent)
+	if !strings.Contains(output.String(), "Configuration failure: apply_failed (revision 2)") {
+		t.Fatalf("agent detail omitted safe configuration failure code: %s", output.String())
 	}
 }
 

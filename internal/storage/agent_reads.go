@@ -62,6 +62,8 @@ type AgentRuntimeStatus struct {
 	AppliedConfigurationRevision int64
 	SchedulerHealth              string
 	CollectionProgress           string
+	ConfigurationFailureCode     *string
+	ConfigurationFailureRevision *int64
 	LastAttemptAt                *time.Time
 	LastSuccessfulQueryAt        *time.Time
 	NextExpectedExecutionAt      *time.Time
@@ -161,11 +163,29 @@ func runtimeStatus(row dbgen.GetAgentRuntimeStatusRow, now time.Time) (*AgentRun
 		DesiredConfigurationRevision: row.DesiredConfigurationRevision,
 		AppliedConfigurationRevision: row.AppliedConfigurationRevision,
 		SchedulerHealth:              row.SchedulerHealth, CollectionProgress: row.CollectionProgress,
-		LastAttemptAt:           nullableTimestamp(row.LastAttemptAt),
-		LastSuccessfulQueryAt:   nullableTimestamp(row.LastSuccessfulQueryAt),
-		NextExpectedExecutionAt: nullableTimestamp(row.NextExpectedExecutionAt),
-		CollectionExplanation:   "no_assignment",
+		ConfigurationFailureCode:     nullableText(row.ConfigurationFailureCode),
+		ConfigurationFailureRevision: nullableInt64(row.ConfigurationFailureRevision),
+		LastAttemptAt:                nullableTimestamp(row.LastAttemptAt),
+		LastSuccessfulQueryAt:        nullableTimestamp(row.LastSuccessfulQueryAt),
+		NextExpectedExecutionAt:      nullableTimestamp(row.NextExpectedExecutionAt),
+		CollectionExplanation:        "no_assignment",
 	}, nil
+}
+
+func nullableText(value pgtype.Text) *string {
+	if !value.Valid {
+		return nil
+	}
+	result := value.String
+	return &result
+}
+
+func nullableInt64(value pgtype.Int8) *int64 {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Int64
+	return &result
 }
 
 func nullableTimestamp(value pgtype.Timestamptz) *time.Time {

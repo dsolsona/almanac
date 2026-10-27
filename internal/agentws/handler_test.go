@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/dsolsona/almanac/internal/agentaccess"
 	"github.com/dsolsona/almanac/internal/agentownership"
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/agentruntime"
@@ -135,6 +136,39 @@ func TestOpenFailureReasonsAreStableAndSanitized(t *testing.T) {
 	} {
 		if got := openFailureReason(test.err); got != test.want || strings.Contains(got, "private") {
 			t.Fatalf("open failure reason = %q, want %q", got, test.want)
+		}
+	}
+}
+
+func TestAuthenticationFailureStatusSeparatesInvalidCredentialFromUnavailable(t *testing.T) {
+	for _, test := range []struct {
+		err  error
+		want int
+	}{
+		{err: agentaccess.ErrInvalidCredential, want: http.StatusUnauthorized},
+		{err: agentaccess.ErrUnavailable, want: http.StatusServiceUnavailable},
+		{err: agentaccess.ErrCancelled, want: http.StatusServiceUnavailable},
+		{err: errors.New("temporary storage fault"), want: http.StatusServiceUnavailable},
+	} {
+		if got := authenticationFailureStatus(test.err); got != test.want {
+			t.Errorf("authentication failure %v returned status %d, want %d", test.err, got, test.want)
+		}
+	}
+}
+
+func TestOpenFailureRetriesWhenOwnershipStorageIsUnavailable(t *testing.T) {
+	for _, test := range []struct {
+		err      error
+		wantCode websocket.StatusCode
+		wantText string
+	}{
+		{err: agentownership.ErrUnavailable, wantCode: websocket.StatusTryAgainLater, wantText: "server_unavailable"},
+		{err: agentownership.ErrCancelled, wantCode: websocket.StatusTryAgainLater, wantText: "server_unavailable"},
+		{err: agentownership.ErrDenied, wantCode: websocket.StatusPolicyViolation, wantText: "session_rejected"},
+	} {
+		code, text := openFailure(test.err)
+		if code != test.wantCode || text != test.wantText {
+			t.Errorf("openFailure(%v) = %d,%q; want %d,%q", test.err, code, text, test.wantCode, test.wantText)
 		}
 	}
 }

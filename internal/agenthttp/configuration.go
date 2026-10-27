@@ -65,18 +65,83 @@ func (h *ConfigurationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	etag := `"agent-config:` + configuration.AgentID + `:` + strconv.FormatInt(configuration.Revision, 10) + `"`
 	if values := r.Header.Values("If-None-Match"); len(values) != 0 {
-		if len(values) != 1 || (values[0] != etag && values[0] != "*") {
+		matched, valid := ifNoneMatch(values, etag)
+		if !valid {
 			writeConfigurationProblem(w, http.StatusBadRequest, "invalid_request", id)
 			return
 		}
-		w.Header().Set("ETag", etag)
-		w.WriteHeader(http.StatusNotModified)
-		return
+		if matched {
+			w.Header().Set("ETag", etag)
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(configuration.Snapshot)
+}
+
+func ifNoneMatch(values []string, current string) (matched, valid bool) {
+	if len(values) == 0 {
+		return false, false
+	}
+	value := strings.Join(values, ",")
+	i := 0
+	skipWhitespace := func() {
+		for i < len(value) && (value[i] == ' ' || value[i] == '\t') {
+			i++
+		}
+	}
+	skipWhitespace()
+	if i < len(value) && value[i] == '*' {
+		i++
+		skipWhitespace()
+		if i != len(value) {
+			return false, false
+		}
+		return true, true
+	}
+	if i == len(value) {
+		return false, false
+	}
+	for {
+		if strings.HasPrefix(value[i:], "W/") {
+			i += 2
+		}
+		if i >= len(value) || value[i] != '"' {
+			return false, false
+		}
+		start := i
+		i++
+		for i < len(value) && value[i] != '"' {
+			c := value[i]
+			if c != 0x21 && (c < 0x23 || c > 0x7e) && c < 0x80 {
+				return false, false
+			}
+			i++
+		}
+		if i == len(value) {
+			return false, false
+		}
+		i++
+		candidate := value[start:i]
+		if candidate == current {
+			matched = true
+		}
+		skipWhitespace()
+		if i == len(value) {
+			return matched, true
+		}
+		if value[i] != ',' {
+			return false, false
+		}
+		i++
+		skipWhitespace()
+		if i == len(value) {
+			return false, false
+		}
+	}
 }
 
 func writeConfigurationProblem(w http.ResponseWriter, status int, code, id string) {

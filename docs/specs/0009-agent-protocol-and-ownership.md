@@ -98,6 +98,11 @@ heartbeat and collection timestamps continue to describe the last accepted runti
 The backend's welcome records selected protocol, ownership generation, server time,
 desired config revision, heartbeat interval and an execution lease. Schemas and
 generated examples live under `api/agent/` at implementation; OpenAPI owns HTTP paths.
+An authenticated `configuration-failed` report is recorded only for the current
+desired revision and one of the bounded failure codes above. It does not advance the
+last successfully applied revision; management status exposes the failure code and
+revision together and marks scheduling degraded and collection blocked. Successful
+application of the desired revision clears both failure fields.
 
 ## Separate versions and authorization
 

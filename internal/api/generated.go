@@ -138,21 +138,42 @@ func (e AgentRuntimeStatusCollectionProgress) Valid() bool {
 	}
 }
 
+// Defines values for AgentRuntimeStatusConfigurationFailureCode.
+const (
+	AgentRuntimeStatusConfigurationFailureCodeApplyFailed     AgentRuntimeStatusConfigurationFailureCode = "apply_failed"
+	AgentRuntimeStatusConfigurationFailureCodeIncompatible    AgentRuntimeStatusConfigurationFailureCode = "incompatible"
+	AgentRuntimeStatusConfigurationFailureCodeInvalidSnapshot AgentRuntimeStatusConfigurationFailureCode = "invalid_snapshot"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeStatusConfigurationFailureCode enum.
+func (e AgentRuntimeStatusConfigurationFailureCode) Valid() bool {
+	switch e {
+	case AgentRuntimeStatusConfigurationFailureCodeApplyFailed:
+		return true
+	case AgentRuntimeStatusConfigurationFailureCodeIncompatible:
+		return true
+	case AgentRuntimeStatusConfigurationFailureCodeInvalidSnapshot:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AgentRuntimeStatusReachability.
 const (
-	Connected    AgentRuntimeStatusReachability = "connected"
-	Incompatible AgentRuntimeStatusReachability = "incompatible"
-	Unreachable  AgentRuntimeStatusReachability = "unreachable"
+	AgentRuntimeStatusReachabilityConnected    AgentRuntimeStatusReachability = "connected"
+	AgentRuntimeStatusReachabilityIncompatible AgentRuntimeStatusReachability = "incompatible"
+	AgentRuntimeStatusReachabilityUnreachable  AgentRuntimeStatusReachability = "unreachable"
 )
 
 // Valid indicates whether the value is a known member of the AgentRuntimeStatusReachability enum.
 func (e AgentRuntimeStatusReachability) Valid() bool {
 	switch e {
-	case Connected:
+	case AgentRuntimeStatusReachabilityConnected:
 		return true
-	case Incompatible:
+	case AgentRuntimeStatusReachabilityIncompatible:
 		return true
-	case Unreachable:
+	case AgentRuntimeStatusReachabilityUnreachable:
 		return true
 	default:
 		return false
@@ -398,19 +419,21 @@ type AgentPage struct {
 
 // AgentRuntimeStatus defines model for AgentRuntimeStatus.
 type AgentRuntimeStatus struct {
-	AppliedConfigurationRevision string                                  `json:"applied_configuration_revision"`
-	Capabilities                 []AgentCapability                       `json:"capabilities"`
-	CollectionExplanation        AgentRuntimeStatusCollectionExplanation `json:"collection_explanation"`
-	CollectionProgress           AgentRuntimeStatusCollectionProgress    `json:"collection_progress"`
-	DesiredConfigurationRevision string                                  `json:"desired_configuration_revision"`
-	LastAttemptAt                *time.Time                              `json:"last_attempt_at"`
-	LastHeartbeatAt              *time.Time                              `json:"last_heartbeat_at"`
-	LastSuccessfulQueryAt        *time.Time                              `json:"last_successful_query_at"`
-	NextExpectedExecutionAt      *time.Time                              `json:"next_expected_execution_at"`
-	Protocol                     string                                  `json:"protocol"`
-	Reachability                 AgentRuntimeStatusReachability          `json:"reachability"`
-	SchedulerHealth              AgentRuntimeStatusSchedulerHealth       `json:"scheduler_health"`
-	SoftwareVersion              string                                  `json:"software_version"`
+	AppliedConfigurationRevision string                                      `json:"applied_configuration_revision"`
+	Capabilities                 []AgentCapability                           `json:"capabilities"`
+	CollectionExplanation        AgentRuntimeStatusCollectionExplanation     `json:"collection_explanation"`
+	CollectionProgress           AgentRuntimeStatusCollectionProgress        `json:"collection_progress"`
+	ConfigurationFailureCode     *AgentRuntimeStatusConfigurationFailureCode `json:"configuration_failure_code"`
+	ConfigurationFailureRevision *string                                     `json:"configuration_failure_revision"`
+	DesiredConfigurationRevision string                                      `json:"desired_configuration_revision"`
+	LastAttemptAt                *time.Time                                  `json:"last_attempt_at"`
+	LastHeartbeatAt              *time.Time                                  `json:"last_heartbeat_at"`
+	LastSuccessfulQueryAt        *time.Time                                  `json:"last_successful_query_at"`
+	NextExpectedExecutionAt      *time.Time                                  `json:"next_expected_execution_at"`
+	Protocol                     string                                      `json:"protocol"`
+	Reachability                 AgentRuntimeStatusReachability              `json:"reachability"`
+	SchedulerHealth              AgentRuntimeStatusSchedulerHealth           `json:"scheduler_health"`
+	SoftwareVersion              string                                      `json:"software_version"`
 }
 
 // AgentRuntimeStatusCollectionExplanation defines model for AgentRuntimeStatus.CollectionExplanation.
@@ -418,6 +441,9 @@ type AgentRuntimeStatusCollectionExplanation string
 
 // AgentRuntimeStatusCollectionProgress defines model for AgentRuntimeStatus.CollectionProgress.
 type AgentRuntimeStatusCollectionProgress string
+
+// AgentRuntimeStatusConfigurationFailureCode defines model for AgentRuntimeStatus.ConfigurationFailureCode.
+type AgentRuntimeStatusConfigurationFailureCode string
 
 // AgentRuntimeStatusReachability defines model for AgentRuntimeStatus.Reachability.
 type AgentRuntimeStatusReachability string

@@ -55,12 +55,16 @@ ON CONFLICT (agent_id) DO UPDATE SET
     protocol = EXCLUDED.protocol,
     software_version = EXCLUDED.software_version,
     capabilities = EXCLUDED.capabilities,
-    last_heartbeat_at = NULL,
+    last_heartbeat_at = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.last_heartbeat_at ELSE NULL END,
     desired_configuration_revision = EXCLUDED.desired_configuration_revision,
     applied_configuration_revision = CASE
         WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
         THEN public.almanac_agent_runtime_status.applied_configuration_revision ELSE 0 END,
-    scheduler_health = 'starting',
+    scheduler_health = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.scheduler_health ELSE 'starting' END,
     collection_progress = CASE
         WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
         THEN public.almanac_agent_runtime_status.collection_progress ELSE 'not_started' END,
@@ -73,6 +77,12 @@ ON CONFLICT (agent_id) DO UPDATE SET
     next_expected_execution_at = CASE
         WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
         THEN public.almanac_agent_runtime_status.next_expected_execution_at ELSE NULL END,
+    configuration_failure_code = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.configuration_failure_code ELSE NULL END,
+    configuration_failure_revision = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.configuration_failure_revision ELSE NULL END,
     updated_at = EXCLUDED.updated_at;
 
 -- name: UpsertAgentIncompatibleAttempt :exec
@@ -93,14 +103,26 @@ WHERE agent_id = $1;
 UPDATE public.almanac_agent_runtime_status AS status
 SET last_heartbeat_at = sqlc.arg(received_at),
     applied_configuration_revision = sqlc.arg(applied_configuration_revision),
-    scheduler_health = sqlc.arg(scheduler_health),
-    collection_progress = sqlc.arg(collection_progress),
+    scheduler_health = CASE
+        WHEN status.configuration_failure_code IS NOT NULL
+          AND sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
+        THEN 'degraded' ELSE sqlc.arg(scheduler_health) END,
+    collection_progress = CASE
+        WHEN status.configuration_failure_code IS NOT NULL
+          AND sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
+        THEN 'blocked' ELSE sqlc.arg(collection_progress) END,
+    configuration_failure_code = CASE
+        WHEN sqlc.arg(applied_configuration_revision) >= status.desired_configuration_revision
+        THEN NULL ELSE status.configuration_failure_code END,
+    configuration_failure_revision = CASE
+        WHEN sqlc.arg(applied_configuration_revision) >= status.desired_configuration_revision
+        THEN NULL ELSE status.configuration_failure_revision END,
     last_attempt_at = sqlc.narg(last_attempt_at),
     last_successful_query_at = sqlc.narg(last_successful_query_at),
     next_expected_execution_at = sqlc.narg(next_expected_execution_at),
     updated_at = sqlc.arg(received_at)
 WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(generation)
-  AND status.desired_configuration_revision = sqlc.arg(applied_configuration_revision)
+  AND status.desired_configuration_revision >= sqlc.arg(applied_configuration_revision)
   AND EXISTS (
       SELECT 1 FROM public.almanac_agent_ownership AS owner
       WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
@@ -109,9 +131,32 @@ WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(gene
 
 -- name: UpdateAgentAppliedConfiguration :execrows
 UPDATE public.almanac_agent_runtime_status AS status
-SET applied_configuration_revision = sqlc.arg(applied_configuration_revision), updated_at = sqlc.arg(received_at)
+SET applied_configuration_revision = sqlc.arg(applied_configuration_revision),
+    configuration_failure_code = CASE
+        WHEN sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
+        THEN status.configuration_failure_code ELSE NULL END,
+    configuration_failure_revision = CASE
+        WHEN sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
+        THEN status.configuration_failure_revision ELSE NULL END,
+    updated_at = sqlc.arg(received_at)
 WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(generation)
   AND sqlc.arg(applied_configuration_revision) <= status.desired_configuration_revision
+  AND EXISTS (
+      SELECT 1 FROM public.almanac_agent_ownership AS owner
+      WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
+        AND owner.expires_at > sqlc.arg(received_at)
+  );
+
+-- name: RecordAgentConfigurationFailed :execrows
+UPDATE public.almanac_agent_runtime_status AS status
+SET configuration_failure_code = sqlc.arg(configuration_failure_code),
+    configuration_failure_revision = sqlc.arg(failed_configuration_revision),
+    scheduler_health = 'degraded',
+    collection_progress = 'blocked',
+    updated_at = sqlc.arg(received_at)
+WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(generation)
+  AND status.desired_configuration_revision = sqlc.arg(failed_configuration_revision)
+  AND status.applied_configuration_revision < sqlc.arg(failed_configuration_revision)
   AND EXISTS (
       SELECT 1 FROM public.almanac_agent_ownership AS owner
       WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
@@ -121,7 +166,7 @@ WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(gene
 -- name: GetAgentRuntimeStatus :one
 SELECT generation, protocol, software_version, capabilities, last_heartbeat_at,
        desired_configuration_revision, applied_configuration_revision,
-       scheduler_health, collection_progress, last_attempt_at,
+       scheduler_health, collection_progress, configuration_failure_code, configuration_failure_revision, last_attempt_at,
        last_successful_query_at, next_expected_execution_at, updated_at
 FROM public.almanac_agent_runtime_status
 WHERE agent_id = $1;
