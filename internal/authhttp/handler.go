@@ -122,6 +122,18 @@ func (h *Handler) ValidateSessionRequest(r *http.Request) (SessionRequest, error
 	return SessionRequest{SessionSecret: session, Source: source}, nil
 }
 
+// ValidateTLSRequest applies direct-TLS or trusted-proxy transport validation
+// without imposing cookie, origin, or session-authentication requirements.
+func (h *Handler) ValidateTLSRequest(r *http.Request) error {
+	if h == nil || r == nil {
+		return ErrRequestTLS
+	}
+	if _, ok := h.requestSource(r); !ok {
+		return ErrRequestTLS
+	}
+	return nil
+}
+
 func canonicalOrigin(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host == "" || strings.HasSuffix(u.Host, ":") || u.User != nil || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || strings.Contains(u.Host, "*") {

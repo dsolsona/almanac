@@ -13,6 +13,7 @@ sql:
       - internal/storage/migrations/0007_agent_credential_retirement.sql
       - internal/storage/migrations/0008_agent_rotation_lookup_index.sql
       - internal/storage/migrations/0009_agent_ownership.sql
+      - internal/storage/migrations/0010_agent_runtime.sql
     gen:
       go:
         package: dbgen

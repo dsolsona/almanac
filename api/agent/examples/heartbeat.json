@@ -6,6 +6,7 @@
     "request_nonce": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
     "applied_configuration_revision": "0",
     "scheduler": "ready",
+    "collection_progress": "not_started",
     "last_attempt_at": null,
     "last_successful_query_at": null,
     "next_expected_execution_at": null,

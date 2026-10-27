@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentmanagement"
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -137,6 +138,29 @@ func TestAgentDTOMapsExactDecimalVersionsAndCounts(t *testing.T) {
 	}
 	if _, present := got["credential"]; !present || got["credential"] != nil {
 		t.Fatalf("lifecycle credential is not explicit null: %s", data)
+	}
+}
+
+func TestAgentDTOExposesSeparateRuntimeStateAndNoAssignment(t *testing.T) {
+	value := storage.AgentRecord{
+		ID: "abcdefab-cdef-4abc-8def-abcdefabcdee", Version: 1,
+		Runtime: &storage.AgentRuntimeStatus{
+			Reachability: "connected", Protocol: agentprotocol.ProtocolV1,
+			SoftwareVersion: "test-agent", Capabilities: []agentprotocol.Capability{},
+			DesiredConfigurationRevision: 1, AppliedConfigurationRevision: 0,
+			SchedulerHealth: "starting", CollectionProgress: "not_started",
+			CollectionExplanation: "no_assignment",
+		},
+	}
+	dto := agentDTO(value)
+	if dto.Runtime == nil || string(dto.Runtime.Reachability) != "connected" || dto.Runtime.DesiredConfigurationRevision != "1" || dto.Runtime.AppliedConfigurationRevision != "0" {
+		t.Fatalf("runtime summary = %#v", dto.Runtime)
+	}
+	if dto.Runtime.LastHeartbeatAt != nil || dto.Runtime.LastSuccessfulQueryAt != nil || string(dto.Runtime.CollectionExplanation) != "no_assignment" {
+		t.Fatalf("runtime summary invented activity: %#v", dto.Runtime)
+	}
+	if dtoNever := agentDTO(storage.AgentRecord{ID: value.ID, Version: 1}); dtoNever.Runtime != nil {
+		t.Fatalf("never-connected agent has runtime state: %#v", dtoNever.Runtime)
 	}
 }
 

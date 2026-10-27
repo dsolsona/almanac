@@ -14,12 +14,14 @@ type Querier interface {
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
+	DeleteExpiredAgentExecutionGrants(ctx context.Context, arg DeleteExpiredAgentExecutionGrantsParams) error
 	DeleteExpiredAgentLifecycleReceipt(ctx context.Context, arg DeleteExpiredAgentLifecycleReceiptParams) (int64, error)
 	DeleteExpiredAgentReceipt(ctx context.Context, arg DeleteExpiredAgentReceiptParams) (int64, error)
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
+	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
 	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
@@ -27,12 +29,17 @@ type Querier interface {
 	FindAgentSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
+	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
+	GetAgentExecutionGrant(ctx context.Context, arg GetAgentExecutionGrantParams) (GetAgentExecutionGrantRow, error)
+	GetAgentExecutionGrantBySequence(ctx context.Context, arg GetAgentExecutionGrantBySequenceParams) (GetAgentExecutionGrantBySequenceRow, error)
+	GetAgentRuntimeStatus(ctx context.Context, agentID pgtype.UUID) (GetAgentRuntimeStatusRow, error)
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
 	InsertAgentCredential(ctx context.Context, arg InsertAgentCredentialParams) (InsertAgentCredentialRow, error)
+	InsertAgentExecutionGrant(ctx context.Context, arg InsertAgentExecutionGrantParams) error
 	InsertAgentLifecycleReceipt(ctx context.Context, arg InsertAgentLifecycleReceiptParams) error
 	InsertAgentOwnership(ctx context.Context, arg InsertAgentOwnershipParams) error
 	InsertAgentReceipt(ctx context.Context, arg InsertAgentReceiptParams) error
@@ -75,8 +82,12 @@ type Querier interface {
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
 	SessionVerifierExists(ctx context.Context, verifier []byte) (bool, error)
+	SetAgentCurrentExecutionLease(ctx context.Context, arg SetAgentCurrentExecutionLeaseParams) (int64, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
+	UpdateAgentAppliedConfiguration(ctx context.Context, arg UpdateAgentAppliedConfigurationParams) (int64, error)
+	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
+	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
 }
 
 var _ Querier = (*Queries)(nil)

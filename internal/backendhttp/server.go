@@ -13,8 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentaccess"
 	"github.com/dsolsona/almanac/internal/agenthttp"
 	"github.com/dsolsona/almanac/internal/agentmanagement"
+	"github.com/dsolsona/almanac/internal/agentruntime"
+	"github.com/dsolsona/almanac/internal/agentws"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -26,6 +29,7 @@ import (
 type Server struct {
 	http           *http.Server
 	databaseURL    string
+	agentSessions  *agentws.Registry
 	ready          atomic.Bool
 	connectionsMu  sync.Mutex
 	newConnections map[net.Conn]struct{}
@@ -58,7 +62,8 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if ctx == nil || service == nil || databaseURL == "" || (cfg.Components != "backend" && !cfg.BackendUI()) || (cfg.BackendUI() && assets == nil) || (cfg.Components == "backend" && assets != nil) {
 		return nil, errors.New("backendhttp: invalid configuration")
 	}
-	s := &Server{databaseURL: databaseURL, newConnections: make(map[net.Conn]struct{})}
+	agentSessions := agentws.NewRegistry()
+	s := &Server{databaseURL: databaseURL, agentSessions: agentSessions, newConnections: make(map[net.Conn]struct{})}
 	options := authhttp.Options{PublicOrigin: cfg.PublicOrigin, TrustedProxyCIDRs: cfg.TrustedProxyCIDRs, Now: time.Now, Preflight: s.authenticationPreflight}
 	auth, err := authhttp.New(service, options)
 	if err != nil {
@@ -72,6 +77,19 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent HTTP configuration")
 	}
+	access := agentaccess.New(databaseURL, time.Now)
+	configuration, err := agenthttp.NewConfigurationHandler(access, auth, time.Now)
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid agent configuration handler")
+	}
+	agentRuntime, err := agentruntime.New(databaseURL, time.Now)
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid agent runtime configuration")
+	}
+	connections, err := agentws.New(access, agentRuntime, auth, agentSessions)
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid agent connection configuration")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
@@ -80,6 +98,8 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	}
 	mux.Handle("/api/v1/agents", agents)
 	mux.Handle("/api/v1/", agents)
+	mux.Handle("/api/agent/v1/configuration", configuration)
+	mux.Handle("/api/agent/v1/connect", connections)
 	if cfg.BackendUI() {
 		mux.Handle("/", assets)
 	}
@@ -142,11 +162,16 @@ func (s *Server) closeNewConnections() {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.closeNewConnections()
+	if err := s.agentSessions.Drain(ctx); err != nil {
+		_ = s.agentSessions.Close()
+		return err
+	}
 	return s.http.Shutdown(ctx)
 }
 
 func (s *Server) Close() error {
 	s.closeNewConnections()
+	_ = s.agentSessions.Close()
 	return s.http.Close()
 }
 

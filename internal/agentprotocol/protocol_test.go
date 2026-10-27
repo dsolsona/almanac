@@ -101,9 +101,24 @@ func TestDecodeRequiresCanonicalDecimalStrings(t *testing.T) {
 }
 
 func TestDecodeAllowsFirstHeartbeatRenewalSequenceZero(t *testing.T) {
-	message := `{"kind":"heartbeat","message_id":"hb-1","session_generation":"1","payload":{"request_nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","applied_configuration_revision":"0","scheduler":"ready","last_attempt_at":null,"last_successful_query_at":null,"next_expected_execution_at":null,"lease_id":"lease-1","renewal_sequence":"0"}}`
+	message := `{"kind":"heartbeat","message_id":"hb-1","session_generation":"1","payload":{"request_nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","applied_configuration_revision":"0","scheduler":"ready","collection_progress":"not_started","last_attempt_at":null,"last_successful_query_at":null,"next_expected_execution_at":null,"lease_id":"lease-1","renewal_sequence":"0"}}`
 	if _, err := Decode([]byte(message)); err != nil {
 		t.Fatalf("first renewal sequence zero was rejected: %v", err)
+	}
+}
+
+func TestDecodeRequiresDistinctCollectionProgress(t *testing.T) {
+	valid := `{"kind":"heartbeat","message_id":"hb-1","session_generation":"1","payload":{"request_nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","applied_configuration_revision":"0","scheduler":"starting","collection_progress":"not_started","last_attempt_at":null,"last_successful_query_at":null,"next_expected_execution_at":null,"lease_id":"lease-1","renewal_sequence":"0"}}`
+	if _, err := Decode([]byte(valid)); err != nil {
+		t.Fatalf("valid heartbeat was rejected: %v", err)
+	}
+	missing := strings.Replace(valid, `,"collection_progress":"not_started"`, "", 1)
+	if _, err := Decode([]byte(missing)); err == nil {
+		t.Fatal("heartbeat without collection progress was accepted")
+	}
+	unknown := strings.Replace(valid, `"collection_progress":"not_started"`, `"collection_progress":"complete"`, 1)
+	if _, err := Decode([]byte(unknown)); err == nil {
+		t.Fatal("heartbeat with unknown collection progress was accepted")
 	}
 }
 

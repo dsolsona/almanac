@@ -20,15 +20,21 @@ var (
 )
 
 type Result struct {
-	AgentID         string
-	Generation      int64
-	RenewalSequence int64
-	AcquiredAt      time.Time
-	RenewedAt       time.Time
-	IssuedAt        time.Time
-	ExpiresAt       time.Time
-	Nonce           []byte
-	ReplaceAt       time.Time
+	AgentID               string
+	Generation            int64
+	RenewalSequence       int64
+	AcquiredAt            time.Time
+	RenewedAt             time.Time
+	IssuedAt              time.Time
+	ExpiresAt             time.Time
+	Nonce                 []byte
+	ReplaceAt             time.Time
+	LeaseID               string
+	ConfigurationRevision int64
+	ConfigurationSnapshot []byte
+	AllowedMeasurements   []byte
+	LeaseValidFrom        time.Time
+	LeaseValidUntil       time.Time
 }
 
 type ConflictError struct {

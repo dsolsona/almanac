@@ -99,6 +99,90 @@ func (e AgentIssuanceReplaySecretState) Valid() bool {
 	}
 }
 
+// Defines values for AgentRuntimeStatusCollectionExplanation.
+const (
+	NoAssignment AgentRuntimeStatusCollectionExplanation = "no_assignment"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeStatusCollectionExplanation enum.
+func (e AgentRuntimeStatusCollectionExplanation) Valid() bool {
+	switch e {
+	case NoAssignment:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeStatusCollectionProgress.
+const (
+	Blocked    AgentRuntimeStatusCollectionProgress = "blocked"
+	Idle       AgentRuntimeStatusCollectionProgress = "idle"
+	NotStarted AgentRuntimeStatusCollectionProgress = "not_started"
+	Running    AgentRuntimeStatusCollectionProgress = "running"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeStatusCollectionProgress enum.
+func (e AgentRuntimeStatusCollectionProgress) Valid() bool {
+	switch e {
+	case Blocked:
+		return true
+	case Idle:
+		return true
+	case NotStarted:
+		return true
+	case Running:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeStatusReachability.
+const (
+	Connected    AgentRuntimeStatusReachability = "connected"
+	Incompatible AgentRuntimeStatusReachability = "incompatible"
+	Unreachable  AgentRuntimeStatusReachability = "unreachable"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeStatusReachability enum.
+func (e AgentRuntimeStatusReachability) Valid() bool {
+	switch e {
+	case Connected:
+		return true
+	case Incompatible:
+		return true
+	case Unreachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeStatusSchedulerHealth.
+const (
+	Degraded AgentRuntimeStatusSchedulerHealth = "degraded"
+	Ready    AgentRuntimeStatusSchedulerHealth = "ready"
+	Starting AgentRuntimeStatusSchedulerHealth = "starting"
+	Stopped  AgentRuntimeStatusSchedulerHealth = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeStatusSchedulerHealth enum.
+func (e AgentRuntimeStatusSchedulerHealth) Valid() bool {
+	switch e {
+	case Degraded:
+		return true
+	case Ready:
+		return true
+	case Starting:
+		return true
+	case Stopped:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthResponseComponent.
 const (
 	Backend HealthResponseComponent = "backend"
@@ -230,13 +314,28 @@ func (e RotationIssuanceReplaySecretState) Valid() bool {
 
 // Agent defines model for Agent.
 type Agent struct {
-	CreatedAt   time.Time          `json:"created_at"`
-	DisplayName string             `json:"display_name"`
-	Enabled     bool               `json:"enabled"`
-	Id          openapi_types.UUID `json:"id"`
-	Name        string             `json:"name"`
-	UpdatedAt   time.Time          `json:"updated_at"`
-	Version     string             `json:"version"`
+	CreatedAt   time.Time           `json:"created_at"`
+	DisplayName string              `json:"display_name"`
+	Enabled     bool                `json:"enabled"`
+	Id          openapi_types.UUID  `json:"id"`
+	Name        string              `json:"name"`
+	Runtime     *AgentRuntimeStatus `json:"runtime,omitempty"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+	Version     string              `json:"version"`
+}
+
+// AgentCapability defines model for AgentCapability.
+type AgentCapability struct {
+	ConfigurationFormats []string `json:"configuration_formats"`
+	Operations           []string `json:"operations"`
+	Provider             string   `json:"provider"`
+}
+
+// AgentConfigurationSnapshot defines model for AgentConfigurationSnapshot.
+type AgentConfigurationSnapshot struct {
+	AgentId               openapi_types.UUID       `json:"agent_id"`
+	Assignments           []map[string]interface{} `json:"assignments"`
+	ConfigurationRevision string                   `json:"configuration_revision"`
 }
 
 // AgentCredential defines model for AgentCredential.
@@ -296,6 +395,35 @@ type AgentPage struct {
 	Items      []Agent `json:"items"`
 	NextCursor string  `json:"next_cursor"`
 }
+
+// AgentRuntimeStatus defines model for AgentRuntimeStatus.
+type AgentRuntimeStatus struct {
+	AppliedConfigurationRevision string                                  `json:"applied_configuration_revision"`
+	Capabilities                 []AgentCapability                       `json:"capabilities"`
+	CollectionExplanation        AgentRuntimeStatusCollectionExplanation `json:"collection_explanation"`
+	CollectionProgress           AgentRuntimeStatusCollectionProgress    `json:"collection_progress"`
+	DesiredConfigurationRevision string                                  `json:"desired_configuration_revision"`
+	LastAttemptAt                *time.Time                              `json:"last_attempt_at"`
+	LastHeartbeatAt              *time.Time                              `json:"last_heartbeat_at"`
+	LastSuccessfulQueryAt        *time.Time                              `json:"last_successful_query_at"`
+	NextExpectedExecutionAt      *time.Time                              `json:"next_expected_execution_at"`
+	Protocol                     string                                  `json:"protocol"`
+	Reachability                 AgentRuntimeStatusReachability          `json:"reachability"`
+	SchedulerHealth              AgentRuntimeStatusSchedulerHealth       `json:"scheduler_health"`
+	SoftwareVersion              string                                  `json:"software_version"`
+}
+
+// AgentRuntimeStatusCollectionExplanation defines model for AgentRuntimeStatus.CollectionExplanation.
+type AgentRuntimeStatusCollectionExplanation string
+
+// AgentRuntimeStatusCollectionProgress defines model for AgentRuntimeStatus.CollectionProgress.
+type AgentRuntimeStatusCollectionProgress string
+
+// AgentRuntimeStatusReachability defines model for AgentRuntimeStatus.Reachability.
+type AgentRuntimeStatusReachability string
+
+// AgentRuntimeStatusSchedulerHealth defines model for AgentRuntimeStatus.SchedulerHealth.
+type AgentRuntimeStatusSchedulerHealth string
 
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
@@ -468,6 +596,11 @@ type AuthenticationProblem = Problem
 
 // AuthenticationRateLimited defines model for AuthenticationRateLimited.
 type AuthenticationRateLimited = Problem
+
+// GetAgentConfigurationParams defines parameters for GetAgentConfiguration.
+type GetAgentConfigurationParams struct {
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+}
 
 // GetAgentsParams defines parameters for GetAgents.
 type GetAgentsParams struct {
@@ -674,6 +807,13 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// GetAgentConfiguration Read the authenticated agent's current configuration snapshot
+	//
+	// Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+	//
+	// Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
+	GetAgentConfiguration(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAgents List agents
 	//
 	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
@@ -848,6 +988,23 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /readyz (the `GetReadiness` operationId).
 	GetReadiness(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetAgentConfiguration Read the authenticated agent's current configuration snapshot
+//
+// Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+//
+// Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
+func (c *Client) GetAgentConfiguration(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentConfigurationRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // GetAgents List agents
@@ -1233,6 +1390,48 @@ func (c *Client) GetReadiness(ctx context.Context, reqEditors ...RequestEditorFn
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetAgentConfigurationRequest constructs an http.Request for the GetAgentConfiguration method
+func NewGetAgentConfigurationRequest(server string, params *GetAgentConfigurationParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/agent/v1/configuration")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IfNoneMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-None-Match", *params.IfNoneMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-None-Match", headerParam0)
+		}
+
+	}
+
+	return req, nil
 }
 
 // NewGetAgentsRequest constructs an http.Request for the GetAgents method
@@ -1933,6 +2132,15 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetAgentConfigurationWithResponse Read the authenticated agent's current configuration snapshot
+	//
+	// Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
+	GetAgentConfigurationWithResponse(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*GetAgentConfigurationResponse, error)
+
 	// GetAgentsWithResponse List agents
 	//
 	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
@@ -2117,6 +2325,68 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /readyz (the `GetReadiness` operationId).
 	GetReadinessWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetReadinessResponse, error)
+}
+
+// GetAgentConfigurationResponse200Headers the declared response headers of an HTTP 200 response for GetAgentConfiguration
+type GetAgentConfigurationResponse200Headers struct {
+	ETag *string
+}
+
+type GetAgentConfigurationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AgentConfigurationSnapshot
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetAgentConfigurationResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAgentConfigurationResponse) GetJSON200() *AgentConfigurationSnapshot {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r GetAgentConfigurationResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetAgentConfigurationResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAgentConfigurationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentConfigurationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentConfigurationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAgentConfigurationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type GetAgentsResponse struct {
@@ -3023,6 +3293,21 @@ func (r GetReadinessResponse) ContentType() string {
 	return ""
 }
 
+// GetAgentConfigurationWithResponse Read the authenticated agent's current configuration snapshot
+//
+// Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
+func (c *ClientWithResponses) GetAgentConfigurationWithResponse(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*GetAgentConfigurationResponse, error) {
+	rsp, err := c.GetAgentConfiguration(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentConfigurationResponse(rsp)
+}
+
 // GetAgentsWithResponse List agents
 //
 // Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
@@ -3332,6 +3617,65 @@ func (c *ClientWithResponses) GetReadinessWithResponse(ctx context.Context, reqE
 		return nil, err
 	}
 	return ParseGetReadinessResponse(rsp)
+}
+
+// ParseGetAgentConfigurationResponse parses an HTTP response from a GetAgentConfigurationWithResponse call
+func ParseGetAgentConfigurationResponse(rsp *http.Response) (*GetAgentConfigurationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentConfigurationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentConfigurationSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 304:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case rsp.StatusCode == 401:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetAgentConfigurationResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseGetAgentsResponse parses an HTTP response from a GetAgentsWithResponse call
@@ -4090,6 +4434,9 @@ func ParseGetReadinessResponse(rsp *http.Response) (*GetReadinessResponse, error
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// GetAgentConfiguration Read the authenticated agent's current configuration snapshot
+	// (GET /api/agent/v1/configuration)
+	GetAgentConfiguration(w http.ResponseWriter, r *http.Request, params GetAgentConfigurationParams)
 	// GetAgents List agents
 	// (GET /api/v1/agents)
 	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
@@ -4139,6 +4486,47 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAgentConfiguration operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentConfiguration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentConfigurationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-None-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-None-Match")]; found {
+		var IfNoneMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-None-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-None-Match", valueList[0], &IfNoneMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-None-Match", Err: err})
+			return
+		}
+
+		params.IfNoneMatch = &IfNoneMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentConfiguration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetAgents operation middleware
 func (siw *ServerInterfaceWrapper) GetAgents(w http.ResponseWriter, r *http.Request) {
@@ -4756,6 +5144,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/agent/v1/configuration", wrapper.GetAgentConfiguration)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/context", wrapper.PostAuthContext)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/password", wrapper.PostAuthPassword)

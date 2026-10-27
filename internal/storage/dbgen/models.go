@@ -18,6 +18,13 @@ type AlmanacAgent struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AlmanacAgentConfiguration struct {
+	AgentID   pgtype.UUID        `json:"agent_id"`
+	Revision  int64              `json:"revision"`
+	Snapshot  []byte             `json:"snapshot"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type AlmanacAgentCredential struct {
 	ID              pgtype.UUID        `json:"id"`
 	AgentID         pgtype.UUID        `json:"agent_id"`
@@ -27,6 +34,19 @@ type AlmanacAgentCredential struct {
 	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
 	RetireAt        pgtype.Timestamptz `json:"retire_at"`
+}
+
+type AlmanacAgentExecutionGrant struct {
+	LeaseID               string             `json:"lease_id"`
+	AgentID               pgtype.UUID        `json:"agent_id"`
+	Generation            int64              `json:"generation"`
+	ConfigurationRevision int64              `json:"configuration_revision"`
+	AllowedMeasurements   []byte             `json:"allowed_measurements"`
+	ValidFrom             pgtype.Timestamptz `json:"valid_from"`
+	ValidUntil            pgtype.Timestamptz `json:"valid_until"`
+	RenewalSequence       int64              `json:"renewal_sequence"`
+	RequestNonce          []byte             `json:"request_nonce"`
+	RetainUntil           pgtype.Timestamptz `json:"retain_until"`
 }
 
 type AlmanacAgentOwnership struct {
@@ -40,6 +60,24 @@ type AlmanacAgentOwnership struct {
 	LastNonce            []byte             `json:"last_nonce"`
 	LastRenewalIssuedAt  pgtype.Timestamptz `json:"last_renewal_issued_at"`
 	LastRenewalExpiresAt pgtype.Timestamptz `json:"last_renewal_expires_at"`
+	CurrentLeaseID       pgtype.Text        `json:"current_lease_id"`
+}
+
+type AlmanacAgentRuntimeStatus struct {
+	AgentID                      pgtype.UUID        `json:"agent_id"`
+	Generation                   int64              `json:"generation"`
+	Protocol                     string             `json:"protocol"`
+	SoftwareVersion              string             `json:"software_version"`
+	Capabilities                 []byte             `json:"capabilities"`
+	LastHeartbeatAt              pgtype.Timestamptz `json:"last_heartbeat_at"`
+	DesiredConfigurationRevision int64              `json:"desired_configuration_revision"`
+	AppliedConfigurationRevision int64              `json:"applied_configuration_revision"`
+	SchedulerHealth              string             `json:"scheduler_health"`
+	CollectionProgress           string             `json:"collection_progress"`
+	LastAttemptAt                pgtype.Timestamptz `json:"last_attempt_at"`
+	LastSuccessfulQueryAt        pgtype.Timestamptz `json:"last_successful_query_at"`
+	NextExpectedExecutionAt      pgtype.Timestamptz `json:"next_expected_execution_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AlmanacAuditEvent struct {

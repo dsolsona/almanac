@@ -464,7 +464,27 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request, data []byte, ag
 }
 
 func agentDTO(v storage.AgentRecord) api.Agent {
-	return api.Agent{Id: googleuuid.MustParse(v.ID), Name: v.Name, DisplayName: v.DisplayName, Enabled: v.Enabled, Version: strconv.FormatInt(v.Version, 10), CreatedAt: v.CreatedAt.UTC(), UpdatedAt: v.UpdatedAt.UTC()}
+	dto := api.Agent{Id: googleuuid.MustParse(v.ID), Name: v.Name, DisplayName: v.DisplayName, Enabled: v.Enabled, Version: strconv.FormatInt(v.Version, 10), CreatedAt: v.CreatedAt.UTC(), UpdatedAt: v.UpdatedAt.UTC()}
+	if v.Runtime == nil {
+		return dto
+	}
+	apiCapabilities := make([]api.AgentCapability, len(v.Runtime.Capabilities))
+	for i, capability := range v.Runtime.Capabilities {
+		apiCapabilities[i] = api.AgentCapability{Provider: capability.Provider, ConfigurationFormats: capability.ConfigurationFormats, Operations: capability.Operations}
+	}
+	dto.Runtime = &api.AgentRuntimeStatus{
+		Reachability: api.AgentRuntimeStatusReachability(v.Runtime.Reachability),
+		Protocol:     v.Runtime.Protocol, SoftwareVersion: v.Runtime.SoftwareVersion, Capabilities: apiCapabilities,
+		LastHeartbeatAt:              v.Runtime.LastHeartbeatAt,
+		DesiredConfigurationRevision: strconv.FormatInt(v.Runtime.DesiredConfigurationRevision, 10),
+		AppliedConfigurationRevision: strconv.FormatInt(v.Runtime.AppliedConfigurationRevision, 10),
+		SchedulerHealth:              api.AgentRuntimeStatusSchedulerHealth(v.Runtime.SchedulerHealth),
+		CollectionProgress:           api.AgentRuntimeStatusCollectionProgress(v.Runtime.CollectionProgress),
+		LastAttemptAt:                v.Runtime.LastAttemptAt, LastSuccessfulQueryAt: v.Runtime.LastSuccessfulQueryAt,
+		NextExpectedExecutionAt: v.Runtime.NextExpectedExecutionAt,
+		CollectionExplanation:   api.AgentRuntimeStatusCollectionExplanation(v.Runtime.CollectionExplanation),
+	}
+	return dto
 }
 func creationCredentialDTO(v storage.AgentCredentialRecord) api.AgentCredential {
 	return api.AgentCredential{Id: googleuuid.MustParse(v.ID), AgentId: googleuuid.MustParse(v.AgentID), IssuedAt: v.IssuedAt.UTC(), ExpiresAt: v.ExpiresAt.UTC()}

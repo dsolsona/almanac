@@ -1,0 +1,113 @@
+-- name: EnsureAgentConfiguration :exec
+INSERT INTO public.almanac_agent_configurations (agent_id, revision, snapshot, created_at)
+VALUES ($1, 1, $2, $3)
+ON CONFLICT (agent_id, revision) DO NOTHING;
+
+-- name: GetAgentConfiguration :one
+SELECT revision, snapshot, created_at
+FROM public.almanac_agent_configurations
+WHERE agent_id = $1
+ORDER BY revision DESC
+LIMIT 1;
+
+-- name: InsertAgentExecutionGrant :exec
+INSERT INTO public.almanac_agent_execution_grants (
+    lease_id, agent_id, generation, configuration_revision, allowed_measurements,
+    valid_from, valid_until, renewal_sequence, request_nonce, retain_until
+) VALUES ($1, $2, $3, $4, '[]'::jsonb, $5, $6, $7, $8, $9);
+
+-- name: GetAgentExecutionGrant :one
+SELECT lease_id, configuration_revision, allowed_measurements,
+       valid_from, valid_until, renewal_sequence, request_nonce
+FROM public.almanac_agent_execution_grants
+WHERE lease_id = $1 AND agent_id = $2 AND generation = $3
+FOR UPDATE;
+
+-- name: GetAgentExecutionGrantBySequence :one
+SELECT lease_id, configuration_revision, allowed_measurements,
+       valid_from, valid_until, renewal_sequence, request_nonce
+FROM public.almanac_agent_execution_grants
+WHERE agent_id = $1 AND generation = $2 AND renewal_sequence = $3
+FOR UPDATE;
+
+-- name: SetAgentCurrentExecutionLease :execrows
+UPDATE public.almanac_agent_ownership
+SET current_lease_id = $3
+WHERE agent_id = $1 AND generation = $2;
+
+-- name: DeleteExpiredAgentExecutionGrants :exec
+DELETE FROM public.almanac_agent_execution_grants AS grant_row
+WHERE grant_row.agent_id = $1
+  AND grant_row.retain_until < $2
+  AND grant_row.lease_id <> COALESCE((
+      SELECT owner.current_lease_id FROM public.almanac_agent_ownership AS owner
+      WHERE owner.agent_id = grant_row.agent_id AND owner.generation = grant_row.generation
+  ), '');
+
+-- name: UpsertAgentRuntimeHello :exec
+INSERT INTO public.almanac_agent_runtime_status (
+    agent_id, generation, protocol, software_version, capabilities,
+    desired_configuration_revision, applied_configuration_revision,
+    scheduler_health, collection_progress, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, 0, 'starting', 'not_started', $7)
+ON CONFLICT (agent_id) DO UPDATE SET
+    generation = EXCLUDED.generation,
+    protocol = EXCLUDED.protocol,
+    software_version = EXCLUDED.software_version,
+    capabilities = EXCLUDED.capabilities,
+    last_heartbeat_at = NULL,
+    desired_configuration_revision = EXCLUDED.desired_configuration_revision,
+    applied_configuration_revision = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.applied_configuration_revision ELSE 0 END,
+    scheduler_health = 'starting',
+    collection_progress = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.collection_progress ELSE 'not_started' END,
+    last_attempt_at = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.last_attempt_at ELSE NULL END,
+    last_successful_query_at = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.last_successful_query_at ELSE NULL END,
+    next_expected_execution_at = CASE
+        WHEN public.almanac_agent_runtime_status.generation = EXCLUDED.generation
+        THEN public.almanac_agent_runtime_status.next_expected_execution_at ELSE NULL END,
+    updated_at = EXCLUDED.updated_at;
+
+-- name: UpdateAgentRuntimeHeartbeat :execrows
+UPDATE public.almanac_agent_runtime_status AS status
+SET last_heartbeat_at = sqlc.arg(received_at),
+    applied_configuration_revision = sqlc.arg(applied_configuration_revision),
+    scheduler_health = sqlc.arg(scheduler_health),
+    collection_progress = sqlc.arg(collection_progress),
+    last_attempt_at = sqlc.narg(last_attempt_at),
+    last_successful_query_at = sqlc.narg(last_successful_query_at),
+    next_expected_execution_at = sqlc.narg(next_expected_execution_at),
+    updated_at = sqlc.arg(received_at)
+WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(generation)
+  AND status.desired_configuration_revision = sqlc.arg(applied_configuration_revision)
+  AND EXISTS (
+      SELECT 1 FROM public.almanac_agent_ownership AS owner
+      WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
+        AND owner.expires_at > sqlc.arg(received_at)
+  );
+
+-- name: UpdateAgentAppliedConfiguration :execrows
+UPDATE public.almanac_agent_runtime_status AS status
+SET applied_configuration_revision = sqlc.arg(applied_configuration_revision), updated_at = sqlc.arg(received_at)
+WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(generation)
+  AND sqlc.arg(applied_configuration_revision) <= status.desired_configuration_revision
+  AND EXISTS (
+      SELECT 1 FROM public.almanac_agent_ownership AS owner
+      WHERE owner.agent_id = status.agent_id AND owner.generation = status.generation
+        AND owner.expires_at > sqlc.arg(received_at)
+  );
+
+-- name: GetAgentRuntimeStatus :one
+SELECT generation, protocol, software_version, capabilities, last_heartbeat_at,
+       desired_configuration_revision, applied_configuration_revision,
+       scheduler_health, collection_progress, last_attempt_at,
+       last_successful_query_at, next_expected_execution_at, updated_at
+FROM public.almanac_agent_runtime_status
+WHERE agent_id = $1;

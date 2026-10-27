@@ -2,7 +2,11 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"math"
 	"time"
@@ -20,16 +24,42 @@ var (
 )
 
 type AgentOwnershipResult struct {
-	AgentID         string
-	Generation      int64
-	RenewalSequence int64
-	AcquiredAt      time.Time
-	RenewedAt       time.Time
-	IssuedAt        time.Time
-	ExpiresAt       time.Time
-	Nonce           []byte
-	ReplaceAt       time.Time
+	AgentID               string
+	Generation            int64
+	RenewalSequence       int64
+	AcquiredAt            time.Time
+	RenewedAt             time.Time
+	IssuedAt              time.Time
+	ExpiresAt             time.Time
+	Nonce                 []byte
+	ReplaceAt             time.Time
+	LeaseID               string
+	ConfigurationRevision int64
+	ConfigurationSnapshot []byte
+	AllowedMeasurements   []byte
+	LeaseValidFrom        time.Time
+	LeaseValidUntil       time.Time
 }
+
+type AgentRuntimeHello struct {
+	Protocol        string
+	SoftwareVersion string
+	Capabilities    []byte
+}
+
+type AgentRuntimeHeartbeat struct {
+	ReceivedAt                   time.Time
+	LeaseID                      string
+	AppliedConfigurationRevision int64
+	SchedulerHealth              string
+	CollectionProgress           string
+	LastAttemptAt                *time.Time
+	LastSuccessfulQueryAt        *time.Time
+	NextExpectedExecutionAt      *time.Time
+}
+
+const agentGrantRetention = 7 * 24 * time.Hour
+const agentMinimumRenewalInterval = 10 * time.Second
 
 type agentOwnershipTransaction struct {
 	conn         *pgx.Conn
@@ -42,6 +72,10 @@ type agentOwnershipTransaction struct {
 }
 
 func AcquireAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, clock func() time.Time) (result AgentOwnershipResult, retErr error) {
+	return AcquireAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, nil, clock)
+}
+
+func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, hello *AgentRuntimeHello, clock func() time.Time) (result AgentOwnershipResult, retErr error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
@@ -75,10 +109,19 @@ func AcquireAgentOwnership(ctx context.Context, databaseURL, credentialID string
 			}
 			return result, ErrAgentOwnershipConflict
 		}
+		result, err := ensureAgentRuntimeGrant(ctx, state.queries, latest)
+		if err != nil {
+			return AgentOwnershipResult{}, operationError(ctx, "storage: agent runtime state unavailable", err)
+		}
+		if hello != nil {
+			if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, latest.Generation, result.ConfigurationRevision, *hello, now); err != nil {
+				return AgentOwnershipResult{}, operationError(ctx, "storage: agent hello status save failed", err)
+			}
+		}
 		if err := state.tx.Commit(ctx); err != nil {
 			return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership replay commit failed", err)
 		}
-		return agentOwnershipResult(latest, nil), nil
+		return result, nil
 	}
 	if hasOwner && subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) == 1 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
@@ -100,14 +143,34 @@ func AcquireAgentOwnership(ctx context.Context, databaseURL, credentialID string
 	}); err != nil {
 		return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership insert failed", err)
 	}
+	created, err := ensureAgentRuntimeGrant(ctx, state.queries, dbgen.AlmanacAgentOwnership{
+		AgentID: state.agentID, Generation: generation, AcquiredAt: timestamp(now), RenewedAt: timestamp(now),
+		ExpiresAt: timestamp(expiresAt),
+	})
+	if err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: agent execution grant insert failed", err)
+	}
+	if err := state.queries.DeleteExpiredAgentExecutionGrants(ctx, dbgen.DeleteExpiredAgentExecutionGrantsParams{
+		AgentID: state.agentID, RetainUntil: timestamp(now),
+	}); err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: expired agent grant pruning failed", err)
+	}
+	if hello != nil {
+		if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, generation, created.ConfigurationRevision, *hello, now); err != nil {
+			return AgentOwnershipResult{}, operationError(ctx, "storage: agent hello status save failed", err)
+		}
+	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership commit failed", err)
 	}
-	return AgentOwnershipResult{AgentID: state.agentID.String(), Generation: generation,
-		AcquiredAt: now, RenewedAt: now, ExpiresAt: expiresAt.UTC()}, nil
+	return created, nil
 }
 
 func ResumeAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time) (AgentOwnershipResult, error) {
+	return ResumeAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, nil, clock)
+}
+
+func ResumeAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, hello *AgentRuntimeHello, clock func() time.Time) (AgentOwnershipResult, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil || generation <= 0 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
@@ -135,13 +198,27 @@ func ResumeAgentOwnership(ctx context.Context, databaseURL, credentialID string,
 		subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) != 1 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 	}
+	result, err := ensureAgentRuntimeGrant(ctx, state.queries, latest)
+	if err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: agent runtime state unavailable", err)
+	}
+	if hello != nil {
+		if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, latest.Generation, result.ConfigurationRevision, *hello, now); err != nil {
+			return AgentOwnershipResult{}, operationError(ctx, "storage: agent hello status save failed", err)
+		}
+	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership resume commit failed", err)
 	}
-	return agentOwnershipResult(latest, nil), nil
+	return result, nil
 }
 
 func RenewAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, expectedSequence int64, nonce [32]byte, clock func() time.Time) (AgentOwnershipResult, error) {
+	return RenewAgentOwnershipWithHeartbeat(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier,
+		generation, expectedSequence, nonce, nil, clock)
+}
+
+func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, expectedSequence int64, nonce [32]byte, heartbeat *AgentRuntimeHeartbeat, clock func() time.Time) (AgentOwnershipResult, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil || generation <= 0 || expectedSequence < 0 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
@@ -171,7 +248,19 @@ func RenewAgentOwnership(ctx context.Context, databaseURL, credentialID string, 
 	}
 	if latest.RenewalSequence > 0 && expectedSequence == latest.RenewalSequence-1 &&
 		subtle.ConstantTimeCompare(latest.LastNonce, nonce[:]) == 1 {
-		result := agentOwnershipResult(latest, nonce[:])
+		if heartbeat != nil {
+			previous, previousErr := state.queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
+				AgentID: state.agentID, Generation: generation, RenewalSequence: expectedSequence,
+			})
+			if previousErr != nil || previous.LeaseID != heartbeat.LeaseID {
+				return AgentOwnershipResult{}, errors.Join(ErrAgentOwnershipDenied, previousErr)
+			}
+		}
+		result, err := agentExecutionResult(ctx, state.queries, latest, latest.RenewalSequence)
+		if err != nil {
+			return AgentOwnershipResult{}, operationError(ctx, "storage: agent grant replay lookup failed", err)
+		}
+		result.Nonce = append([]byte(nil), nonce[:]...)
 		result.IssuedAt = latest.LastRenewalIssuedAt.Time.UTC()
 		result.ExpiresAt = latest.LastRenewalExpiresAt.Time.UTC()
 		if err := state.tx.Commit(ctx); err != nil {
@@ -181,6 +270,17 @@ func RenewAgentOwnership(ctx context.Context, databaseURL, credentialID string, 
 	}
 	if expectedSequence != latest.RenewalSequence || latest.RenewalSequence == math.MaxInt64 ||
 		(len(latest.LastNonce) > 0 && subtle.ConstantTimeCompare(latest.LastNonce, nonce[:]) == 1) {
+		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
+	}
+	if heartbeat != nil {
+		current, currentErr := state.queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
+			AgentID: state.agentID, Generation: generation, RenewalSequence: latest.RenewalSequence,
+		})
+		if currentErr != nil || current.LeaseID != heartbeat.LeaseID {
+			return AgentOwnershipResult{}, errors.Join(ErrAgentOwnershipDenied, currentErr)
+		}
+	}
+	if now.Before(latest.RenewedAt.Time.Add(agentMinimumRenewalInterval)) {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 	}
 	newExpiry := earlierTime(now.Add(time.Hour), effectiveAgentCredentialExpiry(state.credential))
@@ -202,12 +302,38 @@ func RenewAgentOwnership(ctx context.Context, databaseURL, credentialID string, 
 	if affected != 1 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 	}
+	updatedOwner := latest
+	updatedOwner.RenewedAt = timestamp(now)
+	updatedOwner.ExpiresAt = timestamp(newExpiry)
+	updatedOwner.RenewalSequence = nextSequence
+	updatedOwner.LastNonce = nonce[:]
+	updatedOwner.LastRenewalIssuedAt = timestamp(now)
+	updatedOwner.LastRenewalExpiresAt = timestamp(newExpiry)
+	leaseID, err := newExecutionLeaseID()
+	if err != nil {
+		return AgentOwnershipResult{}, err
+	}
+	if err := insertAgentExecutionGrant(ctx, state.queries, updatedOwner, leaseID, nonce[:]); err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: agent execution grant renewal failed", err)
+	}
+	if err := state.queries.DeleteExpiredAgentExecutionGrants(ctx, dbgen.DeleteExpiredAgentExecutionGrantsParams{
+		AgentID: state.agentID, RetainUntil: timestamp(now),
+	}); err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: expired agent grant pruning failed", err)
+	}
+	result, err := agentExecutionResult(ctx, state.queries, updatedOwner, nextSequence)
+	if err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: renewed agent grant lookup failed", err)
+	}
+	if heartbeat != nil {
+		if err := updateAgentRuntimeHeartbeat(ctx, state.queries, state.agentID, generation, *heartbeat); err != nil {
+			return AgentOwnershipResult{}, operationError(ctx, "storage: agent heartbeat status update failed", err)
+		}
+	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership renewal commit failed", err)
 	}
-	return AgentOwnershipResult{AgentID: state.agentID.String(), Generation: generation,
-		RenewalSequence: nextSequence, AcquiredAt: latest.AcquiredAt.Time.UTC(),
-		RenewedAt: now, IssuedAt: now, ExpiresAt: newExpiry.UTC(), Nonce: append([]byte(nil), nonce[:]...)}, nil
+	return result, nil
 }
 
 func beginAgentOwnershipTransaction(ctx context.Context, databaseURL string, credentialUUID pgtype.UUID, verifier [32]byte) (*agentOwnershipTransaction, error) {
@@ -286,6 +412,258 @@ func agentOwnershipResult(owner dbgen.AlmanacAgentOwnership, nonce []byte) Agent
 		result.Nonce = append([]byte(nil), nonce...)
 	}
 	return result
+}
+
+func ensureAgentRuntimeGrant(ctx context.Context, queries *dbgen.Queries, owner dbgen.AlmanacAgentOwnership) (AgentOwnershipResult, error) {
+	grant, err := queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
+		AgentID: owner.AgentID, Generation: owner.Generation, RenewalSequence: owner.RenewalSequence,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		leaseID, idErr := newExecutionLeaseID()
+		if idErr != nil {
+			return AgentOwnershipResult{}, idErr
+		}
+		nonce := owner.LastNonce
+		if err := insertAgentExecutionGrant(ctx, queries, owner, leaseID, nonce); err != nil {
+			return AgentOwnershipResult{}, err
+		}
+		grant, err = queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
+			AgentID: owner.AgentID, Generation: owner.Generation, RenewalSequence: owner.RenewalSequence,
+		})
+	}
+	if err != nil {
+		return AgentOwnershipResult{}, err
+	}
+	if !owner.CurrentLeaseID.Valid || owner.CurrentLeaseID.String != grant.LeaseID {
+		changed, err := queries.SetAgentCurrentExecutionLease(ctx, dbgen.SetAgentCurrentExecutionLeaseParams{
+			AgentID: owner.AgentID, Generation: owner.Generation, CurrentLeaseID: pgtype.Text{String: grant.LeaseID, Valid: true},
+		})
+		if err != nil || changed != 1 {
+			return AgentOwnershipResult{}, errors.Join(err, ErrAgentOwnershipDenied)
+		}
+	}
+	configuration, err := ensureAgentConfiguration(ctx, queries, owner.AgentID, owner.AcquiredAt.Time.UTC())
+	if err != nil {
+		return AgentOwnershipResult{}, err
+	}
+	result := agentOwnershipResult(owner, grant.RequestNonce)
+	result.LeaseID = grant.LeaseID
+	result.ConfigurationRevision = grant.ConfigurationRevision
+	result.ConfigurationSnapshot = append([]byte(nil), configuration.Snapshot...)
+	result.AllowedMeasurements = append([]byte(nil), grant.AllowedMeasurements...)
+	result.LeaseValidFrom = grant.ValidFrom.Time.UTC()
+	result.LeaseValidUntil = grant.ValidUntil.Time.UTC()
+	if owner.RenewalSequence > 0 {
+		result.IssuedAt = grant.ValidFrom.Time.UTC()
+		result.ExpiresAt = grant.ValidUntil.Time.UTC()
+	}
+	return result, nil
+}
+
+func agentExecutionResult(ctx context.Context, queries *dbgen.Queries, owner dbgen.AlmanacAgentOwnership, sequence int64) (AgentOwnershipResult, error) {
+	grant, err := queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
+		AgentID: owner.AgentID, Generation: owner.Generation, RenewalSequence: sequence,
+	})
+	if err != nil {
+		return AgentOwnershipResult{}, err
+	}
+	configuration, err := ensureAgentConfiguration(ctx, queries, owner.AgentID, owner.AcquiredAt.Time.UTC())
+	if err != nil {
+		return AgentOwnershipResult{}, err
+	}
+	result := agentOwnershipResult(owner, grant.RequestNonce)
+	result.LeaseID = grant.LeaseID
+	result.ConfigurationRevision = grant.ConfigurationRevision
+	result.ConfigurationSnapshot = append([]byte(nil), configuration.Snapshot...)
+	result.AllowedMeasurements = append([]byte(nil), grant.AllowedMeasurements...)
+	result.LeaseValidFrom = grant.ValidFrom.Time.UTC()
+	result.LeaseValidUntil = grant.ValidUntil.Time.UTC()
+	result.IssuedAt = grant.ValidFrom.Time.UTC()
+	result.ExpiresAt = grant.ValidUntil.Time.UTC()
+	return result, nil
+}
+
+func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owner dbgen.AlmanacAgentOwnership, leaseID string, nonce []byte) error {
+	configuration, err := ensureAgentConfiguration(ctx, queries, owner.AgentID, owner.AcquiredAt.Time.UTC())
+	if err != nil {
+		return err
+	}
+	validFrom := owner.AcquiredAt.Time.UTC()
+	if owner.RenewalSequence > 0 && owner.LastRenewalIssuedAt.Valid {
+		validFrom = owner.LastRenewalIssuedAt.Time.UTC()
+	}
+	var requestNonce []byte
+	if len(nonce) > 0 {
+		requestNonce = append([]byte(nil), nonce...)
+	}
+	if err := queries.InsertAgentExecutionGrant(ctx, dbgen.InsertAgentExecutionGrantParams{
+		LeaseID: leaseID, AgentID: owner.AgentID, Generation: owner.Generation,
+		ConfigurationRevision: configuration.Revision, ValidFrom: timestamp(validFrom),
+		ValidUntil:      owner.ExpiresAt,
+		RenewalSequence: owner.RenewalSequence, RequestNonce: requestNonce,
+		RetainUntil: timestamp(owner.ExpiresAt.Time.Add(agentGrantRetention)),
+	}); err != nil {
+		return err
+	}
+	changed, err := queries.SetAgentCurrentExecutionLease(ctx, dbgen.SetAgentCurrentExecutionLeaseParams{
+		AgentID: owner.AgentID, Generation: owner.Generation, CurrentLeaseID: pgtype.Text{String: leaseID, Valid: true},
+	})
+	if err != nil || changed != 1 {
+		return errors.Join(err, ErrAgentOwnershipDenied)
+	}
+	return nil
+}
+
+func ensureAgentConfiguration(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, createdAt time.Time) (dbgen.GetAgentConfigurationRow, error) {
+	snapshot, err := json.Marshal(struct {
+		AgentID               string           `json:"agent_id"`
+		ConfigurationRevision string           `json:"configuration_revision"`
+		Assignments           []jsontext.Value `json:"assignments"`
+	}{AgentID: agentID.String(), ConfigurationRevision: "1", Assignments: []jsontext.Value{}})
+	if err != nil {
+		return dbgen.GetAgentConfigurationRow{}, err
+	}
+	if err := queries.EnsureAgentConfiguration(ctx, dbgen.EnsureAgentConfigurationParams{
+		AgentID: agentID, Snapshot: snapshot, CreatedAt: timestamp(createdAt),
+	}); err != nil {
+		return dbgen.GetAgentConfigurationRow{}, err
+	}
+	return queries.GetAgentConfiguration(ctx, agentID)
+}
+
+func saveAgentRuntimeHello(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, generation, revision int64, hello AgentRuntimeHello, at time.Time) error {
+	if hello.Protocol == "" || len(hello.Protocol) > 64 || hello.SoftwareVersion == "" || len(hello.SoftwareVersion) > 128 || len(hello.Capabilities) == 0 || revision <= 0 {
+		return ErrAgentOwnershipInput
+	}
+	return queries.UpsertAgentRuntimeHello(ctx, dbgen.UpsertAgentRuntimeHelloParams{
+		AgentID: agentID, Generation: generation, Protocol: hello.Protocol,
+		SoftwareVersion: hello.SoftwareVersion, Capabilities: hello.Capabilities,
+		DesiredConfigurationRevision: revision, UpdatedAt: timestamp(at),
+	})
+}
+
+func updateAgentRuntimeHeartbeat(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, generation int64, heartbeat AgentRuntimeHeartbeat) error {
+	if heartbeat.ReceivedAt.IsZero() || heartbeat.LeaseID == "" || heartbeat.AppliedConfigurationRevision < 0 || heartbeat.SchedulerHealth == "" || heartbeat.CollectionProgress == "" {
+		return ErrAgentOwnershipInput
+	}
+	updated, err := queries.UpdateAgentRuntimeHeartbeat(ctx, dbgen.UpdateAgentRuntimeHeartbeatParams{
+		ReceivedAt:                   timestamp(heartbeat.ReceivedAt),
+		AppliedConfigurationRevision: heartbeat.AppliedConfigurationRevision,
+		SchedulerHealth:              heartbeat.SchedulerHealth,
+		CollectionProgress:           heartbeat.CollectionProgress,
+		LastAttemptAt:                optionalTimestamp(heartbeat.LastAttemptAt),
+		LastSuccessfulQueryAt:        optionalTimestamp(heartbeat.LastSuccessfulQueryAt),
+		NextExpectedExecutionAt:      optionalTimestamp(heartbeat.NextExpectedExecutionAt),
+		AgentID:                      agentID, Generation: generation,
+	})
+	if err != nil {
+		return err
+	}
+	if updated != 1 {
+		return ErrAgentOwnershipDenied
+	}
+	return nil
+}
+
+func optionalTimestamp(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return timestamp(value.UTC())
+}
+
+func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, clock func() time.Time) error {
+	credentialUUID, valid := canonicalUUID(credentialID)
+	if !valid || generation <= 0 || revision <= 0 || clock == nil {
+		return ErrAgentOwnershipInput
+	}
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	if err != nil {
+		return err
+	}
+	defer closeAgentOwnershipTransaction(state)
+	owner, err := state.queries.LockLatestAgentOwnership(ctx, state.agentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrAgentOwnershipDenied
+	}
+	if err != nil {
+		return operationError(ctx, "storage: agent applied configuration owner lookup failed", err)
+	}
+	now := normalizedAgentNow(clock)
+	if !currentAgentCredentialValid(state.installation, state.agent.Enabled, state.credential, credentialVerifier, now) {
+		return ErrInvalidAgentCredential
+	}
+	if owner.Generation != generation || !now.Before(owner.ExpiresAt.Time) || subtle.ConstantTimeCompare(owner.ResumeVerifier, resumeVerifier[:]) != 1 {
+		return ErrAgentOwnershipDenied
+	}
+	updated, err := state.queries.UpdateAgentAppliedConfiguration(ctx, dbgen.UpdateAgentAppliedConfigurationParams{
+		AppliedConfigurationRevision: revision, ReceivedAt: timestamp(now), AgentID: state.agentID, Generation: generation,
+	})
+	if err != nil {
+		return operationError(ctx, "storage: agent applied configuration update failed", err)
+	}
+	if updated != 1 {
+		return ErrAgentOwnershipDenied
+	}
+	if err := state.tx.Commit(ctx); err != nil {
+		return operationError(ctx, "storage: agent applied configuration commit failed", err)
+	}
+	return nil
+}
+
+type AgentConfigurationSnapshot struct {
+	AgentID  string
+	Revision int64
+	Snapshot []byte
+}
+
+func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, clock func() time.Time) (AgentConfigurationSnapshot, error) {
+	credentialUUID, valid := canonicalUUID(credentialID)
+	if !valid || clock == nil {
+		return AgentConfigurationSnapshot{}, ErrAgentOwnershipInput
+	}
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	if err != nil {
+		return AgentConfigurationSnapshot{}, err
+	}
+	defer closeAgentOwnershipTransaction(state)
+	owner, err := state.queries.LockLatestAgentOwnership(ctx, state.agentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
+	}
+	if err != nil {
+		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration owner lookup failed", err)
+	}
+	now := normalizedAgentNow(clock)
+	if !currentAgentCredentialValid(state.installation, state.agent.Enabled, state.credential, credentialVerifier, now) || !now.Before(owner.ExpiresAt.Time) {
+		return AgentConfigurationSnapshot{}, ErrInvalidAgentCredential
+	}
+	grant, err := state.queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
+		AgentID: state.agentID, Generation: owner.Generation, RenewalSequence: owner.RenewalSequence,
+	})
+	if err != nil || !owner.CurrentLeaseID.Valid || owner.CurrentLeaseID.String != grant.LeaseID {
+		return AgentConfigurationSnapshot{}, errors.Join(ErrAgentOwnershipDenied, err)
+	}
+	configuration, err := ensureAgentConfiguration(ctx, state.queries, state.agentID, owner.AcquiredAt.Time.UTC())
+	if err != nil {
+		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read failed", err)
+	}
+	if configuration.Revision != grant.ConfigurationRevision {
+		return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
+	}
+	if err := state.tx.Commit(ctx); err != nil {
+		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read commit failed", err)
+	}
+	return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision,
+		Snapshot: append([]byte(nil), configuration.Snapshot...)}, nil
+}
+
+func newExecutionLeaseID() (string, error) {
+	var value [32]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(value[:]), nil
 }
 
 func validateOwnershipChronology(now, acquiredAt, renewedAt, expiresAt time.Time) error {

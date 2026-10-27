@@ -1,6 +1,7 @@
 -- name: LockLatestAgentOwnership :one
 SELECT agent_id, generation, resume_verifier, acquired_at, renewed_at, expires_at,
-       renewal_sequence, last_nonce, last_renewal_issued_at, last_renewal_expires_at
+       renewal_sequence, last_nonce, last_renewal_issued_at, last_renewal_expires_at,
+       current_lease_id
 FROM public.almanac_agent_ownership
 WHERE agent_id = sqlc.arg(agent_id)
 ORDER BY generation DESC

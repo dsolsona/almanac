@@ -83,6 +83,7 @@ type Heartbeat struct {
 	RequestNonce                 string     `json:"request_nonce"`
 	AppliedConfigurationRevision string     `json:"applied_configuration_revision"`
 	Scheduler                    string     `json:"scheduler"`
+	CollectionProgress           string     `json:"collection_progress"`
 	LastAttemptAt                *time.Time `json:"last_attempt_at"`
 	LastSuccessfulQueryAt        *time.Time `json:"last_successful_query_at"`
 	NextExpectedExecutionAt      *time.Time `json:"next_expected_execution_at"`
@@ -203,7 +204,7 @@ func validatePayload(kind Kind, raw jsontext.Value) error {
 		}
 		return p.Validate()
 	case KindHeartbeat:
-		if err := requireFields(raw, "request_nonce", "applied_configuration_revision", "scheduler", "lease_id", "renewal_sequence"); err != nil {
+		if err := requireFields(raw, "request_nonce", "applied_configuration_revision", "scheduler", "collection_progress", "lease_id", "renewal_sequence"); err != nil {
 			return err
 		}
 		var p Heartbeat
@@ -467,6 +468,9 @@ func (p Heartbeat) Validate() error {
 	}
 	if p.Scheduler != "starting" && p.Scheduler != "ready" && p.Scheduler != "degraded" && p.Scheduler != "stopped" {
 		return invalidField("heartbeat.scheduler")
+	}
+	if p.CollectionProgress != "not_started" && p.CollectionProgress != "idle" && p.CollectionProgress != "running" && p.CollectionProgress != "blocked" {
+		return invalidField("heartbeat.collection_progress")
 	}
 	for _, field := range []struct {
 		name  string

@@ -46,8 +46,10 @@ must match agent ID, generation, and configuration revision. Its
 revision; duplicate SLI IDs are invalid. An empty grant list permits no query.
 
 A heartbeat includes a fresh nonce, last successfully applied configuration
-revision (`"0"` means not yet applied), explicit scheduler/progress state, current
-lease ID and expected renewal sequence. The first renewal expects sequence `"0"`;
+revision (`"0"` means not yet applied), explicit scheduler health (`starting`,
+`ready`, `degraded`, or `stopped`) and separate collection progress
+(`not_started`, `idle`, `running`, or `blocked`), current lease ID and expected
+renewal sequence. The first renewal expects sequence `"0"`;
 the heartbeat-ack echoes the nonce and returns the durable renewed lease with a
 positive next sequence. Configuration revisions are positive from the first
 snapshot onward. The HTTP configuration snapshot identifies its agent, positive

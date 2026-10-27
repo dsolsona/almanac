@@ -20,6 +20,10 @@ func New(databaseURL string, now func() time.Time) *Service {
 }
 
 func (s *Service) Acquire(ctx context.Context, token string, resumeSecret []byte) (Result, error) {
+	return s.AcquireWithHello(ctx, token, resumeSecret, nil)
+}
+
+func (s *Service) AcquireWithHello(ctx context.Context, token string, resumeSecret []byte, hello *storage.AgentRuntimeHello) (Result, error) {
 	if !validateProof(resumeSecret) {
 		return Result{}, ErrInvalidInput
 	}
@@ -28,7 +32,7 @@ func (s *Service) Acquire(ctx context.Context, token string, resumeSecret []byte
 		return Result{}, err
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
-	stored, err := storage.AcquireAgentOwnership(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, s.now)
+	stored, err := storage.AcquireAgentOwnershipWithHello(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, hello, s.now)
 	result := publicResult(stored)
 	if errors.Is(err, storage.ErrAgentOwnershipConflict) {
 		conflict := &ConflictError{ReplaceAt: stored.ReplaceAt}
@@ -38,6 +42,10 @@ func (s *Service) Acquire(ctx context.Context, token string, resumeSecret []byte
 }
 
 func (s *Service) Resume(ctx context.Context, token string, generation int64, resumeSecret []byte) (Result, error) {
+	return s.ResumeWithHello(ctx, token, generation, resumeSecret, nil)
+}
+
+func (s *Service) ResumeWithHello(ctx context.Context, token string, generation int64, resumeSecret []byte, hello *storage.AgentRuntimeHello) (Result, error) {
 	if !validateProof(resumeSecret) || !validateGeneration(generation) {
 		return Result{}, ErrInvalidInput
 	}
@@ -46,11 +54,15 @@ func (s *Service) Resume(ctx context.Context, token string, generation int64, re
 		return Result{}, err
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
-	stored, err := storage.ResumeAgentOwnership(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, s.now)
+	stored, err := storage.ResumeAgentOwnershipWithHello(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, hello, s.now)
 	return publicResult(stored), s.mapStorageError(err)
 }
 
 func (s *Service) Renew(ctx context.Context, token string, generation, expectedSequence int64, resumeSecret, nonce []byte) (Result, error) {
+	return s.RenewWithHeartbeat(ctx, token, generation, expectedSequence, resumeSecret, nonce, nil)
+}
+
+func (s *Service) RenewWithHeartbeat(ctx context.Context, token string, generation, expectedSequence int64, resumeSecret, nonce []byte, heartbeat *storage.AgentRuntimeHeartbeat) (Result, error) {
 	if !validateProof(resumeSecret) || !validateNonce(nonce) || !validateGeneration(generation) || !validateRenewalSequence(expectedSequence) {
 		return Result{}, ErrInvalidInput
 	}
@@ -61,9 +73,31 @@ func (s *Service) Renew(ctx context.Context, token string, generation, expectedS
 	resumeVerifier := sha256.Sum256(resumeSecret)
 	var renewalNonce [ProofSize]byte
 	copy(renewalNonce[:], nonce)
-	stored, err := storage.RenewAgentOwnership(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier,
-		generation, expectedSequence, renewalNonce, s.now)
+	stored, err := storage.RenewAgentOwnershipWithHeartbeat(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier,
+		generation, expectedSequence, renewalNonce, heartbeat, s.now)
 	return publicResult(stored), s.mapStorageError(err)
+}
+
+func (s *Service) RecordApplied(ctx context.Context, token string, generation, revision int64, resumeSecret []byte) error {
+	if !validateProof(resumeSecret) || !validateGeneration(generation) || revision <= 0 {
+		return ErrInvalidInput
+	}
+	credentialID, credentialVerifier, err := s.credential(ctx, token)
+	if err != nil {
+		return err
+	}
+	resumeVerifier := sha256.Sum256(resumeSecret)
+	if err := storage.RecordAgentConfigurationApplied(ctx, s.databaseURL, credentialID, credentialVerifier,
+		resumeVerifier, generation, revision, s.now); errors.Is(err, storage.ErrInvalidAgentCredential) {
+		return ErrInvalidCredential
+	} else if errors.Is(err, storage.ErrAgentOwnershipDenied) {
+		return ErrDenied
+	} else if errors.Is(err, storage.ErrCancelled) {
+		return errors.Join(ErrCancelled, err)
+	} else if err != nil {
+		return errors.Join(ErrUnavailable, err)
+	}
+	return nil
 }
 
 func (s *Service) credential(ctx context.Context, token string) (string, [32]byte, error) {
@@ -100,5 +134,9 @@ func (s *Service) mapStorageError(err error) error {
 func publicResult(value storage.AgentOwnershipResult) Result {
 	return Result{AgentID: value.AgentID, Generation: value.Generation, RenewalSequence: value.RenewalSequence,
 		AcquiredAt: value.AcquiredAt, RenewedAt: value.RenewedAt, IssuedAt: value.IssuedAt,
-		ExpiresAt: value.ExpiresAt, Nonce: append([]byte(nil), value.Nonce...), ReplaceAt: value.ReplaceAt}
+		ExpiresAt: value.ExpiresAt, Nonce: append([]byte(nil), value.Nonce...), ReplaceAt: value.ReplaceAt,
+		LeaseID: value.LeaseID, ConfigurationRevision: value.ConfigurationRevision,
+		ConfigurationSnapshot: append([]byte(nil), value.ConfigurationSnapshot...),
+		AllowedMeasurements:   append([]byte(nil), value.AllowedMeasurements...),
+		LeaseValidFrom:        value.LeaseValidFrom, LeaseValidUntil: value.LeaseValidUntil}
 }

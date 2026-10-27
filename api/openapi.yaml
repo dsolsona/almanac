@@ -4,6 +4,26 @@ info:
   version: 1.0.0
   description: Anonymous operational endpoints for the independently runnable UI.
 paths:
+  /api/agent/v1/configuration:
+    get:
+      operationId: getAgentConfiguration
+      summary: Read the authenticated agent's current configuration snapshot
+      description: Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+      security: [{AgentBearer: []}]
+      parameters:
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: Full revisioned configuration snapshot
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentConfigurationSnapshot'}
+        '304': {description: Snapshot unchanged}
+        '401': {description: Agent credential invalid}
+        '400': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Configuration unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/auth/context:
     post:
       operationId: postAuthContext
@@ -262,6 +282,10 @@ components:
       description: One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
       schema: {type: string, minLength: 1, maxLength: 128}
   securitySchemes:
+    AgentBearer:
+      type: http
+      scheme: bearer
+      description: Registered agent credential; accepted only over verified TLS.
     SessionCookie:
       type: apiKey
       in: cookie
@@ -289,6 +313,40 @@ components:
         version: {type: string, pattern: '^[1-9][0-9]*$'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        runtime:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/AgentRuntimeStatus'}]
+    AgentRuntimeStatus:
+      type: object
+      required: [reachability, protocol, software_version, capabilities, last_heartbeat_at, desired_configuration_revision, applied_configuration_revision, scheduler_health, collection_progress, last_attempt_at, last_successful_query_at, next_expected_execution_at, collection_explanation]
+      properties:
+        reachability: {type: string, enum: [connected, unreachable, incompatible]}
+        protocol: {type: string}
+        software_version: {type: string}
+        capabilities: {type: array, items: {$ref: '#/components/schemas/AgentCapability'}}
+        last_heartbeat_at: {type: string, format: date-time, nullable: true}
+        desired_configuration_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        applied_configuration_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        scheduler_health: {type: string, enum: [starting, ready, degraded, stopped]}
+        collection_progress: {type: string, enum: [not_started, idle, running, blocked]}
+        last_attempt_at: {type: string, format: date-time, nullable: true}
+        last_successful_query_at: {type: string, format: date-time, nullable: true}
+        next_expected_execution_at: {type: string, format: date-time, nullable: true}
+        collection_explanation: {type: string, enum: [no_assignment]}
+    AgentCapability:
+      type: object
+      required: [provider, configuration_formats, operations]
+      properties:
+        provider: {type: string}
+        configuration_formats: {type: array, items: {type: string}}
+        operations: {type: array, items: {type: string}}
+    AgentConfigurationSnapshot:
+      type: object
+      required: [agent_id, configuration_revision, assignments]
+      properties:
+        agent_id: {type: string, format: uuid}
+        configuration_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        assignments: {type: array, maxItems: 0, items: {type: object}}
     AgentCredential:
       type: object
       required: [id, agent_id, issued_at, expires_at, revoked_at, retire_at]

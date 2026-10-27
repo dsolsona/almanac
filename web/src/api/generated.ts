@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/agent/v1/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated agent's current configuration snapshot
+         * @description Requires a verified TLS request and one current agent bearer credential. The identity is derived from the credential; a client-supplied agent ID is never accepted. Matching If-None-Match returns 304 without a body.
+         */
+        get: operations["getAgentConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/context": {
         parameters: {
             query?: never;
@@ -257,6 +277,41 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            runtime?: components["schemas"]["AgentRuntimeStatus"] | null;
+        };
+        AgentRuntimeStatus: {
+            /** @enum {string} */
+            reachability: "connected" | "unreachable" | "incompatible";
+            protocol: string;
+            software_version: string;
+            capabilities: components["schemas"]["AgentCapability"][];
+            /** Format: date-time */
+            last_heartbeat_at: string | null;
+            desired_configuration_revision: string;
+            applied_configuration_revision: string;
+            /** @enum {string} */
+            scheduler_health: "starting" | "ready" | "degraded" | "stopped";
+            /** @enum {string} */
+            collection_progress: "not_started" | "idle" | "running" | "blocked";
+            /** Format: date-time */
+            last_attempt_at: string | null;
+            /** Format: date-time */
+            last_successful_query_at: string | null;
+            /** Format: date-time */
+            next_expected_execution_at: string | null;
+            /** @enum {string} */
+            collection_explanation: "no_assignment";
+        };
+        AgentCapability: {
+            provider: string;
+            configuration_formats: string[];
+            operations: string[];
+        };
+        AgentConfigurationSnapshot: {
+            /** Format: uuid */
+            agent_id: string;
+            configuration_revision: string;
+            assignments: Record<string, never>[];
         };
         AgentCredential: {
             /** Format: uuid */
@@ -453,6 +508,61 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAgentConfiguration: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Full revisioned configuration snapshot */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentConfigurationSnapshot"];
+                };
+            };
+            /** @description Snapshot unchanged */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Agent credential invalid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Configuration unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     postAuthContext: {
         parameters: {
             query?: never;

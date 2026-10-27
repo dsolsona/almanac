@@ -51,13 +51,14 @@ type CreateAgentInput struct {
 }
 
 type AgentRecord struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	DisplayName string    `json:"display_name"`
-	Enabled     bool      `json:"enabled"`
-	Version     int64     `json:"version"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	DisplayName string              `json:"display_name"`
+	Enabled     bool                `json:"enabled"`
+	Version     int64               `json:"version"`
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+	Runtime     *AgentRuntimeStatus `json:"-"`
 }
 
 type AgentCredentialRecord struct {

@@ -108,11 +108,12 @@
         "session_generation": { "$ref": "#/$defs/positiveDecimal" },
         "payload": {
           "type": "object",
-          "required": ["request_nonce", "applied_configuration_revision", "scheduler", "lease_id", "renewal_sequence"],
+          "required": ["request_nonce", "applied_configuration_revision", "scheduler", "collection_progress", "lease_id", "renewal_sequence"],
           "properties": {
             "request_nonce": { "$ref": "#/$defs/nonce" },
             "applied_configuration_revision": { "$ref": "#/$defs/decimal" },
             "scheduler": { "type": "string", "enum": ["starting", "ready", "degraded", "stopped"] },
+            "collection_progress": { "type": "string", "enum": ["not_started", "idle", "running", "blocked"] },
             "last_attempt_at": { "type": ["string", "null"], "format": "date-time" },
             "last_successful_query_at": { "type": ["string", "null"], "format": "date-time" },
             "next_expected_execution_at": { "type": ["string", "null"], "format": "date-time" },
