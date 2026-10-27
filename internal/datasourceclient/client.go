@@ -303,7 +303,7 @@ func validDiagnostic(data []byte) bool {
 	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "id", "state", "operation", "created_at", "deadline_at", "result_class", "result", "error_code", "message") || json.Unmarshal(data, &value) != nil || !uuidPattern.MatchString(uuidText(value.Id)) || !value.State.Valid() {
 		return false
 	}
-	if value.Operation != api.DiagnosticOperationConnectionTest && value.Operation != api.DiagnosticOperationQueryPreview || value.CreatedAt.IsZero() || value.DeadlineAt.IsZero() {
+	if value.Operation != api.ConnectionTest && value.Operation != api.QueryPreview || value.CreatedAt.IsZero() || value.DeadlineAt.IsZero() {
 		return false
 	}
 	if value.ResultClass != nil && !value.ResultClass.Valid() {
@@ -378,7 +378,7 @@ func validKey(value string) bool {
 	return value != "" && len(value) <= 128 && !strings.ContainsAny(value, "\r\n\t ")
 }
 func etagVersion(etag, id string) string {
-	prefix := `"datasource:` + id + `:"`
+	prefix := `"datasource:` + id + `:`
 	if !strings.HasPrefix(etag, prefix) || !strings.HasSuffix(etag, `"`) {
 		return ""
 	}
