@@ -169,7 +169,7 @@ _verify_integration: _ensure_web_assets
 	  case "$${GO_PACKAGE:-all}" in ./internal/storage|./internal/authentication|./internal/agentmanagement|./internal/agenthttp|./internal/authhttp|./internal/command|all) ;; *) echo 'GO_PACKAGE must select a real database acceptance package or all' >&2; exit 2 ;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  target="$${GO_PACKAGE:-all}"; \
-	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/agentcmd ./internal/command'; fi; \
+	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/command ./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/agentcmd'; fi; \
 	  test_list=$$(mktemp .local/integration-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
 	  if ! .local/bin/go test -tags=integration -list . $$packages > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^TestIntegration/{n++} END{print n+0}' "$$test_list"); \
@@ -179,11 +179,22 @@ _verify_integration: _ensure_web_assets
 	  sh scripts/setup-database.sh --check; \
 	  $(MAKE) build; \
 	  json_artifact="$(CURDIR)/.local/integration-go-test.jsonl"; exit_artifact="$(CURDIR)/.local/integration-go-test.exit"; \
-	  printf 'running\n' > "$$exit_artifact"; \
-	  go_status=0; .local/bin/go test -json -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m $$packages > "$$json_artifact" || go_status=$$?; \
-	  printf '%s\n' "$$go_status" > "$$exit_artifact"; \
+	  package_artifacts="$(CURDIR)/.local/integration-test-json"; mkdir -p "$$package_artifacts"; \
+	  printf 'running\n' > "$$exit_artifact"; : > "$$json_artifact"; \
+	  for package in $$packages; do package_name=$${package##*/}; : > "$$package_artifacts/$$package_name.jsonl"; printf 'pending\n' > "$$package_artifacts/$$package_name.exit"; done; \
+	  for package in $$packages; do \
+	    package_name=$${package##*/}; package_json="$$package_artifacts/$$package_name.jsonl"; \
+	    package_exit="$$package_artifacts/$$package_name.exit"; printf 'running\n' > "$$package_exit"; \
+	    go_status=0; .local/bin/go test -json -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m "$$package" > "$$package_json" || go_status=$$?; \
+	    cat "$$package_json" >> "$$json_artifact"; printf '%s\n' "$$go_status" > "$$package_exit"; \
+	    if [ "$$go_status" -ne 0 ]; then \
+	      printf '%s\n' "$$go_status" > "$$exit_artifact"; \
+	      summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
+	      exit "$$go_status"; \
+	    fi; \
+	  done; \
+	  printf '0\n' > "$$exit_artifact"; \
 	  summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
-	  if [ "$$go_status" -ne 0 ]; then exit "$$go_status"; fi; \
 	  exit "$$summary_status"
 
 _verify_journey:
