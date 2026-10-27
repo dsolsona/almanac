@@ -322,10 +322,12 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	if deadlineState != "pending" || len(deadlineStored) != 0 {
 		t.Fatalf("late result mutated diagnostic receipt: state=%s bytes=%d", deadlineState, len(deadlineStored))
 	}
+	// Earlier assertions narrowed the owner to editor/viewer; both independent
+	// writers in this admission test must have administrator authority.
+	setIntegrationUserRole(t, f, "administrator")
 	if err := verifyConcurrentDatasourceRevisionWrites(t, f, created.Agent.ID, now.Add(4*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	setIntegrationUserRole(t, f, "administrator")
 	revoked, err := RevokeAgentCredential(t.Context(), f.databaseURL, RevokeAgentCredentialInput{
 		Proof: f.input("unused", "unused").Proof, AgentID: created.Agent.ID, CredentialID: issued.ID,
 		ExpectedVersion: created.Agent.Version, IdempotencyKey: "diagnostic-result-revoke", RequestID: "diagnostic-result-revoke",
