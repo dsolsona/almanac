@@ -18,9 +18,8 @@ import (
 )
 
 const (
-	diagnosticReceiptTTL            = 24 * time.Hour
-	maxActiveDatasourceDiagnostics  = 4
-	maxDatasourceDiagnosticReceipts = 256
+	diagnosticReceiptTTL           = 24 * time.Hour
+	maxActiveDatasourceDiagnostics = 4
 )
 
 var (
@@ -83,7 +82,10 @@ func BeginDatasourceDiagnostic(ctx context.Context, databaseURL string, input Be
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	agent, err := queries.GetAgent(ctx, agentID)
+	// Serialize admission for this agent before reading runtime readiness or
+	// counting active diagnostics. Different actors have different user/session
+	// locks, so only this shared row lock protects the per-agent capacity bound.
+	agent, err := queries.LockAgentAccessAgent(ctx, agentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrAgentNotFound
 	}
@@ -245,7 +247,7 @@ func GetDatasourceDiagnostic(ctx context.Context, databaseURL string, proof Data
 		}
 		record.State = "timed_out"
 		agentUUID, _ := canonicalUUID(record.AgentID)
-		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agentUUID); err != nil {
+		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agentUUID, currentTime); err != nil {
 			return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic receipt pruning failed", err)
 		}
 	}
@@ -287,7 +289,7 @@ func CancelDatasourceDiagnostic(ctx context.Context, databaseURL string, proof D
 		}
 		record.State = newState
 		agentUUID, _ := canonicalUUID(record.AgentID)
-		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agentUUID); err != nil {
+		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agentUUID, currentTime); err != nil {
 			return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic receipt pruning failed", err)
 		}
 	}
@@ -355,7 +357,7 @@ func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, credentialID
 	if err != nil {
 		return operationError(ctx, "storage: diagnostic result update failed", err)
 	}
-	if err := pruneDatasourceDiagnosticReceipts(ctx, state.tx, state.agentID); err != nil {
+	if err := pruneDatasourceDiagnosticReceipts(ctx, state.tx, state.agentID, currentTime); err != nil {
 		return operationError(ctx, "storage: diagnostic receipt pruning failed", err)
 	}
 	return state.tx.Commit(ctx)
@@ -394,20 +396,15 @@ func updateDatasourceDiagnosticState(ctx context.Context, databaseURL, diagnosti
 		return operationError(ctx, "storage: diagnostic state update failed", err)
 	}
 	if state == "unknown" {
-		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agent); err != nil {
+		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agent, now.UTC().Truncate(time.Microsecond)); err != nil {
 			return operationError(ctx, "storage: diagnostic receipt pruning failed", err)
 		}
 	}
 	return tx.Commit(ctx)
 }
 
-func pruneDatasourceDiagnosticReceipts(ctx context.Context, tx pgx.Tx, agentID pgtype.UUID) error {
-	_, err := tx.Exec(ctx, `DELETE FROM public.almanac_diagnostics WHERE id IN (
-		SELECT id FROM (
-			SELECT id, row_number() OVER (ORDER BY created_at DESC, id DESC) AS position
-			FROM public.almanac_diagnostics WHERE agent_id=$1 AND state NOT IN ('pending','running')
-		) AS terminal WHERE position > $2
-	)`, agentID, maxDatasourceDiagnosticReceipts)
+func pruneDatasourceDiagnosticReceipts(ctx context.Context, tx pgx.Tx, agentID pgtype.UUID, now time.Time) error {
+	_, err := tx.Exec(ctx, `DELETE FROM public.almanac_diagnostics WHERE agent_id=$1 AND expires_at <= $2`, agentID, timestamp(now))
 	return err
 }
 

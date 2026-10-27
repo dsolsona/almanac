@@ -4,6 +4,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *testing.T) {
@@ -281,6 +283,260 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, previewResult, now.Add(6*time.Second)); !errors.Is(err, ErrInvalidAgentCredential) {
 		t.Fatalf("result retry using revoked credential = %v", err)
 	}
+}
+
+func TestIntegrationDatasourceDiagnosticCapacitySerializesAcrossActors(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "diagnostic-capacity")
+	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"connection_test"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := f.base.Add(4 * time.Second)
+	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}
+	resumeVerifier := ownershipVerifier(ownershipBytes(32, 76))
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, hello, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 1, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	secondVerifier := insertDiagnosticActor(t, f, "diagnostic-capacity-second")
+	proofs := [2]DatasourceProof{{SessionVerifier: f.verifier}, {SessionVerifier: secondVerifier}}
+	settings := datasource.Settings{
+		Name: "capacity-source", DisplayName: "Capacity source", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1",
+		Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60,
+		SettlingDelaySeconds: 60, AgentID: created.Agent.ID,
+	}
+	begin := func(proof DatasourceProof, id string, requestedAt time.Time) (DiagnosticRecord, agentprotocol.DiagnosticRequest, error) {
+		return BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+			Proof: proof, DiagnosticID: id, AgentID: created.Agent.ID, AgentGeneration: 1,
+			Operation: "connection_test", ConnectionSettings: settings,
+			RequestedAt: requestedAt, Now: func() time.Time { return requestedAt },
+		})
+	}
+	for i, id := range []string{
+		"1a000000-0000-4000-8000-000000000001",
+		"1a000000-0000-4000-8000-000000000002",
+		"1a000000-0000-4000-8000-000000000003",
+	} {
+		if _, _, err := begin(proofs[0], id, now.Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatalf("seed pending diagnostic %d: %v", i+1, err)
+		}
+	}
+
+	// Hold contenders at the INSERT boundary after each has performed its
+	// capacity read. With the per-agent lock, contender two instead waits on
+	// the agent row before it can read capacity; the observer detects either
+	// state before releasing the barrier.
+	const barrierClassID, barrierObjectID = 706661, 20
+	barrier := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(barrier)
+	barrierTx, err := barrier.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(barrierTx)
+	if _, err := barrierTx.Exec(t.Context(), "SELECT pg_advisory_xact_lock($1, $2)", barrierClassID, barrierObjectID); err != nil {
+		t.Fatal(err)
+	}
+	observer := integrationConnect(t, f.databaseURL)
+	if _, err := observer.Exec(t.Context(), `CREATE FUNCTION public.almanac_test_diagnostic_capacity_barrier() RETURNS trigger
+		LANGUAGE plpgsql AS $$ BEGIN
+		IF NEW.id IN ('1a000000-0000-4000-8000-000000000004'::uuid, '1a000000-0000-4000-8000-000000000005'::uuid) THEN
+		PERFORM pg_advisory_xact_lock(706661, 20);
+		END IF;
+		RETURN NEW;
+		END $$`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := observer.Exec(t.Context(), `CREATE TRIGGER almanac_test_diagnostic_capacity_barrier BEFORE INSERT ON public.almanac_diagnostics
+		FOR EACH ROW EXECUTE FUNCTION public.almanac_test_diagnostic_capacity_barrier()`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = observer.Exec(context.Background(), "DROP TRIGGER IF EXISTS almanac_test_diagnostic_capacity_barrier ON public.almanac_diagnostics")
+		_, _ = observer.Exec(context.Background(), "DROP FUNCTION IF EXISTS public.almanac_test_diagnostic_capacity_barrier()")
+		closeIntegrationConn(observer)
+	})
+
+	type outcome struct {
+		id      string
+		record  DiagnosticRecord
+		request agentprotocol.DiagnosticRequest
+		err     error
+	}
+	results := make(chan outcome, 2)
+	contenderIDs := []string{"1a000000-0000-4000-8000-000000000004", "1a000000-0000-4000-8000-000000000005"}
+	launch := func(index int) {
+		go func() {
+			record, request, beginErr := begin(proofs[index], contenderIDs[index], now.Add(4*time.Second))
+			results <- outcome{id: contenderIDs[index], record: record, request: request, err: beginErr}
+		}()
+	}
+	launch(0)
+	waitForDiagnosticAdmissionBarrier(t, observer, barrierClassID, barrierObjectID, false)
+	launch(1)
+	waitForDiagnosticAdmissionBarrier(t, observer, barrierClassID, barrierObjectID, true)
+	if err := barrierTx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	closeIntegrationConn(barrier)
+	var succeeded, conflicted int
+	for range 2 {
+		result := <-results
+		switch {
+		case result.err == nil:
+			succeeded++
+			if result.record.ID != result.id || result.request.DiagnosticID != result.id {
+				t.Fatalf("successful diagnostic dispatch does not match receipt: %+v", result)
+			}
+		case errors.Is(result.err, ErrDiagnosticConflict):
+			conflicted++
+			if result.request.DiagnosticID != "" {
+				t.Fatalf("capacity loser produced an agent dispatch: %+v", result.request)
+			}
+		default:
+			t.Fatalf("concurrent diagnostic admission failed unexpectedly: %v", result.err)
+		}
+	}
+	if succeeded != 1 || conflicted != 1 {
+		t.Fatalf("capacity outcomes: succeeded=%d conflicted=%d, want one each", succeeded, conflicted)
+	}
+	var active int
+	if err := observer.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_diagnostics WHERE agent_id=$1 AND state IN ('pending','running')`, created.Agent.ID).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != maxActiveDatasourceDiagnostics {
+		t.Fatalf("active diagnostic rows=%d, want cap %d", active, maxActiveDatasourceDiagnostics)
+	}
+}
+
+func TestIntegrationDatasourceDiagnosticRetentionUsesReceiptExpiry(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "diagnostic-retention")
+	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"connection_test"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := f.base.Add(4 * time.Second)
+	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}
+	resumeVerifier := ownershipVerifier(ownershipBytes(32, 77))
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, hello, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resumeVerifier, 1, 1, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	settings := datasource.Settings{
+		Name: "retention-source", DisplayName: "Retention source", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1",
+		Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60,
+		SettlingDelaySeconds: 60, AgentID: created.Agent.ID,
+	}
+	const diagnosticID = "2a000000-0000-4000-8000-000000000001"
+	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: DatasourceProof{SessionVerifier: f.verifier}, DiagnosticID: diagnosticID, AgentID: created.Agent.ID, AgentGeneration: 1,
+		Operation: "connection_test", ConnectionSettings: settings, RequestedAt: now, Now: func() time.Time { return now },
+	}); err != nil {
+		t.Fatalf("begin diagnostic whose completion triggers receipt pruning: %v", err)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	for index := range 257 {
+		id := fmt.Sprintf("2b000000-0000-4000-8000-%012x", index+1)
+		createdAt := now.Add(-time.Duration(index+2) * time.Hour)
+		if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_diagnostics
+			(id,actor_id,agent_id,session_generation,operation,state,request,result,created_at,updated_at,deadline_at,expires_at)
+			VALUES ($1,$2,$3,1,'connection_test','succeeded','{}','{}',$4,$4,$5,$6)`,
+			id, f.userID, created.Agent.ID, timestamp(createdAt), timestamp(createdAt.Add(30*time.Second)), timestamp(now.Add(24*time.Hour))); err != nil {
+			closeIntegrationConn(conn)
+			t.Fatalf("seed unexpired terminal receipt %d: %v", index+1, err)
+		}
+	}
+	expiredID := "2c000000-0000-4000-8000-000000000001"
+	expiredCreated := now.Add(-48 * time.Hour)
+	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_diagnostics
+		(id,actor_id,agent_id,session_generation,operation,state,request,result,created_at,updated_at,deadline_at,expires_at)
+		VALUES ($1,$2,$3,1,'connection_test','succeeded','{}','{}',$4,$4,$5,$6)`,
+		expiredID, f.userID, created.Agent.ID, timestamp(expiredCreated), timestamp(expiredCreated.Add(30*time.Second)), timestamp(now.Add(-time.Second))); err != nil {
+		closeIntegrationConn(conn)
+		t.Fatal(err)
+	}
+	closeIntegrationConn(conn)
+
+	result := agentprotocol.DiagnosticResult{DiagnosticID: diagnosticID, State: "succeeded", ResultClass: "empty", Series: []agentprotocol.DiagnosticSeries{}}
+	completedAt := now.Add(time.Second)
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, result, completedAt); err != nil {
+		t.Fatalf("complete diagnostic and prune expired receipts: %v", err)
+	}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, result, completedAt.Add(time.Second)); err != nil {
+		t.Fatalf("exact terminal replay after pruning: %v", err)
+	}
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	preserved, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, "2b000000-0000-4000-8000-000000000001", func() time.Time { return completedAt.Add(2 * time.Second) })
+	if err != nil || preserved.State != "succeeded" || !preserved.ExpiresAt.After(completedAt) {
+		t.Fatalf("oldest unexpired terminal receipt = %+v, %v", preserved, err)
+	}
+	completed, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnosticID, func() time.Time { return completedAt.Add(2 * time.Second) })
+	if err != nil || completed.State != "succeeded" || completed.ID != diagnosticID {
+		t.Fatalf("completed diagnostic read after exact replay = %+v, %v", completed, err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	var expiredRows, terminalRows int
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_diagnostics WHERE id=$1", expiredID).Scan(&expiredRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_diagnostics WHERE agent_id=$1 AND state NOT IN ('pending','running')", created.Agent.ID).Scan(&terminalRows); err != nil {
+		t.Fatal(err)
+	}
+	if expiredRows != 0 || terminalRows != 258 {
+		t.Fatalf("receipt retention: expired=%d terminal=%d, want expired=0 and all 258 unexpired", expiredRows, terminalRows)
+	}
+}
+
+func insertDiagnosticActor(t *testing.T, f agentFixture, login string) [32]byte {
+	t.Helper()
+	conn := integrationConnect(t, f.databaseURL)
+	var userID string
+	if err := conn.QueryRow(t.Context(), `INSERT INTO public.almanac_users
+		(login,password_verifier,role,enabled,must_change_password,credential_revision,created_at,updated_at)
+		VALUES ($1,$2,'administrator',true,false,$3,$4,$4) RETURNING id::text`, login, testPasswordVerifier, f.revision, f.base).Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	closeIntegrationConn(conn)
+	var verifier [32]byte
+	verifier[0] = 117
+	if _, err := IssueSession(t.Context(), f.databaseURL, IssueSessionInput{
+		UserID: userID, ExpectedCredentialEpoch: f.epoch, ExpectedCredentialRevision: f.revision,
+		Verifier: verifier, Now: f.base.Add(3 * time.Second), RequestID: "issue-" + login,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return verifier
+}
+
+func waitForDiagnosticAdmissionBarrier(t *testing.T, observer *pgx.Conn, classID, objectID int32, includeAgentRow bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		var advisoryWaiters, agentRowWaiters int
+		if err := observer.QueryRow(t.Context(), `SELECT
+			(SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND classid=$1 AND objid=$2 AND objsubid=2 AND NOT granted),
+			(SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND state='active' AND wait_event_type='Lock' AND query ILIKE '%FROM public.almanac_agents%')`, classID, objectID).Scan(&advisoryWaiters, &agentRowWaiters); err != nil {
+			t.Fatal(err)
+		}
+		if (!includeAgentRow && advisoryWaiters >= 1) || (includeAgentRow && (advisoryWaiters >= 2 || agentRowWaiters >= 1)) {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-t.Context().Done():
+			t.Fatalf("context ended waiting for diagnostic admission barrier: %v", t.Context().Err())
+		}
+	}
+	t.Fatal("concurrent diagnostic admissions did not reach the expected database barrier")
 }
 
 func largeDiagnosticSeries() []agentprotocol.DiagnosticSeries {
