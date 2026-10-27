@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
@@ -234,7 +235,7 @@ func GetDatasourceDiagnostic(ctx context.Context, databaseURL string, proof Data
 	if err != nil {
 		return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic read failed", err)
 	}
-	currentTime := normalizedAgentNow(now)
+	currentTime := now.UTC().Truncate(time.Microsecond)
 	if !currentTime.Before(record.ExpiresAt) {
 		return DiagnosticRecord{}, ErrDiagnosticNotFound
 	}
@@ -296,54 +297,68 @@ func CancelDatasourceDiagnostic(ctx context.Context, databaseURL string, proof D
 	return record, nil
 }
 
-func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, agentID string, generation int64, result agentprotocol.DiagnosticResult, now time.Time) error {
+func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, generation int64, result agentprotocol.DiagnosticResult, now time.Time) error {
 	id, validID := canonicalUUID(result.DiagnosticID)
-	owner, validAgent := canonicalUUID(agentID)
-	if !validID || !validAgent || generation <= 0 || result.Validate() != nil || !validAgentClock(now) {
+	credential, validCredential := canonicalUUID(credentialID)
+	if !validID || !validCredential || generation <= 0 || result.ValidateHTTPS() != nil || !validAgentClock(now) {
 		return ErrInvalidAgentInput
 	}
-	conn, err := connectCurrentSchema(ctx, databaseURL)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credential, credentialVerifier)
 	if err != nil {
 		return err
 	}
-	defer closeInitialOwnerConnection(conn)
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return operationError(ctx, "storage: diagnostic result transaction failed", err)
+	defer closeAgentOwnershipTransaction(state)
+	currentTime := normalizedAgentNow(now)
+	if !currentAgentCredentialValid(state.installation, state.agent.Enabled, state.credential, credentialVerifier, currentTime) {
+		return ErrInvalidAgentCredential
 	}
-	defer rollbackTransaction(tx)
-	if err := setTransactionBounds(ctx, tx); err != nil {
-		return operationError(ctx, "storage: diagnostic result setup failed", err)
-	}
-	encoded, err := json.Marshal(result)
-	if err != nil || len(encoded) > 64<<10 {
+	encoded, err := result.CanonicalJSON()
+	if err != nil || len(encoded) > agentprotocol.MaxHTTPSDiagnosticResultBytes {
 		return ErrInvalidAgentInput
 	}
-	var state string
+	digest := sha256.Sum256(encoded)
+	var stateName string
+	var rowGeneration int64
 	var deadline time.Time
-	err = tx.QueryRow(ctx, `SELECT state, deadline_at FROM public.almanac_diagnostics WHERE id=$1 AND agent_id=$2 AND session_generation=$3 FOR UPDATE`, id, owner, generation).Scan(&state, &deadline)
+	var priorDigest []byte
+	err = state.tx.QueryRow(ctx, `SELECT state, session_generation, deadline_at, result_digest
+		FROM public.almanac_diagnostics WHERE id=$1 AND agent_id=$2 FOR UPDATE`, id, state.agentID).
+		Scan(&stateName, &rowGeneration, &deadline, &priorDigest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrDiagnosticNotFound
 	}
 	if err != nil {
 		return operationError(ctx, "storage: diagnostic result lookup failed", err)
 	}
-	if state != "pending" && state != "running" {
-		return tx.Commit(ctx)
+	owner, err := state.queries.LockLatestAgentOwnership(ctx, state.agentID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (owner.Generation != generation || !currentTime.Before(owner.ExpiresAt.Time))) {
+		return ErrDiagnosticConflict
 	}
-	if !now.Before(deadline) {
-		_, err = tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state='timed_out', updated_at=$2 WHERE id=$1`, id, timestamp(now))
-	} else {
-		_, err = tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state=$2, result=$3::jsonb, error_code=NULLIF($4,''), message=NULLIF($5,''), updated_at=$6 WHERE id=$1`,
-			id, result.State, encoded, result.ErrorCode, result.Message, timestamp(now))
+	if err != nil {
+		return operationError(ctx, "storage: diagnostic result ownership lookup failed", err)
 	}
+	if rowGeneration != generation {
+		return ErrDiagnosticConflict
+	}
+	if stateName != "pending" && stateName != "running" {
+		if len(priorDigest) == sha256.Size && subtle.ConstantTimeCompare(priorDigest, digest[:]) == 1 {
+			return state.tx.Commit(ctx)
+		}
+		return ErrDiagnosticConflict
+	}
+	if !currentTime.Before(deadline) {
+		return ErrDiagnosticConflict
+	}
+	_, err = state.tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state=$2, result=$3::jsonb, result_digest=$4,
+		error_code=NULLIF($5,''), message=NULLIF($6,''), updated_at=$7 WHERE id=$1 AND state IN ('pending','running')`,
+		id, result.State, encoded, digest[:], result.ErrorCode, result.Message, timestamp(currentTime))
 	if err != nil {
 		return operationError(ctx, "storage: diagnostic result update failed", err)
 	}
-	if err := pruneDatasourceDiagnosticReceipts(ctx, tx, owner); err != nil {
+	if err := pruneDatasourceDiagnosticReceipts(ctx, state.tx, state.agentID); err != nil {
 		return operationError(ctx, "storage: diagnostic receipt pruning failed", err)
 	}
-	return tx.Commit(ctx)
+	return state.tx.Commit(ctx)
 }
 
 func MarkDatasourceDiagnosticRunning(ctx context.Context, databaseURL, diagnosticID, agentID string, generation int64, now time.Time) error {

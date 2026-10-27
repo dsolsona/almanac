@@ -17,16 +17,18 @@ import (
 )
 
 const (
-	ProtocolV1            = "almanac.agent.v1"
-	MaxMessageBytes       = 256 << 10
-	MaxQueueMessages      = 128
-	MaxQueueBytes         = 2 << 20
-	MaxCapabilities       = 256
-	MaxMeasurements       = 10_000
-	MaxConfigurationBytes = 1 << 20
-	MaxHeartbeatMillis    = 30_000
-	InitialGeneration     = "0"
-	MaxEnvelopeIDLength   = 128
+	ProtocolV1                     = "almanac.agent.v1"
+	MaxMessageBytes                = 256 << 10
+	MaxQueueMessages               = 128
+	MaxQueueBytes                  = 2 << 20
+	MaxCapabilities                = 256
+	MaxMeasurements                = 10_000
+	MaxConfigurationBytes          = 1 << 20
+	MaxHeartbeatMillis             = 30_000
+	InitialGeneration              = "0"
+	MaxEnvelopeIDLength            = 128
+	MaxInlineDiagnosticResultBytes = 64 << 10
+	MaxHTTPSDiagnosticResultBytes  = 1 << 20
 )
 
 type Kind string
@@ -681,6 +683,21 @@ func (p DiagnosticRequest) Validate() error {
 }
 
 func (p DiagnosticResult) Validate() error {
+	return p.validate(MaxInlineDiagnosticResultBytes)
+}
+
+func (p DiagnosticResult) ValidateHTTPS() error {
+	return p.validate(MaxHTTPSDiagnosticResultBytes)
+}
+
+func (p DiagnosticResult) CanonicalJSON() ([]byte, error) {
+	if err := p.ValidateHTTPS(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p, json.Deterministic(true))
+}
+
+func (p DiagnosticResult) validate(maxSerializedBytes int) error {
 	if !canonicalUUID(p.DiagnosticID) || len(p.Series) > 20 || len(p.Message) > 512 || !utf8.ValidString(p.Message) {
 		return invalidField("diagnostic_result")
 	}
@@ -710,8 +727,8 @@ func (p DiagnosticResult) Validate() error {
 			}
 		}
 	}
-	encoded, err := json.Marshal(p)
-	if err != nil || len(encoded) > 64<<10 {
+	encoded, err := json.Marshal(p, json.Deterministic(true))
+	if err != nil || len(encoded) > maxSerializedBytes {
 		return ErrMessageTooLarge
 	}
 	return nil

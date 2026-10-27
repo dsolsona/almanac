@@ -11,6 +11,7 @@
     { "$ref": "#/$defs/configurationChanged" },
     { "$ref": "#/$defs/configurationApplied" },
     { "$ref": "#/$defs/configurationFailed" },
+    { "$ref": "#/$defs/diagnosticResult" },
     { "$ref": "#/$defs/shutdown" },
     { "$ref": "#/$defs/revoked" }
   ],
@@ -182,6 +183,45 @@
         "payload": { "type": "object", "required": ["configuration_revision", "failure_code"], "properties": { "configuration_revision": { "$ref": "#/$defs/positiveDecimal" }, "failure_code": { "enum": ["invalid_snapshot", "incompatible", "apply_failed"] } }, "additionalProperties": true }
       },
       "additionalProperties": true
+    },
+    "diagnosticResult": {
+      "type": "object",
+      "required": ["kind", "message_id", "session_generation", "payload"],
+      "properties": {
+        "kind": { "const": "diagnostic-result" },
+        "message_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "session_generation": { "$ref": "#/$defs/positiveDecimal" },
+        "payload": { "$ref": "#/$defs/diagnosticResultPayload" }
+      },
+      "additionalProperties": true,
+      "$comment": "The WebSocket envelope validator limits this typed result payload to 64 KiB; larger validated results use the separate authenticated HTTPS operation, bounded to 1 MiB."
+    },
+    "diagnosticResultPayload": {
+      "type": "object",
+      "required": ["diagnostic_id", "state"],
+      "properties": {
+        "diagnostic_id": { "$ref": "#/$defs/agentId" },
+        "state": { "enum": ["succeeded", "failed", "canceled", "timed_out"] },
+        "result_class": { "enum": ["complete", "empty", "incomplete"] },
+        "series": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": ["labels", "time", "value"],
+            "properties": {
+              "labels": { "type": "object", "maxProperties": 32, "additionalProperties": { "type": "string", "maxLength": 256 }, "$comment": "The Go validator also limits each label name to 128 bytes." },
+              "time": { "type": "string", "maxLength": 32 },
+              "value": { "type": "string", "maxLength": 64 }
+            },
+            "additionalProperties": true
+          }
+        },
+        "error_code": { "enum": ["authentication", "incomplete", "network", "query", "rate_limited", "tls", "timeout", "unsupported", "assignment_revoked", "deadline"] },
+        "message": { "type": "string", "maxLength": 512 }
+      },
+      "additionalProperties": true,
+      "x-maxSerializedBytes": 1048576
     },
     "shutdownEnvelope": {
       "type": "object",

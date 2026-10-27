@@ -97,6 +97,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent configuration handler")
 	}
+	diagnosticResults, err := agenthttp.NewDiagnosticResultHandler(access, auth, time.Now)
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid agent diagnostic result handler")
+	}
 	agentRuntime, err := agentruntime.New(databaseURL, time.Now)
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent runtime configuration")
@@ -105,8 +109,8 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent connection configuration")
 	}
-	connections.SetDiagnosticResultHandler(func(resultCtx context.Context, agentID string, generation int64, result agentprotocol.DiagnosticResult) error {
-		return storage.CompleteDatasourceDiagnostic(resultCtx, databaseURL, agentID, generation, result, time.Now().UTC())
+	connections.SetDiagnosticResultHandler(func(resultCtx context.Context, token string, generation int64, result agentprotocol.DiagnosticResult) error {
+		return access.CompleteDiagnostic(resultCtx, token, generation, result)
 	})
 	datasources, err := datasourcehttp.New(databaseURL, sourceSecrets, auth, datasourcehttp.Options{Now: time.Now, Preflight: s.authenticationPreflight, AgentSessions: agentSessions})
 	if err != nil {
@@ -125,6 +129,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.Handle("/api/v1/diagnostics/", datasources)
 	mux.Handle("/api/v1/", agents)
 	mux.Handle("/api/agent/v1/configuration", configuration)
+	mux.Handle("POST /api/agent/v1/diagnostics/{diagnostic_id}/result", diagnosticResults)
 	mux.Handle("/api/agent/v1/connect", connections)
 	if cfg.BackendUI() {
 		mux.Handle("/", assets)

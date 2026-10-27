@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -51,6 +52,7 @@ type client struct {
 	desiredRevision      string
 	configurationPending bool
 	http                 *http.Client
+	diagnosticUploads    chan diagnosticUpload
 }
 
 func Run(ctx context.Context, args []string) error {
@@ -84,6 +86,13 @@ func Run(ctx context.Context, args []string) error {
 	}
 	client.diagnostics = newDiagnosticRunner(client)
 	defer client.diagnostics.close()
+	uploadCtx, cancelUploads := context.WithCancel(ctx)
+	var uploadWorkers sync.WaitGroup
+	client.startDiagnosticUploads(uploadCtx, &uploadWorkers)
+	defer func() {
+		cancelUploads()
+		uploadWorkers.Wait()
+	}()
 	return client.run(ctx)
 }
 
@@ -108,7 +117,7 @@ func newClient(opts options, token string) (*client, error) {
 	if _, err := rand.Read(proof[:]); err != nil {
 		return nil, errors.New("secure random source unavailable")
 	}
-	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0",
+	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0", diagnosticUploads: make(chan diagnosticUpload, maxActiveDiagnostics),
 		http: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}}}, nil
@@ -313,12 +322,23 @@ func (c *client) runSession(ctx context.Context) error {
 				heartbeatTimer.Reset(interval)
 			}
 		case diagnosticResult := <-c.diagnostics.results:
+			canonical, err := diagnosticResult.result.CanonicalJSON()
+			if err != nil {
+				diagnosticTransferFailure()
+				continue
+			}
+			if len(canonical) > agentprotocol.MaxInlineDiagnosticResultBytes {
+				if len(canonical) > agentprotocol.MaxHTTPSDiagnosticResultBytes || !c.queueDiagnosticUpload(ctx, diagnosticResult, canonical) {
+					diagnosticTransferFailure()
+				}
+				continue
+			}
 			messageID, err := newMessageID()
 			if err != nil {
 				return err
 			}
 			message := agentprotocol.Envelope[agentprotocol.DiagnosticResult]{Kind: agentprotocol.KindDiagnosticResult,
-				MessageID: messageID, SessionGeneration: c.generation, Payload: diagnosticResult}
+				MessageID: messageID, SessionGeneration: c.generation, Payload: diagnosticResult.result}
 			if err := message.Validate(); err != nil {
 				return errors.New("agent diagnostic result is invalid")
 			}
@@ -480,7 +500,7 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		}
 		if err := c.diagnostics.start(ctx, request.Payload); err != nil {
 			if errors.Is(err, errDiagnosticCapacity) {
-				c.diagnostics.offer(diagnosticFailure(request.Payload.DiagnosticID, "unsupported"))
+				c.diagnostics.offer(completedDiagnosticResult{result: diagnosticFailure(request.Payload.DiagnosticID, "unsupported"), deadlineAt: request.Payload.DeadlineAt})
 				return nil
 			}
 			return errors.New("backend diagnostic request was rejected")

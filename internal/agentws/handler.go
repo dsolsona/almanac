@@ -223,7 +223,7 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 			}
 		case agentprotocol.KindDiagnosticResult:
 			var result agentprotocol.DiagnosticResult
-			if json.Unmarshal(envelope.Payload, &result) != nil || envelope.SessionGeneration != strconv.FormatInt(session.Generation, 10) || h.diagnosticResult == nil || h.diagnosticResult(ctx, session.AgentID, session.Generation, result) != nil {
+			if json.Unmarshal(envelope.Payload, &result) != nil || envelope.SessionGeneration != strconv.FormatInt(session.Generation, 10) || h.diagnosticResult == nil || h.diagnosticResult(ctx, token, session.Generation, result) != nil {
 				_ = control.conn.Close(websocket.StatusPolicyViolation, "diagnostic result rejected")
 				return
 			}

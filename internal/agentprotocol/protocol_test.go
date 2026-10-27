@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -330,6 +331,24 @@ func TestDiagnosticProtocolBoundsRequestsAndResults(t *testing.T) {
 	}
 }
 
+func TestDiagnosticResultSupportsSeparateBoundedHTTPSPayloadWithoutChangingInlineLimit(t *testing.T) {
+	series := make([]DiagnosticSeries, 20)
+	for seriesIndex := range series {
+		labels := make(map[string]string, 32)
+		for labelIndex := range 32 {
+			labels[strings.Repeat("k", 120)+strconv.Itoa(labelIndex)] = strings.Repeat("v", 256)
+		}
+		series[seriesIndex] = DiagnosticSeries{Labels: labels, Time: "1793102400.000", Value: "1"}
+	}
+	result := DiagnosticResult{DiagnosticID: "00000000-0000-4000-8000-000000000003", State: "succeeded", ResultClass: "complete", Series: series}
+	if err := result.Validate(); !errors.Is(err, ErrMessageTooLarge) {
+		t.Fatalf("inline validator error = %v, want the 64KiB limit", err)
+	}
+	if err := result.ValidateHTTPS(); err != nil {
+		t.Fatalf("bounded HTTPS validator rejected a valid large result: %v", err)
+	}
+}
+
 func validWelcomeJSON() string { return validWelcomeJSONWithGrants(`[]`) }
 
 func validWelcomeJSONWithGrants(grants string) string {
@@ -386,7 +405,7 @@ func TestProtocolSchemasAndEmptyConfigurationExample(t *testing.T) {
 			if err := json.Unmarshal(data, &protocolSchema); err != nil {
 				t.Fatal(err)
 			}
-			want := []string{"#/$defs/hello", "#/$defs/welcome", "#/$defs/heartbeat", "#/$defs/heartbeatAck", "#/$defs/configurationChanged", "#/$defs/configurationApplied", "#/$defs/configurationFailed", "#/$defs/shutdown", "#/$defs/revoked"}
+			want := []string{"#/$defs/hello", "#/$defs/welcome", "#/$defs/heartbeat", "#/$defs/heartbeatAck", "#/$defs/configurationChanged", "#/$defs/configurationApplied", "#/$defs/configurationFailed", "#/$defs/diagnosticResult", "#/$defs/shutdown", "#/$defs/revoked"}
 			got := make(map[string]struct{}, len(protocolSchema.OneOf))
 			for _, item := range protocolSchema.OneOf {
 				got[item.Ref] = struct{}{}

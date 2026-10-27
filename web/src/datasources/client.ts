@@ -78,9 +78,23 @@ function validDiagnostic(value: unknown): value is Diagnostic {
     && ['connection_test', 'query_preview'].includes(String(value.operation))
     && typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) && typeof value.deadline_at === 'string' && Number.isFinite(Date.parse(value.deadline_at))
     && (value.result_class === null || ['complete', 'empty', 'incomplete'].includes(String(value.result_class)))
-    && (value.result === null || object(value.result))
+    && (value.result === null || validDiagnosticResult(value.result, value.id))
     && (value.error_code === null || typeof value.error_code === 'string' && value.error_code.length <= 64)
     && (value.message === null || typeof value.message === 'string' && value.message.length <= 1024);
+}
+
+function validDiagnosticResult(value: unknown, diagnosticID: string): boolean {
+  if (!object(value) || Object.keys(value).some((key) => !['diagnostic_id', 'state', 'result_class', 'series'].includes(key))
+    || value.diagnostic_id !== diagnosticID || value.state !== 'succeeded'
+    || !['complete', 'empty', 'incomplete'].includes(String(value.result_class)) || !Array.isArray(value.series) || value.series.length > 20) return false;
+  return value.series.every((entry) => {
+    if (!object(entry) || Object.keys(entry).some((key) => !['labels', 'time', 'value'].includes(key)) || !object(entry.labels)
+      || typeof entry.time !== 'string' || new TextEncoder().encode(entry.time).byteLength > 32
+      || typeof entry.value !== 'string' || new TextEncoder().encode(entry.value).byteLength > 64
+      || Object.keys(entry.labels).length > 32) return false;
+    return Object.entries(entry.labels).every(([name, label]) => name.length > 0 && new TextEncoder().encode(name).byteLength <= 128
+      && typeof label === 'string' && new TextEncoder().encode(label).byteLength <= 256);
+  });
 }
 
 function safeDiagnostic(value: Diagnostic): Diagnostic {
@@ -100,9 +114,9 @@ function safeDiagnostic(value: Diagnostic): Diagnostic {
     error_code: value.error_code && Object.hasOwn(descriptions, value.error_code) ? value.error_code : (value.error_code ? 'diagnostic_failed' : null), message };
 }
 
-async function json(response: Response): Promise<unknown> {
+async function json(response: Response, maxBytes = 512 * 1024): Promise<unknown> {
   const declared = Number(response.headers.get('Content-Length'));
-  if (Number.isFinite(declared) && declared > 512 * 1024) throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.');
+  if (Number.isFinite(declared) && declared > maxBytes) throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.');
   if (!response.body) throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.');
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -112,7 +126,7 @@ async function json(response: Response): Promise<unknown> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 512 * 1024) { await reader.cancel(); throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.'); }
+      if (size > maxBytes) { await reader.cancel(); throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.'); }
       chunks.push(value);
     }
   } finally { reader.releaseLock(); }
@@ -122,7 +136,7 @@ async function json(response: Response): Promise<unknown> {
   try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch { throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.'); }
 }
 
-async function request<T>(path: string, init: RequestInit, expected: number, validate: (value: unknown) => value is T): Promise<{ value: T; response: Response }> {
+async function request<T>(path: string, init: RequestInit, expected: number, validate: (value: unknown) => value is T, maxBytes = 512 * 1024): Promise<{ value: T; response: Response }> {
   let response: Response;
   try {
     response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' });
@@ -130,7 +144,7 @@ async function request<T>(path: string, init: RequestInit, expected: number, val
     if (init.signal?.aborted) throw new DatasourceFailure('request_canceled', 'The datasource request was canceled.');
     throw new DatasourceFailure('request_failed', 'Datasource management could not be reached.');
   }
-  const value = await json(response);
+  const value = await json(response, maxBytes);
   if (response.status !== expected) {
     const code = object(value) && typeof value.code === 'string' ? value.code : 'management_unavailable';
     throw new DatasourceFailure(code, messages[code] ?? 'Datasource management is temporarily unavailable.', response.status);
@@ -204,13 +218,13 @@ export function createDatasourceClient() {
       return safeDiagnostic(value);
     },
     async diagnostic(id: string, signal?: AbortSignal): Promise<Diagnostic> {
-      const { value } = await request(`/api/v1/diagnostics/${safeUUID(id)}`, { method: 'GET', signal }, 200, validDiagnostic);
+      const { value } = await request(`/api/v1/diagnostics/${safeUUID(id)}`, { method: 'GET', signal }, 200, validDiagnostic, 2 * 1024 * 1024);
       return safeDiagnostic(value);
     },
     async cancelDiagnostic(id: string, context: AuthContext, signal?: AbortSignal): Promise<Diagnostic> {
       const { value } = await request(`/api/v1/diagnostics/${safeUUID(id)}/cancel`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token }, body: '{}', signal,
-      }, 200, validDiagnostic);
+      }, 200, validDiagnostic, 2 * 1024 * 1024);
       return safeDiagnostic(value);
     },
   };

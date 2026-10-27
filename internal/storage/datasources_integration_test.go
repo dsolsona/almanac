@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,6 +37,7 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 		agentPage.Items[0].Runtime.Capabilities[0].Provider != "prometheus" || len(agentPage.Items[0].Runtime.Capabilities[0].Operations) != 2 {
 		t.Fatalf("agent list datasource capability metadata = %+v, %v", agentPage.Items, err)
 	}
+	otherCredential, _ := createOwnershipAgent(t, f, "datasource-cross-agent")
 	keysetID := "c79c723a-81a2-4e0f-ae09-f2a071b2ef45"
 	keysetPath := filepath.Join(t.TempDir(), "source-keyset.json")
 	if err := sourcesecret.Provision(keysetPath, keysetID); err != nil {
@@ -114,8 +116,8 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 		t.Fatalf("diagnostic cancellation = %+v, %v", canceledDiagnostic, err)
 	}
 	late := agentprotocol.DiagnosticResult{DiagnosticID: diagnostic.ID, State: "succeeded", ResultClass: "empty", Series: []agentprotocol.DiagnosticSeries{}}
-	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, created.Agent.ID, 1, late, now.Add(time.Second)); err != nil {
-		t.Fatal(err)
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, late, now.Add(time.Second)); !errors.Is(err, ErrDiagnosticConflict) {
+		t.Fatalf("late result for canceled diagnostic error = %v", err)
 	}
 	status, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, diagnostic.ID, func() time.Time { return now.Add(time.Second) })
 	if err != nil || status.State != "canceled" {
@@ -211,9 +213,72 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 		t.Fatalf("editor saved-source query preview = %+v request=%+v err=%v", preview, previewRequest, err)
 	}
 	now = now.Add(time.Second)
-	if _, err := CancelDatasourceDiagnostic(t.Context(), f.databaseURL, proof, preview.ID, func() time.Time { return now }); err != nil {
+	previewResult := agentprotocol.DiagnosticResult{DiagnosticID: preview.ID, State: "succeeded", ResultClass: "complete",
+		Series: largeDiagnosticSeries()}
+	encodedPreview, err := previewResult.CanonicalJSON()
+	if err != nil || len(encodedPreview) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(encodedPreview) > agentprotocol.MaxHTTPSDiagnosticResultBytes {
+		t.Fatalf("large diagnostic transfer payload size = %d, err=%v", len(encodedPreview), err)
+	}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 2, previewResult, now); !errors.Is(err, ErrDiagnosticConflict) {
+		t.Fatalf("stale generation diagnostic result error = %v", err)
+	}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, otherCredential.ID, otherCredential.Verifier, 1, previewResult, now); !errors.Is(err, ErrDiagnosticNotFound) {
+		t.Fatalf("cross-agent diagnostic result error = %v", err)
+	}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, previewResult, now); err != nil {
+		t.Fatalf("first diagnostic result = %v", err)
+	}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, previewResult, now.Add(time.Second)); err != nil {
+		t.Fatalf("exact diagnostic result replay = %v", err)
+	}
+	changedResult := previewResult
+	changedResult.Series = []agentprotocol.DiagnosticSeries{{Labels: map[string]string{"service": "api"}, Time: "1793102400.000", Value: "2"}}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, changedResult, now.Add(2*time.Second)); !errors.Is(err, ErrDiagnosticConflict) {
+		t.Fatalf("changed terminal result replay error = %v", err)
+	}
+	completed, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, preview.ID, func() time.Time { return now.Add(2 * time.Second) })
+	if err != nil || completed.State != "succeeded" || len(completed.Result) <= agentprotocol.MaxInlineDiagnosticResultBytes || !bytes.Contains(completed.Result, []byte(`"value":"1"`)) {
+		t.Fatalf("completed diagnostic receipt = %+v, %v", completed, err)
+	}
+	deadlineDiagnostic, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
+		Proof: proof, DiagnosticID: "2c111dd1-5377-4ad3-b9b3-44e75fedc214", AgentID: created.Agent.ID,
+		AgentGeneration: 1, DatasourceID: createdSource.ID, Operation: "query_preview", Query: "vector(1)", Secrets: secrets,
+		RequestedAt: now.Add(time.Second), Now: func() time.Time { return now.Add(time.Second) },
+	})
+	if err != nil {
+		t.Fatalf("begin diagnostic for deadline fencing: %v", err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_diagnostics SET deadline_at=$2 WHERE id=$1`, deadlineDiagnostic.ID, timestamp(now.Add(3*time.Second))); err != nil {
 		t.Fatal(err)
 	}
+	closeIntegrationConn(conn)
+	deadlineResult := agentprotocol.DiagnosticResult{DiagnosticID: deadlineDiagnostic.ID, State: "succeeded", ResultClass: "empty", Series: []agentprotocol.DiagnosticSeries{}}
+	if err := CompleteDatasourceDiagnostic(t.Context(), f.databaseURL, issued.ID, issued.Verifier, 1, deadlineResult, now.Add(4*time.Second)); !errors.Is(err, ErrDiagnosticConflict) {
+		t.Fatalf("late diagnostic result error = %v", err)
+	}
+	conn = integrationConnect(t, f.databaseURL)
+	var deadlineState string
+	var deadlineStored []byte
+	if err := conn.QueryRow(t.Context(), `SELECT state, result FROM public.almanac_diagnostics WHERE id=$1`, deadlineDiagnostic.ID).Scan(&deadlineState, &deadlineStored); err != nil {
+		t.Fatal(err)
+	}
+	closeIntegrationConn(conn)
+	if deadlineState != "pending" || len(deadlineStored) != 0 {
+		t.Fatalf("late result mutated diagnostic receipt: state=%s bytes=%d", deadlineState, len(deadlineStored))
+	}
+}
+
+func largeDiagnosticSeries() []agentprotocol.DiagnosticSeries {
+	series := make([]agentprotocol.DiagnosticSeries, 20)
+	for index := range series {
+		labels := make(map[string]string, 32)
+		for label := range 32 {
+			labels[fmt.Sprintf("label_%02d", label)] = string(bytes.Repeat([]byte{'x'}, 256))
+		}
+		series[index] = agentprotocol.DiagnosticSeries{Labels: labels, Time: "1793102400.000", Value: "1"}
+	}
+	return series
 }
 
 func setIntegrationUserRole(t *testing.T, f agentFixture, role string) {

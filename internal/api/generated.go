@@ -482,19 +482,19 @@ func (e DiagnosticOperation) Valid() bool {
 
 // Defines values for DiagnosticResultClass.
 const (
-	Complete   DiagnosticResultClass = "complete"
-	Empty      DiagnosticResultClass = "empty"
-	Incomplete DiagnosticResultClass = "incomplete"
+	DiagnosticResultClassComplete   DiagnosticResultClass = "complete"
+	DiagnosticResultClassEmpty      DiagnosticResultClass = "empty"
+	DiagnosticResultClassIncomplete DiagnosticResultClass = "incomplete"
 )
 
 // Valid indicates whether the value is a known member of the DiagnosticResultClass enum.
 func (e DiagnosticResultClass) Valid() bool {
 	switch e {
-	case Complete:
+	case DiagnosticResultClassComplete:
 		return true
-	case Empty:
+	case DiagnosticResultClassEmpty:
 		return true
-	case Incomplete:
+	case DiagnosticResultClassIncomplete:
 		return true
 	default:
 		return false
@@ -528,6 +528,93 @@ func (e DiagnosticState) Valid() bool {
 	case DiagnosticStateTimedOut:
 		return true
 	case DiagnosticStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticResultPayloadErrorCode.
+const (
+	DiagnosticResultPayloadErrorCodeAssignmentRevoked DiagnosticResultPayloadErrorCode = "assignment_revoked"
+	DiagnosticResultPayloadErrorCodeAuthentication    DiagnosticResultPayloadErrorCode = "authentication"
+	DiagnosticResultPayloadErrorCodeDeadline          DiagnosticResultPayloadErrorCode = "deadline"
+	DiagnosticResultPayloadErrorCodeIncomplete        DiagnosticResultPayloadErrorCode = "incomplete"
+	DiagnosticResultPayloadErrorCodeNetwork           DiagnosticResultPayloadErrorCode = "network"
+	DiagnosticResultPayloadErrorCodeQuery             DiagnosticResultPayloadErrorCode = "query"
+	DiagnosticResultPayloadErrorCodeRateLimited       DiagnosticResultPayloadErrorCode = "rate_limited"
+	DiagnosticResultPayloadErrorCodeTimeout           DiagnosticResultPayloadErrorCode = "timeout"
+	DiagnosticResultPayloadErrorCodeTls               DiagnosticResultPayloadErrorCode = "tls"
+	DiagnosticResultPayloadErrorCodeUnsupported       DiagnosticResultPayloadErrorCode = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticResultPayloadErrorCode enum.
+func (e DiagnosticResultPayloadErrorCode) Valid() bool {
+	switch e {
+	case DiagnosticResultPayloadErrorCodeAssignmentRevoked:
+		return true
+	case DiagnosticResultPayloadErrorCodeAuthentication:
+		return true
+	case DiagnosticResultPayloadErrorCodeDeadline:
+		return true
+	case DiagnosticResultPayloadErrorCodeIncomplete:
+		return true
+	case DiagnosticResultPayloadErrorCodeNetwork:
+		return true
+	case DiagnosticResultPayloadErrorCodeQuery:
+		return true
+	case DiagnosticResultPayloadErrorCodeRateLimited:
+		return true
+	case DiagnosticResultPayloadErrorCodeTimeout:
+		return true
+	case DiagnosticResultPayloadErrorCodeTls:
+		return true
+	case DiagnosticResultPayloadErrorCodeUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticResultPayloadResultClass.
+const (
+	DiagnosticResultPayloadResultClassComplete   DiagnosticResultPayloadResultClass = "complete"
+	DiagnosticResultPayloadResultClassEmpty      DiagnosticResultPayloadResultClass = "empty"
+	DiagnosticResultPayloadResultClassIncomplete DiagnosticResultPayloadResultClass = "incomplete"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticResultPayloadResultClass enum.
+func (e DiagnosticResultPayloadResultClass) Valid() bool {
+	switch e {
+	case DiagnosticResultPayloadResultClassComplete:
+		return true
+	case DiagnosticResultPayloadResultClassEmpty:
+		return true
+	case DiagnosticResultPayloadResultClassIncomplete:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticResultPayloadState.
+const (
+	DiagnosticResultPayloadStateCanceled  DiagnosticResultPayloadState = "canceled"
+	DiagnosticResultPayloadStateFailed    DiagnosticResultPayloadState = "failed"
+	DiagnosticResultPayloadStateSucceeded DiagnosticResultPayloadState = "succeeded"
+	DiagnosticResultPayloadStateTimedOut  DiagnosticResultPayloadState = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticResultPayloadState enum.
+func (e DiagnosticResultPayloadState) Valid() bool {
+	switch e {
+	case DiagnosticResultPayloadStateCanceled:
+		return true
+	case DiagnosticResultPayloadStateFailed:
+		return true
+	case DiagnosticResultPayloadStateSucceeded:
+		return true
+	case DiagnosticResultPayloadStateTimedOut:
 		return true
 	default:
 		return false
@@ -1043,12 +1130,14 @@ type DatasourceWriteProvider string
 
 // Diagnostic defines model for Diagnostic.
 type Diagnostic struct {
-	CreatedAt   time.Time               `json:"created_at"`
-	DeadlineAt  time.Time               `json:"deadline_at"`
-	ErrorCode   *DiagnosticErrorCode    `json:"error_code"`
-	Id          openapi_types.UUID      `json:"id"`
-	Message     *string                 `json:"message"`
-	Operation   DiagnosticOperation     `json:"operation"`
+	CreatedAt  time.Time            `json:"created_at"`
+	DeadlineAt time.Time            `json:"deadline_at"`
+	ErrorCode  *DiagnosticErrorCode `json:"error_code"`
+	Id         openapi_types.UUID   `json:"id"`
+	Message    *string              `json:"message"`
+	Operation  DiagnosticOperation  `json:"operation"`
+
+	// Result Present only for succeeded diagnostics. The typed result payload is bounded to 1 MiB; other states return null while retaining only the normalized top-level error classification.
 	Result      *map[string]interface{} `json:"result"`
 	ResultClass *DiagnosticResultClass  `json:"result_class"`
 	State       DiagnosticState         `json:"state"`
@@ -1065,6 +1154,30 @@ type DiagnosticResultClass string
 
 // DiagnosticState defines model for Diagnostic.State.
 type DiagnosticState string
+
+// DiagnosticResultPayload Typed agent result. The HTTP transport accepts 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB.
+type DiagnosticResultPayload struct {
+	DiagnosticId openapi_types.UUID                  `json:"diagnostic_id"`
+	ErrorCode    *DiagnosticResultPayloadErrorCode   `json:"error_code,omitempty"`
+	Message      *string                             `json:"message,omitempty"`
+	ResultClass  *DiagnosticResultPayloadResultClass `json:"result_class,omitempty"`
+	Series       *[]struct {
+		// Labels Label names are limited to 128 UTF-8 bytes.
+		Labels map[string]string `json:"labels"`
+		Time   string            `json:"time"`
+		Value  string            `json:"value"`
+	} `json:"series,omitempty"`
+	State DiagnosticResultPayloadState `json:"state"`
+}
+
+// DiagnosticResultPayloadErrorCode defines model for DiagnosticResultPayload.ErrorCode.
+type DiagnosticResultPayloadErrorCode string
+
+// DiagnosticResultPayloadResultClass defines model for DiagnosticResultPayload.ResultClass.
+type DiagnosticResultPayloadResultClass string
+
+// DiagnosticResultPayloadState defines model for DiagnosticResultPayload.State.
+type DiagnosticResultPayloadState string
 
 // EmptyAuthRequest defines model for EmptyAuthRequest.
 type EmptyAuthRequest = map[string]interface{}
@@ -1253,6 +1366,9 @@ type DatasourceId = openapi_types.UUID
 // DatasourceIfMatch defines model for DatasourceIfMatch.
 type DatasourceIfMatch = string
 
+// DiagnosticId defines model for DiagnosticId.
+type DiagnosticId = openapi_types.UUID
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
@@ -1271,6 +1387,12 @@ type AuthenticationRateLimited = Problem
 // GetAgentConfigurationParams defines parameters for GetAgentConfiguration.
 type GetAgentConfigurationParams struct {
 	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+}
+
+// PostAgentDiagnosticResultParams defines parameters for PostAgentDiagnosticResult.
+type PostAgentDiagnosticResultParams struct {
+	// XAgentSessionGeneration Current positive canonical decimal ownership generation.
+	XAgentSessionGeneration string `json:"X-Agent-Session-Generation"`
 }
 
 // GetAgentsParams defines parameters for GetAgents.
@@ -1340,6 +1462,9 @@ type PutDatasourceParams struct {
 type GetProvidersParams struct {
 	AgentId *openapi_types.UUID `form:"agent_id,omitempty" json:"agent_id,omitempty"`
 }
+
+// PostAgentDiagnosticResultJSONRequestBody defines body for PostAgentDiagnosticResult for application/json ContentType.
+type PostAgentDiagnosticResultJSONRequestBody = DiagnosticResultPayload
 
 // PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
 type PostAgentsJSONRequestBody = CreateAgentRequest
@@ -1522,6 +1647,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
 	GetAgentConfiguration(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentDiagnosticResultWithBody Submit a bounded diagnostic result over verified HTTPS
+	//
+	// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+	PostAgentDiagnosticResultWithBody(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentDiagnosticResult Submit a bounded diagnostic result over verified HTTPS
+	//
+	// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+	PostAgentDiagnosticResult(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAgents List agents
 	//
@@ -1806,6 +1949,44 @@ type ClientInterface interface {
 // Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
 func (c *Client) GetAgentConfiguration(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAgentConfigurationRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentDiagnosticResultWithBody Submit a bounded diagnostic result over verified HTTPS
+//
+// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+func (c *Client) PostAgentDiagnosticResultWithBody(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentDiagnosticResultRequestWithBody(c.Server, diagnosticId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentDiagnosticResult Submit a bounded diagnostic result over verified HTTPS
+//
+// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+func (c *Client) PostAgentDiagnosticResult(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentDiagnosticResultRequest(c.Server, diagnosticId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2477,6 +2658,66 @@ func NewGetAgentConfigurationRequest(server string, params *GetAgentConfiguratio
 
 			req.Header.Set("If-None-Match", headerParam0)
 		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostAgentDiagnosticResultRequest calls the generic PostAgentDiagnosticResult builder with application/json body
+func NewPostAgentDiagnosticResultRequest(server string, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAgentDiagnosticResultRequestWithBody(server, diagnosticId, params, "application/json", bodyReader)
+}
+
+// NewPostAgentDiagnosticResultRequestWithBody constructs an http.Request for the PostAgentDiagnosticResult method, with any body, and a specified content type
+func NewPostAgentDiagnosticResultRequestWithBody(server string, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "diagnostic_id", diagnosticId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/agent/v1/diagnostics/%s/result", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Agent-Session-Generation", params.XAgentSessionGeneration, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Agent-Session-Generation", headerParam0)
 
 	}
 
@@ -3625,6 +3866,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/agent/v1/configuration (the `GetAgentConfiguration` operationId).
 	GetAgentConfigurationWithResponse(ctx context.Context, params *GetAgentConfigurationParams, reqEditors ...RequestEditorFn) (*GetAgentConfigurationResponse, error)
 
+	// PostAgentDiagnosticResultWithBodyWithResponse Submit a bounded diagnostic result over verified HTTPS
+	//
+	// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+	PostAgentDiagnosticResultWithBodyWithResponse(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentDiagnosticResultResponse, error)
+
+	// PostAgentDiagnosticResultWithResponse Submit a bounded diagnostic result over verified HTTPS
+	//
+	// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+	PostAgentDiagnosticResultWithResponse(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentDiagnosticResultResponse, error)
+
 	// GetAgentsWithResponse List agents
 	//
 	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
@@ -3975,6 +4234,82 @@ func (r GetAgentConfigurationResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetAgentConfigurationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostAgentDiagnosticResultResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSON413 the response for an HTTP 413 `application/problem+json` response
+	ApplicationproblemJSON413 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r PostAgentDiagnosticResultResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r PostAgentDiagnosticResultResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r PostAgentDiagnosticResultResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r PostAgentDiagnosticResultResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON413 returns the response for an HTTP 413 `application/problem+json` response
+func (r PostAgentDiagnosticResultResponse) GetApplicationproblemJSON413() *Problem {
+	return r.ApplicationproblemJSON413
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r PostAgentDiagnosticResultResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAgentDiagnosticResultResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAgentDiagnosticResultResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAgentDiagnosticResultResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAgentDiagnosticResultResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5381,6 +5716,36 @@ func (c *ClientWithResponses) GetAgentConfigurationWithResponse(ctx context.Cont
 	return ParseGetAgentConfigurationResponse(rsp)
 }
 
+// PostAgentDiagnosticResultWithBodyWithResponse Submit a bounded diagnostic result over verified HTTPS
+//
+// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+func (c *ClientWithResponses) PostAgentDiagnosticResultWithBodyWithResponse(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentDiagnosticResultResponse, error) {
+	rsp, err := c.PostAgentDiagnosticResultWithBody(ctx, diagnosticId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentDiagnosticResultResponse(rsp)
+}
+
+// PostAgentDiagnosticResultWithResponse Submit a bounded diagnostic result over verified HTTPS
+//
+// Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
+func (c *ClientWithResponses) PostAgentDiagnosticResultWithResponse(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentDiagnosticResultResponse, error) {
+	rsp, err := c.PostAgentDiagnosticResult(ctx, diagnosticId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentDiagnosticResultResponse(rsp)
+}
+
 // GetAgentsWithResponse List agents
 //
 // Requires the local session cookie. GET permits an absent Origin and does not require CSRF.
@@ -5938,6 +6303,70 @@ func ParseGetAgentConfigurationResponse(rsp *http.Response) (*GetAgentConfigurat
 			headers.ETag = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePostAgentDiagnosticResultResponse parses an HTTP response from a PostAgentDiagnosticResultWithResponse call
+func ParsePostAgentDiagnosticResultResponse(rsp *http.Response) (*PostAgentDiagnosticResultResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAgentDiagnosticResultResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	return response, nil
@@ -7078,6 +7507,9 @@ type ServerInterface interface {
 	// GetAgentConfiguration Read the authenticated agent's current configuration snapshot
 	// (GET /api/agent/v1/configuration)
 	GetAgentConfiguration(w http.ResponseWriter, r *http.Request, params GetAgentConfigurationParams)
+	// PostAgentDiagnosticResult Submit a bounded diagnostic result over verified HTTPS
+	// (POST /api/agent/v1/diagnostics/{diagnostic_id}/result)
+	PostAgentDiagnosticResult(w http.ResponseWriter, r *http.Request, diagnosticId DiagnosticId, params PostAgentDiagnosticResultParams)
 	// GetAgents List agents
 	// (GET /api/v1/agents)
 	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
@@ -7187,6 +7619,60 @@ func (siw *ServerInterfaceWrapper) GetAgentConfiguration(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAgentConfiguration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentDiagnosticResult operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentDiagnosticResult(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "diagnostic_id" -------------
+	var diagnosticId DiagnosticId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "diagnostic_id", r.PathValue("diagnostic_id"), &diagnosticId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "diagnostic_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentDiagnosticResultParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Agent-Session-Generation" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Agent-Session-Generation")]; found {
+		var XAgentSessionGeneration string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Agent-Session-Generation", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Agent-Session-Generation", valueList[0], &XAgentSessionGeneration, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Agent-Session-Generation", Err: err})
+			return
+		}
+
+		params.XAgentSessionGeneration = XAgentSessionGeneration
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Agent-Session-Generation is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Agent-Session-Generation", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentDiagnosticResult(w, r, diagnosticId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8109,6 +8595,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/agent/v1/configuration", wrapper.GetAgentConfiguration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/agent/v1/diagnostics/{diagnostic_id}/result", wrapper.PostAgentDiagnosticResult)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/context", wrapper.PostAuthContext)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/password", wrapper.PostAuthPassword)

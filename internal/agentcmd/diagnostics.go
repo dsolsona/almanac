@@ -14,20 +14,27 @@ import (
 )
 
 const (
-	maxActiveDiagnostics    = 4
-	maxDiagnosticReceipts   = 256
-	diagnosticReceiptPeriod = 24 * time.Hour
+	maxActiveDiagnostics      = 4
+	maxDiagnosticReceipts     = 256
+	maxDiagnosticReceiptBytes = 8 << 20
+	diagnosticReceiptPeriod   = 24 * time.Hour
 )
 
 var errDiagnosticCapacity = errors.New("agent diagnostic capacity reached")
 
 type diagnosticRunner struct {
-	mu        sync.Mutex
-	client    *client
-	results   chan agentprotocol.DiagnosticResult
-	active    map[string]activeDiagnostic
-	completed map[string]diagnosticReceipt
-	order     []string
+	mu           sync.Mutex
+	client       *client
+	results      chan completedDiagnosticResult
+	active       map[string]activeDiagnostic
+	completed    map[string]diagnosticReceipt
+	order        []string
+	receiptBytes int
+}
+
+type completedDiagnosticResult struct {
+	result     agentprotocol.DiagnosticResult
+	deadlineAt time.Time
 }
 
 type activeDiagnostic struct {
@@ -37,12 +44,13 @@ type activeDiagnostic struct {
 }
 
 type diagnosticReceipt struct {
-	result  agentprotocol.DiagnosticResult
+	completedDiagnosticResult
 	expires time.Time
+	size    int
 }
 
 func newDiagnosticRunner(agent *client) *diagnosticRunner {
-	return &diagnosticRunner{client: agent, results: make(chan agentprotocol.DiagnosticResult, maxActiveDiagnostics), active: make(map[string]activeDiagnostic), completed: make(map[string]diagnosticReceipt)}
+	return &diagnosticRunner{client: agent, results: make(chan completedDiagnosticResult, maxActiveDiagnostics), active: make(map[string]activeDiagnostic), completed: make(map[string]diagnosticReceipt)}
 }
 
 func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.DiagnosticRequest) error {
@@ -65,20 +73,15 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	}
 	if saved, ok := r.completed[request.DiagnosticID]; ok {
 		r.mu.Unlock()
-		r.offer(saved.result)
+		r.offer(saved.completedDiagnosticResult)
 		return nil
 	}
 	if !request.DeadlineAt.After(time.Now()) {
 		result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID, State: "timed_out"}
-		r.completed[request.DiagnosticID] = diagnosticReceipt{result: result, expires: time.Now().Add(diagnosticReceiptPeriod)}
-		r.order = append(r.order, request.DiagnosticID)
-		for len(r.order) > maxDiagnosticReceipts {
-			oldest := r.order[0]
-			r.order = r.order[1:]
-			delete(r.completed, oldest)
-		}
+		completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt}
+		r.rememberLocked(request.DiagnosticID, completed, time.Now())
 		r.mu.Unlock()
-		r.offer(result)
+		r.offer(completed)
 		return nil
 	}
 	if len(r.active) >= maxActiveDiagnostics {
@@ -188,15 +191,10 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 	}
 	r.mu.Lock()
 	delete(r.active, request.DiagnosticID)
-	r.completed[request.DiagnosticID] = diagnosticReceipt{result: result, expires: time.Now().Add(diagnosticReceiptPeriod)}
-	r.order = append(r.order, request.DiagnosticID)
-	for len(r.order) > maxDiagnosticReceipts {
-		oldest := r.order[0]
-		r.order = r.order[1:]
-		delete(r.completed, oldest)
-	}
+	completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt}
+	r.rememberLocked(request.DiagnosticID, completed, time.Now())
 	r.mu.Unlock()
-	r.offer(result)
+	r.offer(completed)
 }
 
 func (r *diagnosticRunner) pruneLocked(now time.Time) {
@@ -206,13 +204,40 @@ func (r *diagnosticRunner) pruneLocked(now time.Time) {
 		if ok && now.Before(receipt.expires) {
 			kept = append(kept, id)
 		} else {
+			if ok {
+				r.receiptBytes -= receipt.size
+			}
 			delete(r.completed, id)
 		}
 	}
 	r.order = kept
 }
 
-func (r *diagnosticRunner) offer(result agentprotocol.DiagnosticResult) {
+func (r *diagnosticRunner) rememberLocked(id string, completed completedDiagnosticResult, now time.Time) {
+	encoded, err := completed.result.CanonicalJSON()
+	if err != nil {
+		completed.result = diagnosticFailure(id, "incomplete")
+		encoded, _ = completed.result.CanonicalJSON()
+	}
+	size := len(encoded)
+	if prior, ok := r.completed[id]; ok {
+		r.receiptBytes -= prior.size
+	} else {
+		r.order = append(r.order, id)
+	}
+	r.completed[id] = diagnosticReceipt{completedDiagnosticResult: completed, expires: now.Add(diagnosticReceiptPeriod), size: size}
+	r.receiptBytes += size
+	for len(r.order) > maxDiagnosticReceipts || r.receiptBytes > maxDiagnosticReceiptBytes {
+		oldest := r.order[0]
+		r.order = r.order[1:]
+		if receipt, ok := r.completed[oldest]; ok {
+			r.receiptBytes -= receipt.size
+			delete(r.completed, oldest)
+		}
+	}
+}
+
+func (r *diagnosticRunner) offer(result completedDiagnosticResult) {
 	select {
 	case r.results <- result:
 	default:
