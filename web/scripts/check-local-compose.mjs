@@ -378,8 +378,9 @@ async function checkLocalAgentRegistration() {
     await expect(page.getByText('Local', { exact: true })).toBeVisible();
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
     const agentURL = page.url();
+    stage = 'real Compose registration uses the existing administrator session';
     const registrationAuthContextRequests = contextRequests - contextRequestsBeforeRegistration;
-    assert.equal(registrationAuthContextRequests, 1);
+    assert.equal(registrationAuthContextRequests, 0);
     for (const theme of ['light', 'dark']) {
       for (const viewport of viewports) {
         const viewportName = await setCaptureViewport(page, theme, viewport);
