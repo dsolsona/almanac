@@ -2,6 +2,23 @@
 
 ## Current state
 
+Prometheus datasource management and remote diagnostics are verified under
+[F2-T20](tasks/F2-T20.md), on code checkpoint `f6086fe`. UI, CLI and API support
+encrypted credentials, optimistic updates, explicit configuration readiness,
+connection tests and query previews executed by the assigned remote agent.
+Results above 64 KiB use bounded authenticated HTTPS transfer, up to 1 MiB.
+Final checks passed 146 real integration tests, 169 web tests, 290 Go tests and
+282 race tests, plus generated/build/production/smoke, documentation and Compose
+startup/persistence checks. The coordinator inspected desktop/mobile in both themes.
+The consolidated review and scoped corrections are accepted.
+
+Work stops after publishing this increment as requested. F2 is still incomplete:
+SLI definitions, scheduled collection, collected observations and direct producer
+ingestion remain outstanding in the [delivery plan](plans/0019-first-observations.md).
+Full source-key rotation/re-encryption and restore acceptance remain initial-release
+gates under [ADR-0017](adr/0017-recoverable-secret-encryption.md) and
+[SPEC-0014](specs/0014-delivery-and-verification.md).
+
 The coordinator accepted the PR #36 review corrections under
 [F2-T17](tasks/F2-T17.md). The corrected candidate passes
 the 217-test Go race gate, focused agent client/page web suites (32/47), all 142
@@ -10,8 +27,7 @@ selected PostgreSQL integration tests, and the exact full `make verify` gate (15
 the real TLS/process and browser agent journey. A same-generation hello health reset
 found by the first integration attempt is corrected. Its
 configuration-failure status fields extend migration 0010 and generated OpenAPI
-outputs that overlap the separate datasource branch; coordinator integration must
-reconcile those outputs before datasource publication. The coordinator inspected
+outputs integrated into the datasource increment above. The coordinator inspected
 the final browser screenshots at desktop/mobile widths in both themes.
 
 The connected-agent increment under [F2-T17](tasks/F2-T17.md) and
@@ -21,8 +37,8 @@ backend restart/resume, incompatible handshakes, copied-token fencing and revoca
 The coordinator inspected desktop/mobile screenshots in both themes. Full checks
 passed 156 web and 222 Go tests. The expanded race gate passed 211 tests after
 correcting a canceled outbound enqueue; the real integration run preceded that
-isolated correction. Datasource diagnostics and collected/direct observations remain the
-next F2 increments; connected status alone does not establish healthy collection.
+isolated correction. Collected/direct observations remain the next F2 increment;
+connected status alone does not establish healthy collection.
 
 Durable agent ownership is verified under [F2-T13](tasks/F2-T13.md): transactional
 acquisition, same-process resume, nonce-correlated renewal and generation fencing.
@@ -39,7 +55,7 @@ desktop navigation, accessible mobile menu, account controls and direct `/agents
 links replace the identity confirmation page. Planned destinations are explicitly
 marked “Not available yet.” Evidence: 145 web/178 Go tests, 42 focused catalogue
 browser checks and 129 selected real database tests including browser journeys.
-Datasource diagnostics and observations remain outstanding.
+The datasource increment above extends this shell; observations remain outstanding.
 The maintainer approved the accelerated delivery workflow on 2026-10-27; see
 [ways of working](ways-of-working.md) and [command discipline](commands.md).
 
@@ -71,7 +87,8 @@ first observation journey remain outstanding in F2.
 [F2-T12](tasks/F2-T12.md) adds current-state machine credential authentication,
 including rotation/expiry, revocation, restore epoch and database lock-order checks.
 This prerequisite does not yet expose an agent connection or execution lease.
-User management, observation storage and providers remain unimplemented;
+User management and observation storage remain unimplemented; Prometheus diagnostics
+are implemented in F2-T20, while additional native providers remain future work;
 Google SSO is a later increment.
 The scope of the design pass is the product described in SPEC-0001; further product
 requirements may legitimately create additional specifications and ADRs.

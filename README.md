@@ -158,6 +158,13 @@ The cleartext Tink keyset is deployment key material: protect the file and its
 mount. Datasource credential writes remain unavailable when the keyset is not
 configured or cannot be loaded.
 
+Back up this keyset separately from PostgreSQL and retain decryption keys needed
+by existing data and backups. The F2 datasource increment supplies provisioning,
+encrypted persistence and authorized release. Managed rotation, resumable
+re-encryption and restore acceptance remain initial-release requirements in
+[ADR-0017](docs/adr/0017-recoverable-secret-encryption.md) and
+[SPEC-0014](docs/specs/0014-delivery-and-verification.md).
+
 The first startup provisions the initial administrator, who must change the
 password before ordinary access. Later starts ignore the initial credentials once
 ownership is persisted. Missing, unsafe or weak initial credentials leave `/livez`
