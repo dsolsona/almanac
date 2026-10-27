@@ -525,7 +525,11 @@ func beginDatasourceAdminWrite(ctx context.Context, databaseURL string, verifier
 
 func loadInstallationID(ctx context.Context, tx pgx.Tx) (string, error) {
 	var id pgtype.UUID
-	err := tx.QueryRow(ctx, "SELECT installation_id FROM public.almanac_installation WHERE singleton = true FOR UPDATE").Scan(&id)
+	// Installation identity is immutable after bootstrap. Callers already hold
+	// the installation authority lock; upgrading it here can deadlock when
+	// concurrent datasource admissions each hold it shared and contend for one
+	// agent row.
+	err := tx.QueryRow(ctx, "SELECT installation_id FROM public.almanac_installation WHERE singleton = true").Scan(&id)
 	if err != nil {
 		return "", err
 	}
