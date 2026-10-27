@@ -120,6 +120,93 @@ func (r *Registry) NotifyConfigurationChanged(ctx context.Context, agentID strin
 	return nil
 }
 
+func (r *Registry) SessionGeneration(agentID string) (int64, bool) {
+	if r == nil {
+		return 0, false
+	}
+	r.mu.Lock()
+	sessions := make([]*sessionControl, 0, len(r.sessions))
+	for session := range r.sessions {
+		sessions = append(sessions, session)
+	}
+	r.mu.Unlock()
+	for _, control := range sessions {
+		control.readyMu.RLock()
+		session, ready := control.session, control.ready
+		if ready && session != nil && session.AgentID == agentID {
+			generation := session.Generation
+			control.readyMu.RUnlock()
+			return generation, true
+		}
+		control.readyMu.RUnlock()
+	}
+	return 0, false
+}
+
+func (r *Registry) SendDiagnostic(ctx context.Context, agentID string, generation int64, request agentprotocol.DiagnosticRequest) error {
+	if r == nil || generation <= 0 || request.AgentID != agentID || request.DiagnosticID == "" {
+		return errors.New("agentws: invalid diagnostic dispatch")
+	}
+	r.mu.Lock()
+	sessions := make([]*sessionControl, 0, len(r.sessions))
+	for session := range r.sessions {
+		sessions = append(sessions, session)
+	}
+	r.mu.Unlock()
+	for _, control := range sessions {
+		control.readyMu.RLock()
+		session, ready := control.session, control.ready
+		if !ready || session == nil || session.AgentID != agentID || session.Generation != generation {
+			control.readyMu.RUnlock()
+			continue
+		}
+		control.readyMu.RUnlock()
+		message := agentprotocol.Envelope[agentprotocol.DiagnosticRequest]{Kind: agentprotocol.KindDiagnosticRequest,
+			MessageID: "diagnostic-" + request.DiagnosticID, SessionGeneration: strconv.FormatInt(generation, 10), Payload: request}
+		if err := message.Validate(); err != nil {
+			return errors.New("agentws: invalid diagnostic message")
+		}
+		body, err := json.Marshal(message)
+		if err != nil {
+			return errors.New("agentws: diagnostic message encoding failed")
+		}
+		return control.enqueue(ctx, outbound{body: body})
+	}
+	return errors.New("agentws: diagnostic agent session unavailable")
+}
+
+func (r *Registry) CancelDiagnostic(ctx context.Context, agentID string, generation int64, diagnosticID string) error {
+	if r == nil || generation <= 0 || diagnosticID == "" {
+		return errors.New("agentws: invalid diagnostic cancellation")
+	}
+	r.mu.Lock()
+	sessions := make([]*sessionControl, 0, len(r.sessions))
+	for session := range r.sessions {
+		sessions = append(sessions, session)
+	}
+	r.mu.Unlock()
+	for _, control := range sessions {
+		control.readyMu.RLock()
+		session, ready := control.session, control.ready
+		if !ready || session == nil || session.AgentID != agentID || session.Generation != generation {
+			control.readyMu.RUnlock()
+			continue
+		}
+		control.readyMu.RUnlock()
+		message := agentprotocol.Envelope[agentprotocol.DiagnosticCancel]{Kind: agentprotocol.KindDiagnosticCancel,
+			MessageID: "cancel-" + diagnosticID, SessionGeneration: strconv.FormatInt(generation, 10), Payload: agentprotocol.DiagnosticCancel{DiagnosticID: diagnosticID}}
+		if err := message.Validate(); err != nil {
+			return errors.New("agentws: invalid diagnostic cancellation message")
+		}
+		body, err := json.Marshal(message)
+		if err != nil {
+			return errors.New("agentws: diagnostic cancellation encoding failed")
+		}
+		return control.enqueue(ctx, outbound{body: body})
+	}
+	return errors.New("agentws: diagnostic agent session unavailable")
+}
+
 func (c *sessionControl) forceClose() {
 	c.cancel()
 	_ = c.conn.CloseNow()

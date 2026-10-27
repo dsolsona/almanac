@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentws"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authhttp"
 	"github.com/dsolsona/almanac/internal/datasource"
@@ -25,26 +27,28 @@ import (
 	"github.com/oapi-codegen/runtime/types"
 )
 
-const maxRequestBytes = 80 << 10
+const maxRequestBytes = 96 << 10
 
 type Options struct {
-	Now       func() time.Time
-	Preflight func(context.Context) error
+	Now           func() time.Time
+	Preflight     func(context.Context) error
+	AgentSessions *agentws.Registry
 }
 
 type Handler struct {
-	databaseURL string
-	secrets     *sourcesecret.Adapter
-	auth        *authhttp.Handler
-	now         func() time.Time
-	preflight   func(context.Context) error
+	databaseURL   string
+	secrets       *sourcesecret.Adapter
+	auth          *authhttp.Handler
+	now           func() time.Time
+	preflight     func(context.Context) error
+	agentSessions *agentws.Registry
 }
 
 func New(databaseURL string, secrets *sourcesecret.Adapter, auth *authhttp.Handler, options Options) (*Handler, error) {
 	if databaseURL == "" || auth == nil || options.Now == nil {
 		return nil, errors.New("datasourcehttp: invalid options")
 	}
-	return &Handler{databaseURL: databaseURL, secrets: secrets, auth: auth, now: options.Now, preflight: options.Preflight}, nil
+	return &Handler{databaseURL: databaseURL, secrets: secrets, auth: auth, now: options.Now, preflight: options.Preflight, agentSessions: options.AgentSessions}, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -78,12 +82,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	proof := storage.DatasourceProof{SessionVerifier: verifier}
-	if strings.HasPrefix(path, "/api/v1/diagnostics/") || path == "/api/v1/datasources/connection-tests" || strings.Contains(path, "/query-previews") {
-		h.writeProblem(w, http.StatusServiceUnavailable, "diagnostics_unavailable", requestID)
+	if path == "/api/v1/datasources/connection-tests" {
+		h.connectionTest(w, r, requestID, proof)
+		return
+	}
+	if strings.HasPrefix(path, "/api/v1/diagnostics/") {
+		h.diagnostic(w, r, requestID, proof, strings.TrimPrefix(path, "/api/v1/diagnostics/"))
+		return
+	}
+	if strings.HasSuffix(path, "/query-previews") {
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v1/datasources/"), "/query-previews")
+		h.queryPreview(w, r, requestID, proof, id)
 		return
 	}
 	if path == "/api/v1/providers" {
-		h.providers(w, r, requestID)
+		h.providers(w, r, requestID, proof)
 		return
 	}
 	if path == "/api/v1/datasources" {
@@ -171,6 +184,7 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID s
 			h.writeStorageError(w, err, requestID)
 			return
 		}
+		h.notifyConfiguration(r.Context(), created.Settings.AgentID, created.ConfigurationRevision)
 		w.Header().Set("ETag", datasourceETag(created.ID, created.Version))
 		h.writeJSON(w, http.StatusCreated, datasourceDTO(created))
 	default:
@@ -227,6 +241,10 @@ func (h *Handler) detail(w http.ResponseWriter, r *http.Request, requestID strin
 			h.writeStorageError(w, err, requestID)
 			return
 		}
+		if updated.PreviousAgentID != "" {
+			h.notifyConfiguration(r.Context(), updated.PreviousAgentID, updated.PreviousConfigurationRevision)
+		}
+		h.notifyConfiguration(r.Context(), updated.Settings.AgentID, updated.ConfigurationRevision)
 		w.Header().Set("ETag", datasourceETag(updated.ID, updated.Version))
 		h.writeJSON(w, http.StatusOK, datasourceDTO(updated))
 	default:
@@ -235,7 +253,16 @@ func (h *Handler) detail(w http.ResponseWriter, r *http.Request, requestID strin
 	}
 }
 
-func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID string) {
+func (h *Handler) notifyConfiguration(ctx context.Context, agentID string, revision int64) {
+	if h.agentSessions == nil || agentID == "" || revision <= 0 {
+		return
+	}
+	if err := h.agentSessions.NotifyConfigurationChanged(ctx, agentID, revision); err != nil {
+		log.Printf("datasource configuration notification failed for agent %s at revision %d", agentID, revision)
+	}
+}
+
+func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
@@ -247,19 +274,247 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID st
 		return
 	}
 	availability := api.ProviderDescriptorAvailability("available")
+	operations := []string{"connection_test", "query_preview"}
 	if len(query["agent_id"]) == 1 {
-		availability = "unsupported"
+		agentID := query["agent_id"][0]
+		parsed, parseErr := uuid.Parse(agentID)
+		if parseErr != nil || parsed.String() != agentID {
+			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+			return
+		}
+		capability, capabilityErr := storage.GetDatasourceAgentCapability(r.Context(), h.databaseURL, proof, agentID, h.now)
+		if capabilityErr != nil {
+			h.writeStorageError(w, capabilityErr, requestID)
+			return
+		}
+		operations = []string{}
+		if capability.Enabled && capability.Reachability == "connected" {
+			for _, operation := range []string{"connection_test", "query_preview"} {
+				if datasource.SupportsOperation(capability.Capabilities, operation) {
+					operations = append(operations, operation)
+				}
+			}
+		}
+		if len(operations) == 0 {
+			availability = "unsupported"
+		}
 	}
-	h.writeJSON(w, http.StatusOK, api.ProviderPage{Items: []api.ProviderDescriptor{{Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Operations: []string{"connection_test", "query_preview"}, Availability: availability}}})
+	h.writeJSON(w, http.StatusOK, api.ProviderPage{Items: []api.ProviderDescriptor{{Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Operations: operations, Availability: availability}}})
+}
+
+func (h *Handler) connectionTest(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof) {
+	requestedAt := h.now().UTC().Truncate(time.Microsecond)
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
+		return
+	}
+	if r.URL.RawQuery != "" || r.URL.ForceQuery || hasConditionalHeaders(r) || !jsonContent(r) {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	body, err := readBody(r)
+	if err != nil {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	var request api.ConnectionTestRequest
+	if json.Unmarshal(body, &request, json.RejectUnknownMembers(true)) != nil {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	settings, password, token, valid := mapConnectionTest(request)
+	if !valid {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	h.startDiagnostic(w, r, requestID, proof, storage.BeginDiagnosticInput{Proof: proof, AgentID: settings.AgentID,
+		Operation: "connection_test", ConnectionSettings: settings, Password: password.Value, Token: token.Value,
+		Secrets: h.secrets, RequestedAt: requestedAt, Now: h.now})
+}
+
+func (h *Handler) queryPreview(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, datasourceID string) {
+	requestedAt := h.now().UTC().Truncate(time.Microsecond)
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
+		return
+	}
+	if _, err := uuid.Parse(datasourceID); err != nil || r.URL.RawQuery != "" || r.URL.ForceQuery || hasConditionalHeaders(r) || !jsonContent(r) {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	body, err := readBody(r)
+	if err != nil {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	var request api.QueryPreviewRequest
+	if json.Unmarshal(body, &request, json.RejectUnknownMembers(true)) != nil || strings.TrimSpace(request.Query) == "" || len(request.Query) > 4096 {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	record, err := storage.GetDatasource(r.Context(), h.databaseURL, datasourceID, proof, h.now)
+	if err != nil {
+		h.writeStorageError(w, err, requestID)
+		return
+	}
+	h.startDiagnostic(w, r, requestID, proof, storage.BeginDiagnosticInput{Proof: proof, AgentID: record.Settings.AgentID,
+		DatasourceID: datasourceID, Operation: "query_preview", Query: request.Query, Secrets: h.secrets, RequestedAt: requestedAt, Now: h.now})
+}
+
+func (h *Handler) startDiagnostic(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, input storage.BeginDiagnosticInput) {
+	if h.agentSessions == nil {
+		h.writeProblem(w, http.StatusServiceUnavailable, "agent_unavailable", requestID)
+		return
+	}
+	generation, connected := h.agentSessions.SessionGeneration(input.AgentID)
+	if !connected {
+		h.writeProblem(w, http.StatusServiceUnavailable, "agent_unavailable", requestID)
+		return
+	}
+	id, err := uuid.NewRandom()
+	if err != nil {
+		h.writeProblem(w, http.StatusServiceUnavailable, "diagnostic_unavailable", requestID)
+		return
+	}
+	input.Proof = proof
+	input.DiagnosticID = id.String()
+	input.AgentGeneration = generation
+	record, diagnosticRequest, err := storage.BeginDatasourceDiagnostic(r.Context(), h.databaseURL, input)
+	if err != nil {
+		h.writeStorageError(w, err, requestID)
+		return
+	}
+	if err := h.agentSessions.SendDiagnostic(r.Context(), record.AgentID, record.SessionGeneration, diagnosticRequest); err != nil {
+		if stateErr := storage.FailDatasourceDiagnosticDispatch(r.Context(), h.databaseURL, record.ID, record.AgentID, record.SessionGeneration, h.now()); stateErr != nil {
+			log.Printf("datasource diagnostic dispatch state update failed for %s", record.ID)
+		}
+		h.writeProblem(w, http.StatusServiceUnavailable, "agent_unavailable", requestID)
+		return
+	}
+	if err := storage.MarkDatasourceDiagnosticRunning(r.Context(), h.databaseURL, record.ID, record.AgentID, record.SessionGeneration, h.now()); err != nil {
+		log.Printf("datasource diagnostic running state update failed for %s", record.ID)
+	}
+	w.Header().Set("Location", "/api/v1/diagnostics/"+record.ID)
+	h.writeJSON(w, http.StatusAccepted, diagnosticDTO(record))
+}
+
+func (h *Handler) diagnostic(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, path string) {
+	if strings.HasSuffix(path, "/cancel") {
+		id := strings.TrimSuffix(path, "/cancel")
+		if strings.Contains(id, "/") || !canonicalDiagnosticID(id) {
+			h.writeProblem(w, http.StatusNotFound, "not_found", requestID)
+			return
+		}
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
+			return
+		}
+		if r.URL.RawQuery != "" || r.URL.ForceQuery || !jsonContent(r) {
+			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+			return
+		}
+		body, err := readBody(r)
+		var empty map[string]any
+		if err != nil || json.Unmarshal(body, &empty, json.RejectUnknownMembers(true)) != nil || len(empty) != 0 {
+			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+			return
+		}
+		record, err := storage.CancelDatasourceDiagnostic(r.Context(), h.databaseURL, proof, id, h.now)
+		if err != nil {
+			h.writeStorageError(w, err, requestID)
+			return
+		}
+		if record.State == "canceled" && h.agentSessions != nil {
+			if err := h.agentSessions.CancelDiagnostic(r.Context(), record.AgentID, record.SessionGeneration, record.ID); err != nil {
+				log.Printf("datasource diagnostic cancel notification failed for %s", record.ID)
+			}
+		}
+		h.writeJSON(w, http.StatusOK, diagnosticDTO(record))
+		return
+	}
+	if strings.Contains(path, "/") || !canonicalDiagnosticID(path) {
+		h.writeProblem(w, http.StatusNotFound, "not_found", requestID)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
+		return
+	}
+	if r.URL.RawQuery != "" || r.URL.ForceQuery || hasBody(r) || hasConditionalHeaders(r) {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	record, err := storage.GetDatasourceDiagnostic(r.Context(), h.databaseURL, proof, path, h.now)
+	if err != nil {
+		h.writeStorageError(w, err, requestID)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, diagnosticDTO(record))
+}
+
+func mapConnectionTest(request api.ConnectionTestRequest) (datasource.Settings, datasource.SecretAction, datasource.SecretAction, bool) {
+	settings := datasource.Settings{Name: "connection-test", DisplayName: "Connection test", Provider: string(request.Provider),
+		ConfigurationFormat: string(request.ConfigurationFormat), Endpoint: request.Endpoint,
+		TLS:                datasource.TLSSettings{InsecureSkipVerify: request.Tls.InsecureSkipVerify, CAPEM: optionalString(request.Tls.CaPem)},
+		AuthenticationMode: string(request.Authentication.Mode), PollingIntervalSeconds: 60, SettlingDelaySeconds: datasource.PrometheusSettlingDelay,
+		AgentID: request.AgentId.String()}
+	if request.Authentication.Username != nil {
+		settings.AuthenticationUser = *request.Authentication.Username
+	}
+	password := datasource.SecretAction{Action: string(request.Authentication.PasswordSecret.Action), Value: optionalString(request.Authentication.PasswordSecret.Value)}
+	token := datasource.SecretAction{Action: string(request.Authentication.TokenSecret.Action), Value: optionalString(request.Authentication.TokenSecret.Value)}
+	if settings.Validate() != nil {
+		return datasource.Settings{}, datasource.SecretAction{}, datasource.SecretAction{}, false
+	}
+	resolved, err := datasource.ResolveSecretActions("", settings.AuthenticationMode, false, false, password, token)
+	if err != nil {
+		return datasource.Settings{}, datasource.SecretAction{}, datasource.SecretAction{}, false
+	}
+	return settings, datasource.SecretAction{Action: resolved.Password.Action, Value: resolved.Password.Value},
+		datasource.SecretAction{Action: resolved.Token.Action, Value: resolved.Token.Value}, true
+}
+
+func diagnosticDTO(record storage.DiagnosticRecord) api.Diagnostic {
+	id, _ := uuid.Parse(record.ID)
+	dto := api.Diagnostic{Id: types.UUID(id), State: api.DiagnosticState(record.State), Operation: api.DiagnosticOperation(record.Operation),
+		CreatedAt: record.CreatedAt, DeadlineAt: record.DeadlineAt}
+	if record.ErrorCode != "" {
+		code := record.ErrorCode
+		dto.ErrorCode = &code
+	}
+	if record.Message != "" {
+		message := record.Message
+		dto.Message = &message
+	}
+	if len(record.Result) > 0 {
+		var result map[string]any
+		if json.Unmarshal(record.Result, &result) == nil {
+			dto.Result = &result
+			if resultClass, ok := result["result_class"].(string); ok {
+				class := api.DiagnosticResultClass(resultClass)
+				dto.ResultClass = &class
+			}
+		}
+	}
+	return dto
+}
+
+func canonicalDiagnosticID(value string) bool {
+	parsed, err := uuid.Parse(value)
+	return err == nil && parsed.String() == value
 }
 
 func mapWrite(write api.DatasourceWrite) (datasource.Settings, datasource.SecretAction, datasource.SecretAction, bool) {
-	if write.Tls.CaPem == nil || write.Authentication.Username == nil && write.Authentication.Mode == "basic" {
+	if write.Authentication.Username == nil && write.Authentication.Mode == "basic" {
 		return datasource.Settings{}, datasource.SecretAction{}, datasource.SecretAction{}, false
 	}
 	settings := datasource.Settings{Name: write.Name, DisplayName: write.DisplayName,
 		Provider: string(write.Provider), ConfigurationFormat: string(write.ConfigurationFormat), Endpoint: write.Endpoint,
-		TLS:                datasource.TLSSettings{InsecureSkipVerify: write.Tls.InsecureSkipVerify, CAPEM: *write.Tls.CaPem},
+		TLS:                datasource.TLSSettings{InsecureSkipVerify: write.Tls.InsecureSkipVerify, CAPEM: optionalString(write.Tls.CaPem)},
 		AuthenticationMode: string(write.Authentication.Mode), PollingIntervalSeconds: write.PollingIntervalSeconds,
 		SettlingDelaySeconds: datasource.PrometheusSettlingDelay, AgentID: write.AgentId.String()}
 	if write.Authentication.Username != nil {
@@ -326,6 +581,14 @@ func (h *Handler) writeStorageError(w http.ResponseWriter, err error, requestID 
 		h.writeProblem(w, 404, "not_found", requestID)
 	case errors.Is(err, storage.ErrDatasourceConflict), errors.Is(err, storage.ErrAgentConflict):
 		h.writeProblem(w, 409, "conflict", requestID)
+	case errors.Is(err, storage.ErrDiagnosticConflict):
+		h.writeProblem(w, 409, "conflict", requestID)
+	case errors.Is(err, storage.ErrDiagnosticNotFound):
+		h.writeProblem(w, 404, "not_found", requestID)
+	case errors.Is(err, storage.ErrDiagnosticUnsupported):
+		h.writeProblem(w, 422, "unsupported", requestID)
+	case errors.Is(err, storage.ErrDiagnosticAgentUnavailable):
+		h.writeProblem(w, 503, "agent_unavailable", requestID)
 	case errors.Is(err, storage.ErrAgentNotFound):
 		h.writeProblem(w, 422, "invalid_agent", requestID)
 	case errors.Is(err, storage.ErrSourceSecretUnavailable):

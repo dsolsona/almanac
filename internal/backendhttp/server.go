@@ -16,6 +16,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentaccess"
 	"github.com/dsolsona/almanac/internal/agenthttp"
 	"github.com/dsolsona/almanac/internal/agentmanagement"
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/agentruntime"
 	"github.com/dsolsona/almanac/internal/agentws"
 	"github.com/dsolsona/almanac/internal/api"
@@ -104,7 +105,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent connection configuration")
 	}
-	datasources, err := datasourcehttp.New(databaseURL, sourceSecrets, auth, datasourcehttp.Options{Now: time.Now, Preflight: s.authenticationPreflight})
+	connections.SetDiagnosticResultHandler(func(resultCtx context.Context, agentID string, generation int64, result agentprotocol.DiagnosticResult) error {
+		return storage.CompleteDatasourceDiagnostic(resultCtx, databaseURL, agentID, generation, result, time.Now().UTC())
+	})
+	datasources, err := datasourcehttp.New(databaseURL, sourceSecrets, auth, datasourcehttp.Options{Now: time.Now, Preflight: s.authenticationPreflight, AgentSessions: agentSessions})
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid datasource handler configuration")
 	}
@@ -118,6 +122,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.Handle("/api/v1/providers", datasources)
 	mux.Handle("/api/v1/datasources", datasources)
 	mux.Handle("/api/v1/datasources/", datasources)
+	mux.Handle("/api/v1/diagnostics/", datasources)
 	mux.Handle("/api/v1/", agents)
 	mux.Handle("/api/agent/v1/configuration", configuration)
 	mux.Handle("/api/agent/v1/connect", connections)

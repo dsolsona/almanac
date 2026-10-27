@@ -77,6 +77,66 @@ func TestDiagnosticRunnerCancellationStopsProviderRequest(t *testing.T) {
 	}
 }
 
+func TestDiagnosticRunnerDoesNotExecuteExpiredRequest(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+	}))
+	defer server.Close()
+	assignment := testDiagnosticAssignment(server.URL)
+	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	defer runner.close()
+	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000005", AgentID: testAgentID,
+		Operation: "query_preview", DeadlineAt: time.Now().Add(-time.Second).UTC().Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
+	if err := runner.start(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case result := <-runner.results:
+		if result.State != "timed_out" || result.DiagnosticID != request.DiagnosticID {
+			t.Fatalf("expired request result = %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expired request did not return timed_out")
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("expired request reached provider %d times", calls.Load())
+	}
+}
+
+func TestDiagnosticRunnerCancelsWhenAssignmentIsRevoked(t *testing.T) {
+	started := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	assignment := testDiagnosticAssignment(server.URL)
+	runner := newDiagnosticRunner(&client{agentID: testAgentID, assignments: []agentprotocol.DatasourceAssignment{assignment}})
+	defer runner.close()
+	request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000006", AgentID: testAgentID,
+		Operation: "query_preview", DeadlineAt: time.Now().Add(10 * time.Second).UTC().Truncate(time.Microsecond), Datasource: assignment, Query: "up"}
+	if err := runner.start(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider request did not start")
+	}
+	runner.reconcileAssignments(nil)
+	select {
+	case result := <-runner.results:
+		if result.State != "canceled" || result.DiagnosticID != request.DiagnosticID {
+			t.Fatalf("revoked assignment diagnostic = %+v", result)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("revoked assignment did not cancel provider request")
+	}
+}
+
 func testDiagnosticAssignment(endpoint string) agentprotocol.DatasourceAssignment {
 	return agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "1",
 		Name: "metrics-east", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: endpoint,

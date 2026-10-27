@@ -50,6 +50,7 @@ CREATE TABLE public.almanac_diagnostics (
     error_code text,
     message text,
     created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
     deadline_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,
     CHECK (deadline_at > created_at AND expires_at >= deadline_at),

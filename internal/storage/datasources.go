@@ -65,8 +65,50 @@ type DatasourceRecord struct {
 	TokenConfigured               bool                `json:"-"`
 	ConfigurationRevision         int64               `json:"-"`
 	PreviousConfigurationRevision int64               `json:"-"`
+	PreviousAgentID               string              `json:"-"`
 	CreatedAt                     time.Time           `json:"created_at"`
 	UpdatedAt                     time.Time           `json:"updated_at"`
+}
+
+type DatasourceAgentCapability struct {
+	Enabled      bool
+	Reachability string
+	Capabilities []agentprotocol.Capability
+}
+
+func GetDatasourceAgentCapability(ctx context.Context, databaseURL string, proof DatasourceProof, agentID string, now func() time.Time) (DatasourceAgentCapability, error) {
+	id, valid := canonicalUUID(agentID)
+	if !valid || proof.SessionVerifier == ([32]byte{}) || now == nil {
+		return DatasourceAgentCapability{}, ErrInvalidAgentInput
+	}
+	conn, queries, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, proof.SessionVerifier, now, "administrator", "editor", "viewer")
+	if err != nil {
+		return DatasourceAgentCapability{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	agent, err := queries.GetAgent(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DatasourceAgentCapability{}, ErrAgentNotFound
+	}
+	if err != nil {
+		return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent lookup failed", err)
+	}
+	capability := DatasourceAgentCapability{Enabled: agent.Enabled, Reachability: "unreachable", Capabilities: []agentprotocol.Capability{}}
+	runtime, err := queries.GetAgentRuntimeStatus(ctx, id)
+	if err == nil {
+		status, statusErr := runtimeStatus(runtime, normalizedAgentNow(now))
+		if statusErr != nil {
+			return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent capability state invalid", statusErr)
+		}
+		capability.Reachability, capability.Capabilities = status.Reachability, status.Capabilities
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return DatasourceAgentCapability{}, operationError(ctx, "storage: datasource agent capability lookup failed", err)
+	}
+	if err := finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
+		return DatasourceAgentCapability{}, err
+	}
+	return capability, nil
 }
 
 func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcesecret.Adapter, input CreateDatasourceInput) (DatasourceRecord, error) {
@@ -104,21 +146,19 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 				return DatasourceRecord{}, ErrDatasourceConflict
 			}
 			var saved datasourceCreateReceipt
-			if json.Unmarshal(receipt.Result, &saved) != nil || saved.Version != 1 {
+			if json.Unmarshal(receipt.Result, &saved) != nil || saved.Version != 1 || saved.ResourceVersion <= 0 || saved.ConfigurationRevision <= 0 || saved.Settings.Validate() != nil {
 				return DatasourceRecord{}, errors.New("storage: invalid datasource receipt")
 			}
 			savedID, valid := canonicalUUID(saved.DatasourceID)
 			if !valid {
 				return DatasourceRecord{}, errors.New("storage: invalid datasource receipt")
 			}
-			row, err := queries.GetDatasource(ctx, savedID)
-			if err != nil {
-				return DatasourceRecord{}, operationError(ctx, "storage: datasource receipt resource read failed", err)
-			}
 			if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
 				return DatasourceRecord{}, err
 			}
-			return datasourceRecord(row), nil
+			return DatasourceRecord{ID: savedID.String(), Settings: saved.Settings, Version: saved.ResourceVersion,
+				PasswordConfigured: saved.PasswordConfigured, TokenConfigured: saved.TokenConfigured,
+				ConfigurationRevision: saved.ConfigurationRevision, CreatedAt: saved.CreatedAt, UpdatedAt: saved.UpdatedAt}, nil
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource receipt lookup failed", err)
@@ -202,7 +242,11 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if err := queries.InsertAgentAudit(ctx, dbgen.InsertAgentAuditParams{Actor: user.ID.String(), SubjectID: created.ID, Action: "datasource.created", OccurredAt: timestamp(now), RequestID: input.RequestID}); err != nil {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource audit failed", err)
 	}
-	receiptResult, err := json.Marshal(datasourceCreateReceipt{Version: 1, DatasourceID: created.ID.String()})
+	record := datasourceRecord(created)
+	record.ConfigurationRevision = configurationRevision
+	receiptResult, err := json.Marshal(datasourceCreateReceipt{Version: 1, DatasourceID: created.ID.String(), Settings: record.Settings,
+		ResourceVersion: record.Version, PasswordConfigured: record.PasswordConfigured, TokenConfigured: record.TokenConfigured,
+		ConfigurationRevision: record.ConfigurationRevision, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt})
 	if err != nil {
 		return DatasourceRecord{}, errors.New("storage: datasource receipt encoding failed")
 	}
@@ -212,8 +256,6 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
 		return DatasourceRecord{}, err
 	}
-	record := datasourceRecord(created)
-	record.ConfigurationRevision = configurationRevision
 	return record, nil
 }
 
@@ -242,8 +284,15 @@ func GetDatasource(ctx context.Context, databaseURL, datasourceID string, proof 
 }
 
 type datasourceCreateReceipt struct {
-	Version      int    `json:"version"`
-	DatasourceID string `json:"datasource_id"`
+	Version               int                 `json:"version"`
+	DatasourceID          string              `json:"datasource_id"`
+	Settings              datasource.Settings `json:"settings"`
+	ResourceVersion       int64               `json:"resource_version"`
+	PasswordConfigured    bool                `json:"password_configured"`
+	TokenConfigured       bool                `json:"token_configured"`
+	ConfigurationRevision int64               `json:"configuration_revision"`
+	CreatedAt             time.Time           `json:"created_at"`
+	UpdatedAt             time.Time           `json:"updated_at"`
 }
 
 func digestDatasourceCreate(input CreateDatasourceInput) ([32]byte, error) {
@@ -395,6 +444,7 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	record.ConfigurationRevision = newConfigurationRevision
 	if oldAgentID != newAgentID {
 		record.PreviousConfigurationRevision = oldConfigurationRevision
+		record.PreviousAgentID = uuidFromPG(oldAgentID)
 	}
 	return record, nil
 }

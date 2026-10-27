@@ -1,0 +1,414 @@
+package storage
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json/v2"
+	"errors"
+	"time"
+
+	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/datasource"
+	"github.com/dsolsona/almanac/internal/sourcesecret"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+const (
+	diagnosticReceiptTTL            = 24 * time.Hour
+	maxActiveDatasourceDiagnostics  = 4
+	maxDatasourceDiagnosticReceipts = 256
+)
+
+var (
+	ErrDiagnosticNotFound         = errors.New("storage: diagnostic not found")
+	ErrDiagnosticConflict         = errors.New("storage: diagnostic conflict")
+	ErrDiagnosticAgentUnavailable = errors.New("storage: diagnostic agent unavailable")
+	ErrDiagnosticUnsupported      = errors.New("storage: diagnostic operation unsupported")
+)
+
+type DiagnosticRecord struct {
+	ID                string
+	ActorID           string
+	AgentID           string
+	DatasourceID      string
+	SessionGeneration int64
+	Operation         string
+	State             string
+	Result            []byte
+	ErrorCode         string
+	Message           string
+	CreatedAt         time.Time
+	DeadlineAt        time.Time
+	ExpiresAt         time.Time
+}
+
+type BeginDiagnosticInput struct {
+	Proof              DatasourceProof
+	DiagnosticID       string
+	AgentID            string
+	AgentGeneration    int64
+	DatasourceID       string
+	Operation          string
+	Query              string
+	ConnectionSettings datasource.Settings
+	Password           string
+	Token              string
+	Secrets            *sourcesecret.Adapter
+	RequestedAt        time.Time
+	Now                func() time.Time
+}
+
+func BeginDatasourceDiagnostic(ctx context.Context, databaseURL string, input BeginDiagnosticInput) (DiagnosticRecord, agentprotocol.DiagnosticRequest, error) {
+	diagnosticID, diagnosticOK := canonicalUUID(input.DiagnosticID)
+	agentID, agentOK := canonicalUUID(input.AgentID)
+	if !diagnosticOK || !agentOK || input.AgentGeneration <= 0 || input.Now == nil || !validAgentClock(input.RequestedAt) || input.Proof.SessionVerifier == ([32]byte{}) ||
+		(input.Operation != "connection_test" && input.Operation != "query_preview") ||
+		(input.Operation == "query_preview" && (input.DatasourceID == "" || len(input.Query) == 0 || len(input.Query) > 4096)) ||
+		(input.Operation == "connection_test" && input.ConnectionSettings.Validate() != nil) {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrInvalidAgentInput
+	}
+	roles := []string{"administrator"}
+	if input.Operation == "query_preview" {
+		roles = append(roles, "editor")
+	}
+	conn, queries, tx, user, installation, session, now, err := beginAgentReadWithRoles(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, roles...)
+	if err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	agent, err := queries.GetAgent(ctx, agentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrAgentNotFound
+	}
+	if err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic agent lookup failed", err)
+	}
+	if !agent.Enabled {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrAgentConflict
+	}
+	runtime, err := queries.GetAgentRuntimeStatus(ctx, agentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticAgentUnavailable
+	}
+	if err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic runtime lookup failed", err)
+	}
+	if runtime.Generation != input.AgentGeneration {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticAgentUnavailable
+	}
+	status, err := runtimeStatus(runtime, now)
+	if err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic capabilities invalid", err)
+	}
+	if status.Reachability != "connected" {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticAgentUnavailable
+	}
+	if !datasource.SupportsOperation(status.Capabilities, input.Operation) {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticUnsupported
+	}
+	createdAt := input.RequestedAt.UTC().Truncate(time.Microsecond)
+	deadline := createdAt.Add(30 * time.Second)
+	if !now.Before(deadline) {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticAgentUnavailable
+	}
+	if _, err := tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state='timed_out', updated_at=$2
+		WHERE agent_id=$1 AND state IN ('pending','running') AND deadline_at <= $2`, agentID, timestamp(now)); err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: expired diagnostic cleanup failed", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM public.almanac_diagnostics WHERE expires_at <= $1`, timestamp(now)); err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: expired diagnostic receipt cleanup failed", err)
+	}
+	var activeCount int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM public.almanac_diagnostics WHERE agent_id=$1 AND state IN ('pending','running')`, agentID).Scan(&activeCount); err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic capacity read failed", err)
+	}
+	if activeCount >= maxActiveDatasourceDiagnostics {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticConflict
+	}
+	datasourceAssignment := agentprotocol.DatasourceAssignment{}
+	var datasourceID pgtype.UUID
+	safeRequest := struct {
+		Operation    string `json:"operation"`
+		DatasourceID string `json:"datasource_id,omitempty"`
+		QuerySHA256  string `json:"query_sha256,omitempty"`
+	}{Operation: input.Operation, DatasourceID: input.DatasourceID}
+	if input.Query != "" {
+		digest := sha256.Sum256([]byte(input.Query))
+		safeRequest.QuerySHA256 = hex.EncodeToString(digest[:])
+	}
+	if input.Operation == "query_preview" {
+		id, valid := canonicalUUID(input.DatasourceID)
+		if !valid {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDatasourceNotFound
+		}
+		row, readErr := queries.GetDatasource(ctx, id)
+		if errors.Is(readErr, pgx.ErrNoRows) {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDatasourceNotFound
+		}
+		if readErr != nil {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic datasource read failed", readErr)
+		}
+		if row.AgentID != agentID {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrAgentConflict
+		}
+		installationID, loadErr := loadInstallationID(ctx, tx)
+		if loadErr != nil {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic installation lookup failed", loadErr)
+		}
+		datasourceAssignment, err = releaseDatasourceAssignment(installationID, row, input.Secrets)
+		if err != nil {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, err
+		}
+		datasourceID = id
+	} else {
+		datasourceAssignment, err = assignmentForConnectionTest(input)
+		if err != nil {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, err
+		}
+	}
+	request := agentprotocol.DiagnosticRequest{DiagnosticID: diagnosticID.String(), AgentID: agentID.String(), Operation: input.Operation, DeadlineAt: deadline, Datasource: datasourceAssignment, Query: input.Query}
+	if err := request.Validate(); err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrInvalidAgentInput
+	}
+	requestJSON, err := json.Marshal(safeRequest)
+	if err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrInvalidAgentInput
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO public.almanac_diagnostics
+		(id, actor_id, agent_id, datasource_id, session_generation, operation, state, request, created_at, deadline_at, expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,'pending',$7::jsonb,$8,$9,$10)`, diagnosticID, user.ID, agentID, datasourceID,
+		input.AgentGeneration, input.Operation, requestJSON, timestamp(createdAt), timestamp(deadline), timestamp(deadline.Add(diagnosticReceiptTTL)))
+	if err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic create failed", err)
+	}
+	if err := finishAgentRead(ctx, tx, input.Now, now, user, installation, session); err != nil {
+		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, err
+	}
+	return DiagnosticRecord{ID: diagnosticID.String(), ActorID: user.ID.String(), AgentID: agentID.String(), DatasourceID: input.DatasourceID,
+		SessionGeneration: input.AgentGeneration, Operation: input.Operation, State: "pending", CreatedAt: createdAt, DeadlineAt: deadline, ExpiresAt: deadline.Add(diagnosticReceiptTTL)}, request, nil
+}
+
+func assignmentForConnectionTest(input BeginDiagnosticInput) (agentprotocol.DatasourceAssignment, error) {
+	settings := input.ConnectionSettings
+	if settings.Validate() != nil || settings.AgentID != input.AgentID || (settings.AuthenticationMode == "basic" && input.Password == "") || (settings.AuthenticationMode == "bearer" && input.Token == "") {
+		return agentprotocol.DatasourceAssignment{}, ErrInvalidAgentInput
+	}
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: input.DiagnosticID, DatasourceVersion: "1", Name: "connection-test",
+		Provider: settings.Provider, ConfigurationFormat: settings.ConfigurationFormat, Endpoint: settings.Endpoint,
+		TLS:                agentprotocol.DatasourceTLS{InsecureSkipVerify: settings.TLS.InsecureSkipVerify, CAPEM: settings.TLS.CAPEM},
+		AuthenticationMode: settings.AuthenticationMode, Username: settings.AuthenticationUser, Password: input.Password, BearerToken: input.Token,
+		PollingIntervalSeconds: 60, SettlingDelaySeconds: datasource.PrometheusSettlingDelay}
+	if err := assignment.Validate(); err != nil {
+		return agentprotocol.DatasourceAssignment{}, ErrInvalidAgentInput
+	}
+	return assignment, nil
+}
+
+func GetDatasourceDiagnostic(ctx context.Context, databaseURL string, proof DatasourceProof, diagnosticID string, now func() time.Time) (DiagnosticRecord, error) {
+	id, valid := canonicalUUID(diagnosticID)
+	if !valid || proof.SessionVerifier == ([32]byte{}) || now == nil {
+		return DiagnosticRecord{}, ErrInvalidAgentInput
+	}
+	conn, _, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, proof.SessionVerifier, now, "administrator", "editor", "viewer")
+	if err != nil {
+		return DiagnosticRecord{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	record, err := readDiagnostic(ctx, tx, id)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && user.Role != "administrator" && record.ActorID != user.ID.String()) {
+		return DiagnosticRecord{}, ErrDiagnosticNotFound
+	}
+	if err != nil {
+		return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic read failed", err)
+	}
+	currentTime := normalizedAgentNow(now)
+	if !currentTime.Before(record.ExpiresAt) {
+		return DiagnosticRecord{}, ErrDiagnosticNotFound
+	}
+	if (record.State == "pending" || record.State == "running") && !currentTime.Before(record.DeadlineAt) {
+		if _, err := tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state='timed_out', updated_at=$2 WHERE id=$1`, id, timestamp(currentTime)); err != nil {
+			return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic timeout update failed", err)
+		}
+		record.State = "timed_out"
+		agentUUID, _ := canonicalUUID(record.AgentID)
+		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agentUUID); err != nil {
+			return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic receipt pruning failed", err)
+		}
+	}
+	if err := finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
+		return DiagnosticRecord{}, err
+	}
+	return record, nil
+}
+
+func CancelDatasourceDiagnostic(ctx context.Context, databaseURL string, proof DatasourceProof, diagnosticID string, now func() time.Time) (DiagnosticRecord, error) {
+	id, valid := canonicalUUID(diagnosticID)
+	if !valid || proof.SessionVerifier == ([32]byte{}) || now == nil {
+		return DiagnosticRecord{}, ErrInvalidAgentInput
+	}
+	conn, _, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, proof.SessionVerifier, now, "administrator", "editor")
+	if err != nil {
+		return DiagnosticRecord{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	record, err := readDiagnostic(ctx, tx, id)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && user.Role != "administrator" && record.ActorID != user.ID.String()) {
+		return DiagnosticRecord{}, ErrDiagnosticNotFound
+	}
+	if err != nil {
+		return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic cancellation lookup failed", err)
+	}
+	currentTime := normalizedAgentNow(now)
+	if !currentTime.Before(record.ExpiresAt) {
+		return DiagnosticRecord{}, ErrDiagnosticNotFound
+	}
+	if record.State == "pending" || record.State == "running" {
+		newState := "canceled"
+		if !currentTime.Before(record.DeadlineAt) {
+			newState = "timed_out"
+		}
+		if _, err := tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state=$2, updated_at=$3 WHERE id=$1`, id, newState, timestamp(currentTime)); err != nil {
+			return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic cancellation update failed", err)
+		}
+		record.State = newState
+		agentUUID, _ := canonicalUUID(record.AgentID)
+		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agentUUID); err != nil {
+			return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic receipt pruning failed", err)
+		}
+	}
+	if err := finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
+		return DiagnosticRecord{}, err
+	}
+	return record, nil
+}
+
+func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, agentID string, generation int64, result agentprotocol.DiagnosticResult, now time.Time) error {
+	id, validID := canonicalUUID(result.DiagnosticID)
+	owner, validAgent := canonicalUUID(agentID)
+	if !validID || !validAgent || generation <= 0 || result.Validate() != nil || !validAgentClock(now) {
+		return ErrInvalidAgentInput
+	}
+	conn, err := connectCurrentSchema(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer closeInitialOwnerConnection(conn)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return operationError(ctx, "storage: diagnostic result transaction failed", err)
+	}
+	defer rollbackTransaction(tx)
+	if err := setTransactionBounds(ctx, tx); err != nil {
+		return operationError(ctx, "storage: diagnostic result setup failed", err)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil || len(encoded) > 64<<10 {
+		return ErrInvalidAgentInput
+	}
+	var state string
+	var deadline time.Time
+	err = tx.QueryRow(ctx, `SELECT state, deadline_at FROM public.almanac_diagnostics WHERE id=$1 AND agent_id=$2 AND session_generation=$3 FOR UPDATE`, id, owner, generation).Scan(&state, &deadline)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDiagnosticNotFound
+	}
+	if err != nil {
+		return operationError(ctx, "storage: diagnostic result lookup failed", err)
+	}
+	if state != "pending" && state != "running" {
+		return tx.Commit(ctx)
+	}
+	if !now.Before(deadline) {
+		_, err = tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state='timed_out', updated_at=$2 WHERE id=$1`, id, timestamp(now))
+	} else {
+		_, err = tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state=$2, result=$3::jsonb, error_code=NULLIF($4,''), message=NULLIF($5,''), updated_at=$6 WHERE id=$1`,
+			id, result.State, encoded, result.ErrorCode, result.Message, timestamp(now))
+	}
+	if err != nil {
+		return operationError(ctx, "storage: diagnostic result update failed", err)
+	}
+	if err := pruneDatasourceDiagnosticReceipts(ctx, tx, owner); err != nil {
+		return operationError(ctx, "storage: diagnostic receipt pruning failed", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func MarkDatasourceDiagnosticRunning(ctx context.Context, databaseURL, diagnosticID, agentID string, generation int64, now time.Time) error {
+	return updateDatasourceDiagnosticState(ctx, databaseURL, diagnosticID, agentID, generation, "running", now, "", "")
+}
+
+func FailDatasourceDiagnosticDispatch(ctx context.Context, databaseURL, diagnosticID, agentID string, generation int64, now time.Time) error {
+	return updateDatasourceDiagnosticState(ctx, databaseURL, diagnosticID, agentID, generation, "unknown", now, "network", "The assigned agent session became unavailable")
+}
+
+func updateDatasourceDiagnosticState(ctx context.Context, databaseURL, diagnosticID, agentID string, generation int64, state string, now time.Time, errorCode, message string) error {
+	diagnostic, validDiagnostic := canonicalUUID(diagnosticID)
+	agent, validAgent := canonicalUUID(agentID)
+	if !validDiagnostic || !validAgent || generation <= 0 || (state != "running" && state != "unknown") || !validAgentClock(now) {
+		return ErrInvalidAgentInput
+	}
+	conn, err := connectCurrentSchema(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer closeInitialOwnerConnection(conn)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return operationError(ctx, "storage: diagnostic state transaction failed", err)
+	}
+	defer rollbackTransaction(tx)
+	if err := setTransactionBounds(ctx, tx); err != nil {
+		return operationError(ctx, "storage: diagnostic state setup failed", err)
+	}
+	_, err = tx.Exec(ctx, `UPDATE public.almanac_diagnostics SET state=$4, error_code=NULLIF($5,''), message=NULLIF($6,''), updated_at=$7
+		WHERE id=$1 AND agent_id=$2 AND session_generation=$3 AND state='pending'`, diagnostic, agent, generation, state, errorCode, message, timestamp(now))
+	if err != nil {
+		return operationError(ctx, "storage: diagnostic state update failed", err)
+	}
+	if state == "unknown" {
+		if err := pruneDatasourceDiagnosticReceipts(ctx, tx, agent); err != nil {
+			return operationError(ctx, "storage: diagnostic receipt pruning failed", err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func pruneDatasourceDiagnosticReceipts(ctx context.Context, tx pgx.Tx, agentID pgtype.UUID) error {
+	_, err := tx.Exec(ctx, `DELETE FROM public.almanac_diagnostics WHERE id IN (
+		SELECT id FROM (
+			SELECT id, row_number() OVER (ORDER BY created_at DESC, id DESC) AS position
+			FROM public.almanac_diagnostics WHERE agent_id=$1 AND state NOT IN ('pending','running')
+		) AS terminal WHERE position > $2
+	)`, agentID, maxDatasourceDiagnosticReceipts)
+	return err
+}
+
+func readDiagnostic(ctx context.Context, tx pgx.Tx, id pgtype.UUID) (DiagnosticRecord, error) {
+	var record DiagnosticRecord
+	var datasourceID pgtype.UUID
+	var result []byte
+	var errorCode, message pgtype.Text
+	err := tx.QueryRow(ctx, `SELECT id, actor_id, agent_id, datasource_id, session_generation, operation, state, result,
+		error_code, message, created_at, deadline_at, expires_at FROM public.almanac_diagnostics WHERE id=$1`, id).
+		Scan(&record.ID, &record.ActorID, &record.AgentID, &datasourceID, &record.SessionGeneration, &record.Operation, &record.State, &result,
+			&errorCode, &message, &record.CreatedAt, &record.DeadlineAt, &record.ExpiresAt)
+	if err != nil {
+		return DiagnosticRecord{}, err
+	}
+	if datasourceID.Valid {
+		record.DatasourceID = datasourceID.String()
+	}
+	record.Result = bytes.Clone(result)
+	if errorCode.Valid {
+		record.ErrorCode = errorCode.String
+	}
+	if message.Valid {
+		record.Message = message.String
+	}
+	return record, nil
+}

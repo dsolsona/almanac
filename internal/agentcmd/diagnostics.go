@@ -25,9 +25,15 @@ type diagnosticRunner struct {
 	mu        sync.Mutex
 	client    *client
 	results   chan agentprotocol.DiagnosticResult
-	active    map[string]context.CancelFunc
+	active    map[string]activeDiagnostic
 	completed map[string]diagnosticReceipt
 	order     []string
+}
+
+type activeDiagnostic struct {
+	cancel       context.CancelFunc
+	datasourceID string
+	datasource   *agentprotocol.DatasourceAssignment
 }
 
 type diagnosticReceipt struct {
@@ -36,7 +42,7 @@ type diagnosticReceipt struct {
 }
 
 func newDiagnosticRunner(agent *client) *diagnosticRunner {
-	return &diagnosticRunner{client: agent, results: make(chan agentprotocol.DiagnosticResult, maxActiveDiagnostics), active: make(map[string]context.CancelFunc), completed: make(map[string]diagnosticReceipt)}
+	return &diagnosticRunner{client: agent, results: make(chan agentprotocol.DiagnosticResult, maxActiveDiagnostics), active: make(map[string]activeDiagnostic), completed: make(map[string]diagnosticReceipt)}
 }
 
 func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.DiagnosticRequest) error {
@@ -62,6 +68,19 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 		r.offer(saved.result)
 		return nil
 	}
+	if !request.DeadlineAt.After(time.Now()) {
+		result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID, State: "timed_out"}
+		r.completed[request.DiagnosticID] = diagnosticReceipt{result: result, expires: time.Now().Add(diagnosticReceiptPeriod)}
+		r.order = append(r.order, request.DiagnosticID)
+		for len(r.order) > maxDiagnosticReceipts {
+			oldest := r.order[0]
+			r.order = r.order[1:]
+			delete(r.completed, oldest)
+		}
+		r.mu.Unlock()
+		r.offer(result)
+		return nil
+	}
 	if len(r.active) >= maxActiveDiagnostics {
 		r.mu.Unlock()
 		return errDiagnosticCapacity
@@ -71,7 +90,13 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 		deadline = maxProviderDeadline
 	}
 	ctx, cancel := context.WithDeadline(parent, deadline)
-	r.active[request.DiagnosticID] = cancel
+	active := activeDiagnostic{cancel: cancel}
+	if request.Operation == "query_preview" {
+		assignment := request.Datasource
+		active.datasourceID = assignment.DatasourceID
+		active.datasource = &assignment
+	}
+	r.active[request.DiagnosticID] = active
 	r.mu.Unlock()
 	go r.execute(ctx, request)
 	return nil
@@ -79,9 +104,26 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 
 func (r *diagnosticRunner) cancel(id string) {
 	r.mu.Lock()
-	cancel := r.active[id]
+	active := r.active[id]
 	r.mu.Unlock()
-	if cancel != nil {
+	if active.cancel != nil {
+		active.cancel()
+	}
+}
+
+func (r *diagnosticRunner) reconcileAssignments(assignments []agentprotocol.DatasourceAssignment) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancels := make([]context.CancelFunc, 0)
+	for _, active := range r.active {
+		if active.datasource != nil && !slices.Contains(assignments, *active.datasource) {
+			cancels = append(cancels, active.cancel)
+		}
+	}
+	r.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
 }
@@ -89,8 +131,8 @@ func (r *diagnosticRunner) cancel(id string) {
 func (r *diagnosticRunner) close() {
 	r.mu.Lock()
 	cancels := make([]context.CancelFunc, 0, len(r.active))
-	for _, cancel := range r.active {
-		cancels = append(cancels, cancel)
+	for _, active := range r.active {
+		cancels = append(cancels, active.cancel)
 	}
 	r.mu.Unlock()
 	for _, cancel := range cancels {
