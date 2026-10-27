@@ -156,7 +156,7 @@ func (c *Client) Create(ctx context.Context, body api.CreateAgentRequest, key st
 	if e != nil {
 		return nil, "", true, bodyReadFailure(ctx, true)
 	}
-	return validateIssuance(r, b, "", false)
+	return validateIssuance(ctx, r, b, "", false)
 }
 func (c *Client) Rotate(ctx context.Context, id api.AgentId, body api.RotateAgentRequest, etag, key string) ([]byte, string, bool, error) {
 	if !uuid.MatchString(uuidText(id)) || !validKey(key) || !validETag(etag, uuidText(id)) {
@@ -173,7 +173,7 @@ func (c *Client) Rotate(ctx context.Context, id api.AgentId, body api.RotateAgen
 	if e != nil {
 		return nil, "", true, bodyReadFailure(ctx, true)
 	}
-	return validateIssuance(r, b, uuidText(id), true)
+	return validateIssuance(ctx, r, b, uuidText(id), true)
 }
 func (c *Client) Revoke(ctx context.Context, id, credential api.AgentId, body api.PasswordProofRequest, etag, key string) ([]byte, error) {
 	if !uuid.MatchString(uuidText(id)) || !uuid.MatchString(uuidText(credential)) || !validKey(key) || !validETag(etag, uuidText(id)) {
@@ -191,11 +191,11 @@ func (c *Client) Revoke(ctx context.Context, id, credential api.AgentId, body ap
 		return nil, bodyReadFailure(ctx, true)
 	}
 	if r.StatusCode != 200 {
-		return nil, mutationProblem(r, b)
+		return nil, mutationProblem(ctx, r, b)
 	}
 	var v api.LifecycleResult
 	if json.Unmarshal(b, &v) != nil || !validLifecycleRaw(b, v) || uuidText(v.Agent.Id) != uuidText(id) || v.Credential == nil || !validCredentialRawField(b, "credential", *v.Credential) || uuidText(v.Credential.AgentId) != uuidText(id) || uuidText(v.Credential.Id) != uuidText(credential) || v.Credential.RevokedAt == nil || !decimal(v.RevokedCredentialCount, false) || v.Changed && v.RevokedCredentialCount != "1" || !v.Changed && v.RevokedCredentialCount != "0" {
-		return nil, protocol(true)
+		return nil, ambiguousMutationResponse(ctx)
 	}
 	return json.Marshal(v)
 }
@@ -215,22 +215,22 @@ func (c *Client) Disable(ctx context.Context, id api.AgentId, body api.PasswordP
 		return nil, bodyReadFailure(ctx, true)
 	}
 	if r.StatusCode != 200 {
-		return nil, mutationProblem(r, b)
+		return nil, mutationProblem(ctx, r, b)
 	}
 	var v api.LifecycleResult
 	if json.Unmarshal(b, &v) != nil || !validLifecycleRaw(b, v) || uuidText(v.Agent.Id) != uuidText(id) || v.Credential != nil || !jsonNullField(b, "credential") || v.Agent.Enabled || !decimal(v.RevokedCredentialCount, false) || !v.Changed && v.RevokedCredentialCount != "0" {
-		return nil, protocol(true)
+		return nil, ambiguousMutationResponse(ctx)
 	}
 	return json.Marshal(v)
 }
 
-func validateIssuance(r *http.Response, b []byte, id string, rotation bool) ([]byte, string, bool, error) {
+func validateIssuance(ctx context.Context, r *http.Response, b []byte, id string, rotation bool) ([]byte, string, bool, error) {
 	if r.StatusCode != 200 && r.StatusCode != 201 {
-		return nil, "", false, mutationProblem(r, b)
+		return nil, "", false, mutationProblem(ctx, r, b)
 	}
 	var fields map[string]jsontext.Value
 	if json.Unmarshal(b, &fields) != nil {
-		return nil, "", false, protocol(true)
+		return nil, "", false, ambiguousMutationResponse(ctx)
 	}
 	var common struct {
 		Agent       api.Agent            `json:"agent"`
@@ -241,23 +241,23 @@ func validateIssuance(r *http.Response, b []byte, id string, rotation bool) ([]b
 		Previous    *api.AgentCredential `json:"previous_credential"`
 	}
 	if json.Unmarshal(b, &common) != nil || !hasFields(b, "agent", "credential", "replayed", "secret_state") || !rawBool(rawField(b, "replayed")) || !rawString(rawField(b, "secret_state")) || !validAgentRawField(b, "agent", common.Agent) || !validCredentialRawField(b, "credential", common.Credential) || uuidText(common.Credential.AgentId) != uuidText(common.Agent.Id) || id != "" && uuidText(common.Agent.Id) != id {
-		return nil, "", false, protocol(true)
+		return nil, "", false, ambiguousMutationResponse(ctx)
 	}
 	if rotation {
 		if _, ok := fields["previous_credential"]; !ok {
-			return nil, "", false, protocol(true)
+			return nil, "", false, ambiguousMutationResponse(ctx)
 		}
 		if common.Previous == nil && !jsonNullField(b, "previous_credential") {
-			return nil, "", false, protocol(true)
+			return nil, "", false, ambiguousMutationResponse(ctx)
 		}
 		if common.Previous != nil && (!validCredentialRawField(b, "previous_credential", *common.Previous) || uuidText(common.Previous.AgentId) != uuidText(common.Agent.Id) || uuidText(common.Previous.Id) == uuidText(common.Credential.Id)) {
-			return nil, "", false, protocol(true)
+			return nil, "", false, ambiguousMutationResponse(ctx)
 		}
 	}
 	if common.Replayed {
 		_, hasToken := fields["token"]
 		if r.StatusCode != 200 || common.SecretState != "secret_unavailable" || common.Token != nil || hasToken {
-			return nil, "", true, protocol(true)
+			return nil, "", true, ambiguousMutationResponse(ctx)
 		}
 	} else {
 		expectedStatus := http.StatusCreated
@@ -265,7 +265,7 @@ func validateIssuance(r *http.Response, b []byte, id string, rotation bool) ([]b
 			expectedStatus = http.StatusOK
 		}
 		if !rawString(fields["token"]) || r.StatusCode != expectedStatus || common.SecretState != "issued" || common.Token == nil || *common.Token == "" {
-			return nil, "", false, protocol(true)
+			return nil, "", false, ambiguousMutationResponse(ctx)
 		}
 	}
 	var safe []byte
@@ -287,7 +287,7 @@ func validateIssuance(r *http.Response, b []byte, id string, rotation bool) ([]b
 		}{common.Agent, common.Credential, common.Replayed, common.SecretState})
 	}
 	if e != nil {
-		return nil, "", false, protocol(true)
+		return nil, "", false, ambiguousMutationResponse(ctx)
 	}
 	token := ""
 	if common.Token != nil {
@@ -312,10 +312,13 @@ func problem(r *http.Response, b []byte) error {
 	return f
 }
 
-func mutationProblem(r *http.Response, b []byte) error {
+func mutationProblem(ctx context.Context, r *http.Response, b []byte) error {
 	f, documented := decodeProblem(r, b)
 	if documented && r.StatusCode != http.StatusRequestTimeout && r.StatusCode < http.StatusInternalServerError {
 		return f
+	}
+	if ctx.Err() != nil {
+		return network(ctx, true)
 	}
 	if f == nil {
 		f = unknownProblem(r, b)
@@ -334,6 +337,13 @@ func mutationProblem(r *http.Response, b []byte) error {
 		f.Message = "agent operation outcome is unknown; inspect agent state before deciding what to do next"
 	}
 	return f
+}
+
+func ambiguousMutationResponse(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return network(ctx, true)
+	}
+	return protocol(true)
 }
 
 func decodeProblem(r *http.Response, b []byte) (*Failure, bool) {
