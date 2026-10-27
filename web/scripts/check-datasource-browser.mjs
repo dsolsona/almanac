@@ -234,6 +234,7 @@ stage = 'browser launch';
   assert.deepEqual(result.series[0].labels, {});
   assert.equal(result.series[0].value, '1');
   assert.equal(typeof result.series[0].time, 'string');
+  assert.equal(await page.locator('.diagnostic-result').count(), 1);
 
   stage = 'real failed saved-source preview';
   await queryField.fill('vector(');
@@ -248,6 +249,18 @@ stage = 'browser launch';
   await expect.poll(async () => page.locator('.diagnostic-result').last().innerText(), { timeout: 15000 }).toContain('query_failed');
   stage = 'safe failed diagnostic result message';
   await expect(page.locator('.diagnostic-result').last()).toContainText('The datasource rejected the query.');
+  assert.equal(await page.locator('.diagnostic-result').count(), 1);
+  stage = 'public failed diagnostic payload redaction';
+  const publicFailure = await page.evaluate(async (diagnosticID) => {
+    const response = await fetch(`/api/v1/diagnostics/${diagnosticID}`, { credentials: 'same-origin', cache: 'no-store' });
+    return { status: response.status, body: await response.json() };
+  }, invalidReceipt.id);
+  assert.equal(publicFailure.status, 200);
+  assert.equal(publicFailure.body.state, 'failed');
+  assert.equal(publicFailure.body.error_code, 'query_failed');
+  assert.equal(publicFailure.body.message, 'The datasource rejected the query.');
+  assert.equal(publicFailure.body.result_class, null);
+  assert.equal(publicFailure.body.result, null);
   stage = 'diagnostic result secret redaction';
   assert.equal(await page.locator('body').innerText().then((text) => text.includes(passwordForRedaction)), false);
 

@@ -49,6 +49,18 @@ func TestPublicDiagnosticErrorCodePreservesSafeProviderCauses(t *testing.T) {
 	}
 }
 
+func TestFailedDiagnosticDTODoesNotExposeInternalResultPayload(t *testing.T) {
+	record := storage.DiagnosticRecord{
+		ID: "123e4567-e89b-42d3-a456-426614174000", State: "failed", Operation: "query_preview",
+		Result:    []byte(`{"state":"failed","diagnostic_id":"123e4567-e89b-42d3-a456-426614174000","error_code":"query","message":"private provider detail"}`),
+		ErrorCode: "query", Message: "private provider detail and credential token",
+	}
+	dto := diagnosticDTO(record)
+	if dto.Result != nil || dto.ResultClass != nil || dto.ErrorCode == nil || *dto.ErrorCode != api.DiagnosticErrorCodeQueryFailed || dto.Message == nil || *dto.Message != "The datasource rejected the query." || strings.Contains(*dto.Message, "credential") {
+		t.Fatalf("failed diagnostic DTO leaked internal result or lost public cause: %+v", dto)
+	}
+}
+
 func TestConfigurationAdmissionProblemsAreRetryableAndSafe(t *testing.T) {
 	for _, test := range []struct {
 		name string

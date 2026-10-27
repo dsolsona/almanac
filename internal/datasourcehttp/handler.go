@@ -530,12 +530,10 @@ func diagnosticDTO(record storage.DiagnosticRecord) api.Diagnostic {
 	if record.ErrorCode != "" {
 		code := api.DiagnosticErrorCode(publicDiagnosticErrorCode(record.ErrorCode))
 		dto.ErrorCode = &code
-	}
-	if record.Message != "" {
-		message := record.Message
+		message := publicDiagnosticMessage(record.ErrorCode)
 		dto.Message = &message
 	}
-	if len(record.Result) > 0 {
+	if record.State == "succeeded" && len(record.Result) > 0 {
 		var result map[string]any
 		if json.Unmarshal(record.Result, &result) == nil {
 			dto.Result = &result
@@ -546,6 +544,29 @@ func diagnosticDTO(record storage.DiagnosticRecord) api.Diagnostic {
 		}
 	}
 	return dto
+}
+
+func publicDiagnosticMessage(code string) string {
+	switch code {
+	case "authentication":
+		return "The datasource rejected authentication."
+	case "network":
+		return "The assigned agent could not reach the datasource."
+	case "tls":
+		return "The datasource TLS connection could not be verified."
+	case "query", "incomplete":
+		return "The datasource rejected the query."
+	case "timeout", "deadline":
+		return "The datasource diagnostic timed out."
+	case "assignment_revoked":
+		return "The datasource assignment changed before the diagnostic could complete."
+	case "rate_limited":
+		return "The datasource rate limited the diagnostic."
+	case "unsupported":
+		return "The assigned agent does not support this operation."
+	default:
+		return "The diagnostic failed. Check agent connectivity and datasource settings."
+	}
 }
 
 func publicDiagnosticErrorCode(code string) string {

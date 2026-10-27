@@ -96,7 +96,8 @@ function safeDiagnostic(value: Diagnostic): Diagnostic {
   };
   const message = value.error_code ? descriptions[value.error_code] ?? 'The diagnostic failed. Check agent connectivity and datasource settings.'
     : value.state === 'succeeded' ? 'The diagnostic completed.' : null;
-  return { ...value, error_code: value.error_code && Object.hasOwn(descriptions, value.error_code) ? value.error_code : (value.error_code ? 'diagnostic_failed' : null), message };
+  return { ...value, result: value.state === 'succeeded' ? value.result : null,
+    error_code: value.error_code && Object.hasOwn(descriptions, value.error_code) ? value.error_code : (value.error_code ? 'diagnostic_failed' : null), message };
 }
 
 async function json(response: Response): Promise<unknown> {

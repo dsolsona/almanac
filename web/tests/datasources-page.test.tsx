@@ -116,7 +116,7 @@ describe('datasource page', () => {
     installFetch([], ['available'], [202], {
       id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'failed', operation: 'query_preview',
       created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: null,
-      result: null, error_code: 'query_failed', message: 'private provider detail',
+      result: { state: 'failed', diagnostic_id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', error_code: 'query', message: 'private provider detail' }, error_code: 'query_failed', message: 'private provider detail',
     });
     render(<DatasourcesPage context={editor} />);
     await user.click(await screen.findByRole('button', { name: 'Run preview' }));
@@ -125,6 +125,7 @@ describe('datasource page', () => {
     expect(screen.getAllByText('query_failed').length).toBeGreaterThan(0);
     expect(screen.queryByText('Breached')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('private provider detail');
+    expect(document.body.textContent).not.toContain('"error_code": "query"');
   });
 
   it('invalidates readiness after an administrator saves and waits before enabling preview', async () => {
