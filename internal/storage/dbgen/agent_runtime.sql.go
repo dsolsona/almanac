@@ -25,6 +25,9 @@ const deleteExpiredAgentExecutionGrants = `-- name: DeleteExpiredAgentExecutionG
 DELETE FROM public.almanac_agent_execution_grants AS grant_row
 WHERE grant_row.agent_id = $1
   AND grant_row.retain_until < $2
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage AS coverage WHERE coverage.lease_id = grant_row.lease_id)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts AS attempt WHERE attempt.lease_id = grant_row.lease_id)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_delivery_receipts AS receipt WHERE receipt.lease_id = grant_row.lease_id)
   AND grant_row.lease_id <> COALESCE((
       SELECT owner.current_lease_id FROM public.almanac_agent_ownership AS owner
       WHERE owner.agent_id = grant_row.agent_id AND owner.generation = grant_row.generation
@@ -224,7 +227,7 @@ const insertAgentExecutionGrant = `-- name: InsertAgentExecutionGrant :exec
 INSERT INTO public.almanac_agent_execution_grants (
     lease_id, agent_id, generation, configuration_revision, allowed_measurements,
     valid_from, valid_until, renewal_sequence, request_nonce, retain_until
-) VALUES ($1, $2, $3, $4, '[]'::jsonb, $5, $6, $7, $8, $9)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type InsertAgentExecutionGrantParams struct {
@@ -232,6 +235,7 @@ type InsertAgentExecutionGrantParams struct {
 	AgentID               pgtype.UUID        `json:"agent_id"`
 	Generation            int64              `json:"generation"`
 	ConfigurationRevision int64              `json:"configuration_revision"`
+	AllowedMeasurements   []byte             `json:"allowed_measurements"`
 	ValidFrom             pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil            pgtype.Timestamptz `json:"valid_until"`
 	RenewalSequence       int64              `json:"renewal_sequence"`
@@ -245,6 +249,7 @@ func (q *Queries) InsertAgentExecutionGrant(ctx context.Context, arg InsertAgent
 		arg.AgentID,
 		arg.Generation,
 		arg.ConfigurationRevision,
+		arg.AllowedMeasurements,
 		arg.ValidFrom,
 		arg.ValidUntil,
 		arg.RenewalSequence,

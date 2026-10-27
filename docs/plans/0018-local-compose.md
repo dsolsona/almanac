@@ -11,7 +11,9 @@ Spec: [SPEC-0013 local Compose workflow](../specs/0013-runtime-and-operations.md
 
 ## Global constraints
 
-- Host prerequisites are Docker Compose and Make; no host Go, Node or OpenSSL.
+- Host prerequisites are Docker Compose, Make and curl; no host Go, Node or OpenSSL.
+  The maintainer approved curl for host HTTPS readiness checks in
+  [F2-T22](../tasks/F2-T22.md) on 2026-10-27.
 - Persistent named volumes; no reset or volume deletion in normal commands.
 - Local initialization keeps secrets out of logs, URLs and build context.
 - App runs non-root with protected secret files and real HTTPS authentication.

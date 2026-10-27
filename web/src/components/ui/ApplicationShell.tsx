@@ -35,6 +35,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
   const currentDestination = useRef<HTMLAnchorElement>(null);
   const wasOpen = useRef(false);
   const datasourceCurrent = pathname.startsWith('/datasources');
+  const sliCurrent = pathname.startsWith('/slis');
   const agentCurrent = embedded || pathname === '/' || pathname.startsWith('/agents');
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       return;
     }
     const next = new URL(anchor.href, window.location.href);
-    if (next.origin !== window.location.origin || !(/^\/(?:agents|datasources(?:\/new|\/[0-9a-f-]{36})?)?$/.test(next.pathname))) return;
+    if (next.origin !== window.location.origin || !(/^\/(?:agents|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
     if (next.pathname === '/agents' || next.pathname === '/') {
@@ -124,7 +125,8 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       <nav id="app-navigation-list" className="app-navigation" aria-label="Primary navigation">
         <div className="app-navigation__group"><h2>Product</h2>
           <div className="app-navigation__items">
-            {(['SLOs', 'SLIs'] as const).map((item) => <div className="app-navigation__planned" key={item} aria-disabled="true"><span><NavIcon name={item.toLowerCase() as IconName}/>{item}</span><small>Not available yet</small></div>)}
+            <div className="app-navigation__planned" aria-disabled="true"><span><NavIcon name="slos"/>SLOs</span><small>Not available yet</small></div>
+            <a ref={sliCurrent ? currentDestination : undefined} className={sliCurrent ? 'app-navigation__current' : ''} href="/slis" aria-current={sliCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slis"/>SLIs</a>
           </div>
         </div>
         <div className="app-navigation__group"><h2>Operations</h2>

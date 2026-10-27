@@ -23,6 +23,7 @@ const (
 	MaxQueueBytes                  = 2 << 20
 	MaxCapabilities                = 256
 	MaxMeasurements                = 10_000
+	MaxSLICollections              = 10_000
 	MaxConfigurationBytes          = 1 << 20
 	MaxHeartbeatMillis             = 30_000
 	InitialGeneration              = "0"
@@ -153,6 +154,28 @@ type MeasurementGrant struct {
 	MeasurementRevision string `json:"measurement_revision"`
 }
 
+type MeasurementKind string
+
+const MeasurementKindEventCounts MeasurementKind = "event_counts"
+
+type ComponentMode string
+
+const ComponentModeIntervalCount ComponentMode = "interval_count"
+
+// SLICollection is the agent-only configuration needed to execute one live
+// measurement revision. It contains query text, but never source credentials.
+type SLICollection struct {
+	SLIID               string          `json:"sli_id"`
+	MeasurementRevision string          `json:"measurement_revision"`
+	DatasourceID        string          `json:"datasource_id"`
+	DatasourceVersion   string          `json:"datasource_version"`
+	MeasurementKind     MeasurementKind `json:"measurement_kind"`
+	ComponentMode       ComponentMode   `json:"component_mode"`
+	GoodQuery           string          `json:"good_query"`
+	TotalQuery          string          `json:"total_query"`
+	EffectiveFrom       time.Time       `json:"effective_from"`
+}
+
 // Lease is durable backend evidence. An empty AllowedMeasurements slice is valid
 // and grants no SLI query authority.
 type Lease struct {
@@ -169,6 +192,7 @@ type ConfigurationSnapshot struct {
 	AgentID               string                 `json:"agent_id"`
 	ConfigurationRevision string                 `json:"configuration_revision"`
 	Assignments           []DatasourceAssignment `json:"assignments"`
+	SLIs                  []SLICollection        `json:"slis"`
 }
 
 // DatasourceAssignment is an authorized agent-only configuration view. Secret
@@ -779,7 +803,7 @@ func DecodeConfigurationSnapshot(data []byte) (ConfigurationSnapshot, error) {
 	if len(data) > MaxConfigurationBytes {
 		return ConfigurationSnapshot{}, ErrMessageTooLarge
 	}
-	if err := requireFields(jsontext.Value(data), "agent_id", "configuration_revision", "assignments"); err != nil {
+	if err := requireFields(jsontext.Value(data), "agent_id", "configuration_revision", "assignments", "slis"); err != nil {
 		return ConfigurationSnapshot{}, err
 	}
 	var snapshot ConfigurationSnapshot
@@ -802,15 +826,45 @@ func (s ConfigurationSnapshot) Validate() error {
 	if s.Assignments == nil || len(s.Assignments) > 256 {
 		return invalidField("configuration_snapshot.assignments")
 	}
-	seen := make(map[string]struct{}, len(s.Assignments))
+	assignments := make(map[string]DatasourceAssignment, len(s.Assignments))
 	for i, assignment := range s.Assignments {
 		if err := assignment.Validate(); err != nil {
 			return invalidIndexedField("configuration_snapshot.assignments", i)
 		}
-		if _, exists := seen[assignment.DatasourceID]; exists {
+		if _, exists := assignments[assignment.DatasourceID]; exists {
 			return invalidIndexedField("configuration_snapshot.assignments", i)
 		}
-		seen[assignment.DatasourceID] = struct{}{}
+		assignments[assignment.DatasourceID] = assignment
+	}
+	if s.SLIs == nil || len(s.SLIs) > MaxSLICollections {
+		return invalidField("configuration_snapshot.slis")
+	}
+	seen := make(map[string]struct{}, len(s.SLIs))
+	for i, sli := range s.SLIs {
+		if err := sli.Validate(); err != nil {
+			return invalidIndexedField("configuration_snapshot.slis", i)
+		}
+		if _, exists := seen[sli.SLIID]; exists {
+			return invalidIndexedField("configuration_snapshot.slis", i)
+		}
+		seen[sli.SLIID] = struct{}{}
+		assignment, exists := assignments[sli.DatasourceID]
+		if !exists || assignment.DatasourceVersion != sli.DatasourceVersion ||
+			sli.EffectiveFrom.UnixMicro()%(int64(assignment.PollingIntervalSeconds)*1_000_000) != 0 {
+			return invalidIndexedField("configuration_snapshot.slis", i)
+		}
+	}
+	return nil
+}
+
+func (s SLICollection) Validate() error {
+	if !canonicalUUID(s.SLIID) || !positiveDecimalCheck(s.MeasurementRevision, false) ||
+		!canonicalUUID(s.DatasourceID) || !positiveDecimalCheck(s.DatasourceVersion, false) ||
+		s.MeasurementKind != MeasurementKindEventCounts || s.ComponentMode != ComponentModeIntervalCount ||
+		strings.TrimSpace(s.GoodQuery) == "" || len(s.GoodQuery) > 16<<10 ||
+		strings.TrimSpace(s.TotalQuery) == "" || len(s.TotalQuery) > 16<<10 ||
+		!isUTC(s.EffectiveFrom) || s.EffectiveFrom.Nanosecond()%1_000 != 0 {
+		return invalidField("sli_collection")
 	}
 	return nil
 }
@@ -891,8 +945,8 @@ func invalidIndexedField(field string, index int) error {
 	return fmt.Errorf("%w: %s[%d]", ErrInvalidMessage, field, index)
 }
 
-// ValidateSnapshotLease keeps datasource diagnostics separate from production
-// observation grants. This increment has no SLI definitions to authorize.
+// ValidateSnapshotLease binds execution grants to the exact measurement
+// revisions present in the acknowledged configuration snapshot.
 func ValidateSnapshotLease(snapshot ConfigurationSnapshot, lease Lease) error {
 	if err := snapshot.Validate(); err != nil {
 		return err
@@ -903,10 +957,14 @@ func ValidateSnapshotLease(snapshot ConfigurationSnapshot, lease Lease) error {
 	if snapshot.AgentID != lease.AgentID || snapshot.ConfigurationRevision != lease.ConfigurationRevision {
 		return invalidField("configuration_snapshot.execution_lease_binding")
 	}
-	if len(lease.AllowedMeasurements) != 0 {
-		// Datasource-only snapshots contain no SLI definitions; datasource
-		// assignments therefore do not grant production observation queries.
-		return invalidField("execution_lease.allowed_measurements")
+	measurements := make(map[string]string, len(snapshot.SLIs))
+	for _, sli := range snapshot.SLIs {
+		measurements[sli.SLIID] = sli.MeasurementRevision
+	}
+	for _, grant := range lease.AllowedMeasurements {
+		if measurements[grant.SLIID] != grant.MeasurementRevision {
+			return invalidField("execution_lease.allowed_measurements")
+		}
 	}
 	return nil
 }

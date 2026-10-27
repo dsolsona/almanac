@@ -68,6 +68,11 @@ type DatasourceOperations interface {
 	PostDatasourceQueryPreview(context.Context, api.DatasourceId, api.PostDatasourceQueryPreviewJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	GetDiagnostic(context.Context, api.DatasourceId, ...api.RequestEditorFn) (*http.Response, error)
 	PostDiagnosticCancel(context.Context, api.DatasourceId, api.PostDiagnosticCancelJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	ListSlis(context.Context, *api.ListSlisParams, ...api.RequestEditorFn) (*http.Response, error)
+	CreateSli(context.Context, *api.CreateSliParams, api.CreateSliJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	GetSli(context.Context, api.SliId, ...api.RequestEditorFn) (*http.Response, error)
+	PatchSliMetadata(context.Context, api.SliId, *api.PatchSliMetadataParams, api.PatchSliMetadataJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	ListSliObservations(context.Context, api.SliId, *api.ListSliObservationsParams, ...api.RequestEditorFn) (*http.Response, error)
 }
 
 // AgentContext refreshes authority and CSRF state before exposing the narrow

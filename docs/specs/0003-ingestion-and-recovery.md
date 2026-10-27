@@ -208,6 +208,17 @@ Deduplication and coverage retention must cover the supported replay horizon.
 Expired history and expired delivery receipts need explicit rejection/replay rules;
 cleanup must not make an old retry count as fresh data. Exact horizons remain open.
 
+## Observation history
+
+The native SLI history API pages backward through at most the requested number
+of due canonical intervals, including missing intervals. Its cursor resumes before
+the inspected range, even when that range contains no observations. Each page
+returns inferred missing ranges separately from persisted outcomes and reports the
+earliest queryable interval start: the later of the effective activation boundary
+and the retention cutoff rounded up to a canonical boundary. Failed and incomplete
+attempts remain missing; observed and complete-empty intervals are covered. This
+boundary does not claim data exists there. No inferred interval is a zero value.
+
 ## Live buffering
 
 Live results use the bounded in-memory ring defined in SPEC-0002. Retain recent

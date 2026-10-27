@@ -89,10 +89,10 @@ func New(service *authentication.Service, options Options) (*Handler, error) {
 // rules used by authentication endpoints. It deliberately does not inspect or
 // touch session authority; guarded services do that for every operation.
 func (h *Handler) ValidateSessionRequest(r *http.Request) (SessionRequest, error) {
-	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPut) {
+	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch) {
 		return SessionRequest{}, ErrRequestMethod
 	}
-	unsafeMethod := r.Method == http.MethodPost || r.Method == http.MethodPut
+	unsafeMethod := r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch
 	if values := r.Header.Values("Authorization"); len(values) != 0 {
 		return SessionRequest{}, ErrAuthorization
 	}

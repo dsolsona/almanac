@@ -183,16 +183,19 @@ The foundation provides these fixed entry points:
 | --- | --- |
 | `make setup` | Pinned Go/generators, locked web dependencies and Chromium; explicit network-capable setup; optional SETUP_MODE=go/web |
 | `make setup SETUP_MODE=database` | Isolated PostgreSQL18.6 fixture bound to loopback; validates existing fixture before reuse |
+| `make setup SETUP_MODE=verification` | Network-capable build of the pinned Linux verifier image and PostgreSQL18.6 image; cache fingerprint binds Go, web and OpenAPI lockfiles plus verifier tooling |
 | `make build` | Typecheck, production assets and embedded Go executable; size report |
 | `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
 | `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
+| `make verify VERIFY_MODE=linux` | Offline Linux candidate gate: snapshots tracked and safe untracked source changes, attests a SHA256, then runs the full gate, race gate, real PostgreSQL/browser integration suite and catalogue Chromium matrix in order; exports sanitized logs and acceptance screenshots under `.local/linux-verification.*` |
+| `make verify VERIFY_MODE=linux-sli` | Offline focused Linux journey: runs only the real SLI browser journey in the same isolated PostgreSQL fixture and exports the same sanitized evidence; does not replace the full Linux gate |
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
 | `make verify VERIFY_MODE=go-portability` | Compile-only `internal/command` test binaries for fixed `darwin/amd64`, with ordinary and integration tags, CGO disabled and the pinned offline Go toolchain; ignored outputs and a distinct build cache live under `.local/` |
 | `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication, source-secret, Prometheus datasource and diagnostic unit race checks |
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
 | `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths. Preserves per-package Go JSON events under `.local/integration-test-json/`, the combined event stream at `.local/integration-go-test.jsonl`, the numeric Go test status at `.local/integration-go-test.exit`, and a slowest-test summary. |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
-| Focused onboarding invocation in [command discipline](commands.md) | Real HTTPS/PostgreSQL onboarding with the current built candidate; fails if the selected named journey does not execute and pass |
+| Focused browser journey invocation in [command discipline](commands.md) | Real HTTPS/PostgreSQL journey with the current built candidate; fails if the selected named journey does not execute and pass |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
@@ -202,6 +205,17 @@ The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy
 imports in already-open tabs. The production smoke uses port 5199. Checks require completed
 setup and never install dependencies. Unknown modes and empty test selections fail.
+The Linux verifier setup is separate from offline verification: verification rejects
+a missing or stale image fingerprint and never pulls images or installs dependencies.
+It uses a local Docker context, a read-only source snapshot, and a private network
+namespace shared only with its invocation-owned PostgreSQL fixture. The database check
+queries the live server and requires the fixed database, role, PostgreSQL 18.6,
+127.0.0.1 address and port 15487 before integration tests run. It does not mount the
+Docker socket, publish a host port, reuse the host fixture, or mount operator data.
+The existing Compose journey remains a separate host-side check.
+The fixed SLI journey selector is `BROWSER_SCENARIO=slis`; it requires the integrated
+candidate containing `TestIntegrationExecutableBrowserSLICollectionJourney`. The
+Linux lane runs that test as part of the full database integration suite.
 Go tests exercise real loopback upstreams and embedded assets.
 Go and race checks build missing embedded assets before
 test discovery; focused config/storage unit checks do not need a web build. Existing
@@ -212,10 +226,15 @@ The process smoke owns an ephemeral port. Generation/build/tests use local pinne
 Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
 They require the matching local fixture, use a fresh disposable database per test,
 and fail for unavailable infrastructure or an empty integration-test selection.
-The integration gate runs command/browser acceptance first and stops at the first
+The integration gate runs storage first and command/browser acceptance last, and stops at the first
 failed package. It records Go JSON events in `.local/integration-go-test.jsonl`,
 per-package files under `.local/integration-test-json/`, and the numeric Go exit in
 `.local/integration-go-test.exit`; `running` means completion has not been recorded.
+The storage and command packages run each discovered top-level integration test
+serially with the existing two-minute Go timeout per invocation. Shared invocations
+hit that bound as cumulative test time grew. The gate checks that discovery is valid
+and that each selected test passed exactly once; individual results and failures
+remain in the combined and per-test artifacts.
 The terminal summary reports package results and slow tests. A successful full gate
 requires every selected package; partial artifacts are not a passing gate.
 Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's

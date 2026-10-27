@@ -103,6 +103,18 @@ func NewClient(config Config) (*Client, error) {
 }
 
 func (c *Client) Query(ctx context.Context, query string) (QueryResult, error) {
+	return c.query(ctx, query, time.Time{})
+}
+
+// QueryAt evaluates a vector query at the supplied canonical interval end.
+func (c *Client) QueryAt(ctx context.Context, query string, at time.Time) (QueryResult, error) {
+	if at.IsZero() || at.Nanosecond()%1_000 != 0 {
+		return QueryResult{}, &SourceError{Code: "query"}
+	}
+	return c.query(ctx, query, at.UTC())
+}
+
+func (c *Client) query(ctx context.Context, query string, at time.Time) (QueryResult, error) {
 	if c == nil || c.endpoint == nil || strings.TrimSpace(query) == "" || len(query) > MaxQueryBytes {
 		return QueryResult{}, &SourceError{Code: "query"}
 	}
@@ -110,6 +122,9 @@ func (c *Client) Query(ctx context.Context, query string) (QueryResult, error) {
 	u.Path = strings.TrimRight(u.Path, "/") + "/api/v1/query"
 	values := u.Query()
 	values.Set("query", query)
+	if !at.IsZero() {
+		values.Set("time", at.UTC().Format(time.RFC3339Nano))
+	}
 	u.RawQuery = values.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {

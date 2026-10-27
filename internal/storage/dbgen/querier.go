@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
@@ -20,6 +21,7 @@ type Querier interface {
 	DeleteExpiredAgentReceipt(ctx context.Context, arg DeleteExpiredAgentReceiptParams) (int64, error)
 	DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error)
 	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
+	DeleteExpiredSliCreateReceipt(ctx context.Context, arg DeleteExpiredSliCreateReceiptParams) error
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
@@ -33,9 +35,12 @@ type Querier interface {
 	FindDatasourceDiagnosticReceipt(ctx context.Context, arg FindDatasourceDiagnosticReceiptParams) (FindDatasourceDiagnosticReceiptRow, error)
 	FindDatasourceReceipt(ctx context.Context, arg FindDatasourceReceiptParams) (FindDatasourceReceiptRow, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
+	FindSliCreateReceipt(ctx context.Context, arg FindSliCreateReceiptParams) (FindSliCreateReceiptRow, error)
+	FindSliDeliveryReceipt(ctx context.Context, arg FindSliDeliveryReceiptParams) (FindSliDeliveryReceiptRow, error)
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
 	GetAgentExecutionGrant(ctx context.Context, arg GetAgentExecutionGrantParams) (GetAgentExecutionGrantRow, error)
+	GetAgentExecutionGrantByLease(ctx context.Context, leaseID string) (GetAgentExecutionGrantByLeaseRow, error)
 	GetAgentExecutionGrantBySequence(ctx context.Context, arg GetAgentExecutionGrantBySequenceParams) (GetAgentExecutionGrantBySequenceRow, error)
 	GetAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) (pgtype.Timestamptz, error)
 	GetAgentRuntimeStatus(ctx context.Context, agentID pgtype.UUID) (GetAgentRuntimeStatusRow, error)
@@ -44,7 +49,11 @@ type Querier interface {
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetLatestAgentConfigurationRevision(ctx context.Context, agentID pgtype.UUID) (int64, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
+	GetSli(ctx context.Context, id pgtype.UUID) (GetSliRow, error)
+	GetSliCoverageByCanonicalInterval(ctx context.Context, arg GetSliCoverageByCanonicalIntervalParams) (GetSliCoverageByCanonicalIntervalRow, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
+	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
+	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
 	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
 	InsertAgentConfigurationRevision(ctx context.Context, arg InsertAgentConfigurationRevisionParams) error
@@ -64,9 +73,23 @@ type Querier interface {
 	InsertRotatedAgentCredential(ctx context.Context, arg InsertRotatedAgentCredentialParams) (InsertRotatedAgentCredentialRow, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
 	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
+	InsertSli(ctx context.Context, arg InsertSliParams) error
+	InsertSliCoverage(ctx context.Context, arg InsertSliCoverageParams) error
+	InsertSliCreateReceipt(ctx context.Context, arg InsertSliCreateReceiptParams) error
+	InsertSliDeliveryReceipt(ctx context.Context, arg InsertSliDeliveryReceiptParams) error
+	InsertSliDirtyInterval(ctx context.Context, arg InsertSliDirtyIntervalParams) error
+	InsertSliExecutionAttempt(ctx context.Context, arg InsertSliExecutionAttemptParams) error
+	InsertSliMeasurement(ctx context.Context, arg InsertSliMeasurementParams) error
+	InsertSliObservationValue(ctx context.Context, arg InsertSliObservationValueParams) error
+	LatestSliAcceptedAt(ctx context.Context, arg LatestSliAcceptedAtParams) (pgtype.Timestamptz, error)
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
 	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
+	ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListAuthorizedMeasurementGrantsForAgentRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
+	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
+	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)
+	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
+	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
 	// would otherwise walk inactive history. Recheck base rows after any lock wait.
 	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
@@ -84,6 +107,8 @@ type Querier interface {
 	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockSessionInstallation(ctx context.Context) (LockSessionInstallationRow, error)
 	LockSessionUser(ctx context.Context, userID pgtype.UUID) (LockSessionUserRow, error)
+	LockSliMeasurementForObservation(ctx context.Context, arg LockSliMeasurementForObservationParams) (LockSliMeasurementForObservationRow, error)
+	LockSliMetadata(ctx context.Context, id pgtype.UUID) (LockSliMetadataRow, error)
 	LockUnrevokedAgentCredentials(ctx context.Context, agentID pgtype.UUID) (int64, error)
 	LoginAttemptKeys(ctx context.Context, arg LoginAttemptKeysParams) (LoginAttemptKeysRow, error)
 	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
@@ -105,6 +130,8 @@ type Querier interface {
 	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
 	UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error)
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
+	UpdateSliDisplayName(ctx context.Context, arg UpdateSliDisplayNameParams) (AlmanacSli, error)
+	UpdateSliEffectiveFrom(ctx context.Context, arg UpdateSliEffectiveFromParams) (int64, error)
 	UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error
 	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
 }

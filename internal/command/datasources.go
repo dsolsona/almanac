@@ -20,6 +20,7 @@ import (
 	"github.com/dsolsona/almanac/internal/datasourceclient"
 	"github.com/dsolsona/almanac/internal/secretfile"
 	"github.com/dsolsona/almanac/internal/setupclient"
+	"github.com/dsolsona/almanac/internal/sli"
 )
 
 const maxDatasourceInputBytes = 128 << 10
@@ -37,7 +38,7 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 		return writeDatasourceFailure(stdout, stderr, "datasources", requestedJSON(args), datasourceInvalid("choose a supported datasource command"))
 	}
 	jsonOut := requestedJSON(rest)
-	var profile, id, agentID, inputFile, etag, key, query, cursor, output string
+	var profile, id, sliID, agentID, inputFile, etag, key, query, cursor, output string
 	var limit int
 	var timeout time.Duration
 	var wait, cancelOnTimeout bool
@@ -45,6 +46,7 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&profile, "profile-file", "", "protected profile")
 	fs.StringVar(&id, "datasource-id", "", "canonical datasource UUID")
+	fs.StringVar(&sliID, "sli-id", "", "canonical SLI UUID")
 	fs.StringVar(&agentID, "agent-id", "", "canonical agent UUID")
 	fs.StringVar(&inputFile, "input-file", "", "protected JSON input file, or - for stdin")
 	fs.StringVar(&etag, "if-match", "", "exact strong datasource ETag")
@@ -78,6 +80,17 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	case "datasources test":
 		allowed["input-file"], allowed["datasource-id"], allowed["if-match"], allowed["idempotency-key"] = true, true, true, true
 		allowed["wait"], allowed["cancel-on-timeout"] = true, true
+	case "slis list":
+		allowed["limit"], allowed["cursor"] = true, true
+	case "slis get", "slis observations":
+		allowed["sli-id"] = true
+		if operation == "slis observations" {
+			allowed["limit"], allowed["cursor"] = true, true
+		}
+	case "slis create":
+		allowed["input-file"], allowed["idempotency-key"] = true, true
+	case "slis update":
+		allowed["sli-id"], allowed["input-file"], allowed["if-match"] = true, true, true
 	case "slis test":
 		allowed["datasource-id"], allowed["query"], allowed["wait"], allowed["cancel-on-timeout"] = true, true, true, true
 	case "providers list":
@@ -94,7 +107,10 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	if (operation == "datasources get" || operation == "datasources update" || operation == "slis test" || operation == "datasources test" && seen["datasource-id"]) && (!seen["datasource-id"] || !validCLIUUID(id)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("datasource-id must be a canonical UUID"))
 	}
-	if operation == "datasources list" && (limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor)) {
+	if (operation == "slis get" || operation == "slis observations" || operation == "slis update") && (!seen["sli-id"] || !validCLIUUID(sliID)) {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("sli-id must be a canonical UUID"))
+	}
+	if (operation == "datasources list" || operation == "slis list" || operation == "slis observations") && (limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("pagination options are invalid"))
 	}
 	if operation == "datasources create" && (!seen["input-file"] || inputFile == "" || !seen["idempotency-key"] || !validKey(key)) {
@@ -102,6 +118,12 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	}
 	if operation == "datasources update" && (!seen["input-file"] || inputFile == "" || !seen["if-match"] || !validDatasourceETag(etag, id)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and the exact datasource if-match ETag are required"))
+	}
+	if operation == "slis create" && (!seen["input-file"] || inputFile == "" || !seen["idempotency-key"] || !validKey(key)) {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and a valid idempotency-key are required"))
+	}
+	if operation == "slis update" && (!seen["input-file"] || inputFile == "" || !seen["if-match"] || !validSliETag(etag, sliID)) {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and the exact SLI if-match ETag are required"))
 	}
 	if operation == "datasources test" {
 		if err := validateDatasourceTestArgs(seen, id, inputFile, etag, key); err != nil {
@@ -121,7 +143,7 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	defer stop()
 	ctx, cancel := context.WithTimeout(signalCtx, timeout)
 	defer cancel()
-	result, err := performDatasource(ctx, operation, profile, id, agentID, inputFile, etag, key, query, limit, cursor, wait, cancelOnTimeout, timeout)
+	result, err := performDatasource(ctx, operation, profile, id, sliID, agentID, inputFile, etag, key, query, limit, cursor, wait, cancelOnTimeout, timeout)
 	if err != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err)
 	}
@@ -144,13 +166,16 @@ func datasourceOperation(args []string) (string, []string) {
 	if args[0] == "providers" && len(args) > 1 && args[1] == "list" {
 		return "providers list", args[2:]
 	}
-	if args[0] == "slis" && len(args) > 1 && args[1] == "test" {
-		return "slis test", args[2:]
+	if args[0] == "slis" && len(args) > 1 {
+		switch args[1] {
+		case "list", "get", "create", "update", "observations", "test":
+			return "slis " + args[1], args[2:]
+		}
 	}
 	return "", args
 }
 
-func performDatasource(parent context.Context, operation, profile, id, agentID, inputFile, etag, key, query string, limit int, cursor string, wait, cancelOnTimeout bool, timeout time.Duration) (jsontext.Value, error) {
+func performDatasource(parent context.Context, operation, profile, id, sliID, agentID, inputFile, etag, key, query string, limit int, cursor string, wait, cancelOnTimeout bool, timeout time.Duration) (jsontext.Value, error) {
 	var input []byte
 	if inputFile != "" {
 		var err error
@@ -206,6 +231,55 @@ func performDatasource(parent context.Context, operation, profile, id, agentID, 
 				ETag       string         `json:"etag"`
 			}{jsontext.Value(data), tag})
 		}
+	case "slis list":
+		data, err = client.ListSLIs(parent, limit, cursor)
+	case "slis get":
+		var tag string
+		data, tag, err = client.GetSLI(parent, sliID)
+		if err == nil {
+			data, err = json.Marshal(struct {
+				SLI  jsontext.Value `json:"sli"`
+				ETag string         `json:"etag"`
+			}{jsontext.Value(data), tag})
+		}
+	case "slis create":
+		if identity.Role != "administrator" && identity.Role != "editor" {
+			return nil, datasourceForbidden()
+		}
+		var value api.SliCreateRequest
+		if json.Unmarshal(input, &value) != nil || !validSliCreateInput(input) {
+			clear(input)
+			return nil, datasourceInvalid("SLI JSON must contain a supported event_counts interval_count definition and no unknown fields")
+		}
+		clear(input)
+		var tag string
+		data, tag, err = client.CreateSLI(parent, value, key)
+		if err == nil {
+			data, err = json.Marshal(struct {
+				SLI  jsontext.Value `json:"sli"`
+				ETag string         `json:"etag"`
+			}{jsontext.Value(data), tag})
+		}
+	case "slis update":
+		if identity.Role != "administrator" && identity.Role != "editor" {
+			return nil, datasourceForbidden()
+		}
+		var value api.SliMetadataWrite
+		if json.Unmarshal(input, &value) != nil || !validSliMetadataInput(input) {
+			clear(input)
+			return nil, datasourceInvalid("SLI updates may change display_name only")
+		}
+		clear(input)
+		var tag string
+		data, tag, err = client.UpdateSLIMetadata(parent, sliID, etag, value)
+		if err == nil {
+			data, err = json.Marshal(struct {
+				SLI  jsontext.Value `json:"sli"`
+				ETag string         `json:"etag"`
+			}{jsontext.Value(data), tag})
+		}
+	case "slis observations":
+		data, err = client.SLIObservations(parent, sliID, limit, cursor)
 	case "datasources create", "datasources update":
 		if identity.Role != "administrator" {
 			return nil, datasourceForbidden()
@@ -389,6 +463,24 @@ func exactFields(value map[string]jsontext.Value, names ...string) bool {
 	return true
 }
 
+func validSliCreateInput(data []byte) bool {
+	var fields map[string]jsontext.Value
+	var value api.SliCreateRequest
+	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "name", "display_name", "datasource_id", "measurement_kind", "component_mode", "good_query", "total_query") || json.Unmarshal(data, &value) != nil {
+		return false
+	}
+	return sli.ValidName(value.Name) && strings.TrimSpace(value.Name) == value.Name && value.DisplayName != "" && strings.TrimSpace(value.DisplayName) == value.DisplayName &&
+		validCLIUUID(datasourceUUID(value.DatasourceId)) && value.MeasurementKind == "event_counts" && value.ComponentMode == "interval_count" &&
+		strings.TrimSpace(value.GoodQuery) != "" && strings.TrimSpace(value.TotalQuery) != ""
+}
+
+func validSliMetadataInput(data []byte) bool {
+	var fields map[string]jsontext.Value
+	var value api.SliMetadataWrite
+	return json.Unmarshal(data, &fields) == nil && exactFields(fields, "display_name") && json.Unmarshal(data, &value) == nil &&
+		value.DisplayName != "" && strings.TrimSpace(value.DisplayName) == value.DisplayName
+}
+
 func datasourceTerminal(state api.DiagnosticState) bool {
 	return state == api.DiagnosticStateSucceeded || state == api.DiagnosticStateFailed || state == api.DiagnosticStateCanceled || state == api.DiagnosticStateTimedOut || state == api.DiagnosticStateUnknown
 }
@@ -398,6 +490,19 @@ func validDatasourceETag(etag, id string) bool {
 		return false
 	}
 	version := strings.TrimSuffix(strings.TrimPrefix(etag, prefix), "\"")
+	if !validPositiveDecimal(version) {
+		return false
+	}
+	parsed, err := strconv.ParseInt(version, 10, 64)
+	return err == nil && parsed > 0
+}
+
+func validSliETag(etag, id string) bool {
+	prefix := `"sli:` + id + ":"
+	if !strings.HasPrefix(etag, prefix) || !strings.HasSuffix(etag, `"`) {
+		return false
+	}
+	version := strings.TrimSuffix(strings.TrimPrefix(etag, prefix), `"`)
 	if !validPositiveDecimal(version) {
 		return false
 	}
@@ -438,6 +543,9 @@ func writeDatasourceSuccess(stdout, stderr io.Writer, jsonOut bool, operation st
 		}
 		return 0
 	}
+	if strings.HasPrefix(operation, "slis ") && operation != "slis test" {
+		return writeSLISuccess(stdout, result, operation)
+	}
 	var value map[string]jsontext.Value
 	if json.Unmarshal(result, &value) == nil {
 		if raw, ok := value["items"]; ok {
@@ -470,6 +578,89 @@ func writeDatasourceSuccess(stdout, stderr io.Writer, jsonOut bool, operation st
 	fmt.Fprintln(stdout, string(result))
 	return 0
 }
+
+func writeSLISuccess(stdout io.Writer, result jsontext.Value, operation string) int {
+	var page struct {
+		Items []jsontext.Value `json:"items"`
+	}
+	if json.Unmarshal(result, &page) == nil && page.Items != nil {
+		if operation == "slis observations" {
+			var history api.SliObservationPage
+			if json.Unmarshal(result, &history) == nil {
+				fmt.Fprintf(stdout, "Earliest queryable interval: %s\n", history.EarliestQueryableIntervalStart.Format(time.RFC3339Nano))
+				for _, missing := range history.MissingIntervals {
+					fmt.Fprintf(stdout, "%s – %s\tmissing\n", missing.IntervalStart.Format(time.RFC3339Nano), missing.IntervalEnd.Format(time.RFC3339Nano))
+				}
+				if history.NextCursor != "" {
+					fmt.Fprintf(stdout, "Next cursor: %s\n", history.NextCursor)
+				}
+			}
+		}
+		if len(page.Items) == 0 {
+			if operation == "slis observations" {
+				fmt.Fprintln(stdout, "No SLI observations found.")
+			} else {
+				fmt.Fprintln(stdout, "No SLIs found.")
+			}
+			return 0
+		}
+		if operation == "slis observations" {
+			for _, item := range page.Items {
+				var observation api.SliObservation
+				if json.Unmarshal(item, &observation) != nil {
+					fmt.Fprintln(stdout, string(item))
+					continue
+				}
+				good, total := "—", "—"
+				if observation.GoodCount != nil {
+					good = *observation.GoodCount
+				}
+				if observation.TotalCount != nil {
+					total = *observation.TotalCount
+				}
+				fmt.Fprintf(stdout, "%s – %s\t%s\t%s / %s\n", observation.IntervalStart.Format(time.RFC3339Nano), observation.IntervalEnd.Format(time.RFC3339Nano), observation.Outcome, good, total)
+			}
+			return 0
+		}
+		for _, item := range page.Items {
+			var sli api.Sli
+			if json.Unmarshal(item, &sli) != nil {
+				fmt.Fprintln(stdout, string(item))
+				continue
+			}
+			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", sli.DisplayName, sli.ActivationState, sli.AgentReachability, sli.CollectionProgress, sli.Freshness)
+		}
+		return 0
+	}
+	var envelope struct {
+		SLI  api.Sli `json:"sli"`
+		ETag string  `json:"etag"`
+	}
+	if json.Unmarshal(result, &envelope) == nil && datasourceUUID(envelope.SLI.Id) != "" {
+		value := envelope.SLI
+		fmt.Fprintf(stdout, "%s (%s)\n", value.DisplayName, value.Name)
+		fmt.Fprintf(stdout, "SLI ID: %s\n", datasourceUUID(value.Id))
+		fmt.Fprintf(stdout, "Activation: %s, effective %s UTC\n", value.ActivationState, value.EffectiveFrom.UTC().Format(time.RFC3339Nano))
+		fmt.Fprintf(stdout, "Collection: %s; agent %s; freshness %s\n", value.CollectionProgress, value.AgentReachability, value.Freshness)
+		fmt.Fprintf(stdout, "Measurement revision %s; resource version %s\n", value.MeasurementRevision, value.Version)
+		if observation := value.LatestObservation; observation != nil {
+			good, total := "—", "—"
+			if observation.GoodCount != nil {
+				good = *observation.GoodCount
+			}
+			if observation.TotalCount != nil {
+				total = *observation.TotalCount
+			}
+			fmt.Fprintf(stdout, "Latest interval %s – %s: %s, %s / %s\n", observation.IntervalStart.Format(time.RFC3339Nano), observation.IntervalEnd.Format(time.RFC3339Nano), observation.Outcome, good, total)
+		}
+		if envelope.ETag != "" {
+			fmt.Fprintf(stdout, "ETag: %s\n", envelope.ETag)
+		}
+		return 0
+	}
+	fmt.Fprintln(stdout, string(result))
+	return 0
+}
 func writeDatasourceFailure(stdout, stderr io.Writer, operation string, jsonOut bool, err error) int {
 	code, message := "management_unavailable", "datasource management is temporarily unavailable"
 	requestID, backendCode, httpStatus := "", "", 0
@@ -485,13 +676,13 @@ func writeDatasourceFailure(stdout, stderr io.Writer, operation string, jsonOut 
 		code, message = failure.code, failure.message
 	}
 	exit := 1
-	if code == "invalid_request" || code == "invalid_input" || code == "invalid_datasource_input" || code == "invalid_agent" || code == "configuration_too_large" {
+	if code == "invalid_request" || code == "invalid_input" || code == "invalid_datasource_input" || code == "invalid_agent" || code == "configuration_too_large" || code == "unsupported_measurement" {
 		exit = 2
 	} else if code == "unauthenticated" || code == "unauthorized" || code == "forbidden" {
 		exit = 3
 	} else if code == "not_found" {
 		exit = 4
-	} else if code == "conflict" {
+	} else if code == "conflict" || code == "measurement_conflict" {
 		exit = 5
 	} else if code == "request_timeout" || code == "request_canceled" {
 		exit = 6

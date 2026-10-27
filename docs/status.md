@@ -2,6 +2,17 @@
 
 ## Current state
 
+[F2-T22](tasks/F2-T22.md) is verified locally on `feat/f2-observations`, based on
+`06be8f0`. Operators can create native Prometheus interval-count SLIs, collect them
+through the assigned remote agent, and read exact persisted observations through
+UI/API/CLI. Linux checks passed 207 web, 336 Go, 328 race and all 151 integration
+tests; the corrected host Chromium matrix passed all 102 checks. The normal Compose
+journey and cancellation cleanup passed, including exact 99/100 observations and
+the approved host-curl startup readiness fix. The task records first failures and
+the Linux catalogue watcher limitation; the complete Linux wrapper is not claimed
+as passing. This change is prepared for PR review. Direct-producer ingestion is still required
+for the full F2 checkpoint.
+
 PR #38 review corrections are verified at `a9f6d28`: cancellation retains safe
 request metadata, workspace navigation focuses the Agents heading, and Compose
 acceptance verifies the issued token never appears in service logs. The full gate
@@ -20,8 +31,9 @@ identifiers cannot be edited. Passing checks: 190 web tests, 304 Go tests, 296 r
 tests, 42 catalogue browser checks, real Compose and documentation/build/smoke gates.
 Guidance now requires exact user-case evidence, deployed journeys, reference
 comparison, independent coordinator acceptance and frozen verification candidates.
-Earlier results below establish only their tested cases. No new F2 feature work
-is underway; the maintainer deployment and its data remain untouched.
+Earlier results below establish only their tested cases. At that checkpoint no
+new F2 feature work was underway; the maintainer deployment and its data remained
+untouched.
 
 PR #37 review corrections are verified on combined code checkpoint `845e619`.
 All 17 findings have regressions covering configuration consistency/capacity,
@@ -45,7 +57,7 @@ Final checks passed 146 real integration tests, 169 web tests, 290 Go tests and
 startup/persistence checks. The coordinator inspected desktop/mobile in both themes.
 Those results describe the original increment; the review correction evidence above supersedes them.
 
-Work stops after publishing this increment as requested. F2 is still incomplete:
+The previous delivery stopped after publishing that increment. F2 is still incomplete:
 SLI definitions, scheduled collection, collected observations and direct producer
 ingestion remain outstanding in the [delivery plan](plans/0019-first-observations.md).
 Full source-key rotation/re-encryption and restore acceptance remain initial-release

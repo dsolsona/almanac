@@ -11,7 +11,8 @@ setup:
 	    (cd web && npm ci && ./node_modules/.bin/playwright install chromium); \
 	    (cd tools/openapi && npm ci) ;; \
 	  database) sh scripts/setup-database.sh ;; \
-	  *) echo 'SETUP_MODE must be all, web, go, or database' >&2; exit 2 ;; \
+	  verification) sh scripts/verify-linux.sh setup ;; \
+	  *) echo 'SETUP_MODE must be all, web, go, database, or verification' >&2; exit 2 ;; \
 	esac
 
 build:
@@ -41,7 +42,7 @@ bootstrap:
 	$(MAKE) run
 
 run start:
-	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
+	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; command -v curl >/dev/null 2>&1 || { echo 'curl is required for local startup' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; sh scripts/check-local-readiness.sh; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
 
 stop:
 	docker compose -f compose.yaml stop
@@ -54,7 +55,9 @@ credentials:
 	docker compose -f compose.yaml exec -T app sh -c 'cat /run/almanac-secrets/initial-admin-password; printf "\n"'
 
 verify:
-	@if [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
+	@if [ "$${VERIFY_MODE:-}" = "linux-sli" ]; then sh scripts/verify-linux.sh sli; \
+	elif [ "$${VERIFY_MODE:-}" = "linux" ]; then sh scripts/verify-linux.sh verify; \
+	elif [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
 	elif [ "$${VERIFY_MODE:-}" = "go-portability" ]; then $(MAKE) _verify_go_portability; \
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
@@ -85,7 +88,7 @@ verify:
 	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, providers, compose, or smoke)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, providers, compose, smoke, linux, or linux-sli)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -120,7 +123,7 @@ _ensure_web_assets:
 
 _verify_go:
 	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/cliprofile|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/agenthttp|./internal/agentclient|./internal/storage|./internal/identity|./internal/authentication|./internal/agentmanagement|./internal/agentaccess|./internal/agentownership|./internal/agentcmd|./internal/agentws|./internal/secretfile|./internal/datasource|./internal/prometheus|./internal/datasourcehttp|./internal/datasourceclient) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
+	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/cliprofile|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/agenthttp|./internal/agentclient|./internal/storage|./internal/identity|./internal/authentication|./internal/agentmanagement|./internal/agentaccess|./internal/agentownership|./internal/agentprotocol|./internal/agentruntime|./internal/agentcmd|./internal/agentws|./internal/secretfile|./internal/datasource|./internal/prometheus|./internal/datasourcehttp|./internal/datasourceclient|./internal/sli|./internal/slihttp) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 .local/bin/gofmt -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
@@ -147,7 +150,7 @@ _verify_go:
 _verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  packages='./internal/uihttp ./internal/command ./internal/agentclient ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile ./internal/agentaccess ./internal/agentcmd ./internal/agentws ./internal/agentruntime ./internal/agentownership ./internal/agentprotocol ./internal/datasource ./internal/sourcesecret ./internal/prometheus ./internal/datasourcehttp ./internal/datasourceclient'; \
+	  packages='./internal/uihttp ./internal/command ./internal/agentclient ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile ./internal/agentaccess ./internal/agentcmd ./internal/agentws ./internal/agentruntime ./internal/agentownership ./internal/agentprotocol ./internal/datasource ./internal/sourcesecret ./internal/prometheus ./internal/datasourcehttp ./internal/datasourceclient ./internal/sli ./internal/slihttp'; \
 	  if ! .local/bin/go test -list . $$packages > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
@@ -169,29 +172,55 @@ _verify_integration: _ensure_web_assets
 	  case "$${GO_PACKAGE:-all}" in ./internal/storage|./internal/authentication|./internal/agentmanagement|./internal/agenthttp|./internal/authhttp|./internal/command|all) ;; *) echo 'GO_PACKAGE must select a real database acceptance package or all' >&2; exit 2 ;; esac; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  target="$${GO_PACKAGE:-all}"; \
-	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/command ./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/agentcmd'; fi; \
+	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/agentcmd ./internal/command'; fi; \
 	  test_list=$$(mktemp .local/integration-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
 	  if ! .local/bin/go test -tags=integration -list . $$packages > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^TestIntegration/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected integration packages contain zero tests' >&2; exit 1; }; \
+	  command_tests=''; storage_tests=''; selected_packages=''; \
+	  for name in storage command; do \
+	    case " $$packages " in *" ./internal/$$name "*) \
+	      if ! .local/bin/go test -tags=integration -list '^TestIntegration' "./internal/$$name" > "$$test_list"; then echo "$$name integration test discovery failed" >&2; exit 1; fi; \
+	      selected=$$(python3 scripts/select-integration-tests.py "$$name" "$$test_list") || exit 1; \
+	      case "$$name" in storage) storage_tests="$$selected" ;; command) command_tests="$$selected" ;; esac; \
+	      selected_packages="$$selected_packages $$name" ;; esac; \
+	  done; \
 	  echo "Selected PostgreSQL integration tests: $$tests"; \
 	  $(MAKE) _verify_sqlc_generated; \
-	  sh scripts/setup-database.sh --check; \
+	  fixture_check=--check; \
+	  case "$${ALMANAC_LINUX_VERIFICATION_CONTAINER:-}" in '' ) ;; 1) fixture_check=--check-container ;; *) echo 'ALMANAC_LINUX_VERIFICATION_CONTAINER must be unset or 1' >&2; exit 2 ;; esac; \
+	  sh scripts/setup-database.sh "$$fixture_check"; \
 	  $(MAKE) build; \
 	  json_artifact="$(CURDIR)/.local/integration-go-test.jsonl"; exit_artifact="$(CURDIR)/.local/integration-go-test.exit"; \
 	  package_artifacts="$(CURDIR)/.local/integration-test-json"; mkdir -p "$$package_artifacts"; \
+	  : > "$$package_artifacts/selected-packages.txt"; \
+	  for package in $$packages; do printf '%s\n' "$${package##*/}" >> "$$package_artifacts/selected-packages.txt"; done; \
+	  for name in $$selected_packages; do \
+	    case "$$name" in storage) selected="$$storage_tests" ;; command) selected="$$command_tests" ;; esac; \
+	    printf '%s\n' "$$selected" > "$$package_artifacts/$$name-selected.txt"; \
+	    for run in $$selected; do : > "$$package_artifacts/$$name-$$run.jsonl"; printf 'pending\n' > "$$package_artifacts/$$name-$$run.exit"; done; \
+	  done; \
 	  printf 'running\n' > "$$exit_artifact"; : > "$$json_artifact"; \
 	  for package in $$packages; do package_name=$${package##*/}; : > "$$package_artifacts/$$package_name.jsonl"; printf 'pending\n' > "$$package_artifacts/$$package_name.exit"; done; \
 	  for package in $$packages; do \
 	    package_name=$${package##*/}; package_json="$$package_artifacts/$$package_name.jsonl"; \
 	    package_exit="$$package_artifacts/$$package_name.exit"; printf 'running\n' > "$$package_exit"; \
-	    go_status=0; .local/bin/go test -json -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m "$$package" > "$$package_json" || go_status=$$?; \
-	    cat "$$package_json" >> "$$json_artifact"; printf '%s\n' "$$go_status" > "$$package_exit"; \
-	    if [ "$$go_status" -ne 0 ]; then \
-	      printf '%s\n' "$$go_status" > "$$exit_artifact"; \
-	      summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
-	      exit "$$go_status"; \
-	    fi; \
+	    runs=package; case "$$package" in ./internal/storage) runs="$$storage_tests" ;; ./internal/command) runs="$$command_tests" ;; esac; \
+	    for run in $$runs; do \
+	      selector='^TestIntegration'; run_json="$$package_json"; run_exit="$$package_exit"; \
+	      case "$$package" in ./internal/storage|./internal/command) \
+	        selector="^$${run}$$"; run_json="$$package_artifacts/$$package_name-$$run.jsonl"; run_exit="$$package_artifacts/$$package_name-$$run.exit" ;; esac; \
+	      printf 'running\n' > "$$run_exit"; go_status=0; \
+	      .local/bin/go test -json -race -tags=integration -p=1 -run "$$selector" -count=1 -timeout=2m "$$package" > "$$run_json" || go_status=$$?; \
+	      if [ "$$run_json" != "$$package_json" ]; then cat "$$run_json" >> "$$package_json"; fi; \
+	      cat "$$run_json" >> "$$json_artifact"; printf '%s\n' "$$go_status" > "$$run_exit"; \
+	      if [ "$$go_status" -ne 0 ]; then \
+	        printf '%s\n' "$$go_status" > "$$package_exit"; printf '%s\n' "$$go_status" > "$$exit_artifact"; \
+	        summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
+	        exit "$$go_status"; \
+	      fi; \
+	    done; \
+	    printf '0\n' > "$$package_exit"; \
 	  done; \
 	  printf '0\n' > "$$exit_artifact"; \
 	  summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
@@ -203,12 +232,15 @@ _verify_journey:
 	    onboarding|lost-login|lost-password) expected="TestIntegrationExecutableBrowserAuthentication/$${BROWSER_SCENARIO:-onboarding}"; journey='^TestIntegrationExecutableBrowserAuthentication$$/^'"$${BROWSER_SCENARIO:-onboarding}"'$$' ;; \
 	    agents|agents-close|agents-lost|agents-unavailable) expected="TestIntegrationExecutableBrowserAgentRegistration/$$BROWSER_SCENARIO"; journey='^TestIntegrationExecutableBrowserAgentRegistration$$/^'"$$BROWSER_SCENARIO"'$$' ;; \
 	    agents-lifecycle) expected='TestIntegrationExecutableBrowserAgentLifecycle'; journey='^TestIntegrationExecutableBrowserAgentLifecycle$$' ;; \
+	    slis) expected='TestIntegrationExecutableBrowserSLICollectionJourney'; journey='^TestIntegrationExecutableBrowserSLICollectionJourney$$' ;; \
 	    *) echo 'BROWSER_SCENARIO must select a documented browser journey' >&2; exit 2 ;; \
 	  esac; \
 	  test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
 	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
-	  sh scripts/setup-database.sh --check; \
+	  fixture_check=--check; \
+	  case "$${ALMANAC_LINUX_VERIFICATION_CONTAINER:-}" in '' ) ;; 1) fixture_check=--check-container ;; *) echo 'ALMANAC_LINUX_VERIFICATION_CONTAINER must be unset or 1' >&2; exit 2 ;; esac; \
+	  sh scripts/setup-database.sh "$$fixture_check"; \
 	  $(MAKE) build; \
 	  journey_log=$$(mktemp .local/journey-result.XXXXXX); \
 	  if ! .local/bin/go test -race -tags=integration -p=1 -v -run "$$journey" -count=1 -timeout=2m ./internal/command > "$$journey_log" 2>&1; then cat "$$journey_log"; exit 1; fi; \

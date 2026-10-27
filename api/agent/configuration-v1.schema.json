@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://almanac.dev/schemas/agent/configuration-v1.schema.json",
   "title": "Almanac agent configuration snapshot v1",
-  "description": "Coherent HTTP snapshot returned by GET /api/agent/v1/configuration. The response ETag is \"agent-config:<agent_id>:<configuration_revision>\". Datasource assignments are released only when the current heartbeat grant is bound to this exact revision; a grant behind desired configuration receives temporary configuration-unavailable without a snapshot or source credentials.",
+  "description": "Coherent HTTP snapshot returned by GET /api/agent/v1/configuration. The response ETag is \"agent-config:<agent_id>:<configuration_revision>\". Datasource assignments and SLI query definitions are released only when the current heartbeat grant is bound to this exact revision; a grant behind desired configuration receives temporary configuration-unavailable without a snapshot or source credentials.",
   "type": "object",
-  "required": ["agent_id", "configuration_revision", "assignments"],
+  "required": ["agent_id", "configuration_revision", "assignments", "slis"],
   "properties": {
     "agent_id": { "type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
     "configuration_revision": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19, "$comment": "The validator also rejects values beyond signed int64 MaxInt64." },
@@ -12,6 +12,11 @@
       "type": "array",
       "maxItems": 256,
       "items": { "$ref": "#/$defs/datasourceAssignment" }
+    },
+    "slis": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/sliCollection" }
     }
   },
   "additionalProperties": true,
@@ -41,6 +46,22 @@
         "bearer_token": { "type": "string", "maxLength": 16384, "writeOnly": true },
         "polling_interval_seconds": { "type": "integer", "minimum": 15 },
         "settling_delay_seconds": { "const": 60 }
+      },
+      "additionalProperties": false
+    },
+    "sliCollection": {
+      "type": "object",
+      "required": ["sli_id", "measurement_revision", "datasource_id", "datasource_version", "measurement_kind", "component_mode", "good_query", "total_query", "effective_from"],
+      "properties": {
+        "sli_id": { "type": "string", "format": "uuid" },
+        "measurement_revision": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19 },
+        "datasource_id": { "type": "string", "format": "uuid" },
+        "datasource_version": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19 },
+        "measurement_kind": { "const": "event_counts" },
+        "component_mode": { "const": "interval_count" },
+        "good_query": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "total_query": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "effective_from": { "type": "string", "format": "date-time", "$comment": "The protocol validator requires UTC, microsecond precision, and alignment to the datasource cadence." }
       },
       "additionalProperties": false
     }

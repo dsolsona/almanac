@@ -87,8 +87,11 @@ No management endpoint may bypass those requirements to accelerate the first scr
 The readiness audit confirms all five prerequisites need either extension or new
 implementation; F1 supplies no agent management endpoint or reusable CLI profile.
 The management wire contracts, persistence, handlers and browser/CLI consumers
-now exist in F2-T02–T11. The next usable increment connects the remote agent and
-exposes its actual status, completing checkpoint 2 above.
+exist in F2-T02–T11. F2-T17/T19 completed connected-agent status and F2-T18/T20
+completed protected datasource management and remote diagnostics. The verified
+increment [F2-T22](../tasks/F2-T22.md) delivers: a native count-based SLI collected by its
+assigned agent, with persisted observations and UI/CLI visibility. Direct-producer
+ingestion remains required before the complete F2 checkpoint can be accepted.
 Existing lease/takeover choices are already accepted: the
 [review guide](../review-guide.md) explicitly treats inline proposal wording as
 decision traceability, not a repeated approval requirement.
@@ -118,10 +121,14 @@ UI boundaries, not around every backend edit.
 - [x] Deliver and verify registration through UI/API/CLI.
 - [x] Deliver and verify connected-agent status.
 - [x] Deliver and verify datasource diagnostics.
-- [ ] Deliver and verify collected and directly ingested observations.
+- [x] Deliver and verify native collected observations.
+- [ ] Deliver and verify directly ingested observations.
 
 F2-T01–T06 establish verified provider fixtures and authenticated management API.
 F2-T07–T11 complete browser and CLI management. F2-T17/T19 deliver connected-agent
 status. F2-T18/T20 deliver encrypted datasource management and remote diagnostics.
-The complete observation journey remains outstanding and paused; individual task
-records carry their verification evidence.
+F2-T22 is verified locally on `feat/f2-observations`, based on merged PR #38 at
+`06be8f0`. Its task record contains passing Linux unit/race/database evidence,
+normal Compose acceptance, the corrected host browser matrix and explicit verifier
+limitations. The increment is prepared for PR review. Direct-producer ingestion remains required
+before F2 acceptance.

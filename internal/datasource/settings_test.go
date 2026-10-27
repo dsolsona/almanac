@@ -67,3 +67,15 @@ func TestCapabilityRequiresExactProviderFormatAndDiagnosticOperation(t *testing.
 		t.Fatal("live_query was accepted before collection is implemented")
 	}
 }
+
+func TestCollectionRequiresExplicitProviderFormatAndOperation(t *testing.T) {
+	capability := agentprotocol.Capability{Provider: PrometheusProvider,
+		ConfigurationFormats: []string{PrometheusConfiguration}, Operations: []string{"collect"}}
+	if !SupportsOperation([]agentprotocol.Capability{capability}, "collect") {
+		t.Fatal("advertised Prometheus collection capability was rejected")
+	}
+	capability.Operations = []string{"connection_test"}
+	if SupportsOperation([]agentprotocol.Capability{capability}, "collect") {
+		t.Fatal("diagnostic capability implicitly enabled collection")
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -158,6 +159,104 @@ func TestWelcomeRenewalSequenceMatchesPendingState(t *testing.T) {
 	}
 }
 
+func TestDelayedWelcomeUsesLowerBoundForSettlingAndUpperBoundForLeaseExpiry(t *testing.T) {
+	client := &client{serverClock: &serverClockEstimate{}}
+	sentAt := time.Now().Add(-4 * time.Second)
+	receivedAt := sentAt.Add(4 * time.Second)
+	serverTime := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	client.setServerTimeAt(serverTime, sentAt, receivedAt)
+	if got := client.serverTimeAt(receivedAt); !got.Equal(serverTime) {
+		t.Fatalf("scheduling clock at welcome receipt = %s, want lower bound %s", got, serverTime)
+	}
+	if got := client.leaseServerTimeAt(receivedAt); !got.Equal(serverTime.Add(4 * time.Second)) {
+		t.Fatalf("lease clock at welcome receipt = %s, want conservative upper bound", got)
+	}
+
+	lease := testLease(serverTime, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef", serverTime.Add(time.Minute))
+	freshHello := sentAt.Add(10 * time.Second)
+	freshWelcome := freshHello.Add(time.Second)
+	if _, err := leaseDeadlineFromResponse(lease, serverTime.Add(10*time.Second), freshHello, freshWelcome); err != nil {
+		t.Fatalf("fresh reconnect welcome rejected because prior request was old: %v", err)
+	}
+	if _, err := leaseDeadlineFromResponse(lease, serverTime.Add(10*time.Second), sentAt, freshWelcome); err == nil {
+		t.Fatal("stale heartbeat send time was treated as fresh response evidence")
+	}
+}
+
+func TestHeartbeatAckAfterReconnectUsesOriginalAuthorityAndFreshReplay(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	nonce := testNonce(22)
+	c := testClient(now, nonce)
+	c.pendingSentAt = time.Now().Add(-10 * time.Second)
+	c.pendingServerAtSend = now.Add(-10 * time.Second)
+	c.pendingLatestSentAt = time.Now()
+	wire, err := json.Marshal(testAck(now, nonce))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.handleMessage(t.Context(), nil, jsontext.Value(wire)); err != nil || c.pending != nil || c.sequence != 1 {
+		t.Fatalf("fresh replay acknowledgment did not resolve old pending heartbeat: %v", err)
+	}
+	c = testClient(now, nonce)
+	c.pendingSentAt = time.Now().Add(-20 * time.Second)
+	c.pendingServerAtSend = now.Add(-20 * time.Second)
+	c.pendingLatestSentAt = time.Now().Add(-6 * time.Second)
+	if err := c.handleMessage(t.Context(), nil, jsontext.Value(wire)); err == nil || c.pending == nil {
+		t.Fatal("stale replay response was accepted")
+	}
+}
+
+func TestReconnectAckReconcilesBeforeCollectionResumes(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	nonce := testNonce(23)
+	id := "00000000-0000-4000-8000-000000000010"
+	sourceID := "00000000-0000-4000-8000-000000000020"
+	snapshot := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "1",
+		Assignments: []agentprotocol.DatasourceAssignment{{DatasourceID: sourceID, DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}},
+		SLIs:        []agentprotocol.SLICollection{{SLIID: id, MeasurementRevision: "1", DatasourceID: sourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "vector(1)", TotalQuery: "vector(2)", EffectiveFrom: now.Truncate(15 * time.Second).Add(-2 * time.Minute)}}}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("ETag", `"agent-config:`+testAgentID+`:1"`)
+		_ = json.MarshalWrite(w, snapshot)
+	}))
+	defer server.Close()
+	c := testClient(now, nonce)
+	c.opts.backendURL, c.http, c.clockSafe = server.URL, server.Client(), true
+	c.configurationPending = true // reconnect welcome with an unresolved heartbeat
+	c.pendingSentAt = time.Now().Add(-10 * time.Second)
+	c.pendingServerAtSend = now.Add(-10 * time.Second)
+	c.pendingLatestSentAt = time.Now()
+	c.collections = newCollectionRunner(c)
+	c.collections.SetPaused(true)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var workers sync.WaitGroup
+	launched := make(chan struct{}, 1)
+	c.collections.root, c.collections.workers = ctx, &workers
+	c.collections.launchCollection = func(context.Context, collectionDefinition) { launched <- struct{}{} }
+	ack := testAck(now, nonce)
+	ack.Payload.ExecutionLease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: id, MeasurementRevision: "1"}}
+	wire, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.handleMessage(t.Context(), nil, jsontext.Value(wire)); err != nil {
+		t.Fatalf("replay ACK: %v", err)
+	}
+	if requests.Load() != 1 || c.configurationPending || c.collections.paused {
+		t.Fatal("collection resumed without successful configuration reconciliation")
+	}
+	c.collections.nextIntervalEnd[collectionKey(snapshot.SLIs[0])] = now.Truncate(15 * time.Second).Add(-time.Minute)
+	c.collections.dispatchDue(ctx)
+	select {
+	case <-launched:
+	case <-time.After(time.Second):
+		t.Fatal("reconciled collection did not dispatch")
+	}
+	workers.Wait()
+}
+
 func TestRetryBackoffCapsAndStopsOnCancellation(t *testing.T) {
 	want := []time.Duration{
 		time.Second, 2 * time.Second, 4 * time.Second,
@@ -221,7 +320,7 @@ func TestRunSessionReplaysPendingHeartbeatAfterLostAck(t *testing.T) {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/api/agent/v1/configuration", func(w http.ResponseWriter, _ *http.Request) {
 		snapshot := agentprotocol.ConfigurationSnapshot{
-			AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{},
+			AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{}, SLIs: []agentprotocol.SLICollection{},
 		}
 		data, err := json.Marshal(snapshot)
 		if err != nil {
@@ -377,6 +476,7 @@ func writeTestMessage(ctx context.Context, conn *websocket.Conn, message any) er
 
 func testClient(now time.Time, nonce string) *client {
 	lease := testLease(now, "lease-current", now.Add(time.Hour))
+	sentAt := time.Now()
 	return &client{
 		agentID: testAgentID, generation: "1", revision: "1", resume: testNonce(3),
 		lease: lease, sequence: 0,
@@ -385,7 +485,8 @@ func testClient(now time.Time, nonce string) *client {
 			Scheduler: "ready", CollectionProgress: "idle",
 			LeaseID: lease.LeaseID, RenewalSequence: "0",
 		},
-		serverClock: &serverClockEstimate{serverTime: now, serverAt: time.Now()},
+		pendingSentAt: sentAt, pendingLatestSentAt: sentAt, pendingServerAtSend: now,
+		serverClock: &serverClockEstimate{serverTime: now, serverAt: sentAt},
 	}
 }
 

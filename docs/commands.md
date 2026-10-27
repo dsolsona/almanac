@@ -45,5 +45,33 @@ not replace the full required integration gate.
 Fixture credentials above belong only to the isolated local acceptance database.
 Keep real credentials out of commands, logs and published artifacts.
 
+Local Compose startup requires host curl as well as Docker Compose and Make. It
+checks host HTTPS readiness with the application's public certificate before
+reporting success; a failed check preserves the running services and volumes.
+
 Git publication operations must likewise match current approval rules and existing
 user authorization. Do not merge PRs merely because publishing them was authorized.
+
+## Linux verifier entry points
+
+The project defines these fixed-purpose commands for the isolated Linux lane. Their
+presence here does not grant execution approval; check the active environment's exact
+command approval before running them.
+
+```sh
+make setup SETUP_MODE=verification
+make verify VERIFY_MODE=linux
+make verify VERIFY_MODE=linux-sli
+```
+
+Setup may download pinned tool and browser dependencies into a local Docker image.
+Verification is offline and rejects a stale setup fingerprint. It does not accept
+command passthrough, environment forwarding, a custom database URL, or a host Docker
+socket mount. The catalogue browser matrix and real integration journeys are part of
+the fixed sequence; the existing host Compose journey remains separately selectable.
+The focused SLI browser journey uses the fixed `BROWSER_SCENARIO=slis` selector,
+which maps to `TestIntegrationExecutableBrowserSLICollectionJourney` in the integrated
+candidate. The `linux-sli` mode uses the same isolated database fixture, candidate
+snapshot, image fingerprint, cleanup and sanitized artifact export as the full Linux
+lane, but executes only that real journey. It is focused evidence and does not replace
+the full gate. These selector descriptions do not approve a new invocation.

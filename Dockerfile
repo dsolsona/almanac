@@ -17,6 +17,7 @@ COPY internal/ ./internal/
 COPY web/assets.go ./web/assets.go
 COPY --from=web /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac ./cmd/almanac
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac-agent ./cmd/almanac-agent
 
 # Small local runtime with TLS, certificate validation, and volume locking tools.
 FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 AS runtime
@@ -26,6 +27,7 @@ RUN apt-get update \
     && groupadd --gid 10001 almanac \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin almanac
 COPY --from=build /out/almanac /usr/local/bin/almanac
+COPY --from=build /out/almanac-agent /usr/local/bin/almanac-agent
 COPY deploy/local/init.sh /usr/local/lib/almanac/init.sh
 COPY deploy/local/init-test.sh /usr/local/lib/almanac/init-test.sh
 USER 10001:10001

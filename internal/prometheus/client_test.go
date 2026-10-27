@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSafeDialFallsBackAcrossAllowedLoopbackAddresses(t *testing.T) {
@@ -50,6 +51,26 @@ func TestQueryPreviewUsesConfiguredBearerAndReturnsBoundedVector(t *testing.T) {
 	}
 	if strings.Contains(result.Message, "preview-secret") {
 		t.Fatal("result disclosed configured credentials")
+	}
+}
+
+func TestQueryAtUsesCanonicalIntervalEnd(t *testing.T) {
+	want := "2026-10-27T12:00:15.000123Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("time") != want {
+			t.Errorf("evaluation time = %q, want %q", r.URL.Query().Get("time"), want)
+		}
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1761566415,"99"]}]}}`))
+	}))
+	defer server.Close()
+	client, err := NewClient(Config{Endpoint: server.URL, AllowedDestinations: []string{"127.0.0.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 27, 12, 0, 15, 123000, time.UTC)
+	result, err := client.QueryAt(t.Context(), "sum(increase(requests_total[15s]))", at)
+	if err != nil || result.Class != "complete" || result.Series[0].Value != "99" {
+		t.Fatalf("QueryAt result = %+v, %v", result, err)
 	}
 }
 

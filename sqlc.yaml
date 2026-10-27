@@ -15,6 +15,8 @@ sql:
       - internal/storage/migrations/0009_agent_ownership.sql
       - internal/storage/migrations/0010_agent_runtime.sql
       - internal/storage/migrations/0011_datasources.sql
+      - internal/storage/migrations/0012_diagnostic_result_digest.sql
+      - internal/storage/migrations/0013_sli_observations.sql
     gen:
       go:
         package: dbgen

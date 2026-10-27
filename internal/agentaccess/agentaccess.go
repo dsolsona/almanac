@@ -7,6 +7,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/identity"
+	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
 )
@@ -111,5 +112,35 @@ func (s *Service) CompleteDiagnostic(ctx context.Context, token string, generati
 		return errors.Join(ErrUnavailable, err)
 	default:
 		return nil
+	}
+}
+
+func (s *Service) IngestObservation(ctx context.Context, token string, item sli.ObservationItem) (storage.SliIngestResult, error) {
+	if err := ctx.Err(); err != nil {
+		return storage.SliIngestResult{}, errors.Join(ErrCancelled, err)
+	}
+	if s == nil || s.now == nil {
+		return storage.SliIngestResult{}, ErrUnavailable
+	}
+	credentialID, verifier, err := identity.AgentTokenVerifier(token)
+	if err != nil {
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected", ErrorCode: "invalid_credential"}, ErrInvalidCredential
+	}
+	result, err := storage.IngestAgentObservation(ctx, s.databaseURL, credentialID, verifier, item, s.now)
+	switch {
+	case errors.Is(err, storage.ErrInvalidAgentCredential):
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected", ErrorCode: "invalid_credential"}, ErrInvalidCredential
+	case errors.Is(err, storage.ErrObservationDenied):
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected", ErrorCode: "execution_not_authorized"}, nil
+	case errors.Is(err, storage.ErrObservationInvalid):
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected", ErrorCode: "invalid_observation"}, nil
+	case errors.Is(err, storage.ErrObservationConflict):
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "conflicting", ErrorCode: "canonical_interval_conflict"}, nil
+	case errors.Is(err, storage.ErrCancelled):
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "retryable", ErrorCode: "temporarily_unavailable"}, errors.Join(ErrCancelled, err)
+	case err != nil:
+		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "retryable", ErrorCode: "temporarily_unavailable"}, errors.Join(ErrUnavailable, err)
+	default:
+		return result, nil
 	}
 }

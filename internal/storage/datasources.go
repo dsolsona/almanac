@@ -399,19 +399,38 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	current, err := queries.LockDatasource(ctx, id)
+	observed, err := queries.GetDatasource(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, ErrDatasourceNotFound
 	}
 	if err != nil {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource update read failed", err)
 	}
-	if current.Version != input.ExpectedVersion {
+	if observed.Version != input.ExpectedVersion {
 		return DatasourceRecord{}, ErrDatasourceConflict
 	}
 	newAgentID, _ := canonicalUUID(input.Settings.AgentID)
-	if err := lockDatasourceAgents(ctx, queries, current.AgentID, newAgentID); err != nil {
+	if err := lockDatasourceAgents(ctx, queries, observed.AgentID, newAgentID); err != nil {
 		return DatasourceRecord{}, err
+	}
+	current, err := queries.LockDatasource(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DatasourceRecord{}, ErrDatasourceNotFound
+	}
+	if err != nil {
+		return DatasourceRecord{}, operationError(ctx, "storage: datasource update lock failed", err)
+	}
+	if current.Version != input.ExpectedVersion || current.AgentID != observed.AgentID {
+		return DatasourceRecord{}, ErrDatasourceConflict
+	}
+	if newAgentID != current.AgentID || int32(input.Settings.PollingIntervalSeconds) != current.PollingIntervalSeconds {
+		hasSlis, err := queries.HasSLIsForDatasource(ctx, current.ID)
+		if err != nil {
+			return DatasourceRecord{}, operationError(ctx, "storage: datasource SLI guard failed", err)
+		}
+		if hasSlis {
+			return DatasourceRecord{}, ErrDatasourceMeasurementConflict
+		}
 	}
 	installationID, err := loadInstallationID(ctx, tx)
 	if err != nil {
@@ -604,7 +623,7 @@ func advanceAgentConfiguration(ctx context.Context, queries *dbgen.Queries, agen
 		return 0, ErrAgentConflict
 	}
 	revision := latest + 1
-	snapshot, err := json.Marshal(agentprotocol.ConfigurationSnapshot{AgentID: uuidFromPG(agentID), ConfigurationRevision: strconv.FormatInt(revision, 10), Assignments: []agentprotocol.DatasourceAssignment{}})
+	snapshot, err := json.Marshal(agentprotocol.ConfigurationSnapshot{AgentID: uuidFromPG(agentID), ConfigurationRevision: strconv.FormatInt(revision, 10), Assignments: []agentprotocol.DatasourceAssignment{}, SLIs: []agentprotocol.SLICollection{}})
 	if err != nil {
 		return 0, errors.New("storage: datasource agent configuration encoding failed")
 	}

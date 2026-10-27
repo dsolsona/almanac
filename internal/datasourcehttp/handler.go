@@ -718,6 +718,8 @@ func (h *Handler) writeStorageError(w http.ResponseWriter, err error, requestID 
 		h.writeProblem(w, 404, "not_found", requestID)
 	case errors.Is(err, storage.ErrDatasourceConflict), errors.Is(err, storage.ErrAgentConflict):
 		h.writeProblem(w, 409, "conflict", requestID)
+	case errors.Is(err, storage.ErrDatasourceMeasurementConflict):
+		h.writeProblem(w, 409, "measurement_conflict", requestID)
 	case errors.Is(err, storage.ErrDiagnosticConflict):
 		h.writeProblem(w, 409, "conflict", requestID)
 	case errors.Is(err, storage.ErrDiagnosticNotFound):

@@ -384,6 +384,7 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 		}
 	})
 	db := testpostgres.Connect(t, databaseURL)
+	lastEvidence := "status=unknown reachability=unknown desired=unknown applied=unknown scheduler=unknown progress=unknown grants=unknown heartbeat=unknown"
 	for deadline := time.Now().Add(35 * time.Second); time.Now().Before(deadline); {
 		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/agents/"+created.Result.Agent.ID, nil)
 		if err != nil {
@@ -394,12 +395,14 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 			var detail api.Agent
 			body, readErr := io.ReadAll(response.Body)
 			response.Body.Close()
-			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && detail.Runtime != nil && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil {
+			if readErr == nil && response.StatusCode == http.StatusOK && json.Unmarshal(body, &detail) == nil && detail.Runtime != nil {
 				var grants int
 				if err := db.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_agent_execution_grants WHERE agent_id=$1", created.Result.Agent.ID).Scan(&grants); err != nil {
 					t.Fatal("read connected-agent heartbeat grants failed")
 				}
-				if grants >= 3 && detail.Runtime.SchedulerHealth == api.Ready && detail.Runtime.CollectionProgress == api.AgentRuntimeStatusCollectionProgressIdle {
+				lastEvidence = fmt.Sprintf("status=%d reachability=%s desired=%s applied=%s scheduler=%s progress=%s grants=%d heartbeat=%t", response.StatusCode,
+					safeDiagnosticToken(string(detail.Runtime.Reachability)), safeDiagnosticToken(detail.Runtime.DesiredConfigurationRevision), safeDiagnosticToken(detail.Runtime.AppliedConfigurationRevision), safeDiagnosticToken(string(detail.Runtime.SchedulerHealth)), safeDiagnosticToken(string(detail.Runtime.CollectionProgress)), grants, detail.Runtime.LastHeartbeatAt != nil)
+				if grants >= 3 && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil && detail.Runtime.SchedulerHealth == api.Ready && detail.Runtime.CollectionProgress == api.AgentRuntimeStatusCollectionProgressNotStarted {
 					certificate, err := os.ReadFile(certFile)
 					if err != nil {
 						t.Fatal("read public backend certificate for browser check failed")
@@ -418,7 +421,7 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatal("separate agent did not apply configuration and persist two heartbeat renewals")
+	t.Fatalf("separate agent did not apply configuration and persist two heartbeat renewals: %s", lastEvidence)
 	return connectedAgentJourney{}
 }
 
@@ -822,49 +825,54 @@ func datasourceTestCertificate() ([]byte, []byte, error) {
 
 func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, certificatePEM []byte) string {
 	t.Helper()
-	digest := sha256.Sum256([]byte(dir))
-	name := "almanac-f2-t20-" + hex.EncodeToString(digest[:6])
-	image := "victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df"
-	start := exec.CommandContext(t.Context(), "docker", "run", "--detach", "--rm", "--name", name,
-		"--publish", "127.0.0.1::8428/tcp",
-		"--mount", "type=bind,src="+certificatePath+",dst=/tls/cert.pem,readonly",
-		"--mount", "type=bind,src="+keyPath+",dst=/tls/key.pem,readonly",
-		image, "-tls", "-tlsCertFile=/tls/cert.pem", "-tlsKeyFile=/tls/key.pem")
-	container, err := start.Output()
-	if err != nil || strings.TrimSpace(string(container)) == "" {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) && len(exitError.Stderr) != 0 {
-			message := strings.TrimSpace(string(exitError.Stderr))
-			if len(message) > 512 {
-				message = message[:512]
+	endpoint := ""
+	if fixedLinuxVerifierContext(t) {
+		endpoint = startVictoriaMetricsBinary(t, dir, certificatePath, keyPath)
+	} else {
+		digest := sha256.Sum256([]byte(dir))
+		name := "almanac-f2-t20-" + hex.EncodeToString(digest[:6])
+		image := "victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df"
+		start := exec.CommandContext(t.Context(), "docker", "run", "--detach", "--rm", "--name", name,
+			"--publish", "127.0.0.1::8428/tcp",
+			"--mount", "type=bind,src="+certificatePath+",dst=/tls/cert.pem,readonly",
+			"--mount", "type=bind,src="+keyPath+",dst=/tls/key.pem,readonly",
+			image, "-tls", "-tlsCertFile=/tls/cert.pem", "-tlsKeyFile=/tls/key.pem")
+		container, err := start.Output()
+		if err != nil || strings.TrimSpace(string(container)) == "" {
+			var exitError *exec.ExitError
+			if errors.As(err, &exitError) && len(exitError.Stderr) != 0 {
+				message := strings.TrimSpace(string(exitError.Stderr))
+				if len(message) > 512 {
+					message = message[:512]
+				}
+				t.Fatalf("start pinned isolated VictoriaMetrics fixture failed: %s", message)
 			}
-			t.Fatalf("start pinned isolated VictoriaMetrics fixture failed: %s", message)
+			t.Fatalf("start pinned isolated VictoriaMetrics fixture failed: %v", err)
 		}
-		t.Fatalf("start pinned isolated VictoriaMetrics fixture failed: %v", err)
-	}
-	containerID := strings.TrimSpace(string(container))
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		stop := exec.CommandContext(ctx, "docker", "stop", containerID)
-		stop.Stdout, stop.Stderr = io.Discard, io.Discard
-		if err := stop.Run(); err != nil {
-			t.Error("stop isolated VictoriaMetrics fixture failed")
+		containerID := strings.TrimSpace(string(container))
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			stop := exec.CommandContext(ctx, "docker", "stop", containerID)
+			stop.Stdout, stop.Stderr = io.Discard, io.Discard
+			if err := stop.Run(); err != nil {
+				t.Error("stop isolated VictoriaMetrics fixture failed")
+			}
+		})
+		portCommand := exec.CommandContext(t.Context(), "docker", "port", containerID, "8428/tcp")
+		portOutput, err := portCommand.Output()
+		if err != nil {
+			t.Fatal("read isolated VictoriaMetrics port failed")
 		}
-	})
-	portCommand := exec.CommandContext(t.Context(), "docker", "port", containerID, "8428/tcp")
-	portOutput, err := portCommand.Output()
-	if err != nil {
-		t.Fatal("read isolated VictoriaMetrics port failed")
+		_, port, err := net.SplitHostPort(strings.TrimSpace(string(portOutput)))
+		if err != nil {
+			t.Fatal("parse isolated VictoriaMetrics port failed")
+		}
+		if _, err := strconv.Atoi(port); err != nil {
+			t.Fatal("isolated VictoriaMetrics port is invalid")
+		}
+		endpoint = "https://localhost:" + port
 	}
-	_, port, err := net.SplitHostPort(strings.TrimSpace(string(portOutput)))
-	if err != nil {
-		t.Fatal("parse isolated VictoriaMetrics port failed")
-	}
-	if _, err := strconv.Atoi(port); err != nil {
-		t.Fatal("isolated VictoriaMetrics port is invalid")
-	}
-	endpoint := "https://localhost:" + port
 	block, _ := pem.Decode(certificatePEM)
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -887,6 +895,156 @@ func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, ce
 	}
 	t.Fatal("isolated VictoriaMetrics fixture did not become ready over verified HTTPS")
 	return ""
+}
+
+func fixedLinuxVerifierContext(t *testing.T) bool {
+	t.Helper()
+	value, set := os.LookupEnv("ALMANAC_LINUX_VERIFICATION_CONTAINER")
+	if !set || value == "" {
+		return false
+	}
+	if value != "1" {
+		t.Fatalf("ALMANAC_LINUX_VERIFICATION_CONTAINER has unsupported value %q", value)
+	}
+	marker, err := os.ReadFile("/etc/almanac-linux-verifier")
+	if err != nil || string(bytes.TrimSpace(marker)) != "F2-T22-linux-verifier-v1" {
+		t.Fatal("fixed Linux verifier marker is missing or invalid")
+	}
+	return true
+}
+
+func startVictoriaMetricsBinary(t *testing.T, dir, certificatePath, keyPath string) string {
+	t.Helper()
+	executable := "/usr/local/bin/victoria-metrics-prod"
+	if _, err := os.Stat(executable); err != nil {
+		t.Fatalf("pinned VictoriaMetrics executable is unavailable: %v", err)
+	}
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal("resolve VictoriaMetrics diagnostic artifact root failed")
+	}
+	artifactDir, err := os.MkdirTemp(filepath.Join(root, ".local"), "browser-sli-victoriametrics-")
+	if err != nil {
+		t.Fatal("create bounded VictoriaMetrics diagnostic artifact failed")
+	}
+	stderrPath := filepath.Join(artifactDir, "stderr.log")
+	stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatal("create VictoriaMetrics stderr artifact failed")
+	}
+	stderr := &boundedStderrWriter{file: stderrFile}
+	t.Logf("fixed verifier VictoriaMetrics stderr artifact: %s", stderrPath)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		_ = stderr.Close()
+		t.Fatal("reserve loopback VictoriaMetrics port failed")
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		_ = stderr.Close()
+		t.Fatal("release loopback VictoriaMetrics port failed")
+	}
+	storageDir, err := os.MkdirTemp(dir, "victoria-metrics-storage-")
+	if err != nil {
+		_ = stderr.Close()
+		t.Fatal("create isolated VictoriaMetrics storage directory failed")
+	}
+	processContext, cancel := context.WithCancel(context.Background())
+	process := exec.CommandContext(processContext, executable,
+		"-httpListenAddr=127.0.0.1:"+strconv.Itoa(port),
+		"-storageDataPath="+storageDir,
+		"-tls", "-tlsCertFile="+certificatePath, "-tlsKeyFile="+keyPath)
+	process.Stdout, process.Stderr = io.Discard, stderr
+	if err := process.Start(); err != nil {
+		cancel()
+		if closeErr := stderr.Close(); closeErr != nil {
+			t.Errorf("close VictoriaMetrics stderr artifact failed: %v", closeErr)
+		}
+		t.Fatalf("start pinned VictoriaMetrics executable failed; inspect bounded stderr artifact %s: %v", stderrPath, err)
+	}
+	processDone := make(chan struct{})
+	var processErr error
+	go func() {
+		processErr = process.Wait()
+		close(processDone)
+	}()
+	t.Cleanup(func() {
+		defer func() {
+			if err := stderr.Close(); err != nil {
+				t.Errorf("close VictoriaMetrics stderr artifact failed: %v", err)
+			}
+		}()
+		defer cancel()
+		select {
+		case <-processDone:
+			if processErr != nil {
+				t.Errorf("isolated VictoriaMetrics process exited unexpectedly: %v", processErr)
+			}
+			return
+		default:
+		}
+		if err := process.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Errorf("stop isolated VictoriaMetrics process failed: %v", err)
+		}
+		select {
+		case <-processDone:
+			if processErr != nil {
+				t.Errorf("stop isolated VictoriaMetrics process failed: %v", processErr)
+			}
+		case <-time.After(10 * time.Second):
+			cancel()
+			select {
+			case <-processDone:
+				t.Error("isolated VictoriaMetrics process exceeded the 10-second stop bound and was killed")
+			case <-time.After(5 * time.Second):
+				t.Error("isolated VictoriaMetrics process did not exit after cancellation")
+			}
+		}
+	})
+	return "https://localhost:" + strconv.Itoa(port)
+}
+
+const maxVictoriaMetricsStderrBytes = 16 * 1024
+
+const victoriaMetricsStderrTruncationMarker = "\n[VictoriaMetrics stderr truncated]\n"
+
+type boundedStderrWriter struct {
+	file      *os.File
+	written   int
+	truncated bool
+}
+
+func (writer *boundedStderrWriter) Write(data []byte) (int, error) {
+	limit := maxVictoriaMetricsStderrBytes - len(victoriaMetricsStderrTruncationMarker)
+	remaining := limit - writer.written
+	if remaining <= 0 {
+		writer.truncated = writer.truncated || len(data) > 0
+		return len(data), nil
+	}
+	chunk := data
+	if len(chunk) > remaining {
+		chunk = chunk[:remaining]
+		writer.truncated = true
+	}
+	written, err := writer.file.Write(chunk)
+	writer.written += written
+	if err != nil {
+		return written, err
+	}
+	if written != len(chunk) {
+		return written, io.ErrShortWrite
+	}
+	return len(data), nil
+}
+
+func (writer *boundedStderrWriter) Close() error {
+	if writer.truncated {
+		if _, err := io.WriteString(writer.file, victoriaMetricsStderrTruncationMarker); err != nil {
+			closeErr := writer.file.Close()
+			return errors.Join(err, closeErr)
+		}
+	}
+	return writer.file.Close()
 }
 
 func seedVictoriaMetricsTransferSeries(t *testing.T, endpoint string, certificatePEM []byte) {

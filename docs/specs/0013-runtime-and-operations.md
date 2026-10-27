@@ -113,7 +113,8 @@ Never reopen a database snapshot with its restored bearer tokens still valid.
 The maintainer requested a container-only local workflow on 2026-10-26.
 `make bootstrap` builds and starts the application and PostgreSQL with Docker
 Compose, automatically preparing protected local credentials, a localhost TLS
-certificate and the schema. Only Docker with Compose and Make are host prerequisites.
+certificate and the schema. Docker with Compose, Make and curl are host prerequisites.
+The maintainer approved adding curl and host readiness verification on 2026-10-27.
 `make run` and `make start` perform a cached container build of the current checkout
 before starting the stack, including when the local image is absent. `make bootstrap`
 uses the same path without a duplicate build. Invalid ports fail before build/start
@@ -135,7 +136,10 @@ Use named volumes and a dedicated Compose project, separate from integration
 fixtures and the design catalogue. Expose the app on loopback (HTTPS port 18088
 by default). The application runs without
 root and reads protected secret files. Initialization and migrations must complete
-before serving. Readiness failures return an unsuccessful command result rather
+before serving. Before announcing readiness, startup verifies the host IPv4 loopback
+HTTPS endpoint against the application's public certificate and requires a 200
+readiness response. An unreachable or occupied host port fails without deleting
+services or data. Readiness failures return an unsuccessful command result rather
 than announcing a usable app. Startup prints its URL and how to obtain the initial
 admin password; secret disclosure is an explicit terminal action, never container
 logs. A generated local certificate may need a browser exception; bootstrap never
