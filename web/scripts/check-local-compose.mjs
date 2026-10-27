@@ -13,17 +13,19 @@ if (process.argv.length !== 2 && !fixtureMode) throw new Error('Unsupported argu
 mkdirSync(join(root, '.local'), { recursive: true });
 const artifacts = mkdtempSync(join(root, '.local/compose-check-'));
 const buildContext = mkdtempSync('/tmp/almanac-compose-source-');
-for (const name of ['.dockerignore', 'Dockerfile', 'Makefile', 'compose.yaml', 'go.mod', 'go.sum',
-  'cmd', 'internal', 'deploy/local', 'web/assets.go', 'web/index.html', 'web/package.json',
-  'web/package-lock.json', 'web/tsconfig.json', 'web/vite.config.ts', 'web/src', 'web/public']) {
-  const destination = join(buildContext, name);
-  const source = join(root, name);
-  mkdirSync(dirname(destination), { recursive: true });
-  cpSync(source, destination, { recursive: true, filter: (path) => {
-    const nested = path.slice(source.length).replaceAll('\\', '/');
-    return !/(?:^|\/)(?:\.env(?:\.[^/]*)?|\.agents|\.codex|\.aws|\.git|\.local|\.worktrees|node_modules)(?:\/|$)/.test(nested)
-      && !/(?:^|\/)[^/]+\.(?:pem|key|secret|secrets)$/.test(nested);
-  } });
+function prepareBuildContext() {
+  for (const name of ['.dockerignore', 'Dockerfile', 'Makefile', 'compose.yaml', 'go.mod', 'go.sum',
+    'cmd', 'internal', 'deploy/local', 'web/assets.go', 'web/index.html', 'web/package.json',
+    'web/package-lock.json', 'web/tsconfig.json', 'web/vite.config.ts', 'web/src', 'web/public']) {
+    const destination = join(buildContext, name);
+    const source = join(root, name);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(source, destination, { recursive: true, filter: (path) => {
+      const nested = path.slice(source.length).replaceAll('\\', '/');
+      return !/(?:^|\/)(?:\.env(?:\.[^/]*)?|\.agents|\.codex|\.aws|\.git|\.local|\.worktrees|node_modules)(?:\/|$)/.test(nested)
+        && !/(?:^|\/)[^/]+\.(?:pem|key|secret|secrets)$/.test(nested);
+    } });
+  }
 }
 const sourceMarker = `<!-- compose source refresh ${randomBytes(12).toString('hex')} -->`;
 const project = `almanac-check-${process.pid}-${randomBytes(4).toString('hex')}`;
@@ -214,6 +216,8 @@ function cleanup() {
 }
 
 try {
+  stage = 'prepare isolated source context';
+  prepareBuildContext();
   if (fixtureMode) console.log(JSON.stringify({ owned: true, project, artifacts }));
   if (fixtureMode) {
     stage = 'cancellation fixture bootstrap';
@@ -276,7 +280,7 @@ try {
   const completed = await databaseState();
   assert.match(completed.trim(), /\|t$/);
   stage = 'invalid port fails before changing running stack';
-  await assert.rejects(command('make', ['run'], { environment: { ...env, ALMANAC_PORT: 'invalid' } }));
+  await assert.rejects(command('make', ['run'], { cwd: buildContext, environment: { ...env, ALMANAC_PORT: 'invalid' } }));
   assert.match(lastFailure.stderr, /ALMANAC_PORT must/);
   writeFileSync(join(artifacts, 'invalid-port.json'), JSON.stringify(lastFailure), { mode: 0o600 });
   lastFailure = undefined;
@@ -287,7 +291,8 @@ try {
   const occupied = createServer();
   await new Promise((resolveListen, reject) => { occupied.once('error', reject); occupied.listen(18086, '127.0.0.1', resolveListen); });
   try {
-    await assert.rejects(command('make', ['run']));
+    await assert.rejects(command('make', ['run'], { cwd: buildContext, timeout: 600_000 }));
+    assert.match(`${lastFailure.stdout}\n${lastFailure.stderr}`, /(?:address already in use|port is already allocated|failed to bind host port)/i);
     assert.ok(!lastFailure.stdout.includes('Almanac is ready'));
     writeFileSync(join(artifacts, 'occupied-port.json'), JSON.stringify(lastFailure), { mode: 0o600 });
     lastFailure = undefined;
