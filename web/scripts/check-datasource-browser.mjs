@@ -190,6 +190,58 @@ stage = 'browser launch';
   stage = 'UI datasource update confirmation';
   await expect(page.getByRole('status').filter({ hasText: 'Datasource settings saved.' })).toBeVisible();
   await expect(page.getByLabel('Display name', { exact: true })).toHaveValue(nextName);
+
+  stage = 'batch saved Basic and Bearer datasource fixtures';
+  const authContext = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/auth/context', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', credentials: 'same-origin', cache: 'no-store',
+    });
+    return { status: response.status, body: await response.json() };
+  });
+  assert.equal(authContext.status, 200);
+  assert.equal(typeof authContext.body.csrf_token, 'string');
+  const createSavedAuthSource = async (record) => page.evaluate(async ({ csrfToken, source }) => {
+    const response = await fetch('/api/v1/datasources', {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken, 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify(source),
+    });
+    return { status: response.status, body: await response.json(), etag: response.headers.get('ETag') };
+  }, { csrfToken: authContext.body.csrf_token, source: record });
+  const authSourcePrefix = `browser-auth-${fixture.datasource_id.slice(0, 8)}`;
+  const basicCreate = await createSavedAuthSource({
+    name: `${authSourcePrefix}-basic`, display_name: `Browser auth Basic ${fixture.datasource_id.slice(0, 8)}`,
+    provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: `${fixture.auth_endpoint}/basic`,
+    tls: { insecure_skip_verify: false, ca_pem: fixture.auth_ca_pem },
+    authentication: { mode: 'basic', username: 'browser-user', password_secret: { action: 'replace', value: fixture.basic_password }, token_secret: { action: 'clear' } },
+    polling_interval_seconds: 60, agent_id: fixture.agent_id,
+  });
+  assert.equal(basicCreate.status, 201);
+  const basicSource = basicCreate.body;
+  const basicID = basicSource.id;
+  assert.equal(basicSource.authentication.password_configured, true);
+  assert.equal(basicSource.authentication.token_configured, false);
+  assert.equal('password' in basicSource.authentication, false);
+  assert.equal('password_secret' in basicSource.authentication, false);
+  const bearerCreate = await createSavedAuthSource({
+    name: `${authSourcePrefix}-bearer`, display_name: `Browser auth Bearer ${fixture.datasource_id.slice(0, 8)}`,
+    provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: `${fixture.auth_endpoint}/bearer`,
+    tls: { insecure_skip_verify: false, ca_pem: fixture.auth_ca_pem },
+    authentication: { mode: 'bearer', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'replace', value: fixture.bearer_token } },
+    polling_interval_seconds: 60, agent_id: fixture.agent_id,
+  });
+  assert.equal(bearerCreate.status, 201);
+  const bearerSource = bearerCreate.body;
+  const bearerID = bearerSource.id;
+  assert.equal(bearerSource.authentication.password_configured, false);
+  assert.equal(bearerSource.authentication.token_configured, true);
+  assert.equal('token' in bearerSource.authentication, false);
+  assert.equal('token_secret' in bearerSource.authentication, false);
+  assert.equal(basicCreate.etag, `"datasource:${basicID}:1"`);
+  assert.equal(bearerCreate.etag, `"datasource:${bearerID}:1"`);
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: nextName, exact: true })).toBeVisible();
   stage = 'UI reports datasource configuration ready';
   await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole('button', { name: 'Run preview', exact: true })).toBeEnabled();
@@ -264,34 +316,6 @@ stage = 'browser launch';
   stage = 'diagnostic result secret redaction';
   assert.equal(await page.locator('body').innerText().then((text) => text.includes(passwordForRedaction)), false);
 
-  stage = 'saved Basic datasource creation';
-  await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
-  await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
-  const authSourceName = `browser-auth-${fixture.datasource_id.slice(0, 8)}`;
-  await page.getByLabel('Name', { exact: true }).fill(authSourceName);
-  await page.getByLabel('Display name', { exact: true }).fill(`Browser auth ${fixture.datasource_id.slice(0, 8)}`);
-  await page.getByLabel('Prometheus endpoint', { exact: true }).fill(`${fixture.auth_endpoint}/basic`);
-  await page.getByLabel('Custom CA PEM', { exact: true }).fill(fixture.auth_ca_pem);
-  await page.getByLabel('Authentication', { exact: true }).selectOption('basic');
-  await page.getByLabel('Username', { exact: true }).fill('browser-user');
-  await page.getByLabel('Password value', { exact: true }).fill(fixture.basic_password);
-  const authCreatePromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === '/api/v1/datasources');
-  await page.getByRole('button', { name: 'Create datasource', exact: true }).click();
-  const authCreate = await authCreatePromise;
-  assert.equal(authCreate.status(), 201);
-  const basicSource = await authCreate.json();
-  const basicID = basicSource.id;
-  assert.equal(basicSource.authentication.password_configured, true);
-  assert.equal('password' in basicSource.authentication, false);
-  stage = 'saved Basic datasource readiness';
-  await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
-  const basicDetailPromise = page.waitForResponse((response) => response.request().method() === 'GET'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${basicID}`);
-  await page.goto(new URL(`/datasources/${basicID}`, origin).href);
-  const basicDetail = await basicDetailPromise;
-  assert.equal(basicDetail.status(), 200);
-  await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 30000 });
   const waitForDiagnostic = async (expectedState) => expect.poll(async () => {
     const state = await page.locator('.diagnostic-result').last().locator('.datasource-diagnostic-status').textContent().catch(() => null);
     return state?.trim().toLowerCase();
@@ -302,8 +326,22 @@ stage = 'browser launch';
     assert.deepEqual(await page.locator('input[type="password"]').evaluateAll((inputs) => inputs.map((input) => input.value)), ['']);
     assert.equal(await page.evaluate((values) => Array.from({ length: localStorage.length }, (_, index) => localStorage.getItem(localStorage.key(index) ?? '') ?? '').some((entry) => values.some((value) => entry.includes(value))), [fixture.basic_password, fixture.bearer_token]), false);
   };
-  const submitSavedConnectionTest = async (expectedVersion) => {
-    const path = `/api/v1/datasources/${basicID}/connection-tests`;
+  const openSavedDatasource = async (datasourceID) => {
+    const detailPromise = page.waitForResponse((response) => response.request().method() === 'GET'
+      && new URL(response.url()).pathname === `/api/v1/datasources/${datasourceID}`);
+    await page.goto(new URL(`/datasources/${datasourceID}`, origin).href);
+    const detail = await detailPromise;
+    assert.equal(detail.status(), 200);
+    const value = await detail.json();
+    assert.equal(value.id, datasourceID);
+    assert.equal(detail.headers()['etag'], `"datasource:${datasourceID}:${value.version}"`);
+    for (const key of ['password', 'token', 'password_secret', 'token_secret']) {
+      assert.equal(Object.hasOwn(value.authentication, key), false);
+    }
+    return detail;
+  };
+  const submitSavedConnectionTest = async (datasourceID, expectedVersion) => {
+    const path = `/api/v1/datasources/${datasourceID}/connection-tests`;
     const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === path);
     await page.getByRole('button', { name: 'Test connection', exact: true }).click();
     const response = await responsePromise;
@@ -316,31 +354,27 @@ stage = 'browser launch';
     await waitForDiagnostic('succeeded');
     return receipt;
   };
+  stage = 'saved Basic datasource detail';
+  const basicDetail = await openSavedDatasource(basicID);
+  await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 5000 });
+  assert.equal((await basicDetail.json()).authentication.password_configured, true);
   stage = 'saved Basic credential connection test';
-  await submitSavedConnectionTest(basicDetail.headers()['etag']);
+  await submitSavedConnectionTest(basicID, basicDetail.headers()['etag']);
   await assertNoCredentialDrafts();
 
-  stage = 'saved Bearer datasource update';
-  await page.getByLabel('Authentication', { exact: true }).selectOption('bearer');
-  await page.getByLabel('Prometheus endpoint', { exact: true }).fill(`${fixture.auth_endpoint}/bearer`);
-  await page.getByLabel('Bearer token value', { exact: true }).fill(fixture.bearer_token);
-  const bearerUpdatePromise = page.waitForResponse((response) => response.request().method() === 'PUT'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${basicID}`);
-  await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-  const bearerUpdate = await bearerUpdatePromise;
-  assert.equal(bearerUpdate.status(), 200);
-  const bearerSaved = await bearerUpdate.json();
-  assert.equal(bearerSaved.authentication.token_configured, true);
-  assert.equal('token' in bearerSaved.authentication, false);
-  await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 30000 });
+  stage = 'saved Bearer datasource detail';
+  const bearerDetail = await openSavedDatasource(bearerID);
+  await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 5000 });
+  assert.equal((await bearerDetail.json()).authentication.token_configured, true);
   stage = 'saved Bearer credential connection test';
-  await submitSavedConnectionTest(bearerUpdate.headers()['etag']);
+  await submitSavedConnectionTest(bearerID, bearerDetail.headers()['etag']);
   await assertNoCredentialDrafts();
 
   stage = 'running real preview cancellation';
+  await openSavedDatasource(createdID);
   await page.getByLabel('PromQL query', { exact: true }).fill('block_until_cancel');
   const slowPreviewPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${basicID}/query-previews`);
+    && new URL(response.url()).pathname === `/api/v1/datasources/${createdID}/query-previews`);
   await page.getByRole('button', { name: 'Run preview', exact: true }).click();
   const slowPreview = await slowPreviewPromise;
   assert.equal(slowPreview.status(), 202);
