@@ -45,13 +45,25 @@ directories you change, then the relevant specs and ADRs.
   standing project guidance for delegation; no repeated permission is needed within
   the user's authorized task scope. If the model is unavailable, report it; do not
   silently substitute another model.
-- Start with one implementer in an isolated worktree. Give it a fresh task brief
+- Use up to two Luna implementers when tasks have agreed interfaces, disjoint files
+  and independent fixtures: typically backend/agent and UI/CLI. Use one when those
+  prerequisites are absent. Each works in an isolated worktree. Give each a fresh task brief
   with the base revision, relevant accepted specs/ADRs, edit scope, interfaces,
   acceptance cases and required checks. Avoid forwarding unrelated chat history.
   Give Luna complete bounded features, not just small supporting pieces while the
   coordinator writes most of the feature. Security or complexity requires clearer
   constraints and review, not automatic coordinator implementation. Substantial
   coordinator coding requires the maintainer's explicit agreement first.
+- Prefer complete usable increments over separate tasks/PRs for every internal
+  layer. Run one actual user journey early, inspect real UI before broad matrices,
+  and reserve the full gate for the integrated candidate. Keep current milestone
+  outcomes ahead of optional polish. See [ways of working](docs/ways-of-working.md).
+- Command approval is for the actual invocation, not a similar-looking command.
+  Reuse the exact verified commands in [command discipline](docs/commands.md) and
+  current approval rules. Do not vary wrappers, arguments, environment assignments,
+  redirections or working-directory tricks to obtain execution. Never request a
+  new command approval during unattended work; leave that operation pending and
+  continue independent work. Pass this restriction and exact commands to workers.
 - The implementer submits code and evidence for review; it cannot accept its own
   task, relax checks, change product contracts or start later milestones. After
   two unsuccessful correction rounds on one issue, reframe the task or ask before

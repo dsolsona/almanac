@@ -31,6 +31,14 @@ assert specific tool versions merely because a reference setup uses them.
 
 ## Gate selection
 
+Start an end-to-end feature with one real user journey as soon as it is wired.
+Diagnose shared failures there before multiplying them across scenarios. For UI,
+inspect an actual rendered page before completing the broad theme/viewport matrix.
+Use focused checks for corrections, then the required integrated gate once the
+candidate is ready. This sequencing never waives a failed required gate.
+Command availability is governed by [command discipline](commands.md); do not
+request new approvals or improvise invocation variations to obtain a focused run.
+
 - **Edit loop:** formatting/type checks and focused affected tests. It must support
   selecting one Go package/test, UI test or browser journey. It never implicitly
   installs dependencies or runs every browser/project.
