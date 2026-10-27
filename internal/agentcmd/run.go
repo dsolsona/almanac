@@ -500,7 +500,7 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		}
 		if err := c.diagnostics.start(ctx, request.Payload); err != nil {
 			if errors.Is(err, errDiagnosticCapacity) {
-				c.diagnostics.offer(completedDiagnosticResult{result: diagnosticFailure(request.Payload.DiagnosticID, "unsupported"), deadlineAt: request.Payload.DeadlineAt})
+				c.diagnostics.offer(diagnosticCapacityResult(request.Payload))
 				return nil
 			}
 			return errors.New("backend diagnostic request was rejected")
