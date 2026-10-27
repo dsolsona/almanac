@@ -37,6 +37,65 @@ function installFetch(createResponse?: Response) {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal; if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close; vi.useRealTimers(); });
 
 describe('agent administration screen', () => {
+  it('suggests a valid identifier from Local and preserves an explicit identifier choice', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = installFetch();
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByRole('button', { name: 'west-1' });
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Register agent' });
+    const displayName = within(dialog).getByLabelText('Display name');
+    const name = within(dialog).getByLabelText('Agent name (identifier)');
+    await user.type(displayName, 'Local');
+    expect(name).toHaveValue('local');
+    await user.clear(displayName);
+    await user.type(displayName, 'Local Cluster');
+    expect(name).toHaveValue('local-cluster');
+    await user.clear(name);
+    await user.type(name, 'local-primary');
+    await user.clear(displayName);
+    await user.type(displayName, 'Local Site');
+    expect(name).toHaveValue('local-primary');
+    await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
+    expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
+    const create = fetcher.mock.calls.find(([url, init]) => String(url) === '/api/v1/agents' && init?.method === 'POST');
+    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'local-primary', display_name: 'Local Site' });
+  });
+
+  it('identifies a duplicate agent identifier on the editable field', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = installFetch(response({ type: 'about:blank', title: 'Conflict', status: 409, code: 'conflict', message: 'private backend detail', request_id: 'request-id', field_errors: [] }, 409));
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByRole('button', { name: 'west-1' });
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Register agent' });
+    await user.type(within(dialog).getByLabelText('Display name'), 'Local');
+    await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
+    expect(within(dialog).getByLabelText('Agent name (identifier)')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(dialog).getByText('An agent with this identifier already exists. Choose a different name.')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Registration needs reconciliation' })).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('does not silently normalize an explicitly entered capitalized identifier', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = installFetch();
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByRole('button', { name: 'west-1' });
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Register agent' });
+    const name = within(dialog).getByLabelText('Agent name (identifier)');
+    await user.type(within(dialog).getByLabelText('Display name'), 'Local');
+    expect(name).toHaveValue('local');
+    await user.clear(name);
+    await user.type(name, 'Local');
+    await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
+    expect(name).toHaveValue('Local');
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(within(dialog).getByText('Use 1–63 lowercase letters, numbers, or hyphens, starting with a letter.', { selector: '.ui-error' })).toBeVisible();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+  });
+
   it('registers from the signed-in administrator session without asking for a password again', async () => {
     const user = userEvent.setup(); installDialogs();
     const fetcher = installFetch();
@@ -45,7 +104,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     const dialog = screen.getByRole('dialog', { name: 'Register agent' });
     expect(within(dialog).queryByLabelText('Current password')).not.toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText('Agent name'), 'session-agent');
+    await user.type(within(dialog).getByLabelText('Agent name (identifier)'), 'session-agent');
     await user.type(within(dialog).getByLabelText('Display name'), 'Session Agent');
     await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
@@ -63,7 +122,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'outage-agent');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'outage-agent');
     await user.type(screen.getByLabelText('Display name'), 'Outage Agent');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
@@ -89,7 +148,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'retry-agent');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'retry-agent');
     await user.type(screen.getByLabelText('Display name'), 'Retry Agent');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
@@ -541,7 +600,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     const registration = screen.getByRole('dialog', { name: 'Register agent' });
-    await user.type(within(registration).getByLabelText('Agent name'), 'new-agent');
+    await user.type(within(registration).getByLabelText('Agent name (identifier)'), 'new-agent');
     await user.type(within(registration).getByLabelText('Display name'), 'New agent');
     await user.click(within(registration).getByRole('button', { name: 'Register agent' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
@@ -928,7 +987,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByRole('button', { name: 'west-1' });
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'new-east');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-east');
     await user.type(screen.getByLabelText('Display name'), 'East collector');
     await user.type(screen.getByLabelText('Lifetime (seconds)'), '0');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
@@ -963,7 +1022,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     expect(await screen.findByText('east-1')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'new-agent'); await user.type(screen.getByLabelText('Display name'), 'New agent');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-agent'); await user.type(screen.getByLabelText('Display name'), 'New agent');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     expect(location.search).toContain(`agent=${agentIDB}`);
@@ -985,7 +1044,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'new-east');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-east');
     await user.type(screen.getByLabelText('Display name'), 'East collector');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
@@ -1016,7 +1075,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'new-east'); await user.type(screen.getByLabelText('Display name'), 'East collector');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-east'); await user.type(screen.getByLabelText('Display name'), 'East collector');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(auth.context).toHaveBeenCalledTimes(2);
@@ -1031,7 +1090,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Session status unavailable' })).toBeVisible();
@@ -1054,7 +1113,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Retry registration' }));
@@ -1082,7 +1141,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('status')).toHaveTextContent(/try registration again in (1|2) seconds/i);
     expect(screen.getByRole('button', { name: 'Retry registration' })).toBeDisabled();
@@ -1129,7 +1188,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getAllByRole('button', { name: 'Abandon request' }).at(-1)!);
@@ -1147,7 +1206,7 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'old-user-name'); await user.type(screen.getByLabelText('Display name'), 'Old user');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'old-user-name'); await user.type(screen.getByLabelText('Display name'), 'Old user');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByRole('button', { name: 'Keep request' }));
@@ -1162,7 +1221,7 @@ describe('agent administration screen', () => {
     await user.type(screen.getByLabelText('Login'), 'second'); await user.type(screen.getByLabelText('Password'), 'password'); await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByRole('button', { name: 'Register agent' });
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    expect(screen.getByLabelText('Agent name')).toHaveValue('');
+    expect(screen.getByLabelText('Agent name (identifier)')).toHaveValue('');
     expect(screen.getByLabelText('Display name')).toHaveValue('');
   });
 
@@ -1172,14 +1231,14 @@ describe('agent administration screen', () => {
     render(<AuthPage client={auth} />);
     await screen.findByRole('button', { name: 'Register agent' });
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'private-draft'); await user.type(screen.getByLabelText('Display name'), 'Private draft');
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'private-draft'); await user.type(screen.getByLabelText('Display name'), 'Private draft');
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     await user.type(screen.getByLabelText('Login'), 'owner'); await user.type(screen.getByLabelText('Password'), 'login password'); await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByRole('button', { name: 'Register agent' });
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    expect(screen.getByLabelText('Agent name')).toHaveValue('');
+    expect(screen.getByLabelText('Agent name (identifier)')).toHaveValue('');
     expect(screen.getByLabelText('Display name')).toHaveValue('');
     expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
   });
@@ -1191,8 +1250,8 @@ describe('agent administration screen', () => {
     render(<AuthPage client={makeAuth()} />);
     await screen.findByText('No agents have been registered.');
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
-    await user.type(screen.getByLabelText('Agent name'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
-    const form = screen.getByLabelText('Agent name').closest('form')!;
+    await user.type(screen.getByLabelText('Agent name (identifier)'), 'safe-name'); await user.type(screen.getByLabelText('Display name'), 'Safe display');
+    const form = screen.getByLabelText('Agent name (identifier)').closest('form')!;
     fireEvent.submit(form); fireEvent.submit(form);
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     finish(response({ agent: agent(), credential: credential(), replayed: false, secret_state: 'issued', token: 'one-time-secret' }, 201));

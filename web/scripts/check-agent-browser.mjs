@@ -147,7 +147,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   await page.getByRole('button', { name: 'Register agent', exact: true }).click();
   if (unavailable) setStage('registration dialog opened');
   let registration = page.getByRole('dialog', { name: 'Register agent', exact: true });
-  await registration.getByLabel('Agent name', { exact: true }).fill(name);
+  await registration.getByLabel('Agent name (identifier)', { exact: true }).fill(name);
   await registration.getByLabel('Display name', { exact: true }).fill('Browser acceptance agent');
   let freshResponse = !lost && !unavailable
     ? page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents')
