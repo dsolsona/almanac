@@ -9,7 +9,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -853,14 +852,6 @@ func TestIntegrationDatasourceAssignmentCountLimitRollsBackOverLimitWrite(t *tes
 }
 
 func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrite(t *testing.T) {
-	testStarted := time.Now()
-	const timingLog = ".local/datasource-byte-capacity-timing.log"
-	if err := os.MkdirAll(".local", 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(timingLog, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "datasource-config-byte-limit")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
@@ -885,7 +876,6 @@ func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrit
 	password := strings.Repeat("s", 16<<10)
 	proof := DatasourceProof{SessionVerifier: f.verifier}
 	const seededAssignments = 50
-	seedStarted := time.Now()
 	conn := integrationConnect(t, f.databaseURL)
 	var installationID string
 	if err := conn.QueryRow(t.Context(), "SELECT installation_id::text FROM public.almanac_installation WHERE singleton=true").Scan(&installationID); err != nil {
@@ -949,14 +939,12 @@ func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrit
 		t.Fatal(err)
 	}
 	closeIntegrationConn(conn)
-	appendDatasourceByteFixtureTiming(t, timingLog, "raw secret seed", time.Since(seedStarted), fmt.Sprintf("rows=%d", seeded))
 	conn = integrationConnect(t, f.databaseURL)
 	var initialRevision int64
 	if err := conn.QueryRow(t.Context(), "SELECT max(revision) FROM public.almanac_agent_configurations WHERE agent_id=$1", created.Agent.ID).Scan(&initialRevision); err != nil {
 		closeIntegrationConn(conn)
 		t.Fatal(err)
 	}
-	snapshotStarted := time.Now()
 	seedSnapshotBytes, err := buildDatasourceConfigurationSnapshot(t.Context(), dbgen.New(conn), installationID, agentUUID, initialRevision, secrets)
 	closeIntegrationConn(conn)
 	var seedSnapshot agentprotocol.ConfigurationSnapshot
@@ -964,8 +952,6 @@ func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrit
 		!bytes.Contains(seedSnapshotBytes, []byte(password)) || len(seedSnapshotBytes) >= agentprotocol.MaxConfigurationBytes {
 		t.Fatalf("seed secret-bearing snapshot bytes=%d assignments=%d limit=%d err=%v", len(seedSnapshotBytes), len(seedSnapshot.Assignments), agentprotocol.MaxConfigurationBytes, err)
 	}
-	appendDatasourceByteFixtureTiming(t, timingLog, "seed snapshot decrypt+serialize", time.Since(snapshotStarted), fmt.Sprintf("bytes=%d rows=%d", len(seedSnapshotBytes), len(seedSnapshot.Assignments)))
-	writesStarted := time.Now()
 	successfulWrites := 0
 	overflowIndex := 0
 	for index := range 16 {
@@ -986,7 +972,6 @@ func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrit
 		}
 		successfulWrites++
 	}
-	appendDatasourceByteFixtureTiming(t, timingLog, "API save/overflow", time.Since(writesStarted), fmt.Sprintf("successful=%d overflow_index=%d", successfulWrites, overflowIndex))
 	if successfulWrites == 0 || successfulWrites >= 16 || overflowIndex == 0 {
 		t.Fatalf("expected secret-bearing configuration to exceed 1 MiB within 16 API writes; successful=%d overflow-index=%d", successfulWrites, overflowIndex)
 	}
@@ -1028,22 +1013,6 @@ func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrit
 		auditCount != successfulWrites || receiptCount != successfulWrites {
 		t.Fatalf("over-limit secret write was not atomic: sources=%d revision=%d audit=%d receipts=%d seeded=%d successful=%d",
 			sourceCount, latestRevision, auditCount, receiptCount, seededAssignments, successfulWrites)
-	}
-	appendDatasourceByteFixtureTiming(t, timingLog, "total", time.Since(testStarted), fmt.Sprintf("seeded=%d successful=%d final_bytes=%d overflow_bytes=%d", seededAssignments, successfulWrites, len(snapshotBytes), len(hypotheticalBytes)))
-}
-
-func appendDatasourceByteFixtureTiming(t *testing.T, path, phase string, elapsed time.Duration, details string) {
-	t.Helper()
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fmt.Fprintf(file, "%s: %s %s\n", phase, elapsed, details); err != nil {
-		_ = file.Close()
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
 	}
 }
 

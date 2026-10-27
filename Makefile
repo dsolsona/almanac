@@ -178,7 +178,13 @@ _verify_integration: _ensure_web_assets
 	  $(MAKE) _verify_sqlc_generated; \
 	  sh scripts/setup-database.sh --check; \
 	  $(MAKE) build; \
-	  .local/bin/go test -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m $$packages
+	  json_artifact="$(CURDIR)/.local/integration-go-test.jsonl"; exit_artifact="$(CURDIR)/.local/integration-go-test.exit"; \
+	  printf 'running\n' > "$$exit_artifact"; \
+	  go_status=0; .local/bin/go test -json -race -tags=integration -p=1 -run '^TestIntegration' -count=1 -timeout=2m $$packages > "$$json_artifact" || go_status=$$?; \
+	  printf '%s\n' "$$go_status" > "$$exit_artifact"; \
+	  summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
+	  if [ "$$go_status" -ne 0 ]; then exit "$$go_status"; fi; \
+	  exit "$$summary_status"
 
 _verify_journey:
 	@set -eu; \
