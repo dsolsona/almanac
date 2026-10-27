@@ -6,13 +6,20 @@ import './datasources.css';
 
 type Agent = { id: string; name: string; display_name: string; enabled: boolean; runtime?: { reachability?: string; capabilities?: { provider: string; configuration_formats: string[]; operations: string[] }[] } | null };
 type ProviderReadinessState = Provider['availability'] | 'loading' | 'still_applying' | 'error';
-type Draft = Omit<DatasourceWrite, 'authentication'> & { authMode: 'none' | 'basic' | 'bearer'; username: string; password: string; token: string; passwordAction: 'replace' | 'retain' | 'clear'; tokenAction: 'replace' | 'retain' | 'clear'; passwordConfigured: boolean; tokenConfigured: boolean };
+type Draft = Omit<DatasourceWrite, 'authentication'> & { authMode: 'none' | 'basic' | 'bearer'; username: string; password: string; token: string; passwordAction: 'replace' | 'retain' | 'clear'; tokenAction: 'replace' | 'retain' | 'clear'; passwordConfigured: boolean; tokenConfigured: boolean; nameEdited: boolean };
 type SaveIntent = { input: DatasourceWrite; key: string; etag?: string; isNew: boolean; route: string };
 
 const client = createDatasourceClient();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const DATASOURCE_NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-const emptyDraft = (): Draft => ({ name: '', display_name: '', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: '', tls: { insecure_skip_verify: false, ca_pem: null }, polling_interval_seconds: 60, agent_id: '', authMode: 'none', username: '', password: '', token: '', passwordAction: 'retain', tokenAction: 'retain', passwordConfigured: false, tokenConfigured: false });
+const emptyDraft = (): Draft => ({ name: '', display_name: '', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: '', tls: { insecure_skip_verify: false, ca_pem: null }, polling_interval_seconds: 60, agent_id: '', authMode: 'none', username: '', password: '', token: '', passwordAction: 'retain', tokenAction: 'retain', passwordConfigured: false, tokenConfigured: false, nameEdited: false });
+function suggestDatasourceName(displayName: string): string {
+  let suggestion = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/g, '');
+  if (!suggestion) return '';
+  if (suggestion[0] < 'a' || suggestion[0] > 'z') suggestion = `source-${suggestion}`.slice(0, 63).replace(/-+$/g, '');
+  return suggestion;
+}
 const safeError = (error: unknown) => error instanceof DatasourceFailure ? error.message : 'Datasource management is temporarily unavailable.';
 const terminal = (value: Diagnostic) => ['succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(value.state);
 
@@ -313,6 +320,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (currentUncertainSave) { await retryUncertainSave(); return; }
+    if (!DATASOURCE_NAME.test(draft.name)) return;
     const intent = { input: asWrite(draft, isNew), key: crypto.randomUUID(), ...(isNew ? {} : { etag }), isNew, route: locationKey } satisfies SaveIntent;
     saveIntent.current = intent;
     await executeSave(intent);
@@ -473,8 +481,11 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     <div className="datasource-toolbar"><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button>{source && <p>Version {source.version} · assigned agent {agents.find((agent) => agent.id === source.agent_id)?.display_name ?? source.agent_id}</p>}</div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
     <Panel heading="Connection settings"><form className="datasource-form" onSubmit={(event) => void submit(event)}>
-      <TextField id="datasource-name" label="Name" value={draft.name} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-      <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, display_name: event.target.value })} />
+      <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => {
+        const display_name = event.target.value;
+        setDraft((current) => ({ ...current, display_name, ...(isNew && !current.nameEdited ? { name: suggestDatasourceName(display_name) } : {}) }));
+      }} />
+      <TextField id="datasource-name" label="Name" hint={source ? 'Stable identifier. It cannot be changed after creation.' : 'Stable identifier used in configuration. Suggested from the display name; you can edit it.'} error={draft.nameEdited && !DATASOURCE_NAME.test(draft.name) ? 'Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.' : undefined} value={draft.name} disabled={formDisabled || Boolean(source)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value, nameEdited: true }))} />
       <TextField id="datasource-endpoint" className="datasource-endpoint" label="Prometheus endpoint" type="url" hint="Use an HTTP or HTTPS URL without embedded credentials." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
       <SelectField id="datasource-agent" label="Assigned agent" value={draft.agent_id} disabled={formDisabled} onChange={(event) => selectAgent(event.target.value)} options={[{ value: '', label: 'Select an agent', disabled: true }, ...agents.map((agent) => ({ value: agent.id, label: datasourceAgentLabel(agent), disabled: !supportsDatasourceDiagnostics(agent) }))]} />
       <TextField id="datasource-polling" label="Polling interval (seconds)" type="number" min={15} max={86400} value={draft.polling_interval_seconds} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, polling_interval_seconds: Number(event.target.value) })} />

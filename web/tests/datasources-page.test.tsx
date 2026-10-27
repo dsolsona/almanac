@@ -75,7 +75,14 @@ describe('datasource page', () => {
     history.replaceState({}, '', '/datasources/new');
     const calls = installFetch();
     render(<DatasourcesPage context={admin} />);
-    await user.type(await screen.findByLabelText('Name'), 'metrics-prod');
+    await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
+    expect(screen.getByLabelText('Name')).toHaveValue('production-metrics');
+    await user.clear(screen.getByLabelText('Name'));
+    await user.type(screen.getByLabelText('Name'), 'metrics-prod');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Updated production metrics');
+    expect(screen.getByLabelText('Name')).toHaveValue('metrics-prod');
+    await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Production metrics');
     const endpoint = screen.getByLabelText('Prometheus endpoint');
     await user.type(endpoint, 'http://localhost');
@@ -94,6 +101,21 @@ describe('datasource page', () => {
       expect(key).not.toContain('private-token-value');
       expect(localStorage.getItem(key ?? '')).not.toContain('private-token-value');
     }
+  });
+
+  it('shows an actionable error for an invalid custom datasource identifier and does not submit it', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources/new');
+    const calls = installFetch();
+    render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Display name'), 'Local metrics');
+    const name = screen.getByLabelText('Name');
+    expect(name).toHaveValue('local-metrics');
+    await user.clear(name);
+    await user.type(name, 'Local Metrics');
+    expect(screen.getByText('Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    expect(calls.some((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST')).toBe(false);
   });
 
   it('starts a new create intent after navigating away from an uncertain create', async () => {
@@ -304,6 +326,8 @@ describe('datasource page', () => {
     const calls = installFetch(undefined, ['available', 'applying', 'available']);
     render(<DatasourcesPage context={admin} />);
 
+    expect(await screen.findByLabelText('Name')).toHaveValue('metrics-prod');
+    expect(screen.getByLabelText('Name')).toBeDisabled();
     await user.clear(await screen.findByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Updated metrics');
     await user.click(screen.getByRole('button', { name: 'Save settings' }));
@@ -312,7 +336,9 @@ describe('datasource page', () => {
     expect(await screen.findByText(/^The assigned agent is applying datasource settings(?: \(revision \d+ of \d+\))?\. Preview will be available when it finishes\.$/)).toBeVisible();
     expect(preview).toBeDisabled();
     await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
-    expect(calls.some((call) => call.url === `/api/v1/datasources/${sourceID}` && call.init?.method === 'PUT')).toBe(true);
+    const update = calls.find((call) => call.url === `/api/v1/datasources/${sourceID}` && call.init?.method === 'PUT');
+    expect(update).toBeDefined();
+    expect(JSON.parse(String(update?.init?.body)).name).toBe('metrics-prod');
   });
 
   it('waits for readiness and retries a preview when admission confirms no job was created', async () => {
