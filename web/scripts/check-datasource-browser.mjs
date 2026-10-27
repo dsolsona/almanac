@@ -371,10 +371,9 @@ stage = 'browser launch';
   await assertNoCredentialDrafts();
 
   stage = 'running real preview cancellation';
-  await openSavedDatasource(createdID);
   await page.getByLabel('PromQL query', { exact: true }).fill('block_until_cancel');
   const slowPreviewPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${createdID}/query-previews`);
+    && new URL(response.url()).pathname === `/api/v1/datasources/${bearerID}/query-previews`);
   await page.getByRole('button', { name: 'Run preview', exact: true }).click();
   const slowPreview = await slowPreviewPromise;
   assert.equal(slowPreview.status(), 202);
