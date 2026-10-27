@@ -356,52 +356,66 @@ func verifyConcurrentDatasourceRevisionWrites(t *testing.T, f agentFixture, agen
 		return fmt.Errorf("lock agent for concurrent datasource writes: %w", err)
 	}
 	type result struct {
+		name   string
 		record DatasourceRecord
 		err    error
 	}
 	results := make(chan result, 2)
+	writeCtx, cancelWrites := context.WithCancel(t.Context())
+	defer cancelWrites()
 	for index, name := range []string{"revision-concurrent-a", "revision-concurrent-b"} {
-		go func() {
+		go func(index int, name string) {
 			settings := datasource.Settings{Name: name, DisplayName: name, Provider: datasource.PrometheusProvider,
 				ConfigurationFormat: datasource.PrometheusConfiguration, Endpoint: "https://metrics.example.test",
 				AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: datasource.PrometheusSettlingDelay, AgentID: agentID}
-			record, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: proofs[index], Settings: settings,
+			record, err := CreateDatasource(writeCtx, f.databaseURL, nil, CreateDatasourceInput{Proof: proofs[index], Settings: settings,
 				Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"},
 				IdempotencyKey: "revision-write-" + name, RequestID: "revision-write-" + name, Now: func() time.Time { return now }})
-			results <- result{record: record, err: err}
-		}()
+			results <- result{name: name, record: record, err: err}
+		}(index, name)
 	}
 	observer := integrationConnect(t, f.databaseURL)
+	cleanupWorkers := func(alreadyReceived int) {
+		cancelWrites()
+		rollbackTransaction(controlTx)
+		closeIntegrationConn(observer)
+		closeIntegrationConn(controller)
+		for range 2 - alreadyReceived {
+			select {
+			case <-results:
+			case <-time.After(5 * time.Second):
+				return
+			}
+		}
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	waiters := 0
 	for time.Now().Before(deadline) {
-		var waiters int
-		if err := observer.QueryRow(t.Context(), `SELECT count(*) FROM pg_stat_activity
-			WHERE datname=current_database() AND state='active' AND wait_event_type='Lock'
-			AND query ILIKE '%FROM public.almanac_agents%'`).Scan(&waiters); err != nil {
-			rollbackTransaction(controlTx)
-			closeIntegrationConn(observer)
-			closeIntegrationConn(controller)
+		if err := observer.QueryRow(t.Context(), `SELECT count(*) FROM pg_stat_activity activity
+			WHERE activity.datname=current_database() AND activity.wait_event_type='Lock'
+			AND activity.query ILIKE '%almanac_agents%'
+			AND cardinality(pg_blocking_pids(activity.pid)) > 0`).Scan(&waiters); err != nil {
+			cleanupWorkers(0)
 			return fmt.Errorf("observe concurrent datasource writers: %w", err)
 		}
 		if waiters >= 2 {
 			break
 		}
 		select {
+		case output := <-results:
+			cleanupWorkers(1)
+			return fmt.Errorf("concurrent datasource writer %s returned before shared agent lock barrier: %v", output.name, output.err)
 		case <-ticker.C:
 		case <-t.Context().Done():
-			rollbackTransaction(controlTx)
-			closeIntegrationConn(observer)
-			closeIntegrationConn(controller)
+			cleanupWorkers(0)
 			return fmt.Errorf("context ended observing concurrent datasource writers: %w", t.Context().Err())
 		}
 	}
 	if time.Now().After(deadline) {
-		rollbackTransaction(controlTx)
-		closeIntegrationConn(observer)
-		closeIntegrationConn(controller)
-		return errors.New("concurrent datasource writes did not wait on the shared agent lock")
+		cleanupWorkers(0)
+		return fmt.Errorf("concurrent datasource writes did not both wait on shared agent lock (observed %d blocked writers)", waiters)
 	}
 	if err := controlTx.Commit(t.Context()); err != nil {
 		closeIntegrationConn(observer)
