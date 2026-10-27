@@ -181,10 +181,12 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [controller, setController] = useState<AbortController | null>(null);
+  const diagnosticController = useRef<AbortController | null>(null);
   const providerRequest = useRef<AbortController | null>(null);
   const providerGeneration = useRef(0);
+  const locationKeyRef = useRef(locationKey);
   const saveIntent = useRef<SaveIntent | null>(null);
+  const saveController = useRef<AbortController | null>(null);
   const [uncertainSave, setUncertainSave] = useState(false);
   const currentUncertainSave = uncertainSave && saveIntent.current?.route === locationKey;
   const heading = useRef<HTMLHeadingElement>(null);
@@ -195,23 +197,39 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   useEffect(() => {
     if (saveIntent.current && saveIntent.current.route !== locationKey) {
       saveIntent.current = null;
+      saveController.current?.abort();
+      saveController.current = null;
       setUncertainSave(false);
+      setPending(false);
       setError('');
     }
   }, [locationKey]);
 
+  function changeRoute(nextRoute: string) {
+    locationKeyRef.current = nextRoute;
+    if (saveIntent.current && saveIntent.current.route !== nextRoute) {
+      saveIntent.current = null;
+      saveController.current?.abort();
+      saveController.current = null;
+      setUncertainSave(false);
+      setPending(false);
+      setError('');
+    }
+    setLocationKey(nextRoute);
+  }
+
   const navigate = useCallback((path: string) => {
     history.pushState({}, '', path);
-    setLocationKey(`${location.pathname}${location.search}`);
+    changeRoute(`${location.pathname}${location.search}`);
   }, []);
   useEffect(() => {
-    const changed = () => setLocationKey(`${location.pathname}${location.search}`);
+    const changed = () => changeRoute(`${location.pathname}${location.search}`);
     window.addEventListener('popstate', changed);
     return () => window.removeEventListener('popstate', changed);
   }, []);
 
   const loadList = useCallback((next = '') => {
-    const request = new AbortController(); setController(request); setLoading(true); setError('');
+    const request = new AbortController(); setLoading(true); setError('');
     void (async () => {
       try {
         const [page, agentItems] = await Promise.all([
@@ -228,7 +246,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   useEffect(() => {
     if (selectedID) {
-      const request = new AbortController(); setController(request); setLoading(true); setError(''); setNotice('');
+      const request = new AbortController(); setLoading(true); setError(''); setNotice('');
       setProviders([]); setPreviewReadiness('loading');
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
         if (request.signal.aborted) return [] as Agent[];
@@ -240,7 +258,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     }
     setSource(null); setEtag(''); setDraft(emptyDraft()); setProviders([]); setPreviewReadiness('loading'); setDiagnostic(null);
     if (!isNew) { const request = loadList(cursor); return () => request.abort(); }
-    const request = new AbortController(); setController(request); setLoading(true);
+    const request = new AbortController(); setLoading(true);
     void loadAgents(request.signal).then(async (result) => {
       if (request.signal.aborted) return;
       const eligible = result.filter(supportsDatasourceDiagnostics);
@@ -302,27 +320,33 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   async function executeSave(intent: SaveIntent) {
     setPending(true); setError(''); setNotice('');
-    const request = new AbortController(); setController(request);
+    const request = new AbortController(); saveController.current = request;
+    const activeRequest = () => saveController.current === request && locationKeyRef.current === intent.route && !request.signal.aborted;
+    const activeIntent = () => activeRequest() && saveIntent.current === intent;
     try {
       if (admin && !intent.input.agent_id) throw new Error('Choose an assigned agent before saving.');
       const saved = await client.save(intent.input, context, intent.key, intent.etag, request.signal);
+      if (!activeIntent()) return;
       saveIntent.current = null; setUncertainSave(false); setNotice(intent.isNew ? 'Datasource created.' : 'Datasource settings saved.'); setDiagnostic(null);
       setDraft((current) => ({ ...current, password: '', token: '' }));
-      if (intent.isNew) navigate('/datasources');
+      if (intent.isNew) { setPending(false); navigate('/datasources'); }
       else {
         setSource(saved); setEtag(`"datasource:${saved.id}:${saved.version}"`); setDraft(fromDatasource(saved));
         setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
       }
     } catch (reason) {
-      if (request.signal.aborted) return;
+      if (!activeIntent()) return;
       if (reason instanceof DatasourceFailure && reason.uncertain) {
         setUncertainSave(true);
         setError(intent.isNew ? 'The create response was lost. Retry the same request to safely recover its result.' : 'The save outcome is unknown. Refresh this datasource to reconcile its current version before continuing.');
       } else { saveIntent.current = null; setUncertainSave(false); setError(reason instanceof Error && !(reason instanceof DatasourceFailure) ? reason.message : safeError(reason)); }
     }
     finally {
-      setDraft((current) => ({ ...current, password: '', token: '' }));
-      if (!request.signal.aborted) setPending(false);
+      if (activeRequest()) {
+        setDraft((current) => ({ ...current, password: '', token: '' }));
+        setPending(false);
+      }
+      if (saveController.current === request) saveController.current = null;
     }
   }
 
@@ -331,12 +355,19 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     if (!intent) { setUncertainSave(false); setError('The original request is unavailable. Refresh the datasource before continuing.'); return; }
     if (!intent.isNew) {
       setPending(true); setError('');
+      const request = new AbortController(); saveController.current = request;
+      const activeRequest = () => saveController.current === request && locationKeyRef.current === intent.route && !request.signal.aborted;
+      const activeIntent = () => activeRequest() && saveIntent.current === intent;
       try {
-        const current = await client.get(selectedID!);
+        const current = await client.get(selectedID!, request.signal);
+        if (!activeIntent()) return;
         setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource));
         saveIntent.current = null; setUncertainSave(false); setNotice('The datasource was refreshed after an uncertain save. Review its current version and settings.');
-      } catch (reason) { setError(safeError(reason)); }
-      finally { setPending(false); }
+      } catch (reason) { if (activeIntent()) setError(safeError(reason)); }
+      finally {
+        if (activeRequest()) setPending(false);
+        if (saveController.current === request) saveController.current = null;
+      }
       return;
     }
     await executeSave(intent);
@@ -345,7 +376,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   async function runDiagnostic(kind: 'connection' | 'preview') {
     if (kind === 'preview' && previewReadiness !== 'available') return;
     setPending(true); setError(''); setNotice(''); setDiagnostic(null);
-    const request = new AbortController(); setController(request);
+    const request = new AbortController(); diagnosticController.current = request;
     let deadlineTimer: number | undefined;
     try {
       const settings = asWrite(draft, isNew);
@@ -356,7 +387,10 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         if (source && !connectionDraftChanged(draft, source)) {
           created = await client.savedConnectionTest(source.id, etag, context, crypto.randomUUID(), request.signal);
         } else {
-          if (source && retainsConfiguredSecret(draft)) throw new Error('Save the connection settings before testing with the saved credential, or replace the credential to test unsaved settings.');
+          if (source && retainsConfiguredSecret(draft)) {
+            setError('Save the connection settings before testing with the saved credential, or replace the credential to test unsaved settings.');
+            return;
+          }
           created = await client.connectionTest(connectionInput, context, request.signal);
         }
       } else {
@@ -401,16 +435,23 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       }
       if (!terminal(current) && !request.signal.aborted) setError('The diagnostic deadline passed before a final result arrived.');
     } catch (reason) { if (!request.signal.aborted) setError(safeError(reason)); }
-    finally { if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer); setPending(false); }
+    finally {
+      if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
+      if (diagnosticController.current === request) diagnosticController.current = null;
+      setPending(false);
+    }
   }
 
   async function cancelDiagnostic() {
     if (!diagnostic || !context.session) return;
     setCancelSubmitting(true); setError('');
-    try { const current = await client.cancelDiagnostic(diagnostic.id, context); setDiagnostic(current); }
+    try {
+      const current = await client.cancelDiagnostic(diagnostic.id, context);
+      setDiagnostic(current);
+      if (terminal(current)) diagnosticController.current?.abort();
+    }
     catch (reason) { setError(safeError(reason)); }
     finally { setCancelSubmitting(false); }
-    controller?.abort();
   }
 
   if (loading) return <div className="datasources-loading"><LoadingIndicator label="Loading datasource management" /></div>;

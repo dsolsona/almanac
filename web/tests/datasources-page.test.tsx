@@ -13,11 +13,12 @@ function source() { return { id: sourceID, name: 'metrics-prod', display_name: '
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
 function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }], providerAvailability: string[] = ['available'], previewStatuses: number[] = [], previewResult: Record<string, unknown> = {
 	id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: 'complete', result: { diagnostic_id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', result_class: 'complete', series: [] }, error_code: null, message: null,
-}, createStatuses: number[] = []) {
+}, createStatuses: number[] = [], cancelStatus = 200, diagnosticResults: Record<string, unknown>[] = []) {
   const calls: { url: string; init?: RequestInit }[] = [];
   let providerRequest = 0;
   let previewRequest = 0;
   let createRequest = 0;
+  let diagnosticRequest = 0;
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input); calls.push({ url, init });
     if (url.startsWith('/api/v1/agents')) return response({ items: agentItems, next_cursor: '' });
@@ -33,8 +34,8 @@ function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, na
       const status = previewStatuses[Math.min(previewRequest++, previewStatuses.length - 1)] ?? 500;
       return status === 503 ? response({ code: 'configuration_pending', message: 'safe contract response' }, status) : response(previewResult, status);
     }
-    if (url.endsWith('/cancel') && init?.method === 'POST') return response({ ...previewResult, state: 'canceled', result: null });
-    if (url.startsWith('/api/v1/diagnostics/')) return response(previewResult);
+    if (url.endsWith('/cancel') && init?.method === 'POST') return cancelStatus === 200 ? response({ ...previewResult, state: 'canceled', result: null }) : response({ code: 'management_unavailable', message: 'safe failure' }, cancelStatus);
+    if (url.startsWith('/api/v1/diagnostics/')) return response(diagnosticResults[Math.min(diagnosticRequest++, diagnosticResults.length - 1)] ?? previewResult);
     if (url.startsWith('/api/v1/datasources') && init?.method === 'POST') { const status = createStatuses[Math.min(createRequest++, createStatuses.length - 1)] ?? 201; return response(status === 201 ? source() : { code: 'management_unavailable', message: 'safe failure' }, status, { ETag: `"datasource:${sourceID}:4"` }); }
     return response({ items: [source()], next_cursor: '' });
   });
@@ -115,6 +116,56 @@ describe('datasource page', () => {
     expect(JSON.parse(String(creates[1]?.init?.body)).name).toBe('second-source');
   });
 
+  it('ignores a late successful save after the user opens a fresh form', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources/new');
+    installFetch();
+    const delegate = globalThis.fetch.bind(globalThis);
+    let resolveFirst!: (value: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => { resolveFirst = resolve; });
+    const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input) === '/api/v1/datasources' && init?.method === 'POST' ? firstResponse : delegate(input, init));
+    vi.stubGlobal('fetch', fetcher);
+    render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Name'), 'old-source');
+    await user.type(screen.getByLabelText('Display name'), 'Old source');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://old.example.test');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/datasources', expect.objectContaining({ method: 'POST' })));
+    await user.click(screen.getByRole('button', { name: 'Back to datasources' }));
+    await user.click(await screen.findByRole('button', { name: 'Add datasource' }));
+    await user.type(await screen.findByLabelText('Name'), 'fresh-source');
+    await user.type(screen.getByLabelText('Display name'), 'Fresh source');
+    resolveFirst(response(source(), 201, { ETag: `"datasource:${sourceID}:4"` }));
+    await waitFor(() => expect(location.pathname).toBe('/datasources/new'));
+    expect(screen.getByLabelText('Name')).toHaveValue('fresh-source');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Fresh source');
+    expect(screen.getByRole('button', { name: 'Create datasource' })).toBeEnabled();
+  });
+
+  it('ignores a late uncertain save error after the user opens a fresh form', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources/new');
+    installFetch();
+    const delegate = globalThis.fetch.bind(globalThis);
+    let resolveFirst!: (value: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => { resolveFirst = resolve; });
+    const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input) === '/api/v1/datasources' && init?.method === 'POST' ? firstResponse : delegate(input, init));
+    vi.stubGlobal('fetch', fetcher);
+    render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Name'), 'old-source');
+    await user.type(screen.getByLabelText('Display name'), 'Old source');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://old.example.test');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/datasources', expect.objectContaining({ method: 'POST' })));
+    await user.click(screen.getByRole('button', { name: 'Back to datasources' }));
+    await user.click(await screen.findByRole('button', { name: 'Add datasource' }));
+    await user.type(await screen.findByLabelText('Name'), 'fresh-source');
+    resolveFirst(response({ code: 'management_unavailable', message: 'safe failure' }, 503));
+    expect(await screen.findByLabelText('Name')).toHaveValue('fresh-source');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry same create' })).not.toBeInTheDocument();
+  });
+
   it('distinguishes unreported, unsupported, disabled, and offline agents without enabling unsupported assignments', async () => {
     const offlineID = '2e8fa70c-94dc-4cff-b15b-0953521e8ea6';
     history.replaceState({}, '', '/datasources/new');
@@ -163,7 +214,7 @@ describe('datasource page', () => {
   it('keeps cancellation available while a diagnostic is pending', async () => {
     const user = userEvent.setup();
     history.replaceState({}, '', `/datasources/${sourceID}`);
-    const pending = { id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'pending', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: null, result: null, error_code: null, message: null };
+    const pending = { id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'pending', operation: 'query_preview', created_at: new Date().toISOString(), deadline_at: new Date(Date.now() + 30_000).toISOString(), result_class: null, result: null, error_code: null, message: null };
     const calls = installFetch([], ['available'], [202], pending);
     render(<DatasourcesPage context={editor} />);
     await user.click(await screen.findByRole('button', { name: 'Run preview' }));
@@ -171,6 +222,20 @@ describe('datasource page', () => {
     expect(cancel).toBeEnabled();
     await user.click(cancel);
     await waitFor(() => expect(calls.some((call) => call.url === `/api/v1/diagnostics/${pending.id}/cancel`)).toBe(true));
+  });
+
+  it('continues polling after the cancel request fails and shows the diagnostic final state', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    const pending = { id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'pending', operation: 'query_preview', created_at: new Date().toISOString(), deadline_at: new Date(Date.now() + 30_000).toISOString(), result_class: null, result: null, error_code: null, message: null };
+    const completed = { ...pending, state: 'succeeded', result_class: 'complete', result: { diagnostic_id: pending.id, state: 'succeeded', result_class: 'complete', series: [] } };
+    const calls = installFetch([], ['available'], [202], pending, [], 503, [completed]);
+    render(<DatasourcesPage context={editor} />);
+    await user.click(await screen.findByRole('button', { name: 'Run preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel diagnostic' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Datasource management is temporarily unavailable.');
+    await waitFor(() => expect(calls.some((call) => call.url === `/api/v1/diagnostics/${pending.id}` && call.init?.method === 'GET')).toBe(true));
+    expect(await screen.findByText('Succeeded')).toBeVisible();
   });
 
   it('labels diagnostic failure as Failed with a safe provider cause, never as an SLO breach', async () => {
@@ -211,6 +276,7 @@ describe('datasource page', () => {
     render(<DatasourcesPage context={admin} />);
     await user.clear(await screen.findByLabelText('Prometheus endpoint'));
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://changed.example.test');
+    await waitFor(() => expect(screen.getByLabelText('Prometheus endpoint')).toHaveValue('https://changed.example.test'));
     await user.click(screen.getByRole('button', { name: 'Test connection' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Save the connection settings before testing with the saved credential, or replace the credential to test unsaved settings.');
     expect(calls.some((item) => item.url.endsWith('/connection-tests') && item.init?.method === 'POST')).toBe(false);
