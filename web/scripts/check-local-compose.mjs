@@ -186,6 +186,122 @@ async function checkPermanentLogin() {
     await browser.close();
   }
 }
+async function checkLocalAgentRegistration() {
+  const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${spki}`] });
+  if (cancellation) { await browser.close(); ensureActive(); }
+  activeBrowser = browser;
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    page.setDefaultTimeout(5000);
+    const requests = [];
+    let documentNavigations = 0;
+    let contextRequests = 0;
+    page.on('request', (incoming) => {
+      if (incoming.isNavigationRequest() && incoming.frame() === page.mainFrame()) documentNavigations++;
+      if (new URL(incoming.url()).pathname === '/api/v1/auth/context') contextRequests++;
+      if (incoming.method() === 'POST' && new URL(incoming.url()).pathname === '/api/v1/agents') {
+        requests.push(incoming.postDataJSON());
+      }
+    });
+    await page.goto(url);
+    await page.getByLabel('Login', { exact: true }).fill('admin');
+    await page.getByLabel('Password', { exact: true }).fill(permanent);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    stage = 'real Compose post-login Agents route';
+    documentNavigations = 0;
+    contextRequests = 0;
+    const documentMarker = await page.evaluate(() => {
+      const marker = crypto.randomUUID();
+      document.documentElement.dataset.composeDocumentMarker = marker;
+      return marker;
+    });
+    stage = 'real Compose Agents to Datasources navigation';
+    await page.getByRole('link', { name: 'Datasources', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
+    stage = 'real Compose Add datasource navigation';
+    await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Add datasource', exact: true })).toBeVisible();
+    stage = 'real Compose datasource endpoint literal input';
+    const endpoint = page.locator('#datasource-endpoint');
+    await endpoint.fill('http://localhost');
+    const endpointPresentation = await endpoint.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        value: element.value,
+        font_family: style.fontFamily,
+        font_feature_settings: style.fontFeatureSettings,
+        font_variant_ligatures: style.fontVariantLigatures,
+      };
+    });
+    assert.equal(endpointPresentation.value, 'http://localhost');
+    await endpoint.screenshot({ path: join(artifacts, 'datasource-endpoint-literal.png'), animations: 'disabled' });
+    stage = 'real Compose datasource back navigation';
+    await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
+    stage = 'real Compose Datasources to Agents navigation';
+    await page.getByRole('link', { name: 'Agents', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    stage = 'real Compose same-document and session continuity assertions';
+    assert.equal(await page.locator('html').getAttribute('data-compose-document-marker'), documentMarker);
+    assert.equal(documentNavigations, 0);
+    assert.equal(contextRequests, 0);
+    await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toHaveCount(0);
+    stage = 'real Compose open registration form';
+    await page.getByRole('button', { name: 'Register agent', exact: true }).click();
+    const registration = page.getByRole('dialog', { name: 'Register agent', exact: true });
+    stage = 'real Compose Local name suggestion';
+    await registration.getByLabel('Display name', { exact: true }).fill('Local');
+    const identifier = registration.getByLabel('Agent name (identifier)', { exact: true });
+    await expect(identifier).toHaveValue('local');
+    await page.screenshot({ path: join(artifacts, 'local-agent-suggested-before-submit.png'), fullPage: true, animations: 'disabled' });
+    stage = 'real Compose submit Local registration form';
+    const created = page.waitForResponse((response) => response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/v1/agents');
+    await registration.getByRole('button', { name: 'Register agent', exact: true }).click();
+    const response = await created;
+    stage = 'real Compose validate registration response and one-time token';
+    assert.equal(response.status(), 201);
+    const result = await response.json();
+    assert.equal(result.agent.name, 'local');
+    assert.equal(result.agent.display_name, 'Local');
+    assert.match(result.token, /^almanac_agent_v1_[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
+    await expect(page.getByRole('dialog', { name: 'Agent token', exact: true })).toBeVisible();
+    await expect(page.locator('output[aria-label="Agent token"]')).toHaveText(result.token);
+    assert.deepEqual(requests, [{ name: 'local', display_name: 'Local' }]);
+    stage = 'real Compose close token and inspect agent detail URL';
+    await page.getByRole('button', { name: 'Close token', exact: true }).click();
+    await expect(page).toHaveURL((current) => current.pathname === '/agents' && current.searchParams.has('agent'));
+    await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+    await expect(page.getByText('Local', { exact: true })).toBeVisible();
+    const agentURL = page.url();
+    stage = 'real Compose detail to list browser back';
+    await page.goBack();
+    await expect(page).toHaveURL((current) => current.pathname === '/agents' && !current.searchParams.has('agent'));
+    await expect(page.getByRole('button', { name: 'local', exact: true })).toBeVisible();
+    stage = 'real Compose list to detail browser forward';
+    await page.goForward();
+    await expect(page).toHaveURL(agentURL);
+    await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+    stage = 'real Compose reload persisted agent and one-time-token absence';
+    await page.reload();
+    await expect(page.getByText('local', { exact: true })).toBeVisible();
+    await expect(page.getByText('Local', { exact: true })).toBeVisible();
+    assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
+    stage = 'real Compose verify PostgreSQL persistence';
+    const persisted = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
+      "SELECT count(*) FROM public.almanac_agents WHERE name='local' AND display_name='Local'"]);
+    assert.equal(persisted.trim(), '1');
+    writeFileSync(join(artifacts, 'local-agent-registration.json'), JSON.stringify({
+      name: 'local', display_name: 'Local', create_requests: requests.length,
+      token_shown_once: true, persisted: true, document_navigations: documentNavigations,
+      auth_context_requests: contextRequests, endpoint_presentation: endpointPresentation,
+    }), { mode: 0o600 });
+  } finally {
+    activeBrowser = undefined;
+    await browser.close();
+  }
+}
 async function imageExists() {
   try { await command('docker', ['image', 'inspect', `${project}:dev`], { timeout: 20_000, allowDuringCancellation: true }); return true; }
   catch (error) { if (lastFailure?.status === 1) { lastFailure = undefined; return false; } throw error; }
@@ -311,6 +427,8 @@ try {
   assert.equal(await secretDigest(), beforeSecrets);
   assert.equal(await databaseState(), completed);
   await checkPermanentLogin();
+  stage = 'real Compose browser registration with Local display name';
+  await checkLocalAgentRegistration();
   stage = 'logs exclude credentials';
   const logs = await compose(['logs', '--no-color']);
   assert.ok(!logs.includes(initial));
@@ -324,6 +442,7 @@ try {
     candidateDiffSHA256: createHash('sha256').update(await command('git', ['diff', 'HEAD', '--',
       'Dockerfile', '.dockerignore', 'compose.yaml', 'Makefile', 'deploy/local', 'web/scripts/check-local-compose.mjs'])).digest('hex'),
     checks: ['initializer boundaries', 'real browser onboarding', 'stop/run persistence', 'repeat bootstrap persistence',
+      'real browser agent registration with visible Local identifier suggestion and one-time token',
       'nonroot/read-only/loopback', 'secret-free logs', 'invalid port refusal', 'occupied port refusal'],
   }, null, 2), { mode: 0o600 });
 } catch {
