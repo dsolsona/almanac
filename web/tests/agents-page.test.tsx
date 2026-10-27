@@ -1067,6 +1067,33 @@ describe('agent administration screen', () => {
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
   });
 
+  it('keeps an unknown registration when its retry receives a definite 422', async () => {
+    const user = userEvent.setup(); installDialogs();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
+      .mockRejectedValueOnce(new Error('connection lost'))
+      .mockResolvedValueOnce(response({ code: 'invalid_agent_input', message: 'safe', request_id: 'retry-422', field_errors: [] }, 422));
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByText('No agents have been registered.');
+    await user.click(screen.getByRole('button', { name: 'Register agent' }));
+    await user.type(screen.getByLabelText('Display name'), 'Lost agent');
+    await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Retry registration' }));
+    await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
+    expect(await screen.findByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
+    expect(screen.getByText(/earlier result remains unconfirmed/i)).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent(/original attempt remains unconfirmed/i);
+    expect(screen.getByRole('button', { name: 'Abandon request' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Retry registration' })).toBeVisible();
+    const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(posts).toHaveLength(2);
+    const keys = posts.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
+    expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]);
+    expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({ name: 'lost-agent', display_name: 'Lost agent' });
+  });
+
   it('rechecks session after a 401 without treating the proof failure itself as logout', async () => {
     const user = userEvent.setup(); installDialogs();
     const fetcher = vi.fn().mockResolvedValueOnce(response({ items: [], next_cursor: '' })).mockResolvedValueOnce(response({ code: 'unauthenticated', message: 'unsafe', request_id: 'r', field_errors: [] }, 401)).mockResolvedValueOnce(response({ items: [], next_cursor: '' }));
