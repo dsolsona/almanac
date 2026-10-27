@@ -246,7 +246,8 @@ describe('authentication page', () => {
     const client = clientFor(restricted);
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Set your permanent password' });
-    await user.type(screen.getByLabelText('Current password'), 'c'.repeat(513));
+    await user.click(screen.getByLabelText('Current password'));
+    await user.paste('c'.repeat(513));
     await user.type(screen.getByLabelText('New password'), 'a'.repeat(15));
     await user.type(screen.getByLabelText('Confirm new password'), 'a'.repeat(15));
     await user.click(screen.getByRole('button', { name: 'Set password' }));
@@ -255,9 +256,11 @@ describe('authentication page', () => {
     await user.clear(screen.getByLabelText('Current password'));
     await user.type(screen.getByLabelText('Current password'), 'current');
     await user.clear(screen.getByLabelText('New password'));
-    await user.type(screen.getByLabelText('New password'), 'a'.repeat(129));
+    await user.click(screen.getByLabelText('New password'));
+    await user.paste('a'.repeat(129));
     await user.clear(screen.getByLabelText('Confirm new password'));
-    await user.type(screen.getByLabelText('Confirm new password'), 'a'.repeat(129));
+    await user.click(screen.getByLabelText('Confirm new password'));
+    await user.paste('a'.repeat(129));
     await user.click(screen.getByRole('button', { name: 'Set password' }));
     expect(await screen.findByText('New password must be 15–128 Unicode code points and at most 512 UTF-8 bytes.')).toBeVisible();
     expect(client.changePassword).not.toHaveBeenCalled();
