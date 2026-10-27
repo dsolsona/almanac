@@ -124,8 +124,11 @@ try {
   await browser.close();
   browser = undefined;
   process.stdout.write('PASS browser-agent-status\n');
-} catch {
-  await writeFile(join(fixture.artifacts, 'failure.txt'), `${stage}\n`, { mode: 0o600 });
+} catch (error) {
+  const networkCode = typeof error?.message === 'string'
+    ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] ?? 'none' : 'none';
+  const errorClass = error?.name === 'TimeoutError' ? 'timeout' : 'other';
+  await writeFile(join(fixture.artifacts, 'failure.txt'), `${stage}\nnetwork=${networkCode} class=${errorClass}\n`, { mode: 0o600 });
   process.stdout.write('FAIL browser-agent-status\n');
   process.exitCode = 1;
 } finally {
