@@ -76,7 +76,7 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 		if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) {
 			t.Fatal("datasource browser fixture leaked a credential in output")
 		}
-		t.Fatalf("datasource browser acceptance failed; inspect sanitized artifacts in %s", artifacts)
+		t.Fatalf("datasource browser acceptance failed: %s; inspect sanitized artifacts in %s", safeBrowserFailureMarker(output.String()), artifacts)
 	}
 	if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) {
 		t.Fatal("datasource browser fixture leaked a credential in output")
@@ -84,4 +84,81 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 	if strings.TrimSpace(output.String()) != "PASS browser-datasources" {
 		t.Fatalf("datasource browser acceptance did not produce its exact completion marker; inspect sanitized artifacts in %s", artifacts)
 	}
+}
+
+func safeBrowserFailureMarker(output string) string {
+	fields := strings.Fields(strings.TrimSpace(output))
+	if len(fields) != 8 || fields[0] != "FAIL" || fields[1] != "browser-datasources" {
+		return "stage=none network=none api_status=none request_id=none api_code=none"
+	}
+	values := make(map[string]string, 6)
+	for _, field := range fields[2:] {
+		key, value, ok := strings.Cut(field, "=")
+		if !ok || value == "" {
+			return "stage=none network=none api_status=none request_id=none api_code=none"
+		}
+		values[key] = value
+	}
+	stage := values["stage"]
+	if len(stage) == 0 || len(stage) > 96 || strings.Trim(stage, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
+		stage = "none"
+	}
+	network := values["network"]
+	if network != "none" && (len(network) > 40 || !strings.HasPrefix(network, "ERR_") || strings.Trim(network, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_") != "") {
+		network = "none"
+	}
+	class := values["class"]
+	if class != "timeout" && class != "other" {
+		class = "other"
+	}
+	status := values["api_status"]
+	if status != "none" {
+		parsed := 0
+		for _, digit := range status {
+			if digit < '0' || digit > '9' {
+				parsed = -1
+				break
+			}
+			parsed = parsed*10 + int(digit-'0')
+		}
+		if parsed < 100 || parsed > 599 {
+			status = "none"
+		}
+	}
+	requestID := values["request_id"]
+	if requestID != "none" && !safeBrowserRequestID(requestID) {
+		requestID = "none"
+	}
+	code := values["api_code"]
+	safeCodes := map[string]bool{"agent_unavailable": true, "authentication_unavailable": true, "backend_unavailable": true,
+		"capability_unavailable": true, "conflict": true, "csrf_invalid": true, "datasource_unavailable": true,
+		"diagnostic_unavailable": true, "forbidden": true, "invalid_agent": true, "invalid_request": true,
+		"method_not_allowed": true, "not_found": true, "origin_rejected": true, "rate_limited": true,
+		"secure_transport_required": true, "session_present": true, "source_secret_unavailable": true,
+		"unauthenticated": true, "unauthorized": true, "unsupported": true, "unsupported_media_type": true}
+	if code != "none" && !safeCodes[code] {
+		code = "none"
+	}
+	return "stage=" + stage + " network=" + network + " class=" + class + " api_status=" + status + " request_id=" + requestID + " api_code=" + code
+}
+
+func safeBrowserRequestID(value string) bool {
+	if len(value) == 32 {
+		return strings.Trim(value, "0123456789abcdef") == ""
+	}
+	if len(value) != 36 {
+		return false
+	}
+	for index, char := range value {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
