@@ -2,12 +2,19 @@
 
 ## Current state
 
-User acceptance is reopened under [F2-T21](tasks/F2-T21.md): agent registration
-rejects an ordinary capitalized name without actionable guidance; navigation can
-reload authentication and flash loading states; visual structure and endpoint
-punctuation require direct reference/browser verification. Earlier suite results
-below establish their tested cases, not acceptance of these reported flows. Repairs
-and updated acceptance guidance are in progress. No new F2 feature work is underway.
+Workspace usability repairs under [F2-T21](tasks/F2-T21.md) are verified on product
+checkpoint `a5acd61` with final test-only correction `744a4d3`. The normal isolated
+Compose journey registers `Local`, shows the suggested identifier and one-time
+token, verifies the credential record, history/reload and PostgreSQL persistence.
+Internal navigation retains the document/session with zero reload/context calls;
+literal endpoint text and real desktop/mobile light/dark pages were inspected.
+The same display-name/identifier pattern applies to datasource creation, and saved
+identifiers cannot be edited. Passing checks: 190 web tests, 304 Go tests, 296 race
+tests, 42 catalogue browser checks, real Compose and documentation/build/smoke gates.
+Guidance now requires exact user-case evidence, deployed journeys, reference
+comparison, independent coordinator acceptance and frozen verification candidates.
+Earlier results below establish only their tested cases. No new F2 feature work
+is underway; the maintainer deployment and its data remain untouched.
 
 PR #37 review corrections are verified on combined code checkpoint `845e619`.
 All 17 findings have regressions covering configuration consistency/capacity,
