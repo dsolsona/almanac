@@ -256,6 +256,20 @@ describe('datasource page', () => {
     expect(document.body.textContent).not.toContain('"error_code": "query"');
   });
 
+  it('accepts a polled failed diagnostic with an empty result payload', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    const pending = { id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'pending', operation: 'query_preview', created_at: new Date().toISOString(), deadline_at: new Date(Date.now() + 30_000).toISOString(), result_class: null, result: null, error_code: null, message: null };
+    const failed = { ...pending, state: 'failed', error_code: 'query_failed', message: 'private provider detail' };
+    const calls = installFetch([], ['available'], [202], pending, [], 200, [failed]);
+    render(<DatasourcesPage context={editor} />);
+    await user.click(await screen.findByRole('button', { name: 'Run preview' }));
+    expect(await screen.findByText('Failed', {}, { timeout: 3000 })).toBeVisible();
+    expect(screen.getAllByText('The datasource rejected the query.').length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain('private provider detail');
+    expect(calls.some((call) => call.url === `/api/v1/diagnostics/${pending.id}` && call.init?.method === 'GET')).toBe(true);
+  });
+
   it('tests unchanged saved settings without resending retained basic or bearer credentials', async () => {
     const user = userEvent.setup();
     history.replaceState({}, '', `/datasources/${sourceID}`);
