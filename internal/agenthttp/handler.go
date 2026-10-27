@@ -177,7 +177,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if route == "create" {
-		h.create(w, r, body, authorized.SessionSecret, authorized.Source, id)
+		h.create(w, r, body, authorized.SessionSecret, id)
 		return
 	}
 	if route == "rotate" {
@@ -325,7 +325,6 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, int) {
 }
 
 type createBody struct {
-	CurrentPassword *string        `json:"current_password"`
 	Name            *string        `json:"name"`
 	DisplayName     *string        `json:"display_name"`
 	LifetimeSeconds jsontext.Value `json:"lifetime_seconds"`
@@ -365,9 +364,9 @@ func seconds(value jsontext.Value, max int64, zeroDefault bool) (int64, bool) {
 	return n, true
 }
 
-func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, session string, source netip.Addr, id string) {
+func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, session, id string) {
 	var body createBody
-	if !decode(data, &body) || body.CurrentPassword == nil || body.Name == nil || body.DisplayName == nil {
+	if !decode(data, &body) || body.Name == nil || body.DisplayName == nil {
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
@@ -376,7 +375,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, se
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
-	result, err := h.service.Create(r.Context(), agentmanagement.CreateInput{SessionSecret: session, CurrentPassword: *body.CurrentPassword, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), Name: *body.Name, DisplayName: *body.DisplayName, Lifetime: time.Duration(lifetime) * time.Second})
+	result, err := h.service.Create(r.Context(), agentmanagement.CreateInput{SessionSecret: session, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), Name: *body.Name, DisplayName: *body.DisplayName, Lifetime: time.Duration(lifetime) * time.Second})
 	if err != nil {
 		h.writeError(w, err, id)
 		return

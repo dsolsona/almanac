@@ -305,7 +305,6 @@ type AuthResponse struct {
 
 // CreateAgentRequest defines model for CreateAgentRequest.
 type CreateAgentRequest struct {
-	CurrentPassword string `json:"current_password"`
 	DisplayName     string `json:"display_name"`
 	LifetimeSeconds *int32 `json:"lifetime_seconds,omitempty"`
 	Name            string `json:"name"`

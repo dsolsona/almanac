@@ -97,7 +97,7 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 	}
 	defer db.Close(t.Context())
 	createTokenPath := filepath.Join(dir, "agent-create.token")
-	createArgs := []string{"agents", "create", "--profile-file=" + profile, "--name=cli-agent", "--display-name=CLI Agent", "--current-password-file=" + passwordPath, "--idempotency-key=cli-create-agent-1", "--token-file=" + createTokenPath, "--output=json"}
+	createArgs := []string{"agents", "create", "--profile-file=" + profile, "--name=cli-agent", "--display-name=CLI Agent", "--idempotency-key=cli-create-agent-1", "--token-file=" + createTokenPath, "--output=json"}
 	code, out, errOut := run(createArgs...)
 	requireExit(0, code)
 	if errOut != "" {
@@ -123,7 +123,7 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 		t.Fatal("create token sink was not private")
 	}
 
-	code, out, errOut = run("agents", "create", "--profile-file="+profile, "--name=cli-agent", "--display-name=CLI Agent", "--current-password-file="+passwordPath, "--idempotency-key=cli-create-agent-1", "--show-token", "--output=json")
+	code, out, errOut = run("agents", "create", "--profile-file="+profile, "--name=cli-agent", "--display-name=CLI Agent", "--idempotency-key=cli-create-agent-1", "--show-token", "--output=json")
 	var replay map[string]jsontext.Value
 	if code != 0 || errOut != "" || json.Unmarshal([]byte(out), &replay) != nil || strings.Contains(out, string(token)) {
 		t.Fatal("create replay did not return safe metadata")

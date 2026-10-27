@@ -1,9 +1,8 @@
-// Package agentmanagement creates agents after fresh administrator password proof.
+// Package agentmanagement creates agents from an unrestricted administrator session.
 package agentmanagement
 
 import (
 	"context"
-	"net/netip"
 	"sync"
 	"time"
 
@@ -20,14 +19,12 @@ type Service struct {
 }
 
 type CreateInput struct {
-	SessionSecret   string `json:"-"`
-	CurrentPassword string `json:"-"`
-	Source          netip.Addr
-	RequestID       string
-	IdempotencyKey  string
-	Name            string
-	DisplayName     string
-	Lifetime        time.Duration
+	SessionSecret  string `json:"-"`
+	RequestID      string
+	IdempotencyKey string
+	Name           string
+	DisplayName    string
+	Lifetime       time.Duration
 }
 
 type Issuance struct {
@@ -45,9 +42,8 @@ func New(databaseURL string, auth *authentication.Service, now func() time.Time)
 func (s *Service) Create(ctx context.Context, input CreateInput) (Issuance, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	proof, err := s.auth.ProveAdministrator(ctx, authentication.AdministratorProofInput{
-		SessionSecret: input.SessionSecret, CurrentPassword: input.CurrentPassword,
-		Source: input.Source, RequestID: input.RequestID,
+	proof, err := s.auth.AuthorizeAgentRegistration(ctx, authentication.AgentRegistrationSessionInput{
+		SessionSecret: input.SessionSecret, RequestID: input.RequestID,
 	})
 	if err != nil {
 		return Issuance{}, err

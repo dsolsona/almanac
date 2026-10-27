@@ -417,15 +417,16 @@ FROM public.almanac_agents a JOIN public.almanac_agent_credentials c ON c.agent_
 
 func TestIntegrationCreateAgentProofAndSessionExpiryAfterLockWait(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		start   time.Duration
-		proof   time.Duration
-		advance time.Duration
+		name       string
+		start      time.Duration
+		proof      time.Duration
+		advance    time.Duration
+		wantErr    error
+		wantCounts agentCounts
 	}{
-		{"proof", 3 * time.Second, 2 * time.Second, 35 * time.Second},
-		// Session issued at base+1s: cross its exact 30-minute idle boundary
-		// while password proof remains only three seconds old.
-		{"session", 30*time.Minute - time.Second, 30*time.Minute - 2*time.Second, 30*time.Minute + time.Second},
+		{"session authorization remains valid after the old proof window", 3 * time.Second, 2 * time.Second, 35 * time.Second, nil, agentCounts{agents: 1, credentials: 1, receipts: 1, audits: 2}},
+		// Session issued at base+1s: cross its exact 30-minute idle boundary.
+		{"expired current session remains denied", 30*time.Minute - time.Second, 30*time.Minute - 2*time.Second, 30*time.Minute + time.Second, ErrInvalidSession, agentCounts{}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -453,11 +454,11 @@ func TestIntegrationCreateAgentProofAndSessionExpiryAfterLockWait(t *testing.T) 
 			if err := tx.Commit(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-result; !errors.Is(err, ErrInvalidSession) {
-				t.Fatalf("post-lock authority result = %v", err)
+			if err := <-result; !errors.Is(err, test.wantErr) {
+				t.Fatalf("post-lock authorization result = %v; want %v", err, test.wantErr)
 			}
-			if counts := agentRowCounts(t, f.databaseURL); counts != (agentCounts{}) {
-				t.Fatalf("lock-wait denial left rows: %+v", counts)
+			if counts := agentRowCounts(t, f.databaseURL); counts != test.wantCounts {
+				t.Fatalf("post-lock authorization row counts = %+v; want %+v", counts, test.wantCounts)
 			}
 			closeIntegrationConn(observer)
 			closeIntegrationConn(blocker)

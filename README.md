@@ -217,16 +217,18 @@ Agent management CLI operations follow this shared profile boundary.
 
 Agent administration uses the same HTTPS management API and requires an
 unrestricted administrator session in the selected profile. Reads request one
-bounded page; provide the returned cursor explicitly to continue. Mutations
-require the administrator's current password in a protected file, an explicit
-idempotency key and the exact current ETag for versioned operations:
+bounded page; provide the returned cursor explicitly to continue. Registration
+uses that current session without asking for the password again. Credential
+rotation, revocation and disable require the administrator's current password
+in a protected file. Mutations use an explicit idempotency key; versioned
+operations also require the exact current ETag:
 
 ```sh
 bin/almanac agents list --profile-file=/home/operator/.almanac/profile.json --output=json
 bin/almanac agents get --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
 bin/almanac agents credentials list --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
 bin/almanac agents create --profile-file=/home/operator/.almanac/profile.json --name=collector-east --display-name='East collector' \
-  --current-password-file=/run/secrets/almanac-password --idempotency-key=registration-2026-10-26 \
+  --idempotency-key=registration-2026-10-27 \
   --token-file=/home/operator/.almanac/collector-east.token --output=json
 ```
 

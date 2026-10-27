@@ -109,8 +109,7 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createSource := netip.MustParseAddr("192.0.2.152")
-	created, err := manager.Create(t.Context(), CreateInput{SessionSecret: normal.Secret, CurrentPassword: permanent, Source: createSource, RequestID: "rotation-create", IdempotencyKey: "rotation-create", Name: "rotation-target", DisplayName: "Rotation Target"})
+	created, err := manager.Create(t.Context(), CreateInput{SessionSecret: normal.Secret, RequestID: "rotation-create", IdempotencyKey: "rotation-create", Name: "rotation-target", DisplayName: "Rotation Target"})
 	if err != nil {
 		t.Fatal(err)
 	}

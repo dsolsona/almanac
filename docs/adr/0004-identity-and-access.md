@@ -7,7 +7,8 @@
 - Related specs: [SPEC-0004](../specs/0004-identity-and-access.md),
   [SPEC-0002](../specs/0002-agent-behavior.md), and
   [SPEC-0003](../specs/0003-ingestion-and-recovery.md)
-- Supersedes / superseded by: none
+- Supersedes / superseded by: Agent registration authorization is narrowed by
+  [ADR-0019](0019-session-authorized-agent-registration.md); other identity decisions remain in force.
 
 ## Context
 

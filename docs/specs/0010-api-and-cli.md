@@ -137,6 +137,17 @@ authentication mutation. Uncertain logout preserves the recoverable credential.
 
 ## Acceptance criteria
 
+Agent registration uses the current administrator session as defined by
+[ADR-0019](../adr/0019-session-authorized-agent-registration.md).
+`POST /api/v1/agents` accepts name, display name and optional lifetime without
+`current_password`; the CLI create operation likewise needs no password file.
+Retain idempotency keys, CSRF, current authorization, audit and one-time token
+semantics. For a failed response, explain the observed cause when known
+(connection failure, service unavailable, timeout or unexpected response), retain
+the pending registration and offer deliberate recovery. Never infer rollback
+from a connection failure, automatically repeat a mutation, or describe an
+unconfirmed registration as an empty list with no qualification.
+
 - AC-01: UI and CLI invoke the same authorized operations and produce equivalent
   resource outcomes; the operation inventory has no unexplained UI-only mutations.
 - AC-02: Every API operation has generated types, examples, error cases and declared

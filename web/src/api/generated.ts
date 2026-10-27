@@ -281,8 +281,6 @@ export interface components {
             next_cursor: string;
         };
         CreateAgentRequest: {
-            /** Format: password */
-            current_password: string;
             name: string;
             display_name: string;
             /** Format: int32 */

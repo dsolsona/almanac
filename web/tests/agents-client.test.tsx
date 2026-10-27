@@ -35,7 +35,7 @@ describe('browser agent management client', () => {
 
   it('sends create with explicit caller key and CSRF, exposing only validated fresh issuance', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(issuance, 201));
-    const input = { current_password: 'secret-password', name: 'edge-a', display_name: 'Edge A' };
+    const input = { name: 'edge-a', display_name: 'Edge A' };
     const result = await createAgentClient(fetcher).create(input, auth, 'caller-key');
     expect(result.token).toBe('one-time-secret');
     expect(fetcher).toHaveBeenCalledOnce();
@@ -44,16 +44,16 @@ describe('browser agent management client', () => {
     expect(init).toMatchObject({ method: 'POST', body: JSON.stringify(input), credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' });
     expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe(auth.csrf_token);
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('caller-key');
-    expect(input.current_password).toBe('secret-password');
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty('current_password');
   });
 
   it('rejects replay issuance with any token member and never leaks response secrets', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ ...issuance, replayed: true, secret_state: 'secret_unavailable', token: null }, 200));
     let failure: unknown;
-    try { await createAgentClient(fetcher).create({ current_password: 'password-secret', name: 'edge-a', display_name: 'Edge A' }, auth, 'key'); }
+    try { await createAgentClient(fetcher).create({ name: 'edge-a', display_name: 'Edge A' }, auth, 'key'); }
     catch (error) { failure = error; }
     expect(failure).toBeInstanceOf(AgentFailure);
-    expect(failure).toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
+    expect(failure).toMatchObject({ kind: 'uncertain', code: 'invalid_response' });
     expect(String(failure)).not.toMatch(/password-secret|one-time-secret/);
     expect(fetcher).toHaveBeenCalledOnce();
   });
@@ -61,13 +61,37 @@ describe('browser agent management client', () => {
   it('accepts replay issuance only when the token member is absent', async () => {
     const replay = { agent, credential, replayed: true, secret_state: 'secret_unavailable' };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(replay, 200));
-    await expect(createAgentClient(fetcher).create({ current_password: 'password', name: 'edge-a', display_name: 'Edge A' }, auth, 'key'))
+    await expect(createAgentClient(fetcher).create({ name: 'edge-a', display_name: 'Edge A' }, auth, 'key'))
       .resolves.toEqual(replay);
+  });
+
+  it('preserves a validated management outage cause and safe request ID without replaying', async () => {
+    const requestID = '0123456789abcdef0123456789abcdef';
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({
+      type: 'about:blank', title: 'Unavailable', status: 503, code: 'management_unavailable',
+      message: 'private backend detail', request_id: requestID, field_errors: [],
+    }, 503));
+    let caught: unknown;
+    try { await createAgentClient(fetcher).create({ name: 'edge-a', display_name: 'Edge A' }, auth, 'same-key'); }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ kind: 'uncertain', code: 'management_unavailable', requestID });
+    expect(String(caught)).not.toContain('private backend detail');
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('reports a post-dispatch connection failure without exposing transport detail', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error('private certificate and URL detail'));
+    let caught: unknown;
+    try { await createAgentClient(fetcher).create({ name: 'edge-a', display_name: 'Edge A' }, auth, 'same-key'); }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ kind: 'uncertain', code: 'connection_failed' });
+    expect(String(caught)).not.toMatch(/certificate|URL detail/);
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it('checks create and rotate issuance statuses and all token-state combinations', async () => {
     const createFresh = vi.fn<typeof fetch>().mockResolvedValue(json(issuance, 201));
-    await expect(createAgentClient(createFresh).create({ current_password: 'p', name: 'n', display_name: 'd' }, auth, 'key'))
+    await expect(createAgentClient(createFresh).create({ name: 'n', display_name: 'd' }, auth, 'key'))
       .resolves.toMatchObject({ replayed: false, token: 'one-time-secret' });
     for (const malformed of [
       { ...issuance, token: '' }, { ...issuance, token: null },
@@ -75,12 +99,12 @@ describe('browser agent management client', () => {
       { ...issuance, replayed: true, secret_state: 'secret_unavailable', token: null },
     ]) {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(malformed, malformed.replayed ? 200 : 201));
-      await expect(createAgentClient(fetcher).create({ current_password: 'p', name: 'n', display_name: 'd' }, auth, 'key'))
+      await expect(createAgentClient(fetcher).create({ name: 'n', display_name: 'd' }, auth, 'key'))
         .rejects.toMatchObject({ kind: 'uncertain' });
       expect(fetcher).toHaveBeenCalledOnce();
     }
     const wrongFreshStatus = vi.fn<typeof fetch>().mockResolvedValue(json(issuance, 200));
-    await expect(createAgentClient(wrongFreshStatus).create({ current_password: 'p', name: 'n', display_name: 'd' }, auth, 'key'))
+    await expect(createAgentClient(wrongFreshStatus).create({ name: 'n', display_name: 'd' }, auth, 'key'))
       .rejects.toMatchObject({ kind: 'uncertain' });
     const rotationFresh = { ...issuance, credential: { ...credential, id: replacementCredentialId }, previous_credential: credential };
     const rotate = vi.fn<typeof fetch>().mockResolvedValue(json(rotationFresh));
@@ -106,13 +130,13 @@ describe('browser agent management client', () => {
   });
 
   it('keeps malformed and truncated mutation successes uncertain without exposing secrets', async () => {
-    for (const result of [new Response('{"token":"password-secret"', { status: 201 }), json({ ...issuance, agent: { ...agent, id: credentialId } }, 201)]) {
+    for (const result of [new Response('{"token":"private"', { status: 201 }), json({ ...issuance, agent: { ...agent, id: credentialId } }, 201)]) {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(result);
       let failure: unknown;
-      try { await createAgentClient(fetcher).create({ current_password: 'password-secret', name: 'n', display_name: 'd' }, auth, 'same-key'); }
+      try { await createAgentClient(fetcher).create({ name: 'n', display_name: 'd' }, auth, 'same-key'); }
       catch (error) { failure = error; }
-      expect(failure).toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
-      expect(String(failure)).not.toContain('password-secret');
+      expect(failure).toMatchObject({ kind: 'uncertain', code: 'invalid_response' });
+      expect(String(failure)).not.toContain('private');
       expect(fetcher).toHaveBeenCalledOnce();
     }
   });
@@ -225,7 +249,7 @@ describe('browser agent management client', () => {
     const fetcher = vi.fn<typeof fetch>();
     await expect(createAgentClient(fetcher).list({ cursor: 'x'.repeat(513) })).rejects.toMatchObject({ kind: 'rejected' });
     await expect(createAgentClient(fetcher).credentials(id, { cursor: 'é' })).rejects.toMatchObject({ kind: 'rejected' });
-    await expect(createAgentClient(fetcher).create({ current_password: 'p', name: 'n', display_name: 'd' }, auth, 'bad key'))
+    await expect(createAgentClient(fetcher).create({ name: 'n', display_name: 'd' }, auth, 'bad key'))
       .rejects.toMatchObject({ kind: 'rejected' });
     await expect(createAgentClient(fetcher).disable(id, { current_password: 'p' }, auth, 'W/"bad"', 'key'))
       .rejects.toMatchObject({ kind: 'rejected' });

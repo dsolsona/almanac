@@ -84,7 +84,7 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	case "agents credentials list":
 		allowed["agent-id"], allowed["limit"], allowed["cursor"] = true, true, true
 	case "agents create":
-		allowed["name"], allowed["display-name"], allowed["current-password-file"], allowed["idempotency-key"], allowed["lifetime-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true, true
+		allowed["name"], allowed["display-name"], allowed["idempotency-key"], allowed["lifetime-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true
 	case "agents credentials rotate":
 		allowed["agent-id"], allowed["if-match"], allowed["current-password-file"], allowed["idempotency-key"], allowed["confirm"], allowed["lifetime-seconds"], allowed["overlap-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true, true, true, true
 	case "agents credentials revoke":
@@ -126,7 +126,10 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 		}
 	}
 	mutating := operation == "agents create" || operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable"
-	if mutating && (!seen["current-password-file"] || passwordFile == "" || !seen["idempotency-key"] || !validKey(key)) {
+	if mutating && (!seen["idempotency-key"] || !validKey(key)) {
+		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("a valid idempotency-key is required"))
+	}
+	if operation != "agents create" && mutating && (!seen["current-password-file"] || passwordFile == "") {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("current-password-file and a valid idempotency-key are required"))
 	}
 	if (operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable") && (!seen["if-match"] || !validETag(ifMatch, id)) {
@@ -262,7 +265,7 @@ func cliOptionalTime(t *time.Time) string {
 func performAgent(ctx context.Context, op, profile, id, credentialID, name, display, etag, passwordFile, key, tokenFile string, show bool, limit int, cursor string, lifetime int, lifetimeSet bool, overlap int, overlapSet bool) (jsontext.Value, string, bool, error) {
 	var password []byte
 	mutating := op == "agents create" || op == "agents credentials rotate" || op == "agents credentials revoke" || op == "agents disable"
-	if mutating {
+	if mutating && op != "agents create" {
 		var e error
 		password, e = secretfile.Read(passwordFile, 512)
 		if e != nil || len(password) == 0 || !utf8.Valid(password) {
@@ -333,7 +336,7 @@ func performAgent(ctx context.Context, op, profile, id, credentialID, name, disp
 	case "agents create":
 		life := optionalSeconds(lifetime, lifetimeSet)
 		var b []byte
-		b, token, replay, e = client.Create(ctx, api.CreateAgentRequest{Name: name, DisplayName: display, CurrentPassword: string(password), LifetimeSeconds: life}, key)
+		b, token, replay, e = client.Create(ctx, api.CreateAgentRequest{Name: name, DisplayName: display, LifetimeSeconds: life}, key)
 		data = b
 	case "agents credentials rotate":
 		var idv api.AgentId

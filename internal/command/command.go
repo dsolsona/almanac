@@ -80,7 +80,7 @@ func printHelp(w io.Writer) {
   almanac agents list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--timeout=30s] [--output=json]
   almanac agents get --profile-file=FILE --agent-id=UUID
   almanac agents credentials list --profile-file=FILE --agent-id=UUID [--limit=50] [--cursor=CURSOR]
-  almanac agents create --profile-file=FILE --name=NAME --display-name=NAME --current-password-file=FILE --idempotency-key=KEY (--token-file=FILE|--show-token)
+  almanac agents create --profile-file=FILE --name=NAME --display-name=NAME --idempotency-key=KEY (--token-file=FILE|--show-token)
   almanac agents credentials rotate --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm (--token-file=FILE|--show-token)
   almanac agents credentials revoke --profile-file=FILE --agent-id=UUID --credential-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
   almanac agents disable --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm

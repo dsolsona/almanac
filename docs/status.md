@@ -2,6 +2,16 @@
 
 ## Current state
 
+Registration usability correction is verified under [F2-T14](tasks/F2-T14.md).
+[ADR-0019](adr/0019-session-authorized-agent-registration.md) accepts registration
+using the current administrator session without an additional password prompt.
+UI/API/CLI registration and explicit same-request recovery pass real-stack checks.
+Final evidence: 140 web tests, 178 Go tests, 129 selected database tests and the
+race gate passed. An earlier reported registration failure was not reproduced;
+one intermediate combined-runtime restart shutdown exceeded its five-second
+deadline and remains an unresolved intermittent observation. Neither is claimed
+fixed by a subsequent passing run; details are preserved in the task record.
+
 The first visual foundation task is complete. Shared controls, theme tokens,
 the local heading font, catalogue and web verification harness are implemented.
 The catalogue also includes a date picker, switches, shared loading feedback,

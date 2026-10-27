@@ -243,11 +243,11 @@ func TestGeneratedIssuanceSupportsFreshAndReplayStatusesAndExplicitZero(t *testi
 	defer server.Close()
 	client := newTestAgentClient(t, server)
 	zero := int32(0)
-	created, token, replay, err := client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", CurrentPassword: "proof", LifetimeSeconds: &zero}, "create-key")
+	created, token, replay, err := client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", LifetimeSeconds: &zero}, "create-key")
 	if err != nil || replay || token != "fresh-create-secret" || strings.Contains(string(created), "future_secret") || strings.Contains(string(created), token) {
 		t.Fatalf("fresh create result was wrong: replay=%t err=%v", replay, err)
 	}
-	if _, token, replay, err = client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", CurrentPassword: "proof", LifetimeSeconds: &zero}, "create-key"); err != nil || !replay || token != "" {
+	if _, token, replay, err = client.Create(t.Context(), api.CreateAgentRequest{Name: "east", DisplayName: "East", LifetimeSeconds: &zero}, "create-key"); err != nil || !replay || token != "" {
 		t.Fatalf("create replay failed: replay=%t token=%q err=%v", replay, token, err)
 	}
 	var id api.AgentId
@@ -338,7 +338,7 @@ func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
 			var err error
 			switch mutation {
 			case "create":
-				_, _, _, err = client.Create(t.Context(), api.CreateAgentRequest{Name: strings.Repeat("a", 8<<20), DisplayName: "East", CurrentPassword: "proof"}, "create-once")
+				_, _, _, err = client.Create(t.Context(), api.CreateAgentRequest{Name: strings.Repeat("a", 8<<20), DisplayName: "East"}, "create-once")
 			case "rotate":
 				var id api.AgentId
 				if decodeErr := json.Unmarshal([]byte(`"00000000-0000-0000-0000-000000000001"`), &id); decodeErr != nil {
@@ -427,7 +427,7 @@ func TestMutationsClassifyDocumentedRejectionsUnknownResponsesAndCancellation(t 
 	}))
 	defer server.Close()
 	client := newTestAgentClient(t, server)
-	input := api.CreateAgentRequest{Name: "east", DisplayName: "East", CurrentPassword: "proof"}
+	input := api.CreateAgentRequest{Name: "east", DisplayName: "East"}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, _, _, err := client.Create(ctx, input, "cancel-before-dispatch"); !isFailure(err, setupclient.KindCancelled, false) {

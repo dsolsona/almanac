@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
-	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -32,7 +31,13 @@ func (c *safeClock) Now() time.Time {
 	return c.t
 }
 
-func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.T) {
+func (c *safeClock) Advance(duration time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(duration)
+}
+
+func TestIntegrationCreateAgentUsesCurrentSessionForFreshIssueAndReplay(t *testing.T) {
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade test database failed")
@@ -61,8 +66,8 @@ func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.
 		t.Fatal("construct agent management service failed")
 	}
 	if result, err := manager.Create(t.Context(), CreateInput{
-		SessionSecret: restricted.Secret, CurrentPassword: initialPassword, Source: source,
-		RequestID: "agent-restricted", IdempotencyKey: "restricted-key", Name: "restricted-agent", DisplayName: "Restricted Agent",
+		SessionSecret: restricted.Secret,
+		RequestID:     "agent-restricted", IdempotencyKey: "restricted-key", Name: "restricted-agent", DisplayName: "Restricted Agent",
 	}); !errors.Is(err, authentication.ErrForbidden) || result != (Issuance{}) {
 		t.Fatal("valid restricted onboarding session did not return forbidden with zero issuance")
 	}
@@ -77,9 +82,10 @@ func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.
 	if err != nil {
 		t.Fatal("complete administrator onboarding failed")
 	}
+	clock.Advance(6 * time.Minute)
 	createInput := CreateInput{
-		SessionSecret: normal.Secret, CurrentPassword: permanentPassword, Source: source,
-		RequestID: "agent-create-1", IdempotencyKey: "agent-create-key-1", Name: "metrics-east",
+		SessionSecret: normal.Secret,
+		RequestID:     "agent-create-1", IdempotencyKey: "agent-create-key-1", Name: "metrics-east",
 		DisplayName: "Metrics East", Lifetime: 24 * time.Hour,
 	}
 	created, err := manager.Create(t.Context(), createInput)
@@ -96,14 +102,8 @@ func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.
 		t.Fatal("persisted agent verifier did not match issued token")
 	}
 
-	badReplay := createInput
-	badReplay.CurrentPassword = "incorrect current password"
-	badReplay.RequestID = "agent-replay-bad-proof"
-	if result, err := manager.Create(t.Context(), badReplay); !errors.Is(err, authentication.ErrUnauthenticated) || result.Token != "" {
-		t.Fatal("receipt replay did not require fresh password proof")
-	}
 	replayInput := createInput
-	replayInput.RequestID = "agent-replay-valid-proof"
+	replayInput.RequestID = "agent-replay-current-session"
 	replayed, err := manager.Create(t.Context(), replayInput)
 	if err != nil || !replayed.Creation.Replayed || replayed.Token != "" || replayed.Creation.Credential != created.Creation.Credential {
 		t.Fatal("authorized replay returned token or changed safe metadata")
@@ -114,13 +114,6 @@ func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.
 	if result, err := manager.Create(t.Context(), conflict); !errors.Is(err, storage.ErrAgentConflict) || result.Token != "" {
 		t.Fatal("same key with different body did not conflict safely")
 	}
-	wrongPassword := createInput
-	wrongPassword.CurrentPassword = "wrong password"
-	wrongPassword.IdempotencyKey = "agent-wrong-password"
-	wrongPassword.RequestID = "agent-wrong-password"
-	if result, err := manager.Create(t.Context(), wrongPassword); !errors.Is(err, authentication.ErrUnauthenticated) || result.Token != "" {
-		t.Fatal("wrong password returned an issuance")
-	}
 	invalidSession := createInput
 	invalidSession.SessionSecret = "invalid"
 	invalidSession.IdempotencyKey = "agent-invalid-session"
@@ -130,7 +123,6 @@ func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.
 	}
 	revokedSession := createInput
 	revokedSession.SessionSecret = restricted.Secret
-	revokedSession.CurrentPassword = initialPassword
 	revokedSession.IdempotencyKey = "agent-revoked-session"
 	revokedSession.RequestID = "agent-revoked-session"
 	if result, err := manager.Create(t.Context(), revokedSession); !errors.Is(err, authentication.ErrUnauthenticated) || result != (Issuance{}) {
@@ -183,24 +175,6 @@ func TestIntegrationCreateAgentIssuesOneTimeTokenAndFreshReplayProof(t *testing.
 			t.Fatal("remove transaction failure function failed")
 		}
 	}
-	for attempt := range 3 {
-		failed := createInput
-		failed.CurrentPassword = "incorrect password"
-		failed.IdempotencyKey = fmt.Sprintf("agent-throttle-%d", attempt)
-		failed.RequestID = failed.IdempotencyKey
-		if result, err := manager.Create(t.Context(), failed); !errors.Is(err, authentication.ErrUnauthenticated) || result.Token != "" {
-			t.Fatal("failed password proof returned an issuance")
-		}
-	}
-	blocked := createInput
-	blocked.IdempotencyKey = "agent-throttle-blocked"
-	blocked.RequestID = "agent-throttle-blocked"
-	if result, err := manager.Create(t.Context(), blocked); result.Token != "" {
-		t.Fatal("throttled password proof returned a token")
-	} else if retry, ok := errors.AsType[*authentication.RateLimitError](err); !ok || retry.RetryAfter <= 0 {
-		t.Fatal("shared account throttle did not preserve retry information")
-	}
-
 	encoded, err := json.Marshal(created)
 	if err != nil || strings.Contains(string(encoded), created.Token) {
 		t.Fatal("issuance JSON exposed token")
