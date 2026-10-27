@@ -354,6 +354,22 @@ paths:
         '202': {description: Diagnostic accepted, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
         '503': {description: Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/datasources/{datasource_id}/connection-tests:
+    post:
+      operationId: postSavedDatasourceConnectionTest
+      summary: Test the saved datasource settings on its assigned agent
+      description: Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DatasourceId'}
+        - {$ref: '#/components/parameters/DatasourceIfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
+      responses:
+        '202': {description: Diagnostic accepted or idempotent replay, headers: {Location: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
+        '409': {description: Stale datasource version or idempotency key conflict, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Pre-admission agent/configuration unavailable; no diagnostic receipt was created, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/diagnostics/{diagnostic_id}:
     get:
       operationId: getDiagnostic

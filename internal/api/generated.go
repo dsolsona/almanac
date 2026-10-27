@@ -1458,6 +1458,15 @@ type PutDatasourceParams struct {
 	IfMatch DatasourceIfMatch `json:"If-Match"`
 }
 
+// PostSavedDatasourceConnectionTestParams defines parameters for PostSavedDatasourceConnectionTest.
+type PostSavedDatasourceConnectionTestParams struct {
+	// IfMatch Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>".
+	IfMatch DatasourceIfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetProvidersParams defines parameters for GetProviders.
 type GetProvidersParams struct {
 	AgentId *openapi_types.UUID `form:"agent_id,omitempty" json:"agent_id,omitempty"`
@@ -1498,6 +1507,9 @@ type PostDatasourceConnectionTestJSONRequestBody = ConnectionTestRequest
 
 // PutDatasourceJSONRequestBody defines body for PutDatasource for application/json ContentType.
 type PutDatasourceJSONRequestBody = DatasourceWrite
+
+// PostSavedDatasourceConnectionTestJSONRequestBody defines body for PostSavedDatasourceConnectionTest for application/json ContentType.
+type PostSavedDatasourceConnectionTestJSONRequestBody = EmptyAuthRequest
 
 // PostDatasourceQueryPreviewJSONRequestBody defines body for PostDatasourceQueryPreview for application/json ContentType.
 type PostDatasourceQueryPreviewJSONRequestBody = QueryPreviewRequest
@@ -1886,6 +1898,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
 	PutDatasource(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSavedDatasourceConnectionTestWithBody Test the saved datasource settings on its assigned agent
+	//
+	// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+	PostSavedDatasourceConnectionTestWithBody(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSavedDatasourceConnectionTest Test the saved datasource settings on its assigned agent
+	//
+	// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+	PostSavedDatasourceConnectionTest(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, body PostSavedDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostDatasourceQueryPreviewWithBody Run a bounded PromQL preview on the assigned agent
 	//
@@ -2478,6 +2508,44 @@ func (c *Client) PutDatasourceWithBody(ctx context.Context, datasourceId Datasou
 // Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
 func (c *Client) PutDatasource(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutDatasourceRequest(c.Server, datasourceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostSavedDatasourceConnectionTestWithBody Test the saved datasource settings on its assigned agent
+//
+// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+func (c *Client) PostSavedDatasourceConnectionTestWithBody(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSavedDatasourceConnectionTestRequestWithBody(c.Server, datasourceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostSavedDatasourceConnectionTest Test the saved datasource settings on its assigned agent
+//
+// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+func (c *Client) PostSavedDatasourceConnectionTest(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, body PostSavedDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSavedDatasourceConnectionTestRequest(c.Server, datasourceId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3577,6 +3645,75 @@ func NewPutDatasourceRequestWithBody(server string, datasourceId DatasourceId, p
 	return req, nil
 }
 
+// NewPostSavedDatasourceConnectionTestRequest calls the generic PostSavedDatasourceConnectionTest builder with application/json body
+func NewPostSavedDatasourceConnectionTestRequest(server string, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, body PostSavedDatasourceConnectionTestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostSavedDatasourceConnectionTestRequestWithBody(server, datasourceId, params, "application/json", bodyReader)
+}
+
+// NewPostSavedDatasourceConnectionTestRequestWithBody constructs an http.Request for the PostSavedDatasourceConnectionTest method, with any body, and a specified content type
+func NewPostSavedDatasourceConnectionTestRequestWithBody(server string, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "datasource_id", datasourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/datasources/%s/connection-tests", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewPostDatasourceQueryPreviewRequest calls the generic PostDatasourceQueryPreview builder with application/json body
 func NewPostDatasourceQueryPreviewRequest(server string, datasourceId DatasourceId, body PostDatasourceQueryPreviewJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4114,6 +4251,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /api/v1/datasources/{datasource_id} (the `PutDatasource` operationId).
 	PutDatasourceWithResponse(ctx context.Context, datasourceId DatasourceId, params *PutDatasourceParams, body PutDatasourceJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDatasourceResponse, error)
+
+	// PostSavedDatasourceConnectionTestWithBodyWithResponse Test the saved datasource settings on its assigned agent
+	//
+	// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+	PostSavedDatasourceConnectionTestWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSavedDatasourceConnectionTestResponse, error)
+
+	// PostSavedDatasourceConnectionTestWithResponse Test the saved datasource settings on its assigned agent
+	//
+	// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+	PostSavedDatasourceConnectionTestWithResponse(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, body PostSavedDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSavedDatasourceConnectionTestResponse, error)
 
 	// PostDatasourceQueryPreviewWithBodyWithResponse Run a bounded PromQL preview on the assigned agent
 	//
@@ -5406,6 +5561,75 @@ func (r PutDatasourceResponse) ContentType() string {
 	return ""
 }
 
+// PostSavedDatasourceConnectionTestResponse202Headers the declared response headers of an HTTP 202 response for PostSavedDatasourceConnectionTest
+type PostSavedDatasourceConnectionTestResponse202Headers struct {
+	Location *string
+}
+
+type PostSavedDatasourceConnectionTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *Diagnostic
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *PostSavedDatasourceConnectionTestResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PostSavedDatasourceConnectionTestResponse) GetJSON202() *Diagnostic {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r PostSavedDatasourceConnectionTestResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r PostSavedDatasourceConnectionTestResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PostSavedDatasourceConnectionTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PostSavedDatasourceConnectionTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSavedDatasourceConnectionTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSavedDatasourceConnectionTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostSavedDatasourceConnectionTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // PostDatasourceQueryPreviewResponse202Headers the declared response headers of an HTTP 202 response for PostDatasourceQueryPreview
 type PostDatasourceQueryPreviewResponse202Headers struct {
 	Location *string
@@ -6137,6 +6361,36 @@ func (c *ClientWithResponses) PutDatasourceWithResponse(ctx context.Context, dat
 		return nil, err
 	}
 	return ParsePutDatasourceResponse(rsp)
+}
+
+// PostSavedDatasourceConnectionTestWithBodyWithResponse Test the saved datasource settings on its assigned agent
+//
+// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+func (c *ClientWithResponses) PostSavedDatasourceConnectionTestWithBodyWithResponse(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSavedDatasourceConnectionTestResponse, error) {
+	rsp, err := c.PostSavedDatasourceConnectionTestWithBody(ctx, datasourceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSavedDatasourceConnectionTestResponse(rsp)
+}
+
+// PostSavedDatasourceConnectionTestWithResponse Test the saved datasource settings on its assigned agent
+//
+// Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/datasources/{datasource_id}/connection-tests (the `PostSavedDatasourceConnectionTest` operationId).
+func (c *ClientWithResponses) PostSavedDatasourceConnectionTestWithResponse(ctx context.Context, datasourceId DatasourceId, params *PostSavedDatasourceConnectionTestParams, body PostSavedDatasourceConnectionTestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSavedDatasourceConnectionTestResponse, error) {
+	rsp, err := c.PostSavedDatasourceConnectionTest(ctx, datasourceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSavedDatasourceConnectionTestResponse(rsp)
 }
 
 // PostDatasourceQueryPreviewWithBodyWithResponse Run a bounded PromQL preview on the assigned agent
@@ -7285,6 +7539,66 @@ func ParsePutDatasourceResponse(rsp *http.Response) (*PutDatasourceResponse, err
 	return response, nil
 }
 
+// ParsePostSavedDatasourceConnectionTestResponse parses an HTTP response from a PostSavedDatasourceConnectionTestWithResponse call
+func ParsePostSavedDatasourceConnectionTestResponse(rsp *http.Response) (*PostSavedDatasourceConnectionTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSavedDatasourceConnectionTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest Diagnostic
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers PostSavedDatasourceConnectionTestResponse202Headers
+		if values := rsp.Header.Values("Location"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Location", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Location = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParsePostDatasourceQueryPreviewResponse parses an HTTP response from a PostDatasourceQueryPreviewWithResponse call
 func ParsePostDatasourceQueryPreviewResponse(rsp *http.Response) (*PostDatasourceQueryPreviewResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7558,6 +7872,9 @@ type ServerInterface interface {
 	// PutDatasource Replace datasource settings and assignment
 	// (PUT /api/v1/datasources/{datasource_id})
 	PutDatasource(w http.ResponseWriter, r *http.Request, datasourceId DatasourceId, params PutDatasourceParams)
+	// PostSavedDatasourceConnectionTest Test the saved datasource settings on its assigned agent
+	// (POST /api/v1/datasources/{datasource_id}/connection-tests)
+	PostSavedDatasourceConnectionTest(w http.ResponseWriter, r *http.Request, datasourceId DatasourceId, params PostSavedDatasourceConnectionTestParams)
 	// PostDatasourceQueryPreview Run a bounded PromQL preview on the assigned agent
 	// (POST /api/v1/datasources/{datasource_id}/query-previews)
 	PostDatasourceQueryPreview(w http.ResponseWriter, r *http.Request, datasourceId DatasourceId)
@@ -8335,6 +8652,83 @@ func (siw *ServerInterfaceWrapper) PutDatasource(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// PostSavedDatasourceConnectionTest operation middleware
+func (siw *ServerInterfaceWrapper) PostSavedDatasourceConnectionTest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "datasource_id" -------------
+	var datasourceId DatasourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "datasource_id", r.PathValue("datasource_id"), &datasourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "datasource_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostSavedDatasourceConnectionTestParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch DatasourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostSavedDatasourceConnectionTest(w, r, datasourceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PostDatasourceQueryPreview operation middleware
 func (siw *ServerInterfaceWrapper) PostDatasourceQueryPreview(w http.ResponseWriter, r *http.Request) {
 
@@ -8614,6 +9008,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}", wrapper.PutDatasource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources/connection-tests", wrapper.PostDatasourceConnectionTest)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}/query-previews", wrapper.PostDatasourceQueryPreview)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}/connection-tests", wrapper.PostSavedDatasourceConnectionTest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/diagnostics/{diagnostic_id}", wrapper.GetDiagnostic)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/diagnostics/{diagnostic_id}/cancel", wrapper.PostDiagnosticCancel)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/livez", wrapper.GetLiveness)

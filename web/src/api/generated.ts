@@ -344,6 +344,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/datasources/{datasource_id}/connection-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test the saved datasource settings on its assigned agent
+         * @description Uses the currently saved endpoint and credentials only. Requires the current strong datasource ETag and an idempotency key. Stale versions and key reuse with another request return conflict before a diagnostic receipt is created.
+         */
+        post: operations["postSavedDatasourceConnectionTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnostics/{diagnostic_id}": {
         parameters: {
             query?: never;
@@ -1755,6 +1775,65 @@ export interface operations {
                 };
             };
             /** @description Pre-admission agent/configuration unavailable; configuration_pending guarantees no diagnostic receipt was created */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postSavedDatasourceConnectionTest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
+                "If-Match": components["parameters"]["DatasourceIfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                datasource_id: components["parameters"]["DatasourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Diagnostic accepted or idempotent replay */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Stale datasource version or idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Pre-admission agent/configuration unavailable; no diagnostic receipt was created */
             503: {
                 headers: {
                     [name: string]: unknown;
