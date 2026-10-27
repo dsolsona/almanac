@@ -666,9 +666,9 @@ func verifyTerminalDiagnosticTransitionWait(t *testing.T, f agentFixture, creden
 	t.Helper()
 	proof := DatasourceProof{SessionVerifier: f.verifier}
 	deadline := now.Add(30 * time.Second)
-	if timeout {
-		deadline = now.Add(time.Second)
-	}
+	// Use the admission's original deadline, visible to the stale MVCC read.
+	// Get is invoked at that deadline so its conditional timeout update waits
+	// behind the controller's uncommitted succeeded-state update.
 	if _, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{
 		Proof: proof, DiagnosticID: diagnosticID, AgentID: agentID, AgentGeneration: 1, DatasourceID: datasourceID,
 		Operation: "query_preview", Query: "vector(1)", Secrets: secrets, RequestedAt: now, Now: func() time.Time { return now },
@@ -686,13 +686,6 @@ func verifyTerminalDiagnosticTransitionWait(t *testing.T, f agentFixture, creden
 	if err != nil {
 		closeIntegrationConn(controller)
 		return fmt.Errorf("begin terminal-transition controller: %w", err)
-	}
-	if timeout {
-		if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_diagnostics SET deadline_at=$2 WHERE id=$1`, diagnosticID, timestamp(deadline)); err != nil {
-			rollbackTransaction(tx)
-			closeIntegrationConn(controller)
-			return fmt.Errorf("set forced diagnostic timeout deadline: %w", err)
-		}
 	}
 	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_diagnostics SET state='succeeded', result=$2::jsonb,
 		result_digest=$3, updated_at=$4 WHERE id=$1`, diagnosticID, encoded, digest[:], timestamp(now)); err != nil {
