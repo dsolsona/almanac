@@ -188,6 +188,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [nameValidationAttempted, setNameValidationAttempted] = useState(false);
   const diagnosticController = useRef<AbortController | null>(null);
   const providerRequest = useRef<AbortController | null>(null);
   const providerGeneration = useRef(0);
@@ -213,6 +214,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }, [locationKey]);
 
   function changeRoute(nextRoute: string) {
+    if (locationKeyRef.current !== nextRoute) setNameValidationAttempted(false);
     locationKeyRef.current = nextRoute;
     if (saveIntent.current && saveIntent.current.route !== nextRoute) {
       saveIntent.current = null;
@@ -320,7 +322,11 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (currentUncertainSave) { await retryUncertainSave(); return; }
-    if (!DATASOURCE_NAME.test(draft.name)) return;
+    if (!DATASOURCE_NAME.test(draft.name)) {
+      setNameValidationAttempted(true);
+      document.getElementById('datasource-name')?.focus();
+      return;
+    }
     const intent = { input: asWrite(draft, isNew), key: crypto.randomUUID(), ...(isNew ? {} : { etag }), isNew, route: locationKey } satisfies SaveIntent;
     saveIntent.current = intent;
     await executeSave(intent);
@@ -485,7 +491,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         const display_name = event.target.value;
         setDraft((current) => ({ ...current, display_name, ...(isNew && !current.nameEdited ? { name: suggestDatasourceName(display_name) } : {}) }));
       }} />
-      <TextField id="datasource-name" label="Name" hint={source ? 'Stable identifier. It cannot be changed after creation.' : 'Stable identifier used in configuration. Suggested from the display name; you can edit it.'} error={draft.nameEdited && !DATASOURCE_NAME.test(draft.name) ? 'Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.' : undefined} value={draft.name} disabled={formDisabled || Boolean(source)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value, nameEdited: true }))} />
+      <TextField id="datasource-name" label="Name" hint={source ? 'Stable identifier. It cannot be changed after creation.' : 'Stable identifier used in configuration. Suggested from the display name; you can edit it.'} error={(draft.nameEdited || nameValidationAttempted) && !DATASOURCE_NAME.test(draft.name) ? 'Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.' : undefined} value={draft.name} disabled={formDisabled || Boolean(source)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value, nameEdited: true }))} />
       <TextField id="datasource-endpoint" className="datasource-endpoint" label="Prometheus endpoint" type="url" hint="Use an HTTP or HTTPS URL without embedded credentials." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
       <SelectField id="datasource-agent" label="Assigned agent" value={draft.agent_id} disabled={formDisabled} onChange={(event) => selectAgent(event.target.value)} options={[{ value: '', label: 'Select an agent', disabled: true }, ...agents.map((agent) => ({ value: agent.id, label: datasourceAgentLabel(agent), disabled: !supportsDatasourceDiagnostics(agent) }))]} />
       <TextField id="datasource-polling" label="Polling interval (seconds)" type="number" min={15} max={86400} value={draft.polling_interval_seconds} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, polling_interval_seconds: Number(event.target.value) })} />

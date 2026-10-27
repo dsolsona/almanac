@@ -118,6 +118,31 @@ describe('datasource page', () => {
     expect(calls.some((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST')).toBe(false);
   });
 
+  it('shows validation for an empty suggestion, then creates after the display name is corrected', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources/new');
+    const calls = installFetch();
+    render(<DatasourcesPage context={admin} />);
+    const displayName = await screen.findByLabelText('Display name');
+    await user.type(displayName, '你好');
+    const name = screen.getByLabelText('Name');
+    expect(name).toHaveValue('');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'http://localhost');
+    await user.selectOptions(screen.getByLabelText('Assigned agent'), agentID);
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    expect(screen.getByText('Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.')).toBeVisible();
+    expect(name).toHaveFocus();
+    expect(calls.some((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST')).toBe(false);
+
+    await user.clear(displayName);
+    await user.type(displayName, 'Local metrics');
+    expect(name).toHaveValue('local-metrics');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    await screen.findByText('Production metrics');
+    const create = calls.find((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST');
+    expect(JSON.parse(String(create?.init?.body)).name).toBe('local-metrics');
+  });
+
   it('starts a new create intent after navigating away from an uncertain create', async () => {
     const user = userEvent.setup();
     history.replaceState({}, '', '/datasources/new');
