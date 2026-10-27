@@ -1,21 +1,36 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
 import type { AuthContext } from '../src/auth/client.ts';
 
 const admin: AuthContext = { csrf_token: 'csrf-admin', session: { user_id: 'user-1', login: 'owner', role: 'administrator', restricted: false } };
+const editor: AuthContext = { csrf_token: 'csrf-editor', session: { user_id: 'user-3', login: 'editor', role: 'editor', restricted: false } };
 const viewer: AuthContext = { csrf_token: 'csrf-viewer', session: { user_id: 'user-2', login: 'reader', role: 'viewer', restricted: false } };
 const sourceID = '8ed93d7e-51e3-4a3e-9222-3e8a612de20a';
 const agentID = 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c';
 function source() { return { id: sourceID, name: 'metrics-prod', display_name: 'Production metrics', version: '4', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'bearer', username: null, password_configured: false, token_configured: true }, polling_interval_seconds: 60, settling_delay_seconds: 60, agent_id: agentID, created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
-function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }]) {
+function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }], providerAvailability: string[] = ['available'], previewStatuses: number[] = []) {
   const calls: { url: string; init?: RequestInit }[] = [];
+  let providerRequest = 0;
+  let previewRequest = 0;
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input); calls.push({ url, init });
     if (url.startsWith('/api/v1/agents')) return response({ items: agentItems, next_cursor: '' });
-    if (url.startsWith('/api/v1/providers')) return response({ items: [{ provider: 'prometheus', configuration_format: 'prometheus-http-v1', operations: ['connection_test', 'query_preview'], availability: 'available' }] });
+    if (url.startsWith('/api/v1/providers')) {
+      const availability = providerAvailability[Math.min(providerRequest++, providerAvailability.length - 1)];
+      return response({ items: [{ provider: 'prometheus', configuration_format: 'prometheus-http-v1', operations: ['connection_test', 'query_preview'], availability,
+        desired_configuration_revision: '3', applied_configuration_revision: availability === 'applying' ? '2' : '3', configuration_failure_code: null, configuration_failure_revision: null }] });
+    }
+    if (url === `/api/v1/datasources/${sourceID}` && init?.method === 'PUT') return response({ ...source(), version: '5' }, 200, { ETag: `"datasource:${sourceID}:5"` });
+    if (url === `/api/v1/datasources/${sourceID}`) return response(source(), 200, { ETag: `"datasource:${sourceID}:4"` });
+    if (url === `/api/v1/datasources/${sourceID}/query-previews` && init?.method === 'POST') {
+      const status = previewStatuses[Math.min(previewRequest++, previewStatuses.length - 1)] ?? 500;
+      return status === 503 ? response({ code: 'configuration_pending', message: 'safe contract response' }, status) : response({
+        id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: 'complete', result: { series: [] }, error_code: null, message: null,
+      }, status);
+    }
     if (url.startsWith('/api/v1/datasources') && init?.method === 'POST') return response(source(), 201, { ETag: `"datasource:${sourceID}:4"` });
     return response({ items: [source()], next_cursor: '' });
   });
@@ -79,5 +94,54 @@ describe('datasource page', () => {
     expect(assignment).toHaveValue(offlineID);
     expect(screen.getByText('The assigned agent is offline. Diagnostics require a connected agent.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled();
+  });
+
+  it('keeps editor preview disabled while the saved datasource configuration is applying, then enables it when ready', async () => {
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    const calls = installFetch([], ['applying', 'available']);
+    render(<DatasourcesPage context={editor} />);
+
+    const preview = await screen.findByRole('button', { name: 'Run preview' });
+    expect(screen.getByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).toBeVisible();
+    expect(preview).toBeDisabled();
+    await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
+    expect(screen.queryByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).not.toBeInTheDocument();
+    expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
+  });
+
+  it('invalidates readiness after an administrator saves and waits before enabling preview', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    const calls = installFetch(undefined, ['available', 'applying', 'available']);
+    render(<DatasourcesPage context={admin} />);
+
+    await user.clear(await screen.findByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Updated metrics');
+    await user.click(screen.getByRole('button', { name: 'Save settings' }));
+    expect(await screen.findByText('Datasource settings saved.')).toBeVisible();
+    const preview = screen.getByRole('button', { name: 'Run preview' });
+    expect(await screen.findByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).toBeVisible();
+    expect(preview).toBeDisabled();
+    await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
+    expect(calls.some((call) => call.url === `/api/v1/datasources/${sourceID}` && call.init?.method === 'PUT')).toBe(true);
+  });
+
+  it('waits for readiness and retries a preview when admission confirms no job was created', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    const calls = installFetch([], ['available', 'applying', 'available'], [503, 202]);
+    render(<DatasourcesPage context={editor} />);
+    const query = await screen.findByLabelText('PromQL query');
+    await user.clear(query);
+    await user.type(query, 'up');
+    const preview = await screen.findByRole('button', { name: 'Run preview' });
+    await waitFor(() => expect(preview).not.toBeDisabled());
+    await user.click(preview);
+    expect(await screen.findByText('No preview was started. The agent is applying datasource settings; waiting briefly before retrying this query.')).toBeVisible();
+    await waitFor(() => expect(calls.filter((call) => call.url === `/api/v1/datasources/${sourceID}/query-previews` && call.init?.method === 'POST')).toHaveLength(2), { timeout: 5000 });
+    expect(await screen.findByText('The diagnostic completed.')).toBeVisible();
+    const previews = calls.filter((call) => call.url === `/api/v1/datasources/${sourceID}/query-previews` && call.init?.method === 'POST');
+    expect(previews.map((call) => JSON.parse(String(call.init?.body)).query)).toEqual(['up', 'up']);
+    expect(screen.queryByText(/outcome is unknown/i)).not.toBeInTheDocument();
   });
 });

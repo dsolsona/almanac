@@ -21,6 +21,8 @@ const messages: Record<string, string> = {
   not_found: 'The requested datasource or diagnostic was not found.',
   conflict: 'The datasource changed. Refresh it and review the current settings.',
   invalid_datasource_input: 'The datasource settings were rejected. Review the fields and try again.',
+  configuration_pending: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.',
+  agent_unavailable: 'The assigned agent is unavailable. No diagnostic was started; retry when it is connected.',
   diagnostic_unavailable: 'The assigned agent cannot run this diagnostic right now.',
   request_timeout: 'The request timed out. You can retry when the agent is available.',
   management_unavailable: 'Datasource management is temporarily unavailable.',
@@ -52,6 +54,22 @@ function validDatasource(value: unknown): value is Datasource {
     && typeof value.authentication.password_configured === 'boolean' && typeof value.authentication.token_configured === 'boolean'
     && typeof value.polling_interval_seconds === 'number' && Number.isInteger(value.polling_interval_seconds) && value.polling_interval_seconds >= 15 && value.settling_delay_seconds === 60 && typeof value.agent_id === 'string' && UUID.test(value.agent_id)
     && typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) && typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at));
+}
+
+function validRevision(value: unknown, allowZero: boolean): value is string {
+  return typeof value === 'string' && (allowZero ? /^(0|[1-9][0-9]*)$/ : /^[1-9][0-9]*$/).test(value);
+}
+
+function validProvider(value: unknown): value is Provider {
+  const availabilities = ['available', 'applying', 'offline', 'disabled', 'unreported', 'configuration_failed', 'incompatible', 'planned', 'unsupported'];
+  const failureCodes = ['invalid_snapshot', 'incompatible', 'apply_failed'];
+  return object(value) && value.provider === 'prometheus' && value.configuration_format === 'prometheus-http-v1'
+    && availabilities.includes(String(value.availability)) && Array.isArray(value.operations) && value.operations.length <= 16
+    && value.operations.every((operation) => operation === 'connection_test' || operation === 'query_preview')
+    && (value.desired_configuration_revision === null || validRevision(value.desired_configuration_revision, false))
+    && (value.applied_configuration_revision === null || validRevision(value.applied_configuration_revision, true))
+    && (value.configuration_failure_code === null || failureCodes.includes(String(value.configuration_failure_code)))
+    && (value.configuration_failure_revision === null || validRevision(value.configuration_failure_revision, false));
 }
 
 function validDiagnostic(value: unknown): value is Diagnostic {
@@ -129,10 +147,7 @@ export function createDatasourceClient() {
     async providers(agentID?: string, signal?: AbortSignal): Promise<Provider[]> {
       const query = agentID ? `?agent_id=${encodeURIComponent(safeUUID(agentID))}` : '';
       const { value } = await request(`/api/v1/providers${query}`, { method: 'GET', signal }, 200,
-        (body): body is { items: Provider[] } => object(body) && Array.isArray(body.items) && body.items.length <= 256
-          && body.items.every((item) => object(item) && item.provider === 'prometheus' && item.configuration_format === 'prometheus-http-v1'
-            && ['available', 'planned', 'unsupported'].includes(String(item.availability)) && Array.isArray(item.operations) && item.operations.length <= 16
-            && item.operations.every((operation) => operation === 'connection_test' || operation === 'query_preview')));
+        (body): body is { items: Provider[] } => object(body) && Array.isArray(body.items) && body.items.length <= 256 && body.items.every(validProvider));
       return value.items;
     },
     async list(limit = 50, cursor = '', signal?: AbortSignal): Promise<{ items: Datasource[]; next_cursor: string }> {
@@ -174,7 +189,7 @@ export function createDatasourceClient() {
       try { ({ value } = await request('/api/v1/datasources/connection-tests', {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token }, body: JSON.stringify(input), signal,
         }, 202, validDiagnostic));
-      } catch (error) { if (error instanceof DatasourceFailure && (error.status === 0 || error.status >= 500)) throw new DatasourceFailure('outcome_unknown', 'The diagnostic may still be running. Check its status before starting another test.', error.status, true); throw error; }
+      } catch (error) { if (uncertainDiagnosticOutcome(error)) throw new DatasourceFailure('outcome_unknown', 'The diagnostic may still be running. Check its status before starting another test.', error.status, true); throw error; }
       return safeDiagnostic(value);
     },
     async preview(id: string, query: string, context: AuthContext, signal?: AbortSignal): Promise<Diagnostic> {
@@ -182,7 +197,7 @@ export function createDatasourceClient() {
       try { ({ value } = await request(`/api/v1/datasources/${safeUUID(id)}/query-previews`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token }, body: JSON.stringify({ query }), signal,
         }, 202, validDiagnostic));
-      } catch (error) { if (error instanceof DatasourceFailure && (error.status === 0 || error.status >= 500)) throw new DatasourceFailure('outcome_unknown', 'The diagnostic may still be running. Check its status before starting another preview.', error.status, true); throw error; }
+      } catch (error) { if (uncertainDiagnosticOutcome(error)) throw new DatasourceFailure('outcome_unknown', 'The preview may still be running. Check its status before starting another preview.', error.status, true); throw error; }
       return safeDiagnostic(value);
     },
     async diagnostic(id: string, signal?: AbortSignal): Promise<Diagnostic> {
@@ -196,4 +211,9 @@ export function createDatasourceClient() {
       return safeDiagnostic(value);
     },
   };
+}
+
+function uncertainDiagnosticOutcome(error: unknown): error is DatasourceFailure {
+  return error instanceof DatasourceFailure && (error.status === 0 || error.status >= 500)
+    && !['configuration_pending', 'agent_unavailable', 'diagnostic_unavailable'].includes(error.code);
 }
