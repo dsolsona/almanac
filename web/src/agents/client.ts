@@ -304,6 +304,8 @@ function mutate<T>(fetcher: typeof fetch, path: string, body: unknown, context: 
       if (problem && diagnoseUncertain) throw new AgentFailure('uncertain', problem.code, problem.message, problem.retryAfterSeconds, problem.requestID);
       if (problem) throw failure('uncertain', 'outcome_unknown');
       if (!diagnoseUncertain) throw failure('uncertain', 'outcome_unknown');
+      if (budget.timedOut()) throw failure('uncertain', 'request_timeout');
+      if (budget.signal.aborted) throw failure('uncertain', 'request_cancelled');
       throw failure('uncertain', 'unexpected_response');
     }
     try {

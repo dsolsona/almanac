@@ -79,6 +79,40 @@ describe('browser agent management client', () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it('reports a timed-out error body as an uncertain timeout without replaying', async () => {
+    vi.useFakeTimers();
+    let cancelled = false;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"code":')); },
+      cancel() { cancelled = true; },
+    }), { status: 503, headers: { 'Content-Type': 'application/json' } }));
+    const pending = createAgentClient(fetcher).create({ name: 'edge-a', display_name: 'Edge A' }, auth, 'same-key');
+    const result = pending.catch((error: unknown) => error);
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await result).toMatchObject({ kind: 'uncertain', code: 'request_timeout' });
+    expect(cancelled).toBe(true);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('reports an aborted error body as an uncertain cancellation without replaying', async () => {
+    let cancelled = false;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"code":')); },
+      cancel() { cancelled = true; },
+    }), { status: 503, headers: { 'Content-Type': 'application/json' } }));
+    const controller = new AbortController();
+    const pending = createAgentClient(fetcher).create({ name: 'edge-a', display_name: 'Edge A' }, auth, 'same-key', { signal: controller.signal });
+    const result = pending.catch((error: unknown) => error);
+    await Promise.resolve();
+    await Promise.resolve();
+    controller.abort();
+    expect(await result).toMatchObject({ kind: 'uncertain', code: 'request_cancelled' });
+    expect(cancelled).toBe(true);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('reports a post-dispatch connection failure without exposing transport detail', async () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error('private certificate and URL detail'));
     let caught: unknown;
