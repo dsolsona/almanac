@@ -3,14 +3,11 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 
-let input = '';
-for await (const chunk of process.stdin) {
-  input += chunk;
-  if (Buffer.byteLength(input) > 48 * 1024) throw new Error('fixture input too large');
-}
-const fixture = JSON.parse(input);
-input = '';
-const origin = new URL(fixture.url);
+let stage = 'fixture input';
+let fixture;
+let origin;
+let browser;
+let latestAPI = { status: null, requestID: 'none', code: 'none' };
 const safeCodes = new Set([
   'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
   'conflict', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
@@ -18,6 +15,15 @@ const safeCodes = new Set([
   'rate_limited', 'secure_transport_required', 'session_present', 'source_secret_unavailable',
   'unauthenticated', 'unauthorized', 'unsupported', 'unsupported_media_type',
 ]);
+try {
+let input = '';
+for await (const chunk of process.stdin) {
+  input += chunk;
+  if (Buffer.byteLength(input) > 48 * 1024) throw new Error('fixture input too large');
+}
+fixture = JSON.parse(input);
+input = '';
+origin = new URL(fixture.url);
 assert.equal(origin.protocol, 'https:');
 assert.equal(origin.hostname, 'localhost');
 assert.match(fixture.spki, /^[A-Za-z0-9+/]{43}=$/);
@@ -28,17 +34,13 @@ assert.equal(typeof fixture.ca_pem, 'string');
 assert.ok(fixture.ca_pem.length > 0 && fixture.ca_pem.length <= 16 * 1024);
 assert.match(fixture.ca_pem, /^-----BEGIN CERTIFICATE-----/);
 
-let stage = 'browser launch';
-let browser;
-try {
+stage = 'browser launch';
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
   context.setDefaultTimeout(5000);
   const page = await context.newPage();
   let pageErrors = 0;
   let apiSequence = 0;
-  let latestAPI = { status: null, requestID: 'none', code: 'none' };
-  let latestAPIRead = Promise.resolve();
   page.on('pageerror', () => { pageErrors += 1; });
   page.on('response', (response) => {
     let url;
@@ -46,10 +48,11 @@ try {
     if (url.origin !== origin.origin || !url.pathname.startsWith('/api/v1/')) return;
     const sequence = ++apiSequence;
     const headers = response.headers();
-    const requestID = /^[0-9a-f]{32}$/.test(headers['x-request-id'] ?? '') ? headers['x-request-id'] : 'none';
+    const rawRequestID = headers['x-request-id'] ?? '';
+    const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(rawRequestID) ? rawRequestID : 'none';
     latestAPI = { status: response.status(), requestID, code: 'none' };
     if (response.status() < 400) return;
-    latestAPIRead = response.json().then((body) => {
+    response.json().then((body) => {
       if (sequence === apiSequence && body && typeof body === 'object' && safeCodes.has(body.code)) latestAPI.code = body.code;
     }).catch(() => {});
   });
@@ -237,12 +240,15 @@ try {
 } catch (error) {
   const networkCode = typeof error?.message === 'string' ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] ?? 'none' : 'none';
   const errorClass = error?.name === 'TimeoutError' ? 'timeout' : 'other';
-  await latestAPIRead;
-  const safeStage = stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 96);
-  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${latestAPI.status ?? 'none'}\nrequest_id=${latestAPI.requestID}\napi_code=${latestAPI.code}\n`;
-  if (Buffer.byteLength(diagnostic) > 512) throw new Error('sanitized failure artifact exceeded its bound');
-  await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 });
-  process.stdout.write('FAIL browser-datasources\n');
+  const safeStage = typeof stage === 'string' ? stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 96) : 'fixture input';
+  const status = Number.isInteger(latestAPI.status) && latestAPI.status >= 100 && latestAPI.status <= 599 ? latestAPI.status : 'none';
+  const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(latestAPI.requestID) ? latestAPI.requestID : 'none';
+  const apiCode = safeCodes.has(latestAPI.code) ? latestAPI.code : 'none';
+  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\n`;
+  if (Buffer.byteLength(diagnostic) <= 512 && typeof fixture?.artifacts === 'string') {
+    try { await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 }); } catch {}
+  }
+  process.stdout.write(`FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} api_status=${status} request_id=${requestID} api_code=${apiCode}\n`);
   process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => {});
