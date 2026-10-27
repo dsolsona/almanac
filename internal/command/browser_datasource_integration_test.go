@@ -22,10 +22,11 @@ import (
 // checkDatasourceBrowser exercises the real authenticated datasource UI against
 // the live backend and assigned agent, keeping browser output and screenshots
 // free of credential values.
-func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte, login, password, agentID, datasourceID, query string) {
+func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte, login, password, agentID, datasourceID, query, caPEM string) {
 	t.Helper()
 	parsedURL, err := url.Parse(baseURL)
-	if err != nil || parsedURL.Scheme != "https" || parsedURL.Hostname() != "localhost" || parsedURL.Path != "" && parsedURL.Path != "/" || login == "" || password == "" || !validCLIUUID(agentID) || !validCLIUUID(datasourceID) || query != "vector(1)" || len(certificatePEM) > 16*1024 {
+	caPool := x509.NewCertPool()
+	if err != nil || parsedURL.Scheme != "https" || parsedURL.Hostname() != "localhost" || parsedURL.Path != "" && parsedURL.Path != "/" || login == "" || password == "" || !validCLIUUID(agentID) || !validCLIUUID(datasourceID) || query != "vector(1)" || len(certificatePEM) > 16*1024 || len(caPEM) == 0 || len(caPEM) > 16*1024 || !caPool.AppendCertsFromPEM([]byte(caPEM)) {
 		t.Fatal("datasource browser fixture is invalid")
 	}
 	block, _ := pem.Decode(certificatePEM)
@@ -54,13 +55,14 @@ func checkDatasourceBrowser(t *testing.T, baseURL string, certificatePEM []byte,
 		AgentID      string `json:"agent_id"`
 		DatasourceID string `json:"datasource_id"`
 		Query        string `json:"query"`
+		CAPEM        string `json:"ca_pem"`
 		Artifacts    string `json:"artifacts"`
 	}{
 		URL: baseURL, SPKI: base64.StdEncoding.EncodeToString(spki[:]), Certificate: string(certificatePEM),
-		Login: login, Password: password, AgentID: agentID, DatasourceID: datasourceID, Query: query, Artifacts: artifacts,
+		Login: login, Password: password, AgentID: agentID, DatasourceID: datasourceID, Query: query, CAPEM: caPEM, Artifacts: artifacts,
 	}
 	input, err := json.Marshal(fixture)
-	if err != nil || len(input) > 32*1024 {
+	if err != nil || len(input) > 48*1024 {
 		t.Fatal("encode datasource browser fixture failed")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
