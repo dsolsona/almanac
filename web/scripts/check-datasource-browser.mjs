@@ -10,6 +10,7 @@ let browser;
 let page;
 let authenticated = false;
 let latestAPI = { status: null, requestID: 'none', code: 'none' };
+let latestAPIRead = Promise.resolve();
 const safeCodes = new Set([
   'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
   'conflict', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
@@ -54,7 +55,7 @@ stage = 'browser launch';
     const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(rawRequestID) ? rawRequestID : 'none';
     latestAPI = { status: response.status(), requestID, code: 'none' };
     if (response.status() < 400) return;
-    response.json().then((body) => {
+    latestAPIRead = response.json().then((body) => {
       if (sequence === apiSequence && body && typeof body === 'object' && safeCodes.has(body.code)) latestAPI.code = body.code;
     }).catch(() => {});
   });
@@ -170,6 +171,17 @@ stage = 'browser launch';
   stage = 'UI datasource update confirmation';
   await expect(page.getByRole('status').filter({ hasText: 'Datasource settings saved.' })).toBeVisible();
   await expect(page.getByLabel('Display name', { exact: true })).toHaveValue(nextName);
+  stage = 'agent configuration revision applied';
+  await expect.poll(async () => page.evaluate(async (agentID) => {
+    const response = await fetch(`/api/v1/agents/${agentID}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) return false;
+    const value = await response.json();
+    const desired = value?.runtime?.desired_configuration_revision;
+    const applied = value?.runtime?.applied_configuration_revision;
+    if (typeof desired !== 'string' || typeof applied !== 'string'
+      || !/^(0|[1-9][0-9]*)$/.test(desired) || !/^(0|[1-9][0-9]*)$/.test(applied)) return false;
+    return desired === applied && BigInt(applied) > 1n;
+  }, fixture.agent_id), { timeout: 20000, intervals: [100, 250, 500, 1000] }).toBe(true);
 
   stage = 'real successful saved-source preview';
   const queryField = page.getByLabel('PromQL query', { exact: true });
@@ -254,6 +266,7 @@ stage = 'browser launch';
 } catch (error) {
   const networkCode = typeof error?.message === 'string' ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] ?? 'none' : 'none';
   const errorClass = error?.name === 'TimeoutError' ? 'timeout' : 'other';
+  await Promise.race([latestAPIRead.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 1000))]);
   const safeStage = typeof stage === 'string' ? stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 96) : 'fixture input';
   const status = Number.isInteger(latestAPI.status) && latestAPI.status >= 100 && latestAPI.status <= 599 ? latestAPI.status : 'none';
   const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(latestAPI.requestID) ? latestAPI.requestID : 'none';
