@@ -237,7 +237,9 @@ func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *test
 		t.Fatalf("changed terminal result replay error = %v", err)
 	}
 	completed, err := GetDatasourceDiagnostic(t.Context(), f.databaseURL, proof, preview.ID, func() time.Time { return now.Add(2 * time.Second) })
-	if err != nil || completed.State != "succeeded" || len(completed.Result) <= agentprotocol.MaxInlineDiagnosticResultBytes || !bytes.Contains(completed.Result, []byte(`"value":"1"`)) {
+	var storedResult agentprotocol.DiagnosticResult
+	decodeErr := json.Unmarshal(completed.Result, &storedResult)
+	if err != nil || decodeErr != nil || completed.State != "succeeded" || len(completed.Result) <= agentprotocol.MaxInlineDiagnosticResultBytes || len(storedResult.Series) != 20 || storedResult.Series[0].Value != "1" {
 		t.Fatalf("completed diagnostic receipt = %+v, %v", completed, err)
 	}
 	deadlineDiagnostic, _, err := BeginDatasourceDiagnostic(t.Context(), f.databaseURL, BeginDiagnosticInput{

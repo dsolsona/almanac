@@ -1155,7 +1155,7 @@ type DiagnosticResultClass string
 // DiagnosticState defines model for Diagnostic.State.
 type DiagnosticState string
 
-// DiagnosticResultPayload Typed agent result. The HTTP transport accepts 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB.
+// DiagnosticResultPayload Typed agent result. The HTTP transport accepts more than 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB.
 type DiagnosticResultPayload struct {
 	DiagnosticId openapi_types.UUID                  `json:"diagnostic_id"`
 	ErrorCode    *DiagnosticResultPayloadErrorCode   `json:"error_code,omitempty"`

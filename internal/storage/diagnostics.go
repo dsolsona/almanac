@@ -235,7 +235,7 @@ func GetDatasourceDiagnostic(ctx context.Context, databaseURL string, proof Data
 	if err != nil {
 		return DiagnosticRecord{}, operationError(ctx, "storage: diagnostic read failed", err)
 	}
-	currentTime := now.UTC().Truncate(time.Microsecond)
+	currentTime := normalizedAgentNow(now)
 	if !currentTime.Before(record.ExpiresAt) {
 		return DiagnosticRecord{}, ErrDiagnosticNotFound
 	}
@@ -308,7 +308,7 @@ func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, credentialID
 		return err
 	}
 	defer closeAgentOwnershipTransaction(state)
-	currentTime := normalizedAgentNow(now)
+	currentTime := now.UTC().Truncate(time.Microsecond)
 	if !currentAgentCredentialValid(state.installation, state.agent.Enabled, state.credential, credentialVerifier, currentTime) {
 		return ErrInvalidAgentCredential
 	}

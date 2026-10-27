@@ -428,8 +428,8 @@ func TestProtocolSchemasAndEmptyConfigurationExample(t *testing.T) {
 			if err := json.Unmarshal(data, &configSchema); err != nil {
 				t.Fatal(err)
 			}
-			if configSchema.Properties["assignments"].MaxItems != 0 {
-				t.Fatal("initial configuration schema must constrain assignments to empty")
+			if configSchema.Properties["assignments"].MaxItems != 256 {
+				t.Fatal("configuration schema must bound typed datasource assignments to 256")
 			}
 		}
 	}

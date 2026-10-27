@@ -539,7 +539,7 @@ export interface components {
             error_code: "authentication_failed" | "network_failed" | "tls_failed" | "query_failed" | "request_timeout" | "assignment_revoked" | "rate_limited" | "unsupported" | "diagnostic_failed" | null;
             message: string | null;
         };
-        /** @description Typed agent result. The HTTP transport accepts 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB. */
+        /** @description Typed agent result. The HTTP transport accepts more than 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB. */
         DiagnosticResultPayload: {
             /** Format: uuid */
             diagnostic_id: string;

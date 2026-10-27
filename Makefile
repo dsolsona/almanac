@@ -147,7 +147,7 @@ _verify_go:
 _verify_go_race: _ensure_web_assets
 	@set -eu; export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
 	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  packages='./internal/uihttp ./internal/command ./internal/agentclient ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile ./internal/agentcmd ./internal/agentws ./internal/agentruntime ./internal/agentownership ./internal/agentprotocol ./internal/datasource ./internal/prometheus ./internal/datasourcehttp ./internal/datasourceclient'; \
+	  packages='./internal/uihttp ./internal/command ./internal/agentclient ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile ./internal/agentaccess ./internal/agentcmd ./internal/agentws ./internal/agentruntime ./internal/agentownership ./internal/agentprotocol ./internal/datasource ./internal/sourcesecret ./internal/prometheus ./internal/datasourcehttp ./internal/datasourceclient'; \
 	  if ! .local/bin/go test -list . $$packages > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
 	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \

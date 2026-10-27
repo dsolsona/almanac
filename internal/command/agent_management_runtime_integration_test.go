@@ -457,18 +457,31 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 		}
 	}
 	agentEvidence := "agent_generation=unknown reachability=unknown desired=unknown applied=unknown config_failure=none registry_present=unknown"
+	lastAgentReadFailure := "none"
 	run := func(args ...string) []byte {
 		t.Helper()
 		command := exec.CommandContext(t.Context(), binary, args...)
 		output, err := command.Output()
 		if err != nil {
+			stage := strings.Join(args[:2], " ")
+			if stage == "agents get" && datasourceCLIErrorCode(output) == "management_unavailable" {
+				lastAgentReadFailure = datasourceFailureEvidence(stage, output, err)
+				lastAgentReadFailure += " " + datasourceAgentStateEvidence(t, databaseURL, journey.id)
+				return nil
+			}
 			var exitError *exec.ExitError
 			if bytes.Contains(output, []byte(password)) || bytes.Contains(output, caPEM) || errors.As(err, &exitError) && bytes.Contains(exitError.Stderr, []byte(password)) {
 				t.Fatal("datasource CLI acceptance output leaked fixture material")
 			}
 			evidence := datasourceFailureEvidence(strings.Join(args[:2], " "), output, err)
 			evidence += " " + agentEvidence + " " + datasourceRegistryEvidence(backendLogs, output)
+			if stage == "agents get" {
+				evidence += " " + datasourceAgentStateEvidence(t, databaseURL, journey.id)
+			}
 			t.Fatalf("datasource CLI acceptance failed: %s", evidence)
+		}
+		if strings.Join(args[:2], " ") == "agents get" {
+			lastAgentReadFailure = "none"
 		}
 		return output
 	}
@@ -497,7 +510,7 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 		t.Fatal("datasource CLI create response was invalid")
 	}
 	datasourceID := createdEnvelope.Result.ID
-	agentEvidence = waitDatasourceAgentConfiguration(t, run, journey, databaseURL)
+	agentEvidence = waitDatasourceAgentConfiguration(t, run, journey, databaseURL, func() string { return lastAgentReadFailure })
 	listOutput := run("datasources", "list", "--profile-file="+journey.profile, "--output=json")
 	if !bytes.Contains(listOutput, []byte(datasourceID)) {
 		t.Fatal("datasource CLI list omitted the source")
@@ -514,6 +527,8 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 	assertDiagnosticJSON(t, databaseURL, "datasources.test", connectionOutput, "succeeded", "")
 	queryOutput := run("slis", "test", "--profile-file="+journey.profile, "--datasource-id="+datasourceID, "--query=vector(1)", "--wait", "--output=json")
 	assertDiagnosticJSON(t, databaseURL, "slis.test", queryOutput, "succeeded", `"value":"1"`)
+	largeQueryOutput := run("slis", "test", "--profile-file="+journey.profile, "--datasource-id="+datasourceID, "--query=almanac_transfer_metric", "--wait", "--output=json")
+	assertLargeDiagnosticJSON(t, databaseURL, largeQueryOutput)
 	db := testpostgres.Connect(t, databaseURL)
 	var observationTable *string
 	if err := db.QueryRow(t.Context(), `SELECT to_regclass('public.almanac_observations')::text`).Scan(&observationTable); err != nil {
@@ -527,6 +542,38 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 		t.Fatal("read backend certificate for datasource browser failed")
 	}
 	checkDatasourceBrowser(t, baseURL, certificate, "agent-owner", password, journey.id, datasourceID, "vector(1)", string(caPEM))
+}
+
+func datasourceCLIErrorCode(output []byte) string {
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(output, &response) != nil {
+		return ""
+	}
+	return safeDiagnosticToken(response.Error.Code)
+}
+
+func datasourceAgentStateEvidence(t *testing.T, databaseURL, agentID string) string {
+	t.Helper()
+	db := testpostgres.Connect(t, databaseURL)
+	var generation, desired, applied int64
+	var health, progress, failure string
+	var heartbeat bool
+	var assignments int
+	err := db.QueryRow(t.Context(), `SELECT generation, desired_configuration_revision, applied_configuration_revision,
+		scheduler_health, collection_progress, COALESCE(configuration_failure_code,''), last_heartbeat_at IS NOT NULL
+		FROM public.almanac_agent_runtime_status WHERE agent_id=$1`, agentID).Scan(&generation, &desired, &applied, &health, &progress, &failure, &heartbeat)
+	if err != nil {
+		return "runtime_state=unavailable"
+	}
+	if err := db.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_datasources WHERE agent_id=$1`, agentID).Scan(&assignments); err != nil {
+		return "runtime_state=unavailable"
+	}
+	return fmt.Sprintf("runtime_generation=%d desired=%d applied=%d heartbeat=%t health=%s progress=%s config_failure=%s assignments=%d",
+		generation, desired, applied, heartbeat, safeDiagnosticToken(health), safeDiagnosticToken(progress), safeDiagnosticToken(failure), assignments)
 }
 
 func datasourceFailureEvidence(stage string, output []byte, err error) string {
@@ -605,7 +652,49 @@ func assertDiagnosticJSON(t *testing.T, databaseURL, stage string, output []byte
 	}
 }
 
-func waitDatasourceAgentConfiguration(t *testing.T, run func(...string) []byte, journey connectedAgentJourney, databaseURL string) string {
+func assertLargeDiagnosticJSON(t *testing.T, databaseURL string, output []byte) {
+	t.Helper()
+	var envelope struct {
+		Result jsontext.Value `json:"result"`
+	}
+	if json.Unmarshal(output, &envelope) != nil {
+		t.Fatal("large datasource diagnostic response was invalid JSON")
+	}
+	var diagnostic struct {
+		ID     string         `json:"id"`
+		State  string         `json:"state"`
+		Result jsontext.Value `json:"result"`
+	}
+	if json.Unmarshal(envelope.Result, &diagnostic) != nil || !validCLIUUID(diagnostic.ID) || diagnostic.State != "succeeded" || len(diagnostic.Result) <= 64<<10 || len(diagnostic.Result) > 1<<20 {
+		t.Fatalf("large datasource diagnostic did not complete within the HTTPS transfer bounds: id_valid=%t state=%s result_bytes=%d",
+			validCLIUUID(diagnostic.ID), safeDiagnosticToken(diagnostic.State), len(diagnostic.Result))
+	}
+	var result struct {
+		Series []struct {
+			Labels map[string]string `json:"labels"`
+			Value  string            `json:"value"`
+		} `json:"series"`
+	}
+	if json.Unmarshal(diagnostic.Result, &result) != nil || len(result.Series) != 20 {
+		t.Fatalf("large datasource diagnostic series count=%d, want 20", len(result.Series))
+	}
+	for index, series := range result.Series {
+		if len(series.Labels) != 26 || series.Value != "1" {
+			t.Fatalf("large datasource diagnostic series %d labels=%d value=%s", index, len(series.Labels), safeDiagnosticToken(series.Value))
+		}
+	}
+	db := testpostgres.Connect(t, databaseURL)
+	var storedBytes int
+	var storedState string
+	if err := db.QueryRow(t.Context(), `SELECT octet_length(result::text), state FROM public.almanac_diagnostics WHERE id=$1`, diagnostic.ID).Scan(&storedBytes, &storedState); err != nil {
+		t.Fatal("read large diagnostic transfer receipt failed")
+	}
+	if storedBytes <= 64<<10 || storedBytes > 1<<20 || storedState != "succeeded" {
+		t.Fatalf("large diagnostic stored receipt bytes=%d state=%s", storedBytes, safeDiagnosticToken(storedState))
+	}
+}
+
+func waitDatasourceAgentConfiguration(t *testing.T, run func(...string) []byte, journey connectedAgentJourney, databaseURL string, lastReadFailure func() string) string {
 	t.Helper()
 	db := testpostgres.Connect(t, databaseURL)
 	var generation int64
@@ -654,7 +743,8 @@ func waitDatasourceAgentConfiguration(t *testing.T, run func(...string) []byte, 
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("assigned agent did not apply the datasource configuration: %s", lastEvidence)
+	t.Fatalf("assigned agent did not apply the datasource configuration: %s last_agents_get=%s %s",
+		lastEvidence, lastReadFailure(), datasourceAgentStateEvidence(t, databaseURL, journey.id))
 	return lastEvidence
 }
 
@@ -778,6 +868,7 @@ func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, ce
 		if err == nil {
 			_ = response.Body.Close()
 			if response.StatusCode == http.StatusOK {
+				seedVictoriaMetricsTransferSeries(t, endpoint, certificatePEM)
 				return endpoint
 			}
 		}
@@ -785,4 +876,42 @@ func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, ce
 	}
 	t.Fatal("isolated VictoriaMetrics fixture did not become ready over verified HTTPS")
 	return ""
+}
+
+func seedVictoriaMetricsTransferSeries(t *testing.T, endpoint string, certificatePEM []byte) {
+	t.Helper()
+	block, _ := pem.Decode(certificatePEM)
+	if block == nil {
+		t.Fatal("decode VictoriaMetrics fixture CA failed")
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal("parse VictoriaMetrics fixture CA failed")
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(certificate)
+	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}}
+	t.Cleanup(client.CloseIdleConnections)
+	var payload strings.Builder
+	for series := range 20 {
+		fmt.Fprintf(&payload, "almanac_transfer_metric{transfer_series=\"%d\"", series)
+		for label := range 24 {
+			fmt.Fprintf(&payload, ",label_%02d=\"%s\"", label, strings.Repeat("x", 256))
+		}
+		fmt.Fprintf(&payload, "} 1 %d\n", time.Now().UnixMilli())
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint+"/api/v1/import/prometheus", strings.NewReader(payload.String()))
+	if err != nil {
+		t.Fatal("create bounded VictoriaMetrics transfer fixture request failed")
+	}
+	request.Header.Set("Content-Type", "text/plain; version=0.0.4")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal("populate isolated VictoriaMetrics transfer fixture failed")
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(responseBody) > 4096 || response.StatusCode < 200 || response.StatusCode >= 300 {
+		t.Fatalf("populate isolated VictoriaMetrics transfer fixture status=%d response_bytes=%d", response.StatusCode, len(responseBody))
+	}
 }

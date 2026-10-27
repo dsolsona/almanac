@@ -600,7 +600,7 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        Typed agent result. The HTTP transport accepts 64 KiB through 1 MiB of
+        Typed agent result. The HTTP transport accepts more than 64 KiB through 1 MiB of
         serialized JSON; WebSocket inline results remain limited to 64 KiB.
       x-maxSerializedBytes: 1048576
       required: [diagnostic_id, state]

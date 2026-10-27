@@ -12,7 +12,7 @@ const agentID = 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c';
 function source() { return { id: sourceID, name: 'metrics-prod', display_name: 'Production metrics', version: '4', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'bearer', username: null, password_configured: false, token_configured: true }, polling_interval_seconds: 60, settling_delay_seconds: 60, agent_id: agentID, created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
 function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }], providerAvailability: string[] = ['available'], previewStatuses: number[] = [], previewResult: Record<string, unknown> = {
-	id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: 'complete', result: { series: [] }, error_code: null, message: null,
+	id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', operation: 'query_preview', created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: 'complete', result: { diagnostic_id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'succeeded', result_class: 'complete', series: [] }, error_code: null, message: null,
 }) {
   const calls: { url: string; init?: RequestInit }[] = [];
   let providerRequest = 0;
@@ -103,10 +103,10 @@ describe('datasource page', () => {
     render(<DatasourcesPage context={editor} />);
 
     const preview = await screen.findByRole('button', { name: 'Run preview' });
-    expect(screen.getByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).toBeVisible();
+    expect(await screen.findByText(/^The assigned agent is applying datasource settings(?: \(revision \d+ of \d+\))?\. Preview will be available when it finishes\.$/)).toBeVisible();
     expect(preview).toBeDisabled();
     await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
-    expect(screen.queryByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^The assigned agent is applying datasource settings(?: \(revision \d+ of \d+\))?\. Preview will be available when it finishes\.$/)).not.toBeInTheDocument();
     expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
   });
 
@@ -116,7 +116,7 @@ describe('datasource page', () => {
     installFetch([], ['available'], [202], {
       id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', state: 'failed', operation: 'query_preview',
       created_at: '2026-10-22T12:00:00Z', deadline_at: '2026-10-22T12:00:30Z', result_class: null,
-      result: { state: 'failed', diagnostic_id: 'e5267bc2-3f9c-4bf2-a6c4-5ea2fa3fc6f4', error_code: 'query', message: 'private provider detail' }, error_code: 'query_failed', message: 'private provider detail',
+      result: null, error_code: 'query_failed', message: 'private provider detail',
     });
     render(<DatasourcesPage context={editor} />);
     await user.click(await screen.findByRole('button', { name: 'Run preview' }));
@@ -139,7 +139,7 @@ describe('datasource page', () => {
     await user.click(screen.getByRole('button', { name: 'Save settings' }));
     expect(await screen.findByText('Datasource settings saved.')).toBeVisible();
     const preview = screen.getByRole('button', { name: 'Run preview' });
-    expect(await screen.findByText('The assigned agent is applying datasource settings. Preview will be available when it finishes.')).toBeVisible();
+    expect(await screen.findByText(/^The assigned agent is applying datasource settings(?: \(revision \d+ of \d+\))?\. Preview will be available when it finishes\.$/)).toBeVisible();
     expect(preview).toBeDisabled();
     await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
     expect(calls.some((call) => call.url === `/api/v1/datasources/${sourceID}` && call.init?.method === 'PUT')).toBe(true);
