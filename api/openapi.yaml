@@ -419,7 +419,7 @@ components:
         configuration_format: {type: string, enum: [prometheus-http-v1]}
         operations: {type: array, items: {type: string}}
         availability: {type: string, enum: [available, applying, offline, disabled, unreported, configuration_failed, incompatible, planned, unsupported]}
-        desired_configuration_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$', nullable: true}
+        desired_configuration_revision: {type: string, pattern: '^[1-9][0-9]*$', nullable: true}
         applied_configuration_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$', nullable: true}
         configuration_failure_code: {type: string, enum: [invalid_snapshot, incompatible, apply_failed], nullable: true}
         configuration_failure_revision: {type: string, pattern: '^[1-9][0-9]*$', nullable: true}
