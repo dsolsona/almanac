@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -44,6 +45,17 @@ func TestNewRejectsUnsupportedComponentsAndAssetMismatches(t *testing.T) {
 				t.Fatal("invalid component/asset combination was accepted")
 			}
 		})
+	}
+}
+
+func TestNewRejectsUnavailableConfiguredSourceSecretKeyset(t *testing.T) {
+	cfg := config.Config{Components: "backend", PublicOrigin: "https://example.test",
+		SourceSecretKeysetFile: "/missing/source-keyset",
+		SourceSecretKeysetID:   "00000000-0000-4000-8000-000000000001"}
+	service := &authentication.Service{}
+	server, err := New(context.Background(), cfg, service, "postgres://unused", nil, nil)
+	if err == nil || server != nil || strings.Contains(err.Error(), cfg.SourceSecretKeysetFile) {
+		t.Fatalf("New() = %v, %v; missing keyset must fail without disclosing its path", server, err)
 	}
 }
 

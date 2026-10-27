@@ -304,6 +304,32 @@ func TestConfigurationSnapshotValidatesTypedDatasourceAssignments(t *testing.T) 
 	}
 }
 
+func TestDiagnosticProtocolBoundsRequestsAndResults(t *testing.T) {
+	deadline := time.Date(2026, 10, 27, 12, 0, 30, 0, time.UTC)
+	assignment := DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "3", Name: "metrics-east", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+	request := DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000003", AgentID: "00000000-0000-4000-8000-000000000001", Operation: "query_preview", DeadlineAt: deadline, Datasource: assignment, Query: "up"}
+	if err := (Envelope[DiagnosticRequest]{Kind: KindDiagnosticRequest, MessageID: "dreq-1", SessionGeneration: "1", Payload: request}).Validate(); err != nil {
+		t.Fatalf("valid diagnostic request rejected: %v", err)
+	}
+	request.Query = " "
+	if err := request.Validate(); err == nil {
+		t.Fatal("empty query was accepted")
+	}
+	result := DiagnosticResult{DiagnosticID: request.DiagnosticID, State: "succeeded", ResultClass: "complete", Series: []DiagnosticSeries{{Labels: map[string]string{"job": "api"}, Time: "1793102400.000", Value: "1"}}}
+	if err := result.Validate(); err != nil {
+		t.Fatalf("valid diagnostic result rejected: %v", err)
+	}
+	result.State, result.ResultClass, result.Series, result.ErrorCode = "failed", "", nil, "source leaked credentials"
+	if err := result.Validate(); err == nil {
+		t.Fatal("unrecognized error detail was accepted")
+	}
+	result.ErrorCode = "network"
+	result.Message = strings.Repeat("x", 513)
+	if err := result.Validate(); err == nil {
+		t.Fatal("oversized diagnostic message was accepted")
+	}
+}
+
 func validWelcomeJSON() string { return validWelcomeJSONWithGrants(`[]`) }
 
 func validWelcomeJSONWithGrants(grants string) string {

@@ -8,9 +8,12 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/datasource"
+	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -715,7 +718,7 @@ type AgentConfigurationSnapshot struct {
 	Snapshot []byte
 }
 
-func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, clock func() time.Time) (AgentConfigurationSnapshot, error) {
+func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, clock func() time.Time, adapters ...*sourcesecret.Adapter) (AgentConfigurationSnapshot, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil {
 		return AgentConfigurationSnapshot{}, ErrAgentOwnershipInput
@@ -746,14 +749,100 @@ func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialI
 	if err != nil {
 		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read failed", err)
 	}
-	if configuration.Revision != grant.ConfigurationRevision {
+	// The current owner may fetch a newer desired configuration after an
+	// assignment change. The next heartbeat receives a grant bound to that
+	// revision after the agent acknowledges it; this read alone grants no work.
+	var adapter *sourcesecret.Adapter
+	if len(adapters) > 1 {
+		return AgentConfigurationSnapshot{}, ErrAgentOwnershipInput
+	}
+	if len(adapters) == 1 {
+		adapter = adapters[0]
+	}
+	rows, err := state.queries.ListDatasources(ctx, dbgen.ListDatasourcesParams{
+		AgentID: state.agentID, AfterCreatedAt: timestamp(time.Time{}), AfterID: pgtype.UUID{Valid: true}, RowLimit: 257,
+	})
+	if err != nil {
+		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent datasource configuration read failed", err)
+	}
+	if len(rows) > 256 {
 		return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
+	}
+	installationID, err := loadInstallationID(ctx, state.tx)
+	if err != nil {
+		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent datasource installation lookup failed", err)
+	}
+	assignments := make([]agentprotocol.DatasourceAssignment, 0, len(rows))
+	for _, row := range rows {
+		assignment, assignmentErr := releaseDatasourceAssignment(installationID, row, adapter)
+		if assignmentErr != nil {
+			return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
+		}
+		assignments = append(assignments, assignment)
+	}
+	snapshotBytes, err := json.Marshal(agentprotocol.ConfigurationSnapshot{
+		AgentID: state.agentID.String(), ConfigurationRevision: strconv.FormatInt(configuration.Revision, 10), Assignments: assignments,
+	})
+	if err != nil {
+		return AgentConfigurationSnapshot{}, errors.New("storage: agent datasource configuration encoding failed")
 	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return AgentConfigurationSnapshot{}, operationError(ctx, "storage: agent configuration read commit failed", err)
 	}
 	return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision,
-		Snapshot: append([]byte(nil), configuration.Snapshot...)}, nil
+		Snapshot: snapshotBytes}, nil
+}
+
+func releaseDatasourceAssignment(installationID string, row dbgen.AlmanacDatasource, adapter *sourcesecret.Adapter) (agentprotocol.DatasourceAssignment, error) {
+	var tlsSettings datasource.TLSSettings
+	if json.Unmarshal(row.Tls, &tlsSettings) != nil {
+		return agentprotocol.DatasourceAssignment{}, ErrSourceSecretUnavailable
+	}
+	assignment := agentprotocol.DatasourceAssignment{
+		DatasourceID: row.ID.String(), DatasourceVersion: strconv.FormatInt(row.Version, 10), Name: row.Name,
+		Provider: row.Provider, ConfigurationFormat: row.ConfigurationFormat, Endpoint: row.Endpoint,
+		TLS:                agentprotocol.DatasourceTLS{InsecureSkipVerify: tlsSettings.InsecureSkipVerify, CAPEM: tlsSettings.CAPEM},
+		AuthenticationMode: row.AuthenticationMode, PollingIntervalSeconds: int(row.PollingIntervalSeconds),
+		SettlingDelaySeconds: int(row.SettlingDelaySeconds),
+	}
+	if row.AuthenticationUsername.Valid {
+		assignment.Username = row.AuthenticationUsername.String
+	}
+	if row.AuthenticationMode == "basic" {
+		plaintext, err := decryptDatasourceSecret(installationID, row, "auth.password", row.PasswordRevision, row.PasswordEnvelope, adapter)
+		if err != nil {
+			return agentprotocol.DatasourceAssignment{}, err
+		}
+		assignment.Password = string(plaintext)
+		clear(plaintext)
+	}
+	if row.AuthenticationMode == "bearer" {
+		plaintext, err := decryptDatasourceSecret(installationID, row, "auth.token", row.TokenRevision, row.TokenEnvelope, adapter)
+		if err != nil {
+			return agentprotocol.DatasourceAssignment{}, err
+		}
+		assignment.BearerToken = string(plaintext)
+		clear(plaintext)
+	}
+	if assignment.Validate() != nil {
+		return agentprotocol.DatasourceAssignment{}, ErrSourceSecretUnavailable
+	}
+	return assignment, nil
+}
+
+func decryptDatasourceSecret(installationID string, row dbgen.AlmanacDatasource, field string, revision int64, raw []byte, adapter *sourcesecret.Adapter) ([]byte, error) {
+	if adapter == nil || revision <= 0 || len(raw) == 0 {
+		return nil, ErrSourceSecretUnavailable
+	}
+	var envelope sourcesecret.Envelope
+	if json.Unmarshal(raw, &envelope) != nil {
+		return nil, ErrSourceSecretUnavailable
+	}
+	plaintext, err := adapter.Decrypt(sourcesecret.Binding{InstallationID: installationID, ResourceKind: "datasource", ResourceID: row.ID.String(), Field: field, Revision: uint64(revision)}, envelope)
+	if err != nil {
+		return nil, ErrSourceSecretUnavailable
+	}
+	return plaintext, nil
 }
 
 func newExecutionLeaseID() (string, error) {

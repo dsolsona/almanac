@@ -22,7 +22,9 @@ import (
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
 	"github.com/dsolsona/almanac/internal/config"
+	"github.com/dsolsona/almanac/internal/datasourcehttp"
 	"github.com/dsolsona/almanac/internal/secretfile"
+	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
@@ -30,6 +32,7 @@ type Server struct {
 	http           *http.Server
 	databaseURL    string
 	agentSessions  *agentws.Registry
+	sourceSecrets  *sourcesecret.Adapter
 	ready          atomic.Bool
 	connectionsMu  sync.Mutex
 	newConnections map[net.Conn]struct{}
@@ -63,7 +66,18 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 		return nil, errors.New("backendhttp: invalid configuration")
 	}
 	agentSessions := agentws.NewRegistry()
-	s := &Server{databaseURL: databaseURL, agentSessions: agentSessions, newConnections: make(map[net.Conn]struct{})}
+	var sourceSecrets *sourcesecret.Adapter
+	if (cfg.SourceSecretKeysetFile == "") != (cfg.SourceSecretKeysetID == "") {
+		return nil, errors.New("backendhttp: invalid source-secret key configuration")
+	}
+	if cfg.SourceSecretKeysetFile != "" {
+		var err error
+		sourceSecrets, err = sourcesecret.Load(cfg.SourceSecretKeysetFile, cfg.SourceSecretKeysetID)
+		if err != nil {
+			return nil, errors.New("backendhttp: source-secret keyset is unavailable")
+		}
+	}
+	s := &Server{databaseURL: databaseURL, agentSessions: agentSessions, sourceSecrets: sourceSecrets, newConnections: make(map[net.Conn]struct{})}
 	options := authhttp.Options{PublicOrigin: cfg.PublicOrigin, TrustedProxyCIDRs: cfg.TrustedProxyCIDRs, Now: time.Now, Preflight: s.authenticationPreflight}
 	auth, err := authhttp.New(service, options)
 	if err != nil {
@@ -77,7 +91,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent HTTP configuration")
 	}
-	access := agentaccess.New(databaseURL, time.Now)
+	access := agentaccess.New(databaseURL, time.Now, sourceSecrets)
 	configuration, err := agenthttp.NewConfigurationHandler(access, auth, time.Now)
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent configuration handler")
@@ -90,6 +104,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent connection configuration")
 	}
+	datasources, err := datasourcehttp.New(databaseURL, sourceSecrets, auth, datasourcehttp.Options{Now: time.Now, Preflight: s.authenticationPreflight})
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid datasource handler configuration")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
@@ -97,6 +115,9 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 		mux.Handle(path, auth)
 	}
 	mux.Handle("/api/v1/agents", agents)
+	mux.Handle("/api/v1/providers", datasources)
+	mux.Handle("/api/v1/datasources", datasources)
+	mux.Handle("/api/v1/datasources/", datasources)
 	mux.Handle("/api/v1/", agents)
 	mux.Handle("/api/agent/v1/configuration", configuration)
 	mux.Handle("/api/agent/v1/connect", connections)

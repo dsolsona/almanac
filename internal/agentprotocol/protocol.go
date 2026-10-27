@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -38,6 +39,9 @@ const (
 	KindConfigurationChanged Kind = "configuration-changed"
 	KindConfigurationApplied Kind = "configuration-applied"
 	KindConfigurationFailed  Kind = "configuration-failed"
+	KindDiagnosticRequest    Kind = "diagnostic-request"
+	KindDiagnosticResult     Kind = "diagnostic-result"
+	KindDiagnosticCancel     Kind = "diagnostic-cancel"
 	KindShutdown             Kind = "shutdown"
 	KindRevoked              Kind = "revoked"
 )
@@ -110,6 +114,30 @@ type ConfigurationApplied struct {
 type ConfigurationFailed struct {
 	ConfigurationRevision string `json:"configuration_revision"`
 	FailureCode           string `json:"failure_code"`
+}
+type DiagnosticRequest struct {
+	DiagnosticID string               `json:"diagnostic_id"`
+	AgentID      string               `json:"agent_id"`
+	Operation    string               `json:"operation"`
+	DeadlineAt   time.Time            `json:"deadline_at"`
+	Datasource   DatasourceAssignment `json:"datasource"`
+	Query        string               `json:"query,omitempty"`
+}
+type DiagnosticSeries struct {
+	Labels map[string]string `json:"labels"`
+	Time   string            `json:"time"`
+	Value  string            `json:"value"`
+}
+type DiagnosticResult struct {
+	DiagnosticID string             `json:"diagnostic_id"`
+	State        string             `json:"state"`
+	ResultClass  string             `json:"result_class,omitempty"`
+	Series       []DiagnosticSeries `json:"series,omitempty"`
+	ErrorCode    string             `json:"error_code,omitempty"`
+	Message      string             `json:"message,omitempty"`
+}
+type DiagnosticCancel struct {
+	DiagnosticID string `json:"diagnostic_id"`
 }
 type Shutdown struct {
 	Reason string `json:"reason"`
@@ -201,7 +229,7 @@ func knownKind(kind Kind) bool {
 	switch kind {
 	case KindHello, KindWelcome, KindHeartbeat, KindHeartbeatAck,
 		KindConfigurationChanged, KindConfigurationApplied, KindConfigurationFailed,
-		KindShutdown, KindRevoked:
+		KindDiagnosticRequest, KindDiagnosticResult, KindDiagnosticCancel, KindShutdown, KindRevoked:
 		return true
 	default:
 		return false
@@ -271,6 +299,33 @@ func validatePayload(kind Kind, raw jsontext.Value) error {
 		var p ConfigurationFailed
 		if json.Unmarshal(raw, &p) != nil {
 			return invalidField("configuration_failed.payload")
+		}
+		return p.Validate()
+	case KindDiagnosticRequest:
+		if err := requireFields(raw, "diagnostic_id", "agent_id", "operation", "deadline_at", "datasource"); err != nil {
+			return err
+		}
+		var p DiagnosticRequest
+		if json.Unmarshal(raw, &p) != nil {
+			return invalidField("diagnostic_request.payload")
+		}
+		return p.Validate()
+	case KindDiagnosticResult:
+		if err := requireFields(raw, "diagnostic_id", "state"); err != nil {
+			return err
+		}
+		var p DiagnosticResult
+		if json.Unmarshal(raw, &p) != nil {
+			return invalidField("diagnostic_result.payload")
+		}
+		return p.Validate()
+	case KindDiagnosticCancel:
+		if err := requireFields(raw, "diagnostic_id"); err != nil {
+			return err
+		}
+		var p DiagnosticCancel
+		if json.Unmarshal(raw, &p) != nil {
+			return invalidField("diagnostic_cancel.payload")
 		}
 		return p.Validate()
 	case KindShutdown:
@@ -354,6 +409,24 @@ func validateTypedPayload(kind Kind, payload any) error {
 		p, ok := payload.(ConfigurationFailed)
 		if !ok {
 			return invalidField("configuration_failed.payload")
+		}
+		return p.Validate()
+	case KindDiagnosticRequest:
+		p, ok := payload.(DiagnosticRequest)
+		if !ok {
+			return invalidField("diagnostic_request.payload")
+		}
+		return p.Validate()
+	case KindDiagnosticResult:
+		p, ok := payload.(DiagnosticResult)
+		if !ok {
+			return invalidField("diagnostic_result.payload")
+		}
+		return p.Validate()
+	case KindDiagnosticCancel:
+		p, ok := payload.(DiagnosticCancel)
+		if !ok {
+			return invalidField("diagnostic_cancel.payload")
 		}
 		return p.Validate()
 	case KindShutdown:
@@ -596,6 +669,66 @@ func (p ConfigurationFailed) Validate() error {
 	}
 	if p.FailureCode != "invalid_snapshot" && p.FailureCode != "incompatible" && p.FailureCode != "apply_failed" {
 		return invalidField("configuration_failed.failure_code")
+	}
+	return nil
+}
+
+func (p DiagnosticRequest) Validate() error {
+	if !canonicalUUID(p.DiagnosticID) || !canonicalUUID(p.AgentID) || (p.Operation != "connection_test" && p.Operation != "query_preview") || p.DeadlineAt.IsZero() || p.DeadlineAt.Nanosecond()%1000 != 0 || p.Datasource.Validate() != nil || (p.Operation == "query_preview" && (strings.TrimSpace(p.Query) == "" || len(p.Query) > 4096)) || (p.Operation == "connection_test" && p.Query != "") {
+		return invalidField("diagnostic_request")
+	}
+	return nil
+}
+
+func (p DiagnosticResult) Validate() error {
+	if !canonicalUUID(p.DiagnosticID) || len(p.Series) > 20 || len(p.Message) > 512 || !utf8.ValidString(p.Message) {
+		return invalidField("diagnostic_result")
+	}
+	switch p.State {
+	case "succeeded":
+		if (p.ResultClass != "complete" && p.ResultClass != "empty" && p.ResultClass != "incomplete") || p.ErrorCode != "" || p.Message != "" || p.Series == nil {
+			return invalidField("diagnostic_result.success")
+		}
+	case "failed":
+		if p.ResultClass != "" || !ValidDiagnosticErrorCode(p.ErrorCode) || p.Series != nil {
+			return invalidField("diagnostic_result.failure")
+		}
+	case "canceled", "timed_out":
+		if p.ResultClass != "" || p.ErrorCode != "" || p.Series != nil {
+			return invalidField("diagnostic_result.terminal")
+		}
+	default:
+		return invalidField("diagnostic_result.state")
+	}
+	for i, series := range p.Series {
+		if len(series.Labels) > 32 || len(series.Time) > 32 || len(series.Value) > 64 {
+			return invalidIndexedField("diagnostic_result.series", i)
+		}
+		for key, value := range series.Labels {
+			if key == "" || len(key) > 128 || len(value) > 256 {
+				return invalidIndexedField("diagnostic_result.series.labels", i)
+			}
+		}
+	}
+	encoded, err := json.Marshal(p)
+	if err != nil || len(encoded) > 64<<10 {
+		return ErrMessageTooLarge
+	}
+	return nil
+}
+
+func ValidDiagnosticErrorCode(value string) bool {
+	switch value {
+	case "authentication", "incomplete", "network", "query", "rate_limited", "tls", "timeout", "unsupported", "assignment_revoked", "deadline":
+		return true
+	default:
+		return false
+	}
+}
+
+func (p DiagnosticCancel) Validate() error {
+	if !canonicalUUID(p.DiagnosticID) {
+		return invalidField("diagnostic_cancel.diagnostic_id")
 	}
 	return nil
 }

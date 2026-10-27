@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -276,6 +277,10 @@ func ListAgentCredentials(ctx context.Context, databaseURL string, input ListAge
 }
 
 func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	return beginAgentReadWithRoles(ctx, databaseURL, verifier, clock, "administrator")
+}
+
+func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	conn, err := connectCurrentSchema(ctx, databaseURL)
 	if err != nil {
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
@@ -328,7 +333,7 @@ func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, 
 	if session.Restricted || user.MustChangePassword || !installation.OnboardingCompletedAt.Valid {
 		return fail(ErrAgentForbidden)
 	}
-	if user.Role != "administrator" {
+	if !slices.Contains(roles, user.Role) {
 		return fail(ErrAgentForbidden)
 	}
 	return conn, q, tx, user, installation, session, now, nil

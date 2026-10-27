@@ -135,6 +135,23 @@ For TLS termination at a proxy, omit both TLS files and explicitly configure
 verified client address and HTTPS protocol metadata described in the
 [authentication contract](api/openapi.yaml).
 
+To enable encrypted datasource credentials, provision a source keyset explicitly
+and mount the resulting owner-only file into the backend:
+
+```sh
+bin/almanac secrets provision-source-keyset \
+  --file=/run/secrets/almanac-source-keyset.json \
+  --keyset-id=00000000-0000-4000-8000-000000000001 --output=json
+```
+
+Configure both `--source-secret-keyset-file` and `--source-secret-keyset-id` on
+`serve`, or set the matching `source_secret_keyset_file` and
+`source_secret_keyset_id` JSON properties. The environment equivalents are
+`ALMANAC_SOURCE_SECRET_KEYSET_FILE` and `ALMANAC_SOURCE_SECRET_KEYSET_ID`.
+The cleartext Tink keyset is deployment key material: protect the file and its
+mount. Datasource credential writes remain unavailable when the keyset is not
+configured or cannot be loaded.
+
 The first startup provisions the initial administrator, who must change the
 password before ordinary access. Later starts ignore the initial credentials once
 ownership is persisted. Missing, unsafe or weak initial credentials leave `/livez`

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/identity"
+	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
@@ -22,12 +23,17 @@ type Principal struct {
 }
 
 type Service struct {
-	databaseURL string
-	now         func() time.Time
+	databaseURL   string
+	now           func() time.Time
+	sourceSecrets *sourcesecret.Adapter
 }
 
-func New(databaseURL string, now func() time.Time) *Service {
-	return &Service{databaseURL: databaseURL, now: now}
+func New(databaseURL string, now func() time.Time, adapters ...*sourcesecret.Adapter) *Service {
+	service := &Service{databaseURL: databaseURL, now: now}
+	if len(adapters) == 1 {
+		service.sourceSecrets = adapters[0]
+	}
+	return service
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (Principal, error) {
@@ -65,7 +71,7 @@ func (s *Service) Configuration(ctx context.Context, token string) (storage.Agen
 	if err != nil {
 		return storage.AgentConfigurationSnapshot{}, ErrInvalidCredential
 	}
-	result, err := storage.ReadCurrentAgentConfiguration(ctx, s.databaseURL, credentialID, verifier, s.now)
+	result, err := storage.ReadCurrentAgentConfiguration(ctx, s.databaseURL, credentialID, verifier, s.now, s.sourceSecrets)
 	if errors.Is(err, storage.ErrInvalidAgentCredential) {
 		return storage.AgentConfigurationSnapshot{}, ErrInvalidCredential
 	}

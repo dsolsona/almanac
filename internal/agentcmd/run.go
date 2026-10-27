@@ -21,6 +21,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/secretfile"
 )
 
@@ -42,6 +43,8 @@ type client struct {
 	sequence    int64
 	pending     *agentprotocol.Heartbeat
 	agentID     string
+	assignments []agentprotocol.DatasourceAssignment
+	diagnostics *diagnosticRunner
 	serverTime  time.Time
 	serverAt    time.Time
 	established bool
@@ -77,6 +80,8 @@ func Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	client.diagnostics = newDiagnosticRunner(client)
+	defer client.diagnostics.close()
 	return client.run(ctx)
 }
 
@@ -156,6 +161,9 @@ func retryDelay(current time.Duration, established bool) time.Duration {
 }
 
 func (c *client) runSession(ctx context.Context) error {
+	if c.diagnostics == nil {
+		c.diagnostics = newDiagnosticRunner(c)
+	}
 	u, err := url.Parse(c.opts.backendURL)
 	if err != nil {
 		return err
@@ -185,7 +193,8 @@ func (c *client) runSession(ctx context.Context) error {
 	}
 	hello := agentprotocol.Envelope[agentprotocol.Hello]{Kind: agentprotocol.KindHello, MessageID: messageID, SessionGeneration: c.generation,
 		Payload: agentprotocol.Hello{ProtocolVersions: []string{agentprotocol.ProtocolV1}, SoftwareVersion: "1.0.0",
-			Capabilities: []agentprotocol.Capability{}, ResumeToken: c.resume, RequestNonce: nonce}}
+			Capabilities: []agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
+				ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}}, ResumeToken: c.resume, RequestNonce: nonce}}
 	if err := hello.Validate(); err != nil {
 		return err
 	}
@@ -291,11 +300,27 @@ func (c *client) runSession(ctx context.Context) error {
 				return result.err
 			}
 			wasPending := c.pending != nil
-			if err := c.handleMessage(ctx, conn, result.raw); err != nil {
+			if err := c.handleMessage(sessionCtx, conn, result.raw); err != nil {
 				return err
 			}
 			if wasPending && c.pending == nil {
 				heartbeatTimer.Reset(interval)
+			}
+		case diagnosticResult := <-c.diagnostics.results:
+			messageID, err := newMessageID()
+			if err != nil {
+				return err
+			}
+			message := agentprotocol.Envelope[agentprotocol.DiagnosticResult]{Kind: agentprotocol.KindDiagnosticResult,
+				MessageID: messageID, SessionGeneration: c.generation, Payload: diagnosticResult}
+			if err := message.Validate(); err != nil {
+				return errors.New("agent diagnostic result is invalid")
+			}
+			writeCtx, cancelWrite := context.WithTimeout(ctx, 5*time.Second)
+			err = writeJSON(writeCtx, conn, message)
+			cancelWrite()
+			if err != nil {
+				return err
 			}
 		case <-heartbeatTimer.C:
 			if c.pending == nil {
@@ -340,6 +365,7 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 		return errors.New("configuration validator is invalid")
 	}
 	c.revision = snapshot.ConfigurationRevision
+	c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
 	messageID, err := newMessageID()
 	if err != nil {
 		return err
@@ -410,6 +436,24 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		if err := c.reconcile(ctx, conn); err != nil {
 			return err
 		}
+	case agentprotocol.KindDiagnosticRequest:
+		var request agentprotocol.Envelope[agentprotocol.DiagnosticRequest]
+		if json.Unmarshal(raw, &request) != nil || request.Validate() != nil || request.SessionGeneration != c.generation || c.diagnostics == nil {
+			return errors.New("backend diagnostic request is invalid")
+		}
+		if err := c.diagnostics.start(ctx, request.Payload); err != nil {
+			if errors.Is(err, errDiagnosticCapacity) {
+				c.diagnostics.offer(diagnosticFailure(request.Payload.DiagnosticID, "unsupported"))
+				return nil
+			}
+			return errors.New("backend diagnostic request was rejected")
+		}
+	case agentprotocol.KindDiagnosticCancel:
+		var cancel agentprotocol.Envelope[agentprotocol.DiagnosticCancel]
+		if json.Unmarshal(raw, &cancel) != nil || cancel.Validate() != nil || cancel.SessionGeneration != c.generation || c.diagnostics == nil {
+			return errors.New("backend diagnostic cancellation is invalid")
+		}
+		c.diagnostics.cancel(cancel.Payload.DiagnosticID)
 	case agentprotocol.KindShutdown:
 		var shutdown agentprotocol.Envelope[agentprotocol.Shutdown]
 		if json.Unmarshal(raw, &shutdown) != nil || shutdown.Validate() != nil {

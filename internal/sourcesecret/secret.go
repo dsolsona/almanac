@@ -46,10 +46,10 @@ type Binding struct {
 // Envelope is untrusted storage metadata and ciphertext. Decrypt also requires the expected
 // Binding supplied independently by the caller.
 type Envelope struct {
-	FormatVersion uint32
-	KeysetID      string
-	KeyID         uint32
-	Ciphertext    []byte
+	FormatVersion uint32 `json:"format_version"`
+	KeysetID      string `json:"keyset_id"`
+	KeyID         uint32 `json:"key_id"`
+	Ciphertext    []byte `json:"ciphertext"`
 }
 
 // Adapter provides authenticated encryption with the configured Tink keyset.

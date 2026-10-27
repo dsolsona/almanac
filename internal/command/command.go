@@ -112,6 +112,8 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.String("tls-cert-file", "", "public TLS certificate chain")
 	fs.String("tls-key-file", "", "protected TLS private key")
 	fs.String("trusted-proxy-cidrs", "", "trusted TLS-terminating proxy CIDRs")
+	fs.String("source-secret-keyset-file", "", "protected source-secret Tink keyset file")
+	fs.String("source-secret-keyset-id", "", "canonical UUID bound to the source-secret keyset")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

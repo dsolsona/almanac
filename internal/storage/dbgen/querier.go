@@ -18,6 +18,7 @@ type Querier interface {
 	DeleteExpiredAgentExecutionGrants(ctx context.Context, arg DeleteExpiredAgentExecutionGrantsParams) error
 	DeleteExpiredAgentLifecycleReceipt(ctx context.Context, arg DeleteExpiredAgentLifecycleReceiptParams) (int64, error)
 	DeleteExpiredAgentReceipt(ctx context.Context, arg DeleteExpiredAgentReceiptParams) (int64, error)
+	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
@@ -28,6 +29,7 @@ type Querier interface {
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
 	FindAgentSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
+	FindDatasourceReceipt(ctx context.Context, arg FindDatasourceReceiptParams) (FindDatasourceReceiptRow, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
@@ -35,16 +37,22 @@ type Querier interface {
 	GetAgentExecutionGrantBySequence(ctx context.Context, arg GetAgentExecutionGrantBySequenceParams) (GetAgentExecutionGrantBySequenceRow, error)
 	GetAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) (pgtype.Timestamptz, error)
 	GetAgentRuntimeStatus(ctx context.Context, agentID pgtype.UUID) (GetAgentRuntimeStatusRow, error)
+	GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
+	GetDatasourceAgentCapabilities(ctx context.Context, agentID pgtype.UUID) (GetDatasourceAgentCapabilitiesRow, error)
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
+	GetLatestAgentConfigurationRevision(ctx context.Context, agentID pgtype.UUID) (int64, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
+	InsertAgentConfigurationRevision(ctx context.Context, arg InsertAgentConfigurationRevisionParams) error
 	InsertAgentCredential(ctx context.Context, arg InsertAgentCredentialParams) (InsertAgentCredentialRow, error)
 	InsertAgentExecutionGrant(ctx context.Context, arg InsertAgentExecutionGrantParams) error
 	InsertAgentLifecycleReceipt(ctx context.Context, arg InsertAgentLifecycleReceiptParams) error
 	InsertAgentOwnership(ctx context.Context, arg InsertAgentOwnershipParams) error
 	InsertAgentReceipt(ctx context.Context, arg InsertAgentReceiptParams) error
+	InsertDatasource(ctx context.Context, arg InsertDatasourceParams) (AlmanacDatasource, error)
+	InsertDatasourceReceipt(ctx context.Context, arg InsertDatasourceReceiptParams) error
 	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
 	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
@@ -55,6 +63,7 @@ type Querier interface {
 	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
 	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
+	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
 	// would otherwise walk inactive history. Recheck base rows after any lock wait.
 	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
@@ -88,7 +97,9 @@ type Querier interface {
 	SetAgentCurrentExecutionLease(ctx context.Context, arg SetAgentCurrentExecutionLeaseParams) (int64, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateAgentAppliedConfiguration(ctx context.Context, arg UpdateAgentAppliedConfigurationParams) (int64, error)
+	UpdateAgentDesiredConfigurationRevision(ctx context.Context, arg UpdateAgentDesiredConfigurationRevisionParams) (int64, error)
 	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
+	UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error)
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
 	UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error
 	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
