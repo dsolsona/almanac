@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/identity"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
@@ -85,4 +86,30 @@ func (s *Service) Configuration(ctx context.Context, token string) (storage.Agen
 		return storage.AgentConfigurationSnapshot{}, errors.Join(ErrUnavailable, err)
 	}
 	return result, nil
+}
+
+func (s *Service) CompleteDiagnostic(ctx context.Context, token string, generation int64, result agentprotocol.DiagnosticResult) error {
+	if err := ctx.Err(); err != nil {
+		return errors.Join(ErrCancelled, err)
+	}
+	if s == nil || s.now == nil || generation <= 0 {
+		return storage.ErrInvalidAgentInput
+	}
+	credentialID, verifier, err := identity.AgentTokenVerifier(token)
+	if err != nil {
+		return ErrInvalidCredential
+	}
+	err = storage.CompleteDatasourceDiagnostic(ctx, s.databaseURL, credentialID, verifier, generation, result, s.now())
+	switch {
+	case errors.Is(err, storage.ErrInvalidAgentCredential):
+		return ErrInvalidCredential
+	case errors.Is(err, storage.ErrCancelled):
+		return errors.Join(ErrCancelled, err)
+	case errors.Is(err, storage.ErrInvalidAgentInput), errors.Is(err, storage.ErrDiagnosticNotFound), errors.Is(err, storage.ErrDiagnosticConflict):
+		return err
+	case err != nil:
+		return errors.Join(ErrUnavailable, err)
+	default:
+		return nil
+	}
 }

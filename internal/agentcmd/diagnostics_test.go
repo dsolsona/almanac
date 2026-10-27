@@ -1,6 +1,7 @@
 package agentcmd
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -35,7 +36,7 @@ func TestDiagnosticRunnerExecutesPrometheusPreviewAndDeduplicates(t *testing.T) 
 	}
 	select {
 	case result := <-runner.results:
-		if err := result.Validate(); err != nil || result.State != "succeeded" || result.ResultClass != "complete" || len(result.Series) != 1 || result.Series[0].Labels["job"] != "api" || result.Series[0].Value != "1" {
+		if err := result.result.Validate(); err != nil || result.result.State != "succeeded" || result.result.ResultClass != "complete" || len(result.result.Series) != 1 || result.result.Series[0].Labels["job"] != "api" || result.result.Series[0].Value != "1" {
 			t.Fatalf("diagnostic result = %+v, validation %v", result, err)
 		}
 	case <-time.After(3 * time.Second):
@@ -69,7 +70,7 @@ func TestDiagnosticRunnerCancellationStopsProviderRequest(t *testing.T) {
 	runner.cancel(request.DiagnosticID)
 	select {
 	case result := <-runner.results:
-		if result.State != "canceled" || result.DiagnosticID != request.DiagnosticID {
+		if result.result.State != "canceled" || result.result.DiagnosticID != request.DiagnosticID {
 			t.Fatalf("cancellation result = %+v", result)
 		}
 	case <-time.After(2 * time.Second):
@@ -95,7 +96,7 @@ func TestDiagnosticRunnerDoesNotExecuteExpiredRequest(t *testing.T) {
 	}
 	select {
 	case result := <-runner.results:
-		if result.State != "timed_out" || result.DiagnosticID != request.DiagnosticID {
+		if result.result.State != "timed_out" || result.result.DiagnosticID != request.DiagnosticID {
 			t.Fatalf("expired request result = %+v", result)
 		}
 	case <-time.After(time.Second):
@@ -129,11 +130,26 @@ func TestDiagnosticRunnerCancelsWhenAssignmentIsRevoked(t *testing.T) {
 	runner.reconcileAssignments(nil)
 	select {
 	case result := <-runner.results:
-		if result.State != "canceled" || result.DiagnosticID != request.DiagnosticID {
+		if result.result.State != "canceled" || result.result.DiagnosticID != request.DiagnosticID {
 			t.Fatalf("revoked assignment diagnostic = %+v", result)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("revoked assignment did not cancel provider request")
+	}
+}
+
+func TestDiagnosticReceiptCacheBoundsTotalResultBytes(t *testing.T) {
+	runner := newDiagnosticRunner(&client{})
+	defer runner.close()
+	for index := range 60 {
+		result := largeDiagnosticResult()
+		result.DiagnosticID = fmt.Sprintf("00000000-0000-4000-8000-%012d", index+1)
+		runner.mu.Lock()
+		runner.rememberLocked(result.DiagnosticID, completedDiagnosticResult{result: result, deadlineAt: time.Now().Add(time.Second)}, time.Now())
+		runner.mu.Unlock()
+	}
+	if runner.receiptBytes > maxDiagnosticReceiptBytes || len(runner.completed) >= 60 {
+		t.Fatalf("diagnostic cache retained %d bytes across %d receipts", runner.receiptBytes, len(runner.completed))
 	}
 }
 

@@ -1,8 +1,14 @@
 package datasourceclient
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 )
 
 func TestDatasourceResponseValidationRejectsSecretValues(t *testing.T) {
@@ -13,6 +19,42 @@ func TestDatasourceResponseValidationRejectsSecretValues(t *testing.T) {
 	unsafe := []byte(strings.Replace(string(valid), `"token_configured":true}`, `"token_configured":true,"token":"private-token"}`, 1))
 	if validDatasource(unsafe) {
 		t.Fatal("datasource containing a plaintext token was accepted")
+	}
+}
+
+func TestDiagnosticResponseReadAllowsBoundedTypedLargeResultReceipt(t *testing.T) {
+	series := make([]agentprotocol.DiagnosticSeries, 20)
+	for index := range series {
+		labels := make(map[string]string, 32)
+		for label := range 32 {
+			labels[fmt.Sprintf("label_%02d", label)] = strings.Repeat("x", 256)
+		}
+		series[index] = agentprotocol.DiagnosticSeries{Labels: labels, Time: "1700000000.000", Value: "1"}
+	}
+	result := agentprotocol.DiagnosticResult{DiagnosticID: "8ed93d7e-51e3-4a3e-9222-3e8a612de20a", State: "succeeded", ResultClass: "complete", Series: series}
+	encodedResult, err := result.CanonicalJSON()
+	if err != nil || len(encodedResult) <= agentprotocol.MaxInlineDiagnosticResultBytes {
+		t.Fatalf("large result size=%d err=%v", len(encodedResult), err)
+	}
+	data := []byte(`{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","state":"succeeded","operation":"query_preview","created_at":"2026-10-27T12:00:00Z","deadline_at":"2026-10-27T12:00:30Z","result_class":"complete","result":` + string(encodedResult) + `,"error_code":null,"message":null}`)
+	client := &Client{}
+	response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data))}
+	if _, err := client.readLimit(response, nil, http.StatusOK, validDiagnostic, maxDiagnosticResponseBody); err != nil {
+		t.Fatalf("bounded large diagnostic receipt rejected: %v", err)
+	}
+}
+
+func TestDiagnosticResponseReadUsesItsOwnBoundedBodyLimit(t *testing.T) {
+	data := []byte(`{"payload":"` + strings.Repeat("x", maxBody+1024) + `"}`)
+	client := &Client{}
+	validate := func([]byte) bool { return true }
+	response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data))}
+	if _, err := client.readLimit(response, nil, http.StatusOK, validate, maxDiagnosticResponseBody); err != nil {
+		t.Fatalf("large diagnostic response exceeded its bounded limit: %v", err)
+	}
+	response = &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data))}
+	if _, err := client.readLimit(response, nil, http.StatusOK, validate, maxBody); err == nil {
+		t.Fatal("large response passed the ordinary response limit")
 	}
 }
 

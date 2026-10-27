@@ -14,11 +14,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/setupclient"
 )
 
-const maxBody = 512 << 10
+const (
+	maxBody                   = 512 << 10
+	maxDiagnosticResponseBody = (1 << 20) + (1 << 18)
+)
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var diagnosticCodePattern = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
@@ -189,7 +193,7 @@ func (c *Client) Diagnostic(ctx context.Context, rawID string) ([]byte, error) {
 		return nil, err
 	}
 	r, err := c.ops.GetDiagnostic(ctx, id, c.editor)
-	data, err := c.read(r, err, http.StatusOK, validDiagnostic)
+	data, err := c.readLimit(r, err, http.StatusOK, validDiagnostic, maxDiagnosticResponseBody)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +206,7 @@ func (c *Client) Cancel(ctx context.Context, rawID string) ([]byte, error) {
 		return nil, err
 	}
 	r, err := c.ops.PostDiagnosticCancel(ctx, id, api.EmptyAuthRequest{}, c.mutationEditor("", ""))
-	data, err := c.read(r, err, http.StatusOK, validDiagnostic)
+	data, err := c.readLimit(r, err, http.StatusOK, validDiagnostic, maxDiagnosticResponseBody)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +230,10 @@ func (c *Client) mutationEditor(key, etag string) api.RequestEditorFn {
 }
 
 func (c *Client) read(response *http.Response, err error, expected int, validate func([]byte) bool) ([]byte, error) {
+	return c.readLimit(response, err, expected, validate, maxBody)
+}
+
+func (c *Client) readLimit(response *http.Response, err error, expected int, validate func([]byte) bool, limit int64) ([]byte, error) {
 	if err != nil {
 		if response != nil && response.Body != nil {
 			_ = response.Body.Close()
@@ -236,8 +244,8 @@ func (c *Client) read(response *http.Response, err error, expected int, validate
 		return nil, protocol()
 	}
 	defer response.Body.Close()
-	data, readErr := io.ReadAll(io.LimitReader(response.Body, maxBody+1))
-	if readErr != nil || len(data) > maxBody {
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if readErr != nil || int64(len(data)) > limit {
 		return nil, protocol()
 	}
 	if response.StatusCode != expected {
@@ -312,7 +320,18 @@ func validDiagnostic(data []byte) bool {
 	if value.ResultClass != nil && !value.ResultClass.Valid() {
 		return false
 	}
+	if fields["result"].Kind() != jsontext.KindNull && !validDiagnosticResult(fields["result"], uuidText(value.Id)) {
+		return false
+	}
 	return !hasSecretValue(data) && !hasPlainSecretKey(data)
+}
+
+func validDiagnosticResult(data jsontext.Value, diagnosticID string) bool {
+	var result agentprotocol.DiagnosticResult
+	if json.Unmarshal(data, &result, json.RejectUnknownMembers(true)) != nil || result.DiagnosticID != diagnosticID || result.State != "succeeded" || result.ValidateHTTPS() != nil {
+		return false
+	}
+	return true
 }
 
 func safeDiagnostic(data []byte) ([]byte, error) {

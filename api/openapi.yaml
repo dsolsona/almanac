@@ -24,6 +24,41 @@ paths:
         '401': {description: Agent credential invalid}
         '400': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '503': {description: Configuration unavailable, including while the current heartbeat grant trails desired configuration. No snapshot or source credentials are returned in that case. The agent keeps its last applied configuration and retries after heartbeat renewal., content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/agent/v1/diagnostics/{diagnostic_id}/result:
+    post:
+      operationId: postAgentDiagnosticResult
+      summary: Submit a bounded diagnostic result over verified HTTPS
+      description: >-
+        Agent-only operation authenticated by the current registered agent bearer
+        credential over verified TLS. The body is one JSON DiagnosticResultPayload
+        with a maximum serialized size of 1 MiB. This route is only for results
+        whose serialized result body exceeds the 64 KiB WebSocket inline limit.
+        The supplied positive session generation, credential principal, current
+        ownership generation, diagnostic assignment and deadline are checked
+        transactionally. Replaying the same accepted typed result is idempotent;
+        changed, stale, canceled or timed-out results are rejected without
+        changing the receipt.
+      security: [{AgentBearer: []}]
+      parameters:
+        - {$ref: '#/components/parameters/DiagnosticId'}
+        - name: X-Agent-Session-Generation
+          in: header
+          required: true
+          description: Current positive canonical decimal ownership generation.
+          schema: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DiagnosticResultPayload'}
+      responses:
+        '204': {description: Result accepted or exact accepted replay}
+        '400': {description: Invalid result, generation, or request headers, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Agent credential is invalid or revoked, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: Diagnostic receipt not found for this agent, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Stale ownership generation or result conflicts with an existing terminal receipt, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '413': {description: Result body exceeds 1 MiB, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Temporary storage or agent access failure, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/auth/context:
     post:
       operationId: postAuthContext
@@ -387,6 +422,11 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    DiagnosticId:
+      name: diagnostic_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     DatasourceIfMatch:
       name: If-Match
       in: header
@@ -547,9 +587,40 @@ components:
         created_at: {type: string, format: date-time}
         deadline_at: {type: string, format: date-time}
         result_class: {type: string, enum: [complete, empty, incomplete], nullable: true}
-        result: {type: object, nullable: true}
+        result:
+          type: object
+          nullable: true
+          description: >-
+            Present only for succeeded diagnostics. The typed result payload is
+            bounded to 1 MiB; other states return null while retaining only the
+            normalized top-level error classification.
         error_code: {type: string, enum: [authentication_failed, network_failed, tls_failed, query_failed, request_timeout, assignment_revoked, rate_limited, unsupported, diagnostic_failed], nullable: true}
         message: {type: string, nullable: true, maxLength: 512}
+    DiagnosticResultPayload:
+      type: object
+      additionalProperties: false
+      description: >-
+        Typed agent result. The HTTP transport accepts 64 KiB through 1 MiB of
+        serialized JSON; WebSocket inline results remain limited to 64 KiB.
+      x-maxSerializedBytes: 1048576
+      required: [diagnostic_id, state]
+      properties:
+        diagnostic_id: {type: string, format: uuid}
+        state: {type: string, enum: [succeeded, failed, canceled, timed_out]}
+        result_class: {type: string, enum: [complete, empty, incomplete]}
+        series:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [labels, time, value]
+            properties:
+              labels: {type: object, maxProperties: 32, additionalProperties: {type: string, maxLength: 256}, description: Label names are limited to 128 UTF-8 bytes.}
+              time: {type: string, maxLength: 32}
+              value: {type: string, maxLength: 64}
+        error_code: {type: string, enum: [authentication, incomplete, network, query, rate_limited, tls, timeout, unsupported, assignment_revoked, deadline], maxLength: 64}
+        message: {type: string, maxLength: 512}
     Agent:
       type: object
       required: [id, name, display_name, enabled, version, created_at, updated_at]

@@ -118,3 +118,19 @@ func TestQueryPreviewClassifiesInvalidPromQLWithoutReturningSourceBody(t *testin
 		t.Fatalf("Query error = %v, want redacted query classification", err)
 	}
 }
+
+func TestQueryPreviewRejectsSeriesOutsideDiagnosticLabelBudgets(t *testing.T) {
+	for name, metric := range map[string]string{
+		"label count": `{"label_00":"x","label_01":"x","label_02":"x","label_03":"x","label_04":"x","label_05":"x","label_06":"x","label_07":"x","label_08":"x","label_09":"x","label_10":"x","label_11":"x","label_12":"x","label_13":"x","label_14":"x","label_15":"x","label_16":"x","label_17":"x","label_18":"x","label_19":"x","label_20":"x","label_21":"x","label_22":"x","label_23":"x","label_24":"x","label_25":"x","label_26":"x","label_27":"x","label_28":"x","label_29":"x","label_30":"x","label_31":"x","label_32":"x"}`,
+		"label value": `{"job":"` + strings.Repeat("x", 257) + `"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := []byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":` + metric + `,"value":[1760000000,"1"]}]}}`)
+			_, err := parseQueryResponse(body)
+			var sourceError *SourceError
+			if !errors.As(err, &sourceError) || sourceError.Code != "incomplete" {
+				t.Fatalf("result error = %v, want safe incomplete classification", err)
+			}
+		})
+	}
+}

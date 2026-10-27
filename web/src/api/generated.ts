@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/v1/diagnostics/{diagnostic_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a bounded diagnostic result over verified HTTPS
+         * @description Agent-only operation authenticated by the current registered agent bearer credential over verified TLS. The body is one JSON DiagnosticResultPayload with a maximum serialized size of 1 MiB. This route is only for results whose serialized result body exceeds the 64 KiB WebSocket inline limit. The supplied positive session generation, credential principal, current ownership generation, diagnostic assignment and deadline are checked transactionally. Replaying the same accepted typed result is idempotent; changed, stale, canceled or timed-out results are rejected without changing the receipt.
+         */
+        post: operations["postAgentDiagnosticResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/context": {
         parameters: {
             query?: never;
@@ -513,10 +533,31 @@ export interface components {
             deadline_at: string;
             /** @enum {string|null} */
             result_class: "complete" | "empty" | "incomplete" | null;
+            /** @description Present only for succeeded diagnostics. The typed result payload is bounded to 1 MiB; other states return null while retaining only the normalized top-level error classification. */
             result: Record<string, never> | null;
             /** @enum {string|null} */
             error_code: "authentication_failed" | "network_failed" | "tls_failed" | "query_failed" | "request_timeout" | "assignment_revoked" | "rate_limited" | "unsupported" | "diagnostic_failed" | null;
             message: string | null;
+        };
+        /** @description Typed agent result. The HTTP transport accepts 64 KiB through 1 MiB of serialized JSON; WebSocket inline results remain limited to 64 KiB. */
+        DiagnosticResultPayload: {
+            /** Format: uuid */
+            diagnostic_id: string;
+            /** @enum {string} */
+            state: "succeeded" | "failed" | "canceled" | "timed_out";
+            /** @enum {string} */
+            result_class?: "complete" | "empty" | "incomplete";
+            series?: {
+                /** @description Label names are limited to 128 UTF-8 bytes. */
+                labels: {
+                    [key: string]: string;
+                };
+                time: string;
+                value: string;
+            }[];
+            /** @enum {string} */
+            error_code?: "authentication" | "incomplete" | "network" | "query" | "rate_limited" | "tls" | "timeout" | "unsupported" | "assignment_revoked" | "deadline";
+            message?: string;
         };
         Agent: {
             /** Format: uuid */
@@ -776,6 +817,7 @@ export interface components {
     parameters: {
         AgentId: string;
         DatasourceId: string;
+        DiagnosticId: string;
         /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
         DatasourceIfMatch: string;
         /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
@@ -834,6 +876,87 @@ export interface operations {
                 content?: never;
             };
             /** @description Configuration unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgentDiagnosticResult: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Current positive canonical decimal ownership generation. */
+                "X-Agent-Session-Generation": string;
+            };
+            path: {
+                diagnostic_id: components["parameters"]["DiagnosticId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticResultPayload"];
+            };
+        };
+        responses: {
+            /** @description Result accepted or exact accepted replay */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid result */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Agent credential is invalid or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Diagnostic receipt not found for this agent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Stale ownership generation or result conflicts with an existing terminal receipt */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Result body exceeds 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary storage or agent access failure */
             503: {
                 headers: {
                     [name: string]: unknown;

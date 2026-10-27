@@ -54,4 +54,15 @@ describe('datasource client', () => {
     const input = { provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } }, agent_id: agent } as const;
     await expect(createDatasourceClient().connectionTest(input, context)).rejects.toMatchObject({ code: 'configuration_pending', status: 503, uncertain: false, message: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.' });
   });
+
+  it('allows a bounded large diagnostic receipt while keeping the ordinary response budget separate', async () => {
+    const labels = Object.fromEntries(Array.from({ length: 32 }, (_, index) => [`label_${String(index).padStart(2, '0')}`, 'x'.repeat(256)]));
+    const series = Array.from({ length: 20 }, () => ({ labels, time: '1700000000.000', value: '1' }));
+    const diagnostic = { id, state: 'succeeded', operation: 'query_preview', created_at: '2026-10-20T12:00:00Z', deadline_at: '2026-10-20T12:00:30Z', result_class: 'complete', result: { diagnostic_id: id, state: 'succeeded', result_class: 'complete', series }, error_code: null, message: null };
+    const fetcher = vi.fn().mockResolvedValue(response(diagnostic));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().diagnostic(id)).resolves.toMatchObject({ id, state: 'succeeded' });
+    fetcher.mockResolvedValue(response({ ...diagnostic, result: { payload: 'x'.repeat(2 * 1024 * 1024) } }));
+    await expect(createDatasourceClient().diagnostic(id)).rejects.toMatchObject({ code: 'invalid_response' });
+  });
 });

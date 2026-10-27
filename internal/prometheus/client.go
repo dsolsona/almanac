@@ -178,6 +178,14 @@ func parseQueryResponse(body []byte) (QueryResult, error) {
 	}
 	result := QueryResult{Class: "complete", Series: make([]Series, 0, len(response.Data.Result))}
 	for _, item := range response.Data.Result {
+		if len(item.Metric) > 32 {
+			return QueryResult{}, &SourceError{Code: "incomplete"}
+		}
+		for name, value := range item.Metric {
+			if name == "" || len(name) > 128 || len(value) > 256 {
+				return QueryResult{}, &SourceError{Code: "incomplete"}
+			}
+		}
 		if len(item.Value) != 2 {
 			return QueryResult{}, &SourceError{Code: "query"}
 		}
