@@ -397,7 +397,12 @@ export interface components {
             configuration_format: "prometheus-http-v1";
             operations: string[];
             /** @enum {string} */
-            availability: "available" | "planned" | "unsupported";
+            availability: "available" | "applying" | "offline" | "disabled" | "unreported" | "configuration_failed" | "incompatible" | "planned" | "unsupported";
+            desired_configuration_revision: string | null;
+            applied_configuration_revision: string | null;
+            /** @enum {string|null} */
+            configuration_failure_code: "invalid_snapshot" | "incompatible" | "apply_failed" | null;
+            configuration_failure_revision: string | null;
         };
         DatasourcePage: {
             items: components["schemas"]["Datasource"][];
@@ -500,7 +505,8 @@ export interface components {
             /** @enum {string|null} */
             result_class: "complete" | "empty" | "incomplete" | null;
             result: Record<string, never> | null;
-            error_code: string | null;
+            /** @enum {string|null} */
+            error_code: "authentication_failed" | "network_failed" | "tls_failed" | "query_failed" | "request_timeout" | "assignment_revoked" | "rate_limited" | "unsupported" | "diagnostic_failed" | null;
             message: string | null;
         };
         Agent: {
@@ -551,7 +557,30 @@ export interface components {
             /** Format: uuid */
             agent_id: string;
             configuration_revision: string;
-            assignments: Record<string, never>[];
+            assignments: components["schemas"]["AgentDatasourceAssignment"][];
+        };
+        AgentDatasourceAssignment: {
+            /** Format: uuid */
+            datasource_id: string;
+            datasource_version: string;
+            name: string;
+            /** @enum {string} */
+            provider: "prometheus";
+            /** @enum {string} */
+            configuration_format: "prometheus-http-v1";
+            /** Format: uri */
+            endpoint: string;
+            tls: {
+                insecure_skip_verify: boolean;
+                ca_pem: string;
+            };
+            /** @enum {string} */
+            authentication_mode: "none" | "basic" | "bearer";
+            username?: string;
+            password?: string;
+            bearer_token?: string;
+            polling_interval_seconds: number;
+            settling_delay_seconds: number;
         };
         AgentCredential: {
             /** Format: uuid */

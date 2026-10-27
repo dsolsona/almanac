@@ -21,6 +21,57 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AgentDatasourceAssignmentAuthenticationMode.
+const (
+	AgentDatasourceAssignmentAuthenticationModeBasic  AgentDatasourceAssignmentAuthenticationMode = "basic"
+	AgentDatasourceAssignmentAuthenticationModeBearer AgentDatasourceAssignmentAuthenticationMode = "bearer"
+	AgentDatasourceAssignmentAuthenticationModeNone   AgentDatasourceAssignmentAuthenticationMode = "none"
+)
+
+// Valid indicates whether the value is a known member of the AgentDatasourceAssignmentAuthenticationMode enum.
+func (e AgentDatasourceAssignmentAuthenticationMode) Valid() bool {
+	switch e {
+	case AgentDatasourceAssignmentAuthenticationModeBasic:
+		return true
+	case AgentDatasourceAssignmentAuthenticationModeBearer:
+		return true
+	case AgentDatasourceAssignmentAuthenticationModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentDatasourceAssignmentConfigurationFormat.
+const (
+	AgentDatasourceAssignmentConfigurationFormatPrometheusHttpV1 AgentDatasourceAssignmentConfigurationFormat = "prometheus-http-v1"
+)
+
+// Valid indicates whether the value is a known member of the AgentDatasourceAssignmentConfigurationFormat enum.
+func (e AgentDatasourceAssignmentConfigurationFormat) Valid() bool {
+	switch e {
+	case AgentDatasourceAssignmentConfigurationFormatPrometheusHttpV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentDatasourceAssignmentProvider.
+const (
+	AgentDatasourceAssignmentProviderPrometheus AgentDatasourceAssignmentProvider = "prometheus"
+)
+
+// Valid indicates whether the value is a known member of the AgentDatasourceAssignmentProvider enum.
+func (e AgentDatasourceAssignmentProvider) Valid() bool {
+	switch e {
+	case AgentDatasourceAssignmentProviderPrometheus:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AgentIssuanceSecretState.
 const (
 	AgentIssuanceSecretStateIssued            AgentIssuanceSecretState = "issued"
@@ -372,6 +423,45 @@ func (e DatasourceWriteProvider) Valid() bool {
 	}
 }
 
+// Defines values for DiagnosticErrorCode.
+const (
+	DiagnosticErrorCodeAssignmentRevoked    DiagnosticErrorCode = "assignment_revoked"
+	DiagnosticErrorCodeAuthenticationFailed DiagnosticErrorCode = "authentication_failed"
+	DiagnosticErrorCodeDiagnosticFailed     DiagnosticErrorCode = "diagnostic_failed"
+	DiagnosticErrorCodeNetworkFailed        DiagnosticErrorCode = "network_failed"
+	DiagnosticErrorCodeQueryFailed          DiagnosticErrorCode = "query_failed"
+	DiagnosticErrorCodeRateLimited          DiagnosticErrorCode = "rate_limited"
+	DiagnosticErrorCodeRequestTimeout       DiagnosticErrorCode = "request_timeout"
+	DiagnosticErrorCodeTlsFailed            DiagnosticErrorCode = "tls_failed"
+	DiagnosticErrorCodeUnsupported          DiagnosticErrorCode = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticErrorCode enum.
+func (e DiagnosticErrorCode) Valid() bool {
+	switch e {
+	case DiagnosticErrorCodeAssignmentRevoked:
+		return true
+	case DiagnosticErrorCodeAuthenticationFailed:
+		return true
+	case DiagnosticErrorCodeDiagnosticFailed:
+		return true
+	case DiagnosticErrorCodeNetworkFailed:
+		return true
+	case DiagnosticErrorCodeQueryFailed:
+		return true
+	case DiagnosticErrorCodeRateLimited:
+		return true
+	case DiagnosticErrorCodeRequestTimeout:
+		return true
+	case DiagnosticErrorCodeTlsFailed:
+		return true
+	case DiagnosticErrorCodeUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DiagnosticOperation.
 const (
 	ConnectionTest DiagnosticOperation = "connection_test"
@@ -482,19 +572,58 @@ func (e HealthResponseStatus) Valid() bool {
 
 // Defines values for ProviderDescriptorAvailability.
 const (
-	Available   ProviderDescriptorAvailability = "available"
-	Planned     ProviderDescriptorAvailability = "planned"
-	Unsupported ProviderDescriptorAvailability = "unsupported"
+	ProviderDescriptorAvailabilityApplying            ProviderDescriptorAvailability = "applying"
+	ProviderDescriptorAvailabilityAvailable           ProviderDescriptorAvailability = "available"
+	ProviderDescriptorAvailabilityConfigurationFailed ProviderDescriptorAvailability = "configuration_failed"
+	ProviderDescriptorAvailabilityDisabled            ProviderDescriptorAvailability = "disabled"
+	ProviderDescriptorAvailabilityIncompatible        ProviderDescriptorAvailability = "incompatible"
+	ProviderDescriptorAvailabilityOffline             ProviderDescriptorAvailability = "offline"
+	ProviderDescriptorAvailabilityPlanned             ProviderDescriptorAvailability = "planned"
+	ProviderDescriptorAvailabilityUnreported          ProviderDescriptorAvailability = "unreported"
+	ProviderDescriptorAvailabilityUnsupported         ProviderDescriptorAvailability = "unsupported"
 )
 
 // Valid indicates whether the value is a known member of the ProviderDescriptorAvailability enum.
 func (e ProviderDescriptorAvailability) Valid() bool {
 	switch e {
-	case Available:
+	case ProviderDescriptorAvailabilityApplying:
 		return true
-	case Planned:
+	case ProviderDescriptorAvailabilityAvailable:
 		return true
-	case Unsupported:
+	case ProviderDescriptorAvailabilityConfigurationFailed:
+		return true
+	case ProviderDescriptorAvailabilityDisabled:
+		return true
+	case ProviderDescriptorAvailabilityIncompatible:
+		return true
+	case ProviderDescriptorAvailabilityOffline:
+		return true
+	case ProviderDescriptorAvailabilityPlanned:
+		return true
+	case ProviderDescriptorAvailabilityUnreported:
+		return true
+	case ProviderDescriptorAvailabilityUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProviderDescriptorConfigurationFailureCode.
+const (
+	ProviderDescriptorConfigurationFailureCodeApplyFailed     ProviderDescriptorConfigurationFailureCode = "apply_failed"
+	ProviderDescriptorConfigurationFailureCodeIncompatible    ProviderDescriptorConfigurationFailureCode = "incompatible"
+	ProviderDescriptorConfigurationFailureCodeInvalidSnapshot ProviderDescriptorConfigurationFailureCode = "invalid_snapshot"
+)
+
+// Valid indicates whether the value is a known member of the ProviderDescriptorConfigurationFailureCode enum.
+func (e ProviderDescriptorConfigurationFailureCode) Valid() bool {
+	switch e {
+	case ProviderDescriptorConfigurationFailureCodeApplyFailed:
+		return true
+	case ProviderDescriptorConfigurationFailureCodeIncompatible:
+		return true
+	case ProviderDescriptorConfigurationFailureCodeInvalidSnapshot:
 		return true
 	default:
 		return false
@@ -666,9 +795,9 @@ type AgentCapability struct {
 
 // AgentConfigurationSnapshot defines model for AgentConfigurationSnapshot.
 type AgentConfigurationSnapshot struct {
-	AgentId               openapi_types.UUID       `json:"agent_id"`
-	Assignments           []map[string]interface{} `json:"assignments"`
-	ConfigurationRevision string                   `json:"configuration_revision"`
+	AgentId               openapi_types.UUID          `json:"agent_id"`
+	Assignments           []AgentDatasourceAssignment `json:"assignments"`
+	ConfigurationRevision string                      `json:"configuration_revision"`
 }
 
 // AgentCredential defines model for AgentCredential.
@@ -680,6 +809,35 @@ type AgentCredential struct {
 	RetireAt  *time.Time         `json:"retire_at"`
 	RevokedAt *time.Time         `json:"revoked_at"`
 }
+
+// AgentDatasourceAssignment defines model for AgentDatasourceAssignment.
+type AgentDatasourceAssignment struct {
+	AuthenticationMode     AgentDatasourceAssignmentAuthenticationMode  `json:"authentication_mode"`
+	BearerToken            *string                                      `json:"bearer_token,omitempty"`
+	ConfigurationFormat    AgentDatasourceAssignmentConfigurationFormat `json:"configuration_format"`
+	DatasourceId           openapi_types.UUID                           `json:"datasource_id"`
+	DatasourceVersion      string                                       `json:"datasource_version"`
+	Endpoint               string                                       `json:"endpoint"`
+	Name                   string                                       `json:"name"`
+	Password               *string                                      `json:"password,omitempty"`
+	PollingIntervalSeconds int                                          `json:"polling_interval_seconds"`
+	Provider               AgentDatasourceAssignmentProvider            `json:"provider"`
+	SettlingDelaySeconds   int                                          `json:"settling_delay_seconds"`
+	Tls                    struct {
+		CaPem              string `json:"ca_pem"`
+		InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	} `json:"tls"`
+	Username *string `json:"username,omitempty"`
+}
+
+// AgentDatasourceAssignmentAuthenticationMode defines model for AgentDatasourceAssignment.AuthenticationMode.
+type AgentDatasourceAssignmentAuthenticationMode string
+
+// AgentDatasourceAssignmentConfigurationFormat defines model for AgentDatasourceAssignment.ConfigurationFormat.
+type AgentDatasourceAssignmentConfigurationFormat string
+
+// AgentDatasourceAssignmentProvider defines model for AgentDatasourceAssignment.Provider.
+type AgentDatasourceAssignmentProvider string
 
 // AgentIssuance defines model for AgentIssuance.
 type AgentIssuance struct {
@@ -887,7 +1045,7 @@ type DatasourceWriteProvider string
 type Diagnostic struct {
 	CreatedAt   time.Time               `json:"created_at"`
 	DeadlineAt  time.Time               `json:"deadline_at"`
-	ErrorCode   *string                 `json:"error_code"`
+	ErrorCode   *DiagnosticErrorCode    `json:"error_code"`
 	Id          openapi_types.UUID      `json:"id"`
 	Message     *string                 `json:"message"`
 	Operation   DiagnosticOperation     `json:"operation"`
@@ -895,6 +1053,9 @@ type Diagnostic struct {
 	ResultClass *DiagnosticResultClass  `json:"result_class"`
 	State       DiagnosticState         `json:"state"`
 }
+
+// DiagnosticErrorCode defines model for Diagnostic.ErrorCode.
+type DiagnosticErrorCode string
 
 // DiagnosticOperation defines model for Diagnostic.Operation.
 type DiagnosticOperation string
@@ -960,14 +1121,21 @@ type Problem struct {
 
 // ProviderDescriptor defines model for ProviderDescriptor.
 type ProviderDescriptor struct {
-	Availability        ProviderDescriptorAvailability        `json:"availability"`
-	ConfigurationFormat ProviderDescriptorConfigurationFormat `json:"configuration_format"`
-	Operations          []string                              `json:"operations"`
-	Provider            ProviderDescriptorProvider            `json:"provider"`
+	AppliedConfigurationRevision *string                                     `json:"applied_configuration_revision"`
+	Availability                 ProviderDescriptorAvailability              `json:"availability"`
+	ConfigurationFailureCode     *ProviderDescriptorConfigurationFailureCode `json:"configuration_failure_code"`
+	ConfigurationFailureRevision *string                                     `json:"configuration_failure_revision"`
+	ConfigurationFormat          ProviderDescriptorConfigurationFormat       `json:"configuration_format"`
+	DesiredConfigurationRevision *string                                     `json:"desired_configuration_revision"`
+	Operations                   []string                                    `json:"operations"`
+	Provider                     ProviderDescriptorProvider                  `json:"provider"`
 }
 
 // ProviderDescriptorAvailability defines model for ProviderDescriptor.Availability.
 type ProviderDescriptorAvailability string
+
+// ProviderDescriptorConfigurationFailureCode defines model for ProviderDescriptor.ConfigurationFailureCode.
+type ProviderDescriptorConfigurationFailureCode string
 
 // ProviderDescriptorConfigurationFormat defines model for ProviderDescriptor.ConfigurationFormat.
 type ProviderDescriptorConfigurationFormat string
