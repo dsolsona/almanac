@@ -88,8 +88,13 @@ try {
   await expect(panel.getByText('No provider capabilities were reported.', { exact: true })).toBeVisible();
 
   stage = 'keyboard skip navigation';
-  await page.keyboard.press('Tab');
   const skipLink = page.getByRole('link', { name: 'Skip to content', exact: true });
+  // The application deliberately focuses its heading after authentication.
+  // Verify keyboard reachability from that position, not an assumed body focus.
+  for (let steps = 0; steps < 30; steps += 1) {
+    await page.keyboard.press('Tab');
+    if (await skipLink.evaluate((element) => element === document.activeElement)) break;
+  }
   await expect(skipLink).toBeFocused();
   await page.keyboard.press('Enter');
   await expect.poll(() => new URL(page.url()).hash).toBe('#main');
