@@ -372,7 +372,8 @@ async function checkLocalAgentRegistration() {
     stage = 'real Compose verify agent detail URL after token close';
     await expect(page).toHaveURL((current) => current.pathname === '/agents' && current.searchParams.has('agent'));
     stage = 'real Compose verify credential history after token close';
-    await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: result.credential.id, exact: true })).toBeVisible();
     stage = 'real Compose verify Local display name after token close';
     await expect(page.getByText('Local', { exact: true })).toBeVisible();
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
@@ -383,7 +384,8 @@ async function checkLocalAgentRegistration() {
       for (const viewport of viewports) {
         const viewportName = await setCaptureViewport(page, theme, viewport);
         stage = `real Compose ${theme} ${viewportName} agent detail screenshot after token closure`;
-        await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
+        await expect(page.getByRole('cell', { name: result.credential.id, exact: true })).toBeVisible();
         await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
         const detailCapture = `agent-detail-after-token-${viewportName}-${theme}.png`;
         await page.screenshot({ path: join(artifacts, detailCapture), fullPage: true, animations: 'disabled' });
@@ -397,7 +399,8 @@ async function checkLocalAgentRegistration() {
     stage = 'real Compose list to detail browser forward';
     await page.goForward();
     await expect(page).toHaveURL(agentURL);
-    await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: result.credential.id, exact: true })).toBeVisible();
     const preReloadCounts = { documentNavigations, contextRequests };
     const routeOnlyContinuity = {
       document_navigation_requests: preReloadCounts.documentNavigations,
@@ -454,7 +457,7 @@ async function checkLocalAgentRegistration() {
         agent_detail_read_succeeded: agentDetailReadSucceeded,
         credential_history_read_seen: credentialHistoryReadSeen,
         credential_history_read_succeeded: credentialHistoryReadSucceeded,
-        credential_history_visible: await visible(journeyPage.getByRole('region', { name: 'Credential history', exact: true })),
+        credential_history_visible: await visible(journeyPage.getByRole('heading', { name: 'Credential history', exact: true })),
         local_display_name_visible: await visible(journeyPage.getByText('Local', { exact: true })),
       };
       writeFileSync(join(artifacts, 'local-agent-post-create-diagnostic.json'), JSON.stringify(safeState, null, 2), { mode: 0o600 });
