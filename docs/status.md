@@ -2,6 +2,13 @@
 
 ## Current state
 
+PR #38 review corrections are verified at `a9f6d28`: cancellation retains safe
+request metadata, workspace navigation focuses the Agents heading, and Compose
+acceptance verifies the issued token never appears in service logs. The full gate
+passed 190 web and 305 Go tests; race verification and the real Compose journey
+(including desktop/mobile focus and cancellation cleanup) passed. See
+[F2-T21](tasks/F2-T21.md) for regression and deployment evidence.
+
 Workspace usability repairs under [F2-T21](tasks/F2-T21.md) are verified on product
 checkpoint `a5acd61` with final test-only correction `744a4d3`. The normal isolated
 Compose journey registers `Local`, shows the suggested identifier and one-time
