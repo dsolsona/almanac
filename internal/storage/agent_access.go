@@ -64,19 +64,28 @@ func AuthenticateAgentCredential(ctx context.Context, databaseURL, credentialID 
 		return AgentAccessPrincipal{}, operationError(ctx, "storage: agent credential lock failed", err)
 	}
 	now := normalizedAgentNow(clock)
-	if now.IsZero() || !installation.OnboardingCompletedAt.Valid || !agent.Enabled ||
-		credential.CredentialEpoch != installation.CredentialEpoch || len(credential.Verifier) != len(verifier) ||
-		subtle.ConstantTimeCompare(credential.Verifier, verifier[:]) != 1 ||
-		credential.IssuedAt.Time.After(now) || !now.Before(credential.ExpiresAt.Time) ||
-		credential.RevokedAt.Valid || (credential.RetireAt.Valid && !now.Before(credential.RetireAt.Time)) {
+	if !currentAgentCredentialValid(installation, agent.Enabled, credential, verifier, now) {
 		return AgentAccessPrincipal{}, ErrInvalidAgentCredential
 	}
-	expiresAt := credential.ExpiresAt.Time
-	if credential.RetireAt.Valid && credential.RetireAt.Time.Before(expiresAt) {
-		expiresAt = credential.RetireAt.Time
-	}
+	expiresAt := effectiveAgentCredentialExpiry(credential)
 	if err := tx.Commit(ctx); err != nil {
 		return AgentAccessPrincipal{}, operationError(ctx, "storage: agent credential transaction commit failed", err)
 	}
 	return AgentAccessPrincipal{AgentID: agent.ID.String(), CredentialID: credential.ID.String(), ExpiresAt: expiresAt.UTC()}, nil
+}
+
+func currentAgentCredentialValid(installation dbgen.LockSessionInstallationRow, enabled bool, credential dbgen.AlmanacAgentCredential, verifier [32]byte, now time.Time) bool {
+	return !now.IsZero() && installation.OnboardingCompletedAt.Valid && enabled &&
+		credential.CredentialEpoch == installation.CredentialEpoch && len(credential.Verifier) == len(verifier) &&
+		subtle.ConstantTimeCompare(credential.Verifier, verifier[:]) == 1 &&
+		!credential.IssuedAt.Time.After(now) && now.Before(credential.ExpiresAt.Time) &&
+		!credential.RevokedAt.Valid && (!credential.RetireAt.Valid || now.Before(credential.RetireAt.Time))
+}
+
+func effectiveAgentCredentialExpiry(credential dbgen.AlmanacAgentCredential) time.Time {
+	expiresAt := credential.ExpiresAt.Time
+	if credential.RetireAt.Valid && credential.RetireAt.Time.Before(expiresAt) {
+		expiresAt = credential.RetireAt.Time
+	}
+	return expiresAt.UTC()
 }

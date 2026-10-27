@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,9 +24,12 @@ import (
 )
 
 type Server struct {
-	http        *http.Server
-	databaseURL string
-	ready       atomic.Bool
+	http           *http.Server
+	databaseURL    string
+	ready          atomic.Bool
+	connectionsMu  sync.Mutex
+	newConnections map[net.Conn]struct{}
+	shuttingDown   bool
 }
 
 func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
@@ -54,7 +58,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if ctx == nil || service == nil || databaseURL == "" || (cfg.Components != "backend" && !cfg.BackendUI()) || (cfg.BackendUI() && assets == nil) || (cfg.Components == "backend" && assets != nil) {
 		return nil, errors.New("backendhttp: invalid configuration")
 	}
-	s := &Server{databaseURL: databaseURL}
+	s := &Server{databaseURL: databaseURL, newConnections: make(map[net.Conn]struct{})}
 	options := authhttp.Options{PublicOrigin: cfg.PublicOrigin, TrustedProxyCIDRs: cfg.TrustedProxyCIDRs, Now: time.Now, Preflight: s.authenticationPreflight}
 	auth, err := authhttp.New(service, options)
 	if err != nil {
@@ -83,7 +87,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if tlsConfig != nil {
 		clonedTLS = tlsConfig.Clone()
 	}
-	s.http = &http.Server{Handler: strictPaths(mux, agents), TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	s.http = &http.Server{Handler: s.rejectAfterShutdown(strictPaths(mux, agents)), TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ConnState: s.connectionState, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	return s, nil
 }
 
@@ -94,8 +98,57 @@ func (s *Server) Serve(listener net.Listener) error {
 	}
 	return s.http.Serve(listener)
 }
-func (s *Server) Shutdown(ctx context.Context) error { return s.http.Shutdown(ctx) }
-func (s *Server) Close() error                       { return s.http.Close() }
+
+func (s *Server) connectionState(conn net.Conn, state http.ConnState) {
+	s.connectionsMu.Lock()
+	closeConnection := false
+	if state == http.StateNew {
+		if s.shuttingDown {
+			closeConnection = true
+		} else {
+			s.newConnections[conn] = struct{}{}
+		}
+	} else {
+		delete(s.newConnections, conn)
+	}
+	s.connectionsMu.Unlock()
+	if closeConnection {
+		_ = conn.Close()
+	}
+}
+
+func (s *Server) rejectAfterShutdown(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.connectionsMu.Lock()
+		shuttingDown := s.shuttingDown
+		s.connectionsMu.Unlock()
+		if shuttingDown {
+			http.Error(w, "server is shutting down", http.StatusServiceUnavailable)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) closeNewConnections() {
+	s.connectionsMu.Lock()
+	defer s.connectionsMu.Unlock()
+	s.shuttingDown = true
+	for conn := range s.newConnections {
+		delete(s.newConnections, conn)
+		_ = conn.Close()
+	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.closeNewConnections()
+	return s.http.Shutdown(ctx)
+}
+
+func (s *Server) Close() error {
+	s.closeNewConnections()
+	return s.http.Close()
+}
 
 // RegisterOnShutdown registers an asynchronous notification after listeners close.
 // Callbacks must not wait for requests to finish draining.

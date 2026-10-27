@@ -2,6 +2,16 @@
 
 ## Current state
 
+Durable agent ownership is verified under [F2-T13](tasks/F2-T13.md): transactional
+acquisition, same-process resume, nonce-correlated renewal and generation fencing.
+The combined candidate passes 138 real PostgreSQL integration tests and the full
+gate (146 web/189 Go tests, build/generated/production checks). A deterministic
+stalled-TLS shutdown regression drove a correction that closes pre-request
+connections while draining active requests. The exact socket behind the earlier
+intermittent shutdown failures was not recorded; this fixes the reproduced class,
+without claiming forensic proof of every historical failure. Remote transport,
+configuration application, health and execution grants remain outstanding.
+
 The signed-in application shell is verified under [F2-T16](tasks/F2-T16.md):
 desktop navigation, accessible mobile menu, account controls and direct `/agents`
 links replace the identity confirmation page. Planned destinations are explicitly

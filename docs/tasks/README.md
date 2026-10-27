@@ -92,6 +92,8 @@ agent-management command parity.
 
 [F2-T11](F2-T11.md) completes agent-management CLI parity.
 [F2-T12](F2-T12.md) adds current-state machine credential authentication.
+[F2-T13](F2-T13.md) adds durable ownership acquisition, same-process resume and
+nonce-correlated renewal before remote connection and execution grants.
 [F2-T14](F2-T14.md) changes registration to use the administrator session and
 adds actionable failure recovery under [ADR-0019](../adr/0019-session-authorized-agent-registration.md).
 
