@@ -525,6 +525,9 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 	})
 	connectionOutput := run("datasources", "test", "--profile-file="+journey.profile, "--input-file="+inputPath, "--wait", "--output=json")
 	assertDiagnosticJSON(t, databaseURL, "datasources.test", connectionOutput, "succeeded", "")
+	savedConnectionOutput := run("datasources", "test", "--profile-file="+journey.profile, "--datasource-id="+datasourceID,
+		"--if-match=\"datasource:"+datasourceID+":1\"", "--idempotency-key=integration-saved-connection-test", "--wait", "--output=json")
+	assertDiagnosticJSON(t, databaseURL, "datasources.test.saved", savedConnectionOutput, "succeeded", "")
 	queryOutput := run("slis", "test", "--profile-file="+journey.profile, "--datasource-id="+datasourceID, "--query=vector(1)", "--wait", "--output=json")
 	assertDiagnosticJSON(t, databaseURL, "slis.test", queryOutput, "succeeded", `"value":"1"`)
 	largeQueryOutput := run("slis", "test", "--profile-file="+journey.profile, "--datasource-id="+datasourceID, "--query=almanac_transfer_metric", "--wait", "--output=json")

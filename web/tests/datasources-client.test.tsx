@@ -20,6 +20,21 @@ describe('datasource client', () => {
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
   });
 
+  it('accepts ordinary datasource names and metric labels containing token or password', async () => {
+    const named = { ...source(), name: 'token' };
+    const diagnostic = { id, state: 'succeeded', operation: 'query_preview', created_at: '2026-10-20T12:00:00Z', deadline_at: '2026-10-20T12:00:30Z', result_class: 'complete', result: { diagnostic_id: id, state: 'succeeded', result_class: 'complete', series: [{ labels: { token: 'ordinary label', password: 'ordinary label' }, time: '1700000000.000', value: '1' }] }, error_code: null, message: null };
+    const fetcher = vi.fn().mockResolvedValueOnce(response(named, 200, { ETag: `"datasource:${id}:4"` })).mockResolvedValueOnce(response(diagnostic));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().get(id)).resolves.toMatchObject({ datasource: { name: 'token' } });
+    await expect(createDatasourceClient().diagnostic(id)).resolves.toMatchObject({ result: { series: [{ labels: { token: 'ordinary label', password: 'ordinary label' } }] } });
+  });
+
+  it('rejects secret fields outside the declared redacted response shape', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ ...source(), token: 'private-token' }, 200, { ETag: `"datasource:${id}:4"` }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().get(id)).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
   it('sends explicit secret actions with CSRF and idempotency while returning no submitted secret', async () => {
     const fetcher = vi.fn().mockResolvedValue(response(source(), 201, { ETag: `"datasource:${id}:4"` }));
     vi.stubGlobal('fetch', fetcher);
@@ -53,6 +68,25 @@ describe('datasource client', () => {
     vi.stubGlobal('fetch', fetcher);
     const input = { provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } }, agent_id: agent } as const;
     await expect(createDatasourceClient().connectionTest(input, context)).rejects.toMatchObject({ code: 'configuration_pending', status: 503, uncertain: false, message: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.' });
+  });
+
+  it('tests stored datasource credentials by ID and exact version without sending settings or secrets', async () => {
+    const diagnostic = { id, state: 'pending', operation: 'connection_test', created_at: '2026-10-27T12:00:00Z', deadline_at: '2026-10-27T12:00:30Z', result_class: null, result: null, error_code: null, message: null };
+    const fetcher = vi.fn().mockResolvedValue(response(diagnostic, 202));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().savedConnectionTest(id, `"datasource:${id}:4"`, context, 'test-key')).resolves.toMatchObject({ id, state: 'pending' });
+    expect(fetcher.mock.calls[0]?.[0]).toBe(`/api/v1/datasources/${id}/connection-tests`);
+    const init = fetcher.mock.calls[0]?.[1];
+    expect(new Headers(init?.headers).get('If-Match')).toBe(`"datasource:${id}:4"`);
+    expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('test-key');
+    expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('csrf-token');
+    expect(init?.body).toBe('{}');
+  });
+
+  it('keeps a guaranteed no-job saved diagnostic failure definite', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ code: 'configuration_pending', message: 'private detail' }, 503));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().savedConnectionTest(id, `"datasource:${id}:4"`, context, 'test-key')).rejects.toMatchObject({ code: 'configuration_pending', uncertain: false });
   });
 
   it('allows a bounded large diagnostic receipt while keeping the ordinary response budget separate', async () => {

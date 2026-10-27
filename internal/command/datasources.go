@@ -76,7 +76,8 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	case "datasources update":
 		allowed["datasource-id"], allowed["input-file"], allowed["if-match"] = true, true, true
 	case "datasources test":
-		allowed["input-file"], allowed["wait"], allowed["cancel-on-timeout"] = true, true, true
+		allowed["input-file"], allowed["datasource-id"], allowed["if-match"], allowed["idempotency-key"] = true, true, true, true
+		allowed["wait"], allowed["cancel-on-timeout"] = true, true
 	case "slis test":
 		allowed["datasource-id"], allowed["query"], allowed["wait"], allowed["cancel-on-timeout"] = true, true, true, true
 	case "providers list":
@@ -90,7 +91,7 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	if profile == "" || timeout <= 0 || timeout > 2*time.Minute {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("profile-file is required and timeout must be positive and at most 2m"))
 	}
-	if (operation == "datasources get" || operation == "datasources update" || operation == "slis test") && (!seen["datasource-id"] || !validCLIUUID(id)) {
+	if (operation == "datasources get" || operation == "datasources update" || operation == "slis test" || operation == "datasources test" && seen["datasource-id"]) && (!seen["datasource-id"] || !validCLIUUID(id)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("datasource-id must be a canonical UUID"))
 	}
 	if operation == "datasources list" && (limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor)) {
@@ -102,8 +103,10 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	if operation == "datasources update" && (!seen["input-file"] || inputFile == "" || !seen["if-match"] || !validDatasourceETag(etag, id)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and the exact datasource if-match ETag are required"))
 	}
-	if operation == "datasources test" && (!seen["input-file"] || inputFile == "") {
-		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file is required for an unsaved connection test"))
+	if operation == "datasources test" {
+		if err := validateDatasourceTestArgs(seen, id, inputFile, etag, key); err != nil {
+			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err)
+		}
 	}
 	if operation == "slis test" && (!seen["query"] || strings.TrimSpace(query) == "") {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("query is required"))
@@ -222,13 +225,17 @@ func performDatasource(parent context.Context, operation, profile, id, agentID, 
 		if identity.Role != "administrator" {
 			return nil, datasourceForbidden()
 		}
-		var value api.ConnectionTestRequest
-		if json.Unmarshal(input, &value) != nil || !validConnectionTestInput(input) {
-			clear(input)
-			return nil, datasourceInvalid("connection test JSON is invalid")
+		if id != "" {
+			data, err = client.TestSaved(parent, id, etag, key)
+		} else {
+			var value api.ConnectionTestRequest
+			if json.Unmarshal(input, &value) != nil || !validConnectionTestInput(input) {
+				clear(input)
+				return nil, datasourceInvalid("connection test JSON is invalid")
+			}
+			data, err = client.Test(parent, value)
 		}
 		clear(input)
-		data, err = client.Test(parent, value)
 	case "slis test":
 		if identity.Role != "administrator" && identity.Role != "editor" {
 			return nil, datasourceForbidden()
@@ -248,31 +255,11 @@ func performDatasource(parent context.Context, operation, profile, id, agentID, 
 			if diagnostic.DeadlineAt.Before(deadline) {
 				deadline = diagnostic.DeadlineAt
 			}
-			for !datasourceTerminal(diagnostic.State) {
-				if !time.Now().Before(deadline) || parent.Err() != nil {
-					if cancelOnTimeout && (errors.Is(parent.Err(), context.DeadlineExceeded) || !time.Now().Before(deadline)) {
-						cancelDatasourceDiagnostic(parent, client, datasourceUUID(diagnostic.Id))
-					}
-					return nil, &datasourceclient.Failure{Code: "request_timeout", Message: "diagnostic did not finish before the CLI deadline; inspect the datasource and retry deliberately"}
-				}
-				timer := time.NewTimer(500 * time.Millisecond)
-				select {
-				case <-parent.Done():
-					timer.Stop()
-					return nil, &datasourceclient.Failure{Code: "request_canceled", Message: "waiting for the diagnostic was interrupted; the remote diagnostic may still be running"}
-				case <-timer.C:
-				}
-				data, err = client.Diagnostic(parent, datasourceUUID(diagnostic.Id))
-				if err != nil {
-					if cancelOnTimeout && errors.Is(parent.Err(), context.DeadlineExceeded) {
-						cancelDatasourceDiagnostic(parent, client, datasourceUUID(diagnostic.Id))
-						return nil, &datasourceclient.Failure{Code: "request_timeout", Message: "diagnostic polling reached its deadline; a cancellation was requested and its final state may still be pending"}
-					}
-					return nil, datasourceClientFailure(err)
-				}
-				if json.Unmarshal(data, &diagnostic) != nil {
-					return nil, datasourceClientFailure(errors.New("invalid diagnostic"))
-				}
+			diagnostic, err = waitForDatasourceDiagnostic(parent, diagnostic, deadline, cancelOnTimeout,
+				func(ctx context.Context, id string) ([]byte, error) { return client.Diagnostic(ctx, id) },
+				func(ctx context.Context, id string) { cancelDatasourceDiagnostic(ctx, client, id) })
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -280,6 +267,51 @@ func performDatasource(parent context.Context, operation, profile, id, agentID, 
 		return nil, datasourceProfileFailure(err)
 	}
 	return jsontext.Value(data), nil
+}
+
+func waitForDatasourceDiagnostic(parent context.Context, diagnostic api.Diagnostic, deadline time.Time, cancelOnTimeout bool,
+	poll func(context.Context, string) ([]byte, error), cancel func(context.Context, string)) (api.Diagnostic, error) {
+	id := datasourceUUID(diagnostic.Id)
+	for !datasourceTerminal(diagnostic.State) {
+		deadlineExpired := errors.Is(parent.Err(), context.DeadlineExceeded) || !time.Now().Before(deadline)
+		if deadlineExpired || parent.Err() != nil {
+			if parent.Err() != nil && !errors.Is(parent.Err(), context.DeadlineExceeded) {
+				return api.Diagnostic{}, &datasourceclient.Failure{Code: "request_canceled", Message: "waiting for the diagnostic was interrupted; the remote diagnostic may still be running"}
+			}
+			if cancelOnTimeout && deadlineExpired {
+				cancel(parent, id)
+				return api.Diagnostic{}, &datasourceclient.Failure{Code: "request_timeout", Message: "diagnostic did not finish before the CLI deadline; a cancellation was requested and its final state may still be pending"}
+			}
+			return api.Diagnostic{}, &datasourceclient.Failure{Code: "request_timeout", Message: "diagnostic did not finish before the CLI deadline; inspect the datasource and retry deliberately"}
+		}
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-parent.Done():
+			timer.Stop()
+			if errors.Is(parent.Err(), context.DeadlineExceeded) {
+				message := "diagnostic polling reached its deadline; inspect its status before retrying"
+				if cancelOnTimeout {
+					cancel(parent, id)
+					message = "diagnostic polling reached its deadline; a cancellation was requested and its final state may still be pending"
+				}
+				return api.Diagnostic{}, &datasourceclient.Failure{Code: "request_timeout", Message: message}
+			}
+			return api.Diagnostic{}, &datasourceclient.Failure{Code: "request_canceled", Message: "waiting for the diagnostic was interrupted; the remote diagnostic may still be running"}
+		case <-timer.C:
+		}
+		data, err := poll(parent, id)
+		if err != nil {
+			if cancelOnTimeout && errors.Is(parent.Err(), context.DeadlineExceeded) {
+				cancel(parent, id)
+				return api.Diagnostic{}, &datasourceclient.Failure{Code: "request_timeout", Message: "diagnostic polling reached its deadline; a cancellation was requested and its final state may still be pending"}
+			}
+			return api.Diagnostic{}, datasourceClientFailure(err)
+		}
+		if json.Unmarshal(data, &diagnostic) != nil {
+			return api.Diagnostic{}, datasourceClientFailure(errors.New("invalid diagnostic"))
+		}
+	}
+	return diagnostic, nil
 }
 
 func cancelDatasourceDiagnostic(ctx context.Context, client *datasourceclient.Client, id string) {
@@ -358,6 +390,20 @@ func validDatasourceETag(etag, id string) bool {
 	parsed, err := strconv.ParseInt(version, 10, 64)
 	return err == nil && parsed > 0
 }
+
+func validateDatasourceTestArgs(seen map[string]bool, id, inputFile, etag, key string) error {
+	if seen["datasource-id"] {
+		if seen["input-file"] || !seen["if-match"] || !validDatasourceETag(etag, id) || !seen["idempotency-key"] || !validKey(key) {
+			return datasourceInvalid("saved connection tests require datasource-id, its exact if-match ETag, and an idempotency-key; do not provide input-file")
+		}
+		return nil
+	}
+	if !seen["input-file"] || inputFile == "" || seen["if-match"] || seen["idempotency-key"] {
+		return datasourceInvalid("unsaved connection tests require input-file and cannot use saved datasource version or idempotency flags")
+	}
+	return nil
+}
+
 func validPositiveDecimal(value string) bool {
 	if value == "" || value[0] == '0' {
 		return false
@@ -425,9 +471,9 @@ func writeDatasourceFailure(stdout, stderr io.Writer, operation string, jsonOut 
 		code, message = failure.code, failure.message
 	}
 	exit := 1
-	if code == "invalid_request" || code == "invalid_input" {
+	if code == "invalid_request" || code == "invalid_input" || code == "invalid_datasource_input" || code == "invalid_agent" || code == "configuration_too_large" {
 		exit = 2
-	} else if code == "unauthenticated" || code == "forbidden" {
+	} else if code == "unauthenticated" || code == "unauthorized" || code == "forbidden" {
 		exit = 3
 	} else if code == "not_found" {
 		exit = 4

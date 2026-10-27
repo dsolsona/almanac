@@ -64,6 +64,7 @@ type DatasourceOperations interface {
 	PostDatasources(context.Context, *api.PostDatasourcesParams, api.PostDatasourcesJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	PutDatasource(context.Context, api.DatasourceId, *api.PutDatasourceParams, api.PutDatasourceJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	PostDatasourceConnectionTest(context.Context, api.PostDatasourceConnectionTestJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
+	PostSavedDatasourceConnectionTest(context.Context, api.DatasourceId, *api.PostSavedDatasourceConnectionTestParams, api.PostSavedDatasourceConnectionTestJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	PostDatasourceQueryPreview(context.Context, api.DatasourceId, api.PostDatasourceQueryPreviewJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	GetDiagnostic(context.Context, api.DatasourceId, ...api.RequestEditorFn) (*http.Response, error)
 	PostDiagnosticCancel(context.Context, api.DatasourceId, api.PostDiagnosticCancelJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
