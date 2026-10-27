@@ -219,6 +219,17 @@ async function captureMobileNavigation(page, theme, artifacts) {
   await expect(menu).toBeFocused();
   await expect(page.getByRole('dialog', { name: 'Navigation menu', exact: true })).toHaveCount(0);
 }
+async function navigateWorkspace(page, viewportName, destination) {
+  let navigation;
+  if (viewportName === 'mobile') {
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Navigation menu', exact: true });
+    navigation = drawer.getByRole('navigation', { name: 'Primary navigation', exact: true });
+  } else {
+    navigation = page.getByRole('navigation', { name: 'Primary navigation', exact: true });
+  }
+  await navigation.getByRole('link', { name: destination, exact: true }).click();
+}
 async function checkLocalAgentRegistration() {
   const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${spki}`] });
   if (cancellation) { await browser.close(); ensureActive(); }
@@ -232,11 +243,26 @@ async function checkLocalAgentRegistration() {
     page.setDefaultTimeout(5000);
     let documentNavigations = 0;
     let contextRequests = 0;
+    let agentDetailReadSeen = false;
+    let agentDetailReadSucceeded = false;
+    let credentialHistoryReadSeen = false;
+    let credentialHistoryReadSucceeded = false;
     page.on('request', (incoming) => {
       if (incoming.isNavigationRequest() && incoming.frame() === page.mainFrame()) documentNavigations++;
       if (new URL(incoming.url()).pathname === '/api/v1/auth/context') contextRequests++;
       if (incoming.method() === 'POST' && new URL(incoming.url()).pathname === '/api/v1/agents') {
         requests.push(incoming.postDataJSON());
+      }
+    });
+    page.on('response', (response) => {
+      const pathname = new URL(response.url()).pathname;
+      if (/^\/api\/v1\/agents\/[0-9a-f-]+$/.test(pathname)) {
+        agentDetailReadSeen = true;
+        agentDetailReadSucceeded = response.status() >= 200 && response.status() < 300;
+      }
+      if (/^\/api\/v1\/agents\/[0-9a-f-]+\/credentials$/.test(pathname)) {
+        credentialHistoryReadSeen = true;
+        credentialHistoryReadSucceeded = response.status() >= 200 && response.status() < 300;
       }
     });
     await page.goto(url);
@@ -266,7 +292,7 @@ async function checkLocalAgentRegistration() {
         const viewportName = await setCaptureViewport(page, theme, viewport);
         if (viewportName === 'mobile') await captureMobileNavigation(page, theme, artifacts);
         stage = `real Compose ${theme} ${viewportName} Agents to Datasources navigation`;
-        await page.getByRole('link', { name: 'Datasources', exact: true }).click();
+        await navigateWorkspace(page, viewportName, 'Datasources');
         await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
         stage = `real Compose ${theme} ${viewportName} Add datasource navigation`;
         await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
@@ -298,7 +324,7 @@ async function checkLocalAgentRegistration() {
         await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
         await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
         stage = `real Compose ${theme} ${viewportName} Datasources to Agents navigation`;
-        await page.getByRole('link', { name: 'Agents', exact: true }).click();
+        await navigateWorkspace(page, viewportName, 'Agents');
         await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
         stage = `real Compose ${theme} ${viewportName} Local name suggestion`;
         await page.getByRole('button', { name: 'Register agent', exact: true }).click();
@@ -424,6 +450,10 @@ async function checkLocalAgentRegistration() {
         registration_dialog_visible: await visible(journeyPage.getByRole('dialog', { name: 'Register agent', exact: true })),
         token_dialog_visible: await visible(journeyPage.getByRole('dialog', { name: 'Agent token', exact: true })),
         token_output_present: await journeyPage.locator('output[aria-label="Agent token"]').count() > 0,
+        agent_detail_read_seen: agentDetailReadSeen,
+        agent_detail_read_succeeded: agentDetailReadSucceeded,
+        credential_history_read_seen: credentialHistoryReadSeen,
+        credential_history_read_succeeded: credentialHistoryReadSucceeded,
         credential_history_visible: await visible(journeyPage.getByRole('region', { name: 'Credential history', exact: true })),
         local_display_name_visible: await visible(journeyPage.getByText('Local', { exact: true })),
       };
