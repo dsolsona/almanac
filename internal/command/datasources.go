@@ -255,16 +255,30 @@ func performDatasource(parent context.Context, operation, profile, id, agentID, 
 			if diagnostic.DeadlineAt.Before(deadline) {
 				deadline = diagnostic.DeadlineAt
 			}
-			diagnostic, err = waitForDatasourceDiagnostic(parent, diagnostic, deadline, cancelOnTimeout,
+			result, waitErr := waitForDatasourceDiagnosticResult(parent, diagnostic, deadline, cancelOnTimeout,
 				func(ctx context.Context, id string) ([]byte, error) { return client.Diagnostic(ctx, id) },
 				func(ctx context.Context, id string) { cancelDatasourceDiagnostic(ctx, client, id) })
-			if err != nil {
-				return nil, err
+			if waitErr != nil {
+				return nil, waitErr
 			}
+			data = result
 		}
 	}
 	if err := locked.Close(); err != nil {
 		return nil, datasourceProfileFailure(err)
+	}
+	return jsontext.Value(data), nil
+}
+
+func waitForDatasourceDiagnosticResult(parent context.Context, diagnostic api.Diagnostic, deadline time.Time, cancelOnTimeout bool,
+	poll func(context.Context, string) ([]byte, error), cancel func(context.Context, string)) (jsontext.Value, error) {
+	final, err := waitForDatasourceDiagnostic(parent, diagnostic, deadline, cancelOnTimeout, poll, cancel)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(final)
+	if err != nil {
+		return nil, datasourceClientFailure(errors.New("invalid diagnostic"))
 	}
 	return jsontext.Value(data), nil
 }
