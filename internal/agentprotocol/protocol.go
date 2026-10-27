@@ -313,8 +313,16 @@ func validatePayload(kind Kind, raw jsontext.Value) error {
 		}
 		return p.Validate()
 	case KindDiagnosticResult:
-		if err := requireFields(raw, "diagnostic_id", "state"); err != nil {
+		if err := requireFields(raw, "diagnostic_id", "state", "series"); err != nil {
 			return err
+		}
+		var fields map[string]jsontext.Value
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return invalidField("diagnostic_result.payload")
+		}
+		var series []DiagnosticSeries
+		if err := json.Unmarshal(fields["series"], &series); err != nil || series == nil {
+			return invalidField("diagnostic_result.series")
 		}
 		var p DiagnosticResult
 		if json.Unmarshal(raw, &p) != nil {
@@ -707,11 +715,11 @@ func (p DiagnosticResult) validate(maxSerializedBytes int) error {
 			return invalidField("diagnostic_result.success")
 		}
 	case "failed":
-		if p.ResultClass != "" || !ValidDiagnosticErrorCode(p.ErrorCode) || p.Series != nil {
+		if p.ResultClass != "" || !ValidDiagnosticErrorCode(p.ErrorCode) || len(p.Series) != 0 {
 			return invalidField("diagnostic_result.failure")
 		}
 	case "canceled", "timed_out":
-		if p.ResultClass != "" || p.ErrorCode != "" || p.Series != nil {
+		if p.ResultClass != "" || p.ErrorCode != "" || len(p.Series) != 0 {
 			return invalidField("diagnostic_result.terminal")
 		}
 	default:

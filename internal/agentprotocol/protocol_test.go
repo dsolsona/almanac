@@ -103,6 +103,48 @@ func TestDiagnosticResultKeepsSuccessfulEmptySeriesOnWire(t *testing.T) {
 	}
 }
 
+func TestDiagnosticResultTerminalStatesKeepEmptySeriesOnWire(t *testing.T) {
+	diagnosticID := "00000000-0000-4000-8000-000000000001"
+	for _, result := range []DiagnosticResult{
+		{DiagnosticID: diagnosticID, State: "failed", ErrorCode: "query"},
+		{DiagnosticID: diagnosticID, State: "canceled"},
+		{DiagnosticID: diagnosticID, State: "timed_out"},
+	} {
+		t.Run(result.State, func(t *testing.T) {
+			message := Envelope[DiagnosticResult]{Kind: KindDiagnosticResult, MessageID: "result-" + result.State,
+				SessionGeneration: "1", Payload: result}
+			if err := message.Validate(); err != nil {
+				t.Fatalf("terminal result was rejected before serialization: %v", err)
+			}
+			wire, err := json.Marshal(message)
+			if err != nil || !strings.Contains(string(wire), `"series":[]`) {
+				t.Fatalf("terminal result did not retain empty series on wire: %s, %v", wire, err)
+			}
+			decoded, err := Decode(wire)
+			if err != nil {
+				t.Fatalf("terminal result wire round trip failed: %v", err)
+			}
+			var roundTrip DiagnosticResult
+			if err := json.Unmarshal(decoded.Payload, &roundTrip); err != nil || roundTrip.State != result.State || roundTrip.Series == nil || len(roundTrip.Series) != 0 {
+				t.Fatalf("terminal result round trip = %#v, %v", roundTrip, err)
+			}
+			missingSeries := strings.Replace(string(wire), `,"series":[]`, "", 1)
+			if _, err := Decode([]byte(missingSeries)); err == nil {
+				t.Fatal("terminal result without its required series array was accepted")
+			}
+			nullSeries := strings.Replace(string(wire), `"series":[]`, `"series":null`, 1)
+			if _, err := Decode([]byte(nullSeries)); err == nil {
+				t.Fatal("terminal result with a null series array was accepted")
+			}
+		})
+	}
+	nonemptyFailure := DiagnosticResult{DiagnosticID: diagnosticID, State: "failed", ErrorCode: "query",
+		Series: []DiagnosticSeries{{Labels: map[string]string{"service": "api"}, Time: "1700000000", Value: "1"}}}
+	if err := nonemptyFailure.Validate(); err == nil {
+		t.Fatal("failed diagnostic result with partial series was accepted")
+	}
+}
+
 func TestDecodeEnforcesProtocolVersionAndCapabilityUniqueness(t *testing.T) {
 	for _, message := range []string{
 		strings.Replace(validHello, `"protocol_versions":["almanac.agent.v1"]`, `"protocol_versions":["almanac.agent.v1","almanac.agent.v1"]`, 1),
