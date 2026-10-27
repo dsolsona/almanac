@@ -209,7 +209,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       const request = new AbortController(); setController(request); setLoading(true); setError(''); setNotice('');
       setProviders([]); setPreviewReadiness('loading');
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
-        if (request.signal.aborted) return;
+        if (request.signal.aborted) return [] as Agent[];
         setSource(datasource); setEtag(tag); setDraft(fromDatasource(datasource));
         return admin ? loadAgents(request.signal) : Promise.resolve([] as Agent[]);
       }).then((agentItems) => { if (!request.signal.aborted) setAgents(agentItems); })
