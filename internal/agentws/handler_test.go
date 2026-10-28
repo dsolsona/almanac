@@ -62,6 +62,73 @@ func TestRegistryPublicationCannotRegressAfterRemoval(t *testing.T) {
 	}
 }
 
+func TestReplacementReasonNegotiation(t *testing.T) {
+	legacy := newTestControl()
+	if got := legacy.replacementReason(); got != "session_rejected" {
+		t.Fatalf("legacy reason = %q", got)
+	}
+	legacy.supportsOwnerReplaced = true
+	if got := legacy.replacementReason(); got != "owner_replaced" {
+		t.Fatalf("capable reason = %q", got)
+	}
+}
+
+func TestRegistryReplacementClosesLegacyAndCapableWebSockets(t *testing.T) {
+	for _, test := range []struct {
+		capable bool
+		want    string
+	}{{false, "session_rejected"}, {true, "owner_replaced"}} {
+		t.Run(test.want, func(t *testing.T) {
+			r := NewRegistry()
+			ready := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				conn, err := websocket.Accept(w, req, nil)
+				if err != nil {
+					return
+				}
+				ctx, cancel := context.WithCancel(req.Context())
+				defer cancel()
+				old := newTestControl()
+				old.conn, old.cancel, old.supportsOwnerReplaced = conn, cancel, test.capable
+				r.publish(old, agentruntime.Session{AgentID: "agent", Generation: 1})
+				close(ready)
+				<-ctx.Done()
+			}))
+			defer server.Close()
+			conn, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.CloseNow()
+			<-ready
+			r.publish(newTestControl(), agentruntime.Session{AgentID: "agent", Generation: 2})
+			_, _, err = conn.Read(t.Context())
+			var closeErr websocket.CloseError
+			if !errors.As(err, &closeErr) || closeErr.Reason != test.want {
+				t.Fatalf("replacement close = %v, want %s", err, test.want)
+			}
+			r.closeWorkers.Wait()
+		})
+	}
+}
+
+func TestRegistryRemoveOldSessionPreservesCurrentOwner(t *testing.T) {
+	r := NewRegistry()
+	id := "agent"
+	old, current := newTestControl(), newTestControl()
+	old.session = &agentruntime.Session{AgentID: id, Generation: 1}
+	current.session = &agentruntime.Session{AgentID: id, Generation: 2}
+	r.owners[id] = registryOwner{generation: 2, control: current}
+	r.remove(old)
+	if got, gen := r.current(id); got != current || gen != 2 {
+		t.Fatalf("owner = %p generation %d", got, gen)
+	}
+	r.remove(current)
+	if got, gen := r.current(id); got != nil || gen != 2 {
+		t.Fatalf("removed owner = %p generation %d", got, gen)
+	}
+}
+
 func TestEnqueueBoundsBytesAndRollsBackCancelledReservation(t *testing.T) {
 	control := newTestControl()
 	body := make([]byte, agentprotocol.MaxMessageBytes)

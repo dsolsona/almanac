@@ -140,3 +140,5 @@ agent record alignment, credential history and plain-language password guidance.
 [F2-T30](F2-T30.md) adds immediate initial saved observations and stable recurring dispatch phases under ADR-0021.
 
 [F2-T31](F2-T31.md) makes authenticated process replacement immediate and fences superseded processes under ADR-0022.
+
+[F2-T32](F2-T32.md) addresses stack review findings in SLI lists/navigation, collection scheduling and agent lifecycle compatibility.

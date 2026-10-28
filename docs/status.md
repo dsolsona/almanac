@@ -2,6 +2,16 @@
 
 ## Current state
 
+[F2-T32](tasks/F2-T32.md) is verified on `fix/stack-review`, based on `bcd636b`.
+It repairs thirteen review findings across the SLI and agent stack: empty-history
+lists, bounded large responses, focus and retry, lease indexes, month-end partitions,
+handoff configuration/cleanup, phased heartbeat timing and replacement compatibility.
+Source `06f59ca3` passed 261 web, 365 Go, 357 race, 165 PostgreSQL integration and
+108 browser tests. Normal Compose acceptance covered navigation/retry, exact 99/100
+collection and clean/forced/backend restarts; desktop/mobile pages in both themes
+were inspected. F2-T32 records first failures, corrections and compatibility limits.
+This correction is prepared at the stack tip; the operator app remains unchanged.
+
 [F2-T31](tasks/F2-T31.md) is verified on `fix/agent-restart`, based on `c6b8674`.
 [ADR-0022](adr/0022-restartable-agent-ownership.md) replaces the one-hour restart
 wait with immediate authenticated process replacement and durable generation fencing.

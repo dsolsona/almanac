@@ -89,7 +89,7 @@ try {
 
   stage = 'open create SLI flow';
   await page.goto(new URL('/slis/new', origin).href);
-  await expect(page.getByRole('heading', { name: 'Create SLI', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create SLI', exact: true })).toBeFocused();
   await page.getByLabel('SLI name', { exact: true }).fill('request-success');
   await page.getByLabel('Display name', { exact: true }).fill('Request success');
   await page.getByLabel('Datasource', { exact: true }).selectOption(fixture.datasource_id);
@@ -146,7 +146,16 @@ try {
   assert.equal(createResponse.headers()['etag'], `"sli:${created.id}:${created.version}"`);
 
   stage = 'read initial activation in the UI';
-  await expect(page.getByRole('heading', { name: 'Request success', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Request success', exact: true })).toBeFocused();
+  stage = 'fragment history preserves detail';
+  await page.getByRole('link', { name: 'Skip to content' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#main$/);
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).focus();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Request success', exact: true })).not.toBeFocused();
   await expect(page.locator('.sli-state').filter({ hasText: 'Activation' }).locator('strong')).toHaveText(/scheduled|preparing|active/);
   const screenshotDir = fixture.artifacts;
   await mkdir(screenshotDir, { recursive: true, mode: 0o700 });
@@ -239,10 +248,21 @@ try {
   await expect(page).toHaveURL(detailURL);
   await page.goForward();
   await expect(page).toHaveURL(new RegExp(`/datasources/${fixture.datasource_id}$`));
+  const detailSources = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/datasources');
   await page.goBack();
   await expect(page).toHaveURL(detailURL);
+  await detailSources;
+  stage = 'recover datasource list failure';
+  await page.route('**/api/v1/datasources?*', async (route) => {
+    await route.fulfill({ status: 503, contentType: 'application/problem+json', body: JSON.stringify({ code: 'datasource_unavailable' }) });
+  }, { times: 1 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs' }).click();
   await expect(page).toHaveURL(new RegExp('/slis$'));
+  await expect(page.getByRole('button', { name: /Request success/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'SLIs', exact: true })).toBeFocused();
+  await expect(page.getByRole('alert')).toContainText('Datasources could not be loaded');
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add SLI', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(detailURL);
 

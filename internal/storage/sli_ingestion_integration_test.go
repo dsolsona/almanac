@@ -101,6 +101,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("concurrent agent renewal: %v", err)
 	}
 	record := result.record
+	page, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", clock)
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != record.ID || page.Items[0].LatestObservation != nil {
+		t.Fatalf("new SLI list = %+v, %v", page, err)
+	}
 	unchanged, err := UpdateSliMetadata(t.Context(), f.databaseURL, UpdateSliMetadataInput{Proof: proof, SliID: record.ID, ExpectedVersion: record.Version, DisplayName: record.DisplayName, RequestID: "noop", Now: clock})
 	if err != nil || unchanged.Version != record.Version {
 		t.Fatalf("metadata no-op version=%d, err=%v", unchanged.Version, err)
@@ -382,10 +386,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_agent_ownership_proof_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18)`); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 2 || result.DatabaseSchemaVersion != 17 {
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 3 || result.DatabaseSchemaVersion != 18 {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {

@@ -333,6 +333,11 @@ func reconcileDatasourceReassignment(ctx context.Context, conn *pgx.Conn, candid
 	if _, err := q.DeleteDatasourceReassignment(ctx, pending.DatasourceID); err != nil {
 		return nil, err
 	}
+	if pending.UsesV2Removal && !pending.DrainedAt.Valid {
+		if err := q.DeleteExpiredSourceHandoffConfiguration(ctx, pending.SourceAgentID); err != nil {
+			return nil, err
+		}
+	}
 	var sourceRevision int64
 	if pending.UsesV2Removal {
 		sourceRevision, err = q.GetLatestAgentConfigurationRevision(ctx, pending.SourceAgentID)

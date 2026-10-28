@@ -43,6 +43,41 @@ func TestNextIntervalEndSkipsMissedAndHonorsActivation(t *testing.T) {
 	}
 }
 
+func TestHeartbeatReportsDispatchPhaseAndInitialBypass(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	runner := newCollectionRunner(testClient(now, testNonce(71)))
+	d := agentprotocol.SLICollection{SLIID: "sli", MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: now}
+	other := d
+	for i := range 100 {
+		other.SLIID = fmt.Sprintf("other-%d", i)
+		if sli.DispatchPhase(other.SLIID, 60)+time.Second < sli.DispatchPhase(d.SLIID, 60) {
+			break
+		}
+	}
+	if sli.DispatchPhase(other.SLIID, 60)+time.Second >= sli.DispatchPhase(d.SLIID, 60) {
+		t.Fatal("fixture lacks a lower phase")
+	}
+	a := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 10}
+	runner.SetConfiguration(agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{a}, SLIs: []agentprotocol.SLICollection{d, other}})
+	key := collectionKey(d)
+	runner.nextIntervalEnd[key] = now.Add(time.Minute)
+	runner.initialPending[key] = false
+	otherKey := collectionKey(other)
+	runner.nextIntervalEnd[otherKey] = now.Add(time.Minute + time.Second)
+	runner.initialPending[otherKey] = false
+	_, _, _, got := runner.Heartbeat()
+	want := now.Add(71*time.Second + sli.DispatchPhase(other.SLIID, a.PollingIntervalSeconds))
+	if got == nil || !got.Equal(want) {
+		t.Fatalf("recurring heartbeat = %v, want %v", got, want)
+	}
+	runner.initialPending[key] = true
+	_, _, _, got = runner.Heartbeat()
+	want = now.Add(70 * time.Second)
+	if got == nil || !got.Equal(want) {
+		t.Fatalf("initial heartbeat = %v, want %v", got, want)
+	}
+}
+
 func TestExpiredCursorKeepsCurrentSettledInterval(t *testing.T) {
 	now := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
 	agent := testClient(now, testNonce(71))

@@ -186,6 +186,17 @@ func (q *Queries) DeleteDatasourceReassignment(ctx context.Context, datasourceID
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredSourceHandoffConfiguration = `-- name: DeleteExpiredSourceHandoffConfiguration :exec
+DELETE FROM public.almanac_agent_handoff_configurations marker
+WHERE marker.agent_id = $1
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments pending WHERE pending.source_agent_id = marker.agent_id)
+`
+
+func (q *Queries) DeleteExpiredSourceHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteExpiredSourceHandoffConfiguration, agentID)
+	return err
+}
+
 const getAgentHandoffConfiguration = `-- name: GetAgentHandoffConfiguration :one
 SELECT revision FROM public.almanac_agent_handoff_configurations WHERE agent_id = $1
 `

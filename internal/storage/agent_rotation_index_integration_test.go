@@ -96,7 +96,7 @@ VALUES($1,'agent.credential.rotate','preserved-index-upgrade',decode(repeat('ab'
 		t.Fatal("read pre-upgrade receipt failed")
 	}
 	upgraded, err := Upgrade(t.Context(), databaseURL)
-	if err != nil || upgraded.Applied != 10 || upgraded.DatabaseSchemaVersion != 17 {
+	if err != nil || upgraded.Applied != 11 || upgraded.DatabaseSchemaVersion != 18 {
 		t.Fatalf("upgrade populated schema 7 to 13 = %+v, %v", upgraded, err)
 	}
 	var historyCount int

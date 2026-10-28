@@ -16,6 +16,16 @@ describe('SLI client', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ code }, status)));
     await expect(createSliClient().get(id)).rejects.toMatchObject({ code, status, message });
   });
+  it('accepts a maximum escaped SLI page and rejects oversized responses', async () => {
+    const query = '\u0001'.repeat(4096);
+    const page = { items: Array.from({ length: 200 }, () => ({ ...sli(), good_query: query, total_query: query })), next_cursor: '' };
+    const fetcher = vi.fn().mockResolvedValue(response(page));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(createSliClient().list(200)).resolves.toHaveProperty('items.length', 200);
+    const paddedPage = JSON.stringify({ items: [sli()], next_cursor: '' }) + ' '.repeat(10 * 1024 * 1024);
+    fetcher.mockResolvedValue(new Response(paddedPage));
+    await expect(createSliClient().list(200)).rejects.toMatchObject({ code: 'invalid_response' });
+  });
   it('creates with CSRF and idempotency, then verifies the resource ETag', async () => {
     const fetcher = vi.fn().mockResolvedValue(response(sli(), 201, { ETag: `"sli:${id}:2"` }));
     vi.stubGlobal('fetch', fetcher);

@@ -553,7 +553,7 @@ func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owne
 	if err != nil {
 		return err
 	}
-	if runtime, runtimeErr := queries.GetAgentRuntimeStatus(ctx, owner.AgentID); runtimeErr == nil && runtime.Protocol == agentprotocol.ProtocolV2 && runtime.AppliedConfigurationRevision > 0 && runtime.AppliedConfigurationRevision < configuration.Revision {
+	if runtime, runtimeErr := queries.GetAgentRuntimeStatus(ctx, owner.AgentID); runtimeErr == nil && runtime.Generation == owner.Generation && runtime.Protocol == agentprotocol.ProtocolV2 && runtime.AppliedConfigurationRevision > 0 && runtime.AppliedConfigurationRevision < configuration.Revision {
 		transitionRevision, transitionErr := queries.GetAgentHandoffConfiguration(ctx, owner.AgentID)
 		if transitionErr == nil && transitionRevision == configuration.Revision {
 			configuration.Revision = runtime.AppliedConfigurationRevision

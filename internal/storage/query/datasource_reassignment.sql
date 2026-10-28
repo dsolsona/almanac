@@ -94,6 +94,11 @@ SELECT revision FROM public.almanac_agent_handoff_configurations WHERE agent_id 
 -- name: DeleteAcknowledgedAgentHandoffConfiguration :execrows
 DELETE FROM public.almanac_agent_handoff_configurations WHERE agent_id = $1 AND revision = $2;
 
+-- name: DeleteExpiredSourceHandoffConfiguration :exec
+DELETE FROM public.almanac_agent_handoff_configurations marker
+WHERE marker.agent_id = $1
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments pending WHERE pending.source_agent_id = marker.agent_id);
+
 -- name: GetCurrentSliOwnershipEpoch :one
 SELECT * FROM public.almanac_sli_ownership_epochs WHERE sli_id = $1 AND measurement_revision = $2 AND ends_at IS NULL FOR UPDATE;
 

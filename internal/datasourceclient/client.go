@@ -21,7 +21,10 @@ import (
 )
 
 const (
-	maxBody                   = 512 << 10
+	maxBody = 512 << 10
+	// 200 items with two 4096-byte queries at six JSON bytes per byte,
+	// plus bounded metadata, observation and cursor overhead.
+	maxSLIPageBody            = 10 << 20
 	maxDiagnosticResponseBody = (1 << 20) + (1 << 18)
 )
 
@@ -72,7 +75,7 @@ func (c *Client) ListSLIs(ctx context.Context, limit int, cursor string) ([]byte
 		p.Cursor = pageCursor(cursor)
 	}
 	r, err := c.ops.ListSlis(ctx, p, c.editor)
-	return c.read(r, err, http.StatusOK, validSliPage)
+	return c.readLimit(r, err, http.StatusOK, validSliPage, maxSLIPageBody)
 }
 
 func (c *Client) GetSLI(ctx context.Context, rawID string) ([]byte, string, error) {

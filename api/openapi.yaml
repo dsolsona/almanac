@@ -595,12 +595,12 @@ components:
       name: limit
       in: query
       required: false
-      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
     PageCursor:
       name: cursor
       in: query
       required: false
-      schema: {type: string, maxLength: 2048}
+      schema: {type: string, maxLength: 512}
     IfMatch:
       name: If-Match
       in: header

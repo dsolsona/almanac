@@ -357,6 +357,32 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 		t.Fatal("read protected connected-agent token failed")
 	}
 	token := strings.TrimSpace(string(tokenBytes))
+	legacyTokenPath := filepath.Join(dir, "legacy-agent-token")
+	legacyCreate := exec.CommandContext(t.Context(), backendBinary, "agents", "create", "--profile-file="+profile, "--name=legacy-replacement-test", "--display-name=Legacy replacement test", "--idempotency-key=legacy-replacement-test", "--token-file="+legacyTokenPath, "--output=json")
+	legacyCreate.Stderr = io.Discard
+	legacyOutput, err := legacyCreate.Output()
+	if err != nil {
+		t.Fatal("register legacy replacement fixture failed")
+	}
+	var legacyCreated agentCLICreateDocument
+	if err := json.Unmarshal(legacyOutput, &legacyCreated); err != nil || legacyCreated.Result.Agent.ID == "" || legacyCreated.Result.Agent.Version == "" {
+		t.Fatal("legacy fixture registration response was invalid")
+	}
+	legacyToken, err := os.ReadFile(legacyTokenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyReplacementProtocol(t, baseURL, strings.TrimSpace(string(legacyToken)), client)
+	legacyDelete := exec.CommandContext(t.Context(), backendBinary, "agents", "delete", "--profile-file="+profile, "--agent-id="+legacyCreated.Result.Agent.ID, "--if-match=\"agent:"+legacyCreated.Result.Agent.ID+":"+legacyCreated.Result.Agent.Version+"\"", "--idempotency-key=legacy-replacement-delete", "--confirm", "--output=json")
+	legacyDelete.Stdout, legacyDelete.Stderr = io.Discard, io.Discard
+	if err := legacyDelete.Run(); err != nil {
+		t.Fatal("archive legacy replacement fixture failed")
+	}
+	legacyDB := testpostgres.Connect(t, databaseURL)
+	var archived bool
+	if err := legacyDB.QueryRow(t.Context(), `SELECT deleted_at IS NOT NULL FROM public.almanac_agents WHERE id=$1`, legacyCreated.Result.Agent.ID).Scan(&archived); err != nil || !archived {
+		t.Fatal("legacy replacement fixture was not archived")
+	}
 	assertAgentWebSocketBoundaries(t, baseURL, token, client)
 	assertIncompatibleAgentAttempt(t, baseURL, token, databaseURL, created.Result.Agent.ID, client, "0", 86, "incompatible_protocol", api.AgentRuntimeStatusReachabilityIncompatible)
 	agentBinary, err := filepath.Abs(filepath.Join("..", "..", "bin", "almanac-agent"))

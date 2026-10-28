@@ -84,6 +84,14 @@ server-to-agent application message that requests reconnect. A locally stopped
 agent ends the WebSocket with a normal close and does not send a server-only
 `shutdown` message.
 
+Hello may include `supports_owner_replaced: true` to advertise support for the
+explicit replacement reason. Absent or false uses the established terminal
+`session_rejected` reason when fencing that peer, including rejected resumes and
+heartbeats. This preserves replacement termination across backend-first upgrades.
+Older established-session readers may reconnect once before their handshake reader
+recognizes the terminal rejection; they must not retry indefinitely. Current agents
+advertise support and retain the clear replacement message and successful exit.
+
 Hello validation first enforces a bounded, nonempty, unique protocol-version list;
 negotiation then selects v1 or reports incompatibility. An authenticated, well-formed
 hello with no supported version records only a bounded per-agent attempt timestamp,
