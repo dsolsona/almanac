@@ -5,6 +5,7 @@
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
 - Related spec: [SPEC-0009](../specs/0009-agent-protocol-and-ownership.md)
+- Supersedes / superseded by: process-replacement waiting is superseded by [ADR-0022](0022-restartable-agent-ownership.md); offline lease and datasource reassignment decisions remain in effect
 
 ## Context and decision
 

@@ -39,6 +39,29 @@ func TestEnqueueBoundsMessagesIncludingInFlight(t *testing.T) {
 	}
 }
 
+func TestRegistryPublicationCannotRegressAfterRemoval(t *testing.T) {
+	registry := NewRegistry()
+	newer, older, reconnect := newTestControl(), newTestControl(), newTestControl()
+	const id = "00000000-0000-4000-8000-000000000001"
+	if _, ok := registry.publish(newer, agentruntime.Session{AgentID: id, Generation: 2}); !ok {
+		t.Fatal("newer publication rejected")
+	}
+	if _, ok := registry.publish(older, agentruntime.Session{AgentID: id, Generation: 1}); ok {
+		t.Fatal("older publication accepted")
+	}
+	registry.remove(older)
+	if got, ok := registry.SessionGeneration(id); !ok || got != 2 {
+		t.Fatalf("current generation = %d, %v", got, ok)
+	}
+	registry.remove(newer)
+	if _, ok := registry.publish(older, agentruntime.Session{AgentID: id, Generation: 1}); ok {
+		t.Fatal("older generation resurrected")
+	}
+	if _, ok := registry.publish(reconnect, agentruntime.Session{AgentID: id, Generation: 2}); !ok {
+		t.Fatal("same-generation reconnect rejected")
+	}
+}
+
 func TestEnqueueBoundsBytesAndRollsBackCancelledReservation(t *testing.T) {
 	control := newTestControl()
 	body := make([]byte, agentprotocol.MaxMessageBytes)
@@ -121,7 +144,7 @@ func TestDrainClosesPreHelloSessionAndJoinsHandler(t *testing.T) {
 }
 
 func newTestControl() *sessionControl {
-	return &sessionControl{queue: make(chan outbound, agentprotocol.MaxQueueMessages)}
+	return &sessionControl{queue: make(chan outbound, agentprotocol.MaxQueueMessages), done: make(chan struct{})}
 }
 
 func TestOpenFailureReasonsAreStableAndSanitized(t *testing.T) {
@@ -130,6 +153,7 @@ func TestOpenFailureReasonsAreStableAndSanitized(t *testing.T) {
 		want string
 	}{
 		{err: agentownership.ErrConflict, want: "active_owner"},
+		{err: agentownership.ErrReplaced, want: "owner_replaced"},
 		{err: agentownership.ErrInvalidCredential, want: "credential_revoked"},
 		{err: agentruntime.ErrIncompatible, want: "incompatible_protocol"},
 		{err: errors.New("private database detail"), want: "session_rejected"},

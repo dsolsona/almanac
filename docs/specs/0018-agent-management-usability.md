@@ -5,7 +5,7 @@
 - Accepted: 2026-10-28
 - Approval: The maintainer approved the four numbered requirements in the working conversation: credential-driven Make startup, dependency-blocked deletion, readable durations and no repeated password prompts.
 - Implementation: verified
-- Verification: [F2-T24](../tasks/F2-T24.md) through [F2-T27](../tasks/F2-T27.md) record local evidence and retained investigations
+- Verification: [F2-T24](../tasks/F2-T24.md) through [F2-T27](../tasks/F2-T27.md) record the management increment; [F2-T31](../tasks/F2-T31.md) records verified immediate restart and crash recovery
 - Related ADRs: [ADR-0020](../adr/0020-session-authorized-management.md)
 - Plan: [agent management](../plans/0020-agent-management.md)
 - Supersedes / superseded by: Amends [SPEC-0004](0004-identity-and-access.md), [SPEC-0010](0010-api-and-cli.md), [SPEC-0012](0012-user-interface.md) and [SPEC-0013](0013-runtime-and-operations.md) for these workflows.
@@ -28,10 +28,13 @@ container on the local application network, verify backend TLS with the public C
 and use the operator's selected Compose project. Do not restart the app, mutate its
 users or register identities. The command remains attached and Ctrl-C stops its
 owned process/container. Fail clearly for missing prerequisites, unsafe files,
-invalid credentials and ownership conflicts, with safe guidance. Keep temporary
-credentials private and clean them on failure or interruption. Explain existing
-ownership lease restart limitations honestly; do not report container startup as
-proof of connection. The UI's agent status supplies that proof.
+invalid credentials and fenced sessions, with safe guidance. Keep temporary
+credentials private and clean them on failure or interruption. Under
+[ADR-0022](../adr/0022-restartable-agent-ownership.md), the same command immediately
+replaces a stopped, crashed or still-running prior process using the supplied valid
+credential. A replaced process reports replacement and exits; it does not try to
+take ownership back. Do not report container startup as proof of connection. The
+UI's agent status supplies that proof.
 
 ## Agent deletion
 
@@ -83,7 +86,8 @@ Expired sessions require sign-in; they do not invite password proof in a dialog.
 
 - AC-01: A registered credential supplied to `make agent` connects a separate real
   container agent; a datasource assigned to it can test/query and collect an SLI.
-  Secrets do not appear in command lines, logs or saved screenshots.
+  Immediate clean/crash replacement works before prior lease expiry and fences old
+  results. Secrets do not appear in command lines, logs or saved screenshots.
 - AC-02: Assigned agents cannot be deleted; linked dependencies and a replacement
   registration path are visible. Reassigning all dependencies permits deletion.
 - AC-03: Concurrent assignment/delete cannot create a dangling active assignment;

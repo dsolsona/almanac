@@ -167,7 +167,7 @@ func assertAgentWebSocketBoundaries(t *testing.T, baseURL, token string, tlsClie
 	}
 }
 
-func assertCopiedAgentCannotReplaceOwner(t *testing.T, agentBinary, baseURL, token, caFile, databaseURL, agentID string, client *http.Client) {
+func assertFreshAgentReplacesOwner(t *testing.T, agentBinary, baseURL, token, caFile, databaseURL, agentID string, client *http.Client, oldDone <-chan struct{}, oldResult <-chan error) (<-chan struct{}, <-chan error) {
 	t.Helper()
 	tokenPath := filepath.Join(t.TempDir(), "copied-agent-token")
 	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
@@ -179,22 +179,29 @@ func assertCopiedAgentCannotReplaceOwner(t *testing.T, agentBinary, baseURL, tok
 	if err := copyAgent.Start(); err != nil {
 		t.Fatal("start copied-token agent process failed")
 	}
-	copyDone := make(chan error, 1)
-	go func(process *exec.Cmd, done chan<- error) { done <- process.Wait() }(copyAgent, copyDone)
-	select {
-	case err := <-copyDone:
-		if err == nil || copyAgent.ProcessState == nil || copyAgent.ProcessState.ExitCode() != 1 {
-			t.Fatal("copied-token process did not report active-owner conflict")
-		}
-	case <-time.After(5 * time.Second):
+	copyDone := make(chan struct{})
+	copyResult := make(chan error, 1)
+	go func() { copyResult <- copyAgent.Wait(); close(copyDone) }()
+	t.Cleanup(func() {
 		_ = copyAgent.Process.Kill()
-		<-copyDone
-		t.Fatal("copied-token process did not fail promptly")
+		select {
+		case <-copyDone:
+		case <-time.After(7 * time.Second):
+			t.Error("replacement agent did not exit")
+		}
+	})
+	select {
+	case <-oldDone:
+		if err := <-oldResult; err != nil {
+			t.Fatal("replaced process did not exit successfully")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("replaced process did not exit promptly")
 	}
 	db := testpostgres.Connect(t, databaseURL)
 	var generation int64
-	if err := db.QueryRow(t.Context(), "SELECT generation FROM public.almanac_agent_ownership WHERE agent_id=$1", agentID).Scan(&generation); err != nil || generation != 1 {
-		t.Fatal("copied token displaced active ownership")
+	if err := db.QueryRow(t.Context(), "SELECT generation FROM public.almanac_agent_ownership WHERE agent_id=$1 ORDER BY generation DESC LIMIT 1", agentID).Scan(&generation); err != nil || generation != 2 {
+		t.Fatal("fresh agent did not acquire the next generation")
 	}
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/agents/"+agentID, nil)
 	if err != nil {
@@ -208,8 +215,9 @@ func assertCopiedAgentCannotReplaceOwner(t *testing.T, agentBinary, baseURL, tok
 	body, readErr := io.ReadAll(response.Body)
 	response.Body.Close()
 	if readErr != nil || response.StatusCode != http.StatusOK || json.Unmarshal(body, &detail) != nil || detail.Runtime == nil || detail.Runtime.Reachability != api.AgentRuntimeStatusReachabilityConnected {
-		t.Fatal("copied-token attempt disrupted the active agent")
+		t.Fatal("replacement agent is not connected")
 	}
+	return copyDone, copyResult
 }
 
 func revokeConnectedAgentCredential(t *testing.T, backendBinary string, journey connectedAgentJourney, client *http.Client, baseURL string) {

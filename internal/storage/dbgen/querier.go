@@ -67,6 +67,7 @@ type Querier interface {
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
 	GetSli(ctx context.Context, id pgtype.UUID) (GetSliRow, error)
 	GetSliCoverageByCanonicalInterval(ctx context.Context, arg GetSliCoverageByCanonicalIntervalParams) (GetSliCoverageByCanonicalIntervalRow, error)
+	HasAgentOwnershipProof(ctx context.Context, arg HasAgentOwnershipProofParams) (bool, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)

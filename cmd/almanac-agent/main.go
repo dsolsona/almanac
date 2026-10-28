@@ -15,6 +15,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := agentcmd.Run(ctx, os.Args[1:]); err != nil {
+		if errors.Is(err, agentcmd.ErrReplaced) {
+			fmt.Fprintln(os.Stderr, "almanac-agent: replaced by a newer process; stopping")
+			return
+		}
 		message := "almanac-agent: operation failed"
 		switch {
 		case errors.Is(err, agentcmd.ErrOwnerConflict):

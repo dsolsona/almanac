@@ -54,7 +54,7 @@ is preserved. Calculation, alerting, UI and delivery specs incorporate the amend
 
 | Review item | Accepted direction | Consequence to validate |
 | --- | --- | --- |
-| P01/P02 | One-hour offline execution lease; safe takeover waits, force takeover acknowledges possible source-query overlap | Ring-buffer capacity alone does not bound stale permissions. This adds a time limit not previously chosen by the maintainer |
+| P01/P02 | One-hour offline execution lease; fresh authenticated process starts replace immediately under [ADR-0022](adr/0022-restartable-agent-ownership.md); datasource handoff remains separate | Superseded processes cannot save results, but a partitioned process may query until its lease expires |
 | R01/R02 | Combined server modes plus separate agent artifact; one active backend initially | Preserves simple deployment and component separation without promising immediate backend horizontal scaling |
 | S01/M07 | Keep canonical observations for 400 days; caches optional | Preserves exact supported reporting semantics but has significant disk/index cost |
 | M01/M02 | Import valid unsupported definitions inactive; cross-source ratio components and some alert/calendar/slice cases cannot activate initially | OpenSLO import compatibility is broader than initial executable coverage; this limitation must be explicit |

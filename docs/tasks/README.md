@@ -138,3 +138,5 @@ agent record alignment, credential history and plain-language password guidance.
 [F2-T29](F2-T29.md) repairs prompt, fair live dispatch and overdue interval handling under SPEC-0002, SPEC-0009 and SPEC-0015.
 
 [F2-T30](F2-T30.md) adds immediate initial saved observations and stable recurring dispatch phases under ADR-0021.
+
+[F2-T31](F2-T31.md) makes authenticated process replacement immediate and fences superseded processes under ADR-0022.

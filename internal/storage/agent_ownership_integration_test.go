@@ -15,6 +15,40 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+func TestIntegrationFreshAgentReplacesUnexpiredOwner(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, _ := createOwnershipAgent(t, f, "ownership-replacement")
+	now := f.base.Add(4 * time.Second)
+	clock := func() time.Time { return now }
+	oldProof := ownershipVerifier(ownershipBytes(32, 81))
+	newProof := ownershipVerifier(ownershipBytes(32, 82))
+	old, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, oldProof, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, newProof, clock)
+	if err != nil || replacement.Generation != old.Generation+1 || !now.Before(old.ExpiresAt) {
+		t.Fatalf("fresh replacement = %+v, %v", replacement, err)
+	}
+	if _, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, oldProof, clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("superseded proof replay = %v", err)
+	}
+	if _, err := ResumeAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, oldProof, old.Generation, clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("superseded resume = %v", err)
+	}
+	if _, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, oldProof, old.Generation, 0, ownershipNonce(83), clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("superseded renewal = %v", err)
+	}
+	replay, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, newProof, clock)
+	if err != nil || replay.Generation != replacement.Generation || !replay.ExpiresAt.Equal(replacement.ExpiresAt) {
+		t.Fatalf("replacement welcome replay = %+v, %v", replay, err)
+	}
+	now = replacement.ExpiresAt
+	if _, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, oldProof, clock); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("superseded proof after expiry = %v", err)
+	}
+}
+
 func TestIntegrationAgentOwnershipAcquireResumeRenewAndReplay(t *testing.T) {
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-lifecycle")
@@ -41,10 +75,6 @@ func TestIntegrationAgentOwnershipAcquireResumeRenewAndReplay(t *testing.T) {
 	replayed, err := acquire(secret)
 	if err != nil || replayed.Generation != first.Generation || !replayed.ExpiresAt.Equal(first.ExpiresAt) {
 		t.Fatalf("lost response replay = %+v, %v", replayed, err)
-	}
-	other, err := acquire(ownershipBytes(32, 4))
-	if !errors.Is(err, ErrAgentOwnershipConflict) || !other.ReplaceAt.Equal(first.ExpiresAt) {
-		t.Fatalf("copied credential acquisition = %+v, %v", other, err)
 	}
 	resumed, err := ResumeAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
 		ownershipVerifier(secret), first.Generation, clock)
@@ -161,37 +191,42 @@ func TestIntegrationAgentOwnershipExpiryRotationRevocationAndFencing(t *testing.
 	}
 }
 
-func TestIntegrationAgentOwnershipConcurrentAcquisitionHasOneWinner(t *testing.T) {
+func TestIntegrationAgentOwnershipConcurrentAcquisitionFencesEarlierGeneration(t *testing.T) {
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-concurrent")
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	start := make(chan struct{})
-	results := make(chan error, 2)
+	type outcome struct {
+		result AgentOwnershipResult
+		proof  []byte
+		err    error
+	}
+	results := make(chan outcome, 2)
 	var workers sync.WaitGroup
 	for i := range 2 {
 		proof := ownershipBytes(32, byte(20+i))
 		workers.Go(func() {
 			<-start
-			_, err := AcquireAgentOwnership(ctx, f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), func() time.Time { return f.base.Add(4 * time.Second) })
-			results <- err
+			result, err := AcquireAgentOwnership(ctx, f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(proof), func() time.Time { return f.base.Add(4 * time.Second) })
+			results <- outcome{result, proof, err}
 		})
 	}
 	close(start)
 	workers.Wait()
 	close(results)
-	twins, conflicts := 0, 0
-	for err := range results {
-		if err == nil {
-			twins++
-		} else if errors.Is(err, ErrAgentOwnershipConflict) {
-			conflicts++
-		} else {
-			t.Fatalf("unexpected acquisition error: %v", err)
+	var generations = map[int64][]byte{}
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("unexpected acquisition error: %v", result.err)
 		}
+		generations[result.result.Generation] = result.proof
 	}
-	if twins != 1 || conflicts != 1 {
-		t.Fatalf("concurrent acquisition outcomes: winners=%d conflicts=%d", twins, conflicts)
+	if len(generations) != 2 || generations[1] == nil || generations[2] == nil {
+		t.Fatalf("concurrent generations = %v", generations)
+	}
+	if _, err := AcquireAgentOwnership(ctx, f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(generations[1]), func() time.Time { return f.base.Add(4 * time.Second) }); !errors.Is(err, ErrAgentOwnershipDenied) {
+		t.Fatalf("earlier proof replay = %v", err)
 	}
 	conn := integrationConnect(t, f.databaseURL)
 	var count int
@@ -199,7 +234,7 @@ func TestIntegrationAgentOwnershipConcurrentAcquisitionHasOneWinner(t *testing.T
 		t.Fatal(err)
 	}
 	closeIntegrationConn(conn)
-	if count != 1 {
+	if count != 2 {
 		t.Fatalf("concurrent acquisition stored %d owners", count)
 	}
 }

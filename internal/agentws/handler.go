@@ -143,10 +143,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(code, reason)
 		return
 	}
-	control.readyMu.Lock()
-	control.session = &accepted
-	control.ready = true
-	control.readyMu.Unlock()
+	_, published := h.registry.publish(control, accepted)
+	if !published {
+		_ = conn.Close(websocket.StatusPolicyViolation, "owner_replaced")
+		return
+	}
 	welcome, err := json.Marshal(accepted.Welcome)
 	if err != nil || control.enqueue(ctx, outbound{body: welcome}) != nil {
 		_ = conn.Close(websocket.StatusInternalError, "session unavailable")
@@ -197,7 +198,11 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 				agentprotocol.Envelope[agentprotocol.Heartbeat]{Kind: envelope.Kind, MessageID: envelope.MessageID,
 					SessionGeneration: envelope.SessionGeneration, Payload: heartbeat}, time.Now().UTC())
 			if err != nil {
-				_ = control.conn.Close(websocket.StatusPolicyViolation, "heartbeat rejected")
+				reason := "heartbeat rejected"
+				if errors.Is(err, agentownership.ErrReplaced) {
+					reason = "owner_replaced"
+				}
+				_ = control.conn.Close(websocket.StatusPolicyViolation, reason)
 				return
 			}
 			body, err := json.Marshal(ack)
@@ -236,6 +241,8 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 
 func openFailureReason(err error) string {
 	switch {
+	case errors.Is(err, agentownership.ErrReplaced):
+		return "owner_replaced"
 	case errors.Is(err, agentownership.ErrConflict):
 		return "active_owner"
 	case errors.Is(err, agentownership.ErrInvalidCredential):

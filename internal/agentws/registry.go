@@ -8,18 +8,55 @@ import (
 	"sync"
 	"uuid"
 
+	"github.com/coder/websocket"
 	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/agentruntime"
 )
 
 // Registry owns upgraded sessions because net/http does not drain hijacked
 // WebSocket connections during Server.Shutdown.
 type Registry struct {
-	mu       sync.Mutex
-	sessions map[*sessionControl]struct{}
-	stopping bool
+	mu           sync.Mutex
+	sessions     map[*sessionControl]struct{}
+	owners       map[string]registryOwner
+	closeWorkers sync.WaitGroup
+	stopping     bool
 }
 
-func NewRegistry() *Registry { return &Registry{sessions: make(map[*sessionControl]struct{})} }
+type registryOwner struct {
+	generation int64
+	control    *sessionControl
+}
+
+func NewRegistry() *Registry {
+	return &Registry{sessions: make(map[*sessionControl]struct{}), owners: make(map[string]registryOwner)}
+}
+
+// publish retains the high-water generation even after its connection closes.
+func (r *Registry) publish(control *sessionControl, session agentruntime.Session) (*sessionControl, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := r.owners[session.AgentID]
+	if r.stopping || session.Generation < owner.generation {
+		return nil, false
+	}
+	control.readyMu.Lock()
+	control.session, control.ready = &session, true
+	control.readyMu.Unlock()
+	r.owners[session.AgentID] = registryOwner{generation: session.Generation, control: control}
+	if owner.control != nil && owner.control != control {
+		previous := owner.control
+		code, reason := websocket.StatusPolicyViolation, "owner_replaced"
+		if owner.generation == session.Generation {
+			code, reason = websocket.StatusGoingAway, "session resumed"
+		}
+		r.closeWorkers.Go(func() {
+			_ = previous.conn.Close(code, reason)
+			previous.cancel()
+		})
+	}
+	return owner.control, true
+}
 
 func (r *Registry) add(session *sessionControl) bool {
 	r.mu.Lock()
@@ -34,8 +71,21 @@ func (r *Registry) add(session *sessionControl) bool {
 func (r *Registry) remove(session *sessionControl) {
 	r.mu.Lock()
 	delete(r.sessions, session)
+	for id, owner := range r.owners {
+		if owner.control == session {
+			owner.control = nil
+			r.owners[id] = owner
+		}
+	}
 	r.mu.Unlock()
 	close(session.done)
+}
+
+func (r *Registry) current(agentID string) (*sessionControl, int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := r.owners[agentID]
+	return owner.control, owner.generation
 }
 
 func (r *Registry) Drain(ctx context.Context) error {
@@ -64,6 +114,14 @@ func (r *Registry) Drain(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+	closed := make(chan struct{})
+	go func() { r.closeWorkers.Wait(); close(closed) }()
+	select {
+	case <-closed:
+	case <-ctx.Done():
+		r.Close()
+		return ctx.Err()
+	}
 	return nil
 }
 
@@ -83,6 +141,7 @@ func (r *Registry) Close() error {
 			closeErr = errors.Join(closeErr, err)
 		}
 	}
+	r.closeWorkers.Wait()
 	return closeErr
 }
 
@@ -91,19 +150,14 @@ func (r *Registry) NotifyConfigurationChanged(ctx context.Context, agentID strin
 	if r == nil || err != nil || parsed.String() != agentID || revision <= 0 {
 		return errors.New("agentws: invalid configuration notification")
 	}
-	r.mu.Lock()
-	sessions := make([]*sessionControl, 0, len(r.sessions))
-	for session := range r.sessions {
-		sessions = append(sessions, session)
-	}
-	r.mu.Unlock()
-	for _, control := range sessions {
+	control, _ := r.current(agentID)
+	if control != nil {
 		control.readyMu.RLock()
 		session := control.session
 		ready := control.ready
 		if !ready || session == nil || session.AgentID != agentID {
 			control.readyMu.RUnlock()
-			continue
+			return nil
 		}
 		generation := strconv.FormatInt(session.Generation, 10)
 		control.readyMu.RUnlock()
@@ -124,41 +178,21 @@ func (r *Registry) SessionGeneration(agentID string) (int64, bool) {
 	if r == nil {
 		return 0, false
 	}
-	r.mu.Lock()
-	sessions := make([]*sessionControl, 0, len(r.sessions))
-	for session := range r.sessions {
-		sessions = append(sessions, session)
-	}
-	r.mu.Unlock()
-	for _, control := range sessions {
-		control.readyMu.RLock()
-		session, ready := control.session, control.ready
-		if ready && session != nil && session.AgentID == agentID {
-			generation := session.Generation
-			control.readyMu.RUnlock()
-			return generation, true
-		}
-		control.readyMu.RUnlock()
-	}
-	return 0, false
+	control, generation := r.current(agentID)
+	return generation, control != nil
 }
 
 func (r *Registry) SendDiagnostic(ctx context.Context, agentID string, generation int64, request agentprotocol.DiagnosticRequest) error {
 	if r == nil || generation <= 0 || request.AgentID != agentID || request.DiagnosticID == "" {
 		return errors.New("agentws: invalid diagnostic dispatch")
 	}
-	r.mu.Lock()
-	sessions := make([]*sessionControl, 0, len(r.sessions))
-	for session := range r.sessions {
-		sessions = append(sessions, session)
-	}
-	r.mu.Unlock()
-	for _, control := range sessions {
+	control, _ := r.current(agentID)
+	if control != nil {
 		control.readyMu.RLock()
 		session, ready := control.session, control.ready
 		if !ready || session == nil || session.AgentID != agentID || session.Generation != generation {
 			control.readyMu.RUnlock()
-			continue
+			return errors.New("agentws: diagnostic agent session unavailable")
 		}
 		control.readyMu.RUnlock()
 		message := agentprotocol.Envelope[agentprotocol.DiagnosticRequest]{Kind: agentprotocol.KindDiagnosticRequest,
@@ -179,18 +213,13 @@ func (r *Registry) CancelDiagnostic(ctx context.Context, agentID string, generat
 	if r == nil || generation <= 0 || diagnosticID == "" {
 		return errors.New("agentws: invalid diagnostic cancellation")
 	}
-	r.mu.Lock()
-	sessions := make([]*sessionControl, 0, len(r.sessions))
-	for session := range r.sessions {
-		sessions = append(sessions, session)
-	}
-	r.mu.Unlock()
-	for _, control := range sessions {
+	control, _ := r.current(agentID)
+	if control != nil {
 		control.readyMu.RLock()
 		session, ready := control.session, control.ready
 		if !ready || session == nil || session.AgentID != agentID || session.Generation != generation {
 			control.readyMu.RUnlock()
-			continue
+			return errors.New("agentws: diagnostic agent session unavailable")
 		}
 		control.readyMu.RUnlock()
 		message := agentprotocol.Envelope[agentprotocol.DiagnosticCancel]{Kind: agentprotocol.KindDiagnosticCancel,

@@ -7,6 +7,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -384,11 +385,44 @@ func TestRetryDelayResetsOnlyAfterCurrentAttemptEstablished(t *testing.T) {
 
 func TestSessionRejectionIsActionableAndTerminal(t *testing.T) {
 	err := closeReasonError("session_rejected")
-	if !errors.Is(err, ErrSessionRejected) || !strings.Contains(err.Error(), "ownership lease") {
+	if !errors.Is(err, ErrSessionRejected) || !strings.Contains(err.Error(), "agent") {
 		t.Fatalf("session rejection classification = %v", err)
 	}
 	if err := closeReasonError("server_unavailable"); err != nil {
 		t.Fatalf("retryable close reason became terminal: %v", err)
+	}
+	if !errors.Is(closeReasonError("owner_replaced"), ErrReplaced) {
+		t.Fatal("replacement was not terminally classified")
+	}
+}
+
+func TestReplacementCloseIsTerminalForHandshakeAndEstablishedReads(t *testing.T) {
+	for _, established := range []bool{false, true} {
+		t.Run(fmt.Sprint(established), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				conn, err := websocket.Accept(w, r, nil)
+				if err != nil {
+					return
+				}
+				_ = conn.Close(websocket.StatusPolicyViolation, "owner_replaced")
+			}))
+			defer server.Close()
+			conn, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.CloseNow()
+			if established {
+				var value jsontext.Value
+				err = readRaw(t.Context(), conn, &value)
+			} else {
+				var value agentprotocol.Envelope[agentprotocol.Welcome]
+				err = readJSON(t.Context(), conn, &value)
+			}
+			if !errors.Is(err, ErrReplaced) {
+				t.Fatalf("replacement close = %v", err)
+			}
+		})
 	}
 }
 

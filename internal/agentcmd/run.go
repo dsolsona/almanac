@@ -148,7 +148,7 @@ func (c *client) run(ctx context.Context) error {
 		if err == nil {
 			return nil
 		}
-		if errors.Is(err, ErrOwnerConflict) || errors.Is(err, ErrRevoked) || errors.Is(err, ErrCredential) || errors.Is(err, ErrIncompatible) || errors.Is(err, ErrSessionRejected) {
+		if errors.Is(err, ErrOwnerConflict) || errors.Is(err, ErrReplaced) || errors.Is(err, ErrRevoked) || errors.Is(err, ErrCredential) || errors.Is(err, ErrIncompatible) || errors.Is(err, ErrSessionRejected) {
 			return err
 		}
 		backoff = retryDelay(backoff, c.established)
@@ -723,10 +723,11 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 
 var errReconnect = errors.New("backend requested reconnect")
 var ErrOwnerConflict = errors.New("agent credential has an active owner")
+var ErrReplaced = errors.New("agent process was replaced")
 var ErrRevoked = errors.New("agent credential revoked")
 var ErrCredential = errors.New("agent credential rejected")
 var ErrIncompatible = errors.New("backend protocol incompatible")
-var ErrSessionRejected = errors.New("agent session was rejected; verify the ownership lease and restart only after it expires")
+var ErrSessionRejected = errors.New("agent session was rejected; inspect the agent and credential")
 
 func (c *client) setServerTime(serverTime time.Time) {
 	if c.serverClock == nil {
@@ -969,6 +970,8 @@ func readJSON(ctx context.Context, conn *websocket.Conn, value any) error {
 
 func closeReasonError(reason string) error {
 	switch reason {
+	case "owner_replaced":
+		return ErrReplaced
 	case "active_owner":
 		return ErrOwnerConflict
 	case "credential_revoked":
@@ -984,6 +987,11 @@ func closeReasonError(reason string) error {
 
 func readRaw(ctx context.Context, conn *websocket.Conn, value *jsontext.Value) error {
 	messageType, data, err := conn.Read(ctx)
+	if closeError, ok := errors.AsType[websocket.CloseError](err); ok {
+		if classified := closeReasonError(closeError.Reason); classified != nil {
+			return classified
+		}
+	}
 	if err != nil || messageType != websocket.MessageText {
 		return errors.New("backend message unavailable")
 	}
