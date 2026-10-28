@@ -7,7 +7,7 @@ import './datasources.css';
 type Agent = { id: string; name: string; display_name: string; enabled: boolean; runtime?: { reachability?: string; capabilities?: { provider: string; configuration_formats: string[]; operations: string[] }[] } | null };
 type ProviderReadinessState = Provider['availability'] | 'loading' | 'still_applying' | 'error';
 type Draft = Omit<DatasourceWrite, 'authentication'> & { authMode: 'none' | 'basic' | 'bearer'; username: string; password: string; token: string; passwordAction: 'replace' | 'retain' | 'clear'; tokenAction: 'replace' | 'retain' | 'clear'; passwordConfigured: boolean; tokenConfigured: boolean; nameEdited: boolean };
-type SaveIntent = { input: DatasourceWrite; key: string; etag?: string; isNew: boolean; route: string };
+type SaveIntent = { input: DatasourceWrite; key: string; etag?: string; isNew: boolean; route: string; cancelReassignment?: boolean };
 
 const client = createDatasourceClient();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -22,6 +22,7 @@ function suggestDatasourceName(displayName: string): string {
 }
 const safeError = (error: unknown) => error instanceof DatasourceFailure ? error.message : 'Datasource management is temporarily unavailable.';
 const terminal = (value: Diagnostic) => ['succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(value.state);
+const displayTime = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'long' }).format(new Date(value));
 
 async function loadAgents(signal: AbortSignal): Promise<Agent[]> {
   let response: Response;
@@ -189,6 +190,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [reassignmentStale, setReassignmentStale] = useState(false);
   const [nameValidationAttempted, setNameValidationAttempted] = useState(false);
   const diagnosticController = useRef<AbortController | null>(null);
   const providerRequest = useRef<AbortController | null>(null);
@@ -217,6 +219,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   function changeRoute(nextRoute: string) {
     if (locationKeyRef.current !== nextRoute) { setNameValidationAttempted(false); setLoading(true); }
+    if (locationKeyRef.current !== nextRoute && !saveIntent.current && saveController.current) { saveController.current.abort(); saveController.current = null; setPending(false); }
     locationKeyRef.current = nextRoute;
     if (saveIntent.current && saveIntent.current.route !== nextRoute) {
       saveIntent.current = null;
@@ -258,7 +261,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   useEffect(() => {
     if (selectedID) {
-      const request = new AbortController(); setLoading(true); setError(''); setNotice('');
+      const request = new AbortController(); setLoading(true); setError(''); setNotice(''); setReassignmentStale(false);
       setProviders([]); setPreviewReadiness('loading');
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
         if (request.signal.aborted) return [] as Agent[];
@@ -282,7 +285,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }, [locationKey, selectedID, isNew, loadList, admin, canPreview]);
 
   useEffect(() => {
-    if (!source || !canPreview) return;
+    if (!source || source.reassignment || !canPreview) return;
     const request = new AbortController();
     const deadline = Date.now() + 30_000;
     const timeout = window.setTimeout(() => request.abort(), 30_000);
@@ -303,7 +306,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       request.abort();
       window.clearTimeout(timeout);
     };
-  }, [source?.agent_id, canPreview, providerRefresh]);
+  }, [source?.agent_id, source?.reassignment, canPreview, providerRefresh]);
 
   const selectedAgent = agents.find((agent) => agent.id === draft.agent_id);
   const connectionAvailable = selectedAgent !== undefined && selectedAgent.enabled && datasourceAgentState(selectedAgent) === 'connected' && (providers.some((provider) => provider.provider === 'prometheus' && provider.availability === 'available' && provider.operations.includes('connection_test'))
@@ -325,6 +328,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (currentUncertainSave) { await retryUncertainSave(); return; }
+    if (source?.reassignment) return;
     if (!DATASOURCE_NAME.test(draft.name)) {
       setNameValidationAttempted(true);
       document.getElementById('datasource-name')?.focus();
@@ -344,7 +348,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       if (admin && !intent.input.agent_id) throw new Error('Choose an assigned agent before saving.');
       const saved = await client.save(intent.input, context, intent.key, intent.etag, request.signal);
       if (!activeIntent()) return;
-      saveIntent.current = null; setUncertainSave(false); setNotice(intent.isNew ? 'Datasource created.' : 'Datasource settings saved.'); setDiagnostic(null);
+      saveIntent.current = null; setUncertainSave(false); setNotice(intent.isNew ? 'Datasource created.' : saved.reassignment ? '' : intent.cancelReassignment ? 'Reassignment canceled.' : 'Datasource settings saved.'); setDiagnostic(null);
       setDraft((current) => ({ ...current, password: '', token: '' }));
       if (intent.isNew) { setPending(false); navigate(returnToSLI ? `/slis/new?datasource=${encodeURIComponent(saved.id)}` : '/datasources'); }
       else {
@@ -356,7 +360,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       if (reason instanceof DatasourceFailure && reason.uncertain) {
         setUncertainSave(true);
         setError(intent.isNew ? 'The create response was lost. Retry the same request to safely recover its result.' : 'The save outcome is unknown. Refresh this datasource to reconcile its current version before continuing.');
-      } else { saveIntent.current = null; setUncertainSave(false); setError(reason instanceof Error && !(reason instanceof DatasourceFailure) ? reason.message : safeError(reason)); }
+      } else { saveIntent.current = null; setUncertainSave(false); if (source?.reassignment && reason instanceof DatasourceFailure && ['conflict', 'reassignment_pending'].includes(reason.code)) setReassignmentStale(true); setError(reason instanceof Error && !(reason instanceof DatasourceFailure) ? reason.message : safeError(reason)); }
     }
     finally {
       if (activeRequest()) {
@@ -365,6 +369,25 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       }
       if (saveController.current === request) saveController.current = null;
     }
+  }
+
+  async function cancelReassignment() {
+    if (!source?.reassignment || !etag || pending || currentUncertainSave || reassignmentStale) return;
+    const intent: SaveIntent = { input: asWrite(fromDatasource(source), false), key: crypto.randomUUID(), etag, isNew: false, route: locationKey, cancelReassignment: true };
+    saveIntent.current = intent; await executeSave(intent);
+  }
+
+  async function refreshReassignment() {
+    if (!selectedID || pending || currentUncertainSave) return;
+    setPending(true); setError('');
+    const request = new AbortController(); saveController.current = request;
+    const route = locationKey;
+    try {
+      const [current, agentItems] = await Promise.all([client.get(selectedID, request.signal), admin ? loadAgents(request.signal) : Promise.resolve([])]);
+      if (request.signal.aborted || locationKeyRef.current !== route) return;
+      setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource)); setAgents(agentItems); setReassignmentStale(false); setNotice('Datasource status refreshed.');
+    } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === route) setError(safeError(reason)); }
+    finally { if (!request.signal.aborted && locationKeyRef.current === route) setPending(false); if (saveController.current === request) saveController.current = null; }
   }
 
   async function retryUncertainSave() {
@@ -379,7 +402,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         const current = await client.get(selectedID!, request.signal);
         if (!activeIntent()) return;
         setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource));
-        saveIntent.current = null; setUncertainSave(false); setNotice('The datasource was refreshed after an uncertain save. Review its current version and settings.');
+        saveIntent.current = null; setUncertainSave(false); setNotice(intent.cancelReassignment ? current.datasource.reassignment ? 'The reassignment is still pending. Review its current status before trying again.' : 'The datasource was refreshed. Review its current assignment.' : 'The datasource was refreshed after an uncertain save. Review its current version and settings.');
       } catch (reason) { if (activeIntent()) setError(safeError(reason)); }
       finally {
         if (activeRequest()) setPending(false);
@@ -391,6 +414,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }
 
   async function runDiagnostic(kind: 'connection' | 'preview') {
+    if (source?.reassignment) return;
     if (kind === 'preview' && previewReadiness !== 'available') return;
     setPending(true); setError(''); setNotice(''); setDiagnostic(null);
     const request = new AbortController(); diagnosticController.current = request;
@@ -487,11 +511,12 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }
 
   const readonly = !admin;
-  const formDisabled = readonly || pending || currentUncertainSave;
+  const formDisabled = readonly || pending || currentUncertainSave || Boolean(source?.reassignment);
   return <>
     <PageTitle headingRef={heading} title={isNew ? 'Add datasource' : source?.display_name ?? 'Datasource'} />
     <div className="datasource-toolbar"><Button variant="outline" onClick={() => navigate(returnToSLI ? '/slis/new' : '/datasources')}>{returnToSLI ? 'Back to SLI' : 'Back to datasources'}</Button>{source && <p>Version {source.version} · assigned agent {agents.find((agent) => agent.id === source.agent_id)?.display_name ?? source.agent_id}</p>}</div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
+    {source?.reassignment && <Panel heading="Moving datasource">{source.reassignment.state === 'replacement_unavailable' ? <p>{agents.find((agent) => agent.id === source.reassignment!.target_agent_id)?.display_name ?? 'The replacement collector'} is unavailable. Cancel this reassignment before choosing another collector.</p> : <p>Almanac will start {agents.find((agent) => agent.id === source.reassignment!.target_agent_id)?.display_name ?? 'the replacement collector'} after {agents.find((agent) => agent.id === source.reassignment!.source_agent_id)?.display_name ?? 'the previous collector'} stops collecting.</p>}<p>If the previous agent is offline, this may require waiting until <time dateTime={source.reassignment.authority_expires_at} title={source.reassignment.authority_expires_at}>{displayTime(source.reassignment.authority_expires_at)}</time>. The replacement may start later.</p><div className="datasource-actions"><Button variant="outline" disabled={pending || currentUncertainSave} onClick={() => void refreshReassignment()}>Refresh reassignment</Button>{admin && <Button variant="outline" disabled={pending || currentUncertainSave || reassignmentStale} onClick={() => void cancelReassignment()}>Cancel reassignment</Button>}</div></Panel>}
     {isNew && admin && !agents.some(supportsDatasourceDiagnostics) && <p className="datasource-alert">{agents.length === 0 ? 'Register and start an Almanac agent before adding a datasource.' : agents.some((agent) => agent.enabled && datasourceAgentState(agent) === 'unreported') ? 'Start your registered agent before assigning this datasource.' : datasourceAvailabilityMessage(undefined, agents)} <Button variant="outline" onClick={() => navigate('/agents')}>View agents</Button></p>}
     <Panel heading="Connection settings"><form className="datasource-form" onSubmit={(event) => void submit(event)}>
       <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => {
@@ -507,10 +532,10 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       {draft.authMode === 'bearer' && <SecretInput id="datasource-token" label="Bearer token" action={draft.tokenAction} configured={draft.tokenConfigured} value={draft.token} disabled={formDisabled} onAction={(tokenAction) => setDraft({ ...draft, tokenAction })} onValue={(token) => setDraft({ ...draft, token })} />}
       <label className="datasource-check"><input type="checkbox" checked={draft.tls.insecure_skip_verify} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, insecure_skip_verify: event.target.checked } })} />Skip TLS certificate verification <span>Insecure</span></label>
       <label className="datasource-check datasource-check--wide">Custom CA PEM<textarea rows={4} value={draft.tls.ca_pem ?? ''} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, ca_pem: event.target.value || null } })} /></label>
-      {admin && <div className="datasource-actions"><Button type="submit" pending={pending}>{currentUncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || currentUncertainSave} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents)}</span></div>}
+      {admin && <div className="datasource-actions"><Button type="submit" pending={pending} disabled={Boolean(source?.reassignment) && !currentUncertainSave}>{currentUncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || currentUncertainSave || Boolean(source?.reassignment)} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{source?.reassignment ? 'Diagnostics are unavailable while the datasource is moving.' : connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents)}</span></div>}
       {readonly && <p className="datasource-readonly">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}
     </form></Panel>
-    {source && canPreview && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><p role="status" className={previewReadiness === 'loading' ? 'sr-only' : 'datasource-readiness'}>{providerReadinessMessage(previewReadiness, providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1'))}</p>{previewReadiness !== 'available' && previewReadiness !== 'loading' && <Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button>}<label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" pending={cancelSubmitting} disabled={cancelSubmitting} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div></Panel>}
+    {source && canPreview && !source.reassignment && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><p role="status" className={previewReadiness === 'loading' ? 'sr-only' : 'datasource-readiness'}>{providerReadinessMessage(previewReadiness, providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1'))}</p>{previewReadiness !== 'available' && previewReadiness !== 'loading' && <Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button>}<label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" pending={cancelSubmitting} disabled={cancelSubmitting} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div></Panel>}
     {diagnostic && <Panel heading={diagnostic.operation === 'connection_test' ? 'Connection test' : 'Diagnostic result'}><DiagnosticView value={diagnostic} /></Panel>}
   </>;
 }

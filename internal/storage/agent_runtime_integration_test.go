@@ -9,8 +9,37 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/datasource"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+func TestIntegrationAgentRuntimeExplanationReflectsAssignment(t *testing.T) {
+	f := newAgentFixture(t)
+	credential, created := createOwnershipAgent(t, f, "runtime-assignment")
+	clock := func() time.Time { return f.base.Add(5 * time.Second) }
+	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test", Capabilities: []byte(`[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["collect","connection_test","query_preview"]}]`)}
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, credential.ID, credential.Verifier, ownershipVerifier(ownershipBytes(32, 79)), hello, clock); err != nil {
+		t.Fatal(err)
+	}
+	input := AgentReadInput{SessionVerifier: f.verifier, AgentID: created.Agent.ID, Now: clock}
+	before, err := GetAgent(t.Context(), f.databaseURL, input)
+	if err != nil || before.Runtime == nil || before.Runtime.CollectionExplanation != "no_assignment" {
+		t.Fatalf("unassigned runtime=%+v err=%v", before.Runtime, err)
+	}
+	settings := datasource.DefaultSettings("runtime-metrics", "Runtime metrics", "https://metrics.example.test", created.Agent.ID)
+	if _, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: DatasourceProof{SessionVerifier: f.verifier}, Settings: settings, Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, IdempotencyKey: "runtime-source", RequestID: "runtime-source", Now: clock}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := GetAgent(t.Context(), f.databaseURL, input)
+	if err != nil || after.Runtime == nil || after.Runtime.CollectionExplanation != "none" {
+		t.Fatalf("assigned runtime=%+v err=%v", after.Runtime, err)
+	}
+	page, err := ListAgents(t.Context(), f.databaseURL, ListAgentsInput{SessionVerifier: f.verifier, Limit: 10, Now: clock})
+	if err != nil || len(page.Items) != 1 || page.Items[0].Runtime == nil || page.Items[0].Runtime.CollectionExplanation != "none" {
+		t.Fatalf("assigned list=%+v err=%v", page, err)
+	}
+}
 
 func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testing.T) {
 	f := newAgentFixture(t)
@@ -201,5 +230,39 @@ func TestIntegrationAgentRuntimeGrantFailureRollsBackOwnership(t *testing.T) {
 	closeIntegrationConn(conn)
 	if ownerships != 0 || grants != 0 || configurations != 0 || statuses != 0 {
 		t.Fatalf("failed runtime acquisition left rows ownership/grant/config/status=%d/%d/%d/%d", ownerships, grants, configurations, statuses)
+	}
+}
+
+func TestIntegrationStaleHeartbeatDoesNotRegressAppliedRevision(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "stale-heartbeat")
+	now := f.base.Add(5 * time.Second)
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(ownershipBytes(32, 54)), &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV2, SoftwareVersion: "test", Capabilities: []byte(`[]`)}, func() time.Time { return now }); err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_agent_runtime_status SET desired_configuration_revision=2, applied_configuration_revision=2, scheduler_health='ready', collection_progress='running' WHERE agent_id=$1`, created.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	id, ok := canonicalUUID(created.Agent.ID)
+	if !ok {
+		t.Fatal("invalid agent ID")
+	}
+	rows, err := dbgen.New(conn).UpdateAgentRuntimeHeartbeat(t.Context(), dbgen.UpdateAgentRuntimeHeartbeatParams{AgentID: id, Generation: 1, ReceivedAt: timestamp(now), AppliedConfigurationRevision: 1, SchedulerHealth: "degraded", CollectionProgress: "blocked"})
+	if err != nil || rows != 1 {
+		t.Fatalf("stale heartbeat rows=%d err=%v", rows, err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_agent_runtime_status SET desired_configuration_revision=3 WHERE agent_id=$1`, created.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = dbgen.New(conn).UpdateAgentRuntimeHeartbeat(t.Context(), dbgen.UpdateAgentRuntimeHeartbeatParams{AgentID: id, Generation: 1, ReceivedAt: timestamp(now), AppliedConfigurationRevision: 3, SchedulerHealth: "ready", CollectionProgress: "running"})
+	if err != nil || rows != 1 {
+		t.Fatalf("unacknowledged heartbeat rows=%d err=%v", rows, err)
+	}
+	var revision int64
+	var health, progress string
+	if err := conn.QueryRow(t.Context(), `SELECT applied_configuration_revision,scheduler_health,collection_progress FROM public.almanac_agent_runtime_status WHERE agent_id=$1`, created.Agent.ID).Scan(&revision, &health, &progress); err != nil || revision != 2 || health != "ready" || progress != "running" {
+		t.Fatalf("stale heartbeat regressed status revision=%d health=%s progress=%s err=%v", revision, health, progress, err)
 	}
 }

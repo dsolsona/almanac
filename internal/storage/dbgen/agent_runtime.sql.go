@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const agentConfigurationRevisionExists = `-- name: AgentConfigurationRevisionExists :one
+SELECT EXISTS (SELECT 1 FROM public.almanac_agent_configurations WHERE agent_id = $1 AND revision = $2)
+`
+
+type AgentConfigurationRevisionExistsParams struct {
+	AgentID  pgtype.UUID `json:"agent_id"`
+	Revision int64       `json:"revision"`
+}
+
+func (q *Queries) AgentConfigurationRevisionExists(ctx context.Context, arg AgentConfigurationRevisionExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, agentConfigurationRevisionExists, arg.AgentID, arg.Revision)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const deleteAgentIncompatibleAttempt = `-- name: DeleteAgentIncompatibleAttempt :exec
 DELETE FROM public.almanac_agent_incompatible_attempts
 WHERE agent_id = $1
@@ -320,7 +336,7 @@ func (q *Queries) SetAgentCurrentExecutionLease(ctx context.Context, arg SetAgen
 
 const updateAgentAppliedConfiguration = `-- name: UpdateAgentAppliedConfiguration :execrows
 UPDATE public.almanac_agent_runtime_status AS status
-SET applied_configuration_revision = $1,
+SET applied_configuration_revision = GREATEST(status.applied_configuration_revision, $1),
     configuration_failure_code = CASE
         WHEN $1 < status.desired_configuration_revision
         THEN status.configuration_failure_code ELSE NULL END,
@@ -360,24 +376,26 @@ func (q *Queries) UpdateAgentAppliedConfiguration(ctx context.Context, arg Updat
 const updateAgentRuntimeHeartbeat = `-- name: UpdateAgentRuntimeHeartbeat :execrows
 UPDATE public.almanac_agent_runtime_status AS status
 SET last_heartbeat_at = $1,
-    applied_configuration_revision = $2,
+    applied_configuration_revision = status.applied_configuration_revision,
     scheduler_health = CASE
+        WHEN $2 <> status.applied_configuration_revision THEN status.scheduler_health
         WHEN status.configuration_failure_code IS NOT NULL
           AND $2 < status.desired_configuration_revision
         THEN 'degraded' ELSE $3 END,
     collection_progress = CASE
+        WHEN $2 <> status.applied_configuration_revision THEN status.collection_progress
         WHEN status.configuration_failure_code IS NOT NULL
           AND $2 < status.desired_configuration_revision
         THEN 'blocked' ELSE $4 END,
     configuration_failure_code = CASE
-        WHEN $2 >= status.desired_configuration_revision
+        WHEN $2 = status.applied_configuration_revision AND status.applied_configuration_revision >= status.desired_configuration_revision
         THEN NULL ELSE status.configuration_failure_code END,
     configuration_failure_revision = CASE
-        WHEN $2 >= status.desired_configuration_revision
+        WHEN $2 = status.applied_configuration_revision AND status.applied_configuration_revision >= status.desired_configuration_revision
         THEN NULL ELSE status.configuration_failure_revision END,
-    last_attempt_at = $5,
-    last_successful_query_at = $6,
-    next_expected_execution_at = $7,
+    last_attempt_at = CASE WHEN $2 <> status.applied_configuration_revision THEN status.last_attempt_at ELSE $5 END,
+    last_successful_query_at = CASE WHEN $2 <> status.applied_configuration_revision THEN status.last_successful_query_at ELSE $6 END,
+    next_expected_execution_at = CASE WHEN $2 <> status.applied_configuration_revision THEN status.next_expected_execution_at ELSE $7 END,
     updated_at = $1
 WHERE status.agent_id = $8 AND status.generation = $9
   AND status.desired_configuration_revision >= $2

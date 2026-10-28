@@ -152,13 +152,16 @@ func (e AgentIssuanceReplaySecretState) Valid() bool {
 
 // Defines values for AgentRuntimeStatusCollectionExplanation.
 const (
-	NoAssignment AgentRuntimeStatusCollectionExplanation = "no_assignment"
+	AgentRuntimeStatusCollectionExplanationNoAssignment AgentRuntimeStatusCollectionExplanation = "no_assignment"
+	AgentRuntimeStatusCollectionExplanationNone         AgentRuntimeStatusCollectionExplanation = "none"
 )
 
 // Valid indicates whether the value is a known member of the AgentRuntimeStatusCollectionExplanation enum.
 func (e AgentRuntimeStatusCollectionExplanation) Valid() bool {
 	switch e {
-	case NoAssignment:
+	case AgentRuntimeStatusCollectionExplanationNoAssignment:
+		return true
+	case AgentRuntimeStatusCollectionExplanationNone:
 		return true
 	default:
 		return false
@@ -411,6 +414,24 @@ func (e DatasourceAuthenticationMode) Valid() bool {
 	case DatasourceAuthenticationModeBearer:
 		return true
 	case DatasourceAuthenticationModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DatasourceReassignmentState.
+const (
+	ReplacementUnavailable  DatasourceReassignmentState = "replacement_unavailable"
+	WaitingForPreviousAgent DatasourceReassignmentState = "waiting_for_previous_agent"
+)
+
+// Valid indicates whether the value is a known member of the DatasourceReassignmentState enum.
+func (e DatasourceReassignmentState) Valid() bool {
+	switch e {
+	case ReplacementUnavailable:
+		return true
+	case WaitingForPreviousAgent:
 		return true
 	default:
 		return false
@@ -1255,6 +1276,13 @@ type AgentCredential struct {
 	RevokedAt *time.Time         `json:"revoked_at"`
 }
 
+// AgentDatasource defines model for AgentDatasource.
+type AgentDatasource struct {
+	DisplayName string             `json:"display_name"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+}
+
 // AgentDatasourceAssignment defines model for AgentDatasourceAssignment.
 type AgentDatasourceAssignment struct {
 	AuthenticationMode     AgentDatasourceAssignmentAuthenticationMode  `json:"authentication_mode"`
@@ -1283,6 +1311,12 @@ type AgentDatasourceAssignmentConfigurationFormat string
 
 // AgentDatasourceAssignmentProvider defines model for AgentDatasourceAssignment.Provider.
 type AgentDatasourceAssignmentProvider string
+
+// AgentDatasourcePage defines model for AgentDatasourcePage.
+type AgentDatasourcePage struct {
+	Items      []AgentDatasource `json:"items"`
+	NextCursor string            `json:"next_cursor"`
+}
 
 // AgentIssuance defines model for AgentIssuance.
 type AgentIssuance struct {
@@ -1325,6 +1359,9 @@ type AgentIssuanceReplayReplayed bool
 
 // AgentIssuanceReplaySecretState defines model for AgentIssuanceReplay.SecretState.
 type AgentIssuanceReplaySecretState string
+
+// AgentLifecycleRequest defines model for AgentLifecycleRequest.
+type AgentLifecycleRequest = map[string]interface{}
 
 // AgentPage defines model for AgentPage.
 type AgentPage struct {
@@ -1450,6 +1487,7 @@ type Datasource struct {
 	Name                   string                         `json:"name"`
 	PollingIntervalSeconds int                            `json:"polling_interval_seconds"`
 	Provider               DatasourceProvider             `json:"provider"`
+	Reassignment           *DatasourceReassignment        `json:"reassignment,omitempty"`
 	SettlingDelaySeconds   DatasourceSettlingDelaySeconds `json:"settling_delay_seconds"`
 	Tls                    DatasourceTLS                  `json:"tls"`
 	UpdatedAt              time.Time                      `json:"updated_at"`
@@ -1481,6 +1519,18 @@ type DatasourcePage struct {
 	Items      []Datasource `json:"items"`
 	NextCursor string       `json:"next_cursor"`
 }
+
+// DatasourceReassignment defines model for DatasourceReassignment.
+type DatasourceReassignment struct {
+	AuthorityExpiresAt time.Time                   `json:"authority_expires_at"`
+	RequestedAt        time.Time                   `json:"requested_at"`
+	SourceAgentId      openapi_types.UUID          `json:"source_agent_id"`
+	State              DatasourceReassignmentState `json:"state"`
+	TargetAgentId      openapi_types.UUID          `json:"target_agent_id"`
+}
+
+// DatasourceReassignmentState defines model for DatasourceReassignment.State.
+type DatasourceReassignmentState string
 
 // DatasourceTLS defines model for DatasourceTLS.
 type DatasourceTLS struct {
@@ -1672,15 +1722,9 @@ type ObservedOutcome struct {
 // ObservedOutcomeState defines model for ObservedOutcome.State.
 type ObservedOutcomeState string
 
-// PasswordProofRequest defines model for PasswordProofRequest.
-type PasswordProofRequest struct {
-	CurrentPassword string `json:"current_password"`
-}
-
 // PasswordRequest defines model for PasswordRequest.
 type PasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
+	NewPassword string `json:"new_password"`
 }
 
 // Problem defines model for Problem.
@@ -1748,7 +1792,6 @@ type QueryPreviewRequest struct {
 
 // RotateAgentRequest defines model for RotateAgentRequest.
 type RotateAgentRequest struct {
-	CurrentPassword string `json:"current_password"`
 	LifetimeSeconds *int32 `json:"lifetime_seconds,omitempty"`
 	OverlapSeconds  *int32 `json:"overlap_seconds,omitempty"`
 }
@@ -1991,6 +2034,15 @@ type PostAgentsParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// DeleteAgentParams defines parameters for DeleteAgent.
+type DeleteAgentParams struct {
+	// IfMatch Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected.
+	IfMatch IfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAgentCredentialsParams defines parameters for GetAgentCredentials.
 type GetAgentCredentialsParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2013,6 +2065,12 @@ type PostAgentCredentialRevokeParams struct {
 
 	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAgentDatasourcesParams defines parameters for GetAgentDatasources.
+type GetAgentDatasourcesParams struct {
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // PostAgentDisableParams defines parameters for PostAgentDisable.
@@ -2089,14 +2147,17 @@ type PostAgentObservationsJSONRequestBody = ObservationBatchRequest
 // PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
 type PostAgentsJSONRequestBody = CreateAgentRequest
 
+// DeleteAgentJSONRequestBody defines body for DeleteAgent for application/json ContentType.
+type DeleteAgentJSONRequestBody = AgentLifecycleRequest
+
 // PostAgentCredentialRotateJSONRequestBody defines body for PostAgentCredentialRotate for application/json ContentType.
 type PostAgentCredentialRotateJSONRequestBody = RotateAgentRequest
 
 // PostAgentCredentialRevokeJSONRequestBody defines body for PostAgentCredentialRevoke for application/json ContentType.
-type PostAgentCredentialRevokeJSONRequestBody = PasswordProofRequest
+type PostAgentCredentialRevokeJSONRequestBody = AgentLifecycleRequest
 
 // PostAgentDisableJSONRequestBody defines body for PostAgentDisable for application/json ContentType.
-type PostAgentDisableJSONRequestBody = PasswordProofRequest
+type PostAgentDisableJSONRequestBody = AgentLifecycleRequest
 
 // PostAuthContextJSONRequestBody defines body for PostAuthContext for application/json ContentType.
 type PostAuthContextJSONRequestBody = EmptyAuthRequest
@@ -2511,6 +2572,24 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
 	PostAgents(ctx context.Context, params *PostAgentsParams, body PostAgentsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteAgentWithBody Archive an unassigned agent and revoke all credentials
+	//
+	// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+	DeleteAgentWithBody(ctx context.Context, agentId AgentId, params *DeleteAgentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteAgent Archive an unassigned agent and revoke all credentials
+	//
+	// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+	DeleteAgent(ctx context.Context, agentId AgentId, params *DeleteAgentParams, body DeleteAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAgent Read an agent
 	//
 	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
@@ -2560,6 +2639,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
 	PostAgentCredentialRevoke(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAgentDatasources List assigned datasource dependencies, including disabled sources
+	//
+	// Corresponds with GET /api/v1/agents/{agent_id}/datasources (the `GetAgentDatasources` operationId).
+	GetAgentDatasources(ctx context.Context, agentId AgentId, params *GetAgentDatasourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostAgentDisableWithBody Disable an agent
 	//
@@ -2981,6 +3065,44 @@ func (c *Client) PostAgents(ctx context.Context, params *PostAgentsParams, body 
 	return c.Client.Do(req)
 }
 
+// DeleteAgentWithBody Archive an unassigned agent and revoke all credentials
+//
+// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+func (c *Client) DeleteAgentWithBody(ctx context.Context, agentId AgentId, params *DeleteAgentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAgentRequestWithBody(c.Server, agentId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteAgent Archive an unassigned agent and revoke all credentials
+//
+// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+func (c *Client) DeleteAgent(ctx context.Context, agentId AgentId, params *DeleteAgentParams, body DeleteAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAgentRequest(c.Server, agentId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetAgent Read an agent
 //
 // Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
@@ -3081,6 +3203,21 @@ func (c *Client) PostAgentCredentialRevokeWithBody(ctx context.Context, agentId 
 // Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
 func (c *Client) PostAgentCredentialRevoke(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAgentCredentialRevokeRequest(c.Server, agentId, credentialId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAgentDatasources List assigned datasource dependencies, including disabled sources
+//
+// Corresponds with GET /api/v1/agents/{agent_id}/datasources (the `GetAgentDatasources` operationId).
+func (c *Client) GetAgentDatasources(ctx context.Context, agentId AgentId, params *GetAgentDatasourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentDatasourcesRequest(c.Server, agentId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3973,6 +4110,75 @@ func NewPostAgentsRequestWithBody(server string, params *PostAgentsParams, conte
 	return req, nil
 }
 
+// NewDeleteAgentRequest calls the generic DeleteAgent builder with application/json body
+func NewDeleteAgentRequest(server string, agentId AgentId, params *DeleteAgentParams, body DeleteAgentJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteAgentRequestWithBody(server, agentId, params, "application/json", bodyReader)
+}
+
+// NewDeleteAgentRequestWithBody constructs an http.Request for the DeleteAgent method, with any body, and a specified content type
+func NewDeleteAgentRequestWithBody(server string, agentId AgentId, params *DeleteAgentParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewGetAgentRequest constructs an http.Request for the GetAgent method
 func NewGetAgentRequest(server string, agentId AgentId) (*http.Request, error) {
 	var err error
@@ -4220,6 +4426,79 @@ func NewPostAgentCredentialRevokeRequestWithBody(server string, agentId AgentId,
 
 		req.Header.Set("Idempotency-Key", headerParam1)
 
+	}
+
+	return req, nil
+}
+
+// NewGetAgentDatasourcesRequest constructs an http.Request for the GetAgentDatasources method
+func NewGetAgentDatasourcesRequest(server string, agentId AgentId, params *GetAgentDatasourcesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agent_id", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agents/%s/datasources", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -5414,6 +5693,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/agents (the `PostAgents` operationId).
 	PostAgentsWithResponse(ctx context.Context, params *PostAgentsParams, body PostAgentsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentsResponse, error)
 
+	// DeleteAgentWithBodyWithResponse Archive an unassigned agent and revoke all credentials
+	//
+	// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+	DeleteAgentWithBodyWithResponse(ctx context.Context, agentId AgentId, params *DeleteAgentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteAgentResponse, error)
+
+	// DeleteAgentWithResponse Archive an unassigned agent and revoke all credentials
+	//
+	// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+	DeleteAgentWithResponse(ctx context.Context, agentId AgentId, params *DeleteAgentParams, body DeleteAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteAgentResponse, error)
+
 	// GetAgentWithResponse Read an agent
 	//
 	// Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
@@ -5467,6 +5764,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke (the `PostAgentCredentialRevoke` operationId).
 	PostAgentCredentialRevokeWithResponse(ctx context.Context, agentId AgentId, credentialId openapi_types.UUID, params *PostAgentCredentialRevokeParams, body PostAgentCredentialRevokeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentCredentialRevokeResponse, error)
+
+	// GetAgentDatasourcesWithResponse List assigned datasource dependencies, including disabled sources
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/agents/{agent_id}/datasources (the `GetAgentDatasources` operationId).
+	GetAgentDatasourcesWithResponse(ctx context.Context, agentId AgentId, params *GetAgentDatasourcesParams, reqEditors ...RequestEditorFn) (*GetAgentDatasourcesResponse, error)
 
 	// PostAgentDisableWithBodyWithResponse Disable an agent
 	//
@@ -6068,6 +6372,54 @@ func (r PostAgentsResponse) ContentType() string {
 	return ""
 }
 
+type DeleteAgentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LifecycleResult
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteAgentResponse) GetJSON200() *LifecycleResult {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r DeleteAgentResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteAgentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAgentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAgentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteAgentResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetAgentResponse200Headers the declared response headers of an HTTP 200 response for GetAgent
 type GetAgentResponse200Headers struct {
 	ETag *string
@@ -6261,6 +6613,54 @@ func (r PostAgentCredentialRevokeResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostAgentCredentialRevokeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAgentDatasourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AgentDatasourcePage
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAgentDatasourcesResponse) GetJSON200() *AgentDatasourcePage {
+	return r.JSON200
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetAgentDatasourcesResponse) GetJSONDefault() *Problem {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAgentDatasourcesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentDatasourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentDatasourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAgentDatasourcesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -7849,6 +8249,36 @@ func (c *ClientWithResponses) PostAgentsWithResponse(ctx context.Context, params
 	return ParsePostAgentsResponse(rsp)
 }
 
+// DeleteAgentWithBodyWithResponse Archive an unassigned agent and revoke all credentials
+//
+// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+func (c *ClientWithResponses) DeleteAgentWithBodyWithResponse(ctx context.Context, agentId AgentId, params *DeleteAgentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteAgentResponse, error) {
+	rsp, err := c.DeleteAgentWithBody(ctx, agentId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAgentResponse(rsp)
+}
+
+// DeleteAgentWithResponse Archive an unassigned agent and revoke all credentials
+//
+// Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/agents/{agent_id} (the `DeleteAgent` operationId).
+func (c *ClientWithResponses) DeleteAgentWithResponse(ctx context.Context, agentId AgentId, params *DeleteAgentParams, body DeleteAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteAgentResponse, error) {
+	rsp, err := c.DeleteAgent(ctx, agentId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAgentResponse(rsp)
+}
+
 // GetAgentWithResponse Read an agent
 //
 // Requires the local session cookie. GET permits an absent Origin and does not require CSRF. The strong ETag contains the canonical agent UUID and positive decimal version.
@@ -7937,6 +8367,19 @@ func (c *ClientWithResponses) PostAgentCredentialRevokeWithResponse(ctx context.
 		return nil, err
 	}
 	return ParsePostAgentCredentialRevokeResponse(rsp)
+}
+
+// GetAgentDatasourcesWithResponse List assigned datasource dependencies, including disabled sources
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/agents/{agent_id}/datasources (the `GetAgentDatasources` operationId).
+func (c *ClientWithResponses) GetAgentDatasourcesWithResponse(ctx context.Context, agentId AgentId, params *GetAgentDatasourcesParams, reqEditors ...RequestEditorFn) (*GetAgentDatasourcesResponse, error) {
+	rsp, err := c.GetAgentDatasources(ctx, agentId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentDatasourcesResponse(rsp)
 }
 
 // PostAgentDisableWithBodyWithResponse Disable an agent
@@ -8688,6 +9131,39 @@ func ParsePostAgentsResponse(rsp *http.Response) (*PostAgentsResponse, error) {
 	return response, nil
 }
 
+// ParseDeleteAgentResponse parses an HTTP response from a DeleteAgentWithResponse call
+func ParseDeleteAgentResponse(rsp *http.Response) (*DeleteAgentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAgentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LifecycleResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetAgentResponse parses an HTTP response from a GetAgentWithResponse call
 func ParseGetAgentResponse(rsp *http.Response) (*GetAgentResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8816,6 +9292,39 @@ func ParsePostAgentCredentialRevokeResponse(rsp *http.Response) (*PostAgentCrede
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest LifecycleResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAgentDatasourcesResponse parses an HTTP response from a GetAgentDatasourcesWithResponse call
+func ParseGetAgentDatasourcesResponse(rsp *http.Response) (*GetAgentDatasourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentDatasourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentDatasourcePage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -10075,6 +10584,9 @@ type ServerInterface interface {
 	// PostAgents Create an agent
 	// (POST /api/v1/agents)
 	PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams)
+	// DeleteAgent Archive an unassigned agent and revoke all credentials
+	// (DELETE /api/v1/agents/{agent_id})
+	DeleteAgent(w http.ResponseWriter, r *http.Request, agentId AgentId, params DeleteAgentParams)
 	// GetAgent Read an agent
 	// (GET /api/v1/agents/{agent_id})
 	GetAgent(w http.ResponseWriter, r *http.Request, agentId AgentId)
@@ -10087,6 +10599,9 @@ type ServerInterface interface {
 	// PostAgentCredentialRevoke Revoke an agent credential
 	// (POST /api/v1/agents/{agent_id}/credentials/{credential_id}/revoke)
 	PostAgentCredentialRevoke(w http.ResponseWriter, r *http.Request, agentId AgentId, credentialId openapi_types.UUID, params PostAgentCredentialRevokeParams)
+	// GetAgentDatasources List assigned datasource dependencies, including disabled sources
+	// (GET /api/v1/agents/{agent_id}/datasources)
+	GetAgentDatasources(w http.ResponseWriter, r *http.Request, agentId AgentId, params GetAgentDatasourcesParams)
 	// PostAgentDisable Disable an agent
 	// (POST /api/v1/agents/{agent_id}/disable)
 	PostAgentDisable(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAgentDisableParams)
@@ -10364,6 +10879,83 @@ func (siw *ServerInterfaceWrapper) PostAgents(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteAgent operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAgent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteAgentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAgent(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAgent operation middleware
 func (siw *ServerInterfaceWrapper) GetAgent(w http.ResponseWriter, r *http.Request) {
 
@@ -10599,6 +11191,61 @@ func (siw *ServerInterfaceWrapper) PostAgentCredentialRevoke(w http.ResponseWrit
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAgentCredentialRevoke(w, r, agentId, credentialId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentDatasources operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentDatasources(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agent_id" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent_id", r.PathValue("agent_id"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentDatasourcesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentDatasources(w, r, agentId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11497,7 +12144,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/logout", wrapper.PostAuthLogout)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents", wrapper.GetAgents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents", wrapper.PostAgents)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/agents/{agent_id}", wrapper.DeleteAgent)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents/{agent_id}", wrapper.GetAgent)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents/{agent_id}/datasources", wrapper.GetAgentDatasources)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials", wrapper.GetAgentCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/disable", wrapper.PostAgentDisable)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/agents/{agent_id}/credentials/rotate", wrapper.PostAgentCredentialRotate)

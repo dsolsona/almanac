@@ -20,6 +20,8 @@ const messages: Record<string, string> = {
   forbidden: 'Your role does not allow this operation.',
   not_found: 'The requested SLI or datasource was not found.',
   conflict: 'The SLI changed. Refresh it and review the current version.',
+  reassignment_pending: 'This agent is completing a datasource move. Wait for it to finish or cancel the move before changing collection settings.',
+  reassignment_settings_conflict: 'Save connection changes before changing the assigned agent.',
   invalid_request: 'The SLI request input is invalid. Review the fields and try again.',
   unsupported_measurement: 'This measurement kind or component mode is not supported by the current collector.',
   measurement_conflict: 'The datasource cadence or agent assignment cannot change while this SLI uses it.',

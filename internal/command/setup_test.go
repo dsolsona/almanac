@@ -230,7 +230,7 @@ func TestSetupCommandWritesOnlyRequestedSuccessFormat(t *testing.T) {
 				Current string `json:"current_password"`
 				New     string `json:"new_password"`
 			}
-			if err := json.UnmarshalRead(r.Body, &body); err != nil || body.Current != initial || body.New != permanent {
+			if err := json.UnmarshalRead(r.Body, &body); err != nil || body.Current != "" || body.New != permanent {
 				t.Error("password request did not preserve its inputs")
 			}
 			if r.Header.Get("X-CSRF-Token") != "restricted-csrf" {

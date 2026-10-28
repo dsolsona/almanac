@@ -11,6 +11,24 @@ function response(body: unknown, status = 200, headers: Record<string, string> =
 afterEach(() => vi.unstubAllGlobals());
 
 describe('datasource client', () => {
+  it('treats configuration pending as a definite rejected move', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ code: 'configuration_pending' }, 503)));
+    const input = { name: 'metrics-prod', display_name: 'Production metrics', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } }, polling_interval_seconds: 60, agent_id: agent } as const;
+    await expect(createDatasourceClient().save(input, context, 'key', `"datasource:${id}:4"`)).rejects.toMatchObject({ code: 'configuration_pending', status: 503, uncertain: false, message: 'The agent is applying configuration. Wait until it is ready and try again.' });
+  });
+  it.each([['reassignment_pending', 409, 'This agent is completing a datasource move. Wait for it to finish or cancel the move before changing collection settings.'], ['reassignment_settings_conflict', 422, 'Save connection changes before changing the assigned agent.']])('explains %s', async (code, status, message) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ code }, status)));
+    await expect(createDatasourceClient().get(id)).rejects.toMatchObject({ code, status, message });
+  });
+  it('accepts a bounded pending reassignment and rejects mismatched owners', async () => {
+    const reassignment = { source_agent_id: agent, target_agent_id: id, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T13:00:00Z', state: 'waiting_for_previous_agent' };
+    const fetcher = vi.fn().mockResolvedValue(response({ ...source(), reassignment }, 200, { ETag: `"datasource:${id}:4"` })); vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().get(id)).resolves.toMatchObject({ datasource: { agent_id: agent, reassignment } });
+    fetcher.mockResolvedValue(response({ ...source(), reassignment: { ...reassignment, source_agent_id: id } }, 200, { ETag: `"datasource:${id}:4"` }));
+    await expect(createDatasourceClient().get(id)).rejects.toMatchObject({ code: 'invalid_response' });
+    fetcher.mockResolvedValue(response({ ...source(), reassignment: { ...reassignment, state: ['waiting_for_previous_agent'] } }, 200, { ETag: `"datasource:${id}:4"` }));
+    await expect(createDatasourceClient().get(id)).rejects.toMatchObject({ code: 'invalid_response' });
+  });
   it('reads a redacted datasource and validates its canonical version ETag', async () => {
     const fetcher = vi.fn().mockResolvedValue(response(source(), 200, { ETag: `"datasource:${id}:4"` }));
     vi.stubGlobal('fetch', fetcher);
@@ -67,7 +85,7 @@ describe('datasource client', () => {
     const fetcher = vi.fn().mockResolvedValue(response({ code: 'configuration_pending', message: 'untrusted backend detail' }, 503));
     vi.stubGlobal('fetch', fetcher);
     const input = { provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } }, agent_id: agent } as const;
-    await expect(createDatasourceClient().connectionTest(input, context)).rejects.toMatchObject({ code: 'configuration_pending', status: 503, uncertain: false, message: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.' });
+    await expect(createDatasourceClient().connectionTest(input, context)).rejects.toMatchObject({ code: 'configuration_pending', status: 503, uncertain: false, message: 'The agent is applying configuration. Wait until it is ready and try again.' });
   });
 
   it('tests stored datasource credentials by ID and exact version without sending settings or secrets', async () => {

@@ -5,7 +5,7 @@
 - Accepted: 2026-10-27
 - Approval: The maintainer explicitly selected “Use the signed-in administrator session” for agent registration, retaining role checks, CSRF protection and auditing.
 - Related specs: [SPEC-0004](../specs/0004-identity-and-access.md), [SPEC-0010](../specs/0010-api-and-cli.md)
-- Supersedes / superseded by: Narrows the credential-issuance policy under [ADR-0004](0004-identity-and-access.md) for agent registration only.
+- Supersedes / superseded by: Narrows the credential-issuance policy under [ADR-0004](0004-identity-and-access.md) for agent registration only; extended by [ADR-0020](0020-session-authorized-management.md).
 
 ## Context
 

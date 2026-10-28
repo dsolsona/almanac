@@ -280,6 +280,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     }
     if (fixture.scenario === 'agents-lifecycle') {
       await runAgentLifecycleJourney({ page, context, fixture, setStage, registration: evidence, tokenEvidence });
+      await expect(page.getByRole('button', { name: 'Refresh agents', exact: true })).toBeEnabled();
     }
     setStage('real session invalidation and UI reconciliation');
     // Revoke the real session independently of the UI's local authentication
@@ -292,7 +293,14 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
       return logout.status;
     });
     assert.equal(invalidation, 204);
-    await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+    if (fixture.scenario === 'agents-lifecycle') {
+      const listRead = page.waitForResponse((response) => response.request().method() === 'GET'
+        && new URL(response.url()).pathname === '/api/v1/agents');
+      await page.getByRole('button', { name: 'Refresh agents', exact: true }).click();
+      assert.equal((await listRead).status(), 401);
+    } else {
+      await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+    }
     await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toHaveCount(0);
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);

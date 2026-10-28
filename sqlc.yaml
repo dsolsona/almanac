@@ -17,6 +17,8 @@ sql:
       - internal/storage/migrations/0011_datasources.sql
       - internal/storage/migrations/0012_diagnostic_result_digest.sql
       - internal/storage/migrations/0013_sli_observations.sql
+      - internal/storage/migrations/0014_agent_archival.sql
+      - internal/storage/migrations/0015_datasource_reassignment.sql
     gen:
       go:
         package: dbgen

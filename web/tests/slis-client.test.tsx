@@ -12,6 +12,10 @@ function historyPage(items: unknown[]) { return { items, next_cursor: '', earlie
 afterEach(() => vi.unstubAllGlobals());
 
 describe('SLI client', () => {
+  it.each([['reassignment_pending', 409, 'This agent is completing a datasource move. Wait for it to finish or cancel the move before changing collection settings.'], ['reassignment_settings_conflict', 422, 'Save connection changes before changing the assigned agent.']])('explains %s', async (code, status, message) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ code }, status)));
+    await expect(createSliClient().get(id)).rejects.toMatchObject({ code, status, message });
+  });
   it('creates with CSRF and idempotency, then verifies the resource ETag', async () => {
     const fetcher = vi.fn().mockResolvedValue(response(sli(), 201, { ETag: `"sli:${id}:2"` }));
     vi.stubGlobal('fetch', fetcher);

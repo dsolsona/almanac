@@ -84,11 +84,11 @@ describe('browser authentication client', () => {
       csrf_token: 'next-csrf', session: { ...signedIn.session, restricted: true },
     }));
     await expect(createAuthClient(fetcher).changePassword(
-      { current_password: 'old', new_password: 'new' }, signedIn,
+      { new_password: 'new' }, signedIn,
     )).rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
     const neverFetch = vi.fn<typeof fetch>();
     await expect(createAuthClient(neverFetch).changePassword(
-      { current_password: 'old', new_password: 'new' }, context,
+      { new_password: 'new' }, context,
     )).rejects.toMatchObject({ kind: 'rejected' });
     expect(neverFetch).not.toHaveBeenCalled();
   });
@@ -97,16 +97,16 @@ describe('browser authentication client', () => {
     const changed = { csrf_token: 'rotated-csrf', session: signedIn.session };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(changed));
     await expect(createAuthClient(fetcher).changePassword(
-      { current_password: 'old', new_password: 'new' }, signedIn,
+      { new_password: 'new' }, signedIn,
     )).resolves.toEqual(changed);
     expect(fetcher.mock.calls[0][0]).toBe('/api/v1/auth/password');
-    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ current_password: 'old', new_password: 'new' });
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ new_password: 'new' });
     expect(fetcher.mock.calls[0][1]).toMatchObject({ credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' });
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-CSRF-Token')).toBe(signedIn.csrf_token);
     const differentUser = { csrf_token: 'rotated', session: { ...signedIn.session, user_id: 'user-2' } };
     const mismatchFetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(differentUser)).mockResolvedValueOnce(jsonResponse(context));
     await expect(createAuthClient(mismatchFetcher).changePassword(
-      { current_password: 'old', new_password: 'new' }, signedIn,
+      { new_password: 'new' }, signedIn,
     )).rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
     expect(mismatchFetcher.mock.calls.map(([url]) => url)).toEqual(['/api/v1/auth/password', '/api/v1/auth/context']);
   });
@@ -132,7 +132,7 @@ describe('browser authentication client', () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('private transport detail'))
       .mockResolvedValueOnce(jsonResponse(signedIn));
     await expect(createAuthClient(fetcher).changePassword(
-      { current_password: 'old-secret', new_password: 'new-secret' }, signedIn,
+      { new_password: 'new-secret' }, signedIn,
     )).rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown', recovery: signedIn });
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(['/api/v1/auth/password', '/api/v1/auth/context']);
     expect(fetcher).toHaveBeenCalledTimes(2);

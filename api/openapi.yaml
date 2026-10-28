@@ -230,6 +230,31 @@ paths:
       responses:
         '200': {description: Agent, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Agent'}}}}
         'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    delete:
+      operationId: deleteAgent
+      summary: Archive an unassigned agent and revoke all credentials
+      description: Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentLifecycleRequest'}}}}
+      responses:
+        '200': {description: Deletion receipt, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/agents/{agent_id}/datasources:
+    get:
+      operationId: getAgentDatasources
+      summary: List assigned datasource dependencies, including disabled sources
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AgentId'}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Assigned datasource page, content: {application/json: {schema: {$ref: '#/components/schemas/AgentDatasourcePage'}}}}
+        'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/agents/{agent_id}/credentials:
     get:
       operationId: getAgentCredentials
@@ -253,7 +278,7 @@ paths:
         - {$ref: '#/components/parameters/AgentId'}
         - {$ref: '#/components/parameters/IfMatch'}
         - {$ref: '#/components/parameters/IdempotencyKey'}
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordProofRequest'}}}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentLifecycleRequest'}}}}
       responses:
         '200': {description: Disable result, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
         'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
@@ -282,7 +307,7 @@ paths:
         - {name: credential_id, in: path, required: true, schema: {type: string, format: uuid}}
         - {$ref: '#/components/parameters/IfMatch'}
         - {$ref: '#/components/parameters/IdempotencyKey'}
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordProofRequest'}}}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentLifecycleRequest'}}}}
       responses:
         '200': {description: Revoke result, content: {application/json: {schema: {$ref: '#/components/schemas/LifecycleResult'}}}}
         'default': {description: Request rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
@@ -810,8 +835,18 @@ components:
         polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
         settling_delay_seconds: {type: integer, enum: [60]}
         agent_id: {type: string, format: uuid}
+        reassignment: {$ref: '#/components/schemas/DatasourceReassignment'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    DatasourceReassignment:
+      type: object
+      required: [source_agent_id, target_agent_id, requested_at, authority_expires_at, state]
+      properties:
+        source_agent_id: {type: string, format: uuid}
+        target_agent_id: {type: string, format: uuid}
+        requested_at: {type: string, format: date-time}
+        authority_expires_at: {type: string, format: date-time}
+        state: {type: string, enum: [waiting_for_previous_agent, replacement_unavailable]}
     DatasourceTLS:
       type: object
       additionalProperties: false
@@ -958,7 +993,7 @@ components:
         last_attempt_at: {type: string, format: date-time, nullable: true}
         last_successful_query_at: {type: string, format: date-time, nullable: true}
         next_expected_execution_at: {type: string, format: date-time, nullable: true}
-        collection_explanation: {type: string, enum: [no_assignment]}
+        collection_explanation: {type: string, enum: [no_assignment, none]}
     AgentCapability:
       type: object
       required: [provider, configuration_formats, operations]
@@ -1043,17 +1078,26 @@ components:
     RotateAgentRequest:
       type: object
       additionalProperties: false
-      required: [current_password]
       properties:
-        current_password: {type: string, format: password}
         lifetime_seconds: {type: integer, minimum: 0, maximum: 31536000, format: int32}
         overlap_seconds: {type: integer, minimum: 0, maximum: 600, format: int32}
-    PasswordProofRequest:
+    AgentLifecycleRequest:
       type: object
       additionalProperties: false
-      required: [current_password]
+      properties: {}
+    AgentDatasourcePage:
+      type: object
+      required: [items, next_cursor]
       properties:
-        current_password: {type: string, format: password}
+        items: {type: array, items: {$ref: '#/components/schemas/AgentDatasource'}}
+        next_cursor: {type: string}
+    AgentDatasource:
+      type: object
+      required: [id, name, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
     LifecycleResult:
       type: object
       required: [agent, credential, changed, revoked_credential_count, replayed]
@@ -1134,10 +1178,9 @@ components:
         password: {type: string, format: password}
     PasswordRequest:
       type: object
-      required: [current_password, new_password]
+      required: [new_password]
       additionalProperties: false
       properties:
-        current_password: {type: string, format: password}
         new_password: {type: string, format: password}
     SafeIdentity:
       type: object

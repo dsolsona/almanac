@@ -106,7 +106,7 @@ describe('authentication page', () => {
   it('reloads into restricted setup without retaining a prior login credential', async () => {
     render(<AuthPage client={clientFor(restricted)} />);
     expect(await screen.findByRole('heading', { name: 'Set your permanent password' })).toBeVisible();
-    expect(screen.getByLabelText('Current password')).toHaveAttribute('autocomplete', 'current-password');
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
     expect(screen.getByLabelText('New password')).toHaveAttribute('autocomplete', 'new-password');
     expect(screen.getByLabelText('Confirm new password')).toHaveAttribute('autocomplete', 'new-password');
     expect(screen.getByText('Choose a different password with 15–128 characters. Spaces are welcome.')).toBeVisible();
@@ -269,11 +269,9 @@ describe('authentication page', () => {
     client.changePassword = vi.fn(() => new Promise<AuthContext>((resolve) => { complete = resolve; }));
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Set your permanent password' });
-    await user.type(screen.getByLabelText('Current password'), 'same password');
     await user.type(screen.getByLabelText('New password'), 'same password');
     await user.type(screen.getByLabelText('Confirm new password'), 'different password');
     await user.click(screen.getByRole('button', { name: 'Set password' }));
-    expect(await screen.findByText('Choose a new password that differs from the current password.')).toBeVisible();
     expect(screen.getByText('Enter the same new password again.')).toBeVisible();
     expect(client.changePassword).not.toHaveBeenCalled();
     await user.clear(screen.getByLabelText('New password'));
@@ -282,12 +280,11 @@ describe('authentication page', () => {
     await user.type(screen.getByLabelText('Confirm new password'), 'a new permanent password');
     await user.click(screen.getByRole('button', { name: 'Set password' }));
     await waitFor(() => expect(client.changePassword).toHaveBeenCalledOnce());
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
     expect(screen.getByLabelText('New password')).toHaveValue('');
     expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
     complete(signedIn);
     expect(await screen.findByText('Your permanent password is set.')).toBeVisible();
-    expect(client.changePassword).toHaveBeenCalledWith({ current_password: 'same password', new_password: 'a new permanent password' }, restricted, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(client.changePassword).toHaveBeenCalledWith({ new_password: 'a new permanent password' }, restricted, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it('enforces password limits by UTF-8 bytes and Unicode code points', async () => {
@@ -295,16 +292,6 @@ describe('authentication page', () => {
     const client = clientFor(restricted);
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Set your permanent password' });
-    await user.click(screen.getByLabelText('Current password'));
-    await user.paste('c'.repeat(513));
-    await user.type(screen.getByLabelText('New password'), 'a'.repeat(15));
-    await user.type(screen.getByLabelText('Confirm new password'), 'a'.repeat(15));
-    await user.click(screen.getByRole('button', { name: 'Set password' }));
-    expect(await screen.findByText('Password is too long. Check it and try again.')).toBeVisible();
-    expect(client.changePassword).not.toHaveBeenCalled();
-    await user.clear(screen.getByLabelText('Current password'));
-    await user.type(screen.getByLabelText('Current password'), 'current');
-    await user.clear(screen.getByLabelText('New password'));
     await user.click(screen.getByLabelText('New password'));
     await user.paste('a'.repeat(129));
     await user.clear(screen.getByLabelText('Confirm new password'));
@@ -347,7 +334,6 @@ describe('authentication page', () => {
     client.logout = vi.fn().mockRejectedValue(new AuthFailure('unavailable', 'logout_unconfirmed', 'untrusted text'));
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Set your permanent password' });
-    await user.type(screen.getByLabelText('Current password'), 'draft current');
     await user.type(screen.getByLabelText('New password'), 'draft new password');
     await user.type(screen.getByLabelText('Confirm new password'), 'mismatched draft password');
     await user.click(screen.getByRole('button', { name: 'Set password' }));
@@ -355,7 +341,6 @@ describe('authentication page', () => {
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not be confirmed/i);
     expect(screen.getByRole('heading', { name: 'Set your permanent password' })).toBeVisible();
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
     expect(screen.getByLabelText('New password')).toHaveValue('');
     expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
     expect(screen.queryByText('Enter the same new password again.')).not.toBeInTheDocument();
@@ -370,7 +355,6 @@ describe('authentication page', () => {
     client.login = vi.fn().mockResolvedValue(restricted);
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Set your permanent password' });
-    await user.type(screen.getByLabelText('Current password'), 'draft current');
     await user.type(screen.getByLabelText('New password'), 'draft new password');
     await user.type(screen.getByLabelText('Confirm new password'), 'draft new password');
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -379,7 +363,6 @@ describe('authentication page', () => {
     await user.type(screen.getByLabelText('Password'), 'initial password');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('heading', { name: 'Set your permanent password' })).toBeVisible();
-    expect(screen.getByLabelText('Current password')).toHaveValue('');
     expect(screen.getByLabelText('New password')).toHaveValue('');
     expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
     expect(client.changePassword).not.toHaveBeenCalled();
@@ -393,7 +376,6 @@ describe('authentication page', () => {
     client.changePassword = vi.fn().mockRejectedValue(new AuthFailure('uncertain', 'outcome_unknown', 'untrusted text', anonymous));
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Set your permanent password' });
-    await user.type(screen.getByLabelText('Current password'), 'current password');
     await user.type(screen.getByLabelText('New password'), 'a different permanent password');
     await user.type(screen.getByLabelText('Confirm new password'), 'a different permanent password');
     await user.click(screen.getByRole('button', { name: 'Set password' }));

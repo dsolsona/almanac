@@ -64,7 +64,6 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [agentDraft, setAgentDraft] = useState<AgentSafeDraft>(emptyAgentDraft);
@@ -261,19 +260,16 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     setNotice(null);
     setShowCheckSession(false);
     const nextErrors: FieldErrors = {};
-    if (!currentPassword || byteLength(currentPassword) > 512) nextErrors.currentPassword = !currentPassword ? 'Enter your current password.' : 'Password is too long. Check it and try again.';
     const points = [...newPassword].length;
     if (points < 15) nextErrors.newPassword = 'Use at least 15 characters.';
     else if (points > 128 || byteLength(newPassword) > 512) nextErrors.newPassword = 'Use 128 characters or fewer.';
-    if (newPassword === currentPassword && currentPassword) nextErrors.newPassword = 'Choose a new password that differs from the current password.';
     if (confirmation !== newPassword) nextErrors.confirmation = 'Enter the same new password again.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       setNotice({ kind: 'error', text: 'Review the highlighted fields.' });
       return;
     }
-    const input = { current_password: currentPassword, new_password: newPassword };
-    setCurrentPassword('');
+    const input = { new_password: newPassword };
     setNewPassword('');
     setConfirmation('');
     setNotice(null);
@@ -300,7 +296,6 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     if (busy.current || !context?.session) return;
     busy.current = true;
     requestGeneration.current++;
-    setCurrentPassword('');
     setNewPassword('');
     setConfirmation('');
     setAgentDraft(emptyAgentDraft);
@@ -379,7 +374,6 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
       {!checking && !unavailable && context?.session?.restricted && <Panel heading="Choose a permanent password" className="auth-panel">
         <p>Choose a different password with 15–128 characters. Spaces are welcome.</p>
         <form noValidate onSubmit={(event) => void submitPassword(event)}>
-          <TextField id="current-password" label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} error={errors.currentPassword} disabled={pending} />
           <TextField id="new-password" label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} error={errors.newPassword} disabled={pending} />
           <TextField id="confirm-password" label="Confirm new password" type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} error={errors.confirmation} disabled={pending} />
           <div className="auth-actions"><Button type="submit" pending={pending}>Set password</Button><Button variant="outline" onClick={() => void signOut()} pending={pending}>Sign out</Button>

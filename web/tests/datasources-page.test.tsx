@@ -46,6 +46,92 @@ function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, na
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('datasource page', () => {
+  it.each([true, false])('reconciles an uncertain cancellation when pending is %s', async (stillPending) => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    const reassignment = { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T13:00:00Z', state: 'waiting_for_previous_agent' };
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West', enabled: true }, { id: target, display_name: 'Replacement', enabled: true }], next_cursor: '' });
+      if (path.startsWith('/api/v1/providers')) return response({ items: [] });
+      if (init?.method === 'PUT') throw new Error('lost response');
+      const first = reads++ === 0; const version = first ? '4' : '5';
+      return response({ ...source(), version, ...(first || stillPending ? { reassignment } : {}) }, 200, { ETag: `"datasource:${sourceID}:${version}"` });
+    }));
+    render(<DatasourcesPage context={admin} />);
+    await user.click(await screen.findByRole('button', { name: 'Cancel reassignment' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('outcome is unknown');
+    expect(screen.getByRole('button', { name: 'Cancel reassignment' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Reconcile save' }));
+    expect(await screen.findByText(stillPending ? /reassignment is still pending/ : /Review its current assignment/)).toHaveAttribute('role', 'status');
+    expect(screen.queryByText('Reassignment canceled.')).not.toBeInTheDocument();
+    expect(Boolean(screen.queryByRole('heading', { name: 'Moving datasource' }))).toBe(stillPending);
+  });
+  it('keeps a stale cancellation blocked and tells the user to refresh', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    const reassignment = { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T13:00:00Z', state: 'waiting_for_previous_agent' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West', enabled: true }, { id: target, display_name: 'Replacement', enabled: true }], next_cursor: '' });
+      if (path.startsWith('/api/v1/providers')) return response({ items: [] });
+      if (init?.method === 'PUT') return response({ code: 'conflict' }, 409);
+      return response({ ...source(), reassignment }, 200, { ETag: `"datasource:${sourceID}:4"` });
+    }));
+    render(<DatasourcesPage context={admin} />);
+    await user.click(await screen.findByRole('button', { name: 'Cancel reassignment' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Refresh it');
+    expect(screen.getByRole('heading', { name: 'Moving datasource' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel reassignment' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Refresh reassignment' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel reassignment' })).toBeEnabled());
+    expect(screen.queryByText('Reassignment canceled.')).not.toBeInTheDocument();
+  });
+  it('refreshes a pending handoff before presenting the replacement as active', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West', enabled: true }, { id: target, display_name: 'Replacement', enabled: true }], next_cursor: '' });
+      if (path.startsWith('/api/v1/providers')) return response({ items: [] });
+      if (++reads === 1) return response({ ...source(), reassignment: { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T13:00:00Z', state: 'waiting_for_previous_agent' } }, 200, { ETag: `"datasource:${sourceID}:4"` });
+      return response({ ...source(), agent_id: target, version: '5' }, 200, { ETag: `"datasource:${sourceID}:5"` });
+    }));
+    render(<DatasourcesPage context={admin} />);
+    expect(await screen.findByText(/Almanac will start Replacement after West stops collecting/)).toBeVisible();
+    expect(screen.getByText(/replacement may start later/)).toBeVisible();
+    expect(screen.getByLabelText('Assigned agent')).toHaveValue(agentID);
+    await user.click(screen.getByRole('button', { name: 'Refresh reassignment' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Moving datasource' })).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Assigned agent')).toHaveValue(target);
+  });
+  it('shows pending reassignment and cancels with the source and current version', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    const reassignment = { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T13:00:00Z', state: 'replacement_unavailable' };
+    let current: Record<string, unknown> = { ...source(), reassignment };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West collector', enabled: true }, { id: target, display_name: 'Replacement', enabled: true }], next_cursor: '' });
+      if (path.startsWith('/api/v1/providers')) return response({ items: [] });
+      if (init?.method === 'PUT') { current = { ...source(), version: '5' }; return response(current, 200, { ETag: `"datasource:${sourceID}:5"` }); }
+      return response(current, 200, { ETag: `"datasource:${sourceID}:4"` });
+    });
+    vi.stubGlobal('fetch', fetcher); render(<DatasourcesPage context={admin} />);
+    expect(await screen.findByRole('heading', { name: 'Moving datasource' })).toBeVisible();
+    expect(screen.getByText(/Replacement.*unavailable/i)).toBeVisible();
+    expect(screen.getByLabelText('Prometheus endpoint')).toBeDisabled();
+    expect(screen.getByLabelText('Assigned agent')).toHaveValue(agentID);
+    expect(screen.queryByText('Datasource settings saved.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel reassignment' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/datasources/${sourceID}`, expect.objectContaining({ method: 'PUT' })));
+    const request = fetcher.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1];
+    expect(new Headers(request?.headers).get('If-Match')).toBe(`"datasource:${sourceID}:4"`);
+    expect(JSON.parse(String(request?.body)).agent_id).toBe(agentID);
+    expect(await screen.findByText('Reassignment canceled.')).toBeVisible();
+  });
   it('returns to SLI creation with the created datasource when invoked from SLI', async () => {
     const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
     installFetch(); render(<DatasourcesPage context={admin} />);

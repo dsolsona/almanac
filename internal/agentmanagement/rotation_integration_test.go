@@ -63,7 +63,7 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 			return err
 		}, storage.ErrAgentForbidden},
 		{"rotate", func() error {
-			got, err := manager.Rotate(t.Context(), RotateInput{SessionSecret: restricted.Secret, CurrentPassword: password, Source: netip.MustParseAddr("192.0.2.173"), RequestID: "restricted-rotate", IdempotencyKey: "restricted-rotate", AgentID: restrictedTarget, ExpectedVersion: 1})
+			got, err := manager.Rotate(t.Context(), RotateInput{SessionSecret: restricted.Secret, Source: netip.MustParseAddr("192.0.2.173"), RequestID: "restricted-rotate", IdempotencyKey: "restricted-rotate", AgentID: restrictedTarget, ExpectedVersion: 1})
 			if got != (RotationIssuance{}) {
 				return errors.New("restricted Rotate returned data")
 			}
@@ -84,14 +84,14 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 			return err
 		}, storage.ErrAgentForbidden},
 		{"revoke", func() error {
-			got, err := manager.Revoke(t.Context(), RevokeInput{SessionSecret: restricted.Secret, CurrentPassword: password, Source: netip.MustParseAddr("192.0.2.161"), RequestID: "restricted-revoke", IdempotencyKey: "restricted-revoke", AgentID: restrictedTarget, CredentialID: "abcdefab-cdef-4abc-8def-abcdefabcdea", ExpectedVersion: 1})
+			got, err := manager.Revoke(t.Context(), RevokeInput{SessionSecret: restricted.Secret, Source: netip.MustParseAddr("192.0.2.161"), RequestID: "restricted-revoke", IdempotencyKey: "restricted-revoke", AgentID: restrictedTarget, CredentialID: "abcdefab-cdef-4abc-8def-abcdefabcdea", ExpectedVersion: 1})
 			if got != (storage.AgentLifecycleResult{}) {
 				return errors.New("restricted Revoke returned data")
 			}
 			return err
 		}, authentication.ErrForbidden},
 		{"disable", func() error {
-			got, err := manager.Disable(t.Context(), DisableInput{SessionSecret: restricted.Secret, CurrentPassword: password, Source: netip.MustParseAddr("192.0.2.162"), RequestID: "restricted-disable", IdempotencyKey: "restricted-disable", AgentID: restrictedTarget, ExpectedVersion: 1})
+			got, err := manager.Disable(t.Context(), DisableInput{SessionSecret: restricted.Secret, Source: netip.MustParseAddr("192.0.2.162"), RequestID: "restricted-disable", IdempotencyKey: "restricted-disable", AgentID: restrictedTarget, ExpectedVersion: 1})
 			if got != (storage.AgentLifecycleResult{}) {
 				return errors.New("restricted Disable returned data")
 			}
@@ -105,7 +105,7 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 		})
 	}
 	permanent := "Rotation service permanent password 830!"
-	normal, err := auth.ChangePassword(t.Context(), authentication.ChangePasswordInput{SessionSecret: restricted.Secret, CurrentPassword: password, NewPassword: permanent, Source: source, RequestID: "rotation-onboarding"})
+	normal, err := auth.ChangePassword(t.Context(), authentication.ChangePasswordInput{SessionSecret: restricted.Secret, NewPassword: permanent, Source: source, RequestID: "rotation-onboarding"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalidatedRestricted := RotateInput{SessionSecret: restricted.Secret, CurrentPassword: permanent, Source: netip.MustParseAddr("192.0.2.172"), RequestID: "rotation-invalidated-restricted", IdempotencyKey: "rotation-invalidated-restricted", AgentID: created.Creation.Agent.ID, ExpectedVersion: 1}
+	invalidatedRestricted := RotateInput{SessionSecret: restricted.Secret, Source: netip.MustParseAddr("192.0.2.172"), RequestID: "rotation-invalidated-restricted", IdempotencyKey: "rotation-invalidated-restricted", AgentID: created.Creation.Agent.ID, ExpectedVersion: 1}
 	if got, err := manager.Rotate(t.Context(), invalidatedRestricted); !errors.Is(err, authentication.ErrUnauthenticated) || got != (RotationIssuance{}) {
 		t.Fatalf("onboarding-invalidated restricted session returned token=%t metadata=%+v err=%v", got.Token != "", got.Rotation, err)
 	}
@@ -157,7 +157,7 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	if proofRowsAfter != proofRowsBefore {
 		t.Fatalf("safe reads performed password proof work: login attempt rows %d -> %d", proofRowsBefore, proofRowsAfter)
 	}
-	input := RotateInput{SessionSecret: normal.Secret, CurrentPassword: permanent, Source: netip.MustParseAddr("192.0.2.153"), RequestID: "rotation-service-first", IdempotencyKey: "rotation-service-key", AgentID: get.ID, ExpectedVersion: 1}
+	input := RotateInput{SessionSecret: normal.Secret, Source: netip.MustParseAddr("192.0.2.153"), RequestID: "rotation-service-first", IdempotencyKey: "rotation-service-key", AgentID: get.ID, ExpectedVersion: 1}
 	issued, err := manager.Rotate(t.Context(), input)
 	if err != nil || issued.Token == "" || issued.Rotation.Replayed {
 		t.Fatalf("fresh rotation token-present=%t metadata=%+v err=%v", issued.Token != "", issued.Rotation, err)
@@ -172,10 +172,10 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	}
 	badReplay := input
 	badReplay.Source = netip.MustParseAddr("192.0.2.163")
-	badReplay.CurrentPassword = "wrong replay password"
+	badReplay.SessionSecret = "invalid-session"
 	badReplay.RequestID = "rotation-bad-replay-proof"
 	if got, err := manager.Rotate(t.Context(), badReplay); !errors.Is(err, authentication.ErrUnauthenticated) || got != (RotationIssuance{}) {
-		t.Fatalf("wrong-password replay token-present=%t metadata=%+v err=%v", got.Token != "", got.Rotation, err)
+		t.Fatalf("invalid-session replay token-present=%t metadata=%+v err=%v", got.Token != "", got.Rotation, err)
 	}
 	input.Source = netip.MustParseAddr("192.0.2.154")
 	replay, err := manager.Rotate(t.Context(), input)
@@ -184,48 +184,38 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	}
 	wrong := input
 	wrong.Source = netip.MustParseAddr("192.0.2.155")
-	wrong.CurrentPassword = "wrong password"
+	wrong.SessionSecret = "invalid-session"
 	wrong.IdempotencyKey = "rotation-wrong-password"
 	wrong.RequestID = "rotation-wrong-password"
 	if got, err := manager.Rotate(t.Context(), wrong); !errors.Is(err, authentication.ErrUnauthenticated) || got != (RotationIssuance{}) {
-		t.Fatalf("wrong-password rotation token-present=%t metadata=%+v err=%v", got.Token != "", got.Rotation, err)
+		t.Fatalf("invalid-session rotation token-present=%t metadata=%+v err=%v", got.Token != "", got.Rotation, err)
 	}
-	revokeInput := RevokeInput{SessionSecret: normal.Secret, CurrentPassword: permanent, Source: netip.MustParseAddr("192.0.2.156"), RequestID: "rotation-revoke", IdempotencyKey: "rotation-revoke", AgentID: get.ID, CredentialID: id, ExpectedVersion: 2}
+	revokeInput := RevokeInput{SessionSecret: normal.Secret, Source: netip.MustParseAddr("192.0.2.156"), RequestID: "rotation-revoke", IdempotencyKey: "rotation-revoke", AgentID: get.ID, CredentialID: id, ExpectedVersion: 2}
 	badRevoke := revokeInput
 	badRevoke.Source = netip.MustParseAddr("192.0.2.164")
-	badRevoke.CurrentPassword = "wrong revoke password"
+	badRevoke.SessionSecret = "invalid-session"
 	badRevoke.RequestID = "rotation-revoke-wrong-proof"
 	if got, err := manager.Revoke(t.Context(), badRevoke); !errors.Is(err, authentication.ErrUnauthenticated) || got != (storage.AgentLifecycleResult{}) {
-		t.Fatalf("wrong-password revoke = %+v, %v", got, err)
+		t.Fatalf("invalid-session revoke = %+v, %v", got, err)
 	}
 	if got, err := manager.Revoke(t.Context(), revokeInput); err != nil || !got.Changed || got.Credential == nil {
 		t.Fatalf("service revoke = %+v, %v", got, err)
 	}
 	badRevokeReplay := revokeInput
 	badRevokeReplay.Source = netip.MustParseAddr("192.0.2.165")
-	badRevokeReplay.CurrentPassword = "wrong revoke replay password"
+	badRevokeReplay.SessionSecret = "invalid-session"
 	badRevokeReplay.RequestID = "rotation-revoke-bad-replay-proof"
 	if got, err := manager.Revoke(t.Context(), badRevokeReplay); !errors.Is(err, authentication.ErrUnauthenticated) || got != (storage.AgentLifecycleResult{}) {
-		t.Fatalf("wrong-password revoke replay = %+v, %v", got, err)
+		t.Fatalf("invalid-session revoke replay = %+v, %v", got, err)
 	}
-	disableInput := DisableInput{SessionSecret: normal.Secret, CurrentPassword: permanent, Source: netip.MustParseAddr("192.0.2.157"), RequestID: "rotation-disable", IdempotencyKey: "rotation-disable", AgentID: get.ID, ExpectedVersion: 3}
+	disableInput := DisableInput{SessionSecret: normal.Secret, Source: netip.MustParseAddr("192.0.2.157"), RequestID: "rotation-disable", IdempotencyKey: "rotation-disable", AgentID: get.ID, ExpectedVersion: 3}
 	badDisable := disableInput
 	badDisable.Source = netip.MustParseAddr("192.0.2.166")
-	badDisable.CurrentPassword = "wrong disable password"
+	badDisable.SessionSecret = "invalid-session"
 	badDisable.RequestID = "rotation-disable-wrong-proof"
 	if got, err := manager.Disable(t.Context(), badDisable); !errors.Is(err, authentication.ErrUnauthenticated) || got != (storage.AgentLifecycleResult{}) {
-		t.Fatalf("wrong-password disable = %+v, %v", got, err)
+		t.Fatalf("invalid-session disable = %+v, %v", got, err)
 	}
-	// Five deliberately incorrect proofs above exhaust the account-wide window,
-	// even though their source addresses differ. Keep that protection observable
-	// before advancing explicit time beyond the window (but below session idle expiry).
-	limited, limitErr := manager.Disable(t.Context(), disableInput)
-	if _, ok := errors.AsType[*authentication.RateLimitError](limitErr); !ok || limited != (storage.AgentLifecycleResult{}) {
-		t.Fatalf("shared proof throttle did not reject disable: %v", limitErr)
-	}
-	clock.mu.Lock()
-	clock.t = clock.t.Add(15*time.Minute + time.Second)
-	clock.mu.Unlock()
 	if got, err := manager.Disable(t.Context(), disableInput); err != nil || !got.Changed || got.Agent.Enabled {
 		t.Fatalf("service disable = %+v, %v", got, err)
 	}
@@ -237,10 +227,10 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	}
 	badDisableReplay := disableInput
 	badDisableReplay.Source = netip.MustParseAddr("192.0.2.167")
-	badDisableReplay.CurrentPassword = "wrong disable replay password"
+	badDisableReplay.SessionSecret = "invalid-session"
 	badDisableReplay.RequestID = "rotation-disable-bad-replay-proof"
 	if got, err := manager.Disable(t.Context(), badDisableReplay); !errors.Is(err, authentication.ErrUnauthenticated) || got != (storage.AgentLifecycleResult{}) {
-		t.Fatalf("wrong-password disable replay = %+v, %v", got, err)
+		t.Fatalf("invalid-session disable replay = %+v, %v", got, err)
 	}
 	if _, err := conn.Exec(t.Context(), "UPDATE public.almanac_users SET role='viewer' WHERE id=(SELECT id FROM public.almanac_users WHERE login='rotation-admin')"); err != nil {
 		t.Fatal(err)
@@ -264,28 +254,24 @@ func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
 	viewerRevoke := revokeInput
 	viewerRevoke.Source = netip.MustParseAddr("192.0.2.168")
 	viewerRevoke.RequestID = "rotation-viewer-revoke"
-	viewerRevoke.CurrentPassword = permanent
 	if got, err := manager.Revoke(t.Context(), viewerRevoke); !errors.Is(err, authentication.ErrForbidden) || got != (storage.AgentLifecycleResult{}) {
 		t.Fatalf("viewer revoke = %+v, %v", got, err)
 	}
 	viewerRevokeReplay := revokeInput
 	viewerRevokeReplay.Source = netip.MustParseAddr("192.0.2.169")
 	viewerRevokeReplay.RequestID = "rotation-viewer-revoke-replay"
-	viewerRevokeReplay.CurrentPassword = permanent
 	if got, err := manager.Revoke(t.Context(), viewerRevokeReplay); !errors.Is(err, authentication.ErrForbidden) || got != (storage.AgentLifecycleResult{}) {
 		t.Fatalf("viewer revoke replay = %+v, %v", got, err)
 	}
 	viewerDisable := disableInput
 	viewerDisable.Source = netip.MustParseAddr("192.0.2.170")
 	viewerDisable.RequestID = "rotation-viewer-disable"
-	viewerDisable.CurrentPassword = permanent
 	if got, err := manager.Disable(t.Context(), viewerDisable); !errors.Is(err, authentication.ErrForbidden) || got != (storage.AgentLifecycleResult{}) {
 		t.Fatalf("viewer disable = %+v, %v", got, err)
 	}
 	viewerDisableReplay := disableInput
 	viewerDisableReplay.Source = netip.MustParseAddr("192.0.2.171")
 	viewerDisableReplay.RequestID = "rotation-viewer-disable-replay"
-	viewerDisableReplay.CurrentPassword = permanent
 	if got, err := manager.Disable(t.Context(), viewerDisableReplay); !errors.Is(err, authentication.ErrForbidden) || got != (storage.AgentLifecycleResult{}) {
 		t.Fatalf("viewer disable replay = %+v, %v", got, err)
 	}

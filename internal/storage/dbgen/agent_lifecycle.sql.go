@@ -11,6 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const agentHasDatasourceDependencies = `-- name: AgentHasDatasourceDependencies :one
+SELECT EXISTS (SELECT 1 FROM public.almanac_datasources WHERE agent_id = $1)
+    OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = $1 OR target_agent_id = $1)
+`
+
+func (q *Queries) AgentHasDatasourceDependencies(ctx context.Context, agentID pgtype.UUID) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, agentHasDatasourceDependencies, agentID)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const archiveAgent = `-- name: ArchiveAgent :one
+UPDATE public.almanac_agents SET enabled = false, deleted_at = $1,
+    updated_at = $1, version = version + 1
+WHERE id = $2 AND deleted_at IS NULL AND version < 9223372036854775807
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at
+`
+
+type ArchiveAgentParams struct {
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	AgentID   pgtype.UUID        `json:"agent_id"`
+}
+
+func (q *Queries) ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error) {
+	row := q.db.QueryRow(ctx, archiveAgent, arg.UpdatedAt, arg.AgentID)
+	var i AlmanacAgent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Enabled,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const deleteExpiredAgentLifecycleReceipt = `-- name: DeleteExpiredAgentLifecycleReceipt :execrows
 DELETE FROM public.almanac_management_receipts
 WHERE actor_id = $1 AND operation = $2
@@ -41,7 +81,7 @@ const disableAgent = `-- name: DisableAgent :one
 UPDATE public.almanac_agents SET enabled = false, version = version + 1,
        updated_at = $1
 WHERE id = $2 AND version < 9223372036854775807
-RETURNING id, name, display_name, enabled, version, created_at, updated_at
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at
 `
 
 type DisableAgentParams struct {
@@ -60,6 +100,7 @@ func (q *Queries) DisableAgent(ctx context.Context, arg DisableAgentParams) (Alm
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -163,8 +204,8 @@ func (q *Queries) InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleA
 }
 
 const lockLifecycleAgent = `-- name: LockLifecycleAgent :one
-SELECT id, name, display_name, enabled, version, created_at, updated_at
-FROM public.almanac_agents WHERE id = $1 FOR UPDATE
+SELECT id, name, display_name, enabled, version, created_at, updated_at, deleted_at
+FROM public.almanac_agents WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 func (q *Queries) LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error) {
@@ -178,6 +219,7 @@ func (q *Queries) LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -305,7 +347,7 @@ const updateLifecycleAgent = `-- name: UpdateLifecycleAgent :one
 UPDATE public.almanac_agents SET enabled = $1, version = version + 1,
        updated_at = $2
 WHERE id = $3 AND version < 9223372036854775807
-RETURNING id, name, display_name, enabled, version, created_at, updated_at
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at
 `
 
 type UpdateLifecycleAgentParams struct {
@@ -325,6 +367,7 @@ func (q *Queries) UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleA
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

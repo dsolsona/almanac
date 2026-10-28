@@ -62,7 +62,7 @@ func TestCompleteUsesVerifiedTLSAndAuthenticationSequence(t *testing.T) {
 				Current string `json:"current_password"`
 				New     string `json:"new_password"`
 			}
-			if err := json.UnmarshalRead(r.Body, &body); err != nil || body.Current != initial || body.New != permanent {
+			if err := json.UnmarshalRead(r.Body, &body); err != nil || body.Current != "" || body.New != permanent {
 				t.Errorf("unexpected password body")
 			}
 			w.Header().Add("Set-Cookie", "__Host-almanac-session="+testCookie+cookieAttributes)

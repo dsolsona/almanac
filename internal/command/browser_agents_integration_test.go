@@ -83,7 +83,7 @@ func assertBrowserAgentRegistration(t *testing.T, databaseURL, artifacts, scenar
 	var matching int
 	wantEnabled, wantVersion, wantCredentials := true, 1, 52
 	if scenario == "agents-lifecycle" {
-		wantEnabled, wantVersion, wantCredentials = false, 4, 53
+		wantEnabled, wantVersion, wantCredentials = false, 5, 53
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_agents a
 JOIN public.almanac_agent_credentials c ON c.agent_id=a.id
@@ -104,6 +104,10 @@ WHERE operation='agent.create' AND NOT result ? 'token'`).Scan(&receiptCount); e
 		t.Fatal("browser registration receipt differs or exposes token")
 	}
 	if scenario == "agents-lifecycle" {
+		var archived bool
+		if err := conn.QueryRow(t.Context(), `SELECT deleted_at IS NOT NULL FROM public.almanac_agents WHERE id=$1`, evidence.AgentID).Scan(&archived); err != nil || !archived {
+			t.Fatal("browser agent was not archived")
+		}
 		assertBrowserAgentLifecycle(t, databaseURL, artifacts, evidence.AgentID, evidence.CredentialID)
 	}
 }
@@ -147,7 +151,7 @@ WHERE agent_id=$1 AND revoked_at IS NULL`, agentID).Scan(&matching); err != nil 
 	var receipts, operations int
 	if err := conn.QueryRow(t.Context(), `SELECT count(*), count(DISTINCT operation)
 FROM public.almanac_management_receipts
-WHERE operation <> 'agent.create' AND NOT result ? 'token'`).Scan(&receipts, &operations); err != nil || receipts != 3 || operations != 3 {
+WHERE operation <> 'agent.create' AND NOT result ? 'token'`).Scan(&receipts, &operations); err != nil || receipts != 4 || operations != 4 {
 		t.Fatal("browser lifecycle receipts differ or contain a token")
 	}
 }

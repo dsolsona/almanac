@@ -32,6 +32,9 @@
 .agents-runtime__capabilities li span { color: var(--text-2); }
 .agents-runtime__freshness { padding-top: var(--space-2); border-top: 1px solid var(--border); }
 .agents-form { display: grid; gap: var(--space-4); }
+.agents-dependencies { display: grid; gap: var(--space-2); }
+.agents-dependencies p, .agents-dependencies ul { margin: 0; }
+.agents-duration { display: grid; gap: var(--space-3); }
 .agents-token { display: grid; gap: var(--space-3); }
 .agents-token p { margin: 0; }
 .agents-token label { font-family: var(--mono); font-size: .875rem; }

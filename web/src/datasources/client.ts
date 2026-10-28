@@ -21,9 +21,11 @@ const messages: Record<string, string> = {
   forbidden: 'Your role does not allow this operation.',
   not_found: 'The requested datasource or diagnostic was not found.',
   conflict: 'The datasource changed. Refresh it and review the current settings.',
+  reassignment_pending: 'This agent is completing a datasource move. Wait for it to finish or cancel the move before changing collection settings.',
+  reassignment_settings_conflict: 'Save connection changes before changing the assigned agent.',
   invalid_datasource_input: 'The datasource settings were rejected. Review the fields and try again.',
   invalid_request: 'The datasource request input is invalid. Review the request and try again.',
-  configuration_pending: 'The agent is applying the latest datasource settings. No diagnostic was started; wait for readiness and retry.',
+  configuration_pending: 'The agent is applying configuration. Wait until it is ready and try again.',
   configuration_failed: 'The assigned agent could not apply its datasource configuration. Check the agent and try again.',
   source_secret_unavailable: 'The stored datasource credential is unavailable. Update the credentials before testing again.',
   invalid_agent: 'The assigned agent is invalid or unavailable.',
@@ -45,7 +47,16 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 }
 
 function validDatasource(value: unknown): value is Datasource {
-  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'provider', 'configuration_format', 'endpoint', 'tls', 'authentication', 'polling_interval_seconds', 'settling_delay_seconds', 'agent_id', 'created_at', 'updated_at'])) return false;
+  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'provider', 'configuration_format', 'endpoint', 'tls', 'authentication', 'polling_interval_seconds', 'settling_delay_seconds', 'agent_id', 'created_at', 'updated_at', ...(Object.hasOwn(value, 'reassignment') ? ['reassignment'] : [])])) return false;
+  if (Object.hasOwn(value, 'reassignment')) {
+    const move = value.reassignment;
+    if (!object(move) || !exactKeys(move, ['source_agent_id', 'target_agent_id', 'requested_at', 'authority_expires_at', 'state'])
+      || typeof move.source_agent_id !== 'string' || !UUID.test(move.source_agent_id) || move.source_agent_id !== value.agent_id
+      || typeof move.target_agent_id !== 'string' || !UUID.test(move.target_agent_id) || move.target_agent_id === move.source_agent_id
+      || typeof move.requested_at !== 'string' || !Number.isFinite(Date.parse(move.requested_at))
+      || typeof move.authority_expires_at !== 'string' || !Number.isFinite(Date.parse(move.authority_expires_at))
+      || typeof move.state !== 'string' || !['waiting_for_previous_agent', 'replacement_unavailable'].includes(move.state)) return false;
+  }
   let endpoint: URL;
   try { endpoint = new URL(String(value.endpoint)); } catch { return false; }
   const version = typeof value.version === 'string' && /^[1-9][0-9]*$/.test(value.version)
@@ -205,7 +216,7 @@ export function createDatasourceClient() {
         if (response.headers.get('ETag') !== `"datasource:${resultID}:${value.version}"`) throw new DatasourceFailure('invalid_response', 'The datasource save may have completed, but its new version could not be confirmed.', 0, true);
         return value;
       } catch (error) {
-        if (error instanceof DatasourceFailure && (error.status === 0 || error.status >= 500) && error.code !== 'invalid_request') throw new DatasourceFailure('outcome_unknown', 'The save may have completed. Reconcile its outcome before editing the datasource again.', error.status, true);
+        if (error instanceof DatasourceFailure && (error.status === 0 || error.status >= 500) && !['invalid_request', 'configuration_pending'].includes(error.code)) throw new DatasourceFailure('outcome_unknown', 'The save may have completed. Reconcile its outcome before editing the datasource again.', error.status, true);
         throw error;
       }
     },

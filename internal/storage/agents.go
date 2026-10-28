@@ -21,6 +21,7 @@ var (
 	ErrAgentForbidden    = errors.New("storage: agent operation forbidden")
 	ErrInvalidAgentInput = errors.New("storage: invalid agent input")
 	ErrAgentConflict     = errors.New("storage: agent conflict")
+	ErrAgentInUse        = errors.New("storage: agent has assigned datasources")
 )
 
 const (

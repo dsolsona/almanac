@@ -51,6 +51,8 @@ func TestAgentCommandsRejectIncompleteOrContradictoryFlags(t *testing.T) {
 		{"agents", "create", "--profile-file=x", "--name=n", "--display-name=d", "--current-password-file=p", "--idempotency-key=k"},
 		{"agents", "create", "--profile-file=x", "--name=n", "--display-name=d", "--current-password-file=p", "--idempotency-key=k", "--show-token", "--token-file=t"},
 		{"agents", "credentials", "revoke", "--profile-file=x", "--agent-id=00000000-0000-0000-0000-000000000001", "--credential-id=00000000-0000-0000-0000-000000000002"},
+		{"agents", "delete", "--profile-file=x", "--agent-id=00000000-0000-0000-0000-000000000001", "--idempotency-key=k"},
+		{"agents", "datasources", "--profile-file=x", "--agent-id=not-a-uuid"},
 	}
 	for _, args := range cases {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
@@ -133,6 +135,10 @@ func TestAgentDetailTextShowsRuntimeWithoutCombiningHealthSignals(t *testing.T) 
 	emptyCapabilities := jsontext.Value(strings.Replace(string(result), `"capabilities":[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}]`, `"capabilities":[]`, 1))
 	if emptyText := renderAgentText("agents get", emptyCapabilities, "", false); !strings.Contains(emptyText, "No provider capabilities were reported.") {
 		t.Fatalf("empty capabilities were not explicit: %s", emptyText)
+	}
+	assigned := jsontext.Value(strings.Replace(string(result), `"collection_explanation":"no_assignment"`, `"collection_explanation":"none"`, 1))
+	if assignedText := renderAgentText("agents get", assigned, "", false); strings.Contains(assignedText, "No datasources are assigned") || !strings.Contains(assignedText, "Collection progress: running") {
+		t.Fatalf("assigned runtime text is misleading: %s", assignedText)
 	}
 	neverConnected := jsontext.Value(`{"agent":{"id":"00000000-0000-0000-0000-000000000001","name":"east","display_name":"East","enabled":true,"version":"1","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:00Z"},"etag":"\"agent:00000000-0000-0000-0000-000000000001:1\""}`)
 	if neverConnectedText := renderAgentText("agents get", neverConnected, "", false); !strings.Contains(neverConnectedText, "Connection state: Never connected") || !strings.Contains(neverConnectedText, "No heartbeat has been received.") {

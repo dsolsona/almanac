@@ -216,7 +216,7 @@ func revokeConnectedAgentCredential(t *testing.T, backendBinary string, journey 
 	t.Helper()
 	revoke := exec.CommandContext(t.Context(), backendBinary, "agents", "credentials", "revoke", "--profile-file="+journey.profile,
 		"--agent-id="+journey.id, "--credential-id="+journey.credentialID, "--if-match=\"agent:"+journey.id+":1\"",
-		"--current-password-file="+journey.passwordPath, "--idempotency-key=connected-agent-revoke", "--confirm", "--output=json")
+		"--idempotency-key=connected-agent-revoke", "--confirm", "--output=json")
 	revoke.Stdout, revoke.Stderr = io.Discard, io.Discard
 	if err := revoke.Run(); err != nil {
 		t.Fatal("revoke connected-agent credential failed")

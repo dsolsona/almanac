@@ -206,7 +206,7 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	if status != 200 || json.Unmarshal(body, &authContext) != nil {
 		t.Fatal("restricted session context failed")
 	}
-	status, body = callAuth("/api/v1/auth/password", `{"current_password":"`+initialPassword+`","new_password":"`+permanentPassword+`"}`, authContext.CsrfToken)
+	status, body = callAuth("/api/v1/auth/password", `{"new_password":"`+permanentPassword+`"}`, authContext.CsrfToken)
 	if status != 200 || json.Unmarshal(body, &session) != nil || session.Session == nil || session.Session.Restricted {
 		t.Fatal("owner password rotation did not complete")
 	}
@@ -273,8 +273,8 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 	revokeConnectedAgentCredential(t, binary, journey, client, baseURL)
 	if cliAccepted := runAgentManagementCLIAcceptance(t, databaseURL, binary, dir, baseURL, certFile, permanentPassword); cliAccepted {
 		status, body, _ = managementGET()
-		if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Items) != 2 || !containsAgentName(page.Items, "cli-agent") || !containsAgentName(page.Items, "connected-agent") {
-			t.Fatal("API did not observe agent created by executable CLI")
+		if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Items) != 1 || containsAgentName(page.Items, "cli-agent") || !containsAgentName(page.Items, "connected-agent") {
+			t.Fatalf("API list after CLI archival: status=%d items=%d", status, len(page.Items))
 		}
 	}
 	malformedPath, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/agents/%2e%2e/readyz", nil)

@@ -12,7 +12,8 @@ export type AgentIssuance = components['schemas']['AgentIssuanceFresh'] | compon
 export type RotationIssuance = components['schemas']['RotationIssuanceResponse'];
 export type CreateAgentInput = components['schemas']['CreateAgentRequest'];
 export type RotateAgentInput = components['schemas']['RotateAgentRequest'];
-export type PasswordProofInput = components['schemas']['PasswordProofRequest'];
+export type PasswordProofInput = components['schemas']['AgentLifecycleRequest'];
+export type AgentDatasourcePage = components['schemas']['AgentDatasourcePage'];
 export type AgentReadOptions = { signal?: AbortSignal; limit?: number; cursor?: string };
 export type AgentMutationOptions = { signal?: AbortSignal };
 export type AgentDetail = { agent: Agent; etag: string };
@@ -46,7 +47,7 @@ const safeMessages: Record<string, string> = {
   forbidden: 'You are not allowed to perform this operation.', not_found: 'The requested agent was not found.',
   origin_rejected: 'This request was rejected.', secure_transport_required: 'A secure connection is required.',
   csrf_invalid: 'Refresh the page and try again.',
-  conflict: 'The agent changed. Refresh it and try again.', invalid_agent_input: 'The agent details were rejected.',
+  conflict: 'The agent changed. Refresh it and try again.', agent_in_use: 'Datasources use this agent or are being moved to it.', invalid_agent_input: 'The agent details were rejected.',
   rate_limited: 'Too many requests. Wait before trying again.', request_timeout: 'The request timed out.',
   request_too_large: 'The request is too large.', unsupported_media_type: 'The request format is unsupported.',
   management_unavailable: 'Agent management is temporarily unavailable.',
@@ -54,7 +55,7 @@ const safeMessages: Record<string, string> = {
 const statusCodes: Record<number, string[]> = {
   400: ['invalid_request'], 401: ['unauthenticated'],
   403: ['forbidden', 'origin_rejected', 'secure_transport_required', 'csrf_invalid'], 404: ['not_found'],
-  408: ['request_timeout'], 409: ['conflict'], 413: ['request_too_large'], 415: ['unsupported_media_type'],
+  408: ['request_timeout'], 409: ['conflict', 'agent_in_use'], 413: ['request_too_large'], 415: ['unsupported_media_type'],
   422: ['invalid_agent_input'], 429: ['rate_limited'], 503: ['management_unavailable'],
 };
 
@@ -138,7 +139,7 @@ function validRuntime(value: unknown): value is AgentRuntimeStatus {
     && (value.last_attempt_at === null || validDate(value.last_attempt_at))
     && (value.last_successful_query_at === null || validDate(value.last_successful_query_at))
     && (value.next_expected_execution_at === null || validDate(value.next_expected_execution_at))
-    && value.collection_explanation === 'no_assignment';
+    && (value.collection_explanation === 'no_assignment' || value.collection_explanation === 'none');
 }
 function validCredential(value: unknown, agentID?: string): value is AgentCredential {
   return isObject(value) && validUUID(value.id) && validUUID(value.agent_id) && (agentID === undefined || value.agent_id === agentID)
@@ -250,12 +251,12 @@ function readFailure(signal: AbortSignal): AgentFailure {
   return failure('unavailable', signal.aborted ? 'cancelled' : 'request_failed');
 }
 
-async function request(fetcher: typeof fetch, path: string, method: 'GET' | 'POST', budget: Budget, body?: unknown, headers?: Record<string, string>): Promise<Response> {
+async function request(fetcher: typeof fetch, path: string, method: 'GET' | 'POST' | 'DELETE', budget: Budget, body?: unknown, headers?: Record<string, string>): Promise<Response> {
   let result: Promise<Response>;
   try {
-    result = fetcher(path, { method, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
+    result = fetcher(path, { method, ...(method !== 'GET' ? { body: JSON.stringify(body) } : {}),
       credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error',
-      headers: { ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}), ...headers }, signal: budget.signal });
+      headers: { ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}), ...headers }, signal: budget.signal });
   } catch { throw new Error('request failed'); }
   return new Promise((resolve, reject) => {
     const aborted = () => reject(new Error('request aborted'));
@@ -311,13 +312,13 @@ function read<T>(fetcher: typeof fetch, path: string, signal: AbortSignal | unde
   });
 }
 function mutate<T>(fetcher: typeof fetch, path: string, body: unknown, context: AuthContext, key: string, etag: string | undefined,
-  signal: AbortSignal | undefined, validate: (value: unknown, status: number) => value is T, diagnoseUncertain = false): Promise<T> {
+  signal: AbortSignal | undefined, validate: (value: unknown, status: number) => value is T, diagnoseUncertain = false, method: 'POST' | 'DELETE' = 'POST'): Promise<T> {
   return withBudget(signal, async (budget) => {
     let response: Response;
     try {
       const headers: Record<string, string> = { 'X-CSRF-Token': context.csrf_token, 'Idempotency-Key': key };
       if (etag !== undefined) headers['If-Match'] = etag;
-      response = await request(fetcher, path, 'POST', budget, body, headers);
+      response = await request(fetcher, path, method, budget, body, headers);
     } catch (error) {
       if (error instanceof AgentFailure && error.kind === 'rejected') throw error;
       if (!diagnoseUncertain) throw failure('uncertain', 'outcome_unknown');
@@ -390,6 +391,15 @@ export function createAgentClient(fetcher: typeof fetch = fetch) {
         const path = `${BASE}/${encodeURIComponent(agentID)}/credentials${query(options)}`;
         return read(fetcher, path, options.signal, (value): value is CredentialPage => validCredentialPage(value, agentID));
       });
+    },
+    datasources(agentID: string, options: AgentReadOptions = {}): Promise<AgentDatasourcePage> {
+      if (!canonicalID(agentID)) return Promise.reject(failure('rejected', 'invalid_request'));
+      return promiseCall(() => read(fetcher, `${BASE}/${encodeURIComponent(agentID)}/datasources${query(options)}`, options.signal,
+        (value): value is AgentDatasourcePage => isObject(value) && Array.isArray(value.items) && value.items.length <= 200 && value.items.every((item: unknown) => isObject(item) && validUUID(item.id) && typeof item.name === 'string' && typeof item.display_name === 'string') && validCursor(value.next_cursor)));
+    },
+    delete(agentID: string, context: AuthContext, etag: string, idempotencyKey: string, options: AgentMutationOptions = {}): Promise<LifecycleResult> {
+      if (!canonicalID(agentID)) return Promise.reject(failure('rejected', 'invalid_request'));
+      return promiseCall(() => { validateMutation(idempotencyKey, etag, agentID); return mutate(fetcher, `${BASE}/${encodeURIComponent(agentID)}`, {}, context, idempotencyKey, etag, options.signal, (value, status): value is LifecycleResult => status === 200 && validLifecycle(value, agentID) && !value.agent.enabled && value.credential === null && value.changed, false, 'DELETE'); });
     },
     create(input: CreateAgentInput, context: AuthContext, idempotencyKey: string, options: AgentMutationOptions = {}): Promise<AgentIssuance> {
       return promiseCall(() => {

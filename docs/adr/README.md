@@ -45,3 +45,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0017](0017-recoverable-secret-encryption.md) | Recoverable secret encryption | accepted |
 | [ADR-0018](0018-agent-websocket-library.md) | Agent WebSocket library | accepted |
 | [ADR-0019](0019-session-authorized-agent-registration.md) | Register agents using the administrator session | accepted |
+| [ADR-0020](0020-session-authorized-management.md) | Authorize signed-in management through the current session | accepted |

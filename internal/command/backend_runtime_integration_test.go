@@ -270,7 +270,7 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 	if status != http.StatusOK || json.Unmarshal(body, &authContext) != nil {
 		t.Fatal("restricted context request failed")
 	}
-	status, body, _ = call("/api/v1/auth/password", `{"current_password":"`+initialPassword+`","new_password":"`+permanentPassword+`"}`, authContext.CsrfToken)
+	status, body, _ = call("/api/v1/auth/password", `{"new_password":"`+permanentPassword+`"}`, authContext.CsrfToken)
 	var normal api.AuthResponse
 	if status != http.StatusOK || json.Unmarshal(body, &normal) != nil || normal.Session == nil || normal.Session.Restricted {
 		t.Fatal("password rotation did not unlock the normal session")

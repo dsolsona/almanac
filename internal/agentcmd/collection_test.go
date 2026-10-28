@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -383,4 +384,180 @@ func emptyResult() prometheus.QueryResult {
 
 func incompleteResult() prometheus.QueryResult {
 	return prometheus.QueryResult{Class: "incomplete", Series: []prometheus.Series{}}
+}
+
+func TestConfigurationDrainWaitsForRemovedCollectionAndLeavesOthersRunning(t *testing.T) {
+	runner := newCollectionRunner(&client{})
+	removedCtx, cancelRemoved := context.WithCancel(t.Context())
+	otherCtx, cancelOther := context.WithCancel(t.Context())
+	defer cancelOther()
+	removedDone, otherDone := make(chan struct{}), make(chan struct{})
+	removed := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000001", MeasurementRevision: "1"}
+	other := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000002", MeasurementRevision: "1"}
+	runner.active[collectionKey(removed)] = activeCollection{reservation: 1, cancel: cancelRemoved, done: removedDone}
+	runner.active[collectionKey(other)] = activeCollection{reservation: 2, cancel: cancelOther, done: otherDone}
+	result := make(chan error, 1)
+	go func() {
+		result <- runner.SetConfigurationAndDrain(t.Context(), agentprotocol.ConfigurationSnapshot{SLIs: []agentprotocol.SLICollection{other}})
+	}()
+	select {
+	case <-removedCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("removed work was not canceled")
+	}
+	select {
+	case <-otherCtx.Done():
+		t.Fatal("unrelated work was canceled")
+	default:
+	}
+	select {
+	case <-result:
+		t.Fatal("drain completed before removed work exited")
+	default:
+	}
+	close(removedDone)
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("drain did not finish")
+	}
+}
+
+func TestConfigurationDrainReturnsCancellationWithoutClaimingCompletion(t *testing.T) {
+	runner := newCollectionRunner(&client{})
+	ctx, cancel := context.WithCancel(t.Context())
+	work, stopWork := context.WithCancel(t.Context())
+	defer stopWork()
+	sli := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000001", MeasurementRevision: "1"}
+	runner.active[collectionKey(sli)] = activeCollection{reservation: 1, cancel: stopWork, done: make(chan struct{})}
+	cancel()
+	if err := runner.SetConfigurationAndDrain(ctx, agentprotocol.ConfigurationSnapshot{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("drain error = %v", err)
+	}
+	select {
+	case <-work.Done():
+	default:
+		t.Fatal("cancellation did not reach removed work")
+	}
+}
+
+func TestTransitionDrainsVersionChangedPairBeforeRestoringIt(t *testing.T) {
+	runner := newCollectionRunner(&client{})
+	work, cancelWork := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	prior := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000001", MeasurementRevision: "1", DatasourceVersion: "1"}
+	restored := prior
+	restored.DatasourceVersion = "2"
+	runner.active[collectionKey(prior)] = activeCollection{reservation: 1, cancel: cancelWork, done: done}
+	result := make(chan error, 1)
+	go func() {
+		result <- runner.SetTransitionConfigurationAndDrain(t.Context(), agentprotocol.ConfigurationSnapshot{SLIs: []agentprotocol.SLICollection{restored}}, map[string]bool{})
+	}()
+	select {
+	case <-work.Done():
+	case <-time.After(time.Second):
+		t.Fatal("version-changed work was not canceled")
+	}
+	select {
+	case <-result:
+		t.Fatal("transition returned before work drained")
+	default:
+	}
+	close(done)
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTransitionKeepsUnchangedCursorAndWithholdsAddedCollection(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	agent := testClient(now, testNonce(60))
+	runner := newCollectionRunner(agent)
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
+	retained := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: now.Add(-2 * time.Minute)}
+	added := retained
+	added.SLIID = "00000000-0000-4000-8000-000000000011"
+	lease := testLease(now.Add(-time.Minute), "lease-transition", now.Add(time.Hour))
+	lease.AgentID = testAgentID
+	lease.ConfigurationRevision = "1"
+	lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: retained.SLIID, MeasurementRevision: "1"}, {SLIID: added.SLIID, MeasurementRevision: "1"}}
+	runner.SetLease(lease)
+	cursor := now.Add(-61 * time.Second)
+	runner.nextIntervalEnd[collectionKey(retained)] = cursor
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	launched := make(chan string, 2)
+	var workers sync.WaitGroup
+	runner.root, runner.workers = ctx, &workers
+	runner.launchCollection = func(_ context.Context, definition collectionDefinition) { launched <- definition.sli.SLIID }
+	if err := runner.SetTransitionConfigurationAndDrain(ctx, agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{retained, added}}, map[string]bool{collectionKey(retained): true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runner.nextIntervalEnd[collectionKey(retained)]; !got.Equal(cursor) {
+		t.Fatalf("retained cursor changed: %v", got)
+	}
+	runner.nextIntervalEnd[collectionKey(added)] = cursor
+	runner.dispatchDue(ctx)
+	workers.Wait()
+	select {
+	case got := <-launched:
+		if got != retained.SLIID {
+			t.Fatalf("ungranted added collection executed: %s", got)
+		}
+	default:
+		t.Fatal("unchanged collection did not run")
+	}
+	select {
+	case got := <-launched:
+		t.Fatalf("unexpected collection executed: %s", got)
+	default:
+	}
+}
+
+func TestTransitionInitializesAddedCursorBeforeDelayedGrant(t *testing.T) {
+	cutoff := time.Now().UTC().Truncate(15 * time.Second).Add(30 * time.Second)
+	agent := testClient(cutoff.Add(-15*time.Second), testNonce(70))
+	runner := newCollectionRunner(agent)
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
+	added := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000011", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: cutoff}
+	lease := testLease(cutoff.Add(-time.Minute), "lease-old", cutoff.Add(time.Hour))
+	runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	launched := make(chan collectionDefinition, 1)
+	var workers sync.WaitGroup
+	runner.root, runner.workers = ctx, &workers
+	runner.launchCollection = func(_ context.Context, definition collectionDefinition) { launched <- definition }
+	if err := runner.SetTransitionConfigurationAndDrain(ctx, agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{added}}, map[string]bool{}); err != nil {
+		t.Fatal(err)
+	}
+	runner.dispatchDue(ctx)
+	if got := runner.nextIntervalEnd[collectionKey(added)]; !got.Equal(cutoff.Add(15 * time.Second)) {
+		t.Fatalf("withheld cursor=%v, want first interval after cutoff", got)
+	}
+	select {
+	case <-launched:
+		t.Fatal("added collection executed before its matching grant")
+	default:
+	}
+	lease.ConfigurationRevision = "2"
+	lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: added.SLIID, MeasurementRevision: "1"}}
+	runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
+	agent.serverClock.mu.Lock()
+	agent.serverClock.serverTime = cutoff.Add(75 * time.Second)
+	agent.serverClock.serverAt = time.Now()
+	agent.serverClock.mu.Unlock()
+	runner.dispatchDue(ctx)
+	workers.Wait()
+	select {
+	case definition := <-launched:
+		if !definition.intervalEnd.Equal(cutoff.Add(15 * time.Second)) {
+			t.Fatalf("first interval skipped: %v", definition.intervalEnd)
+		}
+	default:
+		t.Fatal("first settled interval did not run with matching grant")
+	}
 }

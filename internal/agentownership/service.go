@@ -101,6 +101,10 @@ func (s *Service) RenewWithHeartbeat(ctx context.Context, token string, generati
 }
 
 func (s *Service) RecordApplied(ctx context.Context, token string, generation, revision int64, resumeSecret []byte) error {
+	return s.RecordAppliedProtocol(ctx, token, generation, revision, resumeSecret, "almanac.agent.v1")
+}
+
+func (s *Service) RecordAppliedProtocol(ctx context.Context, token string, generation, revision int64, resumeSecret []byte, protocol string) error {
 	if !validateProof(resumeSecret) || !validateGeneration(generation) || revision <= 0 {
 		return ErrInvalidInput
 	}
@@ -109,8 +113,8 @@ func (s *Service) RecordApplied(ctx context.Context, token string, generation, r
 		return err
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
-	if err := storage.RecordAgentConfigurationApplied(ctx, s.databaseURL, credentialID, credentialVerifier,
-		resumeVerifier, generation, revision, s.now); errors.Is(err, storage.ErrInvalidAgentCredential) {
+	if err := storage.RecordAgentConfigurationAppliedProtocol(ctx, s.databaseURL, credentialID, credentialVerifier,
+		resumeVerifier, generation, revision, protocol, s.now); errors.Is(err, storage.ErrInvalidAgentCredential) {
 		return ErrInvalidCredential
 	} else if errors.Is(err, storage.ErrAgentOwnershipDenied) {
 		return ErrDenied

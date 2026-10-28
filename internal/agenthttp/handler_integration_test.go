@@ -55,7 +55,7 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	normal, err := authService.ChangePassword(t.Context(), authentication.ChangePasswordInput{SessionSecret: restricted.Secret, CurrentPassword: initialPassword, NewPassword: permanentPassword, Source: source, RequestID: "http-agent-password"})
+	normal, err := authService.ChangePassword(t.Context(), authentication.ChangePasswordInput{SessionSecret: restricted.Secret, NewPassword: permanentPassword, Source: source, RequestID: "http-agent-password"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,23 +391,25 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 		t.Fatalf("detail status=%d etag-matched=%t", status, headers.Get("ETag") == tag)
 	}
 	for index, badTag := range []string{"W/" + tag, "*", tag + "," + tag, `"agent:` + agentID + `:01"`, `"agent:` + agentID + `:9223372036854775808"`} {
-		status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": fmt.Sprintf("bad-tag-%d", index), "If-Match": badTag})
+		status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": fmt.Sprintf("bad-tag-%d", index), "If-Match": badTag})
 		assertProblem(t, status, body, 400, "invalid_request")
 	}
-	status, body, _ = callMulti(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, map[string][]string{"Content-Type": {"application/json"}, "Idempotency-Key": {"duplicate-etag"}, "If-Match": {tag, tag}})
+	status, body, _ = callMulti(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{}`, true, context.CsrfToken, map[string][]string{"Content-Type": {"application/json"}, "Idempotency-Key": {"duplicate-etag"}, "If-Match": {tag, tag}})
 	assertProblem(t, status, body, 400, "invalid_request")
 	missingID := "00000000-0000-4000-8000-000000000001"
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+missingID+"/disable", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "missing-target", "If-Match": `"agent:00000000-0000-4000-8000-000000000001:1"`})
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+missingID+"/disable", `{}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "missing-target", "If-Match": `"agent:00000000-0000-4000-8000-000000000001:1"`})
 	assertProblem(t, status, body, 404, "not_found")
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/"+missingID+"/revoke", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "wrong-parent-credential", "If-Match": tag})
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/"+missingID+"/revoke", `{}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "wrong-parent-credential", "If-Match": tag})
 	assertProblem(t, status, body, 404, "not_found")
 	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID+"/credentials", "", false, "", nil)
 	var history api.CredentialPage
 	if status != 200 || json.Unmarshal(body, &history) != nil || len(history.Items) != 1 || history.Items[0].RevokedAt != nil || history.Items[0].RetireAt != nil {
 		t.Fatalf("initial credential history invalid (status=%d, decode-error=%t, items=%d)", status, json.Unmarshal(body, &history) != nil, len(history.Items))
 	}
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/rotate", `{"current_password":"obsolete"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "obsolete-rotate", "If-Match": tag})
+	assertProblem(t, status, body, 400, "invalid_request")
 	rotateHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-rotate-1", "If-Match": tag}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/rotate", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, rotateHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/rotate", `{}`, true, context.CsrfToken, rotateHeaders)
 	var rotated api.RotationIssuance
 	if status != 200 || json.Unmarshal(body, &rotated) != nil || rotated.Token == nil || *rotated.Token == "" || rotated.Replayed || rotated.SecretState != api.RotationIssuanceSecretStateIssued || rotated.Agent.Version != "2" || rotated.PreviousCredential == nil {
 		t.Fatalf("rotation invalid (status=%d, decode-error=%t, token-present=%t, replayed=%t, version=%s, previous-present=%t)", status, json.Unmarshal(body, &rotated) != nil, rotated.Token != nil && *rotated.Token != "", rotated.Replayed, rotated.Agent.Version, rotated.PreviousCredential != nil)
@@ -415,34 +417,79 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	if got := verifyPersistedToken(t, databaseURL, *rotated.Token); got != rotated.Credential.Id.String() {
 		t.Fatal("fresh rotation token did not match persisted credential")
 	}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "stale-version", "If-Match": tag})
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "stale-version", "If-Match": tag})
 	assertProblem(t, status, body, 409, "conflict")
 	rotatedCredentialID := rotated.Credential.Id.String()
 	revokeHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-revoke-1", "If-Match": `"agent:` + agentID + `:2"`}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/"+rotatedCredentialID+"/revoke", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, revokeHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/"+rotatedCredentialID+"/revoke", `{}`, true, context.CsrfToken, revokeHeaders)
 	var revoked api.LifecycleResult
 	if status != 200 || json.Unmarshal(body, &revoked) != nil || !revoked.Changed || revoked.Agent.Version != "3" || revoked.Credential == nil || revoked.Credential.RevokedAt == nil {
 		t.Fatalf("revoke invalid (status=%d, decode-error=%t, changed=%t, version=%s, credential-present=%t, revoked-at-present=%t)", status, json.Unmarshal(body, &revoked) != nil, revoked.Changed, revoked.Agent.Version, revoked.Credential != nil, revoked.Credential != nil && revoked.Credential.RevokedAt != nil)
 	}
 	disableHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-disable-1", "If-Match": `"agent:` + agentID + `:3"`}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, disableHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{}`, true, context.CsrfToken, disableHeaders)
 	var disabled api.LifecycleResult
 	if status != 200 || json.Unmarshal(body, &disabled) != nil || !disabled.Changed || disabled.Agent.Enabled || disabled.Agent.Version != "4" {
 		t.Fatalf("disable invalid (status=%d, decode-error=%t, changed=%t, enabled=%t, version=%s)", status, json.Unmarshal(body, &disabled) != nil, disabled.Changed, disabled.Agent.Enabled, disabled.Agent.Version)
 	}
 	disableAgainHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-disable-noop", "If-Match": `"agent:` + agentID + `:4"`}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, disableAgainHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/disable", `{}`, true, context.CsrfToken, disableAgainHeaders)
 	var noOp api.LifecycleResult
 	if status != 200 || json.Unmarshal(body, &noOp) != nil || noOp.Changed || noOp.Agent.Version != "4" {
 		t.Fatalf("disable no-op invalid (status=%d, decode-error=%t, changed=%t, version=%s)", status, json.Unmarshal(body, &noOp) != nil, noOp.Changed, noOp.Agent.Version)
 	}
-	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/rotate", `{"current_password":"`+permanentPassword+`"}`, true, context.CsrfToken, rotateHeaders)
+	status, body, _ = call(http.MethodPost, "/api/v1/agents/"+agentID+"/credentials/rotate", `{}`, true, context.CsrfToken, rotateHeaders)
 	var rotationReplay api.RotationIssuance
 	var rotationReplayWire map[string]any
 	decodeReplayErr := json.Unmarshal(body, &rotationReplay) != nil || json.Unmarshal(body, &rotationReplayWire) != nil
 	_, replayTokenPresent := rotationReplayWire["token"]
 	if status != 200 || decodeReplayErr || replayTokenPresent || rotationReplay.Token != nil || !rotationReplay.Replayed || rotationReplay.SecretState != api.RotationIssuanceSecretStateSecretUnavailable || rotationReplay.Agent.Version != "2" {
 		t.Fatalf("historical rotation replay invalid (status=%d, decode-error=%t, token-member-present=%t, replayed=%t, version=%s)", status, decodeReplayErr, replayTokenPresent, rotationReplay.Replayed, rotationReplay.Agent.Version)
+	}
+	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID+"/credentials", "", false, "", nil)
+	if status != 200 || json.Unmarshal(body, &history) != nil || len(history.Items) != 2 {
+		t.Fatalf("credential history before archival invalid (status=%d, decode-error=%t, items=%d)", status, json.Unmarshal(body, &history) != nil, len(history.Items))
+	}
+	if _, err := db.Exec(t.Context(), `INSERT INTO public.almanac_datasources (id,name,display_name,provider,configuration_format,endpoint,tls,authentication_mode,polling_interval_seconds,settling_delay_seconds,agent_id,created_at,updated_at) VALUES ('a2345678-1234-4123-8123-123456789012','http-dependent','HTTP dependent','prometheus','prometheus-http-v1','https://metrics.example.test','{}','none',60,60,$1,$2,$2)`, agentID, now); err != nil {
+		t.Fatal(err)
+	}
+	status, body, _ = call(http.MethodDelete, "/api/v1/agents/"+agentID, `{}`, true, "invalid-csrf", map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-delete-csrf", "If-Match": `"agent:` + agentID + `:4"`})
+	assertProblem(t, status, body, 403, "csrf_invalid")
+	status, body, _ = call(http.MethodDelete, "/api/v1/agents/"+agentID, `{}`, true, context.CsrfToken, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-delete-stale", "If-Match": `"agent:` + agentID + `:3"`})
+	assertProblem(t, status, body, 409, "conflict")
+	blockedHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-blocked-delete", "If-Match": `"agent:` + agentID + `:4"`}
+	status, body, _ = call(http.MethodDelete, "/api/v1/agents/"+agentID, `{}`, true, context.CsrfToken, blockedHeaders)
+	assertProblem(t, status, body, 409, "agent_in_use")
+	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID+"/datasources?limit=1", "", false, "", nil)
+	var blockedDependencies api.AgentDatasourcePage
+	if status != 200 || json.Unmarshal(body, &blockedDependencies) != nil || len(blockedDependencies.Items) != 1 || blockedDependencies.Items[0].DisplayName != "HTTP dependent" {
+		t.Fatalf("blocked dependencies status=%d", status)
+	}
+	if _, err := db.Exec(t.Context(), `DELETE FROM public.almanac_datasources WHERE name='http-dependent'`); err != nil {
+		t.Fatal(err)
+	}
+	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID+"/datasources?limit=1", "", false, "", nil)
+	var dependencies api.AgentDatasourcePage
+	if status != 200 || json.Unmarshal(body, &dependencies) != nil || len(dependencies.Items) != 0 || dependencies.NextCursor != "" {
+		t.Fatalf("dependencies status=%d", status)
+	}
+	deleteHeaders := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "http-delete-1", "If-Match": `"agent:` + agentID + `:4"`}
+	status, body, _ = call(http.MethodDelete, "/api/v1/agents/"+agentID, `{}`, true, context.CsrfToken, deleteHeaders)
+	var archived api.LifecycleResult
+	if status != 200 || json.Unmarshal(body, &archived) != nil || !archived.Changed || archived.Agent.Enabled || archived.Agent.Version != "5" {
+		t.Fatalf("delete status=%d", status)
+	}
+	status, body, _ = call(http.MethodDelete, "/api/v1/agents/"+agentID, `{}`, true, context.CsrfToken, deleteHeaders)
+	if status != 200 || json.Unmarshal(body, &archived) != nil || !archived.Replayed {
+		t.Fatalf("delete replay status=%d", status)
+	}
+	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID, "", false, "", nil)
+	assertProblem(t, status, body, 404, "not_found")
+	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID+"/credentials", "", false, "", nil)
+	assertProblem(t, status, body, 404, "not_found")
+	var credentialCount, revokedCount int
+	if err := db.QueryRow(t.Context(), `SELECT count(*), count(*) FILTER (WHERE revoked_at IS NOT NULL) FROM public.almanac_agent_credentials WHERE agent_id=$1`, agentID).Scan(&credentialCount, &revokedCount); err != nil || credentialCount != 2 || revokedCount != 2 {
+		t.Fatalf("archived credential history=%d revoked=%d err=%v", credentialCount, revokedCount, err)
 	}
 	beforeLostResponse := countSnapshot()
 	lostRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/agents", strings.NewReader(`{"name":"lost-response","display_name":"Lost Response"}`))
@@ -480,10 +527,6 @@ func TestIntegrationTLSAgentManagementUsesSharedSessionHandler(t *testing.T) {
 	}
 	if after := countSnapshot(); after != afterLostResponse {
 		t.Fatalf("lost-response replay mutated management counts (agents=%d credentials=%d receipts=%d)", after[0], after[1], after[2])
-	}
-	status, body, _ = call(http.MethodGet, "/api/v1/agents/"+agentID+"/credentials", "", false, "", nil)
-	if status != 200 || json.Unmarshal(body, &history) != nil || len(history.Items) != 2 {
-		t.Fatalf("final credential history invalid (status=%d, decode-error=%t, items=%d)", status, json.Unmarshal(body, &history) != nil, len(history.Items))
 	}
 }
 

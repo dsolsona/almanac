@@ -42,6 +42,10 @@ func New(databaseURL string, now func() time.Time) (*Service, error) {
 }
 
 func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol.Envelope[agentprotocol.Hello]) (Session, error) {
+	return s.OpenProtocol(ctx, token, envelope, agentprotocol.ProtocolV1)
+}
+
+func (s *Service) OpenProtocol(ctx context.Context, token string, envelope agentprotocol.Envelope[agentprotocol.Hello], protocol string) (Session, error) {
 	if s == nil || s.ownership == nil || envelope.Kind != agentprotocol.KindHello {
 		return Session{}, ErrInvalidInput
 	}
@@ -56,7 +60,7 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 	if err != nil || generation < 0 {
 		return Session{}, ErrInvalidInput
 	}
-	if !containsProtocol(envelope.Payload.ProtocolVersions, agentprotocol.ProtocolV1) {
+	if (protocol != agentprotocol.ProtocolV1 && protocol != agentprotocol.ProtocolV2) || !containsProtocol(envelope.Payload.ProtocolVersions, protocol) {
 		if _, err := s.ownership.RecordIncompatibleAttempt(ctx, token, generation, resumeToken); err != nil {
 			return Session{}, err
 		}
@@ -67,7 +71,7 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 		return Session{}, ErrInvalidInput
 	}
 	hello := &storage.AgentRuntimeHello{
-		Protocol: agentprotocol.ProtocolV1, SoftwareVersion: envelope.Payload.SoftwareVersion,
+		Protocol: protocol, SoftwareVersion: envelope.Payload.SoftwareVersion,
 		Capabilities: capabilities,
 	}
 	var owner agentownership.Result
@@ -99,7 +103,7 @@ func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol
 	welcome := agentprotocol.Envelope[agentprotocol.Welcome]{
 		Kind: agentprotocol.KindWelcome, MessageID: messageID, SessionGeneration: strconv.FormatInt(owner.Generation, 10),
 		Payload: agentprotocol.Welcome{
-			Protocol: agentprotocol.ProtocolV1, RequestNonce: envelope.Payload.RequestNonce,
+			Protocol: protocol, RequestNonce: envelope.Payload.RequestNonce,
 			ServerTime: s.now().UTC(), AgentID: owner.AgentID,
 			ConfigurationRevision: strconv.FormatInt(owner.ConfigurationRevision, 10),
 			RenewalSequence:       strconv.FormatInt(owner.RenewalSequence, 10),
@@ -183,7 +187,7 @@ func (s *Service) Applied(ctx context.Context, token string, session Session, en
 	if err != nil || revision <= 0 {
 		return ErrInvalidInput
 	}
-	return s.ownership.RecordApplied(ctx, token, session.Generation, revision, session.ResumeToken)
+	return s.ownership.RecordAppliedProtocol(ctx, token, session.Generation, revision, session.ResumeToken, session.Welcome.Payload.Protocol)
 }
 
 func (s *Service) Failed(ctx context.Context, token string, session Session, envelope agentprotocol.Envelope[agentprotocol.ConfigurationFailed]) error {

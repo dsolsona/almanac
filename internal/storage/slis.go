@@ -191,6 +191,11 @@ func CreateSli(ctx context.Context, databaseURL string, input CreateSliInput) (S
 	} else if err != nil {
 		return SliRecord{}, operationError(ctx, "storage: SLI agent lock failed", err)
 	}
+	if pending, err := queries.AgentHasPendingReassignments(ctx, observedDatasource.AgentID); err != nil {
+		return SliRecord{}, err
+	} else if pending {
+		return SliRecord{}, ErrReassignmentPending
+	}
 	lockedDatasource, err := queries.LockDatasource(ctx, datasourceID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SliRecord{}, ErrDatasourceNotFound
@@ -654,6 +659,11 @@ func nextSliActivationBoundary(now time.Time, cadenceSeconds int) time.Time {
 }
 
 func reconcilePendingSliActivation(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, configurationRevision int64, now time.Time) error {
+	if pending, err := queries.AgentHasPendingReassignments(ctx, agentID); err != nil {
+		return err
+	} else if pending {
+		return nil
+	}
 	configuration, err := queries.GetAgentConfiguration(ctx, agentID)
 	if err != nil {
 		return err

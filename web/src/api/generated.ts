@@ -182,6 +182,27 @@ export interface paths {
         get: operations["getAgent"];
         put?: never;
         post?: never;
+        /**
+         * Archive an unassigned agent and revoke all credentials
+         * @description Requires an administrator session, CSRF, strong If-Match and an Idempotency-Key. Assigned datasources cause agent_in_use; a successful receipt can be replayed after archival.
+         */
+        delete: operations["deleteAgent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/datasources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List assigned datasource dependencies, including disabled sources */
+        get: operations["getAgentDatasources"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -723,10 +744,23 @@ export interface components {
             settling_delay_seconds: 60;
             /** Format: uuid */
             agent_id: string;
+            reassignment?: components["schemas"]["DatasourceReassignment"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        DatasourceReassignment: {
+            /** Format: uuid */
+            source_agent_id: string;
+            /** Format: uuid */
+            target_agent_id: string;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            authority_expires_at: string;
+            /** @enum {string} */
+            state: "waiting_for_previous_agent" | "replacement_unavailable";
         };
         DatasourceTLS: {
             insecure_skip_verify: boolean;
@@ -863,7 +897,7 @@ export interface components {
             /** Format: date-time */
             next_expected_execution_at: string | null;
             /** @enum {string} */
-            collection_explanation: "no_assignment";
+            collection_explanation: "no_assignment" | "none";
         };
         AgentCapability: {
             provider: string;
@@ -948,16 +982,21 @@ export interface components {
             lifetime_seconds?: number;
         };
         RotateAgentRequest: {
-            /** Format: password */
-            current_password: string;
             /** Format: int32 */
             lifetime_seconds?: number;
             /** Format: int32 */
             overlap_seconds?: number;
         };
-        PasswordProofRequest: {
-            /** Format: password */
-            current_password: string;
+        AgentLifecycleRequest: Record<string, never>;
+        AgentDatasourcePage: {
+            items: components["schemas"]["AgentDatasource"][];
+            next_cursor: string;
+        };
+        AgentDatasource: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
         };
         LifecycleResult: {
             agent: components["schemas"]["Agent"];
@@ -1017,8 +1056,6 @@ export interface components {
             password: string;
         };
         PasswordRequest: {
-            /** Format: password */
-            current_password: string;
             /** Format: password */
             new_password: string;
         };
@@ -1712,6 +1749,80 @@ export interface operations {
             };
         };
     };
+    deleteAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
+                "If-Match": components["parameters"]["IfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentLifecycleRequest"];
+            };
+        };
+        responses: {
+            /** @description Deletion receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LifecycleResult"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAgentDatasources: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Assigned datasource page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDatasourcePage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getAgentCredentials: {
         parameters: {
             query?: {
@@ -1762,7 +1873,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordProofRequest"];
+                "application/json": components["schemas"]["AgentLifecycleRequest"];
             };
         };
         responses: {
@@ -1843,7 +1954,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordProofRequest"];
+                "application/json": components["schemas"]["AgentLifecycleRequest"];
             };
         };
         responses: {

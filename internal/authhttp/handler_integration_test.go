@@ -162,12 +162,12 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 		t.Fatal("context did not issue independent valid tab tokens for the current session")
 	}
 	for _, token := range []string{firstTab.CsrfToken, secondTab.CsrfToken} {
-		status, _, _ := call("/api/v1/auth/password", `{"current_password":"wrong password","new_password":"`+"Permanent password phrase 467!"+`"}`, token)
-		if status != http.StatusUnauthorized {
-			t.Fatalf("valid tab token password proof status=%d", status)
+		status, _, _ := call("/api/v1/auth/password", `{"new_password":"too short"}`, token)
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("valid tab token password policy status=%d", status)
 		}
 	}
-	status, body, headers = call("/api/v1/auth/password", `{"current_password":"`+initialPassword+`","new_password":"too short"}`, firstTab.CsrfToken)
+	status, body, headers = call("/api/v1/auth/password", `{"new_password":"too short"}`, firstTab.CsrfToken)
 	var policyProblem api.Problem
 	if status != http.StatusUnprocessableEntity || json.Unmarshal(body, &policyProblem) != nil || policyProblem.Code != "password_policy" || len(policyProblem.FieldErrors) != 1 || policyProblem.FieldErrors[0].Field != "new_password" || len(headers.Values("Set-Cookie")) != 0 {
 		t.Fatalf("new-password policy response status=%d code=%q field-error-count=%d cookie-issued=%t", status, policyProblem.Code, len(policyProblem.FieldErrors), len(headers.Values("Set-Cookie")) != 0)
@@ -186,7 +186,7 @@ func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
 		t.Fatal("login did not place the session cookie in the jar")
 	}
 	permanent := "Permanent password phrase 467!"
-	status, body, headers = call("/api/v1/auth/password", `{"current_password":"`+initialPassword+`","new_password":"`+permanent+`"}`, loggedIn.CsrfToken)
+	status, body, headers = call("/api/v1/auth/password", `{"new_password":"`+permanent+`"}`, loggedIn.CsrfToken)
 	if status != http.StatusOK {
 		t.Fatalf("password rotation status=%d", status)
 	}

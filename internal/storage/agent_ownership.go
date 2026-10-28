@@ -117,7 +117,7 @@ func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credential
 			return AgentOwnershipResult{}, operationError(ctx, "storage: agent runtime state unavailable", err)
 		}
 		if hello != nil {
-			if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, latest.Generation, result.ConfigurationRevision, *hello, now); err != nil {
+			if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, latest.Generation, *hello, now); err != nil {
 				return AgentOwnershipResult{}, operationError(ctx, "storage: agent hello status save failed", err)
 			}
 		}
@@ -159,7 +159,7 @@ func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credential
 		return AgentOwnershipResult{}, operationError(ctx, "storage: expired agent grant pruning failed", err)
 	}
 	if hello != nil {
-		if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, generation, created.ConfigurationRevision, *hello, now); err != nil {
+		if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, generation, *hello, now); err != nil {
 			return AgentOwnershipResult{}, operationError(ctx, "storage: agent hello status save failed", err)
 		}
 	}
@@ -259,7 +259,7 @@ func ResumeAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialI
 		return AgentOwnershipResult{}, operationError(ctx, "storage: agent runtime state unavailable", err)
 	}
 	if hello != nil {
-		if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, latest.Generation, result.ConfigurationRevision, *hello, now); err != nil {
+		if err := saveAgentRuntimeHello(ctx, state.queries, state.agentID, latest.Generation, *hello, now); err != nil {
 			return AgentOwnershipResult{}, operationError(ctx, "storage: agent hello status save failed", err)
 		}
 	}
@@ -547,6 +547,17 @@ func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owne
 	if err != nil {
 		return err
 	}
+	if runtime, runtimeErr := queries.GetAgentRuntimeStatus(ctx, owner.AgentID); runtimeErr == nil && runtime.Protocol == agentprotocol.ProtocolV2 && runtime.AppliedConfigurationRevision > 0 && runtime.AppliedConfigurationRevision < configuration.Revision {
+		transitionRevision, transitionErr := queries.GetAgentHandoffConfiguration(ctx, owner.AgentID)
+		if transitionErr == nil && transitionRevision == configuration.Revision {
+			configuration.Revision = runtime.AppliedConfigurationRevision
+		}
+		if transitionErr != nil && !errors.Is(transitionErr, pgx.ErrNoRows) {
+			return transitionErr
+		}
+	} else if runtimeErr != nil && !errors.Is(runtimeErr, pgx.ErrNoRows) {
+		return runtimeErr
+	}
 	allowed, err := authorizedMeasurementGrants(ctx, queries, owner, configuration.Revision)
 	if err != nil {
 		return err
@@ -589,7 +600,7 @@ func authorizedMeasurementGrants(ctx context.Context, queries *dbgen.Queries, ow
 	if runtime.Generation != owner.Generation || runtime.AppliedConfigurationRevision < configurationRevision || runtime.ConfigurationFailureCode.Valid {
 		return json.Marshal(grants)
 	}
-	rows, err := queries.ListAuthorizedMeasurementGrantsForAgent(ctx, owner.AgentID)
+	rows, err := queries.ListAuthorizedMeasurementGrantsForAgent(ctx, dbgen.ListAuthorizedMeasurementGrantsForAgentParams{AgentID: owner.AgentID, ConfigurationRevision: configurationRevision})
 	if err != nil {
 		return nil, err
 	}
@@ -627,14 +638,18 @@ func ensureAgentConfiguration(ctx context.Context, queries *dbgen.Queries, agent
 	return queries.GetAgentConfiguration(ctx, agentID)
 }
 
-func saveAgentRuntimeHello(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, generation, revision int64, hello AgentRuntimeHello, at time.Time) error {
-	if hello.Protocol == "" || len(hello.Protocol) > 64 || hello.SoftwareVersion == "" || len(hello.SoftwareVersion) > 128 || len(hello.Capabilities) == 0 || revision <= 0 {
+func saveAgentRuntimeHello(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, generation int64, hello AgentRuntimeHello, at time.Time) error {
+	if hello.Protocol == "" || len(hello.Protocol) > 64 || hello.SoftwareVersion == "" || len(hello.SoftwareVersion) > 128 || len(hello.Capabilities) == 0 {
 		return ErrAgentOwnershipInput
+	}
+	configuration, err := queries.GetAgentConfiguration(ctx, agentID)
+	if err != nil || configuration.Revision <= 0 {
+		return errors.Join(err, ErrAgentOwnershipInput)
 	}
 	if err := queries.UpsertAgentRuntimeHello(ctx, dbgen.UpsertAgentRuntimeHelloParams{
 		AgentID: agentID, Generation: generation, Protocol: hello.Protocol,
 		SoftwareVersion: hello.SoftwareVersion, Capabilities: hello.Capabilities,
-		DesiredConfigurationRevision: revision, UpdatedAt: timestamp(at),
+		DesiredConfigurationRevision: configuration.Revision, UpdatedAt: timestamp(at),
 	}); err != nil {
 		return err
 	}
@@ -683,8 +698,12 @@ func optionalTimestamp(value *time.Time) pgtype.Timestamptz {
 }
 
 func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, clock func() time.Time) error {
+	return RecordAgentConfigurationAppliedProtocol(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, revision, agentprotocol.ProtocolV1, clock)
+}
+
+func RecordAgentConfigurationAppliedProtocol(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, protocol string, clock func() time.Time) error {
 	credentialUUID, valid := canonicalUUID(credentialID)
-	if !valid || generation <= 0 || revision <= 0 || clock == nil {
+	if !valid || generation <= 0 || revision <= 0 || clock == nil || (protocol != agentprotocol.ProtocolV1 && protocol != agentprotocol.ProtocolV2) {
 		return ErrAgentOwnershipInput
 	}
 	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
@@ -707,8 +726,17 @@ func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentia
 		return ErrAgentOwnershipDenied
 	}
 	configuration, err := state.queries.GetAgentConfiguration(ctx, state.agentID)
-	if err != nil || configuration.Revision != revision {
+	if err != nil || revision > configuration.Revision {
 		return errors.Join(ErrAgentOwnershipDenied, err)
+	}
+	if revision != configuration.Revision {
+		if protocol != agentprotocol.ProtocolV2 {
+			return ErrAgentOwnershipDenied
+		}
+		known, knownErr := state.queries.AgentConfigurationRevisionExists(ctx, dbgen.AgentConfigurationRevisionExistsParams{AgentID: state.agentID, Revision: revision})
+		if knownErr != nil || !known {
+			return errors.Join(ErrAgentOwnershipDenied, knownErr)
+		}
 	}
 	updated, err := state.queries.UpdateAgentAppliedConfiguration(ctx, dbgen.UpdateAgentAppliedConfigurationParams{
 		AppliedConfigurationRevision: revision, ReceivedAt: timestamp(now), AgentID: state.agentID, Generation: generation,
@@ -719,8 +747,18 @@ func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentia
 	if updated != 1 {
 		return ErrAgentOwnershipDenied
 	}
-	if err := reconcilePendingSliActivation(ctx, state.queries, state.agentID, revision, now); err != nil {
-		return operationError(ctx, "storage: SLI activation reconciliation failed", err)
+	if protocol == agentprotocol.ProtocolV2 {
+		if _, err := state.queries.DeleteAcknowledgedAgentHandoffConfiguration(ctx, dbgen.DeleteAcknowledgedAgentHandoffConfigurationParams{AgentID: state.agentID, Revision: revision}); err != nil {
+			return operationError(ctx, "storage: handoff configuration acknowledgment failed", err)
+		}
+		if _, err := state.queries.MarkDatasourceReassignmentDrained(ctx, dbgen.MarkDatasourceReassignmentDrainedParams{SourceAgentID: state.agentID, RemovalRevision: revision, DrainedAt: timestamp(now)}); err != nil {
+			return operationError(ctx, "storage: datasource drain acknowledgment failed", err)
+		}
+	}
+	if revision == configuration.Revision {
+		if err := reconcilePendingSliActivation(ctx, state.queries, state.agentID, revision, now); err != nil {
+			return operationError(ctx, "storage: SLI activation reconciliation failed", err)
+		}
 	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return operationError(ctx, "storage: agent applied configuration commit failed", err)
@@ -812,10 +850,20 @@ func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialI
 		return AgentConfigurationSnapshot{}, ErrAgentOwnershipDenied
 	}
 	if grant.ConfigurationRevision < configuration.Revision {
-		if err := state.tx.Commit(ctx); err != nil {
-			return AgentConfigurationSnapshot{}, operationError(ctx, "storage: pending agent configuration read commit failed", err)
+		runtime, runtimeErr := state.queries.GetAgentRuntimeStatus(ctx, state.agentID)
+		transitionRevision, transitionErr := state.queries.GetAgentHandoffConfiguration(ctx, state.agentID)
+		if runtimeErr != nil && !errors.Is(runtimeErr, pgx.ErrNoRows) {
+			return AgentConfigurationSnapshot{}, runtimeErr
 		}
-		return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision, Pending: true}, nil
+		if transitionErr != nil && !errors.Is(transitionErr, pgx.ErrNoRows) {
+			return AgentConfigurationSnapshot{}, transitionErr
+		}
+		if runtimeErr != nil || transitionErr != nil || runtime.Protocol != agentprotocol.ProtocolV2 || transitionRevision != configuration.Revision {
+			if err := state.tx.Commit(ctx); err != nil {
+				return AgentConfigurationSnapshot{}, operationError(ctx, "storage: pending agent configuration read commit failed", err)
+			}
+			return AgentConfigurationSnapshot{AgentID: state.agentID.String(), Revision: configuration.Revision, Pending: true}, nil
+		}
 	}
 	var adapter *sourcesecret.Adapter
 	if len(adapters) > 1 {
@@ -847,6 +895,16 @@ func buildDatasourceConfigurationSnapshot(ctx context.Context, queries *dbgen.Qu
 	}
 	assignments := make([]agentprotocol.DatasourceAssignment, 0, len(rows))
 	for _, row := range rows {
+		transition, transitionErr := queries.GetDatasourceReassignment(ctx, row.ID)
+		if transitionErr != nil && !errors.Is(transitionErr, pgx.ErrNoRows) {
+			return nil, transitionErr
+		}
+		if transitionErr == nil && transition.SourceAgentID == agentID {
+			if transition.UsesV2Removal {
+				continue
+			}
+			row.Version = transition.SourceConfigVersion
+		}
 		assignment, assignmentErr := releaseDatasourceAssignment(installationID, row, adapter)
 		if assignmentErr != nil {
 			return nil, ErrAgentOwnershipDenied

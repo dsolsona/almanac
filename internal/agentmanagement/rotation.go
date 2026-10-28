@@ -11,8 +11,8 @@ import (
 )
 
 type RotateInput struct {
-	SessionSecret                      string `json:"-"`
-	CurrentPassword                    string `json:"-"`
+	SessionSecret string `json:"-"`
+
 	Source                             netip.Addr
 	RequestID, IdempotencyKey, AgentID string
 	ExpectedVersion                    int64
@@ -27,7 +27,7 @@ type RotationIssuance struct {
 func (s *Service) Rotate(ctx context.Context, input RotateInput) (RotationIssuance, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	proof, err := s.auth.ProveAdministrator(ctx, authentication.AdministratorProofInput{SessionSecret: input.SessionSecret, CurrentPassword: input.CurrentPassword, Source: input.Source, RequestID: input.RequestID})
+	proof, err := s.auth.AuthorizeAgentRegistration(ctx, authentication.AgentRegistrationSessionInput{SessionSecret: input.SessionSecret, RequestID: input.RequestID})
 	if err != nil {
 		return RotationIssuance{}, err
 	}

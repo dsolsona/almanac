@@ -85,9 +85,11 @@ func printHelp(w io.Writer) {
   almanac agents get --profile-file=FILE --agent-id=UUID
   almanac agents credentials list --profile-file=FILE --agent-id=UUID [--limit=50] [--cursor=CURSOR]
   almanac agents create --profile-file=FILE --name=NAME --display-name=NAME --idempotency-key=KEY (--token-file=FILE|--show-token)
-  almanac agents credentials rotate --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm (--token-file=FILE|--show-token)
-  almanac agents credentials revoke --profile-file=FILE --agent-id=UUID --credential-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
-  almanac agents disable --profile-file=FILE --agent-id=UUID --if-match=ETAG --current-password-file=FILE --idempotency-key=KEY --confirm
+  almanac agents credentials rotate --profile-file=FILE --agent-id=UUID --if-match=ETAG --idempotency-key=KEY --confirm (--token-file=FILE|--show-token)
+  almanac agents credentials revoke --profile-file=FILE --agent-id=UUID --credential-id=UUID --if-match=ETAG --idempotency-key=KEY --confirm
+  almanac agents disable --profile-file=FILE --agent-id=UUID --if-match=ETAG --idempotency-key=KEY --confirm
+  almanac agents datasources --profile-file=FILE --agent-id=UUID
+  almanac agents delete --profile-file=FILE --agent-id=UUID --if-match=ETAG --idempotency-key=KEY --confirm
   almanac datasources list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--output=json]
   almanac datasources get --profile-file=FILE --datasource-id=UUID [--output=json]
   almanac datasources create --profile-file=FILE --input-file=FILE --idempotency-key=KEY [--output=json]

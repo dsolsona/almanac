@@ -124,7 +124,7 @@ func TestIntegrationBootstrapRestrictedLoginRotationAndLogout(t *testing.T) {
 		t.Fatalf("initial login = %+v, %v", login.Access, err)
 	}
 	permanent := "  Permanent Password phrase 457! \n"
-	rotated, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: login.Secret, CurrentPassword: initial, NewPassword: permanent, Source: source, RequestID: "rotate-1"})
+	rotated, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: login.Secret, NewPassword: permanent, Source: source, RequestID: "rotate-1"})
 	if err != nil || rotated.Secret == "" || rotated.Access.Restricted {
 		t.Fatalf("initial rotation = %+v, %v", rotated.Access, err)
 	}
@@ -256,7 +256,7 @@ func TestIntegrationOrdinaryRotationAndFailedProofPreserveCredentials(t *testing
 		t.Fatal(err)
 	}
 	permanent := "Ordinary rotation permanent phrase 913!"
-	firstRotation, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, CurrentPassword: initial, NewPassword: permanent, Source: source, RequestID: "complete-onboarding"})
+	firstRotation, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, NewPassword: permanent, Source: source, RequestID: "complete-onboarding"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,14 +264,11 @@ func TestIntegrationOrdinaryRotationAndFailedProofPreserveCredentials(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, CurrentPassword: "wrong password candidate", NewPassword: "Another permanent password 674!", Source: source, RequestID: "wrong-current"}); !errors.Is(err, ErrUnauthenticated) {
-		t.Fatalf("wrong current password = %v", err)
-	}
-	unchanged, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, CurrentPassword: permanent, NewPassword: permanent, Source: source, RequestID: "unchanged"})
+	unchanged, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, NewPassword: permanent, Source: source, RequestID: "unchanged"})
 	if !errors.Is(err, ErrPasswordUnchanged) || unchanged.Secret != "" {
 		t.Fatalf("equal password returned_secret=%t err=%v", unchanged.Secret != "", err)
 	}
-	common, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, CurrentPassword: permanent, NewPassword: "passwordpassword", Source: source, RequestID: "common"})
+	common, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, NewPassword: "passwordpassword", Source: source, RequestID: "common"})
 	if !errors.Is(err, identity.ErrCommonPassword) || common.Secret != "" {
 		t.Fatalf("common password returned_secret=%t err=%v", common.Secret != "", err)
 	}
@@ -288,11 +285,11 @@ func TestIntegrationOrdinaryRotationAndFailedProofPreserveCredentials(t *testing
 	if err := query.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_login_attempts WHERE state='failed'").Scan(&failedAttempts); err != nil {
 		t.Fatal(err)
 	}
-	if revision != 2 || sessions != 2 || failedAttempts != 1 {
-		t.Fatalf("state after failed proofs and successful completion: revision=%d sessions=%d failed_attempts=%d", revision, sessions, failedAttempts)
+	if revision != 2 || sessions != 2 || failedAttempts != 0 {
+		t.Fatalf("state after policy rejections and successful completion: revision=%d sessions=%d failed_attempts=%d", revision, sessions, failedAttempts)
 	}
 	finalPassword := "Ordinary rotation replacement phrase 799!"
-	third, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, CurrentPassword: permanent, NewPassword: finalPassword, Source: source, RequestID: "rotate-ordinary"})
+	third, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: second.Secret, NewPassword: finalPassword, Source: source, RequestID: "rotate-ordinary"})
 	if err != nil || third.Secret == "" {
 		t.Fatalf("ordinary rotation = %+v, %v", third.Access, err)
 	}
@@ -363,23 +360,29 @@ func TestIntegrationCredentialEpochRaceDeniesLoginAndRotation(t *testing.T) {
 			t.Fatal(err)
 		}
 		permanent := "Epoch race rotation permanent 747!"
-		normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, CurrentPassword: initial, NewPassword: permanent, Source: source, RequestID: "epoch-first-rotate"})
+		normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, NewPassword: permanent, Source: source, RequestID: "epoch-first-rotate"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		query := testpostgres.Connect(t, databaseURL)
+		hookRan := false
 		service.hasher = controlledHasher{base: service.hasher, afterVerify: func(_ context.Context, _, _ string, verified bool) (bool, error) {
-			if !verified {
-				return false, nil
-			}
+			hookRan = true
 			if _, err := query.Exec(t.Context(), "UPDATE public.almanac_installation SET credential_epoch=gen_random_uuid() WHERE singleton"); err != nil {
 				return false, err
 			}
 			return verified, nil
 		}}
-		result, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: normal.Secret, CurrentPassword: permanent, NewPassword: "Epoch race replacement phrase 688!", Source: source, RequestID: "epoch-rotation-race"})
+		result, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: normal.Secret, NewPassword: "Epoch race replacement phrase 688!", Source: source, RequestID: "epoch-rotation-race"})
+		if !hookRan {
+			t.Fatal("credential epoch race hook did not run")
+		}
 		if !errors.Is(err, ErrUnauthenticated) || result.Secret != "" {
 			t.Fatalf("rotation epoch race returned_secret=%t err=%v", result.Secret != "", err)
+		}
+		var sessions int
+		if err := query.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_sessions WHERE user_id=$1", owner.State.AdministratorID).Scan(&sessions); err != nil || sessions != 1 {
+			t.Fatalf("sessions after denied rotation=%d err=%v", sessions, err)
 		}
 		var revision int64
 		if err := query.QueryRow(t.Context(), "SELECT credential_revision FROM public.almanac_users WHERE id=$1", owner.State.AdministratorID).Scan(&revision); err != nil || revision != 2 {
@@ -423,7 +426,7 @@ func TestIntegrationSharedRateLimitCoversLoginAndCurrentPasswordProof(t *testing
 		t.Fatal(err)
 	}
 	permanent := "Admission control permanent phrase 803!"
-	normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, CurrentPassword: initial, NewPassword: permanent, Source: source, RequestID: "admission-rotate"})
+	normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, NewPassword: permanent, Source: source, RequestID: "admission-rotate"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +449,7 @@ WHERE account_key=sha256(convert_to(lower('owner'), 'UTF8')) AND state='failed'`
 	if !ok || limit.RetryAfter != latestFailure.Sub(blockedAt) || limit.RetryAfter <= 0 {
 		t.Fatalf("blocked login error = %v; expected retry %s", err, latestFailure.Sub(blockedAt))
 	}
-	_, err = service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: normal.Secret, CurrentPassword: permanent, NewPassword: "Admission control replacement phrase 605!", Source: netip.MustParseAddr("198.51.100.89"), RequestID: "admission-blocked-rotation"})
+	_, err = service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: normal.Secret, NewPassword: "Admission control replacement phrase 605!", Source: netip.MustParseAddr("198.51.100.89"), RequestID: "admission-blocked-rotation"})
 	limit, ok = errors.AsType[*RateLimitError](err)
 	if !ok || limit.RetryAfter != latestFailure.Sub(blockedAt) {
 		t.Fatalf("blocked current-password proof error = %v", err)
@@ -457,7 +460,7 @@ WHERE account_key=sha256(convert_to(lower('owner'), 'UTF8')) AND state='failed'`
 	}
 }
 
-func TestIntegrationAdministratorProofThrottlePreventsPasswordWork(t *testing.T) {
+func TestIntegrationAdministratorSessionAuthorizationDoesNotRepeatPasswordWork(t *testing.T) {
 	_, service, _ := newIntegrationService(t)
 	initial := "Administrator proof throttle initial 513!"
 	integrationOwner(t, service, initial)
@@ -468,7 +471,7 @@ func TestIntegrationAdministratorProofThrottlePreventsPasswordWork(t *testing.T)
 	}
 	permanent := "Administrator proof throttle permanent 804!"
 	normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{
-		SessionSecret: pending.Secret, CurrentPassword: initial, NewPassword: permanent,
+		SessionSecret: pending.Secret, NewPassword: permanent,
 		Source: source, RequestID: "proof-throttle-complete-onboarding",
 	})
 	if err != nil {
@@ -492,17 +495,14 @@ func TestIntegrationAdministratorProofThrottlePreventsPasswordWork(t *testing.T)
 	if got := verified.Load(); got != 5 {
 		t.Fatalf("password verification count before throttled proof = %d; want 5", got)
 	}
-	_, err = service.ProveAdministrator(t.Context(), AdministratorProofInput{
-		SessionSecret: normal.Secret, CurrentPassword: permanent,
-		Source: netip.MustParseAddr("192.0.2.171"), RequestID: "proof-throttle-denied",
-	})
-	limit, ok := errors.AsType[*RateLimitError](err)
-	if !ok || limit.RetryAfter <= 0 {
-		t.Fatal("administrator proof did not preserve shared account throttle retry")
+	_, err = service.AuthorizeAgentRegistration(t.Context(), AgentRegistrationSessionInput{SessionSecret: normal.Secret, RequestID: "session-authority"})
+	if err != nil {
+		t.Fatalf("current administrator session rejected: %v", err)
 	}
 	if got := verified.Load(); got != 5 {
-		t.Fatalf("rate-limited administrator proof performed password work; verify count = %d", got)
+		t.Fatalf("session authorization repeated password work; verify count = %d", got)
 	}
+
 }
 
 func TestIntegrationSharedSourceRateLimitReturnsExactRetry(t *testing.T) {
@@ -536,7 +536,7 @@ WHERE source_key=sha256(convert_to('198.51.100.101', 'UTF8')) AND state='failed'
 		t.Fatalf("unthrottled owner login failed: %v", err)
 	}
 	permanent := "Source budget permanent password 748!"
-	normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, CurrentPassword: initial, NewPassword: permanent, Source: otherSource, RequestID: "source-budget-onboard"})
+	normal, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: pending.Secret, NewPassword: permanent, Source: otherSource, RequestID: "source-budget-onboard"})
 	if err != nil {
 		t.Fatalf("unthrottled onboarding rotation failed: %v", err)
 	}
@@ -551,7 +551,7 @@ FROM public.almanac_users u CROSS JOIN public.almanac_installation i WHERE u.id=
 		t.Fatal(err)
 	}
 	changeAt := clock.Now()
-	result, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: normal.Secret, CurrentPassword: permanent, NewPassword: "Source budget replacement password 819!", Source: source, RequestID: "source-budget-blocked-change"})
+	result, err := service.ChangePassword(t.Context(), ChangePasswordInput{SessionSecret: normal.Secret, NewPassword: "Source budget replacement password 819!", Source: source, RequestID: "source-budget-blocked-change"})
 	limit, ok = errors.AsType[*RateLimitError](err)
 	if !ok || limit.RetryAfter != earliestExpiry.Sub(changeAt) || limit.RetryAfter <= 0 || result.Secret != "" {
 		t.Fatalf("source-limited current proof returned_secret=%t err=%v expected_retry=%s", result.Secret != "", err, earliestExpiry.Sub(changeAt))

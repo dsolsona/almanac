@@ -44,6 +44,7 @@ type activeDiagnostic struct {
 	cancel       context.CancelFunc
 	datasourceID string
 	datasource   *agentprotocol.DatasourceAssignment
+	done         chan struct{}
 }
 
 type diagnosticReceipt struct {
@@ -111,8 +112,8 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 		return errors.New("agent diagnostic request expired")
 	}
 	ctx, cancel := context.WithTimeout(parent, remaining)
-	active := activeDiagnostic{cancel: cancel}
-	if request.Operation == "query_preview" {
+	active := activeDiagnostic{cancel: cancel, done: make(chan struct{})}
+	if slices.Contains(r.client.assignments, request.Datasource) {
 		assignment := request.Datasource
 		active.datasourceID = assignment.DatasourceID
 		active.datasource = &assignment
@@ -148,6 +149,29 @@ func (r *diagnosticRunner) reconcileAssignments(assignments []agentprotocol.Data
 	for _, cancel := range cancels {
 		cancel()
 	}
+}
+
+func (r *diagnosticRunner) reconcileAssignmentsAndDrain(ctx context.Context, assignments []agentprotocol.DatasourceAssignment) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	var done []<-chan struct{}
+	for _, active := range r.active {
+		if active.datasource != nil && !slices.Contains(assignments, *active.datasource) {
+			active.cancel()
+			done = append(done, active.done)
+		}
+	}
+	r.mu.Unlock()
+	for _, completed := range done {
+		select {
+		case <-completed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (r *diagnosticRunner) close() {
@@ -209,6 +233,9 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 		result = agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID, State: "timed_out"}
 	}
 	r.mu.Lock()
+	if active, ok := r.active[request.DiagnosticID]; ok {
+		close(active.done)
+	}
 	delete(r.active, request.DiagnosticID)
 	completed := completedDiagnosticResult{result: result, deadlineAt: request.DeadlineAt, generation: generation}
 	r.rememberLocked(request.DiagnosticID, completed, r.client.currentServerTime())

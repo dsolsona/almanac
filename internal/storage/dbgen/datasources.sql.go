@@ -134,7 +134,7 @@ const getDatasourceAgentCapabilities = `-- name: GetDatasourceAgentCapabilities 
 SELECT agent.enabled, runtime.capabilities
 FROM public.almanac_agents AS agent
 LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = agent.id
-WHERE agent.id = $1
+WHERE agent.id = $1 AND agent.deleted_at IS NULL
 `
 
 type GetDatasourceAgentCapabilitiesRow struct {

@@ -98,8 +98,6 @@ async function signIn(password) {
 }
 
 async function setPassword(setStage) {
-  setStage('password rotation current password input');
-  await page.getByLabel('Current password', { exact: true }).fill(fixture.initial);
   setStage('password rotation new password input');
   await page.getByLabel('New password', { exact: true }).fill(fixture.permanent);
   setStage('password rotation confirmation input');
@@ -156,27 +154,24 @@ try {
   stage = 'restricted sign-in';
   await signIn(fixture.initial);
   await heading('Set your permanent password');
+  await expect(page.getByLabel('Current password', { exact: true })).toHaveCount(0);
   await page.reload();
   await heading('Set your permanent password');
-  await expect(page.getByLabel('Current password', { exact: true })).toHaveValue('');
   if (fixture.scenario === 'onboarding') {
     stage = 'restricted management read without Origin';
     await inspectManagementRead(403);
     await inspectLayouts('restricted');
     stage = 'restricted draft logout and sign-in';
-    await page.getByLabel('Current password', { exact: true }).fill(fixture.initial);
     await page.getByLabel('New password', { exact: true }).fill('unsubmitted draft password');
     await page.getByLabel('Confirm new password', { exact: true }).fill('unsubmitted draft password');
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await heading('Sign in');
     await signIn(fixture.initial);
     await heading('Set your permanent password');
-    await expect(page.getByLabel('Current password', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('New password', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Confirm new password', { exact: true })).toHaveValue('');
     assert.equal(counts.password, 0);
     stage = 'invalid new password';
-    await page.getByLabel('Current password', { exact: true }).fill(fixture.initial);
     await page.getByLabel('New password', { exact: true }).fill('short');
     await page.getByLabel('Confirm new password', { exact: true }).fill('short');
     await page.getByRole('button', { name: 'Set password', exact: true }).click();

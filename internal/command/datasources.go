@@ -563,6 +563,12 @@ func writeDatasourceSuccess(stdout, stderr io.Writer, jsonOut bool, operation st
 				_ = json.Unmarshal(item["availability"], &availability)
 				_ = json.Unmarshal(item["endpoint"], &endpoint)
 				fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", firstNonempty(display, name, provider), endpoint, provider, availability)
+				if raw, exists := item["reassignment"]; exists {
+					var transition api.DatasourceReassignment
+					if json.Unmarshal(raw, &transition) == nil {
+						fmt.Fprintf(stdout, "  Reassignment: %s → %s; %s until %s\n", cliAgentID(transition.SourceAgentId), cliAgentID(transition.TargetAgentId), transition.State, transition.AuthorityExpiresAt.Format(time.RFC3339))
+					}
+				}
 			}
 			return 0
 		}

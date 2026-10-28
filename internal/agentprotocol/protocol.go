@@ -18,6 +18,7 @@ import (
 
 const (
 	ProtocolV1                     = "almanac.agent.v1"
+	ProtocolV2                     = "almanac.agent.v2"
 	MaxMessageBytes                = 256 << 10
 	MaxQueueMessages               = 128
 	MaxQueueBytes                  = 2 << 20
@@ -558,7 +559,7 @@ func (p Hello) Validate() error {
 }
 
 func (p Welcome) Validate() error {
-	if p.Protocol != ProtocolV1 {
+	if p.Protocol != ProtocolV1 && p.Protocol != ProtocolV2 {
 		return invalidField("welcome.protocol")
 	}
 	if err := validateNonce(p.RequestNonce); err != nil {

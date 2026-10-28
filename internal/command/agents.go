@@ -15,7 +15,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/agentclient"
 	"github.com/dsolsona/almanac/internal/api"
@@ -43,7 +42,7 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	}
 	jsonOut := requestedJSON(rest)
 	op := operation
-	var profile, id, credentialID, name, display, ifMatch, passwordFile, key, tokenFile, cursor, output string
+	var profile, id, credentialID, name, display, ifMatch, key, tokenFile, cursor, output string
 	var limit, lifetime, overlap int
 	var timeout time.Duration
 	var show, confirm bool
@@ -55,7 +54,6 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	fs.StringVar(&name, "name", "", "immutable agent name")
 	fs.StringVar(&display, "display-name", "", "agent display name")
 	fs.StringVar(&ifMatch, "if-match", "", "exact strong agent ETag")
-	fs.StringVar(&passwordFile, "current-password-file", "", "protected current administrator password")
 	fs.StringVar(&key, "idempotency-key", "", "caller-owned operation key")
 	fs.StringVar(&tokenFile, "token-file", "", "new protected token file")
 	fs.BoolVar(&show, "show-token", false, "display a fresh token once in result output")
@@ -81,16 +79,16 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 		allowed["limit"], allowed["cursor"] = true, true
 	case "agents get":
 		allowed["agent-id"] = true
-	case "agents credentials list":
+	case "agents credentials list", "agents datasources":
 		allowed["agent-id"], allowed["limit"], allowed["cursor"] = true, true, true
 	case "agents create":
 		allowed["name"], allowed["display-name"], allowed["idempotency-key"], allowed["lifetime-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true
 	case "agents credentials rotate":
-		allowed["agent-id"], allowed["if-match"], allowed["current-password-file"], allowed["idempotency-key"], allowed["confirm"], allowed["lifetime-seconds"], allowed["overlap-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true, true, true, true
+		allowed["agent-id"], allowed["if-match"], allowed["idempotency-key"], allowed["confirm"], allowed["lifetime-seconds"], allowed["overlap-seconds"], allowed["token-file"], allowed["show-token"] = true, true, true, true, true, true, true, true
 	case "agents credentials revoke":
-		allowed["agent-id"], allowed["credential-id"], allowed["if-match"], allowed["current-password-file"], allowed["idempotency-key"], allowed["confirm"] = true, true, true, true, true, true
-	case "agents disable":
-		allowed["agent-id"], allowed["if-match"], allowed["current-password-file"], allowed["idempotency-key"], allowed["confirm"] = true, true, true, true, true
+		allowed["agent-id"], allowed["credential-id"], allowed["if-match"], allowed["idempotency-key"], allowed["confirm"] = true, true, true, true, true
+	case "agents disable", "agents delete":
+		allowed["agent-id"], allowed["if-match"], allowed["idempotency-key"], allowed["confirm"] = true, true, true, true
 	}
 	for flag := range seen {
 		if !allowed[flag] {
@@ -100,10 +98,10 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	if !seen["profile-file"] || profile == "" || timeout <= 0 || timeout > 2*time.Minute {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("profile-file is required and timeout must be positive and at most 2m"))
 	}
-	if (operation == "agents list" || operation == "agents credentials list") && (limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor)) {
+	if (operation == "agents list" || operation == "agents credentials list" || operation == "agents datasources") && (limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor)) {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("pagination options are invalid"))
 	}
-	if strings.Contains(operation, "get") || strings.Contains(operation, "credentials list") || strings.Contains(operation, "rotate") || strings.Contains(operation, "revoke") || operation == "agents disable" {
+	if strings.Contains(operation, "get") || strings.Contains(operation, "credentials list") || strings.Contains(operation, "rotate") || strings.Contains(operation, "revoke") || operation == "agents disable" || operation == "agents delete" || operation == "agents datasources" {
 		if !seen["agent-id"] || !validCLIUUID(id) {
 			return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("agent-id must be a canonical UUID"))
 		}
@@ -115,7 +113,7 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	if isIssue && ((tokenFile != "") == show) {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("select exactly one of token-file or show-token"))
 	}
-	if operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable" {
+	if operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable" || operation == "agents delete" {
 		if !confirm {
 			return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("--confirm is required"))
 		}
@@ -125,14 +123,12 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 			return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("name and display-name are required"))
 		}
 	}
-	mutating := operation == "agents create" || operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable"
+	mutating := operation == "agents create" || operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable" || operation == "agents delete"
 	if mutating && (!seen["idempotency-key"] || !validKey(key)) {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("a valid idempotency-key is required"))
 	}
-	if operation != "agents create" && mutating && (!seen["current-password-file"] || passwordFile == "") {
-		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("current-password-file and a valid idempotency-key are required"))
-	}
-	if (operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable") && (!seen["if-match"] || !validETag(ifMatch, id)) {
+
+	if (operation == "agents credentials rotate" || operation == "agents credentials revoke" || operation == "agents disable" || operation == "agents delete") && (!seen["if-match"] || !validETag(ifMatch, id)) {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, agentInvalid("if-match must be the exact strong ETag for agent-id"))
 	}
 	if seen["lifetime-seconds"] && (lifetime < 0 || lifetime > 31_536_000) || seen["overlap-seconds"] && (overlap < 0 || overlap > 600) {
@@ -142,7 +138,7 @@ func agentsCommand(parent context.Context, args []string, stdout, stderr io.Writ
 	defer stop()
 	ctx, cancel := context.WithTimeout(signalCtx, timeout)
 	defer cancel()
-	result, token, replayed, err := performAgent(ctx, operation, profile, id, credentialID, name, display, ifMatch, passwordFile, key, tokenFile, show, limit, cursor, lifetime, seen["lifetime-seconds"], overlap, seen["overlap-seconds"])
+	result, token, replayed, err := performAgent(ctx, operation, profile, id, credentialID, name, display, ifMatch, key, tokenFile, show, limit, cursor, lifetime, seen["lifetime-seconds"], overlap, seen["overlap-seconds"])
 	if err != nil {
 		return writeAgentFailure(stdout, stderr, op, jsonOut, err)
 	}
@@ -171,7 +167,7 @@ func agentOperation(a []string) (string, []string) {
 		return "", a
 	}
 	switch a[0] {
-	case "list", "get", "create", "disable":
+	case "list", "get", "create", "disable", "delete", "datasources":
 		return "agents " + a[0], a[1:]
 	case "credentials":
 		if len(a) < 2 {
@@ -203,6 +199,18 @@ func renderAgentText(operation string, result jsontext.Value, token string, show
 		fmt.Fprintf(&out, "Agents (%d)\n", len(page.Items))
 		for _, a := range page.Items {
 			fmt.Fprintf(&out, "%s\t%s\t%s\t%t\t%s\n", cliAgentID(a.Id), strconv.Quote(a.Name), strconv.Quote(a.DisplayName), a.Enabled, a.Version)
+		}
+		if page.NextCursor != "" {
+			fmt.Fprintf(&out, "Next cursor: %s\n", strconv.Quote(page.NextCursor))
+		}
+	case "agents datasources":
+		var page api.AgentDatasourcePage
+		if json.Unmarshal(result, &page) != nil {
+			return "Agent dependencies retrieved.\n"
+		}
+		fmt.Fprintf(&out, "Assigned datasources (%d)\n", len(page.Items))
+		for _, item := range page.Items {
+			fmt.Fprintf(&out, "%s\t%s\t%s\n", cliAgentID(item.Id), strconv.Quote(item.Name), strconv.Quote(item.DisplayName))
 		}
 		if page.NextCursor != "" {
 			fmt.Fprintf(&out, "Next cursor: %s\n", strconv.Quote(page.NextCursor))
@@ -242,7 +250,7 @@ func renderAgentText(operation string, result jsontext.Value, token string, show
 		if showToken {
 			fmt.Fprintf(&out, "Token: %s\n", strconv.Quote(token))
 		}
-	case "agents credentials revoke", "agents disable":
+	case "agents credentials revoke", "agents disable", "agents delete":
 		var lifecycle api.LifecycleResult
 		if json.Unmarshal(result, &lifecycle) != nil {
 			return "Agent lifecycle operation completed.\n"
@@ -285,7 +293,7 @@ func renderAgentRuntime(out *strings.Builder, agent api.Agent) {
 	}
 	fmt.Fprintf(out, "Last attempt: %s\nLast successful query: %s\nNext expected execution: %s\n",
 		cliRuntimeTime(runtime.LastAttemptAt), cliRuntimeTime(runtime.LastSuccessfulQueryAt), cliRuntimeTime(runtime.NextExpectedExecutionAt))
-	if runtime.CollectionExplanation == api.NoAssignment {
+	if runtime.CollectionExplanation == api.AgentRuntimeStatusCollectionExplanationNoAssignment {
 		fmt.Fprintln(out, "No datasources are assigned to this agent.")
 	}
 	if len(runtime.Capabilities) == 0 {
@@ -342,16 +350,8 @@ func cliOptionalTime(t *time.Time) string {
 	}
 	return t.Format(time.RFC3339Nano)
 }
-func performAgent(ctx context.Context, op, profile, id, credentialID, name, display, etag, passwordFile, key, tokenFile string, show bool, limit int, cursor string, lifetime int, lifetimeSet bool, overlap int, overlapSet bool) (jsontext.Value, string, bool, error) {
-	var password []byte
-	mutating := op == "agents create" || op == "agents credentials rotate" || op == "agents credentials revoke" || op == "agents disable"
-	if mutating && op != "agents create" {
-		var e error
-		password, e = secretfile.Read(passwordFile, 512)
-		if e != nil || len(password) == 0 || !utf8.Valid(password) {
-			return nil, "", false, agentInvalid("current-password file is invalid")
-		}
-	}
+func performAgent(ctx context.Context, op, profile, id, credentialID, name, display, etag, key, tokenFile string, show bool, limit int, cursor string, lifetime int, lifetimeSet bool, overlap int, overlapSet bool) (jsontext.Value, string, bool, error) {
+	mutating := op == "agents create" || op == "agents credentials rotate" || op == "agents credentials revoke" || op == "agents disable" || op == "agents delete"
 	locked, e := cliprofile.Open(ctx, profile, false)
 	if e != nil {
 		return nil, "", false, agentProfileFailure(e, false)
@@ -413,6 +413,14 @@ func performAgent(ctx context.Context, op, profile, id, credentialID, name, disp
 		var idv api.AgentId
 		_ = json.Unmarshal([]byte(strconv.Quote(id)), &idv)
 		data, e = client.Credentials(ctx, idv, limit, cursor)
+	case "agents datasources":
+		var idv api.AgentId
+		_ = json.Unmarshal([]byte(strconv.Quote(id)), &idv)
+		data, e = client.Dependencies(ctx, idv, limit, cursor)
+	case "agents delete":
+		var idv api.AgentId
+		_ = json.Unmarshal([]byte(strconv.Quote(id)), &idv)
+		data, e = client.Delete(ctx, idv, etag, key)
 	case "agents create":
 		life := optionalSeconds(lifetime, lifetimeSet)
 		var b []byte
@@ -424,17 +432,17 @@ func performAgent(ctx context.Context, op, profile, id, credentialID, name, disp
 		life := optionalSeconds(lifetime, lifetimeSet)
 		over := optionalSeconds(overlap, overlapSet)
 		var b []byte
-		b, token, replay, e = client.Rotate(ctx, idv, api.RotateAgentRequest{CurrentPassword: string(password), LifetimeSeconds: life, OverlapSeconds: over}, etag, key)
+		b, token, replay, e = client.Rotate(ctx, idv, api.RotateAgentRequest{LifetimeSeconds: life, OverlapSeconds: over}, etag, key)
 		data = b
 	case "agents credentials revoke":
 		var idv, cid api.AgentId
 		_ = json.Unmarshal([]byte(strconv.Quote(id)), &idv)
 		_ = json.Unmarshal([]byte(strconv.Quote(credentialID)), &cid)
-		data, e = client.Revoke(ctx, idv, cid, api.PasswordProofRequest{CurrentPassword: string(password)}, etag, key)
+		data, e = client.Revoke(ctx, idv, cid, api.AgentLifecycleRequest{}, etag, key)
 	case "agents disable":
 		var idv api.AgentId
 		_ = json.Unmarshal([]byte(strconv.Quote(id)), &idv)
-		data, e = client.Disable(ctx, idv, api.PasswordProofRequest{CurrentPassword: string(password)}, etag, key)
+		data, e = client.Disable(ctx, idv, api.AgentLifecycleRequest{}, etag, key)
 	}
 	if record.Session != session.Session() {
 		record.Session = session.Session()

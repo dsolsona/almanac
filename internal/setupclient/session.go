@@ -50,6 +50,8 @@ type AgentOperations interface {
 	PostAgents(context.Context, *api.PostAgentsParams, api.PostAgentsJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	GetAgent(context.Context, api.AgentId, ...api.RequestEditorFn) (*http.Response, error)
 	GetAgentCredentials(context.Context, api.AgentId, *api.GetAgentCredentialsParams, ...api.RequestEditorFn) (*http.Response, error)
+	GetAgentDatasources(context.Context, api.AgentId, *api.GetAgentDatasourcesParams, ...api.RequestEditorFn) (*http.Response, error)
+	DeleteAgent(context.Context, api.AgentId, *api.DeleteAgentParams, api.DeleteAgentJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	PostAgentCredentialRotate(context.Context, api.AgentId, *api.PostAgentCredentialRotateParams, api.PostAgentCredentialRotateJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	PostAgentCredentialRevoke(context.Context, api.AgentId, api.AgentId, *api.PostAgentCredentialRevokeParams, api.PostAgentCredentialRevokeJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	PostAgentDisable(context.Context, api.AgentId, *api.PostAgentDisableParams, api.PostAgentDisableJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)

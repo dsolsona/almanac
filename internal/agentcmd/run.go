@@ -40,6 +40,8 @@ type client struct {
 	resume               string
 	generation           string
 	lease                agentprotocol.Lease
+	protocol             string
+	leaseBaseline        *agentprotocol.ConfigurationSnapshot
 	revision             string
 	sequence             int64
 	pending              *agentprotocol.Heartbeat
@@ -197,7 +199,7 @@ func (c *client) runSession(ctx context.Context) error {
 	u.Scheme = "wss"
 	u.Path = "/api/agent/v1/connect"
 	header := http.Header{"Authorization": []string{"Bearer " + c.token}}
-	conn, response, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPClient: c.http, HTTPHeader: header, Subprotocols: []string{agentprotocol.ProtocolV1}, CompressionMode: websocket.CompressionDisabled})
+	conn, response, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPClient: c.http, HTTPHeader: header, Subprotocols: []string{agentprotocol.ProtocolV2, agentprotocol.ProtocolV1}, CompressionMode: websocket.CompressionDisabled})
 	if err != nil {
 		if response != nil && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) {
 			return ErrCredential
@@ -218,7 +220,7 @@ func (c *client) runSession(ctx context.Context) error {
 		return err
 	}
 	hello := agentprotocol.Envelope[agentprotocol.Hello]{Kind: agentprotocol.KindHello, MessageID: messageID, SessionGeneration: c.generation,
-		Payload: agentprotocol.Hello{ProtocolVersions: []string{agentprotocol.ProtocolV1}, SoftwareVersion: "1.0.0",
+		Payload: agentprotocol.Hello{ProtocolVersions: []string{agentprotocol.ProtocolV2, agentprotocol.ProtocolV1}, SoftwareVersion: "1.0.0",
 			Capabilities: []agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
 				ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"collect", "connection_test", "query_preview"}}}, ResumeToken: c.resume, RequestNonce: nonce}}
 	if err := hello.Validate(); err != nil {
@@ -236,7 +238,7 @@ func (c *client) runSession(ctx context.Context) error {
 	err = readJSON(helloCtx, conn, &welcome)
 	cancelHello()
 	welcomeReceivedAt := time.Now()
-	if err == nil && welcome.Kind == agentprotocol.KindWelcome && welcome.Payload.Protocol != agentprotocol.ProtocolV1 {
+	if err == nil && welcome.Kind == agentprotocol.KindWelcome && welcome.Payload.Protocol != conn.Subprotocol() {
 		return ErrIncompatible
 	}
 	if err != nil || welcome.Kind != agentprotocol.KindWelcome || welcome.Validate() != nil || welcome.Payload.RequestNonce != nonce {
@@ -245,6 +247,7 @@ func (c *client) runSession(ctx context.Context) error {
 		}
 		return errors.New("backend welcome is invalid")
 	}
+	c.protocol = welcome.Payload.Protocol
 	if welcomeReceivedAt.Sub(helloSentAt) > 5*time.Second {
 		return errors.New("backend welcome exceeded the safe lease response window")
 	}
@@ -425,7 +428,7 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusServiceUnavailable {
 		c.configurationPending = true
-		if c.collections != nil {
+		if c.collections != nil && c.protocol != agentprotocol.ProtocolV2 {
 			c.collections.SetPaused(true)
 		}
 		return nil
@@ -445,22 +448,50 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	if response.Header.Get("ETag") != wantETag {
 		return errors.New("configuration validator is invalid")
 	}
-	if agentprotocol.ValidateSnapshotLease(snapshot, c.lease) != nil {
-		return errors.New("configuration snapshot does not match execution lease")
-	}
-	if c.revision == snapshot.ConfigurationRevision {
-		c.configurationPending = false
-		c.desiredRevision = ""
-		c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
-		c.slis = append([]agentprotocol.SLICollection(nil), snapshot.SLIs...)
-		if c.collections != nil {
-			c.collections.SetConfiguration(snapshot)
-			c.collections.SetLease(c.lease)
+	var transitionAllowed map[string]bool
+	transition := snapshot.ConfigurationRevision != c.lease.ConfigurationRevision
+	if transition {
+		if c.protocol != agentprotocol.ProtocolV2 || c.revision == "" || revisionAfter(c.lease.ConfigurationRevision, snapshot.ConfigurationRevision) {
+			return errors.New("configuration snapshot does not match execution lease")
 		}
-		return nil
+		current := agentprotocol.ConfigurationSnapshot{AgentID: c.lease.AgentID, ConfigurationRevision: c.revision, Assignments: c.assignments, SLIs: c.slis}
+		if c.leaseBaseline == nil {
+			if c.revision != c.lease.ConfigurationRevision {
+				return errors.New("previous configuration is not authorized")
+			}
+			c.leaseBaseline = &current
+		}
+		if agentprotocol.ValidateSnapshotLease(*c.leaseBaseline, c.lease) != nil {
+			return errors.New("previous configuration is not authorized")
+		}
+		transitionAllowed, err = unchangedTransitionPairs(current, snapshot)
+		if err != nil {
+			return err
+		}
+		retainBaselineAuthorized(transitionAllowed, *c.leaseBaseline, snapshot)
+	} else if agentprotocol.ValidateSnapshotLease(snapshot, c.lease) != nil {
+		return errors.New("configuration snapshot does not match execution lease")
+	} else {
+		c.leaseBaseline = nil
 	}
+	drainCtx, cancelDrain := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelDrain()
 	if c.diagnostics != nil {
-		c.diagnostics.reconcileAssignments(snapshot.Assignments)
+		if err := c.diagnostics.reconcileAssignmentsAndDrain(drainCtx, snapshot.Assignments); err != nil {
+			return err
+		}
+	}
+	if c.collections != nil {
+		var err error
+		if transition {
+			err = c.collections.SetTransitionConfigurationAndDrain(drainCtx, snapshot, transitionAllowed)
+		} else {
+			err = c.collections.SetConfigurationAndDrain(drainCtx, snapshot)
+		}
+		if err != nil {
+			return err
+		}
+		c.collections.SetLease(c.lease)
 	}
 	messageID, err := newMessageID()
 	if err != nil {
@@ -476,13 +507,71 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	c.revision = snapshot.ConfigurationRevision
 	c.desiredRevision = ""
 	c.configurationPending = false
-	c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
-	c.slis = append([]agentprotocol.SLICollection(nil), snapshot.SLIs...)
+	c.assignments = append([]agentprotocol.DatasourceAssignment{}, snapshot.Assignments...)
+	c.slis = append([]agentprotocol.SLICollection{}, snapshot.SLIs...)
 	if c.collections != nil {
-		c.collections.SetConfiguration(snapshot)
 		c.collections.SetLease(c.lease)
 	}
 	return nil
+}
+
+func unchangedTransitionPairs(previous, next agentprotocol.ConfigurationSnapshot) (map[string]bool, error) {
+	if previous.AgentID != next.AgentID || next.Validate() != nil {
+		return nil, errors.New("invalid transition configuration")
+	}
+	assignments := make(map[string]agentprotocol.DatasourceAssignment, len(previous.Assignments))
+	for _, a := range previous.Assignments {
+		assignments[a.DatasourceID] = a
+	}
+	definitions := make(map[string]agentprotocol.SLICollection, len(previous.SLIs))
+	for _, def := range previous.SLIs {
+		definitions[def.SLIID] = def
+	}
+	nextAssignments := make(map[string]agentprotocol.DatasourceAssignment, len(next.Assignments))
+	for _, a := range next.Assignments {
+		nextAssignments[a.DatasourceID] = a
+	}
+	allowed := make(map[string]bool)
+	for _, def := range next.SLIs {
+		old, exists := definitions[def.SLIID]
+		if !exists {
+			continue
+		}
+		previousAssignment, nextAssignment := assignments[old.DatasourceID], nextAssignments[def.DatasourceID]
+		if old == def && previousAssignment == nextAssignment {
+			allowed[collectionKey(def)] = true
+			continue
+		}
+		// A cancellation can change only the datasource resource version. Treat
+		// it as a removal and withheld addition until a matching grant arrives.
+		previousAssignment.DatasourceVersion = nextAssignment.DatasourceVersion
+		old.DatasourceVersion = def.DatasourceVersion
+		if old != def || previousAssignment != nextAssignment {
+			return nil, errors.New("transition changed an existing collection")
+		}
+	}
+	return allowed, nil
+}
+
+func retainBaselineAuthorized(allowed map[string]bool, baseline, next agentprotocol.ConfigurationSnapshot) {
+	oldSLIs := make(map[string]agentprotocol.SLICollection, len(baseline.SLIs))
+	oldAssignments := make(map[string]agentprotocol.DatasourceAssignment, len(baseline.Assignments))
+	newAssignments := make(map[string]agentprotocol.DatasourceAssignment, len(next.Assignments))
+	for _, value := range baseline.SLIs {
+		oldSLIs[value.SLIID] = value
+	}
+	for _, value := range baseline.Assignments {
+		oldAssignments[value.DatasourceID] = value
+	}
+	for _, value := range next.Assignments {
+		newAssignments[value.DatasourceID] = value
+	}
+	for _, value := range next.SLIs {
+		old, exists := oldSLIs[value.SLIID]
+		if !exists || old != value || oldAssignments[value.DatasourceID] != newAssignments[value.DatasourceID] {
+			delete(allowed, collectionKey(value))
+		}
+	}
 }
 
 func (c *client) prepareHeartbeat() error {
@@ -558,6 +647,9 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 			return errors.New("renewed execution lease has no conservative remaining validity")
 		}
 		c.lease = ack.Payload.ExecutionLease
+		if c.lease.ConfigurationRevision == c.revision {
+			c.leaseBaseline = nil
+		}
 		c.leaseDeadline = deadline
 		if c.collections != nil {
 			c.collections.SetLeaseAuthority(c.lease, deadline, c.clockSafe)
@@ -568,7 +660,7 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		c.pendingServerAtSend = time.Time{}
 		c.pendingLatestSentAt = time.Time{}
 		if c.configurationPending || leaseRevision > currentAppliedRevision || revisionAfter(c.desiredRevision, lease.ConfigurationRevision) {
-			if c.collections != nil {
+			if c.collections != nil && c.protocol != agentprotocol.ProtocolV2 {
 				c.collections.SetPaused(true)
 			}
 			if err := c.reconcile(ctx, conn); err != nil {
@@ -587,7 +679,7 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 			c.desiredRevision = changed.Payload.DesiredRevision
 		}
 		c.configurationPending = true
-		if c.collections != nil {
+		if c.collections != nil && c.protocol != agentprotocol.ProtocolV2 {
 			c.collections.SetPaused(true)
 		}
 	case agentprotocol.KindDiagnosticRequest:

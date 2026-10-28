@@ -76,7 +76,7 @@ func TestIntegrationCreateAgentUsesCurrentSessionForFreshIssueAndReplay(t *testi
 	}
 	permanentPassword := "Agent management permanent password 830!"
 	normal, err := auth.ChangePassword(t.Context(), authentication.ChangePasswordInput{
-		SessionSecret: restricted.Secret, CurrentPassword: initialPassword, NewPassword: permanentPassword,
+		SessionSecret: restricted.Secret, NewPassword: permanentPassword,
 		Source: source, RequestID: "agent-complete-onboarding",
 	})
 	if err != nil {

@@ -70,7 +70,7 @@ func (q *Queries) FindAgentSessionUserID(ctx context.Context, verifier []byte) (
 const insertAgent = `-- name: InsertAgent :one
 INSERT INTO public.almanac_agents (name, display_name, enabled, version, created_at, updated_at)
 VALUES ($1, $2, true, 1, $3, $3)
-RETURNING id, name, display_name, enabled, version, created_at, updated_at
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at
 `
 
 type InsertAgentParams struct {
@@ -90,6 +90,7 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (Alman
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

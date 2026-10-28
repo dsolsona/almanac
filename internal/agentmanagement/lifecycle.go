@@ -26,15 +26,15 @@ type CredentialsInput struct {
 	Cursor        string
 }
 type RevokeInput struct {
-	SessionSecret                                    string `json:"-"`
-	CurrentPassword                                  string `json:"-"`
+	SessionSecret string `json:"-"`
+
 	Source                                           netip.Addr
 	RequestID, IdempotencyKey, AgentID, CredentialID string
 	ExpectedVersion                                  int64
 }
 type DisableInput struct {
-	SessionSecret                      string `json:"-"`
-	CurrentPassword                    string `json:"-"`
+	SessionSecret string `json:"-"`
+
 	Source                             netip.Addr
 	RequestID, IdempotencyKey, AgentID string
 	ExpectedVersion                    int64
@@ -70,7 +70,7 @@ func (s *Service) Credentials(ctx context.Context, input CredentialsInput) (stor
 func (s *Service) Revoke(ctx context.Context, input RevokeInput) (storage.AgentLifecycleResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	proof, err := s.auth.ProveAdministrator(ctx, authentication.AdministratorProofInput{SessionSecret: input.SessionSecret, CurrentPassword: input.CurrentPassword, Source: input.Source, RequestID: input.RequestID})
+	proof, err := s.auth.AuthorizeAgentRegistration(ctx, authentication.AgentRegistrationSessionInput{SessionSecret: input.SessionSecret, RequestID: input.RequestID})
 	if err != nil {
 		return storage.AgentLifecycleResult{}, err
 	}
@@ -79,9 +79,29 @@ func (s *Service) Revoke(ctx context.Context, input RevokeInput) (storage.AgentL
 func (s *Service) Disable(ctx context.Context, input DisableInput) (storage.AgentLifecycleResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	proof, err := s.auth.ProveAdministrator(ctx, authentication.AdministratorProofInput{SessionSecret: input.SessionSecret, CurrentPassword: input.CurrentPassword, Source: input.Source, RequestID: input.RequestID})
+	proof, err := s.auth.AuthorizeAgentRegistration(ctx, authentication.AgentRegistrationSessionInput{SessionSecret: input.SessionSecret, RequestID: input.RequestID})
 	if err != nil {
 		return storage.AgentLifecycleResult{}, err
 	}
 	return storage.DisableAgent(ctx, s.databaseURL, storage.DisableAgentInput{Proof: proof, AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Now: s.currentTime})
+}
+
+func (s *Service) Dependencies(ctx context.Context, input CredentialsInput) (storage.DatasourcePage, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	verifier, err := identity.SessionSecretVerifier(input.SessionSecret)
+	if err != nil {
+		return storage.DatasourcePage{}, authentication.ErrUnauthenticated
+	}
+	return storage.ListAgentDatasourceDependencies(ctx, s.databaseURL, storage.DatasourceProof{SessionVerifier: verifier}, input.AgentID, input.Limit, input.Cursor, s.currentTime)
+}
+
+func (s *Service) Delete(ctx context.Context, input DisableInput) (storage.AgentLifecycleResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	proof, err := s.auth.AuthorizeAgentRegistration(ctx, authentication.AgentRegistrationSessionInput{SessionSecret: input.SessionSecret, RequestID: input.RequestID})
+	if err != nil {
+		return storage.AgentLifecycleResult{}, err
+	}
+	return storage.DeleteAgent(ctx, s.databaseURL, storage.DisableAgentInput{Proof: proof, AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Now: s.currentTime})
 }

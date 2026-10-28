@@ -681,7 +681,13 @@ func datasourceDTO(record storage.DatasourceRecord) api.Datasource {
 		value := record.Settings.AuthenticationUser
 		username = &value
 	}
-	return api.Datasource{Id: types.UUID(id), AgentId: types.UUID(agentID), Name: record.Settings.Name, DisplayName: record.Settings.DisplayName,
+	var reassignment *api.DatasourceReassignment
+	if record.Reassignment != nil {
+		source, _ := uuid.Parse(record.Reassignment.SourceAgentID)
+		target, _ := uuid.Parse(record.Reassignment.TargetAgentID)
+		reassignment = &api.DatasourceReassignment{SourceAgentId: types.UUID(source), TargetAgentId: types.UUID(target), RequestedAt: record.Reassignment.RequestedAt, AuthorityExpiresAt: record.Reassignment.AuthorityExpiresAt, State: api.DatasourceReassignmentState(record.Reassignment.State)}
+	}
+	return api.Datasource{Reassignment: reassignment, Id: types.UUID(id), AgentId: types.UUID(agentID), Name: record.Settings.Name, DisplayName: record.Settings.DisplayName,
 		Version: strconv.FormatInt(record.Version, 10), Provider: api.DatasourceProvider(record.Settings.Provider),
 		ConfigurationFormat: api.DatasourceConfigurationFormat(record.Settings.ConfigurationFormat), Endpoint: record.Settings.Endpoint,
 		Tls: api.DatasourceTLS{CaPem: &caPEM, InsecureSkipVerify: record.Settings.TLS.InsecureSkipVerify},
@@ -718,6 +724,10 @@ func (h *Handler) writeStorageError(w http.ResponseWriter, err error, requestID 
 		h.writeProblem(w, 404, "not_found", requestID)
 	case errors.Is(err, storage.ErrDatasourceConflict), errors.Is(err, storage.ErrAgentConflict):
 		h.writeProblem(w, 409, "conflict", requestID)
+	case errors.Is(err, storage.ErrReassignmentPending):
+		h.writeProblem(w, 409, "reassignment_pending", requestID)
+	case errors.Is(err, storage.ErrReassignmentSettingsConflict):
+		h.writeProblem(w, 422, "reassignment_settings_conflict", requestID)
 	case errors.Is(err, storage.ErrDatasourceMeasurementConflict):
 		h.writeProblem(w, 409, "measurement_conflict", requestID)
 	case errors.Is(err, storage.ErrDiagnosticConflict):
@@ -765,11 +775,18 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
 func (h *Handler) writeProblem(w http.ResponseWriter, status int, code, requestID string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
+	message := "Datasource request failed"
+	if code == "reassignment_pending" {
+		message = "This agent is completing a datasource move. Wait for it to finish or cancel the move before changing collection settings."
+	}
+	if code == "reassignment_settings_conflict" {
+		message = "Save connection changes before changing the assigned agent."
+	}
 	_ = json.MarshalWrite(w, api.Problem{Code: code, FieldErrors: []struct {
 		Code    string `json:"code"`
 		Field   string `json:"field"`
 		Message string `json:"message"`
-	}{}, Message: "Datasource request failed", RequestId: requestID})
+	}{}, Message: message, RequestId: requestID})
 }
 
 func newRequestID() (string, error) {

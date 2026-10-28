@@ -93,7 +93,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		Subprotocols:    []string{agentprotocol.ProtocolV1},
+		Subprotocols:    []string{agentprotocol.ProtocolV2, agentprotocol.ProtocolV1},
 		CompressionMode: websocket.CompressionDisabled,
 	})
 	if err != nil {
@@ -113,7 +113,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer h.registry.remove(control)
 	defer cancel()
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
-	if conn.Subprotocol() != agentprotocol.ProtocolV1 {
+	if conn.Subprotocol() != agentprotocol.ProtocolV1 && conn.Subprotocol() != agentprotocol.ProtocolV2 {
 		_ = conn.Close(websocket.StatusProtocolError, "protocol required")
 		return
 	}
@@ -134,10 +134,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusPolicyViolation, "invalid hello")
 		return
 	}
-	accepted, err := h.runtime.Open(ctx, token, agentprotocol.Envelope[agentprotocol.Hello]{
+	accepted, err := h.runtime.OpenProtocol(ctx, token, agentprotocol.Envelope[agentprotocol.Hello]{
 		Kind: envelope.Kind, MessageID: envelope.MessageID,
 		SessionGeneration: envelope.SessionGeneration, Payload: hello,
-	})
+	}, conn.Subprotocol())
 	if err != nil {
 		code, reason := openFailure(err)
 		_ = conn.Close(code, reason)

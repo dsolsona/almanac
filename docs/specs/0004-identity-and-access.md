@@ -5,7 +5,7 @@
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
 - Implementation: in progress
-- Related ADRs: [ADR-0004](../adr/0004-identity-and-access.md) (accepted)
+- Related ADRs: [ADR-0004](../adr/0004-identity-and-access.md), [ADR-0020](../adr/0020-session-authorized-management.md) (accepted)
 - Plans: [Identity primitives](../plans/0006-identity-primitives.md),
   [initial owner](../plans/0007-initial-owner-persistence.md),
   [offline password policy](../plans/0008-offline-password-policy.md),
@@ -14,7 +14,7 @@
   [shared login admission](../plans/0011-shared-login-throttle.md),
   [local authentication service](../plans/0012-local-authentication-service.md),
   [authentication HTTP](../plans/0013-local-authentication-http.md)
-- Supersedes / superseded by: none
+- Supersedes / superseded by: Amended by [SPEC-0018](0018-agent-management-usability.md) for session-authorized management.
 
 ## Purpose
 
@@ -127,7 +127,7 @@ last-administrator position.
 UI and CLI offer the same create, inspect, update, disable, rotate, and revoke
 operations and errors. Local CLI login exchanges credentials for an opaque session;
 When Google SSO ships, Google-only users authorize a CLI session through a browser approval bound to a
-one-use CLI challenge; browser reauthentication also unlocks sensitive CLI actions.
+one-use CLI challenge; the resulting session authorizes sensitive CLI actions according to current role.
 Personal tokens have explicit management operation scopes, a 30-day default and
 90-day maximum lifetime, and never exceed the user's current role. Ordinary tokens
 cannot mint credentials, change authentication settings, or reset passwords.
@@ -139,9 +139,9 @@ grants authorize their corresponding sensitive operations. `users:admin` automat
 is limited to non-administrator targets: it cannot create/promote an administrator,
 reset an administrator password, change its own role, or link authentication methods.
 `authentication:admin` cannot change account bindings, admission roles, or login trust
-in a way that creates administrator access; those actions require interactive
-administrator reauthentication. Initial grants and scope
-expansion require administrator reauthentication within five minutes. Thereafter,
+in a way that creates administrator access; those actions require an interactive
+administrator session. Initial grants and scope expansion require a current
+administrator session. Thereafter,
 scoped operations, including issuance, rotation, and revocation, run noninteractively
 through API/CLI without repeated browser approval. Every call requires the owner's
 current enabled Administrator role. Automation cannot create or expand automation
@@ -186,7 +186,7 @@ require a session-bound CSRF token and same-origin validation; GET has no mutati
 Do not store browser authentication in local storage. Logout revokes server state.
 [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
 
-A password change requires the current password and atomically invalidates all
+A password change requires an authenticated session and atomically invalidates all
 existing sessions, personal/automation tokens, and pending authentication, linking,
 activation, invitation, and reset challenges; successful change issues a fresh
 session to the authenticated caller. An administrator can issue a one-time,
@@ -222,8 +222,8 @@ email; consume it and bind issuer/subject atomically. An optional Workspace-doma
 restriction validates the signed `hd` claim as an additional restriction, never as
 an invitation substitute. No automatic registration or administrator grant occurs.
 
-Matching an existing email does not link accounts. Linking requires authentication
-and recent reauthentication of the existing account, then a fresh Google flow.
+Matching an existing email does not link accounts. Linking requires a current session
+of the existing account, then a fresh Google flow.
 Unique issuer/subject constraints prevent linking one Google identity to two users.
 Unlinking cannot remove the last usable login method or protected local administrator.
 Google outage blocks new Google authentication; existing Almanac sessions follow

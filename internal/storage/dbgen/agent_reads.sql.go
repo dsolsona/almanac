@@ -11,9 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const agentHasAssignedDatasources = `-- name: AgentHasAssignedDatasources :one
+SELECT EXISTS (SELECT 1 FROM public.almanac_datasources WHERE agent_id = $1)
+`
+
+func (q *Queries) AgentHasAssignedDatasources(ctx context.Context, agentID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, agentHasAssignedDatasources, agentID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, display_name, enabled, version, created_at, updated_at
-FROM public.almanac_agents WHERE id = $1 FOR SHARE
+SELECT id, name, display_name, enabled, version, created_at, updated_at, deleted_at
+FROM public.almanac_agents WHERE id = $1 AND deleted_at IS NULL FOR SHARE
 `
 
 func (q *Queries) GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error) {
@@ -27,6 +38,7 @@ func (q *Queries) GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAge
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -88,9 +100,9 @@ func (q *Queries) ListAgentCredentials(ctx context.Context, arg ListAgentCredent
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, display_name, enabled, version, created_at, updated_at
+SELECT id, name, display_name, enabled, version, created_at, updated_at, deleted_at
 FROM public.almanac_agents
-WHERE (created_at, id) > ($1::timestamptz, $2::uuid)
+WHERE deleted_at IS NULL AND (created_at, id) > ($1::timestamptz, $2::uuid)
 ORDER BY created_at, id LIMIT $3
 `
 
@@ -117,6 +129,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]Alman
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
