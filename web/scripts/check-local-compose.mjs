@@ -56,10 +56,42 @@ let cleanupPromise;
 function redact(value) {
   let text = String(value ?? '');
   for (const secret of [initial, permanent, issuedToken]) if (secret) text = text.split(secret).join('[REDACTED]');
-  return text.replace(/postgres(?:ql)?:\/\/[^\s"']+/g, '[DATABASE URL]')
+  return text.replace(/(["']?(?:set-)?cookie["']?\s*:\s*)[^\r\n]*/gi, '$1[REDACTED]')
+    .replace(/postgres(?:ql)?:\/\/[^\s"']+/g, '[DATABASE URL]')
     .replace(/\b[a-fA-F0-9]{64}\b/g, '[HEX SECRET OR DIGEST]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[PRIVATE KEY]')
     .slice(-64 * 1024);
+}
+
+function failureCategory(error) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  if (/strict mode violation/i.test(message)) return 'strict-locator';
+  if (error?.name === 'TimeoutError' || /timeout .* exceeded|timed out/i.test(message)) return 'timeout';
+  if (error?.name === 'AssertionError' || error?.name === 'ExpectError' || /^expect\(/.test(message)) return 'assertion';
+  return 'other';
+}
+
+async function withTrackedRoute(page, pattern, handle, exercise, release = () => {}) {
+  const pending = new Set();
+  const failures = [];
+  const handler = (route) => {
+    const task = Promise.resolve().then(() => handle(route)).catch((error) => { failures.push(error); });
+    pending.add(task);
+    void task.then(() => pending.delete(task));
+    return task;
+  };
+  await page.route(pattern, handler);
+  try {
+    await exercise();
+  } catch (error) {
+    failures.push(error);
+  } finally {
+    release();
+    try { await page.unroute(pattern, handler); } catch (error) { failures.push(error); }
+    await Promise.all([...pending]);
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, `Route exercise failed (${failures.map(failureCategory).join(', ')})`);
 }
 
 function abortChild(child, signal) {
@@ -276,29 +308,56 @@ async function checkCollectedSLI(page, agentID) {
     if (!response.ok) return '';
     return (await response.json()).runtime?.reachability ?? '';
   }, agentID), { timeout: 25_000 }).toBe('connected');
-  stage = 'create assigned 15-second datasource using administrator session';
-  const datasource = await page.evaluate(async (id) => {
-    const contextResponse = await fetch('/api/v1/auth/context', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
-    });
-    if (!contextResponse.ok) throw new Error(`Authentication context returned ${contextResponse.status}`);
-    const context = await contextResponse.json();
-    if (context.session?.login !== 'admin' || context.session.role !== 'administrator' ||
-        context.session.restricted !== false || typeof context.csrf_token !== 'string' || !context.csrf_token) {
-      throw new Error('Authentication context did not contain an unrestricted administrator session and CSRF token');
+  stage = 'real Compose SLI prerequisite and datasource creation';
+  await page.goto(`${url}/slis`);
+  await expect(page.getByText('Add a Prometheus datasource to create your first SLI.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create SLI', exact: true })).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile', width: 360, height: 900 }]) {
+      await setCaptureViewport(page, theme, viewport);
+      await page.screenshot({ path: join(artifacts, `sli-prerequisite-${viewport.name}-${theme}.png`), fullPage: true, animations: 'disabled' });
     }
-    const response = await fetch('/api/v1/datasources', { method: 'POST', headers: {
-      'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, 'Idempotency-Key': 'compose-sli-datasource',
-    }, body: JSON.stringify({ name: 'compose-metrics', display_name: 'Compose metrics', provider: 'prometheus',
-      configuration_format: 'prometheus-http-v1', endpoint: 'http://victoriametrics:8428',
-      tls: { insecure_skip_verify: false, ca_pem: '' },
-      authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } },
-      polling_interval_seconds: 15, agent_id: id }) });
-    return { status: response.status, body: await response.json() };
-  }, agentID);
+  }
+  await setCaptureViewport(page, 'light', { name: 'desktop', width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
+  await expect(page).toHaveURL(/\/datasources\/new\?return=slis$/);
+  await page.getByLabel('Display name', { exact: true }).fill('Compose metrics');
+  await page.getByLabel('Prometheus endpoint', { exact: true }).fill('http://victoriametrics:8428');
+  await page.getByLabel('Assigned agent', { exact: true }).selectOption(agentID);
+  await page.getByLabel('Polling interval (seconds)', { exact: true }).fill('15');
+  const created = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/datasources');
+  await page.getByRole('button', { name: 'Create datasource', exact: true }).click();
+  const response = await created;
+  const datasource = { status: response.status(), body: await response.json() };
   assert.equal(datasource.status, 201);
   assert.match(datasource.body.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(datasource.body.polling_interval_seconds, 15);
+  await expect(page).toHaveURL((current) => current.pathname === '/slis/new' && current.searchParams.get('datasource') === datasource.body.id);
+  await expect(page.getByLabel('Datasource', { exact: true })).toHaveValue(datasource.body.id);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/datasources\/new\?return=slis$/);
+  await page.goForward();
+  await expect(page.getByLabel('Datasource', { exact: true })).toHaveValue(datasource.body.id);
+  await page.getByLabel('Display name', { exact: true }).fill('First journey');
+  await expect(page.getByLabel('SLI name', { exact: true })).toHaveValue('first-journey');
+  await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Enter a good count query');
+  await page.getByLabel('Good count query', { exact: true }).fill('vector(99)');
+  await page.getByLabel('Total count query', { exact: true }).fill('vector(100)');
+  await page.screenshot({ path: join(artifacts, 'sli-return-from-datasource.png'), fullPage: true, animations: 'disabled' });
+  const sliCreated = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/slis');
+  await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
+  const sliResponse = await sliCreated;
+  assert.equal(sliResponse.status(), 201);
+  const firstSLI = await sliResponse.json();
+  assert.equal(firstSLI.datasource_id, datasource.body.id);
+  await expect(page.getByRole('heading', { name: 'First journey', exact: true })).toBeVisible();
+  await expect.poll(async () => {
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    const counts = page.locator('.sli-counts strong');
+    return await counts.count() === 2 ? [await counts.nth(0).textContent(), await counts.nth(1).textContent()] : [];
+  }, { timeout: 110_000, intervals: [1000] }).toEqual(['99', '100']);
+  await page.screenshot({ path: join(artifacts, 'sli-first-journey-observed.png'), fullPage: true, animations: 'disabled' });
   stage = 'real Compose browser SLI creation and agent collection';
   const browserResult = await command(process.execPath, [join(root, 'web/scripts/check-sli-browser.mjs')], {
     input: JSON.stringify({ url, spki, login: 'admin', password: permanent, agent_id: agentID,
@@ -416,6 +475,14 @@ async function checkLocalAgentRegistration() {
       document.documentElement.dataset.composeDocumentMarker = marker;
       return marker;
     });
+    await page.evaluate(() => {
+      window.composeVisibleLoading = false;
+      new MutationObserver(() => {
+        for (const el of document.querySelectorAll('.ui-loading')) {
+          if (!el.closest('.sr-only') && el.getBoundingClientRect().width > 1) window.composeVisibleLoading = true;
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
     const endpointPresentations = [];
     const endpointCaptures = [];
     const registrationCaptures = [];
@@ -478,6 +545,7 @@ async function checkLocalAgentRegistration() {
         await expect(page.getByRole('dialog', { name: 'Register agent', exact: true })).toHaveCount(0);
       }
     }
+    assert.equal(await page.evaluate(() => window.composeVisibleLoading), false, 'workspace navigation must not show loading indicators');
     stage = 'real Compose same-document and session continuity assertions';
     assert.equal(await page.locator('html').getAttribute('data-compose-document-marker'), documentMarker);
     assert.equal(documentNavigations, 0);
@@ -516,7 +584,7 @@ async function checkLocalAgentRegistration() {
     await expect(page).toHaveURL((current) => current.pathname === '/agents' && current.searchParams.has('agent'));
     stage = 'real Compose verify credential history after token close';
     await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
-    await expect(page.getByRole('cell', { name: result.credential.id, exact: true })).toBeVisible();
+    await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
     stage = 'real Compose verify Local display name after token close';
     await expect(page.getByText('Local', { exact: true })).toBeVisible();
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
@@ -529,9 +597,17 @@ async function checkLocalAgentRegistration() {
         const viewportName = await setCaptureViewport(page, theme, viewport);
         stage = `real Compose ${theme} ${viewportName} agent detail screenshot after token closure`;
         await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
-        await expect(page.getByRole('cell', { name: result.credential.id, exact: true })).toBeVisible();
+        await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
+        const credentialRecord = page.getByRole('region', { name: `Credential ${result.credential.id}` });
+        await expect(credentialRecord.getByText(result.credential.issued_at.replace('T', ' '), { exact: true })).toBeVisible();
+        const revoke = credentialRecord.getByRole('button', { name: 'Revoke credential', exact: true });
+        await revoke.scrollIntoViewIfNeeded();
+        await expect(revoke).toBeInViewport();
+        const bounds = await revoke.boundingBox();
+        assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= viewport.width, 'revoke action clipped horizontally');
         await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
         const detailCapture = `agent-detail-after-token-${viewportName}-${theme}.png`;
+        await page.evaluate(() => window.scrollTo(0, 0));
         await page.screenshot({ path: join(artifacts, detailCapture), fullPage: true, animations: 'disabled' });
         detailCaptures.push(detailCapture);
       }
@@ -540,11 +616,55 @@ async function checkLocalAgentRegistration() {
     await page.goBack();
     await expect(page).toHaveURL((current) => current.pathname === '/agents' && !current.searchParams.has('agent'));
     await expect(page.getByRole('button', { name: 'local', exact: true })).toBeVisible();
+    await setCaptureViewport(page, 'light', viewports[0]);
+    stage = 'real Compose agent row text alignment';
+    const row = page.getByRole('button', { name: 'local', exact: true }).locator('..').locator('..');
+    const centers = await row.evaluate((element) => {
+      const textCenter = (node) => { const range = document.createRange(); range.selectNodeContents(node); const rect = range.getBoundingClientRect(); return rect.y + rect.height / 2; };
+      return [textCenter(element.querySelector('button')), textCenter(element.querySelectorAll('td')[1])];
+    });
+    assert.ok(Math.abs(centers[0] - centers[1]) < 1, 'agent name text should align with display name text');
+    stage = 'real Compose agent table pointer focus';
+    const region = page.locator('.agents-table-scroll').and(page.getByRole('region', { name: 'Agent records', exact: true }));
+    await expect(region).toHaveCount(1);
+    await region.click({ position: { x: 2, y: 2 } });
+    assert.equal(await region.evaluate((el) => el.matches(':focus-visible')), false, 'pointer focus should not draw keyboard outline');
+    stage = 'real Compose agent table keyboard focus';
+    await region.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(region).toBeFocused();
+    assert.equal(await region.evaluate((el) => el.matches(':focus-visible')), true, 'keyboard focus must remain visible');
+    await page.screenshot({ path: join(artifacts, 'agent-list-keyboard-focus.png'), fullPage: true, animations: 'disabled' });
+    stage = 'real Compose slow refresh and failure recovery';
+    const agentListRoute = '**/api/v1/agents?*';
+    let releaseSlowRead;
+    const slowRead = new Promise((resolve) => { releaseSlowRead = resolve; });
+    await withTrackedRoute(page, agentListRoute, async (route) => {
+      await slowRead;
+      await route.continue();
+    }, async () => {
+      await page.getByRole('button', { name: 'Refresh agents', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'local', exact: true })).toBeVisible();
+      await expect(page.getByText('Refreshing agent records', { exact: true })).toHaveClass(/sr-only/);
+      releaseSlowRead();
+      await expect(page.getByText('Refreshing agent records', { exact: true })).toHaveCount(0);
+    }, releaseSlowRead);
+    stage = 'real Compose agent refresh failure and recovery';
+    await withTrackedRoute(page, agentListRoute,
+      (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }),
+      async () => {
+        await page.getByRole('button', { name: 'Refresh agents', exact: true }).click();
+        await expect(page.getByRole('alert')).toContainText('Showing stale results');
+        await expect(page.getByRole('button', { name: 'local', exact: true })).toBeVisible();
+      });
+    await page.getByRole('button', { name: 'Refresh agents', exact: true }).click();
+    await expect(page.getByRole('alert')).toHaveCount(0);
     stage = 'real Compose list to detail browser forward';
     await page.goForward();
     await expect(page).toHaveURL(agentURL);
     await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
-    await expect(page.getByRole('cell', { name: result.credential.id, exact: true })).toBeVisible();
+    await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
     const preReloadCounts = { documentNavigations, contextRequests };
     const routeOnlyContinuity = {
       document_navigation_requests: preReloadCounts.documentNavigations,
@@ -590,6 +710,7 @@ async function checkLocalAgentRegistration() {
       const safeState = {
         stage,
         failure_type: error?.name ?? 'Error',
+        failure_category: failureCategory(error),
         pathname,
         post_request_created: requests.length > 0,
         document_marker_matches: documentMarker
@@ -804,7 +925,7 @@ try {
 } catch (error) {
   failed = true;
   if (cancellation) stage = `cancelled by ${cancellation}`;
-  const diagnostics = { stage, failure: { name: redact(error?.name), message: redact(error?.message) }, lastFailure };
+  const diagnostics = { stage, failure: { name: redact(error?.name), category: failureCategory(error), message: redact(error?.message) }, lastFailure };
   if (!cancellation) {
     try { diagnostics.services = redact(await compose(['ps', '-a', '--format', 'json'])); } catch { diagnostics.services = 'unavailable'; }
     try {

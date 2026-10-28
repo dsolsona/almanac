@@ -2,6 +2,16 @@
 
 ## Current state
 
+[F2-T23](tasks/F2-T23.md) is verified on `fix/workspace-usability`, based on
+the F2-T22 candidate. Product pages no longer show loading indicators; first-use
+SLI setup preserves the datasource return path, agent rows and credential records
+fit their layouts, and password guidance uses plain character limits. The full
+Linux gate passed 225 web, 336 Go, 328 race, 151 integration and 108 browser checks.
+The normal Compose journey and cancellation cleanup passed, with both themes and
+mobile layouts inspected. The task records the verified source snapshot, diagnosed
+test-locator failures and the host sleep/Colima interruptions. This is prepared
+for PR review; the coordinator has not restarted the operator deployment.
+
 [F2-T22](tasks/F2-T22.md) is verified locally on `feat/f2-observations`, based on
 `06be8f0`. Operators can create native Prometheus interval-count SLIs, collect them
 through the assigned remote agent, and read exact persisted observations through

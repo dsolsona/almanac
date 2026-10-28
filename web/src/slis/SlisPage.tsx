@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, LoadingIndicator, Panel, SelectField, TextField } from '../components/ui/index.ts';
+import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createDatasourceClient, type Datasource } from '../datasources/client.ts';
 import { createSliClient, SliFailure, type Sli, type SliCreateRequest, type SliObservation, type SliObservationPage } from './client.ts';
 import './slis.css';
@@ -11,6 +11,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SLI_NAME = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
 const safeError = (error: unknown) => error instanceof SliFailure ? error.message : 'SLI management is temporarily unavailable.';
 const roleCanWrite = (context: AuthContext) => context.session?.role === 'administrator' || context.session?.role === 'editor';
+
+function suggestName(value: string) {
+  return value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/g, '');
+}
 
 type Route = { kind: 'list' | 'create' | 'detail'; id?: string };
 type CreateDraft = { name: string; displayName: string; datasourceID: string; goodQuery: string; totalQuery: string };
@@ -94,6 +98,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [formError, setFormError] = useState('');
   const [historyError, setHistoryError] = useState('');
   const [sourceError, setSourceError] = useState('');
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [loadRevision, setLoadRevision] = useState(0);
+  const nameEdited = useRef(false);
   const routeGeneration = useRef(0);
   const historyRequest = useRef(0);
   const createIntent = useRef<CreateIntent | null>(null);
@@ -101,7 +108,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const canWrite = roleCanWrite(context);
 
   useEffect(() => {
-    const changed = () => { routeGeneration.current++; setLocationKey(`${window.location.pathname}${window.location.search}`); };
+    const changed = () => { routeGeneration.current++; setLoading(true); setLocationKey(`${window.location.pathname}${window.location.search}`); };
     window.addEventListener('popstate', changed);
     return () => window.removeEventListener('popstate', changed);
   }, []);
@@ -116,6 +123,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setFormError('');
     setHistoryError('');
     setSourceError('');
+    setSourceLoading(route.kind === 'list');
     setPending(false);
     setHistoryBusy(false);
     setHistoryLoaded(false);
@@ -136,13 +144,18 @@ export function SlisPage({ context }: { context: AuthContext }) {
           if (!current()) return;
           setItems(page.items);
           setListNextCursor(page.next_cursor);
-          void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasource names could not be loaded.'); });
+          setLoading(false);
+          void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasources could not be loaded. Try again.'); }).finally(() => { if (current()) setSourceLoading(false); });
         } else if (route.kind === 'create') {
           if (!canWrite) throw new Error('Editor or administrator access is required to create an SLI.');
-          const page = await loadSources(request.signal);
-          if (!current()) return;
-          setSources(page);
-          setDraft((current) => ({ ...emptyDraft, datasourceID: current.datasourceID || page[0]?.id || '' }));
+          try {
+            const page = await loadSources(request.signal);
+            if (!current()) return;
+            setSources(page);
+            const selected = new URL(window.location.href).searchParams.get('datasource');
+            setDraft({ ...emptyDraft, datasourceID: selected ? (page.some((source) => source.id === selected) ? selected : '') : page[0]?.id || '' });
+            nameEdited.current = false;
+          } catch { if (current() && !request.signal.aborted) setSourceError('Datasources could not be loaded. Try again.'); }
         } else if (route.id) {
           const resource = await slis.get(route.id, request.signal);
           if (!current()) return;
@@ -162,7 +175,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     };
     void load();
     return () => { active = false; request.abort(); };
-  }, [route.kind, route.id, canWrite]);
+  }, [locationKey, route.kind, route.id, canWrite, loadRevision]);
 
   function updateDraft(key: keyof CreateDraft, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -190,7 +203,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     event.preventDefault();
     setFormError('');
     const errors: string[] = [];
-    if (!SLI_NAME.test(draft.name)) errors.push('Use a lowercase RFC1123 label with letters, digits, and internal hyphens.');
+    if (!SLI_NAME.test(draft.name)) errors.push('Use lowercase letters, numbers, or hyphens for the identifier, starting and ending with a letter or number.');
     if (!draft.displayName.trim()) errors.push('Enter a display name.');
     if (!UUID.test(draft.datasourceID)) errors.push('Choose an existing Prometheus datasource.');
     if (!draft.goodQuery.trim()) errors.push('Enter a good count query.');
@@ -285,23 +298,24 @@ export function SlisPage({ context }: { context: AuthContext }) {
     finally { if (generation === routeGeneration.current) setPending(false); }
   }
 
-  if (loading) return <><PageTitle title={route.kind === 'detail' ? 'SLI details' : route.kind === 'create' ? 'Create SLI' : 'SLIs'} /><div className="app-route-loading"><LoadingIndicator label="Loading SLI data" /></div></>;
+  if (loading) return <><PageTitle title={route.kind === 'detail' ? 'SLI details' : route.kind === 'create' ? 'Create SLI' : 'SLIs'} subtitle={route.kind === 'list' ? 'Service level indicators collected from assigned agents.' : route.kind === 'create' ? 'Define good and total interval counts from a Prometheus datasource.' : undefined} /><span className="sr-only" role="status">Opening SLIs</span></>;
   if (error && !sli && route.kind === 'detail') return <><PageTitle title="SLI unavailable" /><Panel heading="SLI could not be loaded"><p role="alert">{error}</p><Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></Panel></>;
 
   if (route.kind === 'create') {
     const options = [{ value: '', label: 'Select a datasource', disabled: true }, ...sources.map((source) => ({ value: source.id, label: `${source.display_name} · ${source.polling_interval_seconds}s cadence` }))];
     return <>
-      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from an existing Prometheus datasource." headingRef={titleRef} />
+      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} />
       {error && <p className="sli-error" role="alert">{error}</p>}
       {!canWrite ? <Panel heading="Access required"><p>Editor or administrator access is required to create SLIs.</p></Panel>
-        : sources.length === 0 ? <Panel heading="No Prometheus datasources"><p>Add and assign a Prometheus datasource before creating an SLI.</p><Button onClick={() => navigate('/datasources/new')}>Add datasource</Button></Panel>
+        : sourceError ? <div className="sli-empty"><p role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></div>
+        : sources.length === 0 ? <div className="sli-empty"><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create an SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p>{context.session?.role === 'administrator' && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}<Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></div>
           : <form className="sli-form" onSubmit={(event) => void submitCreate(event)} noValidate>
             <Panel heading="Definition">
               <div className="sli-form-grid">
-                <TextField id="sli-name" label="SLI name" value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} hint="Stable RFC1123 label: lowercase letters, digits, and internal hyphens." autoComplete="off" />
-                <TextField id="sli-display-name" label="Display name" value={draft.displayName} onChange={(event) => updateDraft('displayName', event.target.value)} />
+                <TextField id="sli-display-name" label="Display name" value={draft.displayName} onChange={(event) => { const value = event.target.value; setDraft((current) => ({ ...current, displayName: value, ...(!nameEdited.current ? { name: suggestName(value) } : {}) })); setFormError(''); }} />
+                <TextField id="sli-name" label="SLI name" value={draft.name} onChange={(event) => { nameEdited.current = true; updateDraft('name', event.target.value); }} hint="Suggested from the display name. Use lowercase letters, numbers, or hyphens; start and end with a letter or number." autoComplete="off" />
                 <SelectField id="sli-datasource" label="Datasource" options={options} value={draft.datasourceID} onChange={(event) => updateDraft('datasourceID', event.target.value)} hint="Collection runs only on the agent assigned to this datasource." />
-                <div className="sli-measurement-summary"><span>Measurement kind</span><strong>event_counts</strong><span>Component mode</span><strong>interval_count</strong></div>
+                <div className="sli-measurement-summary"><span>Measurement</span><strong>Good and total counts per interval</strong></div>
                 <label className="ui-field" htmlFor="sli-good-query"><span className="ui-label">Good count query</span><textarea id="sli-good-query" className="ui-control sli-query" value={draft.goodQuery} onChange={(event) => updateDraft('goodQuery', event.target.value)} spellCheck={false} /></label>
                 <label className="ui-field" htmlFor="sli-total-query"><span className="ui-label">Total count query</span><textarea id="sli-total-query" className="ui-control sli-query" value={draft.totalQuery} onChange={(event) => updateDraft('totalQuery', event.target.value)} spellCheck={false} /></label>
               </div>
@@ -346,7 +360,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       </div>
       <Panel heading="Observation history" className="sli-history-panel">
         {historyError && <p className="sli-error" role="alert">{historyError}</p>}
-        {historyBusy && <LoadingIndicator label="Loading observation history" />}
+        {historyBusy && <span className="sr-only" role="status">Refreshing observation history</span>}
         {earliest && <p className="sli-muted">History before {formatTime(earliest)} is unavailable.</p>}
         {missing.length > 0 && <div><strong>Missing intervals</strong><ul>{missing.map((range) => <li key={range.interval_start}>{formatTime(range.interval_start)} – {formatTime(range.interval_end)}</li>)}</ul></div>}
         {history.length === 0 ? historyLoaded && !historyError && <p>No observations have been recorded in this range.</p> : <div className="sli-table-scroll" role="region" aria-label="Observation history" tabIndex={0}><table className="sli-table"><thead><tr><th scope="col">Interval start (UTC)</th><th scope="col">Interval end (UTC)</th><th scope="col">Outcome</th><th scope="col">Good count</th><th scope="col">Total count</th><th scope="col">Details</th></tr></thead><tbody>{history.map((row) => <tr key={row.observation_id}><td className="sli-mono">{new Date(row.interval_start).toISOString()}</td><td className="sli-mono">{new Date(row.interval_end).toISOString()}</td><td>{outcomeLabel(row.outcome)}</td><td className="sli-mono">{row.good_count ?? '—'}</td><td className="sli-mono">{row.total_count ?? '—'}</td><td>{row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—'}</td></tr>)}</tbody></table></div>}
@@ -357,10 +371,13 @@ export function SlisPage({ context }: { context: AuthContext }) {
 
   const sourceByID = new Map(sources.map((source) => [source.id, source]));
   return <>
-    <div className="sli-list-heading"><PageTitle title="SLIs" subtitle="Service level indicators collected from assigned agents." />{canWrite && <Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Add SLI</Button>}</div>
+    <div className="sli-list-heading"><PageTitle title="SLIs" subtitle="Service level indicators collected from assigned agents." />{canWrite && items.length > 0 && sources.length > 0 && !sourceError && <Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Add SLI</Button>}</div>
     {error && <p className="sli-error" role="alert">{error}</p>}
     {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
-    {items.length === 0 ? <Panel heading="No SLIs yet"><p>{canWrite ? 'Create an SLI from an existing Prometheus datasource to start collecting canonical intervals.' : 'No SLIs are available to your account.'}</p>{canWrite && <Button onClick={() => { setDraft(emptyDraft); navigate('/slis/new'); }}>Create SLI</Button>}</Panel>
+    {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}
+    {items.length === 0 ? error || sourceLoading ? null : <div className="sli-empty">
+      {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? <Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button> : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p>{context.session?.role === 'administrator' && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}</> : <><p>Create your first SLI from a Prometheus datasource.</p><Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Create SLI</Button></>}
+    </div>
       : <div className="sli-list" aria-label="Service level indicators">{items.map((item) => {
         const observation = item.latest_observation;
         const datasource = sourceByID.get(item.datasource_id);
