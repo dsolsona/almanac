@@ -140,10 +140,11 @@ describe('authentication page', () => {
     expect(screen.getByRole('heading', { name: 'Operations' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Administration' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
-    for (const destination of ['SLOs', 'SLIs', 'Alerts']) {
+    for (const destination of ['SLOs', 'Alerts']) {
       expect(screen.getByText(destination)).toBeVisible();
       expect(screen.getByText(destination).closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
     }
+    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('href', '/slis');
     expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('href', '/datasources');
     expect(screen.getByRole('link', { name: 'Datasources' })).not.toHaveAttribute('aria-disabled');
     expect(screen.queryByRole('heading', { name: 'Signed in' })).not.toBeInTheDocument();
@@ -162,6 +163,10 @@ describe('authentication page', () => {
     expect(await screen.findByRole('heading', { name: 'Datasources' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('aria-current', 'page');
     expect(document.querySelector('.app-workspace')).toBe(workspace);
+    await user.click(screen.getByRole('link', { name: 'SLIs' }));
+    await waitFor(() => expect(location.pathname).toBe('/slis'));
+    expect(await screen.findByRole('heading', { name: 'SLIs' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('link', { name: 'Agents' }));
     await waitFor(() => expect(location.pathname).toBe('/agents'));
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();

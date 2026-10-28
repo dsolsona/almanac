@@ -94,6 +94,11 @@ func printHelp(w io.Writer) {
   almanac datasources update --profile-file=FILE --datasource-id=UUID --if-match=ETAG --input-file=FILE [--output=json]
   almanac datasources test --profile-file=FILE --input-file=FILE [--wait] [--cancel-on-timeout]
   almanac providers list --profile-file=FILE [--agent-id=UUID] [--output=json]
+  almanac slis list --profile-file=FILE [--limit=50] [--cursor=CURSOR]
+  almanac slis get --profile-file=FILE --sli-id=UUID
+  almanac slis create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
+  almanac slis update --profile-file=FILE --sli-id=UUID --if-match=ETAG --input-file=FILE
+  almanac slis observations --profile-file=FILE --sli-id=UUID [--limit=50] [--cursor=CURSOR]
   almanac slis test --profile-file=FILE --datasource-id=UUID --query=PROMQL [--wait] [--cancel-on-timeout]
   almanac secrets provision-source-keyset --file=FILE --keyset-id=UUID [--output=json]
 

@@ -25,6 +25,11 @@ func TestDatasourceOperationDispatch(t *testing.T) {
 		{[]string{"datasources", "update"}, "datasources update", 0},
 		{[]string{"datasources", "test"}, "datasources test", 0},
 		{[]string{"providers", "list"}, "providers list", 0},
+		{[]string{"slis", "list", "--profile-file=x"}, "slis list", 1},
+		{[]string{"slis", "get"}, "slis get", 0},
+		{[]string{"slis", "create"}, "slis create", 0},
+		{[]string{"slis", "update"}, "slis update", 0},
+		{[]string{"slis", "observations"}, "slis observations", 0},
 		{[]string{"slis", "test"}, "slis test", 0},
 		{[]string{"datasources", "delete"}, "", 2},
 	}
@@ -33,6 +38,47 @@ func TestDatasourceOperationDispatch(t *testing.T) {
 		if operation != test.operation || len(rest) != test.rest {
 			t.Fatalf("dispatch %q = %q with %d args", test.args, operation, len(rest))
 		}
+	}
+}
+
+func TestSLIETagRequiresExactCanonicalResourceVersion(t *testing.T) {
+	id := "8ed93d7e-51e3-4a3e-9222-3e8a612de20a"
+	if !validSliETag(`"sli:`+id+`:7"`, id) {
+		t.Fatal("valid SLI ETag was rejected")
+	}
+	for _, etag := range []string{`W/"sli:` + id + `:7"`, `"sli:` + id + `:0"`, `"sli:` + id + `:07"`, `"sli:` + id + `:7,8"`, `"sli:` + id + `:9223372036854775808"`} {
+		if validSliETag(etag, id) {
+			t.Fatalf("accepted invalid SLI ETag %q", etag)
+		}
+	}
+}
+
+func TestSLIInputRequiresNativeMeasurementAndMetadataOnly(t *testing.T) {
+	validCreate := []byte(`{"name":"request-success","display_name":"Request success","datasource_id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","measurement_kind":"event_counts","component_mode":"interval_count","good_query":"sum(rate(requests_total{status=~\"2..\"}[1m]))","total_query":"sum(rate(requests_total[1m]))"}`)
+	if !validSliCreateInput(validCreate) {
+		t.Fatal("supported interval-count SLI input was rejected")
+	}
+	digitFirst := []byte(strings.Replace(string(validCreate), `"name":"request-success"`, `"name":"9ready"`, 1))
+	if !validSliCreateInput(digitFirst) {
+		t.Fatal("RFC1123 SLI name with a digit first was rejected")
+	}
+	trailingHyphen := []byte(strings.Replace(string(validCreate), `"name":"request-success"`, `"name":"trailing-"`, 1))
+	if validSliCreateInput(trailingHyphen) {
+		t.Fatal("RFC1123 SLI name with a trailing hyphen was accepted")
+	}
+	unsupported := []byte(strings.Replace(string(validCreate), `"component_mode":"interval_count"`, `"component_mode":"ratio"`, 1))
+	if validSliCreateInput(unsupported) {
+		t.Fatal("unsupported conversion mode was accepted")
+	}
+	unknown := []byte(strings.TrimSuffix(string(validCreate), "}") + `,"measurement_revision":"4"}`)
+	if validSliCreateInput(unknown) {
+		t.Fatal("unknown SLI measurement edit field was accepted")
+	}
+	if !validSliMetadataInput([]byte(`{"display_name":"Renamed requests"}`)) {
+		t.Fatal("metadata-only SLI update was rejected")
+	}
+	if validSliMetadataInput([]byte(`{"display_name":"Renamed requests","good_query":"vector(1)"}`)) {
+		t.Fatal("SLI metadata update accepted a measurement edit")
 	}
 }
 

@@ -40,6 +40,9 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 		{"/agents?agent=example&agents_cursor=next&credentials_cursor=history", "text/html"},
 		{"/datasources", "text/html"},
 		{"/datasources/8ed93d7e-51e3-4a3e-9222-3e8a612de20a", "text/html"},
+		{"/slis", "text/html"},
+		{"/slis/new", "text/html"},
+		{"/slis/b13e0739-3c86-4a7f-b7e5-c15e9626e71c", "text/html"},
 	} {
 		response, err := testHTTPClient.Get(frontend.URL + tc.path)
 		if err != nil {
@@ -54,7 +57,7 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 			t.Fatalf("index cache control = %q", response.Header.Get("Cache-Control"))
 		}
 	}
-	for _, path := range []string{"/design-system", "/missing.js", "/assets/missing.js", "/agents/extra"} {
+	for _, path := range []string{"/design-system", "/missing.js", "/assets/missing.js", "/agents/extra", "/slis/extra"} {
 		response, err := testHTTPClient.Get(frontend.URL + path)
 		if err != nil {
 			t.Fatal(err)

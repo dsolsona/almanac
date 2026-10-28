@@ -5,7 +5,7 @@ burn rates and alerts across services.
 
 ## Run locally
 
-Install Docker with its Compose plugin and Make, then run:
+Install Docker with its Compose plugin, Make and curl, then run:
 
 ```sh
 make bootstrap
@@ -43,7 +43,8 @@ make logs      # View application logs
 `make run` and its `make start` alias build the current checkout with Docker's cache
 before starting the app, including on a fresh checkout. Repeating startup preserves
 your users, passwords and data. The app runs in the background; readiness failures
-make startup fail visibly. Recreating only the app gives it a fresh network connection,
+make startup fail visibly. Startup checks the host HTTPS endpoint using the local
+application certificate before reporting readiness. Recreating only the app gives it a fresh network connection,
 including after a failed port bind; the database container and volumes are reused.
 `ALMANAC_PORT=8082 make bootstrap` selects another local
 HTTPS port; use the same setting for later commands. PostgreSQL has no host port.

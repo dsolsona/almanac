@@ -272,6 +272,9 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   later milestones merely because related code is available.
 - Use `make bootstrap` for the container-only local app, `make run` (or `make start`)
   for daily startup, and `make stop` to preserve its data while stopping services.
+  Host prerequisites are Docker with Compose, Make and curl. Startup must verify
+  the host HTTPS endpoint before announcing readiness; container health alone is
+  insufficient when a VM supplies Docker port forwarding.
   Bootstrap/run/stop never reset volumes or credentials. Keep this Compose project
   separate from the catalogue and acceptance fixtures; disclose the initial password
   only through the explicit `make credentials` action.

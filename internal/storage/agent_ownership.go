@@ -365,6 +365,9 @@ func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credenti
 	updatedOwner.LastNonce = nonce[:]
 	updatedOwner.LastRenewalIssuedAt = timestamp(now)
 	updatedOwner.LastRenewalExpiresAt = timestamp(newExpiry)
+	if err := prepareSliPartitions(ctx, state.tx, now); err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: SLI partition preparation failed", err)
+	}
 	leaseID, err := newExecutionLeaseID()
 	if err != nil {
 		return AgentOwnershipResult{}, err
@@ -544,6 +547,10 @@ func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owne
 	if err != nil {
 		return err
 	}
+	allowed, err := authorizedMeasurementGrants(ctx, queries, owner, configuration.Revision)
+	if err != nil {
+		return err
+	}
 	validFrom := owner.AcquiredAt.Time.UTC()
 	if owner.RenewalSequence > 0 && owner.LastRenewalIssuedAt.Valid {
 		validFrom = owner.LastRenewalIssuedAt.Time.UTC()
@@ -554,7 +561,7 @@ func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owne
 	}
 	if err := queries.InsertAgentExecutionGrant(ctx, dbgen.InsertAgentExecutionGrantParams{
 		LeaseID: leaseID, AgentID: owner.AgentID, Generation: owner.Generation,
-		ConfigurationRevision: configuration.Revision, ValidFrom: timestamp(validFrom),
+		ConfigurationRevision: configuration.Revision, AllowedMeasurements: allowed, ValidFrom: timestamp(validFrom),
 		ValidUntil:      owner.ExpiresAt,
 		RenewalSequence: owner.RenewalSequence, RequestNonce: requestNonce,
 		RetainUntil: timestamp(owner.ExpiresAt.Time.Add(agentGrantRetention)),
@@ -570,12 +577,45 @@ func insertAgentExecutionGrant(ctx context.Context, queries *dbgen.Queries, owne
 	return nil
 }
 
+func authorizedMeasurementGrants(ctx context.Context, queries *dbgen.Queries, owner dbgen.AlmanacAgentOwnership, configurationRevision int64) ([]byte, error) {
+	grants := []agentprotocol.MeasurementGrant{}
+	runtime, err := queries.GetAgentRuntimeStatus(ctx, owner.AgentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return json.Marshal(grants)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if runtime.Generation != owner.Generation || runtime.AppliedConfigurationRevision < configurationRevision || runtime.ConfigurationFailureCode.Valid {
+		return json.Marshal(grants)
+	}
+	rows, err := queries.ListAuthorizedMeasurementGrantsForAgent(ctx, owner.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	grants = make([]agentprotocol.MeasurementGrant, 0, len(rows))
+	for _, row := range rows {
+		if row.MeasurementRevision <= 0 {
+			return nil, ErrAgentOwnershipDenied
+		}
+		grants = append(grants, agentprotocol.MeasurementGrant{
+			SLIID: row.SliID.String(), MeasurementRevision: strconv.FormatInt(row.MeasurementRevision, 10),
+		})
+	}
+	encoded, err := json.Marshal(grants)
+	if err != nil {
+		return nil, errors.New("storage: agent measurement grant encoding failed")
+	}
+	return encoded, nil
+}
+
 func ensureAgentConfiguration(ctx context.Context, queries *dbgen.Queries, agentID pgtype.UUID, createdAt time.Time) (dbgen.GetAgentConfigurationRow, error) {
 	snapshot, err := json.Marshal(struct {
 		AgentID               string                               `json:"agent_id"`
 		ConfigurationRevision string                               `json:"configuration_revision"`
 		Assignments           []agentprotocol.DatasourceAssignment `json:"assignments"`
-	}{AgentID: agentID.String(), ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{}})
+		SLIs                  []agentprotocol.SLICollection        `json:"slis"`
+	}{AgentID: agentID.String(), ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{}, SLIs: []agentprotocol.SLICollection{}})
 	if err != nil {
 		return dbgen.GetAgentConfigurationRow{}, err
 	}
@@ -621,6 +661,17 @@ func updateAgentRuntimeHeartbeat(ctx context.Context, queries *dbgen.Queries, ag
 	if updated != 1 {
 		return ErrAgentOwnershipDenied
 	}
+	if heartbeat.AppliedConfigurationRevision > 0 {
+		configuration, configErr := queries.GetAgentConfiguration(ctx, agentID)
+		if configErr != nil {
+			return configErr
+		}
+		if configuration.Revision == heartbeat.AppliedConfigurationRevision {
+			if err := reconcilePendingSliActivation(ctx, queries, agentID, heartbeat.AppliedConfigurationRevision, heartbeat.ReceivedAt.UTC()); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -655,6 +706,10 @@ func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentia
 	if owner.Generation != generation || !now.Before(owner.ExpiresAt.Time) || subtle.ConstantTimeCompare(owner.ResumeVerifier, resumeVerifier[:]) != 1 {
 		return ErrAgentOwnershipDenied
 	}
+	configuration, err := state.queries.GetAgentConfiguration(ctx, state.agentID)
+	if err != nil || configuration.Revision != revision {
+		return errors.Join(ErrAgentOwnershipDenied, err)
+	}
 	updated, err := state.queries.UpdateAgentAppliedConfiguration(ctx, dbgen.UpdateAgentAppliedConfigurationParams{
 		AppliedConfigurationRevision: revision, ReceivedAt: timestamp(now), AgentID: state.agentID, Generation: generation,
 	})
@@ -663,6 +718,9 @@ func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentia
 	}
 	if updated != 1 {
 		return ErrAgentOwnershipDenied
+	}
+	if err := reconcilePendingSliActivation(ctx, state.queries, state.agentID, revision, now); err != nil {
+		return operationError(ctx, "storage: SLI activation reconciliation failed", err)
 	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return operationError(ctx, "storage: agent applied configuration commit failed", err)
@@ -795,7 +853,20 @@ func buildDatasourceConfigurationSnapshot(ctx context.Context, queries *dbgen.Qu
 		}
 		assignments = append(assignments, assignment)
 	}
-	snapshotBytes, err := encodeDatasourceConfigurationSnapshot(uuidFromPG(agentID), revision, assignments)
+	sliRows, err := queries.ListSliConfigurationForAgent(ctx, agentID)
+	if err != nil {
+		return nil, operationError(ctx, "storage: agent SLI configuration read failed", err)
+	}
+	slis := make([]agentprotocol.SLICollection, 0, len(sliRows))
+	for _, row := range sliRows {
+		slis = append(slis, agentprotocol.SLICollection{
+			SLIID: row.SliID.String(), MeasurementRevision: strconv.FormatInt(row.MeasurementRevision, 10),
+			DatasourceID: row.DatasourceID.String(), DatasourceVersion: strconv.FormatInt(row.DatasourceVersion, 10),
+			MeasurementKind: agentprotocol.MeasurementKind(row.MeasurementKind), ComponentMode: agentprotocol.ComponentMode(row.ComponentMode),
+			GoodQuery: row.GoodQuery, TotalQuery: row.TotalQuery, EffectiveFrom: row.EffectiveFrom.Time.UTC(),
+		})
+	}
+	snapshotBytes, err := encodeAgentConfigurationSnapshot(uuidFromPG(agentID), revision, assignments, slis)
 	if err != nil {
 		return nil, err
 	}
@@ -806,11 +877,15 @@ func buildDatasourceConfigurationSnapshot(ctx context.Context, queries *dbgen.Qu
 }
 
 func encodeDatasourceConfigurationSnapshot(agentID string, revision int64, assignments []agentprotocol.DatasourceAssignment) ([]byte, error) {
-	if len(assignments) > 256 {
+	return encodeAgentConfigurationSnapshot(agentID, revision, assignments, []agentprotocol.SLICollection{})
+}
+
+func encodeAgentConfigurationSnapshot(agentID string, revision int64, assignments []agentprotocol.DatasourceAssignment, slis []agentprotocol.SLICollection) ([]byte, error) {
+	if len(assignments) > 256 || len(slis) > agentprotocol.MaxSLICollections {
 		return nil, ErrDatasourceConfigurationTooLarge
 	}
 	snapshotBytes, err := json.Marshal(agentprotocol.ConfigurationSnapshot{
-		AgentID: agentID, ConfigurationRevision: strconv.FormatInt(revision, 10), Assignments: assignments,
+		AgentID: agentID, ConfigurationRevision: strconv.FormatInt(revision, 10), Assignments: assignments, SLIs: slis,
 	})
 	if err != nil || len(snapshotBytes) > agentprotocol.MaxConfigurationBytes {
 		return nil, ErrDatasourceConfigurationTooLarge

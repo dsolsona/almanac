@@ -58,12 +58,13 @@ test('charts load on demand and render SVG with exact table paging and hover det
 
 test('chart theme updates and keyboard pagination work without page overflow', async ({ page }, testInfo) => {
   await page.goto('/design-system');
-  await page.getByRole('button', { name: 'Charts' }).click();
+  await page.getByRole('navigation', { name: 'Catalogue sections' }).getByRole('button', { name: 'Charts' }).click();
   const svg = page.locator('.timeline-chart__plot svg');
   await expect(svg).toBeVisible();
   const before = await svg.locator('path').first().getAttribute('stroke');
-  const startedDark = await page.locator('.theme-toggle').getAttribute('aria-pressed') === 'true';
-  await page.getByRole('button', { name: new RegExp(`switch to ${startedDark ? 'light' : 'dark'} theme`, 'i') }).click();
+  const themeToggle = page.locator('.masthead').getByRole('button', { name: /switch to (light|dark) theme/i });
+  const startedDark = await themeToggle.getAttribute('aria-pressed') === 'true';
+  await themeToggle.click();
   if (startedDark) await expect(page.locator('html')).not.toHaveClass(/dark/);
   else await expect(page.locator('html')).toHaveClass(/dark/);
   await expect.poll(() => svg.locator('path').first().getAttribute('stroke')).not.toBe(before);
@@ -104,6 +105,9 @@ test('chart and table retain their shared layout without catalogue styles', asyn
   expect(await tableScroll.evaluate((element) => getComputedStyle(element).overflow)).toBe('auto');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await plot.evaluate((element) => getComputedStyle(element).height)).toBe('400px');
+  // ResizeObserver updates the ECharts SVG asynchronously after the host resizes.
+  await expect.poll(() => plot.evaluate((element) =>
+    Number(element.querySelector('svg')?.getAttribute('width')) === element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
@@ -163,26 +167,28 @@ test('reopening charts across navigation and theme changes leaves the page error
     browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ''}`);
   });
   await page.goto('/design-system');
-  await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
+  const catalogueNavigation = page.getByRole('navigation', { name: 'Catalogue sections' });
+  const charts = catalogueNavigation.getByRole('button', { name: 'Charts' });
+  await expect(charts).toBeVisible();
 
   for (let cycle = 0; cycle < 3; cycle += 1) {
-    await page.getByRole('button', { name: 'Charts' }).click();
+    await charts.click();
     await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
-    const themeToggle = page.locator('.theme-toggle');
+    const themeToggle = page.locator('.masthead').getByRole('button', { name: /switch to (light|dark) theme/i });
     const isDark = await themeToggle.getAttribute('aria-pressed') === 'true';
     await themeToggle.click();
     if (isDark) await expect(page.locator('html')).not.toHaveClass(/dark/);
     else await expect(page.locator('html')).toHaveClass(/dark/);
-    await page.getByRole('link', { name: 'Controls' }).click();
+    await catalogueNavigation.getByRole('link', { name: 'Controls' }).click();
     await expect(page.getByRole('heading', { name: 'Calendar, switches and loading' })).toBeVisible();
-    await page.getByRole('button', { name: 'Charts' }).click();
+    await charts.click();
     await expect(page.getByRole('heading', { name: 'Aligned charts and exact values' })).toBeVisible();
     if (cycle < 2) {
-      await page.getByRole('link', { name: 'ALMANAC' }).click();
+      await page.locator('.masthead').getByRole('link', { name: 'ALMANAC' }).click();
       await expect(page.getByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
       await page.goBack();
-      await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
+      await expect(charts).toBeVisible();
     }
   }
   expect(browserErrors).toEqual([]);

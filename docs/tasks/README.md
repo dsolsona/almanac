@@ -117,3 +117,7 @@ production observations remain a later increment.
 [F2-T21](F2-T21.md) restores usable agent registration, persistent coherent
 navigation and literal endpoint presentation, with independent user and container
 deployment acceptance.
+
+[F2-T22](F2-T22.md) delivers the verified native count-based SLI journey: remote
+scheduled collection, durable observations and truthful UI/CLI collection views.
+Direct-producer ingestion remains a later F2 increment.

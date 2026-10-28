@@ -255,6 +255,51 @@ func (e AgentRuntimeStatusSchedulerHealth) Valid() bool {
 	}
 }
 
+// Defines values for AgentSLICollectionComponentMode.
+const (
+	IntervalCount AgentSLICollectionComponentMode = "interval_count"
+)
+
+// Valid indicates whether the value is a known member of the AgentSLICollectionComponentMode enum.
+func (e AgentSLICollectionComponentMode) Valid() bool {
+	switch e {
+	case IntervalCount:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentSLICollectionMeasurementKind.
+const (
+	EventCounts AgentSLICollectionMeasurementKind = "event_counts"
+)
+
+// Valid indicates whether the value is a known member of the AgentSLICollectionMeasurementKind enum.
+func (e AgentSLICollectionMeasurementKind) Valid() bool {
+	switch e {
+	case EventCounts:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CompleteEmptyOutcomeState.
+const (
+	CompleteEmptyOutcomeStateCompleteEmpty CompleteEmptyOutcomeState = "complete_empty"
+)
+
+// Valid indicates whether the value is a known member of the CompleteEmptyOutcomeState enum.
+func (e CompleteEmptyOutcomeState) Valid() bool {
+	switch e {
+	case CompleteEmptyOutcomeStateCompleteEmpty:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConnectionTestRequestAuthenticationMode.
 const (
 	ConnectionTestRequestAuthenticationModeBasic  ConnectionTestRequestAuthenticationMode = "basic"
@@ -621,6 +666,63 @@ func (e DiagnosticResultPayloadState) Valid() bool {
 	}
 }
 
+// Defines values for FailedOutcomeErrorCode.
+const (
+	FailedOutcomeErrorCodeAssignmentRevoked FailedOutcomeErrorCode = "assignment_revoked"
+	FailedOutcomeErrorCodeAuthentication    FailedOutcomeErrorCode = "authentication"
+	FailedOutcomeErrorCodeDeadline          FailedOutcomeErrorCode = "deadline"
+	FailedOutcomeErrorCodeIncomplete        FailedOutcomeErrorCode = "incomplete"
+	FailedOutcomeErrorCodeNetwork           FailedOutcomeErrorCode = "network"
+	FailedOutcomeErrorCodeQuery             FailedOutcomeErrorCode = "query"
+	FailedOutcomeErrorCodeRateLimited       FailedOutcomeErrorCode = "rate_limited"
+	FailedOutcomeErrorCodeTimeout           FailedOutcomeErrorCode = "timeout"
+	FailedOutcomeErrorCodeTls               FailedOutcomeErrorCode = "tls"
+	FailedOutcomeErrorCodeUnsupported       FailedOutcomeErrorCode = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the FailedOutcomeErrorCode enum.
+func (e FailedOutcomeErrorCode) Valid() bool {
+	switch e {
+	case FailedOutcomeErrorCodeAssignmentRevoked:
+		return true
+	case FailedOutcomeErrorCodeAuthentication:
+		return true
+	case FailedOutcomeErrorCodeDeadline:
+		return true
+	case FailedOutcomeErrorCodeIncomplete:
+		return true
+	case FailedOutcomeErrorCodeNetwork:
+		return true
+	case FailedOutcomeErrorCodeQuery:
+		return true
+	case FailedOutcomeErrorCodeRateLimited:
+		return true
+	case FailedOutcomeErrorCodeTimeout:
+		return true
+	case FailedOutcomeErrorCodeTls:
+		return true
+	case FailedOutcomeErrorCodeUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FailedOutcomeState.
+const (
+	FailedOutcomeStateFailed FailedOutcomeState = "failed"
+)
+
+// Valid indicates whether the value is a known member of the FailedOutcomeState enum.
+func (e FailedOutcomeState) Valid() bool {
+	switch e {
+	case FailedOutcomeStateFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthResponseComponent.
 const (
 	Backend HealthResponseComponent = "backend"
@@ -651,6 +753,81 @@ func (e HealthResponseStatus) Valid() bool {
 	case Ok:
 		return true
 	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IncompleteOutcomeMissingComponents.
+const (
+	IncompleteOutcomeMissingComponentsGood  IncompleteOutcomeMissingComponents = "good"
+	IncompleteOutcomeMissingComponentsTotal IncompleteOutcomeMissingComponents = "total"
+)
+
+// Valid indicates whether the value is a known member of the IncompleteOutcomeMissingComponents enum.
+func (e IncompleteOutcomeMissingComponents) Valid() bool {
+	switch e {
+	case IncompleteOutcomeMissingComponentsGood:
+		return true
+	case IncompleteOutcomeMissingComponentsTotal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IncompleteOutcomeState.
+const (
+	IncompleteOutcomeStateIncomplete IncompleteOutcomeState = "incomplete"
+)
+
+// Valid indicates whether the value is a known member of the IncompleteOutcomeState enum.
+func (e IncompleteOutcomeState) Valid() bool {
+	switch e {
+	case IncompleteOutcomeStateIncomplete:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ObservationItemResultStatus.
+const (
+	Accepted    ObservationItemResultStatus = "accepted"
+	Conflicting ObservationItemResultStatus = "conflicting"
+	Duplicate   ObservationItemResultStatus = "duplicate"
+	Rejected    ObservationItemResultStatus = "rejected"
+	Retryable   ObservationItemResultStatus = "retryable"
+)
+
+// Valid indicates whether the value is a known member of the ObservationItemResultStatus enum.
+func (e ObservationItemResultStatus) Valid() bool {
+	switch e {
+	case Accepted:
+		return true
+	case Conflicting:
+		return true
+	case Duplicate:
+		return true
+	case Rejected:
+		return true
+	case Retryable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ObservedOutcomeState.
+const (
+	ObservedOutcomeStateObserved ObservedOutcomeState = "observed"
+)
+
+// Valid indicates whether the value is a known member of the ObservedOutcomeState enum.
+func (e ObservedOutcomeState) Valid() bool {
+	switch e {
+	case ObservedOutcomeStateObserved:
 		return true
 	default:
 		return false
@@ -861,6 +1038,186 @@ func (e SecretActionAction) Valid() bool {
 	}
 }
 
+// Defines values for SliActivationState.
+const (
+	SliActivationStateActive    SliActivationState = "active"
+	SliActivationStateBlocked   SliActivationState = "blocked"
+	SliActivationStatePreparing SliActivationState = "preparing"
+	SliActivationStateScheduled SliActivationState = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the SliActivationState enum.
+func (e SliActivationState) Valid() bool {
+	switch e {
+	case SliActivationStateActive:
+		return true
+	case SliActivationStateBlocked:
+		return true
+	case SliActivationStatePreparing:
+		return true
+	case SliActivationStateScheduled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliAgentReachability.
+const (
+	SliAgentReachabilityConnected    SliAgentReachability = "connected"
+	SliAgentReachabilityDisabled     SliAgentReachability = "disabled"
+	SliAgentReachabilityIncompatible SliAgentReachability = "incompatible"
+	SliAgentReachabilityUnreachable  SliAgentReachability = "unreachable"
+	SliAgentReachabilityUnreported   SliAgentReachability = "unreported"
+)
+
+// Valid indicates whether the value is a known member of the SliAgentReachability enum.
+func (e SliAgentReachability) Valid() bool {
+	switch e {
+	case SliAgentReachabilityConnected:
+		return true
+	case SliAgentReachabilityDisabled:
+		return true
+	case SliAgentReachabilityIncompatible:
+		return true
+	case SliAgentReachabilityUnreachable:
+		return true
+	case SliAgentReachabilityUnreported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliCollectionProgress.
+const (
+	SliCollectionProgressBlocked    SliCollectionProgress = "blocked"
+	SliCollectionProgressIdle       SliCollectionProgress = "idle"
+	SliCollectionProgressNotStarted SliCollectionProgress = "not_started"
+	SliCollectionProgressRunning    SliCollectionProgress = "running"
+)
+
+// Valid indicates whether the value is a known member of the SliCollectionProgress enum.
+func (e SliCollectionProgress) Valid() bool {
+	switch e {
+	case SliCollectionProgressBlocked:
+		return true
+	case SliCollectionProgressIdle:
+		return true
+	case SliCollectionProgressNotStarted:
+		return true
+	case SliCollectionProgressRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliFreshness.
+const (
+	SliFreshnessFresh   SliFreshness = "fresh"
+	SliFreshnessStale   SliFreshness = "stale"
+	SliFreshnessUnknown SliFreshness = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SliFreshness enum.
+func (e SliFreshness) Valid() bool {
+	switch e {
+	case SliFreshnessFresh:
+		return true
+	case SliFreshnessStale:
+		return true
+	case SliFreshnessUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliObservationErrorCode.
+const (
+	SliObservationErrorCodeAssignmentRevoked SliObservationErrorCode = "assignment_revoked"
+	SliObservationErrorCodeAuthentication    SliObservationErrorCode = "authentication"
+	SliObservationErrorCodeDeadline          SliObservationErrorCode = "deadline"
+	SliObservationErrorCodeIncomplete        SliObservationErrorCode = "incomplete"
+	SliObservationErrorCodeNetwork           SliObservationErrorCode = "network"
+	SliObservationErrorCodeQuery             SliObservationErrorCode = "query"
+	SliObservationErrorCodeRateLimited       SliObservationErrorCode = "rate_limited"
+	SliObservationErrorCodeTimeout           SliObservationErrorCode = "timeout"
+	SliObservationErrorCodeTls               SliObservationErrorCode = "tls"
+	SliObservationErrorCodeUnsupported       SliObservationErrorCode = "unsupported"
+)
+
+// Valid indicates whether the value is a known member of the SliObservationErrorCode enum.
+func (e SliObservationErrorCode) Valid() bool {
+	switch e {
+	case SliObservationErrorCodeAssignmentRevoked:
+		return true
+	case SliObservationErrorCodeAuthentication:
+		return true
+	case SliObservationErrorCodeDeadline:
+		return true
+	case SliObservationErrorCodeIncomplete:
+		return true
+	case SliObservationErrorCodeNetwork:
+		return true
+	case SliObservationErrorCodeQuery:
+		return true
+	case SliObservationErrorCodeRateLimited:
+		return true
+	case SliObservationErrorCodeTimeout:
+		return true
+	case SliObservationErrorCodeTls:
+		return true
+	case SliObservationErrorCodeUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliObservationMissingComponents.
+const (
+	SliObservationMissingComponentsGood  SliObservationMissingComponents = "good"
+	SliObservationMissingComponentsTotal SliObservationMissingComponents = "total"
+)
+
+// Valid indicates whether the value is a known member of the SliObservationMissingComponents enum.
+func (e SliObservationMissingComponents) Valid() bool {
+	switch e {
+	case SliObservationMissingComponentsGood:
+		return true
+	case SliObservationMissingComponentsTotal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliObservationOutcome.
+const (
+	SliObservationOutcomeCompleteEmpty SliObservationOutcome = "complete_empty"
+	SliObservationOutcomeFailed        SliObservationOutcome = "failed"
+	SliObservationOutcomeIncomplete    SliObservationOutcome = "incomplete"
+	SliObservationOutcomeObserved      SliObservationOutcome = "observed"
+)
+
+// Valid indicates whether the value is a known member of the SliObservationOutcome enum.
+func (e SliObservationOutcome) Valid() bool {
+	switch e {
+	case SliObservationOutcomeCompleteEmpty:
+		return true
+	case SliObservationOutcomeFailed:
+		return true
+	case SliObservationOutcomeIncomplete:
+		return true
+	case SliObservationOutcomeObserved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Agent defines model for Agent.
 type Agent struct {
 	CreatedAt   time.Time           `json:"created_at"`
@@ -885,6 +1242,7 @@ type AgentConfigurationSnapshot struct {
 	AgentId               openapi_types.UUID          `json:"agent_id"`
 	Assignments           []AgentDatasourceAssignment `json:"assignments"`
 	ConfigurationRevision string                      `json:"configuration_revision"`
+	Slis                  []AgentSLICollection        `json:"slis"`
 }
 
 // AgentCredential defines model for AgentCredential.
@@ -1008,11 +1366,40 @@ type AgentRuntimeStatusReachability string
 // AgentRuntimeStatusSchedulerHealth defines model for AgentRuntimeStatus.SchedulerHealth.
 type AgentRuntimeStatusSchedulerHealth string
 
+// AgentSLICollection defines model for AgentSLICollection.
+type AgentSLICollection struct {
+	ComponentMode     AgentSLICollectionComponentMode `json:"component_mode"`
+	DatasourceId      openapi_types.UUID              `json:"datasource_id"`
+	DatasourceVersion string                          `json:"datasource_version"`
+
+	// EffectiveFrom UTC microsecond boundary aligned with the datasource polling cadence.
+	EffectiveFrom       time.Time                         `json:"effective_from"`
+	GoodQuery           string                            `json:"good_query"`
+	MeasurementKind     AgentSLICollectionMeasurementKind `json:"measurement_kind"`
+	MeasurementRevision string                            `json:"measurement_revision"`
+	SliId               openapi_types.UUID                `json:"sli_id"`
+	TotalQuery          string                            `json:"total_query"`
+}
+
+// AgentSLICollectionComponentMode defines model for AgentSLICollection.ComponentMode.
+type AgentSLICollectionComponentMode string
+
+// AgentSLICollectionMeasurementKind defines model for AgentSLICollection.MeasurementKind.
+type AgentSLICollectionMeasurementKind string
+
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
 	CsrfToken string        `json:"csrf_token"`
 	Session   *SafeIdentity `json:"session"`
 }
+
+// CompleteEmptyOutcome defines model for CompleteEmptyOutcome.
+type CompleteEmptyOutcome struct {
+	State CompleteEmptyOutcomeState `json:"state"`
+}
+
+// CompleteEmptyOutcomeState defines model for CompleteEmptyOutcome.State.
+type CompleteEmptyOutcomeState string
 
 // ConnectionTestRequest defines model for ConnectionTestRequest.
 type ConnectionTestRequest struct {
@@ -1182,6 +1569,18 @@ type DiagnosticResultPayloadState string
 // EmptyAuthRequest defines model for EmptyAuthRequest.
 type EmptyAuthRequest = map[string]interface{}
 
+// FailedOutcome defines model for FailedOutcome.
+type FailedOutcome struct {
+	ErrorCode FailedOutcomeErrorCode `json:"error_code"`
+	State     FailedOutcomeState     `json:"state"`
+}
+
+// FailedOutcomeErrorCode defines model for FailedOutcome.ErrorCode.
+type FailedOutcomeErrorCode string
+
+// FailedOutcomeState defines model for FailedOutcome.State.
+type FailedOutcomeState string
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Component HealthResponseComponent `json:"component"`
@@ -1193,6 +1592,18 @@ type HealthResponseComponent string
 
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
+
+// IncompleteOutcome defines model for IncompleteOutcome.
+type IncompleteOutcome struct {
+	MissingComponents []IncompleteOutcomeMissingComponents `json:"missing_components"`
+	State             IncompleteOutcomeState               `json:"state"`
+}
+
+// IncompleteOutcomeMissingComponents defines model for IncompleteOutcome.MissingComponents.
+type IncompleteOutcomeMissingComponents string
+
+// IncompleteOutcomeState defines model for IncompleteOutcome.State.
+type IncompleteOutcomeState string
 
 // LifecycleResult defines model for LifecycleResult.
 type LifecycleResult struct {
@@ -1208,6 +1619,58 @@ type LoginRequest struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
 }
+
+// ObservationBatchItem defines model for ObservationBatchItem.
+type ObservationBatchItem struct {
+	ConfigurationRevision string                      `json:"configuration_revision"`
+	CreatedAt             time.Time                   `json:"created_at"`
+	DeliveryId            openapi_types.UUID          `json:"delivery_id"`
+	ExecutionId           openapi_types.UUID          `json:"execution_id"`
+	IntervalEnd           time.Time                   `json:"interval_end"`
+	IntervalStart         time.Time                   `json:"interval_start"`
+	LeaseId               string                      `json:"lease_id"`
+	MeasurementRevision   string                      `json:"measurement_revision"`
+	Outcome               ObservationExecutionOutcome `json:"outcome"`
+	SessionGeneration     string                      `json:"session_generation"`
+	SliId                 openapi_types.UUID          `json:"sli_id"`
+}
+
+// ObservationBatchRequest defines model for ObservationBatchRequest.
+type ObservationBatchRequest struct {
+	Items []ObservationBatchItem `json:"items"`
+}
+
+// ObservationBatchResponse defines model for ObservationBatchResponse.
+type ObservationBatchResponse struct {
+	Items []ObservationItemResult `json:"items"`
+}
+
+// ObservationExecutionOutcome defines model for ObservationExecutionOutcome.
+type ObservationExecutionOutcome struct {
+	union json.RawMessage
+}
+
+// ObservationItemResult defines model for ObservationItemResult.
+type ObservationItemResult struct {
+	DeliveryId       openapi_types.UUID          `json:"delivery_id"`
+	ErrorCode        *string                     `json:"error_code"`
+	ObservationId    *openapi_types.UUID         `json:"observation_id"`
+	ReplayAgeSeconds *int                        `json:"replay_age_seconds"`
+	Status           ObservationItemResultStatus `json:"status"`
+}
+
+// ObservationItemResultStatus defines model for ObservationItemResult.Status.
+type ObservationItemResultStatus string
+
+// ObservedOutcome defines model for ObservedOutcome.
+type ObservedOutcome struct {
+	GoodCount  string               `json:"good_count"`
+	State      ObservedOutcomeState `json:"state"`
+	TotalCount string               `json:"total_count"`
+}
+
+// ObservedOutcomeState defines model for ObservedOutcome.State.
+type ObservedOutcomeState string
 
 // PasswordProofRequest defines model for PasswordProofRequest.
 type PasswordProofRequest struct {
@@ -1357,6 +1820,115 @@ type SecretAction struct {
 // SecretActionAction defines model for SecretAction.Action.
 type SecretActionAction string
 
+// Sli defines model for Sli.
+type Sli struct {
+	ActivationState    SliActivationState    `json:"activation_state"`
+	AgentId            openapi_types.UUID    `json:"agent_id"`
+	AgentReachability  SliAgentReachability  `json:"agent_reachability"`
+	CollectionProgress SliCollectionProgress `json:"collection_progress"`
+
+	// ComponentMode Component conversion mode; this increment supports interval_count.
+	ComponentMode     string             `json:"component_mode"`
+	CreatedAt         time.Time          `json:"created_at"`
+	DatasourceId      openapi_types.UUID `json:"datasource_id"`
+	DatasourceVersion string             `json:"datasource_version"`
+	DisplayName       string             `json:"display_name"`
+	EffectiveFrom     time.Time          `json:"effective_from"`
+	Freshness         SliFreshness       `json:"freshness"`
+	GoodQuery         string             `json:"good_query"`
+	Id                openapi_types.UUID `json:"id"`
+	LastAttemptAt     *time.Time         `json:"last_attempt_at"`
+	LastObservationAt *time.Time         `json:"last_observation_at"`
+	LatestObservation *SliObservation    `json:"latest_observation"`
+
+	// MeasurementKind Typed measurement kind; this increment supports event_counts.
+	MeasurementKind         string     `json:"measurement_kind"`
+	MeasurementRevision     string     `json:"measurement_revision"`
+	Name                    string     `json:"name"`
+	NextExpectedExecutionAt *time.Time `json:"next_expected_execution_at"`
+	PollingIntervalSeconds  int        `json:"polling_interval_seconds"`
+	SettlingDelaySeconds    int        `json:"settling_delay_seconds"`
+	TotalQuery              string     `json:"total_query"`
+	UpdatedAt               time.Time  `json:"updated_at"`
+	Version                 string     `json:"version"`
+}
+
+// SliActivationState defines model for Sli.ActivationState.
+type SliActivationState string
+
+// SliAgentReachability defines model for Sli.AgentReachability.
+type SliAgentReachability string
+
+// SliCollectionProgress defines model for Sli.CollectionProgress.
+type SliCollectionProgress string
+
+// SliFreshness defines model for Sli.Freshness.
+type SliFreshness string
+
+// SliCreateRequest defines model for SliCreateRequest.
+type SliCreateRequest struct {
+	// ComponentMode Current native implementation accepts interval_count; other conversion modes are rejected explicitly.
+	ComponentMode string             `json:"component_mode"`
+	DatasourceId  openapi_types.UUID `json:"datasource_id"`
+	DisplayName   string             `json:"display_name"`
+	GoodQuery     string             `json:"good_query"`
+
+	// MeasurementKind Current native implementation accepts event_counts; other typed kinds are rejected explicitly.
+	MeasurementKind string `json:"measurement_kind"`
+	Name            string `json:"name"`
+	TotalQuery      string `json:"total_query"`
+}
+
+// SliMetadataWrite defines model for SliMetadataWrite.
+type SliMetadataWrite struct {
+	DisplayName string `json:"display_name"`
+}
+
+// SliMissingInterval defines model for SliMissingInterval.
+type SliMissingInterval struct {
+	IntervalEnd   time.Time `json:"interval_end"`
+	IntervalStart time.Time `json:"interval_start"`
+}
+
+// SliObservation defines model for SliObservation.
+type SliObservation struct {
+	ErrorCode           *SliObservationErrorCode          `json:"error_code"`
+	GoodCount           *string                           `json:"good_count"`
+	IntervalEnd         time.Time                         `json:"interval_end"`
+	IntervalStart       time.Time                         `json:"interval_start"`
+	MeasurementRevision string                            `json:"measurement_revision"`
+	MissingComponents   []SliObservationMissingComponents `json:"missing_components"`
+	ObservationId       openapi_types.UUID                `json:"observation_id"`
+	Outcome             SliObservationOutcome             `json:"outcome"`
+	RecordedAt          time.Time                         `json:"recorded_at"`
+	TotalCount          *string                           `json:"total_count"`
+}
+
+// SliObservationErrorCode defines model for SliObservation.ErrorCode.
+type SliObservationErrorCode string
+
+// SliObservationMissingComponents defines model for SliObservation.MissingComponents.
+type SliObservationMissingComponents string
+
+// SliObservationOutcome defines model for SliObservation.Outcome.
+type SliObservationOutcome string
+
+// SliObservationPage defines model for SliObservationPage.
+type SliObservationPage struct {
+	EarliestQueryableIntervalStart time.Time            `json:"earliest_queryable_interval_start"`
+	InspectedEnd                   *time.Time           `json:"inspected_end"`
+	InspectedStart                 *time.Time           `json:"inspected_start"`
+	Items                          []SliObservation     `json:"items"`
+	MissingIntervals               []SliMissingInterval `json:"missing_intervals"`
+	NextCursor                     string               `json:"next_cursor"`
+}
+
+// SliPage defines model for SliPage.
+type SliPage struct {
+	Items      []Sli  `json:"items"`
+	NextCursor string `json:"next_cursor"`
+}
+
 // AgentId defines model for AgentId.
 type AgentId = openapi_types.UUID
 
@@ -1374,6 +1946,18 @@ type IdempotencyKey = string
 
 // IfMatch defines model for IfMatch.
 type IfMatch = string
+
+// PageCursor defines model for PageCursor.
+type PageCursor = string
+
+// PageLimit defines model for PageLimit.
+type PageLimit = int
+
+// SliId defines model for SliId.
+type SliId = openapi_types.UUID
+
+// SliIfMatch defines model for SliIfMatch.
+type SliIfMatch = string
 
 // AuthenticationMethodNotAllowed defines model for AuthenticationMethodNotAllowed.
 type AuthenticationMethodNotAllowed = Problem
@@ -1472,8 +2056,35 @@ type GetProvidersParams struct {
 	AgentId *openapi_types.UUID `form:"agent_id,omitempty" json:"agent_id,omitempty"`
 }
 
+// ListSlisParams defines parameters for ListSlis.
+type ListSlisParams struct {
+	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateSliParams defines parameters for CreateSli.
+type CreateSliParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PatchSliMetadataParams defines parameters for PatchSliMetadata.
+type PatchSliMetadataParams struct {
+	// IfMatch Strong tag exactly formatted as "sli:<canonical-uuid>:<positive-decimal-version>".
+	IfMatch SliIfMatch `json:"If-Match"`
+}
+
+// ListSliObservationsParams defines parameters for ListSliObservations.
+type ListSliObservationsParams struct {
+	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // PostAgentDiagnosticResultJSONRequestBody defines body for PostAgentDiagnosticResult for application/json ContentType.
 type PostAgentDiagnosticResultJSONRequestBody = DiagnosticResultPayload
+
+// PostAgentObservationsJSONRequestBody defines body for PostAgentObservations for application/json ContentType.
+type PostAgentObservationsJSONRequestBody = ObservationBatchRequest
 
 // PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
 type PostAgentsJSONRequestBody = CreateAgentRequest
@@ -1516,6 +2127,185 @@ type PostDatasourceQueryPreviewJSONRequestBody = QueryPreviewRequest
 
 // PostDiagnosticCancelJSONRequestBody defines body for PostDiagnosticCancel for application/json ContentType.
 type PostDiagnosticCancelJSONRequestBody = EmptyAuthRequest
+
+// CreateSliJSONRequestBody defines body for CreateSli for application/json ContentType.
+type CreateSliJSONRequestBody = SliCreateRequest
+
+// PatchSliMetadataJSONRequestBody defines body for PatchSliMetadata for application/json ContentType.
+type PatchSliMetadataJSONRequestBody = SliMetadataWrite
+
+// AsObservedOutcome returns the union data inside the ObservationExecutionOutcome as a ObservedOutcome
+func (t ObservationExecutionOutcome) AsObservedOutcome() (ObservedOutcome, error) {
+	var body ObservedOutcome
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromObservedOutcome overwrites any union data inside the ObservationExecutionOutcome as the provided ObservedOutcome
+func (t *ObservationExecutionOutcome) FromObservedOutcome(v ObservedOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"observed"}`))
+	t.union = b
+	return err
+}
+
+// MergeObservedOutcome performs a merge with any union data inside the ObservationExecutionOutcome, using the provided ObservedOutcome
+func (t *ObservationExecutionOutcome) MergeObservedOutcome(v ObservedOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"observed"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCompleteEmptyOutcome returns the union data inside the ObservationExecutionOutcome as a CompleteEmptyOutcome
+func (t ObservationExecutionOutcome) AsCompleteEmptyOutcome() (CompleteEmptyOutcome, error) {
+	var body CompleteEmptyOutcome
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCompleteEmptyOutcome overwrites any union data inside the ObservationExecutionOutcome as the provided CompleteEmptyOutcome
+func (t *ObservationExecutionOutcome) FromCompleteEmptyOutcome(v CompleteEmptyOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"complete_empty"}`))
+	t.union = b
+	return err
+}
+
+// MergeCompleteEmptyOutcome performs a merge with any union data inside the ObservationExecutionOutcome, using the provided CompleteEmptyOutcome
+func (t *ObservationExecutionOutcome) MergeCompleteEmptyOutcome(v CompleteEmptyOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"complete_empty"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsIncompleteOutcome returns the union data inside the ObservationExecutionOutcome as a IncompleteOutcome
+func (t ObservationExecutionOutcome) AsIncompleteOutcome() (IncompleteOutcome, error) {
+	var body IncompleteOutcome
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromIncompleteOutcome overwrites any union data inside the ObservationExecutionOutcome as the provided IncompleteOutcome
+func (t *ObservationExecutionOutcome) FromIncompleteOutcome(v IncompleteOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"incomplete"}`))
+	t.union = b
+	return err
+}
+
+// MergeIncompleteOutcome performs a merge with any union data inside the ObservationExecutionOutcome, using the provided IncompleteOutcome
+func (t *ObservationExecutionOutcome) MergeIncompleteOutcome(v IncompleteOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"incomplete"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFailedOutcome returns the union data inside the ObservationExecutionOutcome as a FailedOutcome
+func (t ObservationExecutionOutcome) AsFailedOutcome() (FailedOutcome, error) {
+	var body FailedOutcome
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFailedOutcome overwrites any union data inside the ObservationExecutionOutcome as the provided FailedOutcome
+func (t *ObservationExecutionOutcome) FromFailedOutcome(v FailedOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"failed"}`))
+	t.union = b
+	return err
+}
+
+// MergeFailedOutcome performs a merge with any union data inside the ObservationExecutionOutcome, using the provided FailedOutcome
+func (t *ObservationExecutionOutcome) MergeFailedOutcome(v FailedOutcome) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"failed"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ObservationExecutionOutcome) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"state"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t ObservationExecutionOutcome) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "complete_empty":
+		return t.AsCompleteEmptyOutcome()
+	case "failed":
+		return t.AsFailedOutcome()
+	case "incomplete":
+		return t.AsIncompleteOutcome()
+	case "observed":
+		return t.AsObservedOutcome()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t ObservationExecutionOutcome) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ObservationExecutionOutcome) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsRotationIssuanceFresh returns the union data inside the RotationIssuanceResponse as a RotationIssuanceFresh
 func (t RotationIssuanceResponse) AsRotationIssuanceFresh() (RotationIssuanceFresh, error) {
@@ -1677,6 +2467,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
 	PostAgentDiagnosticResult(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentObservationsWithBody Submit a bounded batch of authorized SLI outcomes
+	//
+	// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+	PostAgentObservationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAgentObservations Submit a bounded batch of authorized SLI outcomes
+	//
+	// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+	PostAgentObservations(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAgents List agents
 	//
@@ -1961,6 +2769,59 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListSlis List SLIs
+	//
+	// Corresponds with GET /api/v1/slis (the `ListSlis` operationId).
+	ListSlis(ctx context.Context, params *ListSlisParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSliWithBody Create an event-count SLI
+	//
+	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+	CreateSliWithBody(ctx context.Context, params *CreateSliParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSli Create an event-count SLI
+	//
+	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+	CreateSli(ctx context.Context, params *CreateSliParams, body CreateSliJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSli Read SLI configuration and collection health
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id} (the `GetSli` operationId).
+	GetSli(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSliMetadataWithBody Update SLI display metadata
+	//
+	// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+	PatchSliMetadataWithBody(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSliMetadata Update SLI display metadata
+	//
+	// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+	PatchSliMetadata(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSliObservations Read bounded SLI interval history
+	//
+	// Each page inspects at most limit consecutive due canonical intervals in descending time order, including intervals without observations. The cursor continues strictly before that page's inspected range. Missing ranges are inferred from the effective schedule and exclude accepted observations and complete-empty coverage; failed or incomplete attempts remain missing. Intervals before earliest_queryable_interval_start are unavailable.
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
+	ListSliObservations(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetLiveness Report whether the UI process is alive
 	//
 	// Corresponds with GET /livez (the `GetLiveness` operationId).
@@ -2017,6 +2878,44 @@ func (c *Client) PostAgentDiagnosticResultWithBody(ctx context.Context, diagnost
 // Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
 func (c *Client) PostAgentDiagnosticResult(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAgentDiagnosticResultRequest(c.Server, diagnosticId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentObservationsWithBody Submit a bounded batch of authorized SLI outcomes
+//
+// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+func (c *Client) PostAgentObservationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentObservationsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostAgentObservations Submit a bounded batch of authorized SLI outcomes
+//
+// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+func (c *Client) PostAgentObservations(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAgentObservationsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2660,6 +3559,129 @@ func (c *Client) GetProviders(ctx context.Context, params *GetProvidersParams, r
 	return c.Client.Do(req)
 }
 
+// ListSlis List SLIs
+//
+// Corresponds with GET /api/v1/slis (the `ListSlis` operationId).
+func (c *Client) ListSlis(ctx context.Context, params *ListSlisParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSlisRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSliWithBody Create an event-count SLI
+//
+// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+func (c *Client) CreateSliWithBody(ctx context.Context, params *CreateSliParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSliRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSli Create an event-count SLI
+//
+// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+func (c *Client) CreateSli(ctx context.Context, params *CreateSliParams, body CreateSliJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSliRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSli Read SLI configuration and collection health
+//
+// Corresponds with GET /api/v1/slis/{sli_id} (the `GetSli` operationId).
+func (c *Client) GetSli(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSliRequest(c.Server, sliId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSliMetadataWithBody Update SLI display metadata
+//
+// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+func (c *Client) PatchSliMetadataWithBody(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSliMetadataRequestWithBody(c.Server, sliId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSliMetadata Update SLI display metadata
+//
+// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+func (c *Client) PatchSliMetadata(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSliMetadataRequest(c.Server, sliId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListSliObservations Read bounded SLI interval history
+//
+// Each page inspects at most limit consecutive due canonical intervals in descending time order, including intervals without observations. The cursor continues strictly before that page's inspected range. Missing ranges are inferred from the effective schedule and exclude accepted observations and complete-empty coverage; failed or incomplete attempts remain missing. Intervals before earliest_queryable_interval_start are unavailable.
+//
+// Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
+func (c *Client) ListSliObservations(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSliObservationsRequest(c.Server, sliId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetLiveness Report whether the UI process is alive
 //
 // Corresponds with GET /livez (the `GetLiveness` operationId).
@@ -2788,6 +3810,46 @@ func NewPostAgentDiagnosticResultRequestWithBody(server string, diagnosticId Dia
 		req.Header.Set("X-Agent-Session-Generation", headerParam0)
 
 	}
+
+	return req, nil
+}
+
+// NewPostAgentObservationsRequest calls the generic PostAgentObservations builder with application/json body
+func NewPostAgentObservationsRequest(server string, body PostAgentObservationsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAgentObservationsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAgentObservationsRequestWithBody constructs an http.Request for the PostAgentObservations method, with any body, and a specified content type
+func NewPostAgentObservationsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/agent/v1/observations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -3896,6 +4958,292 @@ func NewGetProvidersRequest(server string, params *GetProvidersParams) (*http.Re
 	return req, nil
 }
 
+// NewListSlisRequest constructs an http.Request for the ListSlis method
+func NewListSlisRequest(server string, params *ListSlisParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSliRequest calls the generic CreateSli builder with application/json body
+func NewCreateSliRequest(server string, params *CreateSliParams, body CreateSliJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSliRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateSliRequestWithBody constructs an http.Request for the CreateSli method, with any body, and a specified content type
+func NewCreateSliRequestWithBody(server string, params *CreateSliParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetSliRequest constructs an http.Request for the GetSli method
+func NewGetSliRequest(server string, sliId SliId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchSliMetadataRequest calls the generic PatchSliMetadata builder with application/json body
+func NewPatchSliMetadataRequest(server string, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchSliMetadataRequestWithBody(server, sliId, params, "application/json", bodyReader)
+}
+
+// NewPatchSliMetadataRequestWithBody constructs an http.Request for the PatchSliMetadata method, with any body, and a specified content type
+func NewPatchSliMetadataRequestWithBody(server string, sliId SliId, params *PatchSliMetadataParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewListSliObservationsRequest constructs an http.Request for the ListSliObservations method
+func NewListSliObservationsRequest(server string, sliId SliId, params *ListSliObservationsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s/observations", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetLivenessRequest constructs an http.Request for the GetLiveness method
 func NewGetLivenessRequest(server string) (*http.Request, error) {
 	var err error
@@ -4020,6 +5368,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/agent/v1/diagnostics/{diagnostic_id}/result (the `PostAgentDiagnosticResult` operationId).
 	PostAgentDiagnosticResultWithResponse(ctx context.Context, diagnosticId DiagnosticId, params *PostAgentDiagnosticResultParams, body PostAgentDiagnosticResultJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentDiagnosticResultResponse, error)
+
+	// PostAgentObservationsWithBodyWithResponse Submit a bounded batch of authorized SLI outcomes
+	//
+	// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+	PostAgentObservationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentObservationsResponse, error)
+
+	// PostAgentObservationsWithResponse Submit a bounded batch of authorized SLI outcomes
+	//
+	// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+	PostAgentObservationsWithResponse(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentObservationsResponse, error)
 
 	// GetAgentsWithResponse List agents
 	//
@@ -4318,6 +5684,65 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProvidersWithResponse(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*GetProvidersResponse, error)
 
+	// ListSlisWithResponse List SLIs
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slis (the `ListSlis` operationId).
+	ListSlisWithResponse(ctx context.Context, params *ListSlisParams, reqEditors ...RequestEditorFn) (*ListSlisResponse, error)
+
+	// CreateSliWithBodyWithResponse Create an event-count SLI
+	//
+	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+	CreateSliWithBodyWithResponse(ctx context.Context, params *CreateSliParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSliResponse, error)
+
+	// CreateSliWithResponse Create an event-count SLI
+	//
+	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+	CreateSliWithResponse(ctx context.Context, params *CreateSliParams, body CreateSliJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSliResponse, error)
+
+	// GetSliWithResponse Read SLI configuration and collection health
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id} (the `GetSli` operationId).
+	GetSliWithResponse(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*GetSliResponse, error)
+
+	// PatchSliMetadataWithBodyWithResponse Update SLI display metadata
+	//
+	// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+	PatchSliMetadataWithBodyWithResponse(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSliMetadataResponse, error)
+
+	// PatchSliMetadataWithResponse Update SLI display metadata
+	//
+	// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+	PatchSliMetadataWithResponse(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSliMetadataResponse, error)
+
+	// ListSliObservationsWithResponse Read bounded SLI interval history
+	//
+	// Each page inspects at most limit consecutive due canonical intervals in descending time order, including intervals without observations. The cursor continues strictly before that page's inspected range. Missing ranges are inferred from the effective schedule and exclude accepted observations and complete-empty coverage; failed or incomplete attempts remain missing. Intervals before earliest_queryable_interval_start are unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
+	ListSliObservationsWithResponse(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*ListSliObservationsResponse, error)
+
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -4465,6 +5890,75 @@ func (r PostAgentDiagnosticResultResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostAgentDiagnosticResultResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostAgentObservationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ObservationBatchResponse
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON413 the response for an HTTP 413 `application/problem+json` response
+	ApplicationproblemJSON413 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PostAgentObservationsResponse) GetJSON200() *ObservationBatchResponse {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r PostAgentObservationsResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r PostAgentObservationsResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON413 returns the response for an HTTP 413 `application/problem+json` response
+func (r PostAgentObservationsResponse) GetApplicationproblemJSON413() *Problem {
+	return r.ApplicationproblemJSON413
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r PostAgentObservationsResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r PostAgentObservationsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAgentObservationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAgentObservationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostAgentObservationsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5836,6 +7330,316 @@ func (r GetProvidersResponse) ContentType() string {
 	return ""
 }
 
+type ListSlisResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SliPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSlisResponse) GetJSON200() *SliPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSlisResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSlisResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSlisResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSlisResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSlisResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreateSliResponse201Headers the declared response headers of an HTTP 201 response for CreateSli
+type CreateSliResponse201Headers struct {
+	ETag *string
+}
+
+type CreateSliResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Sli
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateSliResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSliResponse) GetJSON201() *Sli {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r CreateSliResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r CreateSliResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateSliResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSliResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSliResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSliResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSliResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetSliResponse200Headers the declared response headers of an HTTP 200 response for GetSli
+type GetSliResponse200Headers struct {
+	ETag *string
+}
+
+type GetSliResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Sli
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetSliResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSliResponse) GetJSON200() *Sli {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r GetSliResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSliResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSliResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSliResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSliResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSliResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PatchSliMetadataResponse200Headers the declared response headers of an HTTP 200 response for PatchSliMetadata
+type PatchSliMetadataResponse200Headers struct {
+	ETag *string
+}
+
+type PatchSliMetadataResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Sli
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PatchSliMetadataResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchSliMetadataResponse) GetJSON200() *Sli {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r PatchSliMetadataResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r PatchSliMetadataResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r PatchSliMetadataResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchSliMetadataResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchSliMetadataResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchSliMetadataResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchSliMetadataResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchSliMetadataResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListSliObservationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SliObservationPage
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSliObservationsResponse) GetJSON200() *SliObservationPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r ListSliObservationsResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSliObservationsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSliObservationsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSliObservationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSliObservationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSliObservationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetLivenessResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5968,6 +7772,36 @@ func (c *ClientWithResponses) PostAgentDiagnosticResultWithResponse(ctx context.
 		return nil, err
 	}
 	return ParsePostAgentDiagnosticResultResponse(rsp)
+}
+
+// PostAgentObservationsWithBodyWithResponse Submit a bounded batch of authorized SLI outcomes
+//
+// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+func (c *ClientWithResponses) PostAgentObservationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAgentObservationsResponse, error) {
+	rsp, err := c.PostAgentObservationsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentObservationsResponse(rsp)
+}
+
+// PostAgentObservationsWithResponse Submit a bounded batch of authorized SLI outcomes
+//
+// Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
+func (c *ClientWithResponses) PostAgentObservationsWithResponse(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentObservationsResponse, error) {
+	rsp, err := c.PostAgentObservations(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAgentObservationsResponse(rsp)
 }
 
 // GetAgentsWithResponse List agents
@@ -6477,6 +8311,107 @@ func (c *ClientWithResponses) GetProvidersWithResponse(ctx context.Context, para
 	return ParseGetProvidersResponse(rsp)
 }
 
+// ListSlisWithResponse List SLIs
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slis (the `ListSlis` operationId).
+func (c *ClientWithResponses) ListSlisWithResponse(ctx context.Context, params *ListSlisParams, reqEditors ...RequestEditorFn) (*ListSlisResponse, error) {
+	rsp, err := c.ListSlis(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSlisResponse(rsp)
+}
+
+// CreateSliWithBodyWithResponse Create an event-count SLI
+//
+// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+func (c *ClientWithResponses) CreateSliWithBodyWithResponse(ctx context.Context, params *CreateSliParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSliResponse, error) {
+	rsp, err := c.CreateSliWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSliResponse(rsp)
+}
+
+// CreateSliWithResponse Create an event-count SLI
+//
+// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slis (the `CreateSli` operationId).
+func (c *ClientWithResponses) CreateSliWithResponse(ctx context.Context, params *CreateSliParams, body CreateSliJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSliResponse, error) {
+	rsp, err := c.CreateSli(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSliResponse(rsp)
+}
+
+// GetSliWithResponse Read SLI configuration and collection health
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slis/{sli_id} (the `GetSli` operationId).
+func (c *ClientWithResponses) GetSliWithResponse(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*GetSliResponse, error) {
+	rsp, err := c.GetSli(ctx, sliId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSliResponse(rsp)
+}
+
+// PatchSliMetadataWithBodyWithResponse Update SLI display metadata
+//
+// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+func (c *ClientWithResponses) PatchSliMetadataWithBodyWithResponse(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSliMetadataResponse, error) {
+	rsp, err := c.PatchSliMetadataWithBody(ctx, sliId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSliMetadataResponse(rsp)
+}
+
+// PatchSliMetadataWithResponse Update SLI display metadata
+//
+// Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
+func (c *ClientWithResponses) PatchSliMetadataWithResponse(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSliMetadataResponse, error) {
+	rsp, err := c.PatchSliMetadata(ctx, sliId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSliMetadataResponse(rsp)
+}
+
+// ListSliObservationsWithResponse Read bounded SLI interval history
+//
+// Each page inspects at most limit consecutive due canonical intervals in descending time order, including intervals without observations. The cursor continues strictly before that page's inspected range. Missing ranges are inferred from the effective schedule and exclude accepted observations and complete-empty coverage; failed or incomplete attempts remain missing. Intervals before earliest_queryable_interval_start are unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
+func (c *ClientWithResponses) ListSliObservationsWithResponse(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*ListSliObservationsResponse, error) {
+	rsp, err := c.ListSliObservations(ctx, sliId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSliObservationsResponse(rsp)
+}
+
 // GetLivenessWithResponse Report whether the UI process is alive
 //
 // Returns a wrapper object for the known response body format(s).
@@ -6606,6 +8541,60 @@ func ParsePostAgentDiagnosticResultResponse(rsp *http.Response) (*PostAgentDiagn
 			return nil, err
 		}
 		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAgentObservationsResponse parses an HTTP response from a PostAgentObservationsWithResponse call
+func ParsePostAgentObservationsResponse(rsp *http.Response) (*PostAgentObservationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAgentObservationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ObservationBatchResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
 		var dest Problem
@@ -7751,6 +9740,259 @@ func ParseGetProvidersResponse(rsp *http.Response) (*GetProvidersResponse, error
 	return response, nil
 }
 
+// ParseListSlisResponse parses an HTTP response from a ListSlisWithResponse call
+func ParseListSlisResponse(rsp *http.Response) (*ListSlisResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSlisResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SliPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateSliResponse parses an HTTP response from a CreateSliWithResponse call
+func ParseCreateSliResponse(rsp *http.Response) (*CreateSliResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSliResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Sli
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateSliResponse201Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetSliResponse parses an HTTP response from a GetSliWithResponse call
+func ParseGetSliResponse(rsp *http.Response) (*GetSliResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSliResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Sli
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetSliResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePatchSliMetadataResponse parses an HTTP response from a PatchSliMetadataWithResponse call
+func ParsePatchSliMetadataResponse(rsp *http.Response) (*PatchSliMetadataResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchSliMetadataResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Sli
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PatchSliMetadataResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseListSliObservationsResponse parses an HTTP response from a ListSliObservationsWithResponse call
+func ParseListSliObservationsResponse(rsp *http.Response) (*ListSliObservationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSliObservationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SliObservationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
 func ParseGetLivenessResponse(rsp *http.Response) (*GetLivenessResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7824,6 +10066,9 @@ type ServerInterface interface {
 	// PostAgentDiagnosticResult Submit a bounded diagnostic result over verified HTTPS
 	// (POST /api/agent/v1/diagnostics/{diagnostic_id}/result)
 	PostAgentDiagnosticResult(w http.ResponseWriter, r *http.Request, diagnosticId DiagnosticId, params PostAgentDiagnosticResultParams)
+	// PostAgentObservations Submit a bounded batch of authorized SLI outcomes
+	// (POST /api/agent/v1/observations)
+	PostAgentObservations(w http.ResponseWriter, r *http.Request)
 	// GetAgents List agents
 	// (GET /api/v1/agents)
 	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
@@ -7887,6 +10132,21 @@ type ServerInterface interface {
 	// GetProviders List provider descriptors and selected-agent availability
 	// (GET /api/v1/providers)
 	GetProviders(w http.ResponseWriter, r *http.Request, params GetProvidersParams)
+	// ListSlis List SLIs
+	// (GET /api/v1/slis)
+	ListSlis(w http.ResponseWriter, r *http.Request, params ListSlisParams)
+	// CreateSli Create an event-count SLI
+	// (POST /api/v1/slis)
+	CreateSli(w http.ResponseWriter, r *http.Request, params CreateSliParams)
+	// GetSli Read SLI configuration and collection health
+	// (GET /api/v1/slis/{sli_id})
+	GetSli(w http.ResponseWriter, r *http.Request, sliId SliId)
+	// PatchSliMetadata Update SLI display metadata
+	// (PATCH /api/v1/slis/{sli_id})
+	PatchSliMetadata(w http.ResponseWriter, r *http.Request, sliId SliId, params PatchSliMetadataParams)
+	// ListSliObservations Read bounded SLI interval history
+	// (GET /api/v1/slis/{sli_id}/observations)
+	ListSliObservations(w http.ResponseWriter, r *http.Request, sliId SliId, params ListSliObservationsParams)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -7990,6 +10250,20 @@ func (siw *ServerInterfaceWrapper) PostAgentDiagnosticResult(w http.ResponseWrit
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAgentDiagnosticResult(w, r, diagnosticId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentObservations operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentObservations(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentObservations(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8840,6 +11114,232 @@ func (siw *ServerInterfaceWrapper) GetProviders(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListSlis operation middleware
+func (siw *ServerInterfaceWrapper) ListSlis(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSlisParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSlis(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSli operation middleware
+func (siw *ServerInterfaceWrapper) CreateSli(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateSliParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSli(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSli operation middleware
+func (siw *ServerInterfaceWrapper) GetSli(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSli(w, r, sliId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchSliMetadata operation middleware
+func (siw *ServerInterfaceWrapper) PatchSliMetadata(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PatchSliMetadataParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch SliIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchSliMetadata(w, r, sliId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSliObservations operation middleware
+func (siw *ServerInterfaceWrapper) ListSliObservations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSliObservationsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSliObservations(w, r, sliId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
 
@@ -8989,6 +11489,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/agent/v1/configuration", wrapper.GetAgentConfiguration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/agent/v1/observations", wrapper.PostAgentObservations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/agent/v1/diagnostics/{diagnostic_id}/result", wrapper.PostAgentDiagnosticResult)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/context", wrapper.PostAuthContext)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/auth/login", wrapper.PostAuthLogin)
@@ -9011,6 +11512,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/datasources/{datasource_id}/connection-tests", wrapper.PostSavedDatasourceConnectionTest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/diagnostics/{diagnostic_id}", wrapper.GetDiagnostic)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/diagnostics/{diagnostic_id}/cancel", wrapper.PostDiagnosticCancel)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis", wrapper.ListSlis)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slis", wrapper.CreateSli)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.GetSli)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.PatchSliMetadata)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/observations", wrapper.ListSliObservations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/livez", wrapper.GetLiveness)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReadiness)
 

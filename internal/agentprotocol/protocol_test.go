@@ -271,7 +271,7 @@ func TestDecodeErrorsDoNotEchoUntrustedValues(t *testing.T) {
 }
 
 func TestConfigurationSnapshotRequiresTypedEmptyAssignments(t *testing.T) {
-	snapshot, err := DecodeConfigurationSnapshot([]byte(`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1","assignments":[]}`))
+	snapshot, err := DecodeConfigurationSnapshot([]byte(`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1","assignments":[],"slis":[]}`))
 	if err != nil {
 		t.Fatalf("valid empty snapshot: %v", err)
 	}
@@ -280,8 +280,9 @@ func TestConfigurationSnapshotRequiresTypedEmptyAssignments(t *testing.T) {
 	}
 	for _, body := range []string{
 		`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"0","assignments":[]}`,
-		`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1","assignments":null}`,
+		`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1","assignments":null,"slis":[]}`,
 		`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1"}`,
+		`{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"1","assignments":[],"slis":null}`,
 	} {
 		if _, err := DecodeConfigurationSnapshot([]byte(body)); err == nil {
 			t.Fatalf("accepted invalid snapshot: %s", body)
@@ -290,19 +291,41 @@ func TestConfigurationSnapshotRequiresTypedEmptyAssignments(t *testing.T) {
 }
 
 func TestConfigurationSnapshotFencesLeaseAuthority(t *testing.T) {
-	snapshot := ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{}}
+	snapshot := ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{}, SLIs: []SLICollection{}}
 	lease := Lease{LeaseID: "lease-1", AgentID: snapshot.AgentID, SessionGeneration: "1", ConfigurationRevision: "1", AllowedMeasurements: []MeasurementGrant{}, ValidFrom: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC), ValidUntil: time.Date(2026, 10, 27, 13, 0, 0, 0, time.UTC)}
 	if err := ValidateSnapshotLease(snapshot, lease); err != nil {
 		t.Fatalf("empty configuration with no authority: %v", err)
 	}
+	snapshot.Assignments = []DatasourceAssignment{{DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "3", Name: "primary-metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}}
+	snapshot.SLIs = []SLICollection{{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "3", MeasurementKind: MeasurementKindEventCounts, ComponentMode: ComponentModeIntervalCount, GoodQuery: "sum(rate(request_success[1m]))", TotalQuery: "sum(rate(request_total[1m]))", EffectiveFrom: time.Date(2026, 10, 27, 12, 1, 0, 0, time.UTC)}}
 	lease.AllowedMeasurements = []MeasurementGrant{{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1"}}
+	if err := ValidateSnapshotLease(snapshot, lease); err != nil {
+		t.Fatalf("matching acknowledged measurement grant: %v", err)
+	}
+	lease.AllowedMeasurements[0].MeasurementRevision = "2"
 	if err := ValidateSnapshotLease(snapshot, lease); err == nil {
-		t.Fatal("empty assignments retained query authority")
+		t.Fatal("grant for another measurement revision was accepted")
+	}
+}
+
+func TestConfigurationSnapshotRejectsUnsupportedMeasurementSemantics(t *testing.T) {
+	snapshot := ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{{DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "3", Name: "primary-metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}}, SLIs: []SLICollection{{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", DatasourceID: "00000000-0000-4000-8000-000000000002", DatasourceVersion: "3", MeasurementKind: MeasurementKindEventCounts, ComponentMode: ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: time.Date(2026, 10, 27, 12, 1, 0, 0, time.UTC)}}}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("valid event-count interval configuration rejected: %v", err)
+	}
+	snapshot.SLIs[0].MeasurementKind = "availability_ratio"
+	if err := snapshot.Validate(); err == nil {
+		t.Fatal("unsupported measurement kind was accepted")
+	}
+	snapshot.SLIs[0].MeasurementKind = MeasurementKindEventCounts
+	snapshot.SLIs[0].ComponentMode = "sum_over_interval"
+	if err := snapshot.Validate(); err == nil {
+		t.Fatal("unsupported component mode was accepted")
 	}
 }
 
 func TestConfigurationHTTPResponseUsesRevisionBoundETagAndNotModifiedState(t *testing.T) {
-	snapshot := &ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{}}
+	snapshot := &ConfigurationSnapshot{AgentID: "00000000-0000-4000-8000-000000000001", ConfigurationRevision: "1", Assignments: []DatasourceAssignment{}, SLIs: []SLICollection{}}
 	response := ConfigurationHTTPResponse{StatusCode: 200, ETag: snapshot.ETag(), Snapshot: snapshot}
 	if err := response.Validate(); err != nil {
 		t.Fatalf("valid snapshot response: %v", err)
@@ -354,7 +377,7 @@ func TestConfigurationMessagesAreBoundedAndTyped(t *testing.T) {
 }
 
 func TestConfigurationSnapshotValidatesTypedDatasourceAssignments(t *testing.T) {
-	body := `{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"2","assignments":[{"datasource_id":"00000000-0000-4000-8000-000000000002","datasource_version":"3","name":"primary-metrics","provider":"prometheus","configuration_format":"prometheus-http-v1","endpoint":"https://metrics.example.test","tls":{"insecure_skip_verify":false,"ca_pem":""},"authentication_mode":"bearer","bearer_token":"secret-token","polling_interval_seconds":60,"settling_delay_seconds":60}]}`
+	body := `{"agent_id":"00000000-0000-4000-8000-000000000001","configuration_revision":"2","assignments":[{"datasource_id":"00000000-0000-4000-8000-000000000002","datasource_version":"3","name":"primary-metrics","provider":"prometheus","configuration_format":"prometheus-http-v1","endpoint":"https://metrics.example.test","tls":{"insecure_skip_verify":false,"ca_pem":""},"authentication_mode":"bearer","bearer_token":"secret-token","polling_interval_seconds":60,"settling_delay_seconds":60}],"slis":[]}`
 	snapshot, err := DecodeConfigurationSnapshot([]byte(body))
 	if err != nil || len(snapshot.Assignments) != 1 || snapshot.Assignments[0].DatasourceID != "00000000-0000-4000-8000-000000000002" {
 		t.Fatalf("DecodeConfigurationSnapshot() = %+v, %v", snapshot, err)

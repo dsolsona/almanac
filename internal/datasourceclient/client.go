@@ -17,6 +17,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/setupclient"
+	"github.com/dsolsona/almanac/internal/sli"
 )
 
 const (
@@ -60,6 +61,108 @@ func (c *Client) List(ctx context.Context, limit int, cursor string) ([]byte, er
 		var value api.DatasourcePage
 		return json.Unmarshal(data, &value) == nil && len(value.Items) <= 200 && validDatasourcePage(data, value)
 	})
+}
+
+func (c *Client) ListSLIs(ctx context.Context, limit int, cursor string) ([]byte, error) {
+	if limit < 1 || limit > 200 || len(cursor) > 512 {
+		return nil, invalid()
+	}
+	p := &api.ListSlisParams{Limit: pageLimit(limit)}
+	if cursor != "" {
+		p.Cursor = pageCursor(cursor)
+	}
+	r, err := c.ops.ListSlis(ctx, p, c.editor)
+	return c.read(r, err, http.StatusOK, validSliPage)
+}
+
+func (c *Client) GetSLI(ctx context.Context, rawID string) ([]byte, string, error) {
+	id, err := parseSliID(rawID)
+	if err != nil {
+		return nil, "", err
+	}
+	r, err := c.ops.GetSli(ctx, id, c.editor)
+	data, err := c.read(r, err, http.StatusOK, validSli)
+	if err != nil {
+		return nil, "", err
+	}
+	var value api.Sli
+	if json.Unmarshal(data, &value) != nil || uuidText(value.Id) != rawID {
+		return nil, "", protocol()
+	}
+	etag := r.Header.Get("ETag")
+	if etag != sliETag(rawID, value.Version) {
+		return nil, "", protocol()
+	}
+	return data, etag, nil
+}
+
+func (c *Client) CreateSLI(ctx context.Context, value api.SliCreateRequest, key string) ([]byte, string, error) {
+	if !validKey(key) {
+		return nil, "", invalid()
+	}
+	params := &api.CreateSliParams{IdempotencyKey: api.IdempotencyKey(key)}
+	r, err := c.ops.CreateSli(ctx, params, value, c.mutationEditor(key, ""))
+	data, err := c.read(r, err, http.StatusCreated, validSli)
+	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) {
+		failure.Unknown = true
+		failure.Code = "outcome_unknown"
+		failure.Message = "SLI creation outcome is unknown; repeat the exact command with the same idempotency key and protected input file"
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	var created api.Sli
+	if json.Unmarshal(data, &created) != nil {
+		return nil, "", protocol()
+	}
+	etag := r.Header.Get("ETag")
+	if etag != sliETag(uuidText(created.Id), created.Version) {
+		return nil, "", &Failure{Code: "outcome_unknown", Message: "SLI creation succeeded but its resource version could not be confirmed; inspect the SLI list before continuing", Unknown: true}
+	}
+	return data, etag, nil
+}
+
+func (c *Client) UpdateSLIMetadata(ctx context.Context, rawID, etag string, value api.SliMetadataWrite) ([]byte, string, error) {
+	id, err := parseSliID(rawID)
+	if err != nil {
+		return nil, "", err
+	}
+	if sliETagVersion(etag, rawID) == "" {
+		return nil, "", invalid()
+	}
+	params := &api.PatchSliMetadataParams{IfMatch: api.SliIfMatch(etag)}
+	r, err := c.ops.PatchSliMetadata(ctx, id, params, value, c.mutationEditor("", etag))
+	data, err := c.read(r, err, http.StatusOK, validSli)
+	if failure, ok := errors.AsType[*Failure](err); ok && (failure.Status == 0 || failure.Status >= 500) {
+		failure.Unknown = true
+		failure.Code = "outcome_unknown"
+		failure.Message = "SLI metadata update outcome is unknown; retrieve the SLI and reconcile its current version before retrying"
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	var updated api.Sli
+	if json.Unmarshal(data, &updated) != nil {
+		return nil, "", protocol()
+	}
+	newETag := r.Header.Get("ETag")
+	if newETag != sliETag(rawID, updated.Version) {
+		return nil, "", &Failure{Code: "outcome_unknown", Message: "SLI metadata update may have completed but its version could not be confirmed; retrieve the SLI before retrying", Unknown: true}
+	}
+	return data, newETag, nil
+}
+
+func (c *Client) SLIObservations(ctx context.Context, rawID string, limit int, cursor string) ([]byte, error) {
+	id, err := parseSliID(rawID)
+	if err != nil || limit < 1 || limit > 200 || len(cursor) > 512 {
+		return nil, invalid()
+	}
+	p := &api.ListSliObservationsParams{Limit: pageLimit(limit)}
+	if cursor != "" {
+		p.Cursor = pageCursor(cursor)
+	}
+	r, err := c.ops.ListSliObservations(ctx, id, p, c.editor)
+	return c.read(r, err, http.StatusOK, validSliObservationPage)
 }
 
 func (c *Client) Providers(ctx context.Context, agentID string) ([]byte, error) {
@@ -327,6 +430,147 @@ func validDatasource(data []byte) bool {
 	return true
 }
 
+func validSli(data []byte) bool {
+	var value api.Sli
+	var fields map[string]jsontext.Value
+	if json.Unmarshal(data, &fields) != nil || !exactFields(fields,
+		"activation_state", "agent_id", "agent_reachability", "collection_progress", "component_mode", "created_at",
+		"datasource_id", "datasource_version", "display_name", "effective_from", "freshness", "good_query", "id",
+		"last_attempt_at", "last_observation_at", "latest_observation", "measurement_kind", "measurement_revision",
+		"name", "next_expected_execution_at", "polling_interval_seconds", "settling_delay_seconds", "total_query", "updated_at", "version") || json.Unmarshal(data, &value) != nil {
+		return false
+	}
+	if !uuidPattern.MatchString(uuidText(value.Id)) || !uuidPattern.MatchString(uuidText(value.DatasourceId)) || !uuidPattern.MatchString(uuidText(value.AgentId)) ||
+		!positiveDecimal(value.Version) || !positiveDecimal(value.MeasurementRevision) || !positiveDecimal(value.DatasourceVersion) ||
+		value.MeasurementKind != "event_counts" || value.ComponentMode != "interval_count" || value.Name == "" || value.DisplayName == "" ||
+		value.PollingIntervalSeconds < 15 || value.SettlingDelaySeconds != 60 || value.EffectiveFrom.IsZero() || value.CreatedAt.IsZero() || value.UpdatedAt.IsZero() ||
+		!value.ActivationState.Valid() || !value.AgentReachability.Valid() || !value.CollectionProgress.Valid() || !value.Freshness.Valid() {
+		return false
+	}
+	if fields["latest_observation"].Kind() != jsontext.KindNull && !validSliObservation(fields["latest_observation"]) {
+		return false
+	}
+	return true
+}
+
+func validSliPage(data []byte) bool {
+	var value api.SliPage
+	var fields map[string]jsontext.Value
+	var raw struct {
+		Items []jsontext.Value `json:"items"`
+	}
+	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "items", "next_cursor") ||
+		json.Unmarshal(data, &raw) != nil || json.Unmarshal(data, &value) != nil || len(raw.Items) != len(value.Items) || len(value.Items) > 200 || len(value.NextCursor) > 512 {
+		return false
+	}
+	for _, item := range raw.Items {
+		if !validSli(item) {
+			return false
+		}
+	}
+	return true
+}
+
+func validSliObservationPage(data []byte) bool {
+	var value api.SliObservationPage
+	var fields map[string]jsontext.Value
+	var raw struct {
+		Items []jsontext.Value `json:"items"`
+	}
+	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "items", "next_cursor", "earliest_queryable_interval_start", "inspected_start", "inspected_end", "missing_intervals") ||
+		json.Unmarshal(data, &raw) != nil || json.Unmarshal(data, &value) != nil || len(raw.Items) != len(value.Items) || len(value.Items) > 200 || len(value.NextCursor) > 512 {
+		return false
+	}
+	if value.EarliestQueryableIntervalStart.IsZero() || len(value.MissingIntervals) > 200 || (value.InspectedStart == nil) != (value.InspectedEnd == nil) {
+		return false
+	}
+	if value.InspectedStart != nil && !value.InspectedStart.Before(*value.InspectedEnd) {
+		return false
+	}
+	for _, interval := range value.MissingIntervals {
+		if interval.IntervalStart.IsZero() || !interval.IntervalStart.Before(interval.IntervalEnd) {
+			return false
+		}
+	}
+	for _, item := range raw.Items {
+		if !validSliObservation(item) {
+			return false
+		}
+	}
+	return true
+}
+
+func validSliObservation(data []byte) bool {
+	var value api.SliObservation
+	var fields map[string]jsontext.Value
+	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "error_code", "good_count", "interval_end", "interval_start", "measurement_revision", "missing_components", "observation_id", "outcome", "recorded_at", "total_count") || json.Unmarshal(data, &value) != nil ||
+		!uuidPattern.MatchString(uuidText(value.ObservationId)) || !positiveDecimal(value.MeasurementRevision) || value.IntervalStart.IsZero() || value.IntervalEnd.IsZero() || value.RecordedAt.IsZero() || !value.Outcome.Valid() {
+		return false
+	}
+	for _, component := range value.MissingComponents {
+		if !component.Valid() {
+			return false
+		}
+	}
+	if value.ErrorCode != nil && !value.ErrorCode.Valid() {
+		return false
+	}
+	switch value.Outcome {
+	case api.SliObservationOutcomeObserved:
+		if value.GoodCount == nil || value.TotalCount == nil || value.ErrorCode != nil || len(value.MissingComponents) != 0 {
+			return false
+		}
+		_, _, err := sli.ValidateCounts(*value.GoodCount, *value.TotalCount)
+		return err == nil
+	case api.SliObservationOutcomeCompleteEmpty:
+		return value.GoodCount == nil && value.TotalCount == nil && value.ErrorCode == nil && len(value.MissingComponents) == 0
+	case api.SliObservationOutcomeIncomplete:
+		return value.GoodCount == nil && value.TotalCount == nil && value.ErrorCode == nil && len(value.MissingComponents) > 0
+	case api.SliObservationOutcomeFailed:
+		return value.GoodCount == nil && value.TotalCount == nil && value.ErrorCode != nil && len(value.MissingComponents) == 0
+	default:
+		return false
+	}
+}
+
+func pageLimit(value int) *api.PageLimit {
+	converted := api.PageLimit(value)
+	return &converted
+}
+
+func pageCursor(value string) *api.PageCursor {
+	converted := api.PageCursor(value)
+	return &converted
+}
+
+func parseSliID(raw string) (api.SliId, error) {
+	if !uuidPattern.MatchString(raw) {
+		return api.SliId{}, invalid()
+	}
+	var id api.SliId
+	if json.Unmarshal([]byte(strconv.Quote(raw)), &id) != nil {
+		return api.SliId{}, invalid()
+	}
+	return id, nil
+}
+
+func sliETag(id, version string) string { return `"sli:` + id + ":" + version + `"` }
+
+func sliETagVersion(etag, id string) string {
+	prefix := `"sli:` + id + ":"
+	if !strings.HasPrefix(etag, prefix) || !strings.HasSuffix(etag, `"`) {
+		return ""
+	}
+	version := strings.TrimSuffix(strings.TrimPrefix(etag, prefix), `"`)
+	if !positiveDecimal(version) {
+		return ""
+	}
+	if _, err := strconv.ParseInt(version, 10, 64); err != nil {
+		return ""
+	}
+	return version
+}
+
 func validDatasourcePage(data []byte, page api.DatasourcePage) bool {
 	var fields map[string]jsontext.Value
 	if json.Unmarshal(data, &fields) != nil || !exactFields(fields, "items", "next_cursor") || len(page.Items) > 200 || len(page.NextCursor) > 512 {
@@ -478,7 +722,7 @@ func network(canceled bool) *Failure {
 	return remote()
 }
 func problemFailure(status int, code, requestID string) *Failure {
-	messages := map[string]string{"unauthorized": "sign in before managing datasources", "unauthenticated": "sign in before managing datasources", "forbidden": "the current role is not allowed to perform this operation", "not_found": "the requested datasource or diagnostic was not found", "conflict": "the datasource changed; retrieve it and review the current settings", "invalid_request": "datasource request input is invalid", "invalid_datasource_input": "datasource settings were rejected", "configuration_pending": "the agent is applying datasource settings; no diagnostic was started, so wait for readiness and retry", "configuration_failed": "the assigned agent could not apply its datasource configuration", "source_secret_unavailable": "the stored datasource credential is unavailable; update credentials before retrying", "invalid_agent": "the assigned agent is invalid or unavailable", "datasource_unavailable": "the datasource is unavailable for this operation", "unsupported": "the assigned agent does not support this diagnostic", "diagnostic_unavailable": "the assigned agent cannot run this diagnostic", "agent_unavailable": "the assigned agent cannot run this diagnostic", "request_timeout": "the datasource request timed out", "configuration_too_large": "the datasource configuration exceeds the agent assignment limits", "management_unavailable": "datasource management is temporarily unavailable"}
+	messages := map[string]string{"unauthorized": "sign in before managing datasources", "unauthenticated": "sign in before managing datasources", "forbidden": "the current role is not allowed to perform this operation", "not_found": "the requested datasource, SLI or diagnostic was not found", "conflict": "the resource changed; retrieve it and review the current settings", "measurement_conflict": "the datasource cadence or agent assignment cannot change while an SLI uses it", "invalid_request": "request input is invalid", "invalid_datasource_input": "datasource settings were rejected", "configuration_pending": "the agent is applying datasource settings; no diagnostic was started, so wait for readiness and retry", "configuration_failed": "the assigned agent could not apply its datasource configuration", "source_secret_unavailable": "the stored datasource credential is unavailable; update credentials before retrying", "invalid_agent": "the assigned agent is invalid or unavailable", "datasource_unavailable": "the datasource is unavailable for this operation", "unsupported": "the assigned agent does not support this diagnostic", "unsupported_measurement": "this measurement kind or component mode is not supported by the current SLI collector", "diagnostic_unavailable": "the assigned agent cannot run this diagnostic", "agent_unavailable": "the assigned agent is unavailable for this operation", "request_timeout": "the datasource request timed out", "configuration_too_large": "the datasource configuration exceeds the agent assignment limits", "sli_unavailable": "SLI management is temporarily unavailable", "observation_unavailable": "observation ingestion is temporarily unavailable", "management_unavailable": "management is temporarily unavailable"}
 	message, known := messages[code]
 	backendCode := ""
 	if !known || !diagnosticCodePattern.MatchString(code) {

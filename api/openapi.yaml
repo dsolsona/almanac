@@ -24,6 +24,30 @@ paths:
         '401': {description: Agent credential invalid}
         '400': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '503': {description: Configuration unavailable, including while the current heartbeat grant trails desired configuration. No snapshot or source credentials are returned in that case. The agent keeps its last applied configuration and retries after heartbeat renewal., content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/agent/v1/observations:
+    post:
+      operationId: postAgentObservations
+      summary: Submit a bounded batch of authorized SLI outcomes
+      description: >-
+        Requires the current registered agent bearer credential over verified TLS.
+        Each item binds its delivery and execution identity, creation time, original
+        lease, configuration revision, generation, SLI measurement revision and
+        canonical half-open interval. The backend verifies the retained durable
+        grant and replay age; the current lease alone is insufficient. Items are
+        admitted independently and return accepted, duplicate, rejected, conflicting
+        or retryable outcomes. Source error text and credentials are never accepted.
+      security: [{AgentBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ObservationBatchRequest'}
+      responses:
+        '200': {description: Per-item admission outcomes, content: {application/json: {schema: {$ref: '#/components/schemas/ObservationBatchResponse'}}}}
+        '400': {description: Invalid batch envelope or headers, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Agent credential is invalid or revoked, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '413': {description: Batch exceeds 4 MiB, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Temporary storage failure, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/agent/v1/diagnostics/{diagnostic_id}/result:
     post:
       operationId: postAgentDiagnosticResult
@@ -391,6 +415,88 @@ paths:
       responses:
         '200': {description: Current diagnostic status, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnostic'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis:
+    get:
+      operationId: listSlis
+      summary: List SLIs
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      responses:
+        '200': {description: Bounded SLI page, content: {application/json: {schema: {$ref: '#/components/schemas/SliPage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: createSli
+      summary: Create an event-count SLI
+      description: >-
+        Editors and administrators can create one Prometheus event-count SLI using
+        the existing datasource cadence. This increment accepts event_counts with
+        interval_count only. Activation is scheduled at a future canonical boundary
+        after the assigned agent acknowledges the prepublished configuration.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SliCreateRequest'}
+      responses:
+        '201': {description: Created SLI, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Sli'}}}}
+        '400': {description: Invalid SLI definition, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Duplicate name or idempotency-key conflict, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}:
+    get:
+      operationId: getSli
+      summary: Read SLI configuration and collection health
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SliId'}
+      responses:
+        '200': {description: SLI configuration and distinct activation/freshness state, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Sli'}}}}
+        '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    patch:
+      operationId: patchSliMetadata
+      summary: Update SLI display metadata
+      description: Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SliId'}
+        - {$ref: '#/components/parameters/SliIfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SliMetadataWrite'}
+      responses:
+        '200': {description: Updated SLI metadata, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Sli'}}}}
+        '400': {description: Invalid metadata, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Stale SLI version, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}/observations:
+    get:
+      operationId: listSliObservations
+      summary: Read bounded SLI interval history
+      description: >-
+        Each page inspects at most limit consecutive due canonical intervals in
+        descending time order, including intervals without observations. The cursor
+        continues strictly before that page's inspected range. Missing ranges are
+        inferred from the effective schedule and exclude accepted observations and
+        complete-empty coverage; failed or incomplete attempts remain missing.
+        Intervals before earliest_queryable_interval_start are unavailable.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SliId'}
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      responses:
+        '200': {description: Exact persisted interval outcomes, content: {application/json: {schema: {$ref: '#/components/schemas/SliObservationPage'}}}}
+        '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /livez:
     get:
       operationId: getLiveness
@@ -438,6 +544,11 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    SliId:
+      name: sli_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     DiagnosticId:
       name: diagnostic_id
       in: path
@@ -449,6 +560,22 @@ components:
       required: true
       description: Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>".
       schema: {type: string}
+    SliIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong tag exactly formatted as "sli:<canonical-uuid>:<positive-decimal-version>".
+      schema: {type: string}
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    PageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, maxLength: 2048}
     IfMatch:
       name: If-Match
       in: header
@@ -482,6 +609,168 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    SliPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Sli'}}
+        next_cursor: {type: string}
+    Sli:
+      type: object
+      required: [id, name, display_name, version, measurement_revision, datasource_id, datasource_version, agent_id, agent_reachability, collection_progress, measurement_kind, component_mode, good_query, total_query, polling_interval_seconds, settling_delay_seconds, effective_from, activation_state, freshness, latest_observation, last_attempt_at, last_observation_at, next_expected_execution_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
+        display_name: {type: string, maxLength: 128}
+        version: {type: string, pattern: '^[1-9][0-9]*$'}
+        measurement_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        datasource_id: {type: string, format: uuid}
+        datasource_version: {type: string, pattern: '^[1-9][0-9]*$'}
+        agent_id: {type: string, format: uuid}
+        agent_reachability: {type: string, enum: [connected, unreachable, incompatible, disabled, unreported]}
+        collection_progress: {type: string, enum: [not_started, idle, running, blocked]}
+        measurement_kind: {type: string, description: Typed measurement kind; this increment supports event_counts.}
+        component_mode: {type: string, description: Component conversion mode; this increment supports interval_count.}
+        good_query: {type: string, maxLength: 4096}
+        total_query: {type: string, maxLength: 4096}
+        polling_interval_seconds: {type: integer, minimum: 15}
+        settling_delay_seconds: {type: integer, minimum: 60, maximum: 60}
+        effective_from: {type: string, format: date-time}
+        activation_state: {type: string, enum: [preparing, scheduled, active, blocked]}
+        freshness: {type: string, enum: [unknown, fresh, stale]}
+        latest_observation: {allOf: [{$ref: '#/components/schemas/SliObservation'}], nullable: true}
+        last_attempt_at: {type: string, format: date-time, nullable: true}
+        last_observation_at: {type: string, format: date-time, nullable: true}
+        next_expected_execution_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SliCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, display_name, datasource_id, measurement_kind, component_mode, good_query, total_query]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        datasource_id: {type: string, format: uuid}
+        measurement_kind: {type: string, minLength: 1, maxLength: 64, description: Current native implementation accepts event_counts; other typed kinds are rejected explicitly.}
+        component_mode: {type: string, minLength: 1, maxLength: 64, description: Current native implementation accepts interval_count; other conversion modes are rejected explicitly.}
+        good_query: {type: string, minLength: 1, maxLength: 4096}
+        total_query: {type: string, minLength: 1, maxLength: 4096}
+    SliMetadataWrite:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 128}
+    SliObservationPage:
+      type: object
+      required: [items, next_cursor, earliest_queryable_interval_start, inspected_start, inspected_end, missing_intervals]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SliObservation'}}
+        next_cursor: {type: string}
+        earliest_queryable_interval_start: {type: string, format: date-time}
+        inspected_start: {type: string, format: date-time, nullable: true}
+        inspected_end: {type: string, format: date-time, nullable: true}
+        missing_intervals: {type: array, items: {$ref: '#/components/schemas/SliMissingInterval'}}
+    SliMissingInterval:
+      type: object
+      required: [interval_start, interval_end]
+      properties:
+        interval_start: {type: string, format: date-time}
+        interval_end: {type: string, format: date-time}
+    SliObservation:
+      type: object
+      required: [observation_id, measurement_revision, interval_start, interval_end, outcome, good_count, total_count, error_code, missing_components, recorded_at]
+      properties:
+        observation_id: {type: string, format: uuid}
+        measurement_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        interval_start: {type: string, format: date-time}
+        interval_end: {type: string, format: date-time}
+        outcome: {type: string, enum: [observed, complete_empty, incomplete, failed]}
+        good_count: {type: string, pattern: '^(0|[1-9][0-9]*)([.][0-9]{1,12})?$', nullable: true}
+        total_count: {type: string, pattern: '^(0|[1-9][0-9]*)([.][0-9]{1,12})?$', nullable: true}
+        error_code: {type: string, enum: [authentication, incomplete, network, query, rate_limited, tls, timeout, unsupported, assignment_revoked, deadline], nullable: true}
+        missing_components: {type: array, items: {type: string, enum: [good, total]}}
+        recorded_at: {type: string, format: date-time}
+    ObservationBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      x-maxSerializedBytes: 4194304
+      properties:
+        items: {type: array, minItems: 1, maxItems: 1000, items: {$ref: '#/components/schemas/ObservationBatchItem'}}
+    ObservationBatchItem:
+      type: object
+      additionalProperties: false
+      x-maxSerializedBytes: 1048576
+      required: [delivery_id, execution_id, created_at, lease_id, configuration_revision, session_generation, sli_id, measurement_revision, interval_start, interval_end, outcome]
+      properties:
+        delivery_id: {type: string, format: uuid}
+        execution_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        lease_id: {type: string, minLength: 32, maxLength: 64}
+        configuration_revision: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19}
+        session_generation: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19}
+        sli_id: {type: string, format: uuid}
+        measurement_revision: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19}
+        interval_start: {type: string, format: date-time}
+        interval_end: {type: string, format: date-time}
+        outcome: {$ref: '#/components/schemas/ObservationExecutionOutcome'}
+    ObservationExecutionOutcome:
+      oneOf:
+        - {$ref: '#/components/schemas/ObservedOutcome'}
+        - {$ref: '#/components/schemas/CompleteEmptyOutcome'}
+        - {$ref: '#/components/schemas/IncompleteOutcome'}
+        - {$ref: '#/components/schemas/FailedOutcome'}
+      discriminator:
+        propertyName: state
+        mapping:
+          observed: '#/components/schemas/ObservedOutcome'
+          complete_empty: '#/components/schemas/CompleteEmptyOutcome'
+          incomplete: '#/components/schemas/IncompleteOutcome'
+          failed: '#/components/schemas/FailedOutcome'
+    ObservedOutcome:
+      type: object
+      additionalProperties: false
+      required: [state, good_count, total_count]
+      properties:
+        state: {type: string, enum: [observed]}
+        good_count: {type: string, pattern: '^(0|[1-9][0-9]*)([.][0-9]{1,12})?$'}
+        total_count: {type: string, pattern: '^(0|[1-9][0-9]*)([.][0-9]{1,12})?$'}
+    CompleteEmptyOutcome:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: {type: string, enum: [complete_empty]}
+    IncompleteOutcome:
+      type: object
+      additionalProperties: false
+      required: [state, missing_components]
+      properties:
+        state: {type: string, enum: [incomplete]}
+        missing_components: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [good, total]}}
+    FailedOutcome:
+      type: object
+      additionalProperties: false
+      required: [state, error_code]
+      properties:
+        state: {type: string, enum: [failed]}
+        error_code: {type: string, enum: [authentication, incomplete, network, query, rate_limited, tls, timeout, unsupported, assignment_revoked, deadline]}
+    ObservationBatchResponse:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ObservationItemResult'}}
+    ObservationItemResult:
+      type: object
+      required: [delivery_id, status, error_code, observation_id, replay_age_seconds]
+      properties:
+        delivery_id: {type: string, format: uuid}
+        status: {type: string, enum: [accepted, duplicate, rejected, conflicting, retryable]}
+        error_code: {type: string, maxLength: 64, nullable: true}
+        observation_id: {type: string, format: uuid, nullable: true}
+        replay_age_seconds: {type: integer, minimum: 0, nullable: true}
     ProviderPage:
       type: object
       required: [items]
@@ -679,11 +968,12 @@ components:
         operations: {type: array, items: {type: string}}
     AgentConfigurationSnapshot:
       type: object
-      required: [agent_id, configuration_revision, assignments]
+      required: [agent_id, configuration_revision, assignments, slis]
       properties:
         agent_id: {type: string, format: uuid}
         configuration_revision: {type: string, pattern: '^[1-9][0-9]*$'}
         assignments: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentDatasourceAssignment'}}
+        slis: {type: array, maxItems: 10000, items: {$ref: '#/components/schemas/AgentSLICollection'}}
     AgentDatasourceAssignment:
       type: object
       required: [datasource_id, datasource_version, name, provider, configuration_format, endpoint, tls, authentication_mode, polling_interval_seconds, settling_delay_seconds]
@@ -706,6 +996,20 @@ components:
         bearer_token: {type: string, maxLength: 16384, writeOnly: true}
         polling_interval_seconds: {type: integer, minimum: 15}
         settling_delay_seconds: {type: integer, minimum: 60, maximum: 60}
+    AgentSLICollection:
+      type: object
+      additionalProperties: false
+      required: [sli_id, measurement_revision, datasource_id, datasource_version, measurement_kind, component_mode, good_query, total_query, effective_from]
+      properties:
+        sli_id: {type: string, format: uuid}
+        measurement_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        datasource_id: {type: string, format: uuid}
+        datasource_version: {type: string, pattern: '^[1-9][0-9]*$'}
+        measurement_kind: {type: string, enum: [event_counts]}
+        component_mode: {type: string, enum: [interval_count]}
+        good_query: {type: string, minLength: 1, maxLength: 16384}
+        total_query: {type: string, minLength: 1, maxLength: 16384}
+        effective_from: {type: string, format: date-time, description: UTC microsecond boundary aligned with the datasource polling cadence.}
     AgentCredential:
       type: object
       required: [id, agent_id, issued_at, expires_at, revoked_at, retire_at]

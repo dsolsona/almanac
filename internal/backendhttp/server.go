@@ -25,6 +25,7 @@ import (
 	"github.com/dsolsona/almanac/internal/config"
 	"github.com/dsolsona/almanac/internal/datasourcehttp"
 	"github.com/dsolsona/almanac/internal/secretfile"
+	"github.com/dsolsona/almanac/internal/slihttp"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
 )
@@ -116,6 +117,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid datasource handler configuration")
 	}
+	slis, err := slihttp.New(databaseURL, sourceSecrets, auth, access, slihttp.Options{Now: time.Now, Preflight: s.authenticationPreflight})
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid SLI handler configuration")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
@@ -127,8 +132,11 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.Handle("/api/v1/datasources", datasources)
 	mux.Handle("/api/v1/datasources/", datasources)
 	mux.Handle("/api/v1/diagnostics/", datasources)
+	mux.Handle("/api/v1/slis", slis)
+	mux.Handle("/api/v1/slis/", slis)
 	mux.Handle("/api/v1/", agents)
 	mux.Handle("/api/agent/v1/configuration", configuration)
+	mux.Handle("/api/agent/v1/observations", slis)
 	mux.Handle("POST /api/agent/v1/diagnostics/{diagnostic_id}/result", diagnosticResults)
 	mux.Handle("/api/agent/v1/connect", connections)
 	if cfg.BackendUI() {

@@ -133,12 +133,28 @@ func UpgradeWithMigrations(ctx context.Context, databaseURL string, migrations [
 	result.DatabaseSchemaVersion = version
 	for _, migration := range migrations[len(history):] {
 		if err := applyMigration(ctx, conn, migration); err != nil {
-			return UpgradeResult{}, operationError(ctx, fmt.Sprintf("storage: migration %d failed", migration.Version), err)
+			message := fmt.Sprintf("storage: migration %d failed", migration.Version)
+			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && safeSQLState(pgErr.Code) {
+				message += " (SQLSTATE " + pgErr.Code + ")"
+			}
+			return UpgradeResult{}, operationError(ctx, message, err)
 		}
 		result.Applied++
 		result.DatabaseSchemaVersion = migration.Version
 	}
 	return result, nil
+}
+
+func safeSQLState(code string) bool {
+	if len(code) != 5 {
+		return false
+	}
+	for _, character := range code {
+		if !(character >= '0' && character <= '9' || character >= 'A' && character <= 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 func CheckCompatibility(ctx context.Context, databaseURL string) (Compatibility, error) {

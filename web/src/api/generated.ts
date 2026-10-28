@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/v1/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a bounded batch of authorized SLI outcomes
+         * @description Requires the current registered agent bearer credential over verified TLS. Each item binds its delivery and execution identity, creation time, original lease, configuration revision, generation, SLI measurement revision and canonical half-open interval. The backend verifies the retained durable grant and replay age; the current lease alone is insufficient. Items are admitted independently and return accepted, duplicate, rejected, conflicting or retryable outcomes. Source error text and credentials are never accepted.
+         */
+        post: operations["postAgentObservations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/diagnostics/{diagnostic_id}/result": {
         parameters: {
             query?: never;
@@ -398,6 +418,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/slis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List SLIs */
+        get: operations["listSlis"];
+        put?: never;
+        /**
+         * Create an event-count SLI
+         * @description Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+         */
+        post: operations["createSli"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slis/{sli_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read SLI configuration and collection health */
+        get: operations["getSli"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update SLI display metadata
+         * @description Measurement semantics and datasource assignment are immutable in this increment. Only display_name can change; the resource version is independent of measurement_revision.
+         */
+        patch: operations["patchSliMetadata"];
+        trace?: never;
+    };
+    "/api/v1/slis/{sli_id}/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read bounded SLI interval history
+         * @description Each page inspects at most limit consecutive due canonical intervals in descending time order, including intervals without observations. The cursor continues strictly before that page's inspected range. Missing ranges are inferred from the effective schedule and exclude accepted observations and complete-empty coverage; failed or incomplete attempts remain missing. Intervals before earliest_queryable_interval_start are unavailable.
+         */
+        get: operations["listSliObservations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/livez": {
         parameters: {
             query?: never;
@@ -436,6 +518,171 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SliPage: {
+            items: components["schemas"]["Sli"][];
+            next_cursor: string;
+        };
+        Sli: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            version: string;
+            measurement_revision: string;
+            /** Format: uuid */
+            datasource_id: string;
+            datasource_version: string;
+            /** Format: uuid */
+            agent_id: string;
+            /** @enum {string} */
+            agent_reachability: "connected" | "unreachable" | "incompatible" | "disabled" | "unreported";
+            /** @enum {string} */
+            collection_progress: "not_started" | "idle" | "running" | "blocked";
+            /** @description Typed measurement kind; this increment supports event_counts. */
+            measurement_kind: string;
+            /** @description Component conversion mode; this increment supports interval_count. */
+            component_mode: string;
+            good_query: string;
+            total_query: string;
+            polling_interval_seconds: number;
+            settling_delay_seconds: number;
+            /** Format: date-time */
+            effective_from: string;
+            /** @enum {string} */
+            activation_state: "preparing" | "scheduled" | "active" | "blocked";
+            /** @enum {string} */
+            freshness: "unknown" | "fresh" | "stale";
+            latest_observation: components["schemas"]["SliObservation"] | null;
+            /** Format: date-time */
+            last_attempt_at: string | null;
+            /** Format: date-time */
+            last_observation_at: string | null;
+            /** Format: date-time */
+            next_expected_execution_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SliCreateRequest: {
+            name: string;
+            display_name: string;
+            /** Format: uuid */
+            datasource_id: string;
+            /** @description Current native implementation accepts event_counts; other typed kinds are rejected explicitly. */
+            measurement_kind: string;
+            /** @description Current native implementation accepts interval_count; other conversion modes are rejected explicitly. */
+            component_mode: string;
+            good_query: string;
+            total_query: string;
+        };
+        SliMetadataWrite: {
+            display_name: string;
+        };
+        SliObservationPage: {
+            items: components["schemas"]["SliObservation"][];
+            next_cursor: string;
+            /** Format: date-time */
+            earliest_queryable_interval_start: string;
+            /** Format: date-time */
+            inspected_start: string | null;
+            /** Format: date-time */
+            inspected_end: string | null;
+            missing_intervals: components["schemas"]["SliMissingInterval"][];
+        };
+        SliMissingInterval: {
+            /** Format: date-time */
+            interval_start: string;
+            /** Format: date-time */
+            interval_end: string;
+        };
+        SliObservation: {
+            /** Format: uuid */
+            observation_id: string;
+            measurement_revision: string;
+            /** Format: date-time */
+            interval_start: string;
+            /** Format: date-time */
+            interval_end: string;
+            /** @enum {string} */
+            outcome: "observed" | "complete_empty" | "incomplete" | "failed";
+            good_count: string | null;
+            total_count: string | null;
+            /** @enum {string|null} */
+            error_code: "authentication" | "incomplete" | "network" | "query" | "rate_limited" | "tls" | "timeout" | "unsupported" | "assignment_revoked" | "deadline" | null;
+            missing_components: ("good" | "total")[];
+            /** Format: date-time */
+            recorded_at: string;
+        };
+        ObservationBatchRequest: {
+            items: components["schemas"]["ObservationBatchItem"][];
+        };
+        ObservationBatchItem: {
+            /** Format: uuid */
+            delivery_id: string;
+            /** Format: uuid */
+            execution_id: string;
+            /** Format: date-time */
+            created_at: string;
+            lease_id: string;
+            configuration_revision: string;
+            session_generation: string;
+            /** Format: uuid */
+            sli_id: string;
+            measurement_revision: string;
+            /** Format: date-time */
+            interval_start: string;
+            /** Format: date-time */
+            interval_end: string;
+            outcome: components["schemas"]["ObservationExecutionOutcome"];
+        };
+        ObservationExecutionOutcome: components["schemas"]["ObservedOutcome"] | components["schemas"]["CompleteEmptyOutcome"] | components["schemas"]["IncompleteOutcome"] | components["schemas"]["FailedOutcome"];
+        ObservedOutcome: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "observed";
+            good_count: string;
+            total_count: string;
+        };
+        CompleteEmptyOutcome: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "complete_empty";
+        };
+        IncompleteOutcome: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "incomplete";
+            missing_components: ("good" | "total")[];
+        };
+        FailedOutcome: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "failed";
+            /** @enum {string} */
+            error_code: "authentication" | "incomplete" | "network" | "query" | "rate_limited" | "tls" | "timeout" | "unsupported" | "assignment_revoked" | "deadline";
+        };
+        ObservationBatchResponse: {
+            items: components["schemas"]["ObservationItemResult"][];
+        };
+        ObservationItemResult: {
+            /** Format: uuid */
+            delivery_id: string;
+            /** @enum {string} */
+            status: "accepted" | "duplicate" | "rejected" | "conflicting" | "retryable";
+            error_code: string | null;
+            /** Format: uuid */
+            observation_id: string | null;
+            replay_age_seconds: number | null;
+        };
         ProviderPage: {
             items: components["schemas"]["ProviderDescriptor"][];
         };
@@ -628,6 +875,7 @@ export interface components {
             agent_id: string;
             configuration_revision: string;
             assignments: components["schemas"]["AgentDatasourceAssignment"][];
+            slis: components["schemas"]["AgentSLICollection"][];
         };
         AgentDatasourceAssignment: {
             /** Format: uuid */
@@ -651,6 +899,25 @@ export interface components {
             bearer_token?: string;
             polling_interval_seconds: number;
             settling_delay_seconds: number;
+        };
+        AgentSLICollection: {
+            /** Format: uuid */
+            sli_id: string;
+            measurement_revision: string;
+            /** Format: uuid */
+            datasource_id: string;
+            datasource_version: string;
+            /** @enum {string} */
+            measurement_kind: "event_counts";
+            /** @enum {string} */
+            component_mode: "interval_count";
+            good_query: string;
+            total_query: string;
+            /**
+             * Format: date-time
+             * @description UTC microsecond boundary aligned with the datasource polling cadence.
+             */
+            effective_from: string;
         };
         AgentCredential: {
             /** Format: uuid */
@@ -837,9 +1104,14 @@ export interface components {
     parameters: {
         AgentId: string;
         DatasourceId: string;
+        SliId: string;
         DiagnosticId: string;
         /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
         DatasourceIfMatch: string;
+        /** @description Strong tag exactly formatted as "sli:<canonical-uuid>:<positive-decimal-version>". */
+        SliIfMatch: string;
+        PageLimit: number;
+        PageCursor: string;
         /** @description Strong tag exactly formatted as "agent:<canonical-agent-uuid>:<positive-decimal-version>". The version is bounded by signed int64 MaxInt64; weak tags, wildcards and lists are rejected. */
         IfMatch: string;
         /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -896,6 +1168,66 @@ export interface operations {
                 content?: never;
             };
             /** @description Configuration unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    postAgentObservations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservationBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-item admission outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationBatchResponse"];
+                };
+            };
+            /** @description Invalid batch envelope or headers */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Agent credential is invalid or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Batch exceeds 4 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary storage failure */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1906,6 +2238,243 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Diagnostic"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSlis: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded SLI page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SliPage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createSli: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SliCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created SLI */
+            201: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sli"];
+                };
+            };
+            /** @description Invalid SLI definition */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Duplicate name or idempotency-key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSli: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SLI configuration and distinct activation/freshness state */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sli"];
+                };
+            };
+            /** @description SLI not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    patchSliMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag exactly formatted as "sli:<canonical-uuid>:<positive-decimal-version>". */
+                "If-Match": components["parameters"]["SliIfMatch"];
+            };
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SliMetadataWrite"];
+            };
+        };
+        responses: {
+            /** @description Updated SLI metadata */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sli"];
+                };
+            };
+            /** @description Invalid metadata */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SLI not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Stale SLI version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSliObservations: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exact persisted interval outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SliObservationPage"];
+                };
+            };
+            /** @description SLI not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */

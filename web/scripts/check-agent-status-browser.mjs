@@ -73,10 +73,12 @@ try {
   assert.equal(runtime.desired_configuration_revision, '1');
   stage = 'agent detail applied revision one';
   assert.equal(runtime.applied_configuration_revision, '1');
+  stage = 'agent detail collection not started';
+  assert.equal(runtime.collection_progress, 'not_started');
   stage = 'agent detail no-assignment explanation';
   assert.equal(runtime.collection_explanation, 'no_assignment');
-  stage = 'agent detail Prometheus diagnostic capability';
-  assert.deepEqual(runtime.capabilities, [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }]);
+  stage = 'agent detail Prometheus capability';
+  assert.deepEqual(runtime.capabilities, [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['collect', 'connection_test', 'query_preview'] }]);
   stage = 'agent detail absent collection attempt';
   assert.equal(runtime.last_attempt_at, null);
   stage = 'agent detail absent successful query';
@@ -95,6 +97,8 @@ try {
   await expect(runtimeField('Desired configuration revision')).toHaveText('1');
   stage = 'agent runtime applied revision label';
   await expect(runtimeField('Applied configuration revision')).toHaveText('1');
+  stage = 'agent runtime collection progress label';
+  await expect(runtimeField('Collection progress')).toHaveText('not_started');
   stage = 'agent runtime collection explanation label';
   await expect(runtimeField('Collection explanation')).toHaveText('No datasources are assigned to this agent.');
   stage = 'agent runtime collection attempt label';
@@ -107,7 +111,7 @@ try {
   stage = 'agent runtime Prometheus capability rendering';
   const prometheusCapability = panel.locator('.agents-runtime__capabilities li').filter({ has: page.getByText('prometheus', { exact: true }) });
   await expect(prometheusCapability).toContainText('Configuration formats: prometheus-http-v1');
-  await expect(prometheusCapability).toContainText('Operations: connection_test, query_preview');
+  await expect(prometheusCapability).toContainText('Operations: collect, connection_test, query_preview');
 
   stage = 'keyboard skip navigation';
   const skipLink = page.getByRole('link', { name: 'Skip to content', exact: true });

@@ -106,10 +106,10 @@ func (s Settings) ClientTLSConfig() (*tls.Config, error) {
 	return config, nil
 }
 
-// SupportsOperation reports the currently implemented diagnostic capability.
+// SupportsOperation reports an explicitly advertised provider operation.
 // It deliberately does not infer support from a provider name or software version.
 func SupportsOperation(capabilities []agentprotocol.Capability, operation string) bool {
-	if operation != "connection_test" && operation != "query_preview" {
+	if operation != "collect" && operation != "connection_test" && operation != "query_preview" {
 		return false
 	}
 	for _, capability := range capabilities {

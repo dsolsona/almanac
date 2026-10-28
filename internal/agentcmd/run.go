@@ -43,9 +43,16 @@ type client struct {
 	revision             string
 	sequence             int64
 	pending              *agentprotocol.Heartbeat
+	pendingSentAt        time.Time
+	pendingServerAtSend  time.Time
+	pendingLatestSentAt  time.Time
+	leaseDeadline        time.Time
+	clockSafe            bool
 	agentID              string
 	assignments          []agentprotocol.DatasourceAssignment
+	slis                 []agentprotocol.SLICollection
 	diagnostics          *diagnosticRunner
+	collections          *collectionRunner
 	serverClock          *serverClockEstimate
 	established          bool
 	desiredRevision      string
@@ -55,9 +62,10 @@ type client struct {
 }
 
 type serverClockEstimate struct {
-	mu         sync.RWMutex
-	serverTime time.Time
-	serverAt   time.Time
+	mu              sync.RWMutex
+	serverTime      time.Time
+	leaseServerTime time.Time
+	serverAt        time.Time
 }
 
 func Run(ctx context.Context, args []string) error {
@@ -94,6 +102,8 @@ func Run(ctx context.Context, args []string) error {
 	uploadCtx, cancelUploads := context.WithCancel(ctx)
 	var uploadWorkers sync.WaitGroup
 	client.startDiagnosticUploads(uploadCtx, &uploadWorkers)
+	client.collections = newCollectionRunner(client)
+	client.collections.start(uploadCtx, &uploadWorkers)
 	defer func() {
 		cancelUploads()
 		uploadWorkers.Wait()
@@ -122,7 +132,7 @@ func newClient(opts options, token string) (*client, error) {
 	if _, err := rand.Read(proof[:]); err != nil {
 		return nil, errors.New("secure random source unavailable")
 	}
-	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0", serverClock: &serverClockEstimate{}, diagnosticUploads: make(chan diagnosticUpload, maxActiveDiagnostics),
+	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0", serverClock: &serverClockEstimate{}, clockSafe: true, diagnosticUploads: make(chan diagnosticUpload, maxActiveDiagnostics),
 		http: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}}}, nil
@@ -210,10 +220,11 @@ func (c *client) runSession(ctx context.Context) error {
 	hello := agentprotocol.Envelope[agentprotocol.Hello]{Kind: agentprotocol.KindHello, MessageID: messageID, SessionGeneration: c.generation,
 		Payload: agentprotocol.Hello{ProtocolVersions: []string{agentprotocol.ProtocolV1}, SoftwareVersion: "1.0.0",
 			Capabilities: []agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
-				ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}}, ResumeToken: c.resume, RequestNonce: nonce}}
+				ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"collect", "connection_test", "query_preview"}}}, ResumeToken: c.resume, RequestNonce: nonce}}
 	if err := hello.Validate(); err != nil {
 		return err
 	}
+	helloSentAt := time.Now()
 	writeCtx, cancelWrite := context.WithTimeout(ctx, 5*time.Second)
 	err = writeJSON(writeCtx, conn, hello)
 	cancelWrite()
@@ -224,6 +235,7 @@ func (c *client) runSession(ctx context.Context) error {
 	var welcome agentprotocol.Envelope[agentprotocol.Welcome]
 	err = readJSON(helloCtx, conn, &welcome)
 	cancelHello()
+	welcomeReceivedAt := time.Now()
 	if err == nil && welcome.Kind == agentprotocol.KindWelcome && welcome.Payload.Protocol != agentprotocol.ProtocolV1 {
 		return ErrIncompatible
 	}
@@ -232,6 +244,9 @@ func (c *client) runSession(ctx context.Context) error {
 			return err
 		}
 		return errors.New("backend welcome is invalid")
+	}
+	if welcomeReceivedAt.Sub(helloSentAt) > 5*time.Second {
+		return errors.New("backend welcome exceeded the safe lease response window")
 	}
 	if c.agentID != "" && c.agentID != welcome.Payload.AgentID {
 		return errors.New("backend agent identity changed")
@@ -253,11 +268,37 @@ func (c *client) runSession(ctx context.Context) error {
 	if err := candidate.validateLease(welcome.Payload.ExecutionLease, welcome.Payload.ServerTime); err != nil {
 		return err
 	}
+	deadline, err := leaseDeadlineFromResponse(welcome.Payload.ExecutionLease, welcome.Payload.ServerTime, helloSentAt, welcomeReceivedAt)
+	if err != nil {
+		return errors.New("execution lease has no conservative remaining validity")
+	}
+	if !c.pendingSentAt.IsZero() && c.pendingSentAt.Before(helloSentAt) {
+		serverAtPendingSend := c.pendingServerAtSend
+		if serverAtPendingSend.IsZero() {
+			return errors.New("lost heartbeat renewal has no safe send-time clock evidence")
+		}
+		deadline, err = leaseDeadlineFrom(welcome.Payload.ExecutionLease, serverAtPendingSend, c.pendingSentAt)
+		if err != nil || !deadline.After(welcomeReceivedAt) {
+			return errors.New("retained execution lease has no conservative remaining validity")
+		}
+	}
+	clockSafe := !serverClockSkewed(welcome.Payload.ServerTime, welcomeReceivedAt) && welcomeReceivedAt.Sub(helloSentAt) <= 5*time.Second
 	c.established = true
 	c.agentID = candidate.agentID
-	c.setServerTime(welcome.Payload.ServerTime)
+	c.setServerTimeAt(welcome.Payload.ServerTime, helloSentAt, welcomeReceivedAt)
+	c.leaseDeadline = deadline
+	c.clockSafe = clockSafe
 	c.generation = candidate.generation
 	c.lease = welcome.Payload.ExecutionLease
+	if c.collections != nil {
+		c.collections.SetLeaseAuthority(c.lease, deadline, clockSafe)
+		if !clockSafe {
+			c.collections.SetPaused(true)
+		}
+		if c.configurationPending || c.pending != nil {
+			c.collections.SetPaused(true)
+		}
+	}
 	// Preserve the local expected sequence until replay resolves a pending
 	// heartbeat. A welcome at pending+1 means the prior ack was lost.
 	if c.pending == nil {
@@ -267,7 +308,9 @@ func (c *client) runSession(ctx context.Context) error {
 		if err := c.reconcile(ctx, conn); err != nil {
 			return err
 		}
-	} else if c.revision != c.lease.ConfigurationRevision {
+	} else {
+		// A reconnect with an unresolved heartbeat must re-fetch configuration
+		// after its ACK before any collection can resume, even at the same revision.
 		c.configurationPending = true
 	}
 	interval := time.Duration(welcome.Payload.HeartbeatIntervalMS) * time.Millisecond
@@ -382,6 +425,9 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusServiceUnavailable {
 		c.configurationPending = true
+		if c.collections != nil {
+			c.collections.SetPaused(true)
+		}
 		return nil
 	}
 	if response.StatusCode != http.StatusOK {
@@ -405,24 +451,38 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	if c.revision == snapshot.ConfigurationRevision {
 		c.configurationPending = false
 		c.desiredRevision = ""
+		c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
+		c.slis = append([]agentprotocol.SLICollection(nil), snapshot.SLIs...)
+		if c.collections != nil {
+			c.collections.SetConfiguration(snapshot)
+			c.collections.SetLease(c.lease)
+		}
 		return nil
 	}
 	if c.diagnostics != nil {
 		c.diagnostics.reconcileAssignments(snapshot.Assignments)
 	}
-	c.revision = snapshot.ConfigurationRevision
-	c.desiredRevision = ""
-	c.configurationPending = false
-	c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
 	messageID, err := newMessageID()
 	if err != nil {
 		return err
 	}
 	applied := agentprotocol.Envelope[agentprotocol.ConfigurationApplied]{Kind: agentprotocol.KindConfigurationApplied, MessageID: messageID, SessionGeneration: c.generation,
-		Payload: agentprotocol.ConfigurationApplied{ConfigurationRevision: c.revision}}
+		Payload: agentprotocol.ConfigurationApplied{ConfigurationRevision: snapshot.ConfigurationRevision}}
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return writeJSON(writeCtx, conn, applied)
+	if err := writeJSON(writeCtx, conn, applied); err != nil {
+		return err
+	}
+	c.revision = snapshot.ConfigurationRevision
+	c.desiredRevision = ""
+	c.configurationPending = false
+	c.assignments = append([]agentprotocol.DatasourceAssignment(nil), snapshot.Assignments...)
+	c.slis = append([]agentprotocol.SLICollection(nil), snapshot.SLIs...)
+	if c.collections != nil {
+		c.collections.SetConfiguration(snapshot)
+		c.collections.SetLease(c.lease)
+	}
+	return nil
 }
 
 func (c *client) prepareHeartbeat() error {
@@ -430,10 +490,18 @@ func (c *client) prepareHeartbeat() error {
 	if err != nil {
 		return err
 	}
+	progress, lastAttempt, lastSuccess, nextExpected := "not_started", (*time.Time)(nil), (*time.Time)(nil), (*time.Time)(nil)
+	if c.collections != nil {
+		progress, lastAttempt, lastSuccess, nextExpected = c.collections.Heartbeat()
+	}
 	heartbeat := agentprotocol.Heartbeat{RequestNonce: nonce, AppliedConfigurationRevision: c.revision,
-		Scheduler: "ready", CollectionProgress: "idle", LeaseID: c.lease.LeaseID,
+		Scheduler: c.schedulerState(), CollectionProgress: progress, LastAttemptAt: lastAttempt,
+		LastSuccessfulQueryAt: lastSuccess, NextExpectedExecutionAt: nextExpected, LeaseID: c.lease.LeaseID,
 		RenewalSequence: fmt.Sprint(c.sequence)}
 	c.pending = &heartbeat
+	c.pendingSentAt = time.Time{}
+	c.pendingServerAtSend = time.Time{}
+	c.pendingLatestSentAt = time.Time{}
 	return nil
 }
 
@@ -446,6 +514,12 @@ func (c *client) writeHeartbeat(ctx context.Context, conn *websocket.Conn) error
 		return err
 	}
 	message := agentprotocol.Envelope[agentprotocol.Heartbeat]{Kind: agentprotocol.KindHeartbeat, MessageID: messageID, SessionGeneration: c.generation, Payload: *c.pending}
+	sentAt := time.Now()
+	if c.pendingSentAt.IsZero() {
+		c.pendingSentAt = sentAt
+		c.pendingServerAtSend = c.leaseServerTimeAt(sentAt)
+	}
+	c.pendingLatestSentAt = sentAt
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return writeJSON(writeCtx, conn, message)
@@ -478,10 +552,25 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		if err := candidate.validateLease(lease, c.currentServerTime()); err != nil {
 			return err
 		}
+		nowLocal := time.Now()
+		deadline, deadlineErr := leaseDeadlineFromReplay(lease, c.pendingServerAtSend, c.pendingSentAt, c.pendingLatestSentAt, nowLocal)
+		if deadlineErr != nil {
+			return errors.New("renewed execution lease has no conservative remaining validity")
+		}
 		c.lease = ack.Payload.ExecutionLease
+		c.leaseDeadline = deadline
+		if c.collections != nil {
+			c.collections.SetLeaseAuthority(c.lease, deadline, c.clockSafe)
+		}
 		c.sequence = sequence
 		c.pending = nil
+		c.pendingSentAt = time.Time{}
+		c.pendingServerAtSend = time.Time{}
+		c.pendingLatestSentAt = time.Time{}
 		if c.configurationPending || leaseRevision > currentAppliedRevision || revisionAfter(c.desiredRevision, lease.ConfigurationRevision) {
+			if c.collections != nil {
+				c.collections.SetPaused(true)
+			}
 			if err := c.reconcile(ctx, conn); err != nil {
 				return err
 			}
@@ -498,6 +587,9 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 			c.desiredRevision = changed.Payload.DesiredRevision
 		}
 		c.configurationPending = true
+		if c.collections != nil {
+			c.collections.SetPaused(true)
+		}
 	case agentprotocol.KindDiagnosticRequest:
 		var request agentprotocol.Envelope[agentprotocol.DiagnosticRequest]
 		if json.Unmarshal(raw, &request) != nil || request.Validate() != nil || request.SessionGeneration != c.generation || c.diagnostics == nil {
@@ -549,7 +641,22 @@ func (c *client) setServerTime(serverTime time.Time) {
 		c.serverClock = &serverClockEstimate{}
 	}
 	c.serverClock.mu.Lock()
-	c.serverClock.serverTime, c.serverClock.serverAt = serverTime, time.Now()
+	c.serverClock.serverTime, c.serverClock.leaseServerTime, c.serverClock.serverAt = serverTime, serverTime, time.Now()
+	c.serverClock.mu.Unlock()
+}
+
+func (c *client) setServerTimeAt(serverTime, sentAt, receivedAt time.Time) {
+	if c.serverClock == nil {
+		c.serverClock = &serverClockEstimate{}
+	}
+	// The response timestamp is a lower bound when anchored at local receipt,
+	// which keeps interval settling from starting early. A separate upper-bound
+	// estimate is used only for lease expiry decisions.
+	conservative := serverTime.Add(receivedAt.Sub(sentAt))
+	c.serverClock.mu.Lock()
+	c.serverClock.serverTime = serverTime
+	c.serverClock.leaseServerTime = conservative
+	c.serverClock.serverAt = receivedAt
 	c.serverClock.mu.Unlock()
 }
 
@@ -563,12 +670,75 @@ func (c *client) serverClockTime() time.Time {
 }
 
 func (c *client) currentServerTime() time.Time {
+	return c.serverTimeAt(time.Now())
+}
+
+func (c *client) serverTimeAt(localTime time.Time) time.Time {
 	if c.serverClock == nil {
 		return time.Time{}
 	}
 	c.serverClock.mu.RLock()
 	defer c.serverClock.mu.RUnlock()
-	return c.serverClock.serverTime.Add(time.Since(c.serverClock.serverAt))
+	return c.serverClock.serverTime.Add(localTime.Sub(c.serverClock.serverAt))
+}
+
+func (c *client) leaseServerTimeAt(localTime time.Time) time.Time {
+	if c.serverClock == nil {
+		return time.Time{}
+	}
+	c.serverClock.mu.RLock()
+	defer c.serverClock.mu.RUnlock()
+	serverTime := c.serverClock.leaseServerTime
+	if serverTime.IsZero() {
+		serverTime = c.serverClock.serverTime
+	}
+	return serverTime.Add(localTime.Sub(c.serverClock.serverAt))
+}
+
+func (c *client) schedulerState() string {
+	if c.clockSafe {
+		return "ready"
+	}
+	return "degraded"
+}
+
+func leaseDeadlineFrom(lease agentprotocol.Lease, serverAtSend, sentAt time.Time) (time.Time, error) {
+	if sentAt.IsZero() || serverAtSend.IsZero() || !lease.ValidUntil.After(serverAtSend) {
+		return time.Time{}, errors.New("lease bounds do not establish remaining validity")
+	}
+	return sentAt.Add(lease.ValidUntil.Sub(serverAtSend)), nil
+}
+
+func leaseDeadlineFromResponse(lease agentprotocol.Lease, serverAtSend, sentAt, receivedAt time.Time) (time.Time, error) {
+	if sentAt.IsZero() || receivedAt.Before(sentAt) || receivedAt.Sub(sentAt) > 5*time.Second {
+		return time.Time{}, errors.New("lease response exceeded the safe round-trip window")
+	}
+	deadline, err := leaseDeadlineFrom(lease, serverAtSend, sentAt)
+	if err != nil || !deadline.After(receivedAt) {
+		return time.Time{}, errors.New("lease response leaves no conservative validity")
+	}
+	return deadline, nil
+}
+
+// A replay's latest round trip proves response freshness; the original send
+// and its then-current server-time upper bound constrain the lease deadline.
+func leaseDeadlineFromReplay(lease agentprotocol.Lease, originalServer, originalSend, latestSend, received time.Time) (time.Time, error) {
+	if latestSend.IsZero() || latestSend.Before(originalSend) || received.Before(latestSend) || received.Sub(latestSend) > 5*time.Second {
+		return time.Time{}, errors.New("lease replay response exceeded the safe round-trip window")
+	}
+	deadline, err := leaseDeadlineFrom(lease, originalServer, originalSend)
+	if err != nil || !deadline.After(received) {
+		return time.Time{}, errors.New("lease replay leaves no conservative validity")
+	}
+	return deadline, nil
+}
+
+func serverClockSkewed(serverTime, localTime time.Time) bool {
+	delta := serverTime.Sub(localTime)
+	if delta < 0 {
+		delta = -delta
+	}
+	return delta > 5*time.Second
 }
 
 func revisionAfter(revision, current string) bool {
@@ -581,7 +751,7 @@ func (c *client) validateLease(lease agentprotocol.Lease, now time.Time) error {
 	// The backend preserves the current grant interval across successful renewals;
 	// if credential retirement would shorten it, renewal is denied. Update this
 	// invariant together with storage semantics if a shorter renewal is introduced.
-	if err := lease.Validate(); err != nil || lease.AgentID != c.agentID || lease.SessionGeneration != c.generation || lease.ConfigurationRevision != c.revision || len(lease.AllowedMeasurements) != 0 || lease.ValidFrom.After(now.Add(time.Minute)) || !lease.ValidUntil.After(now) ||
+	if err := lease.Validate(); err != nil || lease.AgentID != c.agentID || lease.SessionGeneration != c.generation || lease.ConfigurationRevision != c.revision || lease.ValidFrom.After(now.Add(time.Minute)) || !lease.ValidUntil.After(now) ||
 		(!c.lease.ValidUntil.IsZero() && lease.AgentID == c.lease.AgentID && lease.SessionGeneration == c.lease.SessionGeneration && lease.ValidUntil.Before(c.lease.ValidUntil)) {
 		return errors.New("execution lease is invalid")
 	}
