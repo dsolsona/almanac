@@ -8,6 +8,7 @@ let origin;
 let browser;
 let page;
 let latestAPI = { status: 'none', code: 'none', requestID: 'none' };
+let effectiveTimeEvidence = null;
 const startedAt = Date.now();
 const safeCodes = new Set(['agent_unavailable', 'conflict', 'forbidden', 'invalid_request', 'measurement_conflict', 'not_found', 'observation_unavailable', 'sli_unavailable', 'source_secret_unavailable', 'unauthenticated', 'unauthorized', 'unsupported_measurement']);
 
@@ -99,26 +100,49 @@ try {
   const createPromise = page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/slis');
   await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
+  stage = 'SLI create response status';
   const createResponse = await createPromise;
   assert.equal(createResponse.status(), 201);
   const createRequest = createResponse.request();
+  stage = 'SLI create idempotency header';
   assert.match(createRequest.headers()['idempotency-key'], /^[\x21-\x7e]{1,128}$/);
+  stage = 'SLI create CSRF header';
   assert.equal(createRequest.headers()['x-csrf-token']?.length > 0, true);
+  stage = 'SLI create request JSON';
   const inputDefinition = createRequest.postDataJSON();
+  stage = 'SLI create request fields';
   assert.deepEqual(Object.keys(inputDefinition).sort(), ['component_mode', 'datasource_id', 'display_name', 'good_query', 'measurement_kind', 'name', 'total_query'].sort());
+  stage = 'SLI create request name';
   assert.equal(inputDefinition.name, 'request-success');
+  stage = 'SLI create request display name';
   assert.equal(inputDefinition.display_name, 'Request success');
+  stage = 'SLI create request datasource';
   assert.equal(inputDefinition.datasource_id, fixture.datasource_id);
+  stage = 'SLI create request measurement kind';
   assert.equal(inputDefinition.measurement_kind, 'event_counts');
+  stage = 'SLI create request component mode';
   assert.equal(inputDefinition.component_mode, 'interval_count');
+  stage = 'SLI create request good query';
   assert.equal(inputDefinition.good_query, 'vector(99)');
+  stage = 'SLI create request total query';
   assert.equal(inputDefinition.total_query, 'vector(100)');
+  stage = 'SLI create response JSON';
   const created = await createResponse.json();
+  stage = 'SLI create response ID';
   assert.match(created.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  stage = 'SLI create response revision';
   assert.equal(created.measurement_revision, '1');
+  stage = 'SLI create response measurement kind';
   assert.equal(created.measurement_kind, 'event_counts');
+  stage = 'SLI create response component mode';
   assert.equal(created.component_mode, 'interval_count');
-  assert.ok(new Date(created.effective_from).getTime() > Date.now());
+  stage = 'SLI create response effective time';
+  const effectiveAt = new Date(created.effective_from).getTime();
+  const comparedAt = Date.now();
+  effectiveTimeEvidence = { valid: Number.isFinite(effectiveAt), after_check: effectiveAt > comparedAt,
+    within_one_second: Number.isFinite(effectiveAt) && Math.abs(effectiveAt - comparedAt) <= 1000 };
+  assert.ok(effectiveAt > comparedAt);
+  stage = 'SLI create response ETag';
   assert.equal(createResponse.headers()['etag'], `"sli:${created.id}:${created.version}"`);
 
   stage = 'read scheduled activation in the UI';
@@ -196,6 +220,22 @@ try {
   const failureClass = error instanceof Error && error.name === 'TimeoutError' ? 'timeout'
     : stage === 'browser module import' ? 'module'
       : stage === 'browser launch' ? 'launch' : 'other';
+  const diagnosticClass = error?.code === 'ERR_ASSERTION' ? 'assertion'
+    : error instanceof Error && error.name === 'TimeoutError' ? 'timeout'
+      : error instanceof SyntaxError ? 'json_parse'
+        : typeof error?.message === 'string' && /Response\.(?:body|json):/.test(error.message) ? 'response_body'
+          : typeof error?.message === 'string' && /element is not attached|element was detached/i.test(error.message) ? 'element_detached' : 'other';
+  const sourceLine = typeof error?.stack === 'string' ? error.stack.match(/check-sli-browser\.mjs:(\d{1,4}):\d+/)?.[1] : undefined;
+  const safeType = (value) => value === null ? 'null' : ['string', 'number', 'boolean', 'undefined'].includes(typeof value) ? typeof value : Array.isArray(value) ? 'array' : 'object';
+  if (fixture?.artifacts) {
+    const detail = { stage: stageValue, category: diagnosticClass, source_line: sourceLine ? Number(sourceLine) : null,
+      assertion_actual_type: diagnosticClass === 'assertion' ? safeType(error.actual) : null,
+      assertion_expected_type: diagnosticClass === 'assertion' ? safeType(error.expected) : null,
+      assertion_actual_boolean: diagnosticClass === 'assertion' && typeof error.actual === 'boolean' ? error.actual : null,
+      assertion_expected_boolean: diagnosticClass === 'assertion' && typeof error.expected === 'boolean' ? error.expected : null,
+      effective_time: effectiveTimeEvidence };
+    await writeFile(join(fixture.artifacts, 'sli-failure-detail.json'), JSON.stringify(detail) + '\n', { mode: 0o600 }).catch(() => {});
+  }
   console.log(`FAIL browser-sli-journey stage=${stageValue} api_status=${status} request_id=${requestID} api_code=${code} class=${failureClass}`);
   process.exitCode = 1;
   await browser?.close().catch(() => {});

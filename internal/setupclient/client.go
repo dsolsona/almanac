@@ -179,7 +179,7 @@ func (c *Client) Complete(ctx context.Context, initialPassword, newPassword stri
 		return Result{}, c.rejectAndLogout(ctx, &Failure{Kind: KindAuthentication, Code: "setup_identity_invalid", Message: "initial account is not the expected administrator", SessionState: "restricted"}, auth.CsrfToken)
 	}
 	userID := auth.Session.UserId
-	passwordResponse, err := c.api.PostAuthPassword(ctx, api.PasswordRequest{CurrentPassword: initialPassword, NewPassword: newPassword}, c.headers(auth.CsrfToken))
+	passwordResponse, err := c.api.PostAuthPassword(ctx, api.PasswordRequest{NewPassword: newPassword}, c.headers(auth.CsrfToken))
 	if err != nil {
 		return Result{}, c.uncertain(ctx, err, "unavailable")
 	}

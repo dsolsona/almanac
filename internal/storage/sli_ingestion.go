@@ -81,14 +81,14 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 	if json.Unmarshal(grant.AllowedMeasurements, &allowed) != nil || allowed == nil || !hasMeasurementGrant(allowed, sliID.String(), measurementRevision) {
 		return result, ErrObservationDenied
 	}
-	measurement, err := state.queries.LockSliMeasurementForObservation(ctx, dbgen.LockSliMeasurementForObservationParams{SliID: sliID, Revision: measurementRevision})
+	measurement, err := state.queries.LockSliMeasurementForObservation(ctx, dbgen.LockSliMeasurementForObservationParams{SliID: sliID, Revision: measurementRevision, IntervalStart: timestamp(item.IntervalStart)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, ErrObservationDenied
 	}
 	if err != nil {
 		return result, operationError(ctx, "storage: SLI measurement authorization lookup failed", err)
 	}
-	if measurement.AgentID != state.agentID || measurement.CurrentAgentID != state.agentID ||
+	if !measurement.IntervalAgentID.Valid || measurement.IntervalAgentID != state.agentID ||
 		measurement.MeasurementKind != string(sli.MeasurementKindEventCounts) || measurement.ComponentMode != string(sli.ComponentModeIntervalCount) {
 		return result, ErrObservationDenied
 	}

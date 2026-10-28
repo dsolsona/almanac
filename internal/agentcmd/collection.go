@@ -38,16 +38,18 @@ const (
 type collectionRunner struct {
 	client *client
 
-	mu              sync.Mutex
-	assignments     map[string]agentprotocol.DatasourceAssignment
-	slis            []agentprotocol.SLICollection
-	lease           agentprotocol.Lease
-	leaseDeadline   time.Time
-	clockSafe       bool
-	paused          bool
-	nextIntervalEnd map[string]time.Time
-	active          map[string]activeCollection
-	activeSources   map[string]int
+	mu                sync.Mutex
+	assignments       map[string]agentprotocol.DatasourceAssignment
+	slis              []agentprotocol.SLICollection
+	lease             agentprotocol.Lease
+	leaseDeadline     time.Time
+	clockSafe         bool
+	paused            bool
+	snapshotRevision  string
+	transitionAllowed map[string]bool
+	nextIntervalEnd   map[string]time.Time
+	active            map[string]activeCollection
+	activeSources     map[string]int
 
 	pending          map[string]*pendingLiveResult
 	pendingOrder     []*pendingLiveResult
@@ -71,6 +73,7 @@ type activeCollection struct {
 	reservation uint64
 	cancel      context.CancelFunc
 	datasource  string
+	done        chan struct{}
 }
 
 type pendingLiveResult struct {
@@ -143,7 +146,36 @@ func (r *collectionRunner) SetLeaseAuthority(lease agentprotocol.Lease, deadline
 }
 
 func (r *collectionRunner) SetConfiguration(snapshot agentprotocol.ConfigurationSnapshot) {
+	r.setConfiguration(snapshot, nil)
+}
+
+func (r *collectionRunner) SetConfigurationAndDrain(ctx context.Context, snapshot agentprotocol.ConfigurationSnapshot) error {
+	removed := r.setConfiguration(snapshot, nil)
+	for _, done := range removed {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+func (r *collectionRunner) SetTransitionConfigurationAndDrain(ctx context.Context, snapshot agentprotocol.ConfigurationSnapshot, allowed map[string]bool) error {
+	removed := r.setConfiguration(snapshot, allowed)
+	for _, done := range removed {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+func (r *collectionRunner) setConfiguration(snapshot agentprotocol.ConfigurationSnapshot, allowed map[string]bool) []<-chan struct{} {
 	r.mu.Lock()
+	removed := make([]<-chan struct{}, 0)
 	assignments := make(map[string]agentprotocol.DatasourceAssignment, len(snapshot.Assignments))
 	for _, assignment := range snapshot.Assignments {
 		assignments[assignment.DatasourceID] = assignment
@@ -153,20 +185,26 @@ func (r *collectionRunner) SetConfiguration(snapshot agentprotocol.Configuration
 		allowedNext[collectionKey(definition)] = struct{}{}
 	}
 	for key, active := range r.active {
-		if _, exists := allowedNext[key]; !exists {
+		_, exists := allowedNext[key]
+		if !exists || (allowed != nil && !allowed[key]) {
 			active.cancel()
+			removed = append(removed, active.done)
 		}
 	}
 	for key := range r.nextIntervalEnd {
-		if _, exists := allowedNext[key]; !exists {
+		_, exists := allowedNext[key]
+		if !exists || (allowed != nil && !allowed[key]) {
 			delete(r.nextIntervalEnd, key)
 		}
 	}
+	r.snapshotRevision = snapshot.ConfigurationRevision
+	r.transitionAllowed = allowed
 	r.assignments = assignments
 	r.slis = append([]agentprotocol.SLICollection(nil), snapshot.SLIs...)
 	r.paused = false
 	r.mu.Unlock()
 	r.signal()
+	return removed
 }
 
 func (r *collectionRunner) SetPaused(paused bool) {
@@ -244,9 +282,6 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		if _, alreadyActive := r.active[key]; alreadyActive {
 			continue
 		}
-		if !hasGrant(r.lease, current.SLIID, current.MeasurementRevision) {
-			continue
-		}
 		assignment, exists := r.assignments[current.DatasourceID]
 		if !exists || assignment.DatasourceVersion != current.DatasourceVersion {
 			continue
@@ -255,6 +290,12 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		if end.IsZero() {
 			end = nextIntervalEnd(now, current.EffectiveFrom, assignment.PollingIntervalSeconds)
 			r.nextIntervalEnd[key] = end
+		}
+		if r.snapshotRevision != "" && r.snapshotRevision != r.lease.ConfigurationRevision && !r.transitionAllowed[key] {
+			continue
+		}
+		if !hasGrant(r.lease, current.SLIID, current.MeasurementRevision) {
+			continue
 		}
 		readyAt := end.Add(time.Duration(assignment.SettlingDelaySeconds) * time.Second)
 		if now.Before(readyAt) {
@@ -273,7 +314,7 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		collectionCtx, cancel := context.WithCancel(ctx)
 		r.nextReservation++
 		reservation := r.nextReservation
-		r.active[key] = activeCollection{reservation: reservation, cancel: cancel, datasource: current.DatasourceID}
+		r.active[key] = activeCollection{reservation: reservation, cancel: cancel, datasource: current.DatasourceID, done: make(chan struct{})}
 		r.activeSources[current.DatasourceID]++
 		r.nextIntervalEnd[key] = end.Add(cadence)
 		definitions = append(definitions, collectionDefinition{sli: current, assignment: assignment, lease: lease,
@@ -288,6 +329,7 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 	r.mu.Unlock()
 	for _, definition := range definitions {
 		go func(definition collectionDefinition) {
+			defer r.releaseCollection(definition)
 			if workers != nil {
 				defer workers.Done()
 			}
@@ -371,7 +413,7 @@ func (r *collectionRunner) collect(parent context.Context, definition collection
 	complete(outcome, &successAt)
 }
 
-func (r *collectionRunner) finishCollection(definition collectionDefinition, outcome *sli.ExecutionOutcome, successfulQueryAt *time.Time) {
+func (r *collectionRunner) releaseCollection(definition collectionDefinition) {
 	r.mu.Lock()
 	if active, exists := r.active[definition.key]; exists && active.reservation == definition.reservation {
 		active.cancel()
@@ -381,7 +423,13 @@ func (r *collectionRunner) finishCollection(definition collectionDefinition, out
 		} else {
 			delete(r.activeSources, active.datasource)
 		}
+		close(active.done)
 	}
+	r.mu.Unlock()
+}
+
+func (r *collectionRunner) finishCollection(definition collectionDefinition, outcome *sli.ExecutionOutcome, successfulQueryAt *time.Time) {
+	r.mu.Lock()
 	if successfulQueryAt != nil {
 		value := *successfulQueryAt
 		r.lastSuccess = &value

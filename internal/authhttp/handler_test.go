@@ -327,7 +327,7 @@ func TestCSRFTokenIsBoundToPurposeAndCookie(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password", strings.NewReader(`{"current_password":"x","new_password":"y"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password", strings.NewReader(`{"new_password":"y"}`))
 	request.TLS = &tls.ConnectionState{}
 	request.RemoteAddr = net.JoinHostPort("192.0.2.10", "443")
 	request.Header.Set("Origin", h.origin)

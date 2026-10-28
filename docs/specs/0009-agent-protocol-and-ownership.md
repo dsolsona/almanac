@@ -60,6 +60,11 @@ execution grant. Capabilities are refreshed in hello and are not repeated in eac
 heartbeat. These wire details implement accepted nonce-correlated renewal and
 ownership semantics; they do not change ownership policy.
 
+Management reads report collection explanation `no_assignment` only when the
+agent has no currently assigned datasources; `none` means there is no such
+explanation. A pending replacement reservation alone is not an assignment. This
+explanation does not imply reachability or collection progress.
+
 This increment defines hello, welcome, heartbeat, heartbeat-ack,
 configuration-changed, configuration-applied/failed, shutdown, and revoked. The
 diagnostic and historical-work message kinds remain unsupported until their owning
@@ -140,6 +145,12 @@ the same live process presents an unpredictable resume token bound to its genera
 A new process without that token must wait for previous execution expiry or request
 an administrator force-takeover. Never persist resume tokens in a shared image or
 claim that possession of a copied agent token proves it is the same process.
+
+Agents negotiate `almanac.agent.v2` for drain-before-acknowledgement semantics,
+falling back to `almanac.agent.v1` with older peers. A v2 agent installs the removal
+configuration, cancels affected collection tasks and waits for their completion before
+acknowledging. Only a v2 acknowledgement for the current generation and exact removal
+revision can shorten the authority wait; v1 acknowledgements wait for expiry.
 
 Datasource reassignment atomically marks the pending transition and freezes renewal
 of the affected old execution grants. It normally waits until that recorded authority

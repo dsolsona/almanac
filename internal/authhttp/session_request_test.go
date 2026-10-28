@@ -48,6 +48,16 @@ func TestValidateSessionRequestSharesCookieOriginTransportAndCSRFRules(t *testin
 	if _, err := first.ValidateSessionRequest(put); err != nil {
 		t.Fatalf("valid session PUT rejected: %v", err)
 	}
+	deleteRequest := request(http.MethodDelete)
+	deleteRequest.Header.Set("Origin", "https://example.test")
+	deleteRequest.Header.Set("X-CSRF-Token", first.csrf("session", secret, [32]byte{4}))
+	if _, err := first.ValidateSessionRequest(deleteRequest); err != nil {
+		t.Fatalf("valid session DELETE rejected: %v", err)
+	}
+	deleteRequest.Header.Del("X-CSRF-Token")
+	if _, err := first.ValidateSessionRequest(deleteRequest); err != ErrRequestCSRF {
+		t.Fatalf("DELETE missing CSRF error = %v", err)
+	}
 	wrongMethodCSRF := request(http.MethodPut)
 	wrongMethodCSRF.Header.Set("Origin", "https://example.test")
 	wrongMethodCSRF.Header.Set("X-CSRF-Token", first.csrf("login", secret, [32]byte{3}))

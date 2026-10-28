@@ -59,17 +59,26 @@ type DatasourcePage struct {
 	NextCursor string             `json:"next_cursor"`
 }
 
+type DatasourceReassignment struct {
+	SourceAgentID      string
+	TargetAgentID      string
+	RequestedAt        time.Time
+	AuthorityExpiresAt time.Time
+	State              string
+}
+
 type DatasourceRecord struct {
-	ID                            string              `json:"id"`
-	Settings                      datasource.Settings `json:"-"`
-	Version                       int64               `json:"-"`
-	PasswordConfigured            bool                `json:"-"`
-	TokenConfigured               bool                `json:"-"`
-	ConfigurationRevision         int64               `json:"-"`
-	PreviousConfigurationRevision int64               `json:"-"`
-	PreviousAgentID               string              `json:"-"`
-	CreatedAt                     time.Time           `json:"created_at"`
-	UpdatedAt                     time.Time           `json:"updated_at"`
+	Reassignment                  *DatasourceReassignment `json:"-"`
+	ID                            string                  `json:"id"`
+	Settings                      datasource.Settings     `json:"-"`
+	Version                       int64                   `json:"-"`
+	PasswordConfigured            bool                    `json:"-"`
+	TokenConfigured               bool                    `json:"-"`
+	ConfigurationRevision         int64                   `json:"-"`
+	PreviousConfigurationRevision int64                   `json:"-"`
+	PreviousAgentID               string                  `json:"-"`
+	CreatedAt                     time.Time               `json:"created_at"`
+	UpdatedAt                     time.Time               `json:"updated_at"`
 }
 
 type DatasourceAgentCapability struct {
@@ -209,6 +218,11 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	} else if err != nil {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource agent lock failed", err)
 	}
+	if pending, err := queries.AgentHasPendingReassignments(ctx, agentID); err != nil {
+		return DatasourceRecord{}, err
+	} else if pending {
+		return DatasourceRecord{}, ErrReassignmentPending
+	}
 	agent, err := queries.GetDatasourceAgentCapabilities(ctx, agentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, ErrAgentNotFound
@@ -321,10 +335,14 @@ func GetDatasource(ctx context.Context, databaseURL, datasourceID string, proof 
 	if err != nil {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource read failed", err)
 	}
+	record, err := datasourceRecordWithReassignment(ctx, queries, row)
+	if err != nil {
+		return DatasourceRecord{}, err
+	}
 	if err := finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
 		return DatasourceRecord{}, err
 	}
-	return datasourceRecord(row), nil
+	return record, nil
 }
 
 type datasourceCreateReceipt struct {
@@ -373,11 +391,62 @@ func ListDatasources(ctx context.Context, databaseURL string, proof DatasourcePr
 		if i == bounded {
 			break
 		}
-		page.Items = append(page.Items, datasourceRecord(row))
+		record, err := datasourceRecordWithReassignment(ctx, queries, row)
+		if err != nil {
+			return DatasourcePage{}, err
+		}
+		page.Items = append(page.Items, record)
 	}
 	if len(rows) > bounded {
 		last := page.Items[len(page.Items)-1]
 		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: "datasources", Time: last.CreatedAt, ID: last.ID})
+		if err != nil {
+			return DatasourcePage{}, err
+		}
+	}
+	if err := finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
+		return DatasourcePage{}, err
+	}
+	return page, nil
+}
+
+// ListAgentDatasourceDependencies returns a bounded page tied to an agent identity.
+func ListAgentDatasourceDependencies(ctx context.Context, databaseURL string, proof DatasourceProof, agentID string, limit int, cursor string, now func() time.Time) (DatasourcePage, error) {
+	id, ok := canonicalUUID(agentID)
+	bounded, position, err := validateAgentPage("agent-datasources", agentID, limit, cursor)
+	if !ok || err != nil || proof.SessionVerifier == ([32]byte{}) || now == nil {
+		return DatasourcePage{}, ErrInvalidAgentInput
+	}
+	conn, queries, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, proof.SessionVerifier, now, "administrator", "editor", "viewer")
+	if err != nil {
+		return DatasourcePage{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	if _, err := queries.GetAgent(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DatasourcePage{}, ErrAgentNotFound
+		}
+		return DatasourcePage{}, operationError(ctx, "storage: agent dependency lookup failed", err)
+	}
+	rows, err := queries.ListAgentDatasourceDependencies(ctx, dbgen.ListAgentDatasourceDependenciesParams{AgentID: id, AfterCreatedAt: timestamp(position.Time), AfterID: uuidOrZero(position.ID), RowLimit: int32(bounded + 1)})
+	if err != nil {
+		return DatasourcePage{}, operationError(ctx, "storage: agent dependencies failed", err)
+	}
+	page := DatasourcePage{Items: []DatasourceRecord{}}
+	for i, row := range rows {
+		if i == bounded {
+			break
+		}
+		record, err := datasourceRecordWithReassignment(ctx, queries, row)
+		if err != nil {
+			return DatasourcePage{}, err
+		}
+		page.Items = append(page.Items, record)
+	}
+	if len(rows) > bounded {
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: "agent-datasources", AgentID: agentID, Time: last.CreatedAt, ID: last.ID})
 		if err != nil {
 			return DatasourcePage{}, err
 		}
@@ -422,6 +491,21 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	}
 	if current.Version != input.ExpectedVersion || current.AgentID != observed.AgentID {
 		return DatasourceRecord{}, ErrDatasourceConflict
+	}
+	if result, handled, err := handleDatasourceReassignment(ctx, queries, tx, current, input, user, installation, session, now, secrets); handled {
+		return result, err
+	}
+	if pending, err := queries.AgentHasPendingReassignments(ctx, current.AgentID); err != nil {
+		return DatasourceRecord{}, err
+	} else if pending {
+		return DatasourceRecord{}, ErrReassignmentPending
+	}
+	if newAgentID != current.AgentID {
+		if pending, err := queries.AgentHasPendingReassignments(ctx, newAgentID); err != nil {
+			return DatasourceRecord{}, err
+		} else if pending {
+			return DatasourceRecord{}, ErrReassignmentPending
+		}
 	}
 	if newAgentID != current.AgentID || int32(input.Settings.PollingIntervalSeconds) != current.PollingIntervalSeconds {
 		hasSlis, err := queries.HasSLIsForDatasource(ctx, current.ID)
@@ -634,6 +718,19 @@ func advanceAgentConfiguration(ctx context.Context, queries *dbgen.Queries, agen
 		return 0, operationError(ctx, "storage: datasource desired revision update failed", err)
 	}
 	return revision, nil
+}
+
+func datasourceRecordWithReassignment(ctx context.Context, queries *dbgen.Queries, row dbgen.AlmanacDatasource) (DatasourceRecord, error) {
+	record := datasourceRecord(row)
+	transition, err := queries.GetDatasourceReassignment(ctx, row.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return record, nil
+	}
+	if err != nil {
+		return DatasourceRecord{}, operationError(ctx, "storage: datasource reassignment read failed", err)
+	}
+	record.Reassignment = &DatasourceReassignment{SourceAgentID: transition.SourceAgentID.String(), TargetAgentID: transition.TargetAgentID.String(), RequestedAt: transition.RequestedAt.Time.UTC(), AuthorityExpiresAt: transition.AuthorityExpiresAt.Time.UTC(), State: transition.State}
+	return record, nil
 }
 
 func datasourceRecord(row dbgen.AlmanacDatasource) DatasourceRecord {

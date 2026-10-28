@@ -9,8 +9,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   const history = page.locator('.agents-credentials').and(page.getByRole('region', { name: 'Credential history', exact: true }));
   const mutations = [];
   const inspectEmptyDialog = async (dialog, label) => {
-    // Only capture before password entry and after any one-time token is cleared.
-    await expect(dialog.getByLabel('Current password', { exact: true })).toHaveValue('');
+    await expect(dialog.getByLabel('Current password', { exact: true })).toHaveCount(0);
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
     for (const width of [1440, 360]) {
       await page.setViewportSize({ width, height: 900 });
@@ -28,12 +27,10 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
     if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith(`${agentPath}/`)) mutations.push(new URL(request.url()).pathname);
   });
   const submit = async (dialog, suffix) => {
-    setStage(`lifecycle ${suffix} password entry`);
-    await dialog.getByLabel('Current password', { exact: true }).fill(fixture.permanent);
     setStage(`lifecycle ${suffix} response wait`);
     const [response] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `${agentPath}${suffix}`),
-      dialog.getByLabel('Current password', { exact: true }).press('Enter'),
+      dialog.getByRole('button', { name: suffix === '/disable' ? 'Disable agent' : suffix === '/credentials/rotate' ? 'Rotate credential' : 'Revoke credential', exact: true }).click(),
     ]);
     setStage(`lifecycle ${suffix} response status ${response.status()}`);
     assert.equal(response.status(), 200);
@@ -45,7 +42,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   const rotation = page.getByRole('dialog', { name: 'Rotate credential', exact: true });
   await inspectEmptyDialog(rotation, 'rotation-form');
   setStage('credential rotation overlap entry');
-  await rotation.getByLabel('Overlap (seconds)', { exact: true }).fill('0');
+  await rotation.getByLabel('Keep the previous credential valid for', { exact: true }).selectOption('0');
   setStage('credential rotation no premature mutation');
   assert.equal(mutations.length, 0);
   const rotatedResponse = await submit(rotation, '/credentials/rotate');
@@ -112,6 +109,20 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
   await expect(history.locator('.agents-credential')).toHaveCount(2);
   await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
+  setStage('unassigned agent deletion');
+  await page.getByRole('button', { name: 'Delete agent', exact: true }).click();
+  const deletion = page.getByRole('dialog', { name: 'Delete agent', exact: true });
+  await expect(deletion.getByText('No datasources use this agent.')).toBeVisible();
+  await inspectEmptyDialog(deletion, 'delete-confirmation');
+  await deletion.getByRole('checkbox').check();
+  const [deleted] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === 'DELETE' && new URL(response.url()).pathname === agentPath),
+    deletion.getByRole('button', { name: 'Delete agent', exact: true }).click(),
+  ]);
+  assert.equal(deleted.status(), 200);
+  assert.deepEqual(deleted.request().postDataJSON(), {});
+  await expect(page.getByRole('button', { name: 'Back to agents' })).toHaveCount(0);
+  assert.equal(await page.evaluate(async (path) => (await fetch(path, { credentials: 'same-origin' })).status, agentPath), 404);
   await writeFile(join(fixture.artifacts, 'agent-lifecycle.json'), JSON.stringify({
     agent_id: registration.agent_id, ...replacement, mutation_count: mutations.length,
   }), { mode: 0o600 });

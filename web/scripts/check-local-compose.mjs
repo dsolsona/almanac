@@ -15,7 +15,7 @@ const artifacts = mkdtempSync(join(root, '.local/compose-check-'));
 const buildContext = mkdtempSync('/tmp/almanac-compose-source-');
 function prepareBuildContext() {
   for (const name of ['.dockerignore', 'Dockerfile', 'Makefile', 'compose.yaml', 'go.mod', 'go.sum',
-    'cmd', 'internal', 'deploy/local', 'scripts/check-local-readiness.sh', 'web/assets.go', 'web/index.html', 'web/package.json',
+    'cmd', 'internal', 'deploy/local', 'scripts/check-local-readiness.sh', 'scripts/local-agent.sh', 'web/assets.go', 'web/index.html', 'web/package.json',
     'web/package-lock.json', 'web/tsconfig.json', 'web/vite.config.ts', 'web/src', 'web/public']) {
     const destination = join(buildContext, name);
     const source = join(root, name);
@@ -29,7 +29,9 @@ function prepareBuildContext() {
 }
 const sourceMarker = `<!-- compose source refresh ${randomBytes(12).toString('hex')} -->`;
 const project = `almanac-check-${process.pid}-${randomBytes(4).toString('hex')}`;
-const agentContainer = `${project}-agent`;
+const launchers = [];
+let launcherOutput = '';
+let launcherLogs = '';
 const relayContainer = `${project}-relay`;
 const inputContainer = `${project}-input-init`;
 const inputVolume = `${project}-agent-input`;
@@ -44,23 +46,30 @@ let cleanupFailed = false;
 let initial;
 let permanent;
 let issuedToken;
+let replacementToken;
+let invalidToken;
 let certificate;
 let spki;
 let lastFailure;
 let cancellation;
 let activeChild;
+let activeChildDone;
 let activeBrowser;
 let cleaning = false;
 let cleanupPromise;
 
 function redact(value) {
   let text = String(value ?? '');
-  for (const secret of [initial, permanent, issuedToken]) if (secret) text = text.split(secret).join('[REDACTED]');
+  for (const secret of [initial, permanent, issuedToken, replacementToken, invalidToken]) if (secret) text = text.split(secret).join('[REDACTED]');
   return text.replace(/(["']?(?:set-)?cookie["']?\s*:\s*)[^\r\n]*/gi, '$1[REDACTED]')
     .replace(/postgres(?:ql)?:\/\/[^\s"']+/g, '[DATABASE URL]')
     .replace(/\b[a-fA-F0-9]{64}\b/g, '[HEX SECRET OR DIGEST]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[PRIVATE KEY]')
     .slice(-64 * 1024);
+}
+function containsFixtureSecret(value) {
+  const text = String(value ?? '');
+  return [initial, permanent, issuedToken, replacementToken, invalidToken].some((secret) => secret && text.includes(secret));
 }
 
 function failureCategory(error) {
@@ -128,6 +137,7 @@ function command(executable, args, { input, timeout = 120_000, environment = env
     const child = spawn(executable, args, { cwd, env: environment,
       detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
     activeChild = child;
+    activeChildDone = new Promise((resolveClose) => child.once('close', resolveClose));
     let overflow = false;
     let timedOut = false;
     const maxBuffer = 32 * 1024 * 1024;
@@ -145,7 +155,7 @@ function command(executable, args, { input, timeout = 120_000, environment = env
     child.stdin.on('error', () => {});
     child.on('error', (error) => {
       if (activeChild === child) activeChild = undefined;
-      lastFailure = { executable, args, code: error.code, stdout: redact(out.value), stderr: redact(err.value) };
+      lastFailure = { executable, args, code: error.code, secretLeak: containsFixtureSecret(out.value) || containsFixtureSecret(err.value), stdout: redact(out.value), stderr: redact(err.value) };
       rejectCommand(error);
     });
     if (input !== undefined) child.stdin.end(input);
@@ -157,7 +167,7 @@ function command(executable, args, { input, timeout = 120_000, environment = env
       if (cancellation && !allowDuringCancellation) return rejectCommand(Object.assign(new Error('cancelled'), { code: 'CANCELLED' }));
       if (timedOut || overflow || status !== 0) {
         const error = Object.assign(new Error('command failed'), { status, signal, code: overflow ? 'MAXBUFFER' : timedOut ? 'TIMEOUT' : undefined });
-        lastFailure = { executable, args, status, signal, code: error.code, stdout: redact(out.value), stderr: redact(err.value) };
+        lastFailure = { executable, args, status, signal, code: error.code, secretLeak: containsFixtureSecret(out.value) || containsFixtureSecret(err.value), stdout: redact(out.value), stderr: redact(err.value) };
         rejectCommand(error);
       } else resolveCommand(includeStderr ? out.value + err.value : out.value);
     });
@@ -288,26 +298,78 @@ async function navigateWorkspace(page, viewportName, destination) {
   }
   await navigation.getByRole('link', { name: destination, exact: true }).click();
 }
-async function checkCollectedSLI(page, agentID) {
+async function startAgent(page, agentID, token) {
   const appID = (await compose(['ps', '-q', 'app'])).trim();
   assert.match(appID, /^[a-f0-9]+$/);
-  stage = 'prepare protected agent inputs';
-  await command('docker', ['volume', 'create', inputVolume]);
-  const inputs = [issuedToken, certificate].map((value) => Buffer.from(value).toString('base64')).join('\n') + '\n';
-  await command('docker', ['run', '-i', '--rm', '--name', inputContainer, '--network', 'none', '--user', '0:0', '--mount', `type=volume,src=${inputVolume},dst=/input`,
-    '--entrypoint', 'sh', `${project}:dev`, '-c',
-    'set -eu; read -r token; read -r cert; printf %s "$token" | base64 -d > /input/token; printf %s "$cert" | base64 -d > /input/ca; chown 10001:10001 /input/token /input/ca; chmod 600 /input/token /input/ca'], { input: inputs });
-  stage = 'start isolated real agent';
-  await command('docker', ['run', '-d', '--name', agentContainer, '--network', `container:${appID}`,
-    '--read-only', '--mount', `type=volume,src=${inputVolume},dst=/input,readonly`,
-    '--entrypoint', '/usr/local/bin/almanac-agent', `${project}:dev`, 'run', '--backend-url=https://localhost:8080',
-    '--token-file=/input/token', '--ca-file=/input/ca']);
+  stage = 'start isolated real agent with make agent';
+  const handle = { appID, agentID, token, tokenFile: join(artifacts, `agent-token-${agentID}`), child: null, done: null, exited: false, container: undefined, output: '' };
+  launchers.push(handle);
+  writeFileSync(handle.tokenFile, token, { mode: 0o600 });
+  const before = new Set((await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned'])).trim().split('\n').filter(Boolean));
+  handle.child = spawn('make', ['agent'], { cwd: root, env: { ...env, AGENT_TOKEN_FILE: handle.tokenFile }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  handle.child.stdout.on('data', (chunk) => { handle.output += chunk; launcherOutput += chunk; });
+  handle.child.stderr.on('data', (chunk) => { handle.output += chunk; launcherOutput += chunk; });
+  handle.done = new Promise((resolveClose) => {
+    handle.child.once('error', (error) => { handle.exited = true; resolveClose({ error: error.code }); });
+    handle.child.once('close', (code, signal) => { handle.exited = true; resolveClose({ code, signal }); });
+  });
+  await expect.poll(async () => {
+    if (handle.exited) throw new Error(`launcher exited before startup: ${redact(handle.output)}`);
+    const ids = (await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned'])).trim().split('\n').filter((id) => id && !before.has(id));
+    if (ids.length === 1) handle.container = ids[0];
+    return ids.length;
+  }, { timeout: 15_000 }).toBe(1);
+  const agent = JSON.parse(await command('docker', ['inspect', handle.container]))[0];
+  assert.equal(agent.HostConfig.NetworkMode, `container:${appID}`);
+  assert.equal(agent.HostConfig.ReadonlyRootfs, true);
+  assert.equal(agent.Config.User, '10001:10001');
+  assert.equal(agent.Mounts.length, 0);
+  assert.ok(Object.hasOwn(agent.HostConfig.Tmpfs, '/tmp'));
+  assert.ok(!JSON.stringify(agent.Config).includes(token));
   stage = 'wait for assigned agent connection';
   await expect.poll(async () => page.evaluate(async (id) => {
     const response = await fetch(`/api/v1/agents/${id}`);
     if (!response.ok) return '';
-    return (await response.json()).runtime?.reachability ?? '';
+    const runtime = (await response.json()).runtime;
+    return runtime?.reachability === 'connected' && runtime.capabilities?.some((capability) => capability.provider === 'prometheus' && capability.configuration_formats.includes('prometheus-http-v1') && capability.operations.includes('connection_test') && capability.operations.includes('query_preview')) ? 'connected' : '';
   }, agentID), { timeout: 25_000 }).toBe('connected');
+  return handle;
+}
+async function stopAgent(handle) {
+  launcherLogs += await command('docker', ['logs', handle.container], { includeStderr: true });
+  stage = 'stop only the launched agent';
+  if (!handle.exited) process.kill(-handle.child.pid, 'SIGINT');
+  const stopped = await Promise.race([handle.done.then(() => true), new Promise((resolveTimeout) => setTimeout(() => resolveTimeout(false), 5000))]);
+  if (!stopped) { abortChild(handle.child, 'SIGTERM'); throw new Error('Acceptance launcher did not stop after interruption'); }
+  assert.equal((await command('docker', ['ps', '-aq', '--filter', `id=${handle.container}`])).trim(), '');
+  assert.equal((await compose(['ps', '-q', 'app'])).trim(), handle.appID);
+  assert.ok(!handle.output.includes(handle.token));
+  rmSync(handle.tokenFile); handle.tokenFile = undefined; handle.container = undefined;
+}
+async function checkRejectedAgentStarts(handle) {
+  const containers = async () => (await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned'])).trim().split('\n').filter(Boolean).sort();
+  const temporaryInputs = () => readdirSync(join(root, '.local')).filter((name) => name.startsWith('almanac-agent.')).sort();
+  const beforeContainers = await containers(); const beforeInputs = temporaryInputs();
+  const dot = issuedToken.lastIndexOf('.');
+  invalidToken = `${issuedToken.slice(0, dot + 1)}${issuedToken[dot + 1] === 'A' ? 'B' : 'A'}${issuedToken.slice(dot + 2)}`;
+  for (const [name, token, expected] of [['invalid', invalidToken, /credential rejected/i], ['copied', issuedToken, /another process owns/i]]) {
+    stage = `real Compose rejected ${name} agent startup`;
+    const file = join(artifacts, `${name}-agent-token`); writeFileSync(file, token, { mode: 0o600 });
+    try {
+      await assert.rejects(command('make', ['agent'], { environment: { ...env, AGENT_TOKEN_FILE: file }, timeout: 25_000 }));
+      assert.ok(lastFailure && lastFailure.status !== 0 && !lastFailure.code, `${name} agent did not exit normally with failure`);
+      assert.match(`${lastFailure.stdout}\n${lastFailure.stderr}`, expected);
+      assert.equal(lastFailure.secretLeak, false, `${name} agent leaked a fixture secret`);
+      lastFailure = undefined;
+      assert.deepEqual(await containers(), beforeContainers); assert.deepEqual(temporaryInputs(), beforeInputs);
+      assert.equal(handle.exited, false);
+    } finally { rmSync(file, { force: true }); }
+  }
+}
+async function checkCollectedSLI(page, agentID) {
+  const oldAgent = await startAgent(page, agentID, issuedToken);
+  const appID = oldAgent.appID;
+  await checkRejectedAgentStarts(oldAgent);
   stage = 'real Compose SLI prerequisite and datasource creation';
   await page.goto(`${url}/slis`);
   await expect(page.getByText('Add a Prometheus datasource to create your first SLI.', { exact: true })).toBeVisible();
@@ -426,6 +488,164 @@ async function checkCollectedSLI(page, agentID) {
   assert.ok(expected);
   assert.deepEqual(cliResult.result.items.find((item) => item.observation_id === expected.observation_id), expected);
   await compose(['exec', '-T', 'app', 'rm', '-rf', cliDir]);
+  return { datasource: datasource.body, sliID: evidence.sli_id, observation: expected, oldAgent };
+
+}
+async function recordHandoffProgress(datasourceID, sliID, targetID, phase) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  if (![datasourceID, sliID, targetID].every((id) => uuid.test(id))) throw new Error('Invalid diagnostic identifier');
+  const sql = `SELECT jsonb_build_object(
+    'captured_at', now(), 'datasource_id', '${datasourceID}', 'sli_id', '${sliID}', 'target_agent_id', '${targetID}',
+    'datasource', (SELECT jsonb_build_object('agent_id', agent_id, 'version', version, 'polling_interval_seconds', polling_interval_seconds, 'settling_delay_seconds', settling_delay_seconds) FROM public.almanac_datasources WHERE id='${datasourceID}'),
+    'runtime', (SELECT jsonb_build_object('agent_id', agent_id, 'generation', generation, 'desired_revision', desired_configuration_revision,
+      'applied_revision', applied_configuration_revision, 'scheduler_health', scheduler_health, 'collection_progress', collection_progress,
+      'configuration_failure_code', configuration_failure_code, 'configuration_failure_revision', configuration_failure_revision,
+      'last_heartbeat_at', last_heartbeat_at, 'last_attempt_at', last_attempt_at, 'last_successful_query_at', last_successful_query_at,
+      'next_expected_execution_at', next_expected_execution_at, 'updated_at', updated_at)
+      FROM public.almanac_agent_runtime_status WHERE agent_id='${targetID}'),
+    'current_grant', (SELECT jsonb_build_object('generation', g.generation, 'configuration_revision', g.configuration_revision,
+      'valid_from', g.valid_from, 'valid_until', g.valid_until, 'renewal_sequence', g.renewal_sequence,
+      'allowed_measurements', COALESCE((SELECT jsonb_agg(jsonb_build_object('sli_id', item->>'sli_id', 'measurement_revision', item->>'measurement_revision'))
+        FROM (SELECT value AS item FROM jsonb_array_elements(g.allowed_measurements)
+          WHERE value->>'sli_id' ~ '^[0-9a-f-]{36}$' AND value->>'measurement_revision' ~ '^[0-9]{1,19}$' LIMIT 256) bounded), '[]'::jsonb))
+      FROM public.almanac_agent_ownership o JOIN public.almanac_agent_execution_grants g ON g.lease_id=o.current_lease_id
+      WHERE o.agent_id='${targetID}' ORDER BY o.generation DESC LIMIT 1),
+    'epochs', COALESCE((SELECT jsonb_agg(to_jsonb(e)) FROM (SELECT sli_id, measurement_revision, agent_id, configuration_revision, starts_at, ends_at
+      FROM public.almanac_sli_ownership_epochs WHERE sli_id='${sliID}' ORDER BY starts_at DESC LIMIT 50) e), '[]'::jsonb),
+    'coverage', COALESCE((SELECT jsonb_agg(to_jsonb(c)) FROM (SELECT agent_id, measurement_revision, configuration_revision,
+      interval_start, interval_end, outcome, error_code, recorded_at FROM public.almanac_sli_coverage
+      WHERE sli_id='${sliID}' ORDER BY interval_start DESC LIMIT 50) c), '[]'::jsonb),
+    'coverage_counts', COALESCE((SELECT jsonb_agg(to_jsonb(c)) FROM (SELECT agent_id, outcome, count(*) AS count
+      FROM public.almanac_sli_coverage WHERE sli_id='${sliID}' GROUP BY agent_id, outcome ORDER BY agent_id, outcome LIMIT 100) c), '[]'::jsonb),
+    'attempt_counts', COALESCE((SELECT jsonb_agg(to_jsonb(a)) FROM (SELECT agent_id, outcome,
+      CASE WHEN error_code IS NULL THEN NULL WHEN error_code IN ('authentication', 'incomplete', 'network', 'query', 'rate_limited', 'tls', 'timeout', 'unsupported', 'assignment_revoked', 'deadline') THEN error_code ELSE 'other' END AS error_code,
+      count(*) AS count, max(recorded_at) AS last_recorded_at FROM public.almanac_sli_execution_attempts WHERE sli_id='${sliID}'
+      GROUP BY agent_id, outcome, 3 ORDER BY agent_id, outcome, 3 LIMIT 100) a), '[]'::jsonb)
+  )`;
+  const path = join(artifacts, `handoff-progress-${phase}.json`);
+  const previousFailure = lastFailure;
+  try {
+    const output = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc', sql]);
+    writeFileSync(path, JSON.stringify(JSON.parse(output), null, 2), { mode: 0o600 });
+  } catch {
+    writeFileSync(path, JSON.stringify({ phase, error: 'Handoff diagnostics unavailable.' }), { mode: 0o600 });
+  } finally { lastFailure = previousFailure; }
+}
+async function checkAgentRetirement(page, original, collection) {
+  const agentURL = `${url}/agents?agent=${original.agent.id}`;
+  stage = 'real Compose assigned-agent deletion is blocked';
+  await page.goto(agentURL);
+  const runtime = page.getByRole('region', { name: 'Agent runtime', exact: true });
+  await expect(runtime).not.toContainText('No datasources are assigned to this agent.');
+  const runtimeExplanation = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/v1/agents/${id}`);
+    if (!response.ok) return null;
+    return (await response.json()).runtime?.collection_explanation ?? null;
+  }, original.agent.id);
+  assert.equal(runtimeExplanation, 'none');
+  await page.getByRole('button', { name: 'Rotate credential', exact: true }).click();
+  const rotation = page.getByRole('dialog', { name: 'Rotate credential', exact: true });
+  await expect(rotation.getByLabel('Current password', { exact: true })).toHaveCount(0);
+  await expect(rotation.getByLabel('Keep the previous credential valid for', { exact: true })).toHaveValue('600');
+  await rotation.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: 'Revoke credential', exact: true }).click();
+  const revoke = page.getByRole('dialog', { name: 'Revoke credential', exact: true });
+  await expect(revoke.getByLabel('Current password', { exact: true })).toHaveCount(0);
+  await revoke.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete agent', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: 'Delete agent', exact: true });
+  const sourceLink = dialog.getByRole('link', { name: 'Compose metrics (compose-metrics)', exact: true });
+  await expect(sourceLink).toHaveAttribute('href', `/datasources/${collection.datasource.id}`);
+  await expect(dialog.getByRole('button', { name: 'Register replacement agent', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Delete agent', exact: true })).toBeDisabled();
+  for (const theme of ['light', 'dark']) for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile', width: 360, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.locator('html').evaluate((element, dark) => element.classList.toggle('dark', dark), theme === 'dark');
+    assert.ok((await dialog.boundingBox()).width <= viewport.width);
+    await page.screenshot({ path: join(artifacts, `delete-blocked-${viewport.name}-${theme}.png`), animations: 'disabled' });
+  }
+  stage = 'real Compose blocked datasource link uses app navigation';
+  await sourceLink.click();
+  await expect(page).toHaveURL(`${url}/datasources/${collection.datasource.id}`);
+  await expect(page.getByLabel('Assigned agent', { exact: true })).toHaveValue(original.agent.id);
+  await page.goBack();
+  await expect(page).toHaveURL(agentURL);
+  await page.getByRole('button', { name: 'Delete agent', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Delete agent', exact: true });
+  await dialog.getByRole('button', { name: 'Register replacement agent', exact: true }).click();
+  const register = page.getByRole('dialog', { name: 'Register agent', exact: true });
+  await register.getByLabel('Display name', { exact: true }).fill('Replacement');
+  await expect(register.getByLabel('New credential expires after', { exact: true })).toHaveValue('7776000');
+  await register.getByLabel('New credential expires after', { exact: true }).selectOption('custom');
+  await register.getByLabel('Custom amount', { exact: true }).fill('90');
+  await register.getByLabel('Unit', { exact: true }).selectOption('86400');
+  for (const theme of ['light', 'dark']) for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile', width: 360, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.locator('html').evaluate((element, dark) => element.classList.toggle('dark', dark), theme === 'dark');
+    const amount = await register.getByLabel('Custom amount', { exact: true }).boundingBox();
+    const unit = await register.getByLabel('Unit', { exact: true }).boundingBox();
+    assert.ok(amount && unit && amount.y + amount.height <= unit.y && unit.x + unit.width <= viewport.width, 'custom duration fields overlap or overflow');
+    await page.screenshot({ path: join(artifacts, `duration-custom-${viewport.name}-${theme}.png`), animations: 'disabled' });
+  }
+  await expect(register.getByLabel('Current password', { exact: true })).toHaveCount(0);
+  stage = 'real Compose register and connect replacement';
+  const created = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents');
+  await register.getByRole('button', { name: 'Register agent', exact: true }).click();
+  const createdResponse = await created;
+  assert.equal(createdResponse.status(), 201);
+  const replacement = await createdResponse.json(); replacementToken = replacement.token;
+  assert.equal(createdResponse.request().postDataJSON().lifetime_seconds, 7776000);
+  assert.equal((await page.locator('output[aria-label="Agent token"]').textContent()), replacementToken);
+  await page.getByRole('button', { name: 'Close token', exact: true }).click();
+  await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
+  const replacementAgent = await startAgent(page, replacement.agent.id, replacementToken);
+  stage = 'real Compose reassign actual datasource';
+  await page.goto(`${url}/datasources/${collection.datasource.id}`);
+  await expect.poll(async () => page.getByLabel('Assigned agent', { exact: true }).locator(`option[value="${replacement.agent.id}"]`).isEnabled(), { timeout: 25_000 }).toBe(true);
+  await page.getByLabel('Assigned agent', { exact: true }).selectOption(replacement.agent.id);
+  const saved = page.waitForResponse((response) => response.request().method() === 'PUT' && new URL(response.url()).pathname === `/api/v1/datasources/${collection.datasource.id}`);
+  await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+  const savedResponse = await saved;
+  assert.equal(savedResponse.status(), 200, `datasource reassignment returned HTTP ${savedResponse.status()}`);
+  const moved = await savedResponse.json();
+  assert.equal(moved.agent_id, original.agent.id);
+  assert.equal(moved.reassignment?.target_agent_id, replacement.agent.id);
+  await expect(page.getByRole('heading', { name: 'Moving datasource', exact: true })).toBeVisible();
+  await expect.poll(async () => page.evaluate(async ({ id, target }) => {
+    const r = await fetch(`/api/v1/datasources/${id}`); if (!r.ok) return false; const source = await r.json(); return source.agent_id === target && !source.reassignment;
+  }, { id: collection.datasource.id, target: replacement.agent.id }), { timeout: 110_000, intervals: [1000] }).toBe(true);
+  await page.getByRole('button', { name: 'Refresh reassignment', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Moving datasource', exact: true })).toHaveCount(0);
+  stage = 'real Compose replacement collector resumes observations';
+  await recordHandoffProgress(collection.datasource.id, collection.sliID, replacement.agent.id, 'start');
+  try {
+    await expect.poll(async () => (await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
+      `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id='${collection.sliID}' AND agent_id='${replacement.agent.id}' AND outcome='observed'`])).trim(), { timeout: 110_000, intervals: [1000] }).not.toBe('0');
+  } catch (error) {
+    await recordHandoffProgress(collection.datasource.id, collection.sliID, replacement.agent.id, 'failure');
+    throw error;
+  }
+  await recordHandoffProgress(collection.datasource.id, collection.sliID, replacement.agent.id, 'success');
+  await stopAgent(collection.oldAgent);
+  stage = 'real Compose delete reassigned agent and preserve history';
+  await page.goto(agentURL);
+  await page.getByRole('button', { name: 'Delete agent', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Delete agent', exact: true });
+  await expect(dialog.getByText('No datasources use this agent.', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Current password', { exact: true })).toHaveCount(0);
+  await dialog.getByRole('checkbox').check();
+  const deleted = page.waitForResponse((response) => response.request().method() === 'DELETE' && new URL(response.url()).pathname === `/api/v1/agents/${original.agent.id}`);
+  await dialog.getByRole('button', { name: 'Delete agent', exact: true }).click();
+  const deletedResponse = await deleted;
+  assert.equal(deletedResponse.status(), 200); assert.deepEqual(deletedResponse.request().postDataJSON(), {});
+  await expect(page.getByRole('status').filter({ hasText: 'Agent deleted' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'local', exact: true })).toHaveCount(0);
+  assert.equal(await page.evaluate(async (id) => (await fetch(`/api/v1/agents/${id}`)).status, original.agent.id), 404);
+  assert.equal(await page.evaluate(async (token) => (await fetch('/api/agent/v1/configuration', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } })).status, issuedToken), 401);
+  const observations = await page.evaluate(async (id) => (await (await fetch(`/api/v1/slis/${id}/observations?limit=50`)).json()).items, collection.sliID);
+  assert.deepEqual(observations.find((item) => item.observation_id === collection.observation.observation_id), collection.observation);
+  await stopAgent(replacementAgent);
 }
 async function checkLocalAgentRegistration() {
   const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${spki}`] });
@@ -577,7 +797,7 @@ async function checkLocalAgentRegistration() {
     const displayedToken = await page.locator('output[aria-label="Agent token"]').textContent();
     assert.equal(typeof result.token === 'string' && result.token.length > 0 && displayedToken === result.token,
       true, 'the one-time token was not displayed');
-    assert.deepEqual(requests, [{ name: 'local', display_name: 'Local' }]);
+    assert.deepEqual(requests, [{ name: 'local', display_name: 'Local', lifetime_seconds: 7776000 }]);
     stage = 'real Compose close one-time token dialog';
     await page.getByRole('button', { name: 'Close token', exact: true }).click();
     stage = 'real Compose verify agent detail URL after token close';
@@ -687,7 +907,8 @@ async function checkLocalAgentRegistration() {
     };
     assert.equal(intentionalReloadCounts.document_navigation_requests, 1);
     assert.equal(intentionalReloadCounts.auth_context_requests, 1);
-    await checkCollectedSLI(page, result.agent.id);
+    const collection = await checkCollectedSLI(page, result.agent.id);
+    await checkAgentRetirement(page, result, collection);
     writeFileSync(join(artifacts, 'local-agent-registration.json'), JSON.stringify({
       name: 'local', display_name: 'Local', create_requests: requests.length,
       token_shown_once: true, persisted: true,
@@ -746,16 +967,36 @@ function cleanup() {
   if (cleanupPromise) return cleanupPromise;
   cleaning = true;
   cleanupPromise = (async () => {
+    for (const handle of launchers) {
+      if (handle.child && !handle.exited) abortChild(handle.child, 'SIGTERM');
+      if (handle.done) {
+        const stopped = await Promise.race([handle.done.then(() => true), new Promise((resolveTimeout) => setTimeout(() => resolveTimeout(false), 5000))]);
+        if (!stopped) { cleanupFailed = true; console.error('Could not stop the acceptance launcher.'); }
+      }
+      if (handle.tokenFile) rmSync(handle.tokenFile, { force: true });
+    }
     if (activeChild) {
-      abortChild(activeChild, 'SIGTERM');
-      await new Promise((resolveClose) => activeChild?.once('close', resolveClose));
+      const child = activeChild; const done = activeChildDone;
+      abortChild(child, 'SIGTERM');
+      const stopped = await Promise.race([done.then(() => true), new Promise((resolveTimeout) => setTimeout(() => resolveTimeout(false), 5000))]);
+      if (!stopped) { cleanupFailed = true; console.error('Could not stop an active acceptance command.'); }
     }
     if (activeBrowser) {
       const browser = activeBrowser;
       activeBrowser = undefined;
       try { await browser.close(); } catch { cleanupFailed = true; console.error('Could not close acceptance browser.'); }
     }
-    for (const name of [agentContainer, relayContainer, inputContainer]) {
+    for (const handle of launchers) if (handle.container) {
+      try {
+        const ids = (await command('docker', ['ps', '-aq', '--filter', `id=${handle.container}`], { allowDuringCancellation: true })).trim();
+        if (ids) {
+          const info = JSON.parse(await command('docker', ['inspect', handle.container], { allowDuringCancellation: true }))[0];
+          if (info.Config.Labels?.['almanac.local-agent'] !== 'owned' || info.HostConfig.NetworkMode !== `container:${handle.appID}`) throw new Error('launcher ownership mismatch');
+          await command('docker', ['rm', '-f', handle.container], { allowDuringCancellation: true });
+        }
+      } catch { cleanupFailed = true; console.error('Could not remove the owned acceptance agent container.'); }
+    }
+    for (const name of [relayContainer, inputContainer]) {
       try {
         const ids = (await command('docker', ['ps', '-aq', '--filter', `name=^/${name}$`], { allowDuringCancellation: true })).trim();
         if (ids) await command('docker', ['rm', '-f', name], { allowDuringCancellation: true });
@@ -902,13 +1143,15 @@ try {
   await checkLocalAgentRegistration();
   stage = 'logs exclude credentials';
   const logs = await compose(['logs', '--no-color']);
-  const agentLogs = await command('docker', ['logs', agentContainer], { includeStderr: true });
+  const agentLogs = launcherLogs;
   assert.equal(!logs.includes(initial), true, 'Compose logs exposed the initial password');
   assert.equal(!logs.includes(permanent), true, 'Compose logs exposed the permanent password');
   assert.equal(typeof issuedToken === 'string' && issuedToken.length > 0, true,
     'registration did not issue a one-time token');
   assert.equal(!logs.includes(issuedToken), true, 'Compose logs exposed the one-time agent token');
   assert.equal(!agentLogs.includes(issuedToken), true, 'Agent logs exposed the one-time agent token');
+  assert.equal(typeof replacementToken === 'string' && replacementToken.length > 0, true, 'replacement token was not issued');
+  assert.equal(!logs.includes(replacementToken) && !agentLogs.includes(replacementToken), true, 'replacement token appeared in logs');
   const dbPassword = await compose(['exec', '-T', 'postgres', 'cat', '/run/postgres-secret/password']);
   assert.ok(dbPassword.length >= 32 && !logs.includes(dbPassword));
   writeFileSync(join(artifacts, 'acceptance.json'), JSON.stringify({ project,
@@ -925,7 +1168,7 @@ try {
 } catch (error) {
   failed = true;
   if (cancellation) stage = `cancelled by ${cancellation}`;
-  const diagnostics = { stage, failure: { name: redact(error?.name), category: failureCategory(error), message: redact(error?.message) }, lastFailure };
+  const diagnostics = { stage, failure: { name: redact(error?.name), category: failureCategory(error), message: redact(error?.message) }, launcherOutput: redact(launcherOutput), lastFailure };
   if (!cancellation) {
     try { diagnostics.services = redact(await compose(['ps', '-a', '--format', 'json'])); } catch { diagnostics.services = 'unavailable'; }
     try {

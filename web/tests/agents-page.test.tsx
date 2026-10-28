@@ -38,6 +38,98 @@ function installFetch(createResponse?: Response) {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal; if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close; vi.useRealTimers(); });
 
 describe('agent administration screen', () => {
+  it('keeps known blockers visible when a later dependency page fails', async () => {
+    const user = userEvent.setup(); installDialogs();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/datasources?')) { if (url.includes('cursor=next')) throw new Error('offline'); return response({ items: [{ id: agentIDB, name: 'first', display_name: 'First' }], next_cursor: 'next' }); }
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.includes(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />); await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete agent' });
+    await within(dialog).findByRole('link', { name: 'First (first)' });
+    await user.click(within(dialog).getByRole('button', { name: 'Load more datasources' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('could not be checked');
+    expect(within(dialog).getByRole('link', { name: 'First (first)' })).toBeVisible();
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Delete agent' })).toBeDisabled();
+  });
+  it('never enables deletion when datasource checks fail', async () => {
+    const user = userEvent.setup(); installDialogs();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/datasources?')) throw new Error('offline');
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.includes(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />); await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete agent' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('could not be checked');
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Delete agent' })).toBeDisabled();
+    expect(within(dialog).queryByText('No datasources use this agent.')).not.toBeInTheDocument();
+  });
+  it('blocks deletion until all datasource pages are reassigned and refreshed', async () => {
+    const user = userEvent.setup(); installDialogs(); let assigned = true;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'DELETE') return response({ agent: { ...agent(), enabled: false }, credential: null, changed: true, revoked_credential_count: '1', replayed: false });
+      if (url.includes('/datasources?')) return response(assigned ? (url.includes('cursor=next') ? { items: [{ id: agentIDB, name: 'second', display_name: 'Second source' }], next_cursor: '' } : { items: [{ id: agentID, name: 'first', display_name: 'First source' }], next_cursor: 'next' }) : { items: [], next_cursor: '' });
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.includes(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agent()], next_cursor: '' });
+    });
+    vi.stubGlobal('fetch', fetcher); render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete agent' });
+    expect(await within(dialog).findByRole('link', { name: 'First source (first)' })).toHaveAttribute('href', `/datasources/${agentID}`);
+    expect(within(dialog).getByText(/are being moved to it/)).toBeVisible();
+    expect(within(dialog).getByRole('link', { name: 'First source (first)' })).toHaveAttribute('data-app-route');
+    await user.click(within(dialog).getByRole('button', { name: 'Load more datasources' }));
+    expect(await within(dialog).findByRole('link', { name: 'Second source (second)' })).toBeVisible();
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Delete agent' })).toBeDisabled();
+    assigned = false; await user.click(within(dialog).getByRole('button', { name: 'Refresh assignments' }));
+    await within(dialog).findByText('No datasources use this agent.');
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}`, expect.objectContaining({ method: 'DELETE' })));
+    expect(await screen.findByRole('status')).toHaveTextContent('Agent deleted');
+    await screen.findByRole('button', { name: 'west-1' });
+  });
+  it('offers readable credential defaults without asking for a password', async () => {
+    const user = userEvent.setup(); installDialogs(); installFetch();
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    expect(within(dialog).getByLabelText('New credential expires after')).toHaveValue('7776000');
+    expect(within(dialog).getByLabelText('Keep the previous credential valid for')).toHaveValue('600');
+    expect(within(dialog).queryByLabelText('Current password')).not.toBeInTheDocument();
+  });
+
+  it('rejects fractional seconds and excessive custom grace without sending a command', async () => {
+    const user = userEvent.setup(); installDialogs(); const fetcher = installFetch();
+    render(<AuthPage client={makeAuth()} />); await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
+    await user.selectOptions(within(dialog).getByLabelText('New credential expires after'), 'custom');
+    await user.type(within(dialog).getByLabelText('Custom amount'), '0.5');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('whole number of seconds');
+    await user.selectOptions(within(dialog).getByLabelText('New credential expires after'), '7776000');
+    await user.selectOptions(within(dialog).getByLabelText('Keep the previous credential valid for'), 'custom');
+    await user.type(within(dialog).getByLabelText('Custom amount'), '601');
+    await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('10 minutes');
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+  });
   it('exposes one keyboard-scrollable agent table within its named panel', async () => {
     installFetch(); render(<AgentsPage context={admin} recheckSession={async () => ({ confirmed: true, context: admin })} suspended={false} draft={{ name: '', displayName: '', lifetime: '' }} onDraftChange={vi.fn()} intent={null} onIntentChange={vi.fn()} lifecycleIntent={null} onLifecycleIntentChange={vi.fn()} />);
     await screen.findByRole('button', { name: 'west-1' });
@@ -79,7 +171,7 @@ describe('agent administration screen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     const create = fetcher.mock.calls.find(([url, init]) => String(url) === '/api/v1/agents' && init?.method === 'POST');
-    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'local-primary', display_name: 'Local Site' });
+    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'local-primary', display_name: 'Local Site', lifetime_seconds: 7776000 });
   });
 
   it('identifies a duplicate agent identifier on the editable field', async () => {
@@ -129,7 +221,7 @@ describe('agent administration screen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Register agent' }));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     const create = fetcher.mock.calls.find(([url, init]) => String(url) === '/api/v1/agents' && init?.method === 'POST');
-    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'session-agent', display_name: 'Session Agent' });
+    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'session-agent', display_name: 'Session Agent', lifetime_seconds: 7776000 });
   });
 
   it('shows only a validated request ID and safe guidance for an unavailable registration response', async () => {
@@ -187,7 +279,7 @@ describe('agent administration screen', () => {
     expect(posts).toHaveLength(3);
     const keys = posts.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
     expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]); expect(keys[2]).toBe(keys[0]);
-    expect(JSON.parse(String(posts[2]?.[1]?.body))).toEqual({ name: 'retry-agent', display_name: 'Retry Agent' });
+    expect(JSON.parse(String(posts[2]?.[1]?.body))).toEqual({ name: 'retry-agent', display_name: 'Retry Agent', lifetime_seconds: 7776000 });
     expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
   });
 
@@ -239,7 +331,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Enter an agent name, display name, and a lifetime from 0 to 31536000 seconds when provided.');
+    expect(alert).toHaveTextContent('Enter an agent name and display name, and an expiry between 1 second and 1 year as a whole number of seconds.');
     expect(screen.getByRole('dialog', { name: 'Register agent' })).toContainElement(alert);
     await waitFor(() => expect(alert).toHaveFocus());
     expect(screen.getAllByRole('alert')).toHaveLength(1);
@@ -272,6 +364,23 @@ describe('agent administration screen', () => {
     expect(screen.getByText('2026-10-22 12:00:00.987654Z')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     await waitFor(() => expect(location.search).toBe(''));
+  });
+
+  it('shows assigned active collection without claiming there are no datasources', async () => {
+    const user = userEvent.setup();
+    const live = { ...agent(), runtime: runtime({ collection_explanation: 'none', last_successful_query_at: '2026-10-22T13:13:30Z' }) };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/credentials?')) return response({ items: [], next_cursor: '' });
+      if (url.endsWith(`/agents/${agentID}`)) return response(live, 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [live], next_cursor: '' });
+    }));
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const panel = await screen.findByRole('region', { name: 'Agent runtime' });
+    expect(panel).toHaveTextContent('2026-10-22 13:13:30Z');
+    expect(panel).not.toHaveTextContent('No datasources are assigned to this agent.');
+    expect(panel).not.toHaveTextContent('Collection explanation');
   });
 
   it('shows connection, collection, capability, revision and query signals without merging them', async () => {
@@ -386,7 +495,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/credentials/rotate'), expect.anything());
-    await user.type(within(screen.getByRole('dialog', { name: 'Rotate credential' })).getByLabelText('Current password'), 'correct horse');
+
     await user.click(within(screen.getByRole('dialog', { name: 'Rotate credential' })).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     await waitFor(() => expect(deferredRefresh).toHaveLength(2));
@@ -396,19 +505,19 @@ describe('agent administration screen', () => {
     const [url, request] = fetcher.mock.calls.find(([, init]) => init?.method === 'POST')!;
     expect(String(url)).toBe(`/api/v1/agents/${agentID}/credentials/rotate`);
     expect(request?.headers).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': '1a86bd22-c858-47c2-90d3-5d508ed1461d' });
-    expect(JSON.parse(String(request?.body))).toEqual({ current_password: 'correct horse' });
+    expect(JSON.parse(String(request?.body))).toEqual({ lifetime_seconds: 7776000, overlap_seconds: 600 });
     expect(screen.getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('replacement-secret');
     await act(async () => { deferredRefresh.splice(0).forEach(({ url, resolve }) => resolve(url.includes('/credentials?') ? response({ items: [credential()], next_cursor: '' }) : response(agent(), 200, { ETag: `"agent:${agentID}:3"` }))); await new Promise((resolve) => setTimeout(resolve, 0)); });
     await user.click(within(screen.getByRole('dialog', { name: 'Agent token' })).getByRole('button', { name: 'Close token' }));
     expect(screen.queryByText('replacement-secret')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
     const rotateDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(rotateDialog).getByLabelText('Overlap (seconds)'), '0');
-    await user.type(within(rotateDialog).getByLabelText('Current password'), 'fresh password');
+    await user.selectOptions(within(rotateDialog).getByLabelText('Keep the previous credential valid for'), '0');
+
     await user.click(within(rotateDialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
     const retryRequest = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')[1]?.[1];
-    expect(JSON.parse(String(retryRequest?.body))).toEqual({ current_password: 'fresh password', overlap_seconds: 0 });
+    expect(JSON.parse(String(retryRequest?.body))).toEqual({ lifetime_seconds: 7776000, overlap_seconds: 0 });
     expect(retryRequest?.headers).toMatchObject({ 'Idempotency-Key': '2a86bd22-c858-47c2-90d3-5d508ed1461d' });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/one-time token is no longer available/i));
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
@@ -435,7 +544,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     const tokenDialog = await screen.findByRole('dialog', { name: 'Agent token' });
     expect(await screen.findByRole('alert')).toHaveTextContent(/showing stale results/i);
@@ -465,7 +574,7 @@ describe('agent administration screen', () => {
     fireEvent.submit(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Revoke credential' }).closest('form')!);
     expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
     await user.click(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('checkbox', { name: /understand/i }));
-    await user.type(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByLabelText('Current password'), 'correct horse');
+
     await user.click(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Revoke credential' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}/credentials/${credentialID}/revoke`, expect.objectContaining({ method: 'POST' })));
   });
@@ -488,7 +597,7 @@ describe('agent administration screen', () => {
     expect(screen.getByRole('dialog', { name: 'Disable agent' })).toHaveTextContent(agentID);
     expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/disable'), expect.anything());
     await user.click(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByRole('checkbox', { name: /understand/i }));
-    await user.type(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByLabelText('Current password'), 'correct horse');
+
     await user.click(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByRole('button', { name: 'Disable agent' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}/disable`, expect.objectContaining({ method: 'POST' })));
     await waitFor(() => expect(screen.getByText('Disabled')).toBeVisible());
@@ -534,7 +643,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     fireEvent.submit(within(dialog).getByRole('button', { name: 'Rotate credential' }).closest('form')!);
@@ -564,7 +673,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
     const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'current proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(resolveRotation).toBeTypeOf('function'));
     await act(async () => { history.pushState({}, '', `/?agent=${agentID}&credentials_cursor=page-two`); dispatchEvent(new PopStateEvent('popstate')); });
@@ -595,7 +704,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -657,14 +766,16 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const rotateDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(rotateDialog).getByLabelText('Lifetime (seconds)'), '12345');
-    await user.type(within(rotateDialog).getByLabelText('Overlap (seconds)'), '17');
-    await user.type(within(rotateDialog).getByLabelText('Current password'), 'first proof');
+    await user.selectOptions(within(rotateDialog).getByLabelText('New credential expires after'), 'custom');
+    await user.type(within(rotateDialog).getByLabelText('Custom amount'), '12345');
+    await user.selectOptions(within(rotateDialog).getByLabelText('Keep the previous credential valid for'), 'custom');
+    await user.type(within(rotateDialog).getAllByLabelText('Custom amount')[1], '17');
+
     await user.click(within(rotateDialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: /Retry rotate credential/i }));
     const rejectedRetryDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(rejectedRetryDialog).getByLabelText('Current password'), 'retry proof');
+
     await user.click(within(rejectedRetryDialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('heading', { name: 'Unable to check your session' })).toBeVisible();
     expect(await screen.findByText(/original target, command key and resource version remain available/i)).toBeVisible();
@@ -676,12 +787,12 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await user.click(await screen.findByRole('button', { name: /Retry rotate credential/i }));
     const retryDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    expect(within(retryDialog).getByText('12345', { selector: 'dd' })).toBeVisible();
-    expect(within(retryDialog).getByText('17', { selector: 'dd' })).toBeVisible();
-    expect(within(retryDialog).queryByLabelText('Lifetime (seconds)')).not.toBeInTheDocument();
-    expect(within(retryDialog).queryByLabelText('Overlap (seconds)')).not.toBeInTheDocument();
+    expect(within(retryDialog).getByText('12345 seconds', { selector: 'dd' })).toBeVisible();
+    expect(within(retryDialog).getByText('17 seconds', { selector: 'dd' })).toBeVisible();
+    expect(within(retryDialog).queryByLabelText('New credential expires after')).not.toBeInTheDocument();
+    expect(within(retryDialog).queryByLabelText('Keep the previous credential valid for')).not.toBeInTheDocument();
     expect(within(retryDialog).getByText(/keeps the original target, resource version, and rotation options/i)).toBeVisible();
-    await user.type(within(retryDialog).getByLabelText('Current password'), 'fresh proof');
+
     await user.click(within(retryDialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(3));
     const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
@@ -691,9 +802,9 @@ describe('agent administration screen', () => {
     expect(firstHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"` });
     expect(secondHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
     expect(thirdHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
-    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ current_password: 'first proof', lifetime_seconds: 12345, overlap_seconds: 17 });
-    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ current_password: 'retry proof', lifetime_seconds: 12345, overlap_seconds: 17 });
-    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ current_password: 'fresh proof', lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ lifetime_seconds: 12345, overlap_seconds: 17 });
     expect(await screen.findByRole('status')).toHaveTextContent(/one-time token is no longer available/i);
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
   });
@@ -723,13 +834,13 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'Revoke credential' }));
     const revokeDialog = screen.getByRole('dialog', { name: 'Revoke credential' });
     await user.click(within(revokeDialog).getByRole('checkbox', { name: /understand/i }));
-    await user.type(within(revokeDialog).getByLabelText('Current password'), 'first proof');
+
     await user.click(within(revokeDialog).getByRole('button', { name: 'Revoke credential' }));
     expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: /Retry revoke credential/i }));
     const retryDialog = screen.getByRole('dialog', { name: 'Revoke credential' });
     await user.click(within(retryDialog).getByRole('checkbox', { name: /understand/i }));
-    await user.type(within(retryDialog).getByLabelText('Current password'), 'retry proof');
+
     await user.click(within(retryDialog).getByRole('button', { name: 'Revoke credential' }));
     await waitFor(() => expect(screen.getAllByRole('alert').some((alert) => /protected agent records were cleared/i.test(alert.textContent ?? ''))).toBe(true));
     expect(screen.queryByRole('heading', { name: 'Agent details' })).not.toBeInTheDocument();
@@ -762,11 +873,11 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await user.click(await screen.findByRole('button', { name: /Retry rotate credential/i }));
     dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'retry proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('heading', { name: 'Credential action needs reconciliation' })).toBeVisible();
     expect(screen.queryByRole('button', { name: /Retry rotate credential/i })).not.toBeInTheDocument();
@@ -777,7 +888,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Abandon command' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'new command proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(3));
     const newRequest = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')[2];
@@ -807,7 +918,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'old proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(auth.context).toHaveBeenCalledTimes(2));
     await user.click(await screen.findByRole('button', { name: 'Abandon command' }));
@@ -816,7 +927,7 @@ describe('agent administration screen', () => {
     await waitFor(() => expect(rotate).toBeEnabled());
     await user.click(rotate);
     dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'new proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     expect(screen.queryByText(/current password was rejected/i)).not.toBeInTheDocument();
@@ -847,13 +958,13 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByText(/session proof was stale/i)).toBeVisible();
     expect(screen.queryByText(/password proof failed/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Retry rotate credential/i }));
     dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'fresh proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
     const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
@@ -882,7 +993,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'Revoke credential' }));
     let dialog = screen.getByRole('dialog', { name: 'Revoke credential' });
     await user.click(within(dialog).getByRole('checkbox', { name: /understand/i }));
-    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Revoke credential' }));
     expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
     detailVersion = 4;
@@ -892,7 +1003,7 @@ describe('agent administration screen', () => {
     dialog = screen.getByRole('dialog', { name: 'Revoke credential' });
     expect(dialog).toHaveTextContent(credentialID);
     await user.click(within(dialog).getByRole('checkbox', { name: /understand/i }));
-    await user.type(within(dialog).getByLabelText('Current password'), 'fresh proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Revoke credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
     const requests = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
@@ -900,7 +1011,7 @@ describe('agent administration screen', () => {
     const secondHeaders = requests[1]?.[1]?.headers as Record<string, string>;
     expect(String(requests[1]?.[0])).toBe(`/api/v1/agents/${agentID}/credentials/${credentialID}/revoke`);
     expect(secondHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
-    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ current_password: 'fresh proof' });
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ });
   });
 
   it('enforces Retry-After in the submit handler as well as the disabled button', async () => {
@@ -923,11 +1034,11 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/wait 1 seconds/i);
     dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'fresh proof');
+
     const submit = within(dialog).getByRole('button', { name: 'Rotate credential' });
     expect(submit).toBeDisabled();
     fireEvent.submit(submit.closest('form')!);
@@ -952,7 +1063,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
     let dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.type(within(dialog).getByLabelText('Current password'), 'first proof');
+
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/wait 30 seconds/i);
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
@@ -1010,14 +1121,14 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-east');
     await user.type(screen.getByLabelText('Display name'), 'East collector');
-    await user.type(screen.getByLabelText('Lifetime (seconds)'), '0');
+    await user.selectOptions(screen.getByLabelText('New credential expires after'), '2592000');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     expect(location.search).toContain('agents_cursor=page-two');
     expect(screen.getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('one-time-secret');
     const request = fetcher.mock.calls.find(([, init]) => init?.method === 'POST');
     expect(request?.[1]?.headers).toMatchObject({ 'Idempotency-Key': expect.any(String), 'X-CSRF-Token': 'csrf-admin' });
-    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector', lifetime_seconds: 0 });
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector', lifetime_seconds: 2592000 });
     expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
     expect(writeText).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Copy token' }));
@@ -1082,7 +1193,7 @@ describe('agent administration screen', () => {
     const firstKey = new Headers(posts[0]?.[1]?.headers).get('Idempotency-Key');
     const retryKey = new Headers(posts[1]?.[1]?.headers).get('Idempotency-Key');
     expect(firstKey).toBeTruthy(); expect(retryKey).toBe(firstKey);
-    expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector' });
+    expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({ name: 'new-east', display_name: 'East collector', lifetime_seconds: 7776000 });
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
     expect(location.search).toContain(`agent=${agentID}`);
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
@@ -1112,7 +1223,7 @@ describe('agent administration screen', () => {
     expect(posts).toHaveLength(2);
     const keys = posts.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
     expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]);
-    expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({ name: 'lost-agent', display_name: 'Lost agent' });
+    expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({ name: 'lost-agent', display_name: 'Lost agent', lifetime_seconds: 7776000 });
   });
 
   it('rechecks session after a 401 without treating the proof failure itself as logout', async () => {

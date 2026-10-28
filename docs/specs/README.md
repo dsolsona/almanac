@@ -49,3 +49,4 @@ feature; mark irrelevant sections as such with a brief reason.
 | [SPEC-0015](0015-datasource-providers.md) | Datasource providers | accepted | not started |
 | [SPEC-0016](0016-maintenance-exclusions.md) | Maintenance exclusions | accepted | not started |
 | [SPEC-0017](0017-slo-timeline-annotations.md) | SLO timeline annotations | accepted | not started |
+| [SPEC-0018](0018-agent-management-usability.md) | Usable agent startup and management | accepted | not started |

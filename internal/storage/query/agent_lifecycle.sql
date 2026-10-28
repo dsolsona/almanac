@@ -1,6 +1,6 @@
 -- name: LockLifecycleAgent :one
-SELECT id, name, display_name, enabled, version, created_at, updated_at
-FROM public.almanac_agents WHERE id = sqlc.arg(agent_id) FOR UPDATE;
+SELECT id, name, display_name, enabled, version, created_at, updated_at, deleted_at
+FROM public.almanac_agents WHERE id = sqlc.arg(agent_id) AND deleted_at IS NULL FOR UPDATE;
 
 -- name: LockLifecycleCredential :one
 SELECT id, agent_id, issued_at, expires_at, revoked_at, retire_at
@@ -42,13 +42,13 @@ RETURNING id, agent_id, issued_at, expires_at, revoked_at, retire_at;
 UPDATE public.almanac_agents SET enabled = sqlc.arg(enabled), version = version + 1,
        updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(agent_id) AND version < 9223372036854775807
-RETURNING id, name, display_name, enabled, version, created_at, updated_at;
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at;
 
 -- name: DisableAgent :one
 UPDATE public.almanac_agents SET enabled = false, version = version + 1,
        updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(agent_id) AND version < 9223372036854775807
-RETURNING id, name, display_name, enabled, version, created_at, updated_at;
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at;
 
 -- name: InsertLifecycleAudit :exec
 INSERT INTO public.almanac_audit_events(actor, subject_id, action, outcome, occurred_at, request_id)
@@ -68,3 +68,13 @@ FROM changed;
 INSERT INTO public.almanac_management_receipts(actor_id, operation, idempotency_key, digest, result, created_at, expires_at)
 VALUES (sqlc.arg(actor_id), sqlc.arg(operation), sqlc.arg(idempotency_key), sqlc.arg(digest),
         sqlc.arg(result), sqlc.arg(created_at), sqlc.arg(expires_at));
+
+-- name: AgentHasDatasourceDependencies :one
+SELECT EXISTS (SELECT 1 FROM public.almanac_datasources WHERE agent_id = sqlc.arg(agent_id))
+    OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = sqlc.arg(agent_id) OR target_agent_id = sqlc.arg(agent_id));
+
+-- name: ArchiveAgent :one
+UPDATE public.almanac_agents SET enabled = false, deleted_at = sqlc.arg(updated_at),
+    updated_at = sqlc.arg(updated_at), version = version + 1
+WHERE id = sqlc.arg(agent_id) AND deleted_at IS NULL AND version < 9223372036854775807
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at;

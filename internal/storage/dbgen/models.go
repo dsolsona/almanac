@@ -16,6 +16,7 @@ type AlmanacAgent struct {
 	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type AlmanacAgentConfiguration struct {
@@ -47,6 +48,11 @@ type AlmanacAgentExecutionGrant struct {
 	RenewalSequence       int64              `json:"renewal_sequence"`
 	RequestNonce          []byte             `json:"request_nonce"`
 	RetainUntil           pgtype.Timestamptz `json:"retain_until"`
+}
+
+type AlmanacAgentHandoffConfiguration struct {
+	AgentID  pgtype.UUID `json:"agent_id"`
+	Revision int64       `json:"revision"`
 }
 
 type AlmanacAgentIncompatibleAttempt struct {
@@ -117,6 +123,22 @@ type AlmanacDatasource struct {
 	AgentID                pgtype.UUID        `json:"agent_id"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacDatasourceReassignment struct {
+	DatasourceID        pgtype.UUID        `json:"datasource_id"`
+	SourceAgentID       pgtype.UUID        `json:"source_agent_id"`
+	TargetAgentID       pgtype.UUID        `json:"target_agent_id"`
+	RequestedAt         pgtype.Timestamptz `json:"requested_at"`
+	AuthorityExpiresAt  pgtype.Timestamptz `json:"authority_expires_at"`
+	RemovalRevision     int64              `json:"removal_revision"`
+	SourceConfigVersion int64              `json:"source_config_version"`
+	UsesV2Removal       bool               `json:"uses_v2_removal"`
+	DrainedAt           pgtype.Timestamptz `json:"drained_at"`
+	RetryAt             pgtype.Timestamptz `json:"retry_at"`
+	State               string             `json:"state"`
+	ActorID             pgtype.UUID        `json:"actor_id"`
+	RequestID           string             `json:"request_id"`
 }
 
 type AlmanacDiagnostic struct {
@@ -283,6 +305,15 @@ type AlmanacSliObservationValue struct {
 	MeasurementRevision int64              `json:"measurement_revision"`
 	GoodCount           pgtype.Numeric     `json:"good_count"`
 	TotalCount          pgtype.Numeric     `json:"total_count"`
+}
+
+type AlmanacSliOwnershipEpoch struct {
+	SliID                 pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision   int64              `json:"measurement_revision"`
+	AgentID               pgtype.UUID        `json:"agent_id"`
+	StartsAt              pgtype.Timestamptz `json:"starts_at"`
+	EndsAt                pgtype.Timestamptz `json:"ends_at"`
+	ConfigurationRevision int64              `json:"configuration_revision"`
 }
 
 type AlmanacUser struct {

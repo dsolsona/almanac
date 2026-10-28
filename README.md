@@ -52,8 +52,25 @@ Named volumes belong to the `almanac-local` Compose project; the test database a
 design catalogue are separate. This is a local development stack, not production
 deployment or restore qualification.
 
-The current app supports initial administrator onboarding, sign-in and sign-out.
-SLI collection, SLO dashboards and alerting are still under development.
+The current app supports administrator onboarding, agent and datasource management,
+and agent-collected event-count SLIs. SLO dashboards and alerting remain under development.
+
+### Start a local agent
+
+After `make run`, register an agent in Almanac and copy its one-time credential.
+In a separate terminal run `make agent` and paste the credential at the private
+prompt. The command stays attached; press Ctrl-C to stop that agent. Check the
+agent's status in the UI to confirm it connected. A previous ownership lease may
+need to expire before a restarted agent can connect.
+
+For noninteractive use, set `AGENT_TOKEN_FILE` to an owner-only regular file
+owned by your user, for example `AGENT_TOKEN_FILE=/path/to/token make agent`.
+Keep the file private. The launcher copies the credential into private temporary
+storage and leaves the supplied file untouched. Run it as a non-root user.
+The launcher uses the Compose project selected by
+`COMPOSE_PROJECT_NAME`, as `make run` does. It starts a separate agent using the
+running app's image and public certificate, without restarting the app. It does
+not register an agent or change application data.
 
 ### Local data sources
 
@@ -72,7 +89,7 @@ are not production deployment examples.
 VictoriaMetrics exposes the Prometheus-compatible query API. VictoriaTraces exposes
 an experimental Tempo-compatible API using **TraceQL**, including metrics queries;
 its trace explorer is at `http://localhost:19428/select/vmui`. Availability of these
-containers does not yet provide an Almanac agent or a native trace provider.
+containers does not yet provide a native trace provider.
 
 After developer tooling setup, `make verify VERIFY_MODE=providers` starts an isolated
 provider project, inserts synthetic metrics and spans, checks exact query results
@@ -178,15 +195,15 @@ Backend settings have matching snake_case JSON fields, `ALMANAC_` environment
 variables and flags; precedence is flags, environment, then file. Proxy CIDRs are a
 JSON array or a comma-separated environment/flag value. See the
 [runtime task](docs/tasks/F1-T14.md) for the configuration mapping and current bounds.
-This increment provides the authentication API, browser onboarding and noninteractive
-setup. Agent registration and credential administration are available in the
-browser. A separate `almanac-agent` executable connects and applies the current
-empty configuration; datasource queries and metric ingestion follow separately.
+The authentication API supports browser onboarding and noninteractive setup.
+Agent registration, credential administration, datasource management and SLI
+collection are available in the browser. The separate `almanac-agent` executable
+applies versioned configuration, queries assigned datasources and submits observations.
 
 The first browser sign-in uses the deployment-provided initial password and opens
-restricted setup. Enter that current password and a different permanent password;
-successful setup opens the signed-in identity screen. Reloading during setup asks
-for the current password again. If a login or password-change response is lost,
+restricted setup. Enter a different permanent password; successful setup opens the
+Agents page. The current session authorizes this change. If a login or
+password-change response is lost,
 the page checks session state and keeps the unknown outcome visible. It never
 automatically resubmits the action. The new password may already be active, so use
 a deliberate sign-in when prompted.
@@ -251,21 +268,32 @@ Agent management CLI operations follow this shared profile boundary.
 Agent administration uses the same HTTPS management API and requires an
 unrestricted administrator session in the selected profile. Reads request one
 bounded page; provide the returned cursor explicitly to continue. Registration
-uses that current session without asking for the password again. Credential
-rotation, revocation and disable require the administrator's current password
-in a protected file. Mutations use an explicit idempotency key; versioned
+and credential rotation, revocation, disable and deletion use the current session
+without asking for the password again. An assigned agent cannot be deleted; the
+UI lists its linked datasources and directs you to update their assignments first.
+Register and start the replacement agent, then edit each datasource's assigned
+agent. For datasources with SLIs, the page shows the pending move until the previous
+agent has stopped its work or its recorded authority expires. Existing observations
+remain available. You can refresh the status or cancel a pending move; save other
+datasource changes separately. Older v1 agents require waiting for authority expiry.
+If the replacement is unavailable, restore it or cancel the move. Both agents remain
+protected from deletion while the move is pending. Once no datasources use the old
+agent, deleting it revokes all its credentials and preserves its history.
+
+Mutations use an explicit idempotency key; versioned
 operations also require the exact current ETag:
 
 ```sh
 bin/almanac agents list --profile-file=/home/operator/.almanac/profile.json --output=json
 bin/almanac agents get --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
 bin/almanac agents credentials list --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
+bin/almanac agents datasources --profile-file=/home/operator/.almanac/profile.json --agent-id=AGENT_UUID --output=json
 bin/almanac agents create --profile-file=/home/operator/.almanac/profile.json --name=collector-east --display-name='East collector' \
   --idempotency-key=registration-2026-10-27 \
   --token-file=/home/operator/.almanac/collector-east.token --output=json
 ```
 
-Credential rotation, revocation and disable also require `--confirm` and an
+Credential rotation, revocation, disable and deletion also require `--confirm` and an
 exact `--if-match` value returned by `agents get`. Creation and rotation require
 exactly one explicit token destination: a new protected `--token-file` or the
 deliberate `--show-token` option. A fresh token is emitted once; replay returns
@@ -307,10 +335,10 @@ bin/almanac-agent run --backend-url=https://almanac.example.com \
   --ca-file=/run/certs/almanac-private-ca.pem
 ```
 
-This increment applies versioned configuration and reports connection and heartbeat
-state through `agents get`. Its configuration has no datasource assignments, so it
-does not execute queries or report collection success. Empty configuration grants
-no query authority. A rejected configuration reports its bounded failure code and
+The agent applies versioned datasource and SLI configuration and reports connection
+and heartbeat state through `agents get`. Assign a datasource and create an SLI to
+start collection; an empty configuration grants no query authority. A rejected
+configuration reports its bounded failure code and
 revision in agent status while leaving the last successfully applied revision intact.
 
 An authenticated agent that offers only unsupported protocol versions is reported

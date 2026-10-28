@@ -124,3 +124,11 @@ Direct-producer ingestion remains a later F2 increment.
 
 [F2-T23](F2-T23.md) addresses first-use SLI setup, workspace loading presentation,
 agent record alignment, credential history and plain-language password guidance.
+
+[F2-T24](F2-T24.md) delivers session-authorized agent management and guarded archival under [SPEC-0018](../specs/0018-agent-management-usability.md).
+
+[F2-T25](F2-T25.md) provides the explicit credential-driven local agent launcher.
+
+[F2-T26](F2-T26.md) provides readable credential controls and dependency-aware agent deletion.
+
+[F2-T27](F2-T27.md) implements safe normal reassignment of active datasources under SPEC-0009 and SPEC-0018.

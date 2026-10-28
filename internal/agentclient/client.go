@@ -141,6 +141,62 @@ func (c *Client) Credentials(ctx context.Context, id api.AgentId, limit int, cur
 	}
 	return json.Marshal(page)
 }
+func (c *Client) Dependencies(ctx context.Context, id api.AgentId, limit int, cursor string) ([]byte, error) {
+	if !uuid.MatchString(uuidText(id)) || !validPageOptions(limit, cursor) {
+		return nil, invalidRequest()
+	}
+	params := &api.GetAgentDatasourcesParams{Limit: &limit}
+	if cursor != "" {
+		params.Cursor = &cursor
+	}
+	r, err := c.ops.GetAgentDatasources(ctx, id, params, c.editor)
+	if err != nil {
+		return nil, network(ctx, false)
+	}
+	b, err := read(r)
+	if err != nil {
+		return nil, network(ctx, false)
+	}
+	if r.StatusCode != 200 {
+		return nil, problem(r, b)
+	}
+	var page api.AgentDatasourcePage
+	if json.Unmarshal(b, &page) != nil || !hasFields(b, "items", "next_cursor") || !strings.HasPrefix(strings.TrimSpace(string(rawField(b, "items"))), "[") || !rawString(rawField(b, "next_cursor")) || len(page.Items) > 200 || !validCursor(page.NextCursor) {
+		return nil, protocol(false)
+	}
+	for _, item := range page.Items {
+		if !uuid.MatchString(uuidText(item.Id)) || item.Name == "" || item.DisplayName == "" {
+			return nil, protocol(false)
+		}
+	}
+	return json.Marshal(page)
+}
+
+func (c *Client) Delete(ctx context.Context, id api.AgentId, etag, key string) ([]byte, error) {
+	if !uuid.MatchString(uuidText(id)) || !validKey(key) || !validETag(etag, uuidText(id)) {
+		return nil, invalidRequest()
+	}
+	if ctx.Err() != nil {
+		return nil, network(ctx, false)
+	}
+	r, err := c.ops.DeleteAgent(ctx, id, &api.DeleteAgentParams{IfMatch: etag, IdempotencyKey: key}, api.AgentLifecycleRequest{}, c.editorWith(key, etag))
+	if err != nil {
+		return nil, network(ctx, true)
+	}
+	b, err := read(r)
+	if err != nil {
+		return nil, bodyReadFailure(ctx, true)
+	}
+	if r.StatusCode != 200 {
+		return nil, mutationProblem(ctx, r, b)
+	}
+	var v api.LifecycleResult
+	if json.Unmarshal(b, &v) != nil || !validLifecycleRaw(b, v) || uuidText(v.Agent.Id) != uuidText(id) || v.Credential != nil || !jsonNullField(b, "credential") || v.Agent.Enabled || !v.Changed || !decimal(v.RevokedCredentialCount, false) {
+		return nil, ambiguousMutationResponse(ctx)
+	}
+	return json.Marshal(v)
+}
+
 func (c *Client) Create(ctx context.Context, body api.CreateAgentRequest, key string) ([]byte, string, bool, error) {
 	if !validKey(key) {
 		return nil, "", false, invalidRequest()
@@ -175,7 +231,7 @@ func (c *Client) Rotate(ctx context.Context, id api.AgentId, body api.RotateAgen
 	}
 	return validateIssuance(ctx, r, b, uuidText(id), true)
 }
-func (c *Client) Revoke(ctx context.Context, id, credential api.AgentId, body api.PasswordProofRequest, etag, key string) ([]byte, error) {
+func (c *Client) Revoke(ctx context.Context, id, credential api.AgentId, body api.AgentLifecycleRequest, etag, key string) ([]byte, error) {
 	if !uuid.MatchString(uuidText(id)) || !uuid.MatchString(uuidText(credential)) || !validKey(key) || !validETag(etag, uuidText(id)) {
 		return nil, invalidRequest()
 	}
@@ -199,7 +255,7 @@ func (c *Client) Revoke(ctx context.Context, id, credential api.AgentId, body ap
 	}
 	return json.Marshal(v)
 }
-func (c *Client) Disable(ctx context.Context, id api.AgentId, body api.PasswordProofRequest, etag, key string) ([]byte, error) {
+func (c *Client) Disable(ctx context.Context, id api.AgentId, body api.AgentLifecycleRequest, etag, key string) ([]byte, error) {
 	if !uuid.MatchString(uuidText(id)) || !validKey(key) || !validETag(etag, uuidText(id)) {
 		return nil, invalidRequest()
 	}
@@ -407,12 +463,16 @@ func decodeProblem(r *http.Response, b []byte) (*Failure, bool) {
 		f.Code = code
 		f.Message = "agent request timed out"
 	case 409:
-		if code != "conflict" {
+		if code != "conflict" && code != "agent_in_use" {
 			return f, false
 		}
 		f.Kind = setupclient.KindConflict
 		f.Code = code
-		f.Message = "agent state changed; refresh it before trying again"
+		if code == "agent_in_use" {
+			f.Message = "agent has assigned datasources; list dependencies and reassign them before deletion"
+		} else {
+			f.Message = "agent state changed; refresh it before trying again"
+		}
 	case 413:
 		if code != "request_too_large" {
 			return f, false

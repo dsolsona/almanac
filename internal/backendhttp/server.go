@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json/v2"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"path"
@@ -39,6 +40,11 @@ type Server struct {
 	connectionsMu  sync.Mutex
 	newConnections map[net.Conn]struct{}
 	shuttingDown   bool
+	workerContext  context.Context
+	workerCancel   context.CancelFunc
+	workerDone     chan struct{}
+	workerMu       sync.Mutex
+	workerStopped  bool
 }
 
 func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
@@ -79,7 +85,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 			return nil, errors.New("backendhttp: source-secret keyset is unavailable")
 		}
 	}
-	s := &Server{databaseURL: databaseURL, agentSessions: agentSessions, sourceSecrets: sourceSecrets, newConnections: make(map[net.Conn]struct{})}
+	s := &Server{databaseURL: databaseURL, agentSessions: agentSessions, sourceSecrets: sourceSecrets, newConnections: make(map[net.Conn]struct{}), workerContext: ctx}
 	options := authhttp.Options{PublicOrigin: cfg.PublicOrigin, TrustedProxyCIDRs: cfg.TrustedProxyCIDRs, Now: time.Now, Preflight: s.authenticationPreflight}
 	auth, err := authhttp.New(service, options)
 	if err != nil {
@@ -152,10 +158,63 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 
 func (s *Server) SetProvisioned(value bool) { s.ready.Store(value) }
 func (s *Server) Serve(listener net.Listener) error {
+	s.startReassignmentWorker()
+	defer s.stopReassignmentWorker(context.Background())
 	if s.http.TLSConfig != nil {
 		listener = tls.NewListener(listener, s.http.TLSConfig)
 	}
 	return s.http.Serve(listener)
+}
+
+func (s *Server) startReassignmentWorker() {
+	s.workerMu.Lock()
+	defer s.workerMu.Unlock()
+	if s.workerStopped || s.workerDone != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(s.workerContext)
+	s.workerCancel = cancel
+	s.workerDone = make(chan struct{})
+	go func() {
+		defer close(s.workerDone)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			bounded, stop := context.WithTimeout(ctx, 10*time.Second)
+			notices, err := storage.ReconcileDatasourceReassignments(bounded, s.databaseURL, s.sourceSecrets, time.Now)
+			if err != nil && ctx.Err() == nil {
+				slog.Warn("datasource reassignment reconciliation failed")
+			}
+			for _, notice := range notices {
+				if err := s.agentSessions.NotifyConfigurationChanged(bounded, notice.AgentID, notice.Revision); err != nil && ctx.Err() == nil {
+					slog.Warn("datasource reassignment configuration notification failed")
+				}
+			}
+			stop()
+		}
+	}()
+}
+
+func (s *Server) stopReassignmentWorker(ctx context.Context) error {
+	s.workerMu.Lock()
+	s.workerStopped = true
+	cancel, done := s.workerCancel, s.workerDone
+	s.workerMu.Unlock()
+	if cancel == nil {
+		return nil
+	}
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Server) connectionState(conn net.Conn, state http.ConnState) {
@@ -201,6 +260,9 @@ func (s *Server) closeNewConnections() {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.closeNewConnections()
+	if err := s.stopReassignmentWorker(ctx); err != nil {
+		return err
+	}
 	if err := s.agentSessions.Drain(ctx); err != nil {
 		_ = s.agentSessions.Close()
 		return err
@@ -210,6 +272,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) Close() error {
 	s.closeNewConnections()
+	_ = s.stopReassignmentWorker(context.Background())
 	_ = s.agentSessions.Close()
 	return s.http.Close()
 }

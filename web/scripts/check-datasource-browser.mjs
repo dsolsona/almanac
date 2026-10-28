@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 
@@ -13,6 +13,8 @@ let latestAPI = { status: null, requestID: 'none', code: 'none' };
 let latestAPIRead = Promise.resolve();
 let latestDiagnostic = { state: 'none', errorCode: 'none', resultClass: 'none' };
 let latestDiagnosticRead = Promise.resolve();
+let activeDiagnosticID = '';
+let cancelResponseState = 'none';
 const safeCodes = new Set([
   'agent_unavailable', 'authentication_unavailable', 'backend_unavailable', 'capability_unavailable',
   'conflict', 'configuration_failed', 'configuration_pending', 'csrf_invalid', 'datasource_unavailable', 'diagnostic_unavailable', 'forbidden',
@@ -64,7 +66,7 @@ stage = 'browser launch';
         const errorCodes = new Set(['authentication', 'authentication_failed', 'deadline', 'diagnostic_failed', 'incomplete',
           'network', 'network_failed', 'query', 'query_failed', 'rate_limited', 'tls', 'tls_failed', 'timeout',
           'unsupported', 'assignment_revoked']);
-        if (!body || body.id !== diagnosticPath[1] || !states.has(body.state)) return;
+        if (!body || body.id !== diagnosticPath[1] || (activeDiagnosticID && body.id !== activeDiagnosticID) || !states.has(body.state)) return;
         latestDiagnostic = {
           state: body.state,
           errorCode: errorCodes.has(body.error_code) ? body.error_code : 'none',
@@ -372,20 +374,32 @@ stage = 'browser launch';
 
   stage = 'running real preview cancellation';
   await page.getByLabel('PromQL query', { exact: true }).fill('block_until_cancel');
+  stage = 'cancel preview submission';
   const slowPreviewPromise = page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname === `/api/v1/datasources/${bearerID}/query-previews`);
   await page.getByRole('button', { name: 'Run preview', exact: true }).click();
   const slowPreview = await slowPreviewPromise;
   assert.equal(slowPreview.status(), 202);
   const slowReceipt = await slowPreview.json();
+  activeDiagnosticID = slowReceipt.id;
+  latestDiagnostic = { state: 'none', errorCode: 'none', resultClass: 'none' };
+  stage = 'cancel button enabled';
   const cancelButton = page.getByRole('button', { name: 'Cancel diagnostic', exact: true });
   await expect(cancelButton).toBeEnabled();
+  stage = 'cancel provider started';
+  await expect.poll(async () => readFile(join(fixture.artifacts, 'provider-started'), 'utf8').catch(() => ''), { timeout: 5000 }).toBe('started\n');
   const cancelPromise = page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname === `/api/v1/diagnostics/${slowReceipt.id}/cancel`);
+  stage = 'cancel request';
   await cancelButton.click();
   const canceledResponse = await cancelPromise;
+  stage = 'cancel response status';
   assert.equal(canceledResponse.status(), 200);
-  assert.equal((await canceledResponse.json()).state, 'canceled');
+  stage = 'cancel response state';
+  const canceledBody = await canceledResponse.json();
+  if (['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(canceledBody.state)) cancelResponseState = canceledBody.state;
+  assert.equal(canceledBody.state, 'canceled');
+  stage = 'cancel result rendering';
   await waitForDiagnostic('canceled');
 
   stage = 'keyboard skip navigation';
@@ -428,37 +442,25 @@ stage = 'browser launch';
   browser = undefined;
   process.stdout.write('PASS browser-datasources\n');
 } catch (error) {
-  const networkCode = typeof error?.message === 'string' ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] ?? 'none' : 'none';
-  const errorClass = error?.name === 'TimeoutError' ? 'timeout' : 'other';
+  const networkMatch = typeof error?.message === 'string' ? error.message.match(/net::(ERR_[A-Z_]+)/)?.[1] : undefined;
+  const networkCode = networkMatch && networkMatch.length <= 40 ? networkMatch : 'none';
+  const errorClass = error?.name === 'TimeoutError' ? 'timeout' : error?.code === 'ERR_ASSERTION' ? 'assertion'
+    : typeof error?.message === 'string' && /Response\.(?:body|json):/.test(error.message) ? 'body_unavailable'
+    : typeof error?.message === 'string' && /element is not attached|element was detached/i.test(error.message) ? 'element_detached' : 'other';
+  const safeAssertionValue = (value) => ['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(value)
+    ? value : Number.isInteger(value) && value >= 100 && value <= 599 ? String(value) : 'none';
+  const actual = errorClass === 'assertion' ? safeAssertionValue(error.actual) : 'none';
+  const expected = errorClass === 'assertion' ? safeAssertionValue(error.expected) : 'none';
+  const line = typeof error?.stack === 'string' ? error.stack.match(/check-datasource-browser\.mjs:(\d{1,4}):\d+/)?.[1] ?? 'none' : 'none';
   await Promise.race([Promise.all([latestAPIRead.catch(() => {}), latestDiagnosticRead.catch(() => {})]), new Promise((resolve) => setTimeout(resolve, 1000))]);
-  const safeStage = typeof stage === 'string' ? stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 96) : 'fixture input';
+  const safeStage = typeof stage === 'string' ? stage.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 48) : 'fixture input';
   const status = Number.isInteger(latestAPI.status) && latestAPI.status >= 100 && latestAPI.status <= 599 ? latestAPI.status : 'none';
   const requestID = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(latestAPI.requestID) ? latestAPI.requestID : 'none';
   const apiCode = safeCodes.has(latestAPI.code) ? latestAPI.code : 'none';
   const diagnosticState = ['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(latestDiagnostic.state) ? latestDiagnostic.state : 'none';
   const diagnosticErrorCode = ['authentication', 'authentication_failed', 'deadline', 'diagnostic_failed', 'incomplete', 'network', 'network_failed', 'query', 'query_failed', 'rate_limited', 'tls', 'tls_failed', 'timeout', 'unsupported', 'assignment_revoked'].includes(latestDiagnostic.errorCode) ? latestDiagnostic.errorCode : 'none';
   const diagnosticResultClass = ['complete', 'empty', 'incomplete'].includes(latestDiagnostic.resultClass) ? latestDiagnostic.resultClass : 'none';
-  let renderedDiagnosticCode = 'none';
-  let renderedDiagnosticMessage = 'none';
-  if (authenticated && page) {
-    try {
-      const rendered = await page.locator('.diagnostic-result').last().evaluate((element) => ({
-        code: element.querySelector('code')?.textContent?.trim() ?? '',
-        message: [...element.querySelectorAll('p')].map((paragraph) => paragraph.textContent?.trim() ?? '').find((text) => text.length > 0 && !text.startsWith('Deadline ')) ?? '',
-      }));
-      const allowedCodes = ['authentication_failed', 'network_failed', 'tls_failed', 'query_failed', 'request_timeout', 'assignment_revoked', 'rate_limited', 'unsupported', 'diagnostic_failed'];
-      if (allowedCodes.includes(rendered.code)) renderedDiagnosticCode = rendered.code;
-      const messageKinds = new Map([
-        ['The datasource rejected the query.', 'query_rejected'],
-        ['The assigned agent could not reach the datasource.', 'network_failed'],
-        ['The datasource TLS connection could not be verified.', 'tls_failed'],
-        ['The datasource rejected authentication.', 'authentication_failed'],
-        ['The diagnostic failed. Check agent connectivity and datasource settings.', 'generic_failure'],
-      ]);
-      renderedDiagnosticMessage = messageKinds.get(rendered.message) ?? 'other';
-    } catch {}
-  }
-  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\ndiagnostic_state=${diagnosticState}\ndiagnostic_error_code=${diagnosticErrorCode}\ndiagnostic_result_class=${diagnosticResultClass}\nrendered_diagnostic_code=${renderedDiagnosticCode}\nrendered_diagnostic_message=${renderedDiagnosticMessage}\n`;
+  const diagnostic = `stage=${safeStage}\nnetwork=${networkCode}\nclass=${errorClass}\nsource_line=${line}\nassert_actual=${actual}\nassert_expected=${expected}\ncancel_response_state=${cancelResponseState}\napi_status=${status}\nrequest_id=${requestID}\napi_code=${apiCode}\ndiagnostic_state=${diagnosticState}\ndiagnostic_error_code=${diagnosticErrorCode}\ndiagnostic_result_class=${diagnosticResultClass}\n`;
   if (authenticated && page && typeof fixture?.artifacts === 'string') {
     try {
       await page.screenshot({
@@ -473,8 +475,8 @@ stage = 'browser launch';
   if (Buffer.byteLength(diagnostic) <= 512 && typeof fixture?.artifacts === 'string') {
     try { await writeFile(join(fixture.artifacts, 'failure.txt'), diagnostic, { mode: 0o600 }); } catch {}
   }
-  const marker = `FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} api_status=${status} request_id=${requestID} api_code=${apiCode} diagnostic_state=${diagnosticState} diagnostic_error_code=${diagnosticErrorCode} diagnostic_result_class=${diagnosticResultClass} rendered_diagnostic_code=${renderedDiagnosticCode} rendered_diagnostic_message=${renderedDiagnosticMessage}\n`;
-  process.stdout.write(Buffer.byteLength(marker) <= 512 ? marker : 'FAIL browser-datasources stage=none network=none class=other api_status=none request_id=none api_code=none diagnostic_state=none diagnostic_error_code=none diagnostic_result_class=none rendered_diagnostic_code=none rendered_diagnostic_message=none\n');
+  const marker = `FAIL browser-datasources stage=${safeStage.replaceAll(' ', '_')} network=${networkCode} class=${errorClass} source_line=${line} assert_actual=${actual} assert_expected=${expected} cancel_response_state=${cancelResponseState} api_status=${status} request_id=${requestID} api_code=${apiCode} diagnostic_state=${diagnosticState} diagnostic_error_code=${diagnosticErrorCode} diagnostic_result_class=${diagnosticResultClass}\n`;
+  process.stdout.write(Buffer.byteLength(marker) <= 512 ? marker : 'FAIL browser-datasources stage=none network=none class=other source_line=none assert_actual=none assert_expected=none cancel_response_state=none api_status=none request_id=none api_code=none diagnostic_state=none diagnostic_error_code=none diagnostic_result_class=none\n');
   process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => {});

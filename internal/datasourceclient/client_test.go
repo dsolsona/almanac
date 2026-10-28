@@ -38,6 +38,13 @@ func TestDatasourceResponseValidationRejectsSecretValues(t *testing.T) {
 	if !validDatasource(ordinaryName) {
 		t.Fatal("datasource with an ordinary name containing a credential word was rejected")
 	}
+	pending := []byte(strings.TrimSuffix(string(valid), "}") + `,"reassignment":{"source_agent_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","target_agent_id":"9c5b4ef2-75e8-4e76-a4de-baa6a4d77277","requested_at":"2026-10-27T12:00:00Z","authority_expires_at":"2026-10-27T13:00:00Z","state":"waiting_for_previous_agent"}}`)
+	if !validDatasource(pending) {
+		t.Fatal("valid pending reassignment rejected")
+	}
+	if validDatasource([]byte(strings.Replace(string(pending), "waiting_for_previous_agent", "unknown", 1))) {
+		t.Fatal("unknown reassignment state accepted")
+	}
 	unsafe := []byte(strings.Replace(string(valid), `"token_configured":true}`, `"token_configured":true,"token":"private-token"}`, 1))
 	if validDatasource(unsafe) {
 		t.Fatal("datasource containing a plaintext token was accepted")

@@ -40,8 +40,8 @@ func TestManagementInputsExcludeSessionAndPasswordAndMalformedReadsFailAuthentic
 	}
 	inputs := []any{
 		GetInput{SessionSecret: "session-secret", AgentID: "agent"}, ListInput{SessionSecret: "session-secret", Limit: 10}, CredentialsInput{SessionSecret: "session-secret", AgentID: "agent"},
-		RevokeInput{SessionSecret: "session-secret", CurrentPassword: "password", Source: netip.MustParseAddr("192.0.2.1")},
-		DisableInput{SessionSecret: "session-secret", CurrentPassword: "password", Source: netip.MustParseAddr("192.0.2.1")},
+		RevokeInput{SessionSecret: "session-secret", Source: netip.MustParseAddr("192.0.2.1")},
+		DisableInput{SessionSecret: "session-secret", Source: netip.MustParseAddr("192.0.2.1")},
 	}
 	for _, input := range inputs {
 		encoded, err := json.Marshal(input)

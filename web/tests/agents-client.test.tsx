@@ -22,6 +22,22 @@ const issuance = { agent, credential, replayed: false, secret_state: 'issued', t
 afterEach(() => vi.useRealTimers());
 
 describe('browser agent management client', () => {
+  it('sends deletion with concurrency and idempotency headers and distinguishes assigned agents', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ agent: disabledAgent, credential: null, changed: true, revoked_credential_count: '1', replayed: false }));
+    await createAgentClient(fetcher).delete(id, auth, `"agent:${id}:7"`, 'delete-key');
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(`/api/v1/agents/${id}`); expect(init?.method).toBe('DELETE'); expect(init?.body).toBe('{}'); expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json');
+    const headers = new Headers(init?.headers); expect(headers.get('If-Match')).toBe(`"agent:${id}:7"`); expect(headers.get('Idempotency-Key')).toBe('delete-key'); expect(headers.get('X-CSRF-Token')).toBe(auth.csrf_token);
+    const dropped = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('connection lost'));
+    await expect(createAgentClient(dropped).delete(id, auth, `"agent:${id}:7"`, 'delete-key')).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(dropped).toHaveBeenCalledTimes(1);
+    const conflict = vi.fn<typeof fetch>().mockResolvedValue(json({ code: 'agent_in_use', message: 'assigned', request_id: '', field_errors: [] }, 409));
+    await expect(createAgentClient(conflict).delete(id, auth, `"agent:${id}:7"`, 'delete-key')).rejects.toMatchObject({ kind: 'rejected', code: 'agent_in_use' });
+    for (const invalid of [{ agent, credential: null, changed: true }, { agent: disabledAgent, credential: null, changed: false }, { agent: disabledAgent, credential: revokedCredential, changed: true }]) {
+      const malformed = vi.fn<typeof fetch>().mockResolvedValue(json({ ...invalid, revoked_credential_count: '1', replayed: false }));
+      await expect(createAgentClient(malformed).delete(id, auth, `"agent:${id}:7"`, 'delete-key')).rejects.toMatchObject({ kind: 'uncertain' });
+    }
+  });
   it('sends a bounded same-origin list request without CSRF or Origin and preserves decimal versions', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ items: [agent], next_cursor: '' }));
     const result = await createAgentClient(fetcher).list({ limit: 200, cursor: 'opaque.cursor' });
@@ -45,6 +61,9 @@ describe('browser agent management client', () => {
     const withRuntime = { ...agent, runtime };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(withRuntime, 200, { ETag: `"agent:${id}:${agent.version}"` }));
     await expect(createAgentClient(fetcher).get(id)).resolves.toEqual({ agent: withRuntime, etag: `"agent:${id}:${agent.version}"` });
+    const assigned = { ...agent, runtime: { ...runtime, collection_explanation: 'none' } };
+    const assignedFetcher = vi.fn<typeof fetch>().mockResolvedValue(json(assigned, 200, { ETag: `"agent:${id}:${agent.version}"` }));
+    await expect(createAgentClient(assignedFetcher).get(id)).resolves.toMatchObject({ agent: assigned });
 
     for (const neverConnected of [agent, { ...agent, runtime: null }]) {
       const list = vi.fn<typeof fetch>().mockResolvedValue(json({ items: [neverConnected], next_cursor: '' }));
@@ -60,7 +79,7 @@ describe('browser agent management client', () => {
       { ...runtime, configuration_failure_code: 'source_password' },
       { ...runtime, configuration_failure_code: 'apply_failed', configuration_failure_revision: null },
       { ...runtime, configuration_failure_code: null, configuration_failure_revision: '2' },
-      { ...runtime, collection_explanation: 'none' },
+      { ...runtime, collection_explanation: 'unknown' },
       { ...runtime, desired_configuration_revision: 7 },
       { ...runtime, desired_configuration_revision: '0' },
       { ...runtime, applied_configuration_revision: '00' },
@@ -211,11 +230,11 @@ describe('browser agent management client', () => {
       .rejects.toMatchObject({ kind: 'uncertain' });
     const rotationFresh = { ...issuance, credential: { ...credential, id: replacementCredentialId }, previous_credential: credential };
     const rotate = vi.fn<typeof fetch>().mockResolvedValue(json(rotationFresh));
-    await expect(createAgentClient(rotate).rotate(id, { current_password: 'p' }, auth, `"agent:${id}:9"`, 'rotate-key'))
+    await expect(createAgentClient(rotate).rotate(id, { }, auth, `"agent:${id}:9"`, 'rotate-key'))
       .resolves.toMatchObject({ replayed: false, secret_state: 'issued' });
     const replay = { agent, credential, previous_credential: null, replayed: true, secret_state: 'secret_unavailable' };
     const rotateReplay = vi.fn<typeof fetch>().mockResolvedValue(json(replay));
-    const replayResult = await createAgentClient(rotateReplay).rotate(id, { current_password: 'p' }, auth, `"agent:${id}:9"`, 'rotate-key');
+    const replayResult = await createAgentClient(rotateReplay).rotate(id, { }, auth, `"agent:${id}:9"`, 'rotate-key');
     expect(replayResult).toMatchObject({ replayed: true });
     expect(Object.hasOwn(replayResult, 'token')).toBe(false);
     for (const malformed of [
@@ -226,7 +245,7 @@ describe('browser agent management client', () => {
       { ...replay, agent: { ...agent, id: credentialId } },
     ]) {
       const invalid = vi.fn<typeof fetch>().mockResolvedValue(json(malformed));
-      await expect(createAgentClient(invalid).rotate(id, { current_password: 'p' }, auth, `"agent:${id}:9"`, 'same-key'))
+      await expect(createAgentClient(invalid).rotate(id, { }, auth, `"agent:${id}:9"`, 'same-key'))
         .rejects.toMatchObject({ kind: 'uncertain' });
       expect(invalid).toHaveBeenCalledOnce();
     }
@@ -248,56 +267,56 @@ describe('browser agent management client', () => {
     const rotateResult = { ...issuance, previous_credential: null };
     const rotate = vi.fn<typeof fetch>().mockResolvedValue(json(rotateResult, 200));
     const client = createAgentClient(rotate);
-    await client.rotate(id, { current_password: 'proof', lifetime_seconds: 0, overlap_seconds: 0 }, auth, `"agent:${id}:7"`, 'rotate-key');
+    await client.rotate(id, { lifetime_seconds: 0, overlap_seconds: 0 }, auth, `"agent:${id}:7"`, 'rotate-key');
     const [rotateURL, rotateInit] = rotate.mock.calls[0];
     expect(rotateURL).toBe(`/api/v1/agents/${id}/credentials/rotate`);
     expect(new Headers(rotateInit?.headers).get('If-Match')).toBe(`"agent:${id}:7"`);
     expect(new Headers(rotateInit?.headers).get('Idempotency-Key')).toBe('rotate-key');
-    expect(JSON.parse(String(rotateInit?.body))).toEqual({ current_password: 'proof', lifetime_seconds: 0, overlap_seconds: 0 });
+    expect(JSON.parse(String(rotateInit?.body))).toEqual({ lifetime_seconds: 0, overlap_seconds: 0 });
 
     const lifecycle = { agent, credential: revokedCredential, changed: true, revoked_credential_count: '1', replayed: false };
     const revoke = vi.fn<typeof fetch>().mockResolvedValue(json(lifecycle));
-    await createAgentClient(revoke).revoke(id, credentialId, { current_password: 'proof' }, auth, `"agent:${id}:7"`, 'revoke-key');
+    await createAgentClient(revoke).revoke(id, credentialId, { }, auth, `"agent:${id}:7"`, 'revoke-key');
     expect(revoke.mock.calls[0][0]).toBe(`/api/v1/agents/${id}/credentials/${credentialId}/revoke`);
     const disabled = { ...lifecycle, agent: disabledAgent, credential: null, revoked_credential_count: '9223372036854775807' };
     expect((await createAgentClient(vi.fn<typeof fetch>().mockResolvedValue(json(disabled))).disable(
-      id, { current_password: 'proof' }, auth, `"agent:${id}:7"`, 'disable-key',
+      id, { }, auth, `"agent:${id}:7"`, 'disable-key',
     )).revoked_credential_count).toBe('9223372036854775807');
   });
 
   it('requires revoke and disable results to match their endpoint contracts', async () => {
     const base = { agent, credential: revokedCredential, changed: true, revoked_credential_count: '1', replayed: false };
     const valid = vi.fn<typeof fetch>().mockResolvedValue(json(base));
-    await expect(createAgentClient(valid).revoke(id, credentialId, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+    await expect(createAgentClient(valid).revoke(id, credentialId, { }, auth, `"agent:${id}:3"`, 'k'))
       .resolves.toMatchObject({ credential: { id: credentialId, revoked_at: expect.any(String) } });
     for (const result of [
       { ...base, credential: null }, { ...base, credential: { ...revokedCredential, id: replacementCredentialId } },
       { ...base, credential: credential }, { ...base, revoked_credential_count: '0' },
     ]) {
       const invalid = vi.fn<typeof fetch>().mockResolvedValue(json(result));
-      await expect(createAgentClient(invalid).revoke(id, credentialId, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+      await expect(createAgentClient(invalid).revoke(id, credentialId, { }, auth, `"agent:${id}:3"`, 'k'))
         .rejects.toMatchObject({ kind: 'uncertain' });
       expect(invalid).toHaveBeenCalledOnce();
     }
     const noOpRevoke = vi.fn<typeof fetch>().mockResolvedValue(json({ ...base, changed: false, revoked_credential_count: '0' }));
-    await expect(createAgentClient(noOpRevoke).revoke(id, credentialId, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+    await expect(createAgentClient(noOpRevoke).revoke(id, credentialId, { }, auth, `"agent:${id}:3"`, 'k'))
       .resolves.toMatchObject({ changed: false });
     const disabled = { ...base, agent: disabledAgent, credential: null };
     const disableFetcher = vi.fn<typeof fetch>().mockResolvedValue(json(disabled));
-    await expect(createAgentClient(disableFetcher).disable(id, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+    await expect(createAgentClient(disableFetcher).disable(id, { }, auth, `"agent:${id}:3"`, 'k'))
       .resolves.toMatchObject({ agent: { enabled: false }, credential: null });
     const disabledNoOp = { ...disabled, changed: false, revoked_credential_count: '0' };
     const noOpDisable = vi.fn<typeof fetch>().mockResolvedValue(json(disabledNoOp));
-    await expect(createAgentClient(noOpDisable).disable(id, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+    await expect(createAgentClient(noOpDisable).disable(id, { }, auth, `"agent:${id}:3"`, 'k'))
       .resolves.toMatchObject({ changed: false, revoked_credential_count: '0' });
     for (const result of [base, { ...disabled, agent, credential: null }, { ...disabled, changed: false, revoked_credential_count: '1' }]) {
       const invalid = vi.fn<typeof fetch>().mockResolvedValue(json(result));
-      await expect(createAgentClient(invalid).disable(id, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+      await expect(createAgentClient(invalid).disable(id, { }, auth, `"agent:${id}:3"`, 'k'))
         .rejects.toMatchObject({ kind: 'uncertain' });
       expect(invalid).toHaveBeenCalledOnce();
     }
     const overflow = vi.fn<typeof fetch>().mockResolvedValue(json({ ...disabled, revoked_credential_count: '9223372036854775808' }));
-    await expect(createAgentClient(overflow).disable(id, { current_password: 'p' }, auth, `"agent:${id}:3"`, 'k'))
+    await expect(createAgentClient(overflow).disable(id, { }, auth, `"agent:${id}:3"`, 'k'))
       .rejects.toMatchObject({ kind: 'uncertain' });
   });
 
@@ -354,7 +373,7 @@ describe('browser agent management client', () => {
     await expect(createAgentClient(fetcher).credentials(id, { cursor: 'é' })).rejects.toMatchObject({ kind: 'rejected' });
     await expect(createAgentClient(fetcher).create({ name: 'n', display_name: 'd' }, auth, 'bad key'))
       .rejects.toMatchObject({ kind: 'rejected' });
-    await expect(createAgentClient(fetcher).disable(id, { current_password: 'p' }, auth, 'W/"bad"', 'key'))
+    await expect(createAgentClient(fetcher).disable(id, { }, auth, 'W/"bad"', 'key'))
       .rejects.toMatchObject({ kind: 'rejected' });
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -411,14 +430,14 @@ describe('browser agent management client', () => {
   it('keeps mutation aborts uncertain and pre-aborted mutations undispatched', async () => {
     const preAborted = new AbortController(); preAborted.abort();
     const never = vi.fn<typeof fetch>();
-    await expect(createAgentClient(never).disable(id, { current_password: 'p' }, auth, `"agent:${id}:1"`, 'k', { signal: preAborted.signal }))
+    await expect(createAgentClient(never).disable(id, { }, auth, `"agent:${id}:1"`, 'k', { signal: preAborted.signal }))
       .rejects.toMatchObject({ kind: 'unavailable', code: 'cancelled' });
     expect(never).not.toHaveBeenCalled();
 
     let resolveFetch!: (response: Response) => void;
     const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise<Response>((resolve) => { resolveFetch = resolve; }));
     const controller = new AbortController();
-    const pending = createAgentClient(fetcher).disable(id, { current_password: 'p' }, auth, `"agent:${id}:1"`, 'caller-key', { signal: controller.signal });
+    const pending = createAgentClient(fetcher).disable(id, { }, auth, `"agent:${id}:1"`, 'caller-key', { signal: controller.signal });
     await Promise.resolve();
     controller.abort();
     await expect(pending).rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
@@ -432,7 +451,7 @@ describe('browser agent management client', () => {
     let cancelled = false;
     const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise<Response>((resolve) => { resolveFetch = resolve; }));
     const controller = new AbortController();
-    const pending = createAgentClient(fetcher).disable(id, { current_password: 'p' }, auth, `"agent:${id}:1"`, 'key', { signal: controller.signal });
+    const pending = createAgentClient(fetcher).disable(id, { }, auth, `"agent:${id}:1"`, 'key', { signal: controller.signal });
     await Promise.resolve();
     controller.abort();
     await expect(pending).rejects.toMatchObject({ kind: 'uncertain' });
@@ -449,14 +468,14 @@ describe('browser agent management client', () => {
 
   it('trusts only documented conflict responses and validates retry guidance', async () => {
     const conflict = vi.fn<typeof fetch>().mockResolvedValue(json({ code: 'conflict', message: 'secret details', request_id: 'r', field_errors: [] }, 409));
-    await expect(createAgentClient(conflict).disable(id, { current_password: 'secret' }, auth, `"agent:${id}:1"`, 'key'))
+    await expect(createAgentClient(conflict).disable(id, { }, auth, `"agent:${id}:1"`, 'key'))
       .rejects.toMatchObject({ kind: 'rejected', code: 'conflict' });
     const malformed = vi.fn<typeof fetch>().mockResolvedValue(json({ code: 'conflict', message: 'secret details' }, 409));
-    await expect(createAgentClient(malformed).disable(id, { current_password: 'secret' }, auth, `"agent:${id}:1"`, 'key'))
+    await expect(createAgentClient(malformed).disable(id, { }, auth, `"agent:${id}:1"`, 'key'))
       .rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
     const throttled = vi.fn<typeof fetch>().mockResolvedValue(json({ code: 'rate_limited', message: 'secret details', request_id: 'r', field_errors: [] }, 429, { 'Retry-After': '42' }));
     let failure: unknown;
-    try { await createAgentClient(throttled).disable(id, { current_password: 'secret' }, auth, `"agent:${id}:1"`, 'key'); }
+    try { await createAgentClient(throttled).disable(id, { }, auth, `"agent:${id}:1"`, 'key'); }
     catch (error) { failure = error; }
     expect(failure).toMatchObject({ kind: 'rejected', code: 'rate_limited', retryAfterSeconds: 42 });
     expect(String(failure)).not.toContain('secret details');
@@ -468,16 +487,16 @@ describe('browser agent management client', () => {
       json({ code: 'management_unavailable', message: 'private detail' }, 503),
     ]) {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
-      const input = Object.freeze({ current_password: 'input-secret' });
+      const input = Object.freeze({ });
       const promise = createAgentClient(fetcher).disable(id, input, auth, `"agent:${id}:11"`, 'original-key');
       await expect(promise).rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
       expect(fetcher).toHaveBeenCalledOnce();
-      expect(input).toEqual({ current_password: 'input-secret' });
+      expect(input).toEqual({ });
       expect(fetcher.mock.calls[0][1]).toMatchObject({ headers: expect.objectContaining({ 'If-Match': `"agent:${id}:11"`, 'Idempotency-Key': 'original-key' }) });
     }
     const transport = vi.fn<typeof fetch>().mockRejectedValue(new Error('transport input-secret private detail'));
     let failure: unknown;
-    try { await createAgentClient(transport).disable(id, { current_password: 'input-secret' }, auth, `"agent:${id}:11"`, 'original-key'); }
+    try { await createAgentClient(transport).disable(id, { }, auth, `"agent:${id}:11"`, 'original-key'); }
     catch (error) { failure = error; }
     expect(failure).toMatchObject({ kind: 'uncertain' });
     expect(String(failure)).not.toMatch(/input-secret|private detail/);
@@ -486,7 +505,7 @@ describe('browser agent management client', () => {
 
   it('keeps post-dispatch transport failures uncertain without retries', async () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error('token-secret transport detail'));
-    await expect(createAgentClient(fetcher).disable(id, { current_password: 'password-secret' }, auth, `"agent:${id}:1"`, 'key'))
+    await expect(createAgentClient(fetcher).disable(id, { }, auth, `"agent:${id}:1"`, 'key'))
       .rejects.toMatchObject({ kind: 'uncertain', code: 'outcome_unknown' });
     expect(fetcher).toHaveBeenCalledOnce();
   });

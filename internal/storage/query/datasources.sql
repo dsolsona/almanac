@@ -46,7 +46,7 @@ RETURNING *;
 SELECT agent.enabled, runtime.capabilities
 FROM public.almanac_agents AS agent
 LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = agent.id
-WHERE agent.id = sqlc.arg(agent_id);
+WHERE agent.id = sqlc.arg(agent_id) AND agent.deleted_at IS NULL;
 
 -- name: GetLatestAgentConfigurationRevision :one
 SELECT revision FROM public.almanac_agent_configurations

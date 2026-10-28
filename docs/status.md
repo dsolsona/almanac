@@ -2,6 +2,19 @@
 
 ## Current state
 
+[Agent management](plans/0020-agent-management.md) is verified on
+`feat/agent-management`, stacked on `fix/workspace-usability`. The maintainer
+approved credential-driven `make agent`, dependency-guarded deletion, readable
+credential durations and session-authorized management. Tasks F2-T24 through
+F2-T27 cover the implementation and safe active-datasource handoff. The integrated
+Compose journey passed replacement collection, agent deletion, old-token rejection
+and preserved history. The full Linux gate passed 243 web, 345 Go, 337 race,
+161 selected integration and 108 browser checks on source snapshot `bd0bb25b`.
+The coordinator inspected desktop/mobile pages in both themes and accepted this
+candidate. Earlier unexplained browser failures remain recorded in
+[F2-T24](tasks/F2-T24.md); later passes do not establish their causes.
+This increment has not been deployed to the operator application.
+
 [F2-T23](tasks/F2-T23.md) is verified on `fix/workspace-usability`, based on
 the F2-T22 candidate. Product pages no longer show loading indicators; first-use
 SLI setup preserves the datasource return path, agent rows and credential records

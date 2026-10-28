@@ -1,4 +1,4 @@
-.PHONY: setup build verify preview generate bootstrap run start stop logs credentials _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup build verify preview generate bootstrap run start stop logs credentials agent _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -54,6 +54,9 @@ credentials:
 	@echo 'This is the initial password only. It is no longer current after you rotate it during onboarding.' >&2
 	docker compose -f compose.yaml exec -T app sh -c 'cat /run/almanac-secrets/initial-admin-password; printf "\n"'
 
+agent:
+	@sh scripts/local-agent.sh
+
 verify:
 	@if [ "$${VERIFY_MODE:-}" = "linux-sli" ]; then sh scripts/verify-linux.sh sli; \
 	elif [ "$${VERIFY_MODE:-}" = "linux" ]; then sh scripts/verify-linux.sh verify; \
@@ -63,7 +66,7 @@ verify:
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
 	elif [ "$${VERIFY_MODE:-}" = "journey" ]; then $(MAKE) _verify_journey; \
-	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then cd web && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
+	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then python3 scripts/local-agent-tty-test.py && cd web && node scripts/check-local-agent.mjs && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
 	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then $(MAKE) _verify_providers; \
 	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \

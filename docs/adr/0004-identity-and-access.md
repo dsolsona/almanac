@@ -8,7 +8,7 @@
   [SPEC-0002](../specs/0002-agent-behavior.md), and
   [SPEC-0003](../specs/0003-ingestion-and-recovery.md)
 - Supersedes / superseded by: Agent registration authorization is narrowed by
-  [ADR-0019](0019-session-authorized-agent-registration.md); other identity decisions remain in force.
+  [ADR-0019](0019-session-authorized-agent-registration.md); repeat password and recent reauthentication requirements are superseded by [ADR-0020](0020-session-authorized-management.md). Other identity decisions remain in force.
 
 ## Context
 

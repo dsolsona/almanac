@@ -147,6 +147,15 @@ func populateAgentRuntimeStatus(ctx context.Context, queries *dbgen.Queries, rec
 			CollectionExplanation: "no_assignment",
 		}
 	}
+	if record.Runtime != nil {
+		assigned, err := queries.AgentHasAssignedDatasources(ctx, agentID)
+		if err != nil {
+			return AgentRecord{}, operationError(ctx, "storage: agent assignment state read failed", err)
+		}
+		if assigned {
+			record.Runtime.CollectionExplanation = "none"
+		}
+	}
 	return record, nil
 }
 

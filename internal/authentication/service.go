@@ -46,11 +46,11 @@ type LoginInput struct {
 }
 
 type ChangePasswordInput struct {
-	SessionSecret   string `json:"-"`
-	CurrentPassword string `json:"-"`
-	NewPassword     string `json:"-"`
-	Source          netip.Addr
-	RequestID       string
+	SessionSecret string `json:"-"`
+
+	NewPassword string `json:"-"`
+	Source      netip.Addr
+	RequestID   string
 }
 
 type SessionResult struct {
@@ -175,7 +175,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (SessionResult, e
 func (s *Service) ChangePassword(ctx context.Context, input ChangePasswordInput) (SessionResult, error) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	if !validRequestID(input.RequestID) || !validCandidate(input.CurrentPassword) || !validSource(input.Source) {
+	if !validRequestID(input.RequestID) || !validSource(input.Source) {
 		return SessionResult{}, ErrInvalidInput
 	}
 	sessionVerifier, err := identity.SessionSecretVerifier(input.SessionSecret)
@@ -196,6 +196,9 @@ func (s *Service) ChangePassword(ctx context.Context, input ChangePasswordInput)
 	if !snapshot.Found || snapshot.UserID != access.UserID {
 		return SessionResult{}, ErrUnauthenticated
 	}
+	if !validCandidate(input.NewPassword) {
+		return SessionResult{}, identity.ValidateNewPassword(input.NewPassword)
+	}
 	admission, err := storage.BeginLoginAttempt(ctx, s.databaseURL, storage.BeginLoginAttemptInput{Login: access.Login, Source: input.Source.Unmap(), Now: s.currentTime()})
 	if err != nil {
 		return SessionResult{}, err
@@ -203,11 +206,11 @@ func (s *Service) ChangePassword(ctx context.Context, input ChangePasswordInput)
 	if !admission.Allowed {
 		return SessionResult{}, &RateLimitError{RetryAfter: admission.RetryAfter}
 	}
-	valid, eligible, err := s.verify(ctx, input.CurrentPassword, snapshot)
+	valid, eligible, err := s.verify(ctx, input.NewPassword, snapshot)
 	if err != nil {
 		return SessionResult{}, err
 	}
-	proof := valid && eligible
+	proof := eligible
 	finished, err := storage.FinishLoginAttempt(ctx, s.databaseURL, admission.AttemptID, proof, s.currentTime())
 	if err != nil {
 		return SessionResult{}, err
@@ -221,7 +224,7 @@ func (s *Service) ChangePassword(ctx context.Context, input ChangePasswordInput)
 	if !proof {
 		return SessionResult{}, ErrUnauthenticated
 	}
-	if input.CurrentPassword == input.NewPassword {
+	if valid {
 		return SessionResult{}, ErrPasswordUnchanged
 	}
 	if err := identity.ValidateNewPassword(input.NewPassword); err != nil {

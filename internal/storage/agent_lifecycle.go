@@ -107,6 +107,13 @@ func DisableAgent(ctx context.Context, databaseURL string, input DisableAgentInp
 	}
 	return runAgentLifecycle(ctx, databaseURL, input.Proof, agentID, pgtype.UUID{}, "agent.disable", input.ExpectedVersion, input.IdempotencyKey, input.RequestID, input.Now)
 }
+func DeleteAgent(ctx context.Context, databaseURL string, input DisableAgentInput) (AgentLifecycleResult, error) {
+	agentID, _, err := validateLifecycleInput(input.Proof, input.AgentID, input.ExpectedVersion, input.IdempotencyKey, input.RequestID, input.Now)
+	if err != nil {
+		return AgentLifecycleResult{}, err
+	}
+	return runAgentLifecycle(ctx, databaseURL, input.Proof, agentID, pgtype.UUID{}, "agent.delete", input.ExpectedVersion, input.IdempotencyKey, input.RequestID, input.Now)
+}
 func validateLifecycleInput(proof AgentAdminProof, agentID string, version int64, key, requestID string, clock func() time.Time) (pgtype.UUID, pgtype.UUID, error) {
 	a, ok := canonicalUUID(agentID)
 	if !ok || version <= 0 || !validPrintableASCII(key, 1, 128) || !validRequestID(requestID) || clock == nil || proof.CredentialRevision <= 0 || proof.VerifiedAt.IsZero() {
@@ -241,7 +248,7 @@ func runAgentLifecycle(ctx context.Context, databaseURL string, proof AgentAdmin
 	if operation == "agent.credential.revoke" && !credential.RevokedAt.Valid && now.Before(credential.IssuedAt.Time) {
 		return AgentLifecycleResult{}, ErrInvalidAgentInput
 	}
-	if operation == "agent.disable" {
+	if operation == "agent.disable" || operation == "agent.delete" {
 		future, err := queries.HasFutureUnrevokedAgentCredential(ctx, dbgen.HasFutureUnrevokedAgentCredentialParams{AgentID: agentID, Now: timestamp(now)})
 		if err != nil {
 			return AgentLifecycleResult{}, operationError(ctx, "storage: agent credential clock check failed", err)
@@ -252,6 +259,18 @@ func runAgentLifecycle(ctx context.Context, databaseURL string, proof AgentAdmin
 	}
 	if agent.Version != expected {
 		return AgentLifecycleResult{}, ErrAgentConflict
+	}
+	if operation == "agent.delete" {
+		assigned, err := queries.AgentHasDatasourceDependencies(ctx, agentID)
+		if err != nil {
+			return AgentLifecycleResult{}, operationError(ctx, "storage: agent dependency check failed", err)
+		}
+		if !assigned.Valid {
+			return AgentLifecycleResult{}, errors.New("storage: invalid agent dependency state")
+		}
+		if assigned.Bool {
+			return AgentLifecycleResult{}, ErrAgentInUse
+		}
 	}
 	result := AgentLifecycleResult{Agent: agentRecord(agent)}
 	if operation == "agent.credential.revoke" {
@@ -284,12 +303,16 @@ func runAgentLifecycle(ctx context.Context, databaseURL string, proof AgentAdmin
 		}
 	} else {
 		wasEnabled := agent.Enabled
-		changed := agent.Enabled || unrevokedCount > 0
+		changed := operation == "agent.delete" || agent.Enabled || unrevokedCount > 0
 		if changed {
 			if agent.Version == math.MaxInt64 {
 				return AgentLifecycleResult{}, ErrAgentConflict
 			}
-			agent, err = queries.DisableAgent(ctx, dbgen.DisableAgentParams{UpdatedAt: timestamp(now), AgentID: agentID})
+			if operation == "agent.delete" {
+				agent, err = queries.ArchiveAgent(ctx, dbgen.ArchiveAgentParams{UpdatedAt: timestamp(now), AgentID: agentID})
+			} else {
+				agent, err = queries.DisableAgent(ctx, dbgen.DisableAgentParams{UpdatedAt: timestamp(now), AgentID: agentID})
+			}
 			if err != nil {
 				return AgentLifecycleResult{}, operationError(ctx, "storage: agent disable failed", err)
 			}
@@ -300,8 +323,12 @@ func runAgentLifecycle(ctx context.Context, databaseURL string, proof AgentAdmin
 				return AgentLifecycleResult{}, operationError(ctx, "storage: agent bulk revoke/audit failed", err)
 			}
 			result.RevokedCredentialCount = count
-			if wasEnabled {
-				if err := queries.InsertLifecycleAudit(ctx, dbgen.InsertLifecycleAuditParams{Actor: userUUID.String(), SubjectID: agentID, Action: "agent.disabled", OccurredAt: timestamp(now), RequestID: requestID}); err != nil {
+			if wasEnabled || operation == "agent.delete" {
+				action := "agent.disabled"
+				if operation == "agent.delete" {
+					action = "agent.deleted"
+				}
+				if err := queries.InsertLifecycleAudit(ctx, dbgen.InsertLifecycleAuditParams{Actor: userUUID.String(), SubjectID: agentID, Action: action, OccurredAt: timestamp(now), RequestID: requestID}); err != nil {
 					return AgentLifecycleResult{}, operationError(ctx, "storage: agent disable audit failed", err)
 				}
 			}
@@ -393,7 +420,7 @@ func validAgentLifecycleReceipt(saved agentLifecycleReceipt, operation string, a
 		}
 		return true
 	}
-	return operation == "agent.disable" && saved.Credential == nil && !saved.Agent.Enabled && saved.RevokedCredentialCount >= 0 &&
+	return (operation == "agent.disable" || operation == "agent.delete") && saved.Credential == nil && !saved.Agent.Enabled && saved.RevokedCredentialCount >= 0 &&
 		(saved.Changed || saved.RevokedCredentialCount == 0)
 }
 func validAgentRecord(record AgentRecord, expectedID string) bool {

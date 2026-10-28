@@ -4,7 +4,7 @@ WHERE id = sqlc.arg(credential_id);
 
 -- name: LockAgentAccessAgent :one
 SELECT id, enabled FROM public.almanac_agents
-WHERE id = sqlc.arg(agent_id) FOR UPDATE;
+WHERE id = sqlc.arg(agent_id) AND deleted_at IS NULL FOR UPDATE;
 
 -- name: LockAgentAccessCredential :one
 SELECT id, agent_id, verifier, credential_epoch, issued_at, expires_at,

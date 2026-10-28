@@ -4,6 +4,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"math"
@@ -13,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -1087,5 +1090,117 @@ func TestIntegrationDifferentAdministratorsRaceOnSharedAgentVersion(t *testing.T
 	}
 	if success != 1 || conflict != 1 {
 		t.Fatalf("cross-actor race success=%d conflict=%d", success, conflict)
+	}
+}
+
+func TestIntegrationAgentDeleteBlocksDependenciesAndReplaysAfterArchival(t *testing.T) {
+	f := newAgentFixture(t)
+	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("retiring-agent", "retiring-create"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacementInput := f.input("replacement-agent", "replacement-create")
+	replacementInput.CredentialID = "abcdefab-cdef-4abc-8def-abcdefabcdeb"
+	replacementInput.CredentialVerifier = [32]byte{92}
+	replacement, err := CreateAgent(t.Context(), f.databaseURL, replacementInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	_, err = conn.Exec(t.Context(), `INSERT INTO public.almanac_datasources (id,name,display_name,provider,configuration_format,endpoint,tls,authentication_mode,polling_interval_seconds,settling_delay_seconds,agent_id,created_at,updated_at) VALUES ('a2345678-1234-4123-8123-123456789012','dependent-source','Dependent source','prometheus','prometheus-http-v1','https://metrics.example.test','{}','none',60,60,$1,$2,$2)`, created.Agent.ID, f.base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Exec(t.Context(), `INSERT INTO public.almanac_datasources (id,name,display_name,provider,configuration_format,endpoint,tls,authentication_mode,polling_interval_seconds,settling_delay_seconds,agent_id,created_at,updated_at) VALUES ('a2345678-1234-4123-8123-123456789013','dependent-source-two','Second source','prometheus','prometheus-http-v1','https://metrics.example.test','{}','none',60,60,$1,$2,$2)`, created.Agent.ID, f.base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := func() time.Time { return f.base.Add(5 * time.Second) }
+	input := DisableAgentInput{Proof: f.input("unused", "unused").Proof, AgentID: created.Agent.ID, ExpectedVersion: 1, IdempotencyKey: "delete-agent", RequestID: "delete-agent", Now: clock}
+	if _, err := DeleteAgent(t.Context(), f.databaseURL, input); !errors.Is(err, ErrAgentInUse) {
+		t.Fatalf("assigned delete: %v", err)
+	}
+	if _, err := AuthenticateAgentCredential(t.Context(), f.databaseURL, created.Credential.ID, [32]byte{91}, clock); err != nil {
+		t.Fatalf("blocked deletion revoked credential: %v", err)
+	}
+	unchanged, err := GetAgent(t.Context(), f.databaseURL, AgentReadInput{SessionVerifier: f.verifier, AgentID: created.Agent.ID, Now: clock})
+	if err != nil || unchanged.Version != 1 || !unchanged.Enabled {
+		t.Fatalf("blocked deletion changed agent: %+v %v", unchanged, err)
+	}
+	page, err := ListAgentDatasourceDependencies(t.Context(), f.databaseURL, DatasourceProof{SessionVerifier: f.verifier}, created.Agent.ID, 1, "", clock)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Settings.Name != "dependent-source" {
+		t.Fatalf("dependencies: %+v %v", page, err)
+	}
+	if page.NextCursor == "" {
+		t.Fatal("missing dependency cursor")
+	}
+	secondPage, err := ListAgentDatasourceDependencies(t.Context(), f.databaseURL, DatasourceProof{SessionVerifier: f.verifier}, created.Agent.ID, 1, page.NextCursor, clock)
+	if err != nil || len(secondPage.Items) != 1 || secondPage.Items[0].Settings.Name != "dependent-source-two" || secondPage.NextCursor != "" {
+		t.Fatalf("second dependency page: %+v %v", secondPage, err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_datasources SET agent_id=$1 WHERE agent_id=$2`, replacement.Agent.ID, created.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := DeleteAgent(t.Context(), f.databaseURL, input)
+	if err != nil || !deleted.Changed || deleted.Agent.Enabled || deleted.RevokedCredentialCount != 1 {
+		t.Fatalf("delete: %+v %v", deleted, err)
+	}
+	if _, err := AuthenticateAgentCredential(t.Context(), f.databaseURL, created.Credential.ID, [32]byte{91}, clock); !errors.Is(err, ErrInvalidAgentCredential) {
+		t.Fatalf("archived credential: %v", err)
+	}
+	replay, err := DeleteAgent(t.Context(), f.databaseURL, input)
+	if err != nil || !replay.Replayed || replay.Agent != deleted.Agent {
+		t.Fatalf("replay: %+v %v", replay, err)
+	}
+	if _, err := GetAgent(t.Context(), f.databaseURL, AgentReadInput{SessionVerifier: f.verifier, AgentID: created.Agent.ID, Now: clock}); !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("archived read: %v", err)
+	}
+	duplicate := f.input("retiring-agent", "new-name-attempt")
+	duplicate.CredentialID = "abcdefab-cdef-4abc-8def-abcdefabcdec"
+	duplicate.CredentialVerifier = [32]byte{93}
+	if _, err := CreateAgent(t.Context(), f.databaseURL, duplicate); !errors.Is(err, ErrAgentConflict) {
+		t.Fatalf("archived name reusable: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='viewer' WHERE id=$1`, f.userID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DeleteAgent(t.Context(), f.databaseURL, input); !errors.Is(err, ErrAgentForbidden) {
+		t.Fatalf("replay after demotion: %v", err)
+	}
+}
+
+func TestIntegrationAgentDeleteSerializesWithDatasourceAssignment(t *testing.T) {
+	f := newAgentFixture(t)
+	issued, created := createOwnershipAgent(t, f, "concurrent-delete")
+	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider, ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := func() time.Time { return f.base.Add(5 * time.Second) }
+	if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, issued.ID, issued.Verifier, ownershipVerifier(ownershipBytes(32, 87)), &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test-agent", Capabilities: capabilities}, clock); err != nil {
+		t.Fatal(err)
+	}
+	deleteInput := DisableAgentInput{Proof: f.input("unused", "unused").Proof, AgentID: created.Agent.ID, ExpectedVersion: 1, IdempotencyKey: "concurrent-delete", RequestID: "concurrent-delete", Now: clock}
+	settings := datasource.Settings{Name: "concurrent-source", DisplayName: "Concurrent source", Provider: datasource.PrometheusProvider, ConfigurationFormat: datasource.PrometheusConfiguration, Endpoint: "https://metrics.example.test", AuthenticationMode: "none", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60, AgentID: created.Agent.ID}
+	input := CreateDatasourceInput{Proof: DatasourceProof{SessionVerifier: f.verifier}, Settings: settings, Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, IdempotencyKey: "concurrent-source", RequestID: "concurrent-source", Now: clock}
+	start := make(chan struct{})
+	deleteResult, assignResult := make(chan error, 1), make(chan error, 1)
+	go func() { <-start; _, err := DeleteAgent(t.Context(), f.databaseURL, deleteInput); deleteResult <- err }()
+	go func() {
+		<-start
+		_, err := CreateDatasource(t.Context(), f.databaseURL, nil, input)
+		assignResult <- err
+	}()
+	close(start)
+	deleteErr, assignErr := <-deleteResult, <-assignResult
+	if !((deleteErr == nil && errors.Is(assignErr, ErrAgentNotFound)) || (assignErr == nil && errors.Is(deleteErr, ErrAgentInUse))) {
+		t.Fatalf("concurrent delete=%v assignment=%v", deleteErr, assignErr)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	var dangling bool
+	if err := conn.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM public.almanac_datasources d JOIN public.almanac_agents a ON a.id=d.agent_id WHERE a.deleted_at IS NOT NULL)`).Scan(&dangling); err != nil || dangling {
+		t.Fatalf("dangling assignment=%t err=%v", dangling, err)
 	}
 }

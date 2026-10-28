@@ -110,6 +110,11 @@ func TestMutationServerFailurePreservesSafeRetryMetadataAndUnknownOutcome(t *tes
 	if !ok || known.Unknown || known.Kind != setupclient.KindConflict {
 		t.Fatalf("definitive conflict became uncertain: %#v", conflict)
 	}
+	inUse := mutationProblem(t.Context(), &http.Response{StatusCode: http.StatusConflict, Header: make(http.Header)}, []byte(`{"code":"agent_in_use","message":"assigned","request_id":"0123456789abcdef0123456789abcdef","field_errors":[]}`))
+	blocked, ok := errors.AsType[*Failure](inUse)
+	if !ok || blocked.Unknown || blocked.Kind != setupclient.KindConflict || blocked.Code != "agent_in_use" || !strings.Contains(blocked.Message, "reassign") {
+		t.Fatalf("dependency conflict is not actionable: %#v", inUse)
+	}
 }
 
 func TestResponseValidationRejectsNullStrings(t *testing.T) {
@@ -240,6 +245,10 @@ func TestGetValidatesOptionalRuntimeAndPreservesExactRevisions(t *testing.T) {
 	if _, _, err := client.Get(t.Context(), agentID); err != nil {
 		t.Fatalf("Get() rejected valid configuration failure detail: %v", err)
 	}
+	responseBody = strings.TrimSuffix(base, "}") + `,"runtime":` + strings.Replace(validRuntime, `"no_assignment"`, `"none"`, 1) + `}`
+	if _, _, err := client.Get(t.Context(), agentID); err != nil {
+		t.Fatalf("Get() rejected assigned-agent runtime: %v", err)
+	}
 	capability := `{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["live_query"]}`
 	formats := strings.TrimSuffix(strings.Repeat(`"format",`, 63), ",") + `,"format"`
 	operations := strings.TrimSuffix(strings.Repeat(`"operation",`, 15), ",") + `,"operation"`
@@ -255,7 +264,7 @@ func TestGetValidatesOptionalRuntimeAndPreservesExactRevisions(t *testing.T) {
 		strings.Replace(validRuntime, `"connected"`, `"online"`, 1),
 		strings.Replace(validRuntime, `"ready"`, `"healthy"`, 1),
 		strings.Replace(validRuntime, `"running"`, `"complete"`, 1),
-		strings.Replace(validRuntime, `"no_assignment"`, `"none"`, 1),
+		strings.Replace(validRuntime, `"no_assignment"`, `"unknown"`, 1),
 		strings.Replace(validRuntime, `"desired_configuration_revision":"9223372036854775807"`, `"desired_configuration_revision":7`, 1),
 		strings.Replace(validRuntime, `"desired_configuration_revision":"9223372036854775807"`, `"desired_configuration_revision":"0"`, 1),
 		strings.Replace(validRuntime, `"applied_configuration_revision":"0"`, `"applied_configuration_revision":"00"`, 1),
@@ -344,7 +353,7 @@ func TestGeneratedIssuanceSupportsFreshAndReplayStatusesAndExplicitZero(t *testi
 		t.Fatal("decode agent ID failed")
 	}
 	etag := `"agent:` + agentID + `:1"`
-	rotation := api.RotateAgentRequest{CurrentPassword: "proof", LifetimeSeconds: &zero, OverlapSeconds: &zero}
+	rotation := api.RotateAgentRequest{LifetimeSeconds: &zero, OverlapSeconds: &zero}
 	result, token, replay, err := client.Rotate(t.Context(), id, rotation, etag, "rotate-key")
 	if err != nil || replay || token != "fresh-rotation-secret" || strings.Contains(string(result), token) {
 		t.Fatalf("fresh rotation failed or exposed token in metadata: replay=%t err=%v result=%s", replay, err, result)
@@ -358,8 +367,8 @@ func TestGeneratedIssuanceSupportsFreshAndReplayStatusesAndExplicitZero(t *testi
 	}
 }
 
-func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
-	for _, mutation := range []string{"create", "rotate"} {
+func TestLostResponseOnReusedTLSConnectionDoesNotReplayMutation(t *testing.T) {
+	for _, mutation := range []string{"create", "rotate", "delete"} {
 		t.Run(mutation, func(t *testing.T) {
 			var attempts atomic.Int32
 			var warmMu sync.Mutex
@@ -374,7 +383,7 @@ func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
 					_, _ = fmt.Fprint(w, `{"csrf_token":"fresh-csrf","session":{"user_id":"u-1","login":"admin","role":"administrator","restricted":false}}`)
 				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/agents":
 					_, _ = fmt.Fprint(w, `{"items":[],"next_cursor":""}`)
-				case r.Method == http.MethodPost:
+				case r.Method == http.MethodPost || r.Method == http.MethodDelete:
 					attempt := attempts.Load() + 1
 					warmMu.Lock()
 					warmed := warmConnection
@@ -385,12 +394,14 @@ func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
 					wantKey := "create-once"
 					if mutation == "rotate" {
 						wantKey = "rotate-once"
+					} else if mutation == "delete" {
+						wantKey = "delete-once"
 					}
 					if r.Header.Get("Idempotency-Key") != wantKey {
 						t.Errorf("%s request idempotency key was not preserved", mutation)
 					}
 					body, err := io.ReadAll(r.Body)
-					if err != nil || len(body) < 8<<20 {
+					if err != nil || len(body) == 0 || (mutation == "create" && len(body) < 8<<20) {
 						t.Errorf("read committed %s request body failed", mutation)
 					}
 					attempts.Add(1)
@@ -433,7 +444,14 @@ func TestLostResponseOnReusedTLSConnectionDoesNotReplayIssuance(t *testing.T) {
 				if decodeErr := json.Unmarshal([]byte(`"00000000-0000-0000-0000-000000000001"`), &id); decodeErr != nil {
 					t.Fatal("decode fixture agent ID failed")
 				}
-				_, _, _, err = client.Rotate(t.Context(), id, api.RotateAgentRequest{CurrentPassword: strings.Repeat("p", 8<<20)}, `"agent:00000000-0000-0000-0000-000000000001:1"`, "rotate-once")
+				_, _, _, err = client.Rotate(t.Context(), id, api.RotateAgentRequest{}, `"agent:00000000-0000-0000-0000-000000000001:1"`, "rotate-once")
+			case "delete":
+				var id api.AgentId
+				if decodeErr := json.Unmarshal([]byte(`"00000000-0000-0000-0000-000000000001"`), &id); decodeErr != nil {
+					t.Fatal("decode fixture agent ID failed")
+				}
+				_, err = client.Delete(t.Context(), id, `"agent:00000000-0000-0000-0000-000000000001:1"`, "delete-once")
+
 			}
 			failure := asAgentFailure(t, err)
 			if !failure.Unknown || failure.Code != "outcome_unknown" {
@@ -675,4 +693,53 @@ func asAgentFailure(t *testing.T, err error) *Failure {
 func isFailure(err error, kind setupclient.Kind, unknown bool) bool {
 	f, ok := errors.AsType[*Failure](err)
 	return ok && f.Kind == kind && f.Unknown == unknown
+}
+
+func TestAgentDependencyAndDeletionClientValidatesResponses(t *testing.T) {
+	const agentID = "00000000-0000-0000-0000-000000000001"
+	page := `{"items":[{"id":"00000000-0000-0000-0000-000000000002","name":"metrics","display_name":"Metrics"}],"next_cursor":""}`
+	deletion := `{"agent":{"id":"` + agentID + `","name":"east","display_name":"East","enabled":false,"version":"2","created_at":"2026-10-26T10:00:00Z","updated_at":"2026-10-26T10:00:01Z"},"credential":null,"changed":true,"revoked_credential_count":"1","replayed":false}`
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/auth/context":
+			_, _ = fmt.Fprint(w, `{"csrf_token":"fresh-csrf","session":{"user_id":"u-1","login":"admin","role":"administrator","restricted":false}}`)
+		case "/api/v1/agents/" + agentID + "/datasources":
+			if r.Method != http.MethodGet || r.URL.Query().Get("limit") != "1" {
+				t.Error("invalid dependency request")
+			}
+			_, _ = fmt.Fprint(w, page)
+		case "/api/v1/agents/" + agentID:
+			body, err := io.ReadAll(r.Body)
+			if err != nil || string(body) != "{}" || r.Header.Get("Content-Type") != "application/json" {
+				t.Error("delete body must be an empty JSON object")
+			}
+			if r.Method != http.MethodDelete || r.Header.Get("If-Match") != `"agent:`+agentID+`:1"` || r.Header.Get("Idempotency-Key") != "delete-key" || r.Header.Get("X-CSRF-Token") != "fresh-csrf" {
+				t.Error("invalid delete request")
+			}
+			_, _ = fmt.Fprint(w, deletion)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client := newTestAgentClient(t, server)
+	var id api.AgentId
+	if err := json.Unmarshal([]byte(`"`+agentID+`"`), &id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Dependencies(t.Context(), id, 1, ""); err != nil {
+		t.Fatalf("dependencies: %v", err)
+	}
+	page = `{"items":[{"id":"00000000-0000-0000-0000-000000000002","name":"metrics"}],"next_cursor":""}`
+	if _, err := client.Dependencies(t.Context(), id, 1, ""); err == nil {
+		t.Fatal("missing display name accepted")
+	}
+	if _, err := client.Delete(t.Context(), id, `"agent:`+agentID+`:1"`, "delete-key"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	deletion = `{"changed":true}`
+	if _, err := client.Delete(t.Context(), id, `"agent:`+agentID+`:1"`, "delete-key"); err == nil {
+		t.Fatal("malformed delete receipt accepted")
+	}
 }

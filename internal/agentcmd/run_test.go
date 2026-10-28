@@ -215,7 +215,23 @@ func TestReconnectAckReconcilesBeforeCollectionResumes(t *testing.T) {
 		Assignments: []agentprotocol.DatasourceAssignment{{DatasourceID: sourceID, DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}},
 		SLIs:        []agentprotocol.SLICollection{{SLIID: id, MeasurementRevision: "1", DatasourceID: sourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "vector(1)", TotalQuery: "vector(2)", EffectiveFrom: now.Truncate(15 * time.Second).Add(-2 * time.Minute)}}}
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	applied := make(chan agentprotocol.Envelope[agentprotocol.ConfigurationApplied], 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ws" {
+			conn, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.CloseNow()
+			_, raw, err := conn.Read(r.Context())
+			if err == nil {
+				var envelope agentprotocol.Envelope[agentprotocol.ConfigurationApplied]
+				if json.Unmarshal(raw, &envelope) == nil {
+					applied <- envelope
+				}
+			}
+			return
+		}
 		requests.Add(1)
 		w.Header().Set("ETag", `"agent-config:`+testAgentID+`:1"`)
 		_ = json.MarshalWrite(w, snapshot)
@@ -241,8 +257,21 @@ func TestReconnectAckReconcilesBeforeCollectionResumes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.handleMessage(t.Context(), nil, jsontext.Value(wire)); err != nil {
+	ws, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	if err := c.handleMessage(t.Context(), ws, jsontext.Value(wire)); err != nil {
 		t.Fatalf("replay ACK: %v", err)
+	}
+	select {
+	case got := <-applied:
+		if got.Kind != agentprotocol.KindConfigurationApplied || got.Payload.ConfigurationRevision != "1" {
+			t.Fatalf("wrong re-ACK: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("installed configuration was not acknowledged again")
 	}
 	if requests.Load() != 1 || c.configurationPending || c.collections.paused {
 		t.Fatal("collection resumed without successful configuration reconciliation")
@@ -255,6 +284,67 @@ func TestReconnectAckReconcilesBeforeCollectionResumes(t *testing.T) {
 		t.Fatal("reconciled collection did not dispatch")
 	}
 	workers.Wait()
+}
+
+func TestReconcileTransitionsFromEmptyConfigurationToAssigned(t *testing.T) {
+	now := time.Now().UTC().Truncate(15 * time.Second)
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
+	definition := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: now}
+	empty := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{}, SLIs: []agentprotocol.SLICollection{}}
+	assigned := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition}}
+	applied := make(chan agentprotocol.Envelope[agentprotocol.ConfigurationApplied], 2)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ws" {
+			conn, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.CloseNow()
+			for range 2 {
+				_, raw, err := conn.Read(r.Context())
+				if err != nil {
+					return
+				}
+				var envelope agentprotocol.Envelope[agentprotocol.ConfigurationApplied]
+				if json.Unmarshal(raw, &envelope) == nil {
+					applied <- envelope
+				}
+			}
+			return
+		}
+		snapshot := empty
+		if requests.Add(1) > 1 {
+			snapshot = assigned
+		}
+		w.Header().Set("ETag", snapshot.ETag())
+		_ = json.MarshalWrite(w, snapshot)
+	}))
+	defer server.Close()
+	c := testClient(now, testNonce(71))
+	c.opts.backendURL, c.http, c.protocol = server.URL, server.Client(), agentprotocol.ProtocolV2
+	c.collections = newCollectionRunner(c)
+	ws, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	if err := c.reconcile(t.Context(), ws); err != nil {
+		t.Fatalf("empty configuration: %v", err)
+	}
+	if err := c.reconcile(t.Context(), ws); err != nil {
+		t.Fatalf("empty-to-assigned transition: %v", err)
+	}
+	for _, revision := range []string{"1", "2"} {
+		select {
+		case got := <-applied:
+			if got.Payload.ConfigurationRevision != revision {
+				t.Fatalf("ACK revision=%s want=%s", got.Payload.ConfigurationRevision, revision)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("configuration acknowledgement missing")
+		}
+	}
 }
 
 func TestRetryBackoffCapsAndStopsOnCancellation(t *testing.T) {
@@ -510,4 +600,41 @@ func testLease(now time.Time, id string, validUntil time.Time) agentprotocol.Lea
 
 func testNonce(fill byte) string {
 	return base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{fill}, 32))
+}
+
+func TestTransitionAllowsOnlyUnchangedRetainedPairs(t *testing.T) {
+	now := time.Now().UTC().Truncate(15 * time.Second)
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
+	definition := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: now}
+	baseline := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition}}
+	added := definition
+	added.SLIID = "00000000-0000-4000-8000-000000000011"
+	next := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition, added}}
+	allowed, err := unchangedTransitionPairs(baseline, next)
+	if err != nil || !allowed[collectionKey(definition)] || allowed[collectionKey(added)] {
+		t.Fatalf("transition authority=%v err=%v", allowed, err)
+	}
+	versionOnly := next
+	versionOnly.Assignments = append([]agentprotocol.DatasourceAssignment(nil), next.Assignments...)
+	versionOnly.SLIs = append([]agentprotocol.SLICollection(nil), next.SLIs...)
+	versionOnly.Assignments[0].DatasourceVersion = "2"
+	for i := range versionOnly.SLIs {
+		versionOnly.SLIs[i].DatasourceVersion = "2"
+	}
+	versionAllowed, versionErr := unchangedTransitionPairs(baseline, versionOnly)
+	if versionErr != nil || versionAllowed[collectionKey(definition)] {
+		t.Fatalf("version-only pair must wait for a matching grant: %v", versionErr)
+	}
+	changed := next
+	changed.SLIs = append([]agentprotocol.SLICollection(nil), next.SLIs...)
+	changed.SLIs[0].GoodQuery = "changed"
+	if _, err := unchangedTransitionPairs(baseline, changed); err == nil {
+		t.Fatal("changed retained pair accepted")
+	}
+	current := baseline
+	current.SLIs = nil
+	allowed, err = unchangedTransitionPairs(current, next)
+	if err != nil || allowed[collectionKey(definition)] {
+		t.Fatal("restored pair authorized before matching grant")
+	}
 }

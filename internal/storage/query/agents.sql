@@ -22,7 +22,7 @@ WHERE actor_id = sqlc.arg(actor_id) AND operation = 'agent.create'
 -- name: InsertAgent :one
 INSERT INTO public.almanac_agents (name, display_name, enabled, version, created_at, updated_at)
 VALUES (sqlc.arg(name), sqlc.arg(display_name), true, 1, sqlc.arg(created_at), sqlc.arg(created_at))
-RETURNING id, name, display_name, enabled, version, created_at, updated_at;
+RETURNING id, name, display_name, enabled, version, created_at, updated_at, deleted_at;
 
 -- name: InsertAgentCredential :one
 INSERT INTO public.almanac_agent_credentials (id, agent_id, verifier, credential_epoch, issued_at, expires_at)

@@ -168,7 +168,7 @@ SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision
        measurement.datasource_id, datasource.version AS datasource_version,
        measurement.measurement_kind, measurement.component_mode,
        measurement.good_query, measurement.total_query, measurement.effective_from, measurement.activated_at,
-       measurement.agent_id, datasource.polling_interval_seconds,
+       datasource.agent_id, datasource.polling_interval_seconds,
        datasource.settling_delay_seconds, sli.created_at, sli.updated_at,
        agent.enabled AS agent_enabled,
        runtime.last_heartbeat_at, runtime.updated_at AS runtime_updated_at,
@@ -181,9 +181,9 @@ FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = measurement.agent_id
-JOIN public.almanac_agents AS agent ON agent.id = measurement.agent_id
-LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompatible.agent_id = measurement.agent_id
+LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = datasource.agent_id
+JOIN public.almanac_agents AS agent ON agent.id = datasource.agent_id
+LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompatible.agent_id = datasource.agent_id
 WHERE sli.id = $1
 `
 
@@ -613,18 +613,25 @@ FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-WHERE measurement.agent_id = $1 AND datasource.agent_id = $1
+WHERE datasource.agent_id = $1
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_ownership_epochs e WHERE e.sli_id = measurement.sli_id AND e.measurement_revision = measurement.revision AND e.ends_at IS NULL AND e.configuration_revision > $2)
   AND measurement.activated_at IS NOT NULL
 ORDER BY sli.id
 `
+
+type ListAuthorizedMeasurementGrantsForAgentParams struct {
+	AgentID               pgtype.UUID `json:"agent_id"`
+	ConfigurationRevision int64       `json:"configuration_revision"`
+}
 
 type ListAuthorizedMeasurementGrantsForAgentRow struct {
 	SliID               pgtype.UUID `json:"sli_id"`
 	MeasurementRevision int64       `json:"measurement_revision"`
 }
 
-func (q *Queries) ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListAuthorizedMeasurementGrantsForAgentRow, error) {
-	rows, err := q.db.Query(ctx, listAuthorizedMeasurementGrantsForAgent, agentID)
+func (q *Queries) ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, arg ListAuthorizedMeasurementGrantsForAgentParams) ([]ListAuthorizedMeasurementGrantsForAgentRow, error) {
+	rows, err := q.db.Query(ctx, listAuthorizedMeasurementGrantsForAgent, arg.AgentID, arg.ConfigurationRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +657,7 @@ FROM public.almanac_sli_measurements AS measurement
 JOIN public.almanac_slis AS sli
   ON sli.id = measurement.sli_id AND sli.measurement_revision = measurement.revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-WHERE measurement.agent_id = $1 AND measurement.activated_at IS NULL
+WHERE datasource.agent_id = $1 AND measurement.activated_at IS NULL
 ORDER BY measurement.sli_id
 FOR UPDATE OF measurement, sli
 `
@@ -689,14 +696,17 @@ func (q *Queries) ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UU
 
 const listSliConfigurationForAgent = `-- name: ListSliConfigurationForAgent :many
 SELECT sli.id AS sli_id, sli.measurement_revision, measurement.datasource_id,
-       datasource.version AS datasource_version, measurement.measurement_kind,
+       COALESCE(pending.source_config_version, datasource.version)::bigint AS datasource_version, measurement.measurement_kind,
        measurement.component_mode, measurement.good_query, measurement.total_query,
-       measurement.effective_from
+       GREATEST(measurement.effective_from, COALESCE(epoch.starts_at, measurement.effective_from))::timestamptz AS effective_from
 FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-WHERE measurement.agent_id = $1 AND datasource.agent_id = $1
+LEFT JOIN public.almanac_datasource_reassignments AS pending ON pending.datasource_id = datasource.id AND NOT pending.uses_v2_removal
+LEFT JOIN public.almanac_sli_ownership_epochs AS epoch ON epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision AND epoch.ends_at IS NULL
+WHERE datasource.agent_id = $1
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.uses_v2_removal)
 ORDER BY sli.id
 `
 
@@ -837,7 +847,7 @@ SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision
        measurement.datasource_id, datasource.version AS datasource_version,
        measurement.measurement_kind, measurement.component_mode,
        measurement.good_query, measurement.total_query, measurement.effective_from,
-       measurement.agent_id, datasource.polling_interval_seconds,
+       datasource.agent_id, datasource.polling_interval_seconds,
        datasource.settling_delay_seconds, sli.created_at, sli.updated_at,
        agent.enabled AS agent_enabled,
        runtime.last_heartbeat_at, runtime.updated_at AS runtime_updated_at,
@@ -860,9 +870,9 @@ FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = measurement.agent_id
-JOIN public.almanac_agents AS agent ON agent.id = measurement.agent_id
-LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompatible.agent_id = measurement.agent_id
+LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = datasource.agent_id
+JOIN public.almanac_agents AS agent ON agent.id = datasource.agent_id
+LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompatible.agent_id = datasource.agent_id
 LEFT JOIN LATERAL (
     SELECT coverage.observation_id, coverage.measurement_revision, coverage.interval_start,
            coverage.interval_end, coverage.outcome, COALESCE(obs.good_count::text, '') AS good_count,
@@ -1008,7 +1018,12 @@ func (q *Queries) ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisR
 
 const lockSliMeasurementForObservation = `-- name: LockSliMeasurementForObservation :one
 SELECT measurement.sli_id, measurement.revision, measurement.datasource_id,
-       measurement.agent_id, measurement.measurement_kind, measurement.component_mode,
+       COALESCE((SELECT epoch.agent_id FROM public.almanac_sli_ownership_epochs epoch
+           WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision
+             AND epoch.starts_at <= $3::timestamptz
+             AND (epoch.ends_at IS NULL OR epoch.ends_at > $3::timestamptz)),
+         CASE WHEN NOT EXISTS (SELECT 1 FROM public.almanac_sli_ownership_epochs epoch WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision) THEN measurement.agent_id END)::uuid AS interval_agent_id,
+       measurement.measurement_kind, measurement.component_mode,
        measurement.effective_from, datasource.agent_id AS current_agent_id,
        datasource.polling_interval_seconds, datasource.settling_delay_seconds,
        sli.measurement_revision AS current_revision
@@ -1020,15 +1035,16 @@ FOR UPDATE OF measurement, sli, datasource
 `
 
 type LockSliMeasurementForObservationParams struct {
-	SliID    pgtype.UUID `json:"sli_id"`
-	Revision int64       `json:"revision"`
+	SliID         pgtype.UUID        `json:"sli_id"`
+	Revision      int64              `json:"revision"`
+	IntervalStart pgtype.Timestamptz `json:"interval_start"`
 }
 
 type LockSliMeasurementForObservationRow struct {
 	SliID                  pgtype.UUID        `json:"sli_id"`
 	Revision               int64              `json:"revision"`
 	DatasourceID           pgtype.UUID        `json:"datasource_id"`
-	AgentID                pgtype.UUID        `json:"agent_id"`
+	IntervalAgentID        pgtype.UUID        `json:"interval_agent_id"`
 	MeasurementKind        string             `json:"measurement_kind"`
 	ComponentMode          string             `json:"component_mode"`
 	EffectiveFrom          pgtype.Timestamptz `json:"effective_from"`
@@ -1039,13 +1055,13 @@ type LockSliMeasurementForObservationRow struct {
 }
 
 func (q *Queries) LockSliMeasurementForObservation(ctx context.Context, arg LockSliMeasurementForObservationParams) (LockSliMeasurementForObservationRow, error) {
-	row := q.db.QueryRow(ctx, lockSliMeasurementForObservation, arg.SliID, arg.Revision)
+	row := q.db.QueryRow(ctx, lockSliMeasurementForObservation, arg.SliID, arg.Revision, arg.IntervalStart)
 	var i LockSliMeasurementForObservationRow
 	err := row.Scan(
 		&i.SliID,
 		&i.Revision,
 		&i.DatasourceID,
-		&i.AgentID,
+		&i.IntervalAgentID,
 		&i.MeasurementKind,
 		&i.ComponentMode,
 		&i.EffectiveFrom,

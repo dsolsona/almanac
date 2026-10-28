@@ -83,9 +83,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if route == "detail" && r.Method == http.MethodDelete {
+		route = "delete"
+	}
 	wantMethod := http.MethodGet
 	if route == "create" || route == "disable" || route == "rotate" || route == "revoke" {
 		wantMethod = http.MethodPost
+	}
+	if route == "delete" {
+		wantMethod = http.MethodDelete
 	}
 	if r.Method != wantMethod {
 		w.Header().Set("Allow", wantMethod)
@@ -108,7 +114,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if route == "list" || route == "credentials" {
+	if route == "list" || route == "credentials" || route == "dependencies" {
 		limit, cursor, valid := pageQuery(query, route == "credentials")
 		if !valid || hasPositiveContent(r) || hasConditionalHeaders(r) {
 			h.writeProblem(w, 400, "invalid_request", id)
@@ -121,6 +127,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.writeJSON(w, 200, pageDTO(page))
+			return
+		}
+		if route == "dependencies" {
+			page, err := h.service.Dependencies(r.Context(), agentmanagement.CredentialsInput{SessionSecret: authorized.SessionSecret, AgentID: ids[0], Limit: limit, Cursor: cursor})
+			if err != nil {
+				h.writeReadError(w, err, id)
+				return
+			}
+			dto := api.AgentDatasourcePage{Items: make([]api.AgentDatasource, 0, len(page.Items)), NextCursor: page.NextCursor}
+			for _, item := range page.Items {
+				dto.Items = append(dto.Items, api.AgentDatasource{Id: googleuuid.MustParse(item.ID), Name: item.Settings.Name, DisplayName: item.Settings.DisplayName})
+			}
+			h.writeJSON(w, 200, dto)
 			return
 		}
 		page, err := h.service.Credentials(r.Context(), agentmanagement.CredentialsInput{SessionSecret: authorized.SessionSecret, AgentID: ids[0], Limit: limit, Cursor: cursor})
@@ -176,6 +195,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.writeProblem(w, status, code, id)
 		return
 	}
+	if route == "delete" {
+		var request proofBody
+		if !decode(body, &request) {
+			h.writeProblem(w, 400, "invalid_request", id)
+			return
+		}
+		result, err := h.service.Delete(r.Context(), agentmanagement.DisableInput{SessionSecret: authorized.SessionSecret, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: ids[0], ExpectedVersion: version})
+		if err != nil {
+			h.writeError(w, err, id)
+			return
+		}
+		h.writeJSON(w, 200, lifecycleDTO(result))
+		return
+	}
 	if route == "create" {
 		h.create(w, r, body, authorized.SessionSecret, id)
 		return
@@ -201,6 +234,9 @@ func matchRoute(path string) (string, []string, bool) {
 	parts := strings.Split(strings.TrimPrefix(path, "/api/v1/agents/"), "/")
 	if len(parts) == 1 && canonicalID(parts[0]) {
 		return "detail", parts, true
+	}
+	if len(parts) == 2 && canonicalID(parts[0]) && parts[1] == "datasources" {
+		return "dependencies", parts[:1], true
 	}
 	if len(parts) == 2 && canonicalID(parts[0]) && parts[1] == "credentials" {
 		return "credentials", parts[:1], true
@@ -330,16 +366,13 @@ type createBody struct {
 	LifetimeSeconds jsontext.Value `json:"lifetime_seconds"`
 }
 type rotateBody struct {
-	CurrentPassword *string        `json:"current_password"`
 	LifetimeSeconds jsontext.Value `json:"lifetime_seconds"`
 	OverlapSeconds  jsontext.Value `json:"overlap_seconds"`
 }
-type proofBody struct {
-	CurrentPassword *string `json:"current_password"`
-}
+type proofBody struct{}
 
 func decode(data []byte, target any) bool {
-	if len(bytes.TrimSpace(data)) == 0 {
+	if !bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) {
 		return false
 	}
 	return json.Unmarshal(data, target, json.RejectUnknownMembers(true)) == nil
@@ -391,7 +424,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, data []byte, se
 }
 func (h *Handler) rotate(w http.ResponseWriter, r *http.Request, data []byte, agentID string, version int64, session string, source netip.Addr, id string) {
 	var body rotateBody
-	if !decode(data, &body) || body.CurrentPassword == nil {
+	if !decode(data, &body) {
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
@@ -413,7 +446,7 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request, data []byte, ag
 		d := time.Duration(over) * time.Second
 		overlap = &d
 	}
-	result, err := h.service.Rotate(r.Context(), agentmanagement.RotateInput{SessionSecret: session, CurrentPassword: *body.CurrentPassword, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: agentID, ExpectedVersion: version, Lifetime: time.Duration(life) * time.Second, Overlap: overlap})
+	result, err := h.service.Rotate(r.Context(), agentmanagement.RotateInput{SessionSecret: session, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: agentID, ExpectedVersion: version, Lifetime: time.Duration(life) * time.Second, Overlap: overlap})
 	if err != nil {
 		h.writeError(w, err, id)
 		return
@@ -438,11 +471,11 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request, data []byte, ag
 }
 func (h *Handler) disable(w http.ResponseWriter, r *http.Request, data []byte, agentID string, version int64, session string, source netip.Addr, id string) {
 	var body proofBody
-	if !decode(data, &body) || body.CurrentPassword == nil {
+	if !decode(data, &body) {
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
-	result, err := h.service.Disable(r.Context(), agentmanagement.DisableInput{SessionSecret: session, CurrentPassword: *body.CurrentPassword, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: agentID, ExpectedVersion: version})
+	result, err := h.service.Disable(r.Context(), agentmanagement.DisableInput{SessionSecret: session, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: agentID, ExpectedVersion: version})
 	if err != nil {
 		h.writeError(w, err, id)
 		return
@@ -451,11 +484,11 @@ func (h *Handler) disable(w http.ResponseWriter, r *http.Request, data []byte, a
 }
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request, data []byte, agentID, credentialID string, version int64, session string, source netip.Addr, id string) {
 	var body proofBody
-	if !decode(data, &body) || body.CurrentPassword == nil {
+	if !decode(data, &body) {
 		h.writeProblem(w, 400, "invalid_request", id)
 		return
 	}
-	result, err := h.service.Revoke(r.Context(), agentmanagement.RevokeInput{SessionSecret: session, CurrentPassword: *body.CurrentPassword, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: agentID, CredentialID: credentialID, ExpectedVersion: version})
+	result, err := h.service.Revoke(r.Context(), agentmanagement.RevokeInput{SessionSecret: session, Source: source, RequestID: id, IdempotencyKey: r.Header.Get("Idempotency-Key"), AgentID: agentID, CredentialID: credentialID, ExpectedVersion: version})
 	if err != nil {
 		h.writeError(w, err, id)
 		return
@@ -573,6 +606,8 @@ func (h *Handler) writeError(w http.ResponseWriter, err error, id string) {
 		h.writeProblem(w, 403, "forbidden", id)
 	case errors.Is(err, storage.ErrAgentNotFound):
 		h.writeProblem(w, 404, "not_found", id)
+	case errors.Is(err, storage.ErrAgentInUse):
+		h.writeProblem(w, 409, "agent_in_use", id)
 	case errors.Is(err, storage.ErrAgentConflict):
 		h.writeProblem(w, 409, "conflict", id)
 	case errors.Is(err, storage.ErrInvalidAgentInput), errors.Is(err, authentication.ErrInvalidInput):
@@ -604,6 +639,8 @@ func problemMessage(code string) string {
 		return "Resource not found"
 	case "method_not_allowed":
 		return "Method is not allowed"
+	case "agent_in_use":
+		return "Reassign the agent’s datasources before deletion"
 	case "unauthenticated":
 		return "Authentication is required"
 	case "origin_rejected":

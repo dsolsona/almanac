@@ -25,7 +25,7 @@ func (q *Queries) FindAgentAccessCredentialAgent(ctx context.Context, credential
 
 const lockAgentAccessAgent = `-- name: LockAgentAccessAgent :one
 SELECT id, enabled FROM public.almanac_agents
-WHERE id = $1 FOR UPDATE
+WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 type LockAgentAccessAgentRow struct {

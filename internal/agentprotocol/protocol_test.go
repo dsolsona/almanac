@@ -538,3 +538,10 @@ func TestProtocolSchemasAndEmptyConfigurationExample(t *testing.T) {
 func validHeartbeatAckJSON() string {
 	return `{"kind":"heartbeat-ack","message_id":"heartbeat-ack-1","session_generation":"1","payload":{"request_nonce":"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE","renewal_sequence":"1","execution_lease":{"lease_id":"lease-1","agent_id":"00000000-0000-4000-8000-000000000001","session_generation":"1","configuration_revision":"1","allowed_measurements":[],"valid_from":"2026-10-27T12:00:00Z","valid_until":"2026-10-27T13:00:00Z"}}}`
 }
+
+func TestWelcomeAcceptsNegotiatedDrainProtocol(t *testing.T) {
+	message := strings.Replace(validWelcomeJSON(), `"protocol":"almanac.agent.v1"`, `"protocol":"almanac.agent.v2"`, 1)
+	if _, err := Decode([]byte(message)); err != nil {
+		t.Fatalf("negotiated v2 welcome rejected: %v", err)
+	}
+}

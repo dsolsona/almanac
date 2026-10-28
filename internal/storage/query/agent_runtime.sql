@@ -105,24 +105,26 @@ WHERE agent_id = $1;
 -- name: UpdateAgentRuntimeHeartbeat :execrows
 UPDATE public.almanac_agent_runtime_status AS status
 SET last_heartbeat_at = sqlc.arg(received_at),
-    applied_configuration_revision = sqlc.arg(applied_configuration_revision),
+    applied_configuration_revision = status.applied_configuration_revision,
     scheduler_health = CASE
+        WHEN sqlc.arg(applied_configuration_revision) <> status.applied_configuration_revision THEN status.scheduler_health
         WHEN status.configuration_failure_code IS NOT NULL
           AND sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
         THEN 'degraded' ELSE sqlc.arg(scheduler_health) END,
     collection_progress = CASE
+        WHEN sqlc.arg(applied_configuration_revision) <> status.applied_configuration_revision THEN status.collection_progress
         WHEN status.configuration_failure_code IS NOT NULL
           AND sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
         THEN 'blocked' ELSE sqlc.arg(collection_progress) END,
     configuration_failure_code = CASE
-        WHEN sqlc.arg(applied_configuration_revision) >= status.desired_configuration_revision
+        WHEN sqlc.arg(applied_configuration_revision) = status.applied_configuration_revision AND status.applied_configuration_revision >= status.desired_configuration_revision
         THEN NULL ELSE status.configuration_failure_code END,
     configuration_failure_revision = CASE
-        WHEN sqlc.arg(applied_configuration_revision) >= status.desired_configuration_revision
+        WHEN sqlc.arg(applied_configuration_revision) = status.applied_configuration_revision AND status.applied_configuration_revision >= status.desired_configuration_revision
         THEN NULL ELSE status.configuration_failure_revision END,
-    last_attempt_at = sqlc.narg(last_attempt_at),
-    last_successful_query_at = sqlc.narg(last_successful_query_at),
-    next_expected_execution_at = sqlc.narg(next_expected_execution_at),
+    last_attempt_at = CASE WHEN sqlc.arg(applied_configuration_revision) <> status.applied_configuration_revision THEN status.last_attempt_at ELSE sqlc.narg(last_attempt_at) END,
+    last_successful_query_at = CASE WHEN sqlc.arg(applied_configuration_revision) <> status.applied_configuration_revision THEN status.last_successful_query_at ELSE sqlc.narg(last_successful_query_at) END,
+    next_expected_execution_at = CASE WHEN sqlc.arg(applied_configuration_revision) <> status.applied_configuration_revision THEN status.next_expected_execution_at ELSE sqlc.narg(next_expected_execution_at) END,
     updated_at = sqlc.arg(received_at)
 WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(generation)
   AND status.desired_configuration_revision >= sqlc.arg(applied_configuration_revision)
@@ -134,7 +136,7 @@ WHERE status.agent_id = sqlc.arg(agent_id) AND status.generation = sqlc.arg(gene
 
 -- name: UpdateAgentAppliedConfiguration :execrows
 UPDATE public.almanac_agent_runtime_status AS status
-SET applied_configuration_revision = sqlc.arg(applied_configuration_revision),
+SET applied_configuration_revision = GREATEST(status.applied_configuration_revision, sqlc.arg(applied_configuration_revision)),
     configuration_failure_code = CASE
         WHEN sqlc.arg(applied_configuration_revision) < status.desired_configuration_revision
         THEN status.configuration_failure_code ELSE NULL END,
@@ -173,3 +175,6 @@ SELECT generation, protocol, software_version, capabilities, last_heartbeat_at,
        last_successful_query_at, next_expected_execution_at, updated_at
 FROM public.almanac_agent_runtime_status
 WHERE agent_id = $1;
+
+-- name: AgentConfigurationRevisionExists :one
+SELECT EXISTS (SELECT 1 FROM public.almanac_agent_configurations WHERE agent_id = $1 AND revision = $2);

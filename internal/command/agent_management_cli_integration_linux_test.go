@@ -161,13 +161,13 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 			Code string `json:"code"`
 		} `json:"error"`
 	}
-	code, out, errOut = run("agents", "credentials", "rotate", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match=\"agent:"+create.Result.Agent.ID+":99\"", "--current-password-file="+passwordPath, "--idempotency-key=cli-stale-version", "--confirm", "--show-token", "--output=json")
+	code, out, errOut = run("agents", "credentials", "rotate", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match=\"agent:"+create.Result.Agent.ID+":99\"", "--idempotency-key=cli-stale-version", "--confirm", "--show-token", "--output=json")
 	if code != 5 || errOut != "" || json.Unmarshal([]byte(out), &cliError) != nil || cliError.Operation != "agents credentials rotate" || cliError.Error.Code != "conflict" {
 		t.Fatal("stale ETag did not return the versioned conflict envelope")
 	}
 
 	rotateTokenPath := filepath.Join(dir, "agent-rotate.token")
-	rotateArgs := []string{"agents", "credentials", "rotate", "--profile-file=" + profile, "--agent-id=" + create.Result.Agent.ID, "--if-match=" + detail.Result.ETag, "--current-password-file=" + passwordPath, "--idempotency-key=cli-rotate-agent-1", "--confirm", "--lifetime-seconds=0", "--overlap-seconds=0", "--token-file=" + rotateTokenPath, "--output=json"}
+	rotateArgs := []string{"agents", "credentials", "rotate", "--profile-file=" + profile, "--agent-id=" + create.Result.Agent.ID, "--if-match=" + detail.Result.ETag, "--idempotency-key=cli-rotate-agent-1", "--confirm", "--lifetime-seconds=0", "--overlap-seconds=0", "--token-file=" + rotateTokenPath, "--output=json"}
 	code, out, errOut = run(rotateArgs...)
 	requireExit(0, code)
 	if errOut != "" {
@@ -197,7 +197,7 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 	if err := db.QueryRow(t.Context(), "SELECT verifier FROM public.almanac_agent_credentials WHERE id=$1", rotateLookup).Scan(&stored); err != nil || !bytes.Equal(stored, rotateVerifier[:]) {
 		t.Fatal("database did not store the matching rotation verifier")
 	}
-	code, out, errOut = run("agents", "credentials", "rotate", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match="+detail.Result.ETag, "--current-password-file="+passwordPath, "--idempotency-key=cli-rotate-agent-1", "--confirm", "--lifetime-seconds=0", "--overlap-seconds=0", "--show-token", "--output=json")
+	code, out, errOut = run("agents", "credentials", "rotate", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match="+detail.Result.ETag, "--idempotency-key=cli-rotate-agent-1", "--confirm", "--lifetime-seconds=0", "--overlap-seconds=0", "--show-token", "--output=json")
 	if code != 0 || errOut != "" || strings.Contains(out, string(rotateToken)) || json.Unmarshal([]byte(out), &replay) != nil {
 		t.Fatal("rotation replay did not return safe metadata")
 	}
@@ -206,7 +206,7 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 	}
 
 	rotatedETag := "\"agent:" + create.Result.Agent.ID + ":" + rotated.Result.Agent.Version + "\""
-	code, out, errOut = run("agents", "credentials", "revoke", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--credential-id="+rotated.Result.Credential.ID, "--if-match="+rotatedETag, "--current-password-file="+passwordPath, "--idempotency-key=cli-revoke-agent-1", "--confirm", "--output=json")
+	code, out, errOut = run("agents", "credentials", "revoke", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--credential-id="+rotated.Result.Credential.ID, "--if-match="+rotatedETag, "--idempotency-key=cli-revoke-agent-1", "--confirm", "--output=json")
 	if code != 0 || errOut != "" {
 		t.Fatal("credential revocation failed")
 	}
@@ -218,7 +218,7 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 	if code != 0 || errOut != "" || json.Unmarshal([]byte(out), &detail) != nil {
 		t.Fatal("agent get after revoke failed")
 	}
-	code, _, errOut = run("agents", "disable", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match="+detail.Result.ETag, "--current-password-file="+passwordPath, "--idempotency-key=cli-disable-agent-1", "--confirm", "--output=json")
+	code, _, errOut = run("agents", "disable", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match="+detail.Result.ETag, "--idempotency-key=cli-disable-agent-1", "--confirm", "--output=json")
 	if code != 0 || errOut != "" {
 		t.Fatal("agent disable failed")
 	}
@@ -226,6 +226,38 @@ func runAgentManagementCLIAcceptance(t *testing.T, databaseURL, binary, dir, bas
 	var version int64
 	if err := db.QueryRow(t.Context(), "SELECT enabled,version FROM public.almanac_agents WHERE id=$1", create.Result.Agent.ID).Scan(&enabled, &version); err != nil || enabled || version != 4 {
 		t.Fatal("disabled agent final database state/version was wrong")
+	}
+	if _, err := db.Exec(t.Context(), `INSERT INTO public.almanac_datasources (id,name,display_name,provider,configuration_format,endpoint,tls,authentication_mode,polling_interval_seconds,settling_delay_seconds,agent_id,created_at,updated_at) VALUES ('a2345678-1234-4123-8123-123456789012','cli-dependent','CLI dependent','prometheus','prometheus-http-v1','https://metrics.example.test','{}','none',60,60,$1,now(),now())`, create.Result.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut = run("agents", "datasources", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--output=json")
+	if code != 0 || errOut != "" || !strings.Contains(out, "CLI dependent") {
+		t.Fatalf("CLI dependencies: code=%d", code)
+	}
+	deleteArgs := []string{"agents", "delete", "--profile-file=" + profile, "--agent-id=" + create.Result.Agent.ID, "--if-match=\"agent:" + create.Result.Agent.ID + ":4\"", "--idempotency-key=cli-delete-agent-1", "--confirm", "--output=json"}
+	code, out, errOut = run(deleteArgs...)
+	if code == 0 || !strings.Contains(out+errOut, "agent_in_use") {
+		t.Fatalf("CLI blocked deletion code=%d", code)
+	}
+	if _, err := db.Exec(t.Context(), `DELETE FROM public.almanac_datasources WHERE name='cli-dependent'`); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut = run("agents", "delete", "--profile-file="+profile, "--agent-id="+create.Result.Agent.ID, "--if-match=\"agent:"+create.Result.Agent.ID+":3\"", "--idempotency-key=cli-delete-stale", "--confirm", "--output=json")
+	if code == 0 || !strings.Contains(out+errOut, "conflict") {
+		t.Fatalf("CLI stale deletion code=%d", code)
+	}
+	code, out, errOut = run(deleteArgs...)
+	if code != 0 || errOut != "" || !strings.Contains(out, `"changed":true`) {
+		t.Fatalf("CLI deletion code=%d", code)
+	}
+	code, out, errOut = run(deleteArgs...)
+	if code != 0 || errOut != "" || !strings.Contains(out, `"replayed":true`) {
+		t.Fatalf("CLI deletion replay code=%d", code)
+	}
+	var archived bool
+	var credentialCount, revokedCount int
+	if err := db.QueryRow(t.Context(), `SELECT a.deleted_at IS NOT NULL, count(c.id), count(c.id) FILTER (WHERE c.revoked_at IS NOT NULL) FROM public.almanac_agents a LEFT JOIN public.almanac_agent_credentials c ON c.agent_id=a.id WHERE a.id=$1 GROUP BY a.id`, create.Result.Agent.ID).Scan(&archived, &credentialCount, &revokedCount); err != nil || !archived || credentialCount != 2 || revokedCount != 2 {
+		t.Fatalf("CLI archived=%t credentials=%d revoked=%d err=%v", archived, credentialCount, revokedCount, err)
 	}
 	var receiptCount int
 	if err := db.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_management_receipts WHERE idempotency_key IN ('cli-create-agent-1','cli-rotate-agent-1','cli-revoke-agent-1','cli-disable-agent-1')").Scan(&receiptCount); err != nil || receiptCount != 4 {

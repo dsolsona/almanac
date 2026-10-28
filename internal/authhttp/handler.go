@@ -89,10 +89,10 @@ func New(service *authentication.Service, options Options) (*Handler, error) {
 // rules used by authentication endpoints. It deliberately does not inspect or
 // touch session authority; guarded services do that for every operation.
 func (h *Handler) ValidateSessionRequest(r *http.Request) (SessionRequest, error) {
-	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch) {
+	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch && r.Method != http.MethodDelete) {
 		return SessionRequest{}, ErrRequestMethod
 	}
-	unsafeMethod := r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch
+	unsafeMethod := r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete
 	if values := r.Header.Values("Authorization"); len(values) != 0 {
 		return SessionRequest{}, ErrAuthorization
 	}
@@ -429,7 +429,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request, body []byte, sou
 
 func (h *Handler) password(w http.ResponseWriter, r *http.Request, body []byte, source netip.Addr, id string) {
 	var request api.PasswordRequest
-	if !decodeObject(body, &request, "current_password", "new_password") {
+	if !decodeObject(body, &request, "new_password") {
 		h.problem(w, 400, "invalid_request", "Request body is invalid", id, "", nil)
 		return
 	}
@@ -447,7 +447,7 @@ func (h *Handler) password(w http.ResponseWriter, r *http.Request, body []byte, 
 		h.problem(w, 503, "authentication_unavailable", "Authentication is unavailable", id, "", nil)
 		return
 	}
-	result, err := h.service.ChangePassword(r.Context(), authentication.ChangePasswordInput{SessionSecret: session, CurrentPassword: request.CurrentPassword, NewPassword: request.NewPassword, Source: source, RequestID: id})
+	result, err := h.service.ChangePassword(r.Context(), authentication.ChangePasswordInput{SessionSecret: session, NewPassword: request.NewPassword, Source: source, RequestID: id})
 	if err != nil {
 		h.mapError(w, err, id, "new_password")
 		return

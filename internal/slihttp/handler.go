@@ -458,6 +458,8 @@ func (h *Handler) writeStorageError(w http.ResponseWriter, err error, requestID 
 		h.writeProblem(w, http.StatusForbidden, "forbidden", requestID)
 	case errors.Is(err, storage.ErrSliNotFound), errors.Is(err, storage.ErrDatasourceNotFound):
 		h.writeProblem(w, http.StatusNotFound, "not_found", requestID)
+	case errors.Is(err, storage.ErrReassignmentPending):
+		h.writeProblem(w, http.StatusConflict, "reassignment_pending", requestID)
 	case errors.Is(err, storage.ErrSliConflict), errors.Is(err, storage.ErrDatasourceConflict), errors.Is(err, storage.ErrDatasourceMeasurementConflict):
 		h.writeProblem(w, http.StatusConflict, "conflict", requestID)
 	case errors.Is(err, storage.ErrSliUnsupported):
@@ -507,11 +509,18 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
 func (h *Handler) writeProblem(w http.ResponseWriter, status int, code, requestID string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
+	message := "SLI request failed"
+	if code == "reassignment_pending" {
+		message = "This agent is completing a datasource move. Wait for it to finish or cancel the move before changing collection settings."
+	}
+	if code == "reassignment_settings_conflict" {
+		message = "Save connection changes before changing the assigned agent."
+	}
 	_ = json.MarshalWrite(w, api.Problem{Code: code, FieldErrors: []struct {
 		Code    string `json:"code"`
 		Field   string `json:"field"`
 		Message string `json:"message"`
-	}{}, Message: "SLI request failed", RequestId: requestID})
+	}{}, Message: message, RequestId: requestID})
 }
 
 func readBody(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, int) {
