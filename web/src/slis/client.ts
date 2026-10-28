@@ -14,6 +14,9 @@ export class SliFailure extends Error {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// 200 records, each with two 4096-byte queries escaped to six bytes per byte,
+// plus bounded metadata, observation and cursor overhead (under 10 MiB total).
+const MAX_SLI_PAGE_BYTES = 10 * 1024 * 1024;
 const MAX_INT64 = '9223372036854775807';
 const messages: Record<string, string> = {
   unauthorized: 'Your session has expired. Check your session and try again.',
@@ -130,14 +133,14 @@ async function readJSON(response: Response, maxBytes = 512 * 1024): Promise<unkn
   try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch { throw new SliFailure('invalid_response', 'The server returned an invalid SLI response.'); }
 }
 
-async function request<T>(path: string, init: RequestInit, expected: number, validate: (value: unknown) => value is T): Promise<{ value: T; response: Response }> {
+async function request<T>(path: string, init: RequestInit, expected: number, validate: (value: unknown) => value is T, maxBytes?: number): Promise<{ value: T; response: Response }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch {
     if (init.signal?.aborted) throw new SliFailure('request_canceled', 'The SLI request was canceled.');
     throw new SliFailure('request_failed', 'SLI management could not be reached.');
   }
-  const body = await readJSON(response);
+  const body = await readJSON(response, maxBytes);
   if (response.status !== expected) {
     const code = object(body) && typeof body.code === 'string' ? body.code : 'sli_unavailable';
     throw new SliFailure(code, messages[code] ?? messages.sli_unavailable!, response.status);
@@ -164,7 +167,7 @@ export function createSliClient() {
       if (!Number.isInteger(limit) || limit < 1 || limit > 200 || cursor.length > 512) throw new SliFailure('invalid_request', 'Pagination options are invalid.');
       const query = new URLSearchParams({ limit: String(limit) });
       if (cursor) query.set('cursor', cursor);
-      return (await request(`/api/v1/slis?${query}`, { method: 'GET', signal }, 200, validSliPage)).value;
+      return (await request(`/api/v1/slis?${query}`, { method: 'GET', signal }, 200, validSliPage, MAX_SLI_PAGE_BYTES)).value;
     },
     async get(id: string, signal?: AbortSignal): Promise<{ sli: Sli; etag: string }> {
       const { value, response } = await request(`/api/v1/slis/${safeID(id)}`, { method: 'GET', signal }, 200, validSli);

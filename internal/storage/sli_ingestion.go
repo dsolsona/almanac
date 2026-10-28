@@ -256,7 +256,8 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 
 func prepareSliPartitions(ctx context.Context, tx pgx.Tx, now time.Time) error {
 	months := map[string]time.Time{}
-	for _, value := range []time.Time{now.Add(-sli.ObservationReplayWindow), now, now.AddDate(0, 1, 0)} {
+	month := time.Date(now.UTC().Year(), now.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
+	for _, value := range []time.Time{now.Add(-sli.ObservationReplayWindow), now, month.AddDate(0, 1, 0)} {
 		start := time.Date(value.UTC().Year(), value.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
 		months[start.Format("200601")] = start
 	}

@@ -220,7 +220,7 @@ func (c *client) runSession(ctx context.Context) error {
 		return err
 	}
 	hello := agentprotocol.Envelope[agentprotocol.Hello]{Kind: agentprotocol.KindHello, MessageID: messageID, SessionGeneration: c.generation,
-		Payload: agentprotocol.Hello{ProtocolVersions: []string{agentprotocol.ProtocolV2, agentprotocol.ProtocolV1}, SoftwareVersion: "1.0.0",
+		Payload: agentprotocol.Hello{SupportsOwnerReplaced: true, ProtocolVersions: []string{agentprotocol.ProtocolV2, agentprotocol.ProtocolV1}, SoftwareVersion: "1.0.0",
 			Capabilities: []agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
 				ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"collect", "connection_test", "query_preview"}}}, ResumeToken: c.resume, RequestNonce: nonce}}
 	if err := hello.Validate(); err != nil {

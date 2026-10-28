@@ -1,0 +1,3 @@
+CREATE INDEX almanac_sli_coverage_lease_idx ON public.almanac_sli_coverage (lease_id);
+CREATE INDEX almanac_sli_execution_attempts_lease_idx ON public.almanac_sli_execution_attempts (lease_id);
+CREATE INDEX almanac_sli_delivery_receipts_lease_idx ON public.almanac_sli_delivery_receipts (lease_id);

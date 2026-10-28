@@ -46,7 +46,7 @@ func (r *Registry) publish(control *sessionControl, session agentruntime.Session
 	r.owners[session.AgentID] = registryOwner{generation: session.Generation, control: control}
 	if owner.control != nil && owner.control != control {
 		previous := owner.control
-		code, reason := websocket.StatusPolicyViolation, "owner_replaced"
+		code, reason := websocket.StatusPolicyViolation, previous.replacementReason()
 		if owner.generation == session.Generation {
 			code, reason = websocket.StatusGoingAway, "session resumed"
 		}
@@ -71,12 +71,16 @@ func (r *Registry) add(session *sessionControl) bool {
 func (r *Registry) remove(session *sessionControl) {
 	r.mu.Lock()
 	delete(r.sessions, session)
-	for id, owner := range r.owners {
+	session.readyMu.RLock()
+	if session.session != nil {
+		id := session.session.AgentID
+		owner := r.owners[id]
 		if owner.control == session {
 			owner.control = nil
 			r.owners[id] = owner
 		}
 	}
+	session.readyMu.RUnlock()
 	r.mu.Unlock()
 	close(session.done)
 }

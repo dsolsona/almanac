@@ -29,8 +29,42 @@ func (operations *savedConnectionTestOperations) PostSavedDatasourceConnectionTe
 	return operations.response, nil
 }
 
+const validSLIResponse = `{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"requests","display_name":"Requests","version":"1","measurement_revision":"1","datasource_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","datasource_version":"1","agent_id":"4b13e073-3c86-4a7f-b7e5-c15e9626e71c","agent_reachability":"connected","collection_progress":"idle","measurement_kind":"event_counts","component_mode":"interval_count","good_query":"vector(99)","total_query":"vector(100)","polling_interval_seconds":60,"settling_delay_seconds":60,"effective_from":"2026-10-27T11:58:00Z","activated_at":null,"activation_state":"preparing","freshness":"unknown","latest_observation":null,"last_attempt_at":null,"last_observation_at":null,"next_expected_execution_at":null,"created_at":"2026-10-27T12:00:20Z","updated_at":"2026-10-27T12:00:20Z"}`
+
+type sliListOperations struct {
+	setupclient.DatasourceOperations
+	response *http.Response
+}
+
+func (o *sliListOperations) ListSlis(_ context.Context, _ *api.ListSlisParams, _ ...api.RequestEditorFn) (*http.Response, error) {
+	return o.response, nil
+}
+
+func TestSLIListAcceptsMaxEscapedPageAndRejectsOversize(t *testing.T) {
+	query, err := json.Marshal(strings.Repeat("\x01", 4096))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := strings.Replace(validSLIResponse, `"good_query":"vector(99)"`, `"good_query":`+string(query), 1)
+	item = strings.Replace(item, `"total_query":"vector(100)"`, `"total_query":`+string(query), 1)
+	body := `{"items":[` + strings.TrimSuffix(strings.Repeat(item+",", 200), ",") + `],"next_cursor":""}`
+	ops := &sliListOperations{response: &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}}
+	client := New(ops, nil)
+	if _, err := client.ListSLIs(t.Context(), 200, ""); err != nil {
+		t.Fatalf("valid escaped page rejected: %v", err)
+	}
+	padded := `{"items":[` + validSLIResponse + `],"next_cursor":""}` + strings.Repeat(" ", 10<<20)
+	if !validSliPage([]byte(padded)) {
+		t.Fatal("oversized fixture must remain a valid page")
+	}
+	ops.response = &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(padded))}
+	if _, err := client.ListSLIs(t.Context(), 200, ""); err == nil {
+		t.Fatal("oversized page accepted")
+	}
+}
+
 func TestSliResponseAcceptsNullableActivationAndRejectsInvalidFields(t *testing.T) {
-	valid := `{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"requests","display_name":"Requests","version":"1","measurement_revision":"1","datasource_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","datasource_version":"1","agent_id":"4b13e073-3c86-4a7f-b7e5-c15e9626e71c","agent_reachability":"connected","collection_progress":"idle","measurement_kind":"event_counts","component_mode":"interval_count","good_query":"vector(99)","total_query":"vector(100)","polling_interval_seconds":60,"settling_delay_seconds":60,"effective_from":"2026-10-27T11:58:00Z","activated_at":null,"activation_state":"preparing","freshness":"unknown","latest_observation":null,"last_attempt_at":null,"last_observation_at":null,"next_expected_execution_at":null,"created_at":"2026-10-27T12:00:20Z","updated_at":"2026-10-27T12:00:20Z"}`
+	valid := validSLIResponse
 	for _, activation := range []string{"null", `"2026-10-27T12:00:21Z"`} {
 		if !validSli([]byte(strings.Replace(valid, `"activated_at":null`, `"activated_at":`+activation, 1))) {
 			t.Fatalf("valid activation %s rejected", activation)

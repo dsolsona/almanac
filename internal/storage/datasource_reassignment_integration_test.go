@@ -11,6 +11,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
+	"github.com/dsolsona/almanac/internal/identity"
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/google/uuid"
@@ -40,6 +41,15 @@ func TestIntegrationReassignmentRetryPaginationDoesNotStarveLaterMoves(t *testin
 		}
 	}
 	q := dbgen.New(conn)
+	if err := q.SetAgentHandoffConfiguration(t.Context(), dbgen.SetAgentHandoffConfigurationParams{AgentID: mustPGUUID(source.Agent.ID), Revision: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.DeleteExpiredSourceHandoffConfiguration(t.Context(), mustPGUUID(source.Agent.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.GetAgentHandoffConfiguration(t.Context(), mustPGUUID(source.Agent.ID)); err != nil {
+		t.Fatalf("pending moves lost marker: %v", err)
+	}
 	first, err := q.ListReadyDatasourceReassignments(t.Context(), timestamp(now))
 	if err != nil || len(first) != 50 {
 		t.Fatalf("first page=%d err=%v", len(first), err)
@@ -57,6 +67,146 @@ func TestIntegrationReassignmentRetryPaginationDoesNotStarveLaterMoves(t *testin
 		if row.DatasourceID == second[0].DatasourceID {
 			t.Fatal("unavailable retry starved later move")
 		}
+	}
+	if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_datasource_reassignments WHERE source_agent_id=$1`, source.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.DeleteExpiredSourceHandoffConfiguration(t.Context(), mustPGUUID(source.Agent.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if guarded, err := q.AgentHasPendingReassignments(t.Context(), mustPGUUID(source.Agent.ID)); err != nil || guarded {
+		t.Fatalf("finished source still guarded: %v, %v", guarded, err)
+	}
+}
+
+func TestIntegrationNewGenerationDoesNotInheritTransitionLease(t *testing.T) {
+	f := newAgentFixture(t)
+	credential, agent := createOwnershipAgent(t, f, "generation-transition")
+	now := f.base.Add(5 * time.Second)
+	clock := func() time.Time { return now }
+	hello := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV2, SoftwareVersion: "test", Capabilities: []byte(`[]`)}
+	oldProof := ownershipVerifier(ownershipBytes(32, 101))
+	old, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, credential.ID, credential.Verifier, oldProof, hello, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordAgentConfigurationAppliedProtocol(t.Context(), f.databaseURL, credential.ID, credential.Verifier, oldProof, old.Generation, old.ConfigurationRevision, agentprotocol.ProtocolV2, clock); err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	q := dbgen.New(conn)
+	revision, err := advanceAgentConfiguration(t.Context(), q, mustPGUUID(agent.Agent.ID), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.SetAgentHandoffConfiguration(t.Context(), dbgen.SetAgentHandoffConfigurationParams{AgentID: mustPGUUID(agent.Agent.ID), Revision: revision}); err != nil {
+		t.Fatal(err)
+	}
+	now = old.ExpiresAt.Add(time.Second)
+	newProof := ownershipVerifier(ownershipBytes(32, 102))
+	current, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, credential.ID, credential.Verifier, newProof, hello, clock)
+	if err != nil || current.Generation <= old.Generation || current.ConfigurationRevision != revision {
+		t.Fatalf("new generation grant=%+v desired=%d err=%v", current, revision, err)
+	}
+}
+
+func TestIntegrationExpiryCompletesLastV2MoveAndUnguardsSource(t *testing.T) {
+	f := newAgentFixture(t)
+	sourceCredential, source := createOwnershipAgent(t, f, "expiry-source")
+	targetCredential, target := createOwnershipAgent(t, f, "expiry-target")
+	otherCredential, other := createOwnershipAgent(t, f, "expiry-other")
+	now := f.base.Add(5 * time.Second)
+	clock := func() time.Time { return now }
+	capabilities := []byte(`[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["collect","connection_test","query_preview"]}]`)
+	helloV2 := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV2, SoftwareVersion: "test", Capabilities: capabilities}
+	helloV1 := &AgentRuntimeHello{Protocol: agentprotocol.ProtocolV1, SoftwareVersion: "test", Capabilities: capabilities}
+	sourceProof := ownershipVerifier(ownershipBytes(32, 111))
+	grant, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, sourceCredential.ID, sourceCredential.Verifier, sourceProof, helloV2, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, credential := range []identity.AgentToken{targetCredential, otherCredential} {
+		resume := ownershipVerifier(ownershipBytes(32, byte(112+i)))
+		if _, err := AcquireAgentOwnershipWithHello(t.Context(), f.databaseURL, credential.ID, credential.Verifier, resume, helloV1, clock); err != nil {
+			t.Fatal(err)
+		}
+		if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, credential.ID, credential.Verifier, resume, 1, 1, clock); err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	var sources []DatasourceRecord
+	for i := range 3 {
+		name := fmt.Sprintf("expiry-source-%d", i)
+		settings := datasource.DefaultSettings(name, name, "https://metrics.example.test", source.Agent.ID)
+		record, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: proof, Settings: settings, Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, IdempotencyKey: name, RequestID: name, Now: clock})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources = append(sources, record)
+		if i < 2 {
+			_, err := CreateSli(t.Context(), f.databaseURL, CreateSliInput{Proof: proof, Name: name, DisplayName: name, DatasourceID: record.ID, MeasurementKind: sli.MeasurementKindEventCounts, ComponentMode: sli.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", IdempotencyKey: name, RequestID: name, Now: clock})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	conn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(conn)
+	var revision int64
+	if err := conn.QueryRow(t.Context(), `SELECT max(revision) FROM public.almanac_agent_configurations WHERE agent_id=$1`, source.Agent.ID).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordAgentConfigurationAppliedProtocol(t.Context(), f.databaseURL, sourceCredential.ID, sourceCredential.Verifier, sourceProof, grant.Generation, revision, agentprotocol.ProtocolV2, clock); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(10 * time.Second)
+	grant, err = RenewAgentOwnershipWithHeartbeat(t.Context(), f.databaseURL, sourceCredential.ID, sourceCredential.Verifier, sourceProof, grant.Generation, 0, ownershipNonce(115), &AgentRuntimeHeartbeat{ReceivedAt: now, LeaseID: grant.LeaseID, AppliedConfigurationRevision: revision, SchedulerHealth: "ready", CollectionProgress: "idle"}, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, targetID := range []string{target.Agent.ID, other.Agent.ID} {
+		settings := sources[i].Settings
+		settings.AgentID = targetID
+		_, err := UpdateDatasource(t.Context(), f.databaseURL, nil, UpdateDatasourceInput{Proof: proof, DatasourceID: sources[i].ID, ExpectedVersion: sources[i].Version, Settings: settings, Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, RequestID: fmt.Sprintf("expiry-move-%d", i), Now: clock})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Delay the second move to prove the first completion retains its marker.
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_datasource_reassignments SET authority_expires_at=$2 WHERE datasource_id=$1`, sources[1].ID, grant.ExpiresAt.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	now = grant.ExpiresAt
+	if notices, err := ReconcileDatasourceReassignments(t.Context(), f.databaseURL, nil, clock); err != nil || len(notices) != 2 {
+		t.Fatalf("first expiry: %v, %v", notices, err)
+	}
+	q := dbgen.New(conn)
+	if guarded, err := q.AgentHasPendingReassignments(t.Context(), mustPGUUID(source.Agent.ID)); err != nil || !guarded {
+		t.Fatalf("remaining move not guarded: %v, %v", guarded, err)
+	}
+	now = now.Add(time.Minute)
+	if notices, err := ReconcileDatasourceReassignments(t.Context(), f.databaseURL, nil, clock); err != nil || len(notices) != 2 {
+		t.Fatalf("last expiry: %v, %v", notices, err)
+	}
+	if guarded, err := q.AgentHasPendingReassignments(t.Context(), mustPGUUID(source.Agent.ID)); err != nil || guarded {
+		t.Fatalf("finished source guarded: %v, %v", guarded, err)
+	}
+	var fresh [32]byte
+	fresh[0] = 116
+	if _, err := IssueSession(t.Context(), f.databaseURL, IssueSessionInput{UserID: f.userID, ExpectedCredentialEpoch: f.epoch, ExpectedCredentialRevision: f.revision, Verifier: fresh, Now: now, RequestID: "expiry-sign-in"}); err != nil {
+		t.Fatal(err)
+	}
+	proof.SessionVerifier = fresh
+	settings := sources[2].Settings
+	settings.DisplayName = "Edited after expiry"
+	if _, err := UpdateDatasource(t.Context(), f.databaseURL, nil, UpdateDatasourceInput{Proof: proof, DatasourceID: sources[2].ID, ExpectedVersion: sources[2].Version, Settings: settings, Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, RequestID: "edit-after-expiry", Now: clock}); err != nil {
+		t.Fatalf("edit datasource after expiry: %v", err)
+	}
+	_, err = CreateSli(t.Context(), f.databaseURL, CreateSliInput{Proof: proof, Name: "after-expiry", DisplayName: "After expiry", DatasourceID: sources[2].ID, MeasurementKind: sli.MeasurementKindEventCounts, ComponentMode: sli.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", IdempotencyKey: "after-expiry", RequestID: "after-expiry", Now: clock})
+	if err != nil {
+		t.Fatalf("create SLI after expiry: %v", err)
 	}
 }
 

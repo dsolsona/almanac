@@ -58,6 +58,45 @@ describe('SLI page', () => {
     expect(await screen.findByRole('button', { name: 'Create SLI' })).toBeVisible();
   });
 
+  it('recovers a failed datasource read with existing SLIs', async () => {
+    history.replaceState({}, '', '/slis');
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).startsWith('/api/v1/datasources')
+      ? (++reads === 1 ? response({}, 503) : response({ items: [source()], next_cursor: '' }))
+      : response({ items: [sli()], next_cursor: '' })));
+    render(<SlisPage context={admin} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Datasources could not be loaded');
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('button', { name: 'Add SLI' })).toBeVisible();
+  });
+
+  it('focuses route headings and ignores fragment history', async () => {
+    history.replaceState({}, '', '/slis');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/v1/datasources')) return response({ items: [source()], next_cursor: '' });
+      if (url.includes('/observations')) return response(historyPage([]));
+      if (url.includes(sliID)) return response(sli(), 200, { ETag: `"sli:${sliID}:2"` });
+      return response({ items: [sli()], next_cursor: '' });
+    }));
+    render(<SlisPage context={editor} />);
+    const row = await screen.findByRole('button', { name: /Request success/ });
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'SLIs' })).toHaveFocus());
+    await userEvent.click(row);
+    const heading = await screen.findByRole('heading', { name: 'Request success' });
+    await waitFor(() => expect(heading).toHaveFocus());
+    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    await userEvent.click(refresh);
+    expect(refresh).toHaveFocus();
+    act(() => { history.pushState({}, '', '#main'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    expect(refresh).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to SLIs' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'SLIs' })).toHaveFocus());
+    await userEvent.click(await screen.findByRole('button', { name: 'Add SLI' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Create SLI' })).toHaveFocus());
+  });
+
   it('shows existing SLIs while datasource names are still being fetched', async () => {
     history.replaceState({}, '', '/slis');
     const deferred = deferredResponse();

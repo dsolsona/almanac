@@ -62,7 +62,11 @@ personal tokens cannot mint additional credentials.
 ## HTTP behavior
 
 Resource IDs are opaque. Lists use stable opaque cursor pagination, default 50/max 200,
-with cursor-bound filters and ordering. Public names are validated and immutable
+with cursor-bound filters and ordering. SLI list and observation cursors are bounded
+to 512 bytes. Browser and CLI SLI list responses have a 10 MiB bound to accommodate
+a full supported page, including maximum-length queries after JSON escaping; other
+response limits remain independent. Responses above that allowance are rejected.
+Public names are validated and immutable
 where referenced by OpenSLO; renaming display text is separate. Maximum body defaults
 1 MiB management/4 MiB ingestion; OpenSLO import explicitly allows 5 MiB and 1,000
 documents. Reject before unbounded decoding. Large exports

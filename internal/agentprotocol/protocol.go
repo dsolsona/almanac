@@ -67,11 +67,12 @@ type Envelope[T any] struct {
 }
 
 type Hello struct {
-	ProtocolVersions []string     `json:"protocol_versions"`
-	SoftwareVersion  string       `json:"software_version"`
-	Capabilities     []Capability `json:"capabilities"`
-	ResumeToken      string       `json:"resume_token"`
-	RequestNonce     string       `json:"request_nonce"`
+	SupportsOwnerReplaced bool         `json:"supports_owner_replaced,omitzero"`
+	ProtocolVersions      []string     `json:"protocol_versions"`
+	SoftwareVersion       string       `json:"software_version"`
+	Capabilities          []Capability `json:"capabilities"`
+	ResumeToken           string       `json:"resume_token"`
+	RequestNonce          string       `json:"request_nonce"`
 }
 
 type Capability struct {

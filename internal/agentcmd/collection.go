@@ -248,6 +248,9 @@ func (r *collectionRunner) Heartbeat() (progress string, lastAttempt, lastSucces
 		if next := r.nextIntervalEnd[collectionKey(definition)]; !next.IsZero() {
 			assignment := r.assignments[definition.DatasourceID]
 			expected := next.Add(time.Duration(assignment.SettlingDelaySeconds) * time.Second)
+			if !r.initialPending[collectionKey(definition)] {
+				expected = expected.Add(sli.DispatchPhase(definition.SLIID, assignment.PollingIntervalSeconds))
+			}
 			if nextExpected == nil || expected.Before(*nextExpected) {
 				nextExpected = &expected
 			}

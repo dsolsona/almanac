@@ -42,17 +42,18 @@ type outbound struct {
 }
 
 type sessionControl struct {
-	conn     *websocket.Conn
-	cancel   context.CancelFunc
-	shutdown chan struct{}
-	queue    chan outbound
-	pending  atomic.Int64
-	queued   atomic.Int64
-	readyMu  sync.RWMutex
-	session  *agentruntime.Session
-	ready    bool
-	done     chan struct{}
-	stopOnce sync.Once
+	supportsOwnerReplaced bool
+	conn                  *websocket.Conn
+	cancel                context.CancelFunc
+	shutdown              chan struct{}
+	queue                 chan outbound
+	pending               atomic.Int64
+	queued                atomic.Int64
+	readyMu               sync.RWMutex
+	session               *agentruntime.Session
+	ready                 bool
+	done                  chan struct{}
+	stopOnce              sync.Once
 }
 
 func New(access *agentaccess.Service, runtime *agentruntime.Service, auth *authhttp.Handler, registry *Registry) (*Handler, error) {
@@ -134,18 +135,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusPolicyViolation, "invalid hello")
 		return
 	}
+	control.supportsOwnerReplaced = hello.SupportsOwnerReplaced
 	accepted, err := h.runtime.OpenProtocol(ctx, token, agentprotocol.Envelope[agentprotocol.Hello]{
 		Kind: envelope.Kind, MessageID: envelope.MessageID,
 		SessionGeneration: envelope.SessionGeneration, Payload: hello,
 	}, conn.Subprotocol())
 	if err != nil {
 		code, reason := openFailure(err)
+		if reason == "owner_replaced" {
+			reason = control.replacementReason()
+		}
 		_ = conn.Close(code, reason)
 		return
 	}
 	_, published := h.registry.publish(control, accepted)
 	if !published {
-		_ = conn.Close(websocket.StatusPolicyViolation, "owner_replaced")
+		_ = conn.Close(websocket.StatusPolicyViolation, control.replacementReason())
 		return
 	}
 	welcome, err := json.Marshal(accepted.Welcome)
@@ -200,7 +205,7 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 			if err != nil {
 				reason := "heartbeat rejected"
 				if errors.Is(err, agentownership.ErrReplaced) {
-					reason = "owner_replaced"
+					reason = control.replacementReason()
 				}
 				_ = control.conn.Close(websocket.StatusPolicyViolation, reason)
 				return
@@ -237,6 +242,13 @@ func (h *Handler) readLoop(ctx context.Context, control *sessionControl, token s
 			return
 		}
 	}
+}
+
+func (c *sessionControl) replacementReason() string {
+	if c.supportsOwnerReplaced {
+		return "owner_replaced"
+	}
+	return "session_rejected"
 }
 
 func openFailureReason(err error) string {
