@@ -22,6 +22,7 @@ import (
 var (
 	ErrAgentOwnershipInput     = errors.New("storage: invalid agent ownership input")
 	ErrAgentOwnershipDenied    = errors.New("storage: agent ownership denied")
+	ErrAgentOwnershipReplaced  = errors.Join(ErrAgentOwnershipDenied, errors.New("storage: agent ownership replaced"))
 	ErrAgentOwnershipConflict  = errors.New("storage: agent ownership conflict")
 	ErrAgentOwnershipExhausted = errors.New("storage: agent ownership counter exhausted")
 )
@@ -103,14 +104,9 @@ func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credential
 	if hasOwner && (now.Before(latest.AcquiredAt.Time) || now.Before(latest.RenewedAt.Time)) {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
 	}
-	if hasOwner && now.Before(latest.ExpiresAt.Time) {
-		if subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) != 1 {
-			result := agentOwnershipResult(latest, nil)
-			result.ReplaceAt = latest.ExpiresAt.Time.UTC()
-			if err := state.tx.Commit(ctx); err != nil {
-				return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership conflict commit failed", err)
-			}
-			return result, ErrAgentOwnershipConflict
+	if hasOwner && subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) == 1 {
+		if !now.Before(latest.ExpiresAt.Time) {
+			return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 		}
 		result, err := ensureAgentRuntimeGrant(ctx, state.queries, latest)
 		if err != nil {
@@ -126,8 +122,12 @@ func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credential
 		}
 		return result, nil
 	}
-	if hasOwner && subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) == 1 {
-		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
+	used, err := state.queries.HasAgentOwnershipProof(ctx, dbgen.HasAgentOwnershipProofParams{AgentID: state.agentID, ResumeVerifier: resumeVerifier[:]})
+	if err != nil {
+		return AgentOwnershipResult{}, operationError(ctx, "storage: agent ownership proof lookup failed", err)
+	}
+	if used {
+		return AgentOwnershipResult{}, ErrAgentOwnershipReplaced
 	}
 	generation := int64(1)
 	if hasOwner {
@@ -250,7 +250,10 @@ func ResumeAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialI
 	if now.Before(latest.AcquiredAt.Time) || now.Before(latest.RenewedAt.Time) {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
 	}
-	if latest.Generation != generation || !now.Before(latest.ExpiresAt.Time) ||
+	if latest.Generation != generation {
+		return AgentOwnershipResult{}, ErrAgentOwnershipReplaced
+	}
+	if !now.Before(latest.ExpiresAt.Time) ||
 		subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) != 1 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 	}
@@ -298,7 +301,10 @@ func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credenti
 	if now.Before(latest.AcquiredAt.Time) || now.Before(latest.RenewedAt.Time) {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
 	}
-	if latest.Generation != generation || !now.Before(latest.ExpiresAt.Time) ||
+	if latest.Generation != generation {
+		return AgentOwnershipResult{}, ErrAgentOwnershipReplaced
+	}
+	if !now.Before(latest.ExpiresAt.Time) ||
 		subtle.ConstantTimeCompare(latest.ResumeVerifier, resumeVerifier[:]) != 1 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 	}

@@ -296,9 +296,12 @@ and generation, including at commit; expiry or cancellation denies their accepta
 authority for old intervals, but that record grants no new execution. Disabling the identity
 or explicitly withdrawing the execution grant denies delayed acceptance as well.
 Reassignment fences old-owner writes immediately, including delayed submissions;
-normal reassignment or duplicate-instance takeover waits for outstanding execution
-authority to expire. A force action requires explicit acknowledgment of possible
-query overlap and does not restore old-owner ingestion rights. Other replay limits
+normal datasource reassignment waits for outstanding execution authority to expire.
+Process replacement instead follows [ADR-0022](../adr/0022-restartable-agent-ownership.md):
+a compatible cold start with a valid credential and fresh proof immediately advances
+ownership generation and fences the prior process, without waiting for offline expiry.
+A forced datasource reassignment requires explicit acknowledgment of possible query
+overlap and does not restore old-owner ingestion rights. Other replay limits
 belong to the protocol and ingestion contracts.
 
 For example, agent A collects 09:59 under revision 1, rotates its token at 10:00,
@@ -412,9 +415,10 @@ plaintext secrets. UI and CLI retain actionable redacted codes and request IDs.
 - REVIEW-I03: Confirm provisional session, password, throttling, reset, machine-token,
   overlap, personal/automation-token, worker-token, and audit-retention defaults
   against operator workflows; confirm automation grant target/scope ceilings.
-- REVIEW-I04: Review the one-hour offline execution limit with protocol ownership;
-  it preserves collection during shorter outages but delays safe takeover and
-  remote revocation. Longer outages intentionally leave gaps.
+- REVIEW-I04: One-hour offline execution preserves collection during shorter outages
+  and bounds remote revocation. Immediate process replacement under
+  [ADR-0022](../adr/0022-restartable-agent-ownership.md) fences stored results while
+  allowing possible old-process queries until expiry. Longer outages leave gaps.
 - REVIEW-I05: Confirm master-key operations and delayed-delivery grant withdrawal.
   Detailed endpoint/schema and deployment artifacts must be specified before code.
 - REVIEW-I06: Evaluate Tink for Go as the preferred encryption/keyset candidate,

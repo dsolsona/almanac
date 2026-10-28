@@ -8,6 +8,10 @@ ORDER BY generation DESC
 LIMIT 1
 FOR UPDATE;
 
+-- name: HasAgentOwnershipProof :one
+SELECT EXISTS(SELECT 1 FROM public.almanac_agent_ownership
+              WHERE agent_id = sqlc.arg(agent_id) AND resume_verifier = sqlc.arg(resume_verifier));
+
 -- name: InsertAgentOwnership :exec
 INSERT INTO public.almanac_agent_ownership (
     agent_id, generation, resume_verifier, acquired_at, renewed_at, expires_at

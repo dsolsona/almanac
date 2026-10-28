@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const hasAgentOwnershipProof = `-- name: HasAgentOwnershipProof :one
+SELECT EXISTS(SELECT 1 FROM public.almanac_agent_ownership
+              WHERE agent_id = $1 AND resume_verifier = $2)
+`
+
+type HasAgentOwnershipProofParams struct {
+	AgentID        pgtype.UUID `json:"agent_id"`
+	ResumeVerifier []byte      `json:"resume_verifier"`
+}
+
+func (q *Queries) HasAgentOwnershipProof(ctx context.Context, arg HasAgentOwnershipProofParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasAgentOwnershipProof, arg.AgentID, arg.ResumeVerifier)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertAgentOwnership = `-- name: InsertAgentOwnership :exec
 INSERT INTO public.almanac_agent_ownership (
     agent_id, generation, resume_verifier, acquired_at, renewed_at, expires_at

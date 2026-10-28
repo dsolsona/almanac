@@ -408,8 +408,8 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 						t.Fatal("read public backend certificate for browser check failed")
 					}
 					artifacts := assertConnectedAgentBrowser(t, baseURL, certificate, "agent-owner", password, created.Result.Agent.ID)
-					assertCopiedAgentCannotReplaceOwner(t, agentBinary, baseURL, token, certFile, databaseURL, created.Result.Agent.ID, client)
-					return connectedAgentJourney{id: created.Result.Agent.ID, credentialID: created.Result.Credential.ID, token: token, profile: profile, passwordPath: passwordPath, done: agentDone, result: agentResult, artifacts: artifacts}
+					replacementDone, replacementResult := assertFreshAgentReplacesOwner(t, agentBinary, baseURL, token, certFile, databaseURL, created.Result.Agent.ID, client, agentDone, agentResult)
+					return connectedAgentJourney{id: created.Result.Agent.ID, credentialID: created.Result.Credential.ID, token: token, profile: profile, passwordPath: passwordPath, done: replacementDone, result: replacementResult, artifacts: artifacts}
 				}
 			}
 		}

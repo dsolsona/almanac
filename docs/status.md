@@ -2,6 +2,16 @@
 
 ## Current state
 
+[F2-T31](tasks/F2-T31.md) is verified on `fix/agent-restart`, based on `c6b8674`.
+[ADR-0022](adr/0022-restartable-agent-ownership.md) replaces the one-hour restart
+wait with immediate authenticated process replacement and durable generation fencing.
+Independent Compose acceptance proved clean restart (1.181s), hard-kill replacement
+(1.066s) and backend restart plus replacement (7.638s), with new observations before
+old lease expiry, preserved history and rejected former-process results. The Linux
+gate passed 258 web, 360 Go, 352 race, 162 PostgreSQL integration and 108 browser
+tests. F2-T31 records artifacts and the corrected fixture readiness failure.
+The operator deployment has not been updated.
+
 [F2-T28](tasks/F2-T28.md) is verified on `fix/sli-detail-usability`, based on
 `258f968`. Maintainer testing exposed noninteractive breadcrumbs, a raw agent UUID,
 crowded collection status and an uneven SLI detail layout. The repair covers linked

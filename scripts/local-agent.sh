@@ -77,7 +77,7 @@ fi
 [ "$(wc -c < "$directory/token")" -le 2048 ] || fail 'the supplied credential is too large'
 { base64 < "$directory/token" | tr -d '\n'; printf '\n'; base64 < "$directory/ca.pem" | tr -d '\n'; printf '\n'; } > "$directory/input"
 name="almanac-agent-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-container=$(docker create -i --name "$name" --label almanac.local-agent=owned \
+container=$(docker create -i --name "$name" --label almanac.local-agent=owned --label "almanac.local-app=$app" \
   --network "container:$app" --user 10001:10001 --read-only --cap-drop ALL \
   --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
   --entrypoint /bin/sh "$image" -c '
@@ -91,8 +91,8 @@ container=$(docker create -i --name "$name" --label almanac.local-agent=owned \
       --token-file=/tmp/agent-token --ca-file=/tmp/agent-ca.pem
   ') || fail 'could not create the agent container'
 printf '%s\n' 'Agent starting. Confirm connection in the Agents page; Ctrl-C stops this agent.'
-printf '%s\n' 'A prior owner lease may delay restart; wait for it to expire if ownership is rejected.'
+printf '%s\n' 'Starting this agent replaces any prior process using the same credential.'
 docker start --attach --interactive "$container" < "$directory/input" &
 attach=$!
-wait "$attach" || fail 'agent stopped; check its credential and any ownership conflict above'
+wait "$attach" || fail 'agent stopped; check the error above'
 attach=''

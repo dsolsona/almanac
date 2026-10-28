@@ -4,7 +4,7 @@ import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { createConnection, createServer } from 'node:net';
-import { get } from 'node:https';
+import { get, request } from 'node:https';
 import { chromium, expect } from '@playwright/test';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -302,10 +302,10 @@ async function startAgent(page, agentID, token) {
   const appID = (await compose(['ps', '-q', 'app'])).trim();
   assert.match(appID, /^[a-f0-9]+$/);
   stage = 'start isolated real agent with make agent';
-  const handle = { appID, agentID, token, tokenFile: join(artifacts, `agent-token-${agentID}`), child: null, done: null, exited: false, container: undefined, output: '' };
+  const handle = { appID, agentID, token, tokenFile: join(artifacts, `agent-token-${agentID}-${randomBytes(12).toString('hex')}`), child: null, done: null, exited: false, container: undefined, output: '' };
   launchers.push(handle);
   writeFileSync(handle.tokenFile, token, { mode: 0o600 });
-  const before = new Set((await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned'])).trim().split('\n').filter(Boolean));
+  const before = new Set((await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned', '--filter', `label=almanac.local-app=${appID}`])).trim().split('\n').filter(Boolean));
   handle.child = spawn('make', ['agent'], { cwd: root, env: { ...env, AGENT_TOKEN_FILE: handle.tokenFile }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   handle.child.stdout.on('data', (chunk) => { handle.output += chunk; launcherOutput += chunk; });
   handle.child.stderr.on('data', (chunk) => { handle.output += chunk; launcherOutput += chunk; });
@@ -315,8 +315,14 @@ async function startAgent(page, agentID, token) {
   });
   await expect.poll(async () => {
     if (handle.exited) throw new Error(`launcher exited before startup: ${redact(handle.output)}`);
-    const ids = (await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned'])).trim().split('\n').filter((id) => id && !before.has(id));
-    if (ids.length === 1) handle.container = ids[0];
+    const ids = (await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned', '--filter', `label=almanac.local-app=${appID}`])).trim().split('\n').filter((id) => id && !before.has(id));
+    if (ids.length === 1) {
+      const info = JSON.parse(await command('docker', ['inspect', ids[0]]))[0];
+      assert.equal(info.Config.Labels?.['almanac.local-agent'], 'owned');
+      assert.equal(info.Config.Labels?.['almanac.local-app'], appID);
+      assert.equal(info.HostConfig.NetworkMode, `container:${appID}`);
+      handle.container = ids[0];
+    }
     return ids.length;
   }, { timeout: 15_000 }).toBe(1);
   const agent = JSON.parse(await command('docker', ['inspect', handle.container]))[0];
@@ -347,12 +353,12 @@ async function stopAgent(handle) {
   rmSync(handle.tokenFile); handle.tokenFile = undefined; handle.container = undefined;
 }
 async function checkRejectedAgentStarts(handle) {
-  const containers = async () => (await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned'])).trim().split('\n').filter(Boolean).sort();
+  const containers = async () => (await command('docker', ['ps', '-aq', '--filter', 'label=almanac.local-agent=owned', '--filter', `label=almanac.local-app=${handle.appID}`])).trim().split('\n').filter(Boolean).sort();
   const temporaryInputs = () => readdirSync(join(root, '.local')).filter((name) => name.startsWith('almanac-agent.')).sort();
   const beforeContainers = await containers(); const beforeInputs = temporaryInputs();
   const dot = issuedToken.lastIndexOf('.');
   invalidToken = `${issuedToken.slice(0, dot + 1)}${issuedToken[dot + 1] === 'A' ? 'B' : 'A'}${issuedToken.slice(dot + 2)}`;
-  for (const [name, token, expected] of [['invalid', invalidToken, /credential rejected/i], ['copied', issuedToken, /another process owns/i]]) {
+  for (const [name, token, expected] of [['invalid', invalidToken, /credential rejected/i]]) {
     stage = `real Compose rejected ${name} agent startup`;
     const file = join(artifacts, `${name}-agent-token`); writeFileSync(file, token, { mode: 0o600 });
     try {
@@ -366,10 +372,91 @@ async function checkRejectedAgentStarts(handle) {
     } finally { rmSync(file, { force: true }); }
   }
 }
+async function checkAgentRestarts(page, handle, agentID, sliID, originalObservation) {
+  const query = async (sql) => (await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc', sql])).trim();
+  const currentOwner = async () => JSON.parse(await query(`SELECT json_build_object('generation', generation, 'expires_at', expires_at, 'unexpired', expires_at > now()) FROM public.almanac_agent_ownership WHERE agent_id='${agentID}' ORDER BY generation DESC LIMIT 1`));
+  const oldItem = JSON.parse(await query(`SELECT json_build_object(
+    'delivery_id', c.delivery_id, 'execution_id', c.execution_id, 'created_at', c.agent_created_at,
+    'lease_id', c.lease_id, 'configuration_revision', c.configuration_revision::text,
+    'session_generation', c.session_generation::text, 'sli_id', c.sli_id,
+    'measurement_revision', c.measurement_revision::text, 'interval_start', c.interval_start,
+    'interval_end', c.interval_end, 'outcome', json_build_object('state', 'observed', 'good_count', v.good_count::text, 'total_count', v.total_count::text))
+    FROM public.almanac_sli_coverage c JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision)
+    WHERE c.sli_id='${sliID}' AND c.outcome='observed' ORDER BY c.interval_start DESC LIMIT 1`));
+  const cursorBefore = await query(`SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id='${sliID}' AND revision=${oldItem.measurement_revision}`);
+  const submit = () => new Promise((resolveSubmit, rejectSubmit) => {
+    const body = JSON.stringify({ items: [oldItem] });
+    const req = request(`${url}/api/agent/v1/observations`, { method: 'POST', ca: certificate,
+      headers: { Authorization: `Bearer ${issuedToken}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (response) => {
+      let data = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { data += chunk; });
+      response.on('end', () => { try { resolveSubmit({ status: response.statusCode, body: JSON.parse(data) }); } catch (error) { rejectSubmit(error); } });
+    });
+    req.setTimeout(15_000, () => req.destroy(new Error('Agent observation request timed out')));
+    req.on('error', rejectSubmit);
+    req.end(body);
+  });
+  stage = 'validate original agent receipt before replacement';
+  const priorReceipt = await submit();
+  assert.equal(priorReceipt.status, 200);
+  assert.equal(priorReceipt.body.items[0].status, 'accepted');
+  assert.ok(priorReceipt.body.items[0].observation_id);
+  const restartEvidence = [];
+  let agent = handle;
+  for (const mode of ['clean', 'kill', 'backend']) {
+    stage = `real Compose ${mode} agent restart before ownership expiry`;
+    const previous = await currentOwner();
+    assert.equal(previous.unexpired, true);
+    const started = performance.now();
+    if (mode === 'kill') {
+      await command('docker', ['kill', '--signal', 'KILL', agent.container]);
+      await Promise.race([agent.done, new Promise((_, reject) => setTimeout(() => reject(new Error('Killed agent launcher did not exit')), 15000))]);
+      rmSync(agent.tokenFile); agent.tokenFile = undefined; agent.container = undefined;
+    } else {
+      await stopAgent(agent);
+    }
+    if (mode === 'backend') {
+      await compose(['restart', 'app']);
+      await expect.poll(async () => {
+        try {
+          const appID = (await compose(['ps', '-q', 'app'])).trim();
+          const health = (await command('docker', ['inspect', '--format', '{{.State.Health.Status}}', appID])).trim();
+          return health === 'healthy' && await page.evaluate(async () => (await fetch('/livez', { cache: 'no-store' })).ok);
+        } catch { return false; }
+      }, { timeout: 25_000 }).toBe(true);
+    }
+    agent = await startAgent(page, agentID, issuedToken);
+    await expect.poll(async () => (await currentOwner()).generation, { timeout: 25_000 }).toBe(previous.generation + 1);
+    const connectElapsedMS = Math.round(performance.now() - started);
+    assert.equal(await query(`SELECT expires_at > now() FROM public.almanac_agent_ownership WHERE agent_id='${agentID}' AND generation=${previous.generation}`), 't');
+    await expect.poll(async () => Number(await query(`SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id='${sliID}' AND session_generation=${previous.generation + 1} AND outcome='observed'`)), { timeout: 110_000, intervals: [1000] }).toBeGreaterThan(0);
+    const replacementObservation = JSON.parse(await query(`SELECT json_build_object('observation_id', observation_id, 'interval_start', interval_start, 'interval_end', interval_end, 'recorded_at', recorded_at) FROM public.almanac_sli_coverage WHERE sli_id='${sliID}' AND session_generation=${previous.generation + 1} AND outcome='observed' ORDER BY interval_start DESC LIMIT 1`));
+    restartEvidence.push({ mode, old_generation: previous.generation, new_generation: previous.generation + 1, old_expires_at: previous.expires_at, connect_elapsed_ms: connectElapsedMS, observation: replacementObservation });
+    writeFileSync(join(artifacts, 'agent-restarts.json'), JSON.stringify(restartEvidence, null, 2), { mode: 0o600 });
+  }
+  stage = 'reject the former generation receipt and retain history';
+  const receipt = await submit();
+  assert.equal(receipt.status, 200);
+  assert.equal(receipt.body.items[0].status, 'rejected');
+  assert.equal(receipt.body.items[0].error_code, 'execution_not_authorized');
+  const observations = await page.evaluate(async (id) => (await (await fetch(`/api/v1/slis/${id}/observations?limit=50`)).json()).items, sliID);
+  assert.deepEqual(observations.find((item) => item.observation_id === originalObservation.observation_id), originalObservation);
+  const cursorAfter = await query(`SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id='${sliID}' AND revision=${oldItem.measurement_revision}`);
+  assert.ok(Date.parse(cursorAfter) >= Date.parse(cursorBefore));
+  return agent;
+}
 async function checkCollectedSLI(page, agentID) {
-  const oldAgent = await startAgent(page, agentID, issuedToken);
-  const appID = oldAgent.appID;
-  await checkRejectedAgentStarts(oldAgent);
+  const originalAgent = await startAgent(page, agentID, issuedToken);
+  const appID = originalAgent.appID;
+  await checkRejectedAgentStarts(originalAgent);
+  stage = 'replace a connected agent using the same credential';
+  let oldAgent = await startAgent(page, agentID, issuedToken);
+  const originalExit = await Promise.race([originalAgent.done, new Promise((_, reject) => setTimeout(() => reject(new Error('Replaced agent did not exit')), 15000))]);
+  assert.equal(originalExit.code, 0);
+  assert.match(originalAgent.output, /replaced by a newer process; stopping/i);
+  assert.ok(!originalAgent.output.includes(issuedToken));
+  rmSync(originalAgent.tokenFile); originalAgent.tokenFile = undefined;
   stage = 'real Compose SLI prerequisite and datasource creation';
   await page.goto(`${url}/slis`);
   await expect(page.getByText('Add a Prometheus datasource to create your first SLI.', { exact: true })).toBeVisible();
@@ -458,6 +545,10 @@ async function checkCollectedSLI(page, agentID) {
   const persisted = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
     `SELECT v.good_count::text, v.total_count::text, c.outcome, c.agent_id::text, extract(epoch from (c.interval_end-c.interval_start))::integer FROM public.almanac_sli_coverage c JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision) WHERE c.sli_id='${evidence.sli_id}' ORDER BY c.interval_start DESC LIMIT 1`]);
   assert.equal(persisted.trim(), `99.000000000000|100.000000000000|observed|${agentID}|15`);
+  const initialHistory = await page.evaluate(async (id) => (await (await fetch(`/api/v1/slis/${id}/observations?limit=50`)).json()).items, evidence.sli_id);
+  const initialObservation = initialHistory.find((item) => item.outcome === 'observed' && item.good_count === '99' && item.total_count === '100');
+  assert.ok(initialObservation);
+  oldAgent = await checkAgentRestarts(page, oldAgent, agentID, evidence.sli_id, initialObservation);
   stage = 'start public-origin loopback relay for CLI';
   await command('docker', ['run', '-d', '--name', relayContainer, '--network', `container:${appID}`, '--read-only',
     '--entrypoint', 'node', nodeImage, '-e',
@@ -1066,7 +1157,7 @@ function cleanup() {
         const ids = (await command('docker', ['ps', '-aq', '--filter', `id=${handle.container}`], { allowDuringCancellation: true })).trim();
         if (ids) {
           const info = JSON.parse(await command('docker', ['inspect', handle.container], { allowDuringCancellation: true }))[0];
-          if (info.Config.Labels?.['almanac.local-agent'] !== 'owned' || info.HostConfig.NetworkMode !== `container:${handle.appID}`) throw new Error('launcher ownership mismatch');
+          if (info.Config.Labels?.['almanac.local-agent'] !== 'owned' || info.Config.Labels?.['almanac.local-app'] !== handle.appID || info.HostConfig.NetworkMode !== `container:${handle.appID}`) throw new Error('launcher ownership mismatch');
           await command('docker', ['rm', '-f', handle.container], { allowDuringCancellation: true });
         }
       } catch { cleanupFailed = true; console.error('Could not remove the owned acceptance agent container.'); }

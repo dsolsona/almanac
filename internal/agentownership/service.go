@@ -162,6 +162,8 @@ func (s *Service) mapStorageError(err error) error {
 		return ErrInvalidCredential
 	case errors.Is(err, storage.ErrAgentOwnershipInput):
 		return ErrInvalidInput
+	case errors.Is(err, storage.ErrAgentOwnershipReplaced):
+		return ErrReplaced
 	case errors.Is(err, storage.ErrAgentOwnershipDenied), errors.Is(err, storage.ErrAgentOwnershipExhausted):
 		return ErrDenied
 	case errors.Is(err, storage.ErrCancelled):

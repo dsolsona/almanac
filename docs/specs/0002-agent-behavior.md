@@ -50,9 +50,12 @@ actionable error; it must not enter a retry loop that hides an incompatibility.
 Transient connection failures use bounded retry delays with jitter. Exact bounds
 are part of the communication ADR and implementation configuration.
 
-Only one executing instance may own an agent identity at a time. The mechanism
-for rejecting or fencing duplicate instances must be decided before implementation;
-multiple processes using the same credential must not silently double collection.
+Only one current generation may save results for an agent identity. Under
+[ADR-0022](../adr/0022-restartable-agent-ownership.md), a compatible authenticated
+cold start with a fresh process proof replaces the previous process immediately,
+including after a crash. A superseded process stops when notified and cannot
+reacquire automatically. An unreachable old process may query until offline expiry,
+but its results are rejected. Keep one desired replica per identity.
 
 ## Capabilities
 

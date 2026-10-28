@@ -106,8 +106,8 @@ spread across the configured frequency while retaining complete measurement wind
 
 When updating this code, rebuild the app with `make run`, then stop the attached
 local agent with Ctrl-C and start it again with `make agent` to use the updated
-agent binary. The launcher uses the running app's image; updating the app does not
-replace an already running agent. Its previous ownership lease may need to expire.
+agent binary. The launcher uses the running app's image; starting it replaces any
+older process for the same agent identity immediately.
 
 ## Runtime foundation
 
@@ -329,14 +329,14 @@ Create the credential with `agents create` and its `--token-file` option as show
 above, then deliver that protected file to the agent host through your deployment
 secret mechanism. The file must be a regular file with no group or other
 permissions; the agent rejects broader permissions and does not print the token.
-Keep one process running for this credential. A second process using a copied token
-cannot take over the active owner. Stop the process with SIGINT or SIGTERM; it
+Keep one desired process running for this credential. A new process using the token
+replaces the current owner. Stop the process with SIGINT or SIGTERM; it
 reconnects after temporary backend loss and exits with a distinct safe message for
-credential rejection, revocation, active-owner conflict or protocol incompatibility.
-The resume proof exists only in process memory. After a process restart, a new
-process cannot resume the prior owner; wait for its ownership lease to expire
-(up to one hour, or sooner if the credential expires) before starting the
-replacement process. There is no force-takeover command in this increment.
+credential rejection, revocation, replacement or protocol incompatibility.
+The resume proof exists only in process memory. Restart immediately with the same
+credential after a stop or crash. A disconnected former process may continue source
+queries until its offline lease expires, but its results are rejected after replacement.
+Protect the credential: any holder can replace the current agent process.
 
 The backend URL must be an HTTPS origin without a path, query or fragment. System
 certificate roots are used by default. To add a private CA while retaining normal

@@ -14,6 +14,7 @@ var (
 	ErrInvalidInput      = errors.New("invalid agent ownership input")
 	ErrInvalidCredential = errors.New("invalid agent credential")
 	ErrDenied            = errors.New("agent ownership denied")
+	ErrReplaced          = errors.Join(ErrDenied, errors.New("agent ownership replaced"))
 	ErrConflict          = errors.New("agent ownership conflict")
 	ErrUnavailable       = errors.New("agent ownership unavailable")
 	ErrCancelled         = errors.New("agent ownership cancelled")

@@ -74,9 +74,11 @@ shutdown/revocation use enumerated safe reasons rather than arbitrary diagnostic
 text.
 
 Handshake rejection uses WebSocket policy close status with one of the stable safe
-reasons `active_owner`, `credential_revoked`, `incompatible_protocol`, or
-`session_rejected`. The agent treats active ownership, revocation, and protocol
-incompatibility as actionable terminal outcomes; transient transport and backend
+reasons `owner_replaced`, `active_owner` (legacy policy), `credential_revoked`,
+`incompatible_protocol`, or `session_rejected`. Both handshake and established-session
+readers treat replacement as terminal: the process reports replacement and exits
+successfully. Active ownership, revocation, session rejection and protocol
+incompatibility are unsuccessful terminal outcomes; transient transport and backend
 availability errors reconnect with bounded backoff. Server `shutdown` is a
 server-to-agent application message that requests reconnect. A locally stopped
 agent ends the WebSocket with a normal close and does not send a server-only
@@ -150,11 +152,24 @@ are denied immediately at authorization. A disconnected agent cannot learn revoc
 instantly; its lease bounds how long it may still query. This is a deliberate proposal
 for review, not a claim that token revocation remotely erases source credentials.
 
-Only one instance may hold an identity's active execution ownership. Reconnect from
+Only one generation may hold an identity's current accepted ownership. Reconnect from
 the same live process presents an unpredictable resume token bound to its generation.
-A new process without that token must wait for previous execution expiry or request
-an administrator force-takeover. Never persist resume tokens in a shared image or
-claim that possession of a copied agent token proves it is the same process.
+Under [ADR-0022](../adr/0022-restartable-agent-ownership.md), a compatible authenticated
+cold hello with a fresh proof immediately replaces the former process, even before
+its lease expires. This applies after clean stops, crashes and backend restarts.
+Current-proof replay remains idempotent; any superseded proof, including a delayed
+cold hello, is terminally denied. Never persist resume tokens in a shared image or
+claim that possession of an agent credential proves it is the same process.
+
+Replacement commits a strictly newer generation under the identity lock. Old-owner
+renewal, resume, diagnostic completion and observation submission are denied, including
+replays. Keep previously accepted history and its collection cursor. Registry publication
+and routing cannot regress to an older generation when handshakes finish out of order.
+Close a superseded connected session with a terminal replacement reason; its client
+cancels work and exits without reacquiring. Transport loss still allows offline work
+until lease expiry. A partitioned old process may query, but cannot save results after
+replacement. Starting a fresh process intentionally replaces the prior instance;
+operators should configure one desired replica per agent identity.
 
 Agents negotiate `almanac.agent.v2` for drain-before-acknowledgement semantics,
 falling back to `almanac.agent.v1` with older peers. A v2 agent installs the removal
@@ -245,8 +260,10 @@ keep generated items within supported limits.
   from receipt alone.
 - AC-03: Heartbeat remains responsive during slow queries; disconnect, lease expiry,
   and token revocation produce distinct observable states.
-- AC-04: Duplicate instances and reassignment obey normal lease fencing; force takeover
-  is explicit/audited and stale writes are rejected even if old queries still run.
+- AC-04: Clean and crashed process replacements connect before prior lease expiry;
+  current-proof replay is idempotent, superseded proofs never take ownership back,
+  and old renewals/results are denied. Concurrent starts and out-of-order session
+  publication retain the newest generation. Datasource handoff fencing is unchanged.
 - AC-05: Lost diagnostic acknowledgements/results do not create uncontrolled duplicate
   tests or replay expired commands.
 - AC-06: Budgets bound memory/concurrency through retries and historical saturation;
@@ -258,7 +275,8 @@ keep generated items within supported limits.
   cause collection to stop and rely on best-effort repair. The user has approved ring
   eviction, not this duration. It bounds stale authorization while allowing brief
   outages to buffer. Review this prominently.
-- **REVIEW-P02:** Safe replacement may wait up to an hour; force takeover acknowledges
-  temporary duplicate source queries while keeping accepted data fenced.
+- **REVIEW-P02:** [ADR-0022](../adr/0022-restartable-agent-ownership.md) supersedes
+  the process-replacement wait: fresh authenticated starts replace immediately,
+  accepting possible partitioned source-query overlap while fencing stored results.
 - **REVIEW-P03:** Budgets, heartbeat/deadlines and protocol-major support are provisional
   defaults requiring provider/load tests. No runtime or wire implementation exists.
