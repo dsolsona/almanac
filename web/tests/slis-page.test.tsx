@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlisPage } from '../src/slis/SlisPage.tsx';
 import type { AuthContext } from '../src/auth/client.ts';
 
+const admin: AuthContext = { csrf_token: 'csrf-admin', session: { user_id: 'admin-1', login: 'owner', role: 'administrator', restricted: false } };
 const editor: AuthContext = { csrf_token: 'csrf-editor', session: { user_id: 'user-1', login: 'editor', role: 'editor', restricted: false } };
 const viewer: AuthContext = { csrf_token: 'csrf-viewer', session: { user_id: 'user-2', login: 'reader', role: 'viewer', restricted: false } };
 const sourceID = '8ed93d7e-51e3-4a3e-9222-3e8a612de20a';
@@ -26,6 +27,62 @@ function deferredResponse() {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); });
 
 describe('SLI page', () => {
+  it.each([['/slis', admin], ['/slis/new', admin], ['/slis', editor], ['/slis/new', editor]] as const)('shows the datasource prerequisite at %s for %s', async (path, context) => {
+    history.replaceState({}, '', path);
+    vi.stubGlobal('fetch', vi.fn(async () => response({ items: [], next_cursor: '' })));
+    render(<SlisPage context={context} />);
+    if (context === admin) {
+      expect(await screen.findByText(/Add a Prometheus datasource to create/)).toBeVisible();
+      const action = screen.getByRole('button', { name: 'Add datasource' });
+      expect(screen.queryByRole('button', { name: 'Create SLI' })).not.toBeInTheDocument();
+      await userEvent.click(action);
+      expect(location.pathname + location.search).toBe('/datasources/new?return=slis');
+    } else {
+      expect(await screen.findByText(/Ask an administrator to add a Prometheus datasource/)).toBeVisible();
+      expect(screen.queryByRole('button', { name: 'Add datasource' })).not.toBeInTheDocument();
+    }
+  });
+
+  it('does not mistake a pending or failed datasource read for an empty prerequisite and retries', async () => {
+    history.replaceState({}, '', '/slis');
+    const deferred = deferredResponse(); let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).startsWith('/api/v1/datasources')
+      ? (++reads === 1 ? deferred.promise : response({ items: [source()], next_cursor: '' }))
+      : response({ items: [], next_cursor: '' })));
+    render(<SlisPage context={admin} />);
+    expect(screen.queryByText(/Add a Prometheus datasource to create/)).not.toBeInTheDocument();
+    await act(async () => deferred.resolve(response({}, 503)));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Datasources could not be loaded');
+    expect(screen.queryByRole('button', { name: 'Add datasource' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('button', { name: 'Create SLI' })).toBeVisible();
+  });
+
+  it('shows existing SLIs while datasource names are still being fetched', async () => {
+    history.replaceState({}, '', '/slis');
+    const deferred = deferredResponse();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).startsWith('/api/v1/datasources')
+      ? deferred.promise : response({ items: [sli()], next_cursor: '' })));
+    render(<SlisPage context={admin} />);
+    expect(await screen.findByRole('button', { name: /Request success/ })).toBeVisible();
+    expect(screen.getByText('Checking datasources')).toHaveClass('sr-only');
+    await act(async () => deferred.resolve(response({ items: [source()], next_cursor: '' })));
+    expect(await screen.findByText(/Production metrics/)).toBeVisible();
+  });
+
+  it('selects the returned datasource and suggests an editable identifier', async () => {
+    history.replaceState({}, '', `/slis/new?datasource=${sourceID}`);
+    vi.stubGlobal('fetch', vi.fn(async () => response({ items: [source()], next_cursor: '' })));
+    const user = userEvent.setup(); render(<SlisPage context={admin} />);
+    expect(await screen.findByLabelText('Datasource')).toHaveValue(sourceID);
+    await user.type(screen.getByLabelText('Display name'), 'Request success');
+    expect(screen.getByLabelText('SLI name')).toHaveValue('request-success');
+    await user.clear(screen.getByLabelText('SLI name'));
+    await user.type(screen.getByLabelText('SLI name'), 'custom-name');
+    await user.type(screen.getByLabelText('Display name'), ' updated');
+    expect(screen.getByLabelText('SLI name')).toHaveValue('custom-name');
+  });
+
   it.each(['empty', 'observed', 'error'] as const)('shows loading until initial history settles: %s', async (outcome) => {
     history.replaceState({}, '', `/slis/${sliID}`);
     const deferred = deferredResponse();
@@ -37,12 +94,12 @@ describe('SLI page', () => {
     }));
     render(<SlisPage context={editor} />);
     expect(await screen.findByRole('heading', { name: 'Request success' })).toBeVisible();
-    expect(screen.getByText('Loading observation history')).toBeVisible();
+    expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
     expect(screen.queryByText('No observations have been recorded in this range.')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Display name')).toBeEnabled();
     await act(async () => deferred.resolve(outcome === 'error' ? response({ code: 'sli_unavailable' }, 503)
       : response(historyPage(outcome === 'observed' ? [sli().latest_observation] : []))));
-    expect(screen.queryByText('Loading observation history')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refreshing observation history')).not.toBeInTheDocument();
     if (outcome === 'empty') expect(screen.getByText('No observations have been recorded in this range.')).toBeVisible();
     if (outcome === 'observed') expectObservedHistory();
     if (outcome === 'error') {
@@ -69,13 +126,13 @@ describe('SLI page', () => {
     await waitFor(() => expect(historyReads).toBe(2));
     if (order === 'initial-first') {
       await act(async () => initial.resolve(response(historyPage([]))));
-      expect(screen.getByText('Loading observation history')).toBeVisible();
+      expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
       expect(screen.queryByText('No observations have been recorded in this range.')).not.toBeInTheDocument();
     }
     await act(async () => refresh.resolve(response(historyPage([sli().latest_observation]))));
     if (order === 'refresh-first') await act(async () => initial.resolve(response(historyPage([]))));
     expectObservedHistory();
-    expect(screen.queryByText('Loading observation history')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refreshing observation history')).not.toBeInTheDocument();
   });
 
   it('retains loaded history while a refresh is pending', async () => {
@@ -94,7 +151,7 @@ describe('SLI page', () => {
     expectObservedHistory();
     await user.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(historyReads).toBe(2));
-    expect(screen.getByText('Loading observation history')).toBeVisible();
+    expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
     expectObservedHistory();
     await act(async () => refresh.resolve(response(historyPage([]))));
     expect(screen.getByText('No observations have been recorded in this range.')).toBeVisible();
@@ -113,11 +170,11 @@ describe('SLI page', () => {
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
     await user.click(await screen.findByRole('button', { name: 'Load more intervals' }));
-    expect(screen.getByText('Loading observation history')).toBeVisible();
+    expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
     expectObservedHistory();
     await act(async () => next.resolve(response(historyPage([]))));
     expectObservedHistory();
-    expect(screen.queryByText('Loading observation history')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refreshing observation history')).not.toBeInTheDocument();
   });
   it('creates an SLI through the API and reads its scheduled activation and exact history', async () => {
     const user = userEvent.setup();

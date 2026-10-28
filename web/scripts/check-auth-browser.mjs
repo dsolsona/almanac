@@ -271,12 +271,16 @@ try {
 } catch (error) {
   failed = true;
   // Do not emit Playwright exceptions: their call logs may contain submitted text.
-  const networkCode = /net::ERR_[A-Z_]+/.exec(String(error))?.[0] ?? 'none';
+  const errorText = String(error);
+  const networkCode = /net::ERR_[A-Z_]+/.exec(errorText)?.[0] ?? 'none';
+  const failureCategory = /strict mode violation/i.test(errorText) ? 'strict-locator'
+    : error?.name === 'TimeoutError' || /timeout .* exceeded|timed out/i.test(errorText) ? 'timeout'
+      : error?.name === 'AssertionError' || error?.name === 'ExpectError' || /expect\(/.test(errorText) ? 'assertion' : 'other';
   const safeLocation = await page?.evaluate(() => {
     const agent = new URL(location.href).searchParams.get('agent') ?? '';
     return { pathname: location.pathname, agent: /^[0-9a-f-]{36}$/.test(agent) ? agent : '(none or invalid)' };
   }).catch(() => ({ pathname: 'unavailable', agent: 'unavailable' })) ?? { pathname: 'unavailable', agent: 'unavailable' };
-  await writeFile(join(fixture.artifacts, 'failure.txt'), `Failed stage: ${stage}\nActual pathname: ${safeLocation.pathname}\nActual agent: ${safeLocation.agent}\nNetwork code: ${networkCode}\nLogin requests: ${counts.login}\nPassword requests: ${counts.password}\n`, { mode: 0o600 });
+  await writeFile(join(fixture.artifacts, 'failure.txt'), `Failed stage: ${stage}\nActual pathname: ${safeLocation.pathname}\nActual agent: ${safeLocation.agent}\nNetwork code: ${networkCode}\nFailure category: ${failureCategory}\nLogin requests: ${counts.login}\nPassword requests: ${counts.password}\n`, { mode: 0o600 });
   try {
     if (!fixture.scenario.startsWith('agents')) {
       await page?.screenshot({ path: join(fixture.artifacts, 'failure.png'),

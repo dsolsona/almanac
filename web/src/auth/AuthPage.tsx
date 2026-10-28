@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react';
 import { AuthFailure, createAuthClient, type AuthContext } from './client.ts';
-import { ApplicationShell, Button, LoadingIndicator, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
+import { ApplicationShell, Button, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
 import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
 
@@ -227,8 +227,8 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     setNotice(null);
     setShowCheckSession(false);
     const nextErrors: FieldErrors = {};
-    if (!login || byteLength(login) > 256) nextErrors.login = !login ? 'Enter your login.' : 'Login must be at most 256 UTF-8 bytes.';
-    if (!password || byteLength(password) > 512) nextErrors.password = !password ? 'Enter your password.' : 'Password must be at most 512 UTF-8 bytes.';
+    if (!login || byteLength(login) > 256) nextErrors.login = !login ? 'Enter your login.' : 'Login is too long. Check it and try again.';
+    if (!password || byteLength(password) > 512) nextErrors.password = !password ? 'Enter your password.' : 'Password is too long. Check it and try again.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       setNotice({ kind: 'error', text: 'Review the highlighted fields.' });
@@ -261,9 +261,10 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     setNotice(null);
     setShowCheckSession(false);
     const nextErrors: FieldErrors = {};
-    if (!currentPassword || byteLength(currentPassword) > 512) nextErrors.currentPassword = !currentPassword ? 'Enter your current password.' : 'Password must be at most 512 UTF-8 bytes.';
+    if (!currentPassword || byteLength(currentPassword) > 512) nextErrors.currentPassword = !currentPassword ? 'Enter your current password.' : 'Password is too long. Check it and try again.';
     const points = [...newPassword].length;
-    if (points < 15 || points > 128 || byteLength(newPassword) > 512) nextErrors.newPassword = 'New password must be 15–128 Unicode code points and at most 512 UTF-8 bytes.';
+    if (points < 15) nextErrors.newPassword = 'Use at least 15 characters.';
+    else if (points > 128 || byteLength(newPassword) > 512) nextErrors.newPassword = 'Use 128 characters or fewer.';
     if (newPassword === currentPassword && currentPassword) nextErrors.newPassword = 'Choose a new password that differs from the current password.';
     if (confirmation !== newPassword) nextErrors.confirmation = 'Enter the same new password again.';
     setErrors(nextErrors);
@@ -337,19 +338,19 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
     }
   }
 
-  const title = checking ? 'Checking your session' : unavailable ? 'Unable to check your session'
+  const title = checking ? 'Welcome to Almanac' : unavailable ? 'Unable to check your session'
     : context?.session?.restricted ? 'Set your permanent password' : 'Sign in';
 
   const lifecycleNotice = agentLifecycleIntent && (!context?.session || context.session.user_id !== agentLifecycleIntent.userID || context.session.restricted || context.session.role !== 'administrator') && <Panel heading={agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? 'Credential command needs reconciliation' : agentLifecycleIntent.outcome === 'rejected' ? 'Credential command was rejected' : 'Credential command outcome unknown'} className="auth-panel"><p>{agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} conflicted after an earlier uncertain attempt. Reconcile its original target, command key and resource version before starting another command.` : agentLifecycleIntent.outcome === 'rejected' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} was rejected. Its original target, command key and resource version remain available for a deliberate retry.` : `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} may have completed. Its original target, command key and resource version remain available for a deliberate retry. No password or token was retained.`}</p></Panel>;
 
   if (operational && context?.session) return <ApplicationShell login={context.session.login} role={context.session.role} pending={pending} showCheckSession={showCheckSession} onCheckSession={() => void checkSession(true)} onSignOut={() => void signOut()}>
-    {pathname.startsWith('/datasources') ? <ScreenBoundary screen="Datasource" key={`datasources:${context.session.user_id}`}><Suspense fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><span>Datasources</span></nav><h1 className="app-page-heading">Datasources</h1><div className="app-route-loading" role="status"><LoadingIndicator label="Opening datasource management" /></div></>}><LazyDatasourcesPage context={context} /></Suspense></ScreenBoundary>
-      : pathname.startsWith('/slis') ? <ScreenBoundary screen="SLI" key={`slis:${context.session.user_id}`}><Suspense fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Product</span><span aria-hidden="true">/</span><span>SLIs</span></nav><h1 className="app-page-heading">SLIs</h1><div className="app-route-loading" role="status"><LoadingIndicator label="Opening SLI management" /></div></>}><LazySlisPage context={context} /></Suspense></ScreenBoundary> : <>
+    {pathname.startsWith('/datasources') ? <ScreenBoundary screen="Datasource" key={`datasources:${context.session.user_id}`}><Suspense fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><span>Datasources</span></nav><h1 className="app-page-heading">Datasources</h1><span className="sr-only" role="status">Opening datasources</span></>}><LazyDatasourcesPage context={context} /></Suspense></ScreenBoundary>
+      : pathname.startsWith('/slis') ? <ScreenBoundary screen="SLI" key={`slis:${context.session.user_id}`}><Suspense fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Product</span><span aria-hidden="true">/</span><span>SLIs</span></nav><h1 className="app-page-heading">SLIs</h1><span className="sr-only" role="status">Opening SLIs</span></>}><LazySlisPage context={context} /></Suspense></ScreenBoundary> : <>
     <nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><span>Agents</span></nav>
     <h1 id="agents-title" className="agents-heading app-page-heading" ref={heading} tabIndex={-1}>Agents</h1>
     {notice && <div ref={noticeRef} className={`auth-notice auth-notice--${notice.kind}`} role={notice.kind === 'success' ? 'status' : 'alert'} tabIndex={-1}>{notice.text}</div>}
     {lifecycleNotice}
-    {context.session.role === 'administrator' ? <ScreenBoundary screen="Agent" key={context.session.user_id}><Suspense fallback={<div className="app-route-loading" role="status"><LoadingIndicator label="Opening agent administration" /></div>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} lifecycleIntent={agentLifecycleIntent} onLifecycleIntentChange={setAgentLifecycleIntent} /></Suspense></ScreenBoundary> : <Panel heading="Agent administration unavailable"><p>Agent administration is available to unrestricted administrators.</p></Panel>}
+    {context.session.role === 'administrator' ? <ScreenBoundary screen="Agent" key={context.session.user_id}><Suspense fallback={<span className="sr-only" role="status">Opening agents</span>}><LazyAgentsPage context={context} recheckSession={recheckAgentSession} suspended={pending || checking || unavailable} draft={agentDraft} onDraftChange={setAgentDraft} intent={agentIntent} onIntentChange={setAgentIntent} lifecycleIntent={agentLifecycleIntent} onLifecycleIntentChange={setAgentLifecycleIntent} /></Suspense></ScreenBoundary> : <Panel heading="Agent administration unavailable"><p>Agent administration is available to unrestricted administrators.</p></Panel>}
     </>}
   </ApplicationShell>;
 
@@ -360,7 +361,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
       <h1 ref={heading} tabIndex={-1}>{title}</h1>
       {notice && <div ref={noticeRef} className={`auth-notice auth-notice--${notice.kind}`} role={notice.kind === 'success' ? 'status' : 'alert'} tabIndex={-1}>{notice.text}</div>}
       {lifecycleNotice}
-      {checking && <div className="auth-loading"><LoadingIndicator label="Checking your session" /></div>}
+      {checking && <span className="sr-only" role="status">Checking your session</span>}
       {!checking && unavailable && <Panel heading="Session status unavailable" className="auth-panel">
         <p>Almanac could not confirm whether you are signed in. Check again to continue.</p>
         <div className="auth-actions">

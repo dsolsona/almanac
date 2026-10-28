@@ -85,7 +85,11 @@ Import controls from `src/components/ui/` and prefer native semantics:
 - `DatePicker` validates `YYYY-MM-DD` calendar dates and opens a shared native
   dialog containing a Monday-first, keyboard-navigable month grid.
 - `LoadingIndicator` announces an indeterminate status with a transform-only
-  moving segment and a static reduced-motion state.
+  moving segment and a static reduced-motion state in the component catalogue.
+  Product pages use stable content and accessible pending state instead of visible
+  loading messages, bars or placeholder flashes. Keep existing records on same-view
+  refreshes, prevent unsafe pending actions, and distinguish pending, empty and
+  failed reads.
 - `ApplicationShell` provides desktop navigation, a focus-contained mobile drawer,
   account controls and visibly unavailable planned destinations.
 

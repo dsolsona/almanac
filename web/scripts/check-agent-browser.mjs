@@ -49,7 +49,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   await expect(page.getByRole('button', { name: 'fixture-001', exact: true })).toBeVisible();
   await page.goForward();
   await expectSelectedAgentURL(selectedAgentID, 'agent selection browser forward');
-  const history = page.getByRole('region', { name: 'Credential history', exact: true }).and(page.locator('[tabindex="0"]'));
+  const history = page.locator('.agents-credentials').and(page.getByRole('region', { name: 'Credential history', exact: true }));
   setStage('agent selection browser forward URL confirmed; waiting for credential history region');
   await expect(history).toBeVisible();
   setStage('direct agent selection URL reload');
@@ -57,23 +57,23 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   await expectSelectedAgentURL(selectedAgentID, 'direct agent selection URL reload');
   await expect(page.getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
   setStage('credential history first page');
-  await expect(history.locator('tbody tr')).toHaveCount(50);
+  await expect(history.locator('.agents-credential')).toHaveCount(50);
   setStage('credential history second page');
   await page.getByRole('button', { name: 'Next credential history', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
-  await expect(history.locator('tbody tr')).toHaveCount(1);
+  await expect(history.locator('.agents-credential')).toHaveCount(1);
   await expect(history).toContainText('20000000-0000-4000-8000-000000000051');
   setStage('credential history cursor browser history');
   await page.goBack();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && !url.searchParams.has('credentials_cursor'));
-  await expect(history.locator('tbody tr')).toHaveCount(50);
+  await expect(history.locator('.agents-credential')).toHaveCount(50);
   await page.goForward();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
-  await expect(history.locator('tbody tr')).toHaveCount(1);
+  await expect(history.locator('.agents-credential')).toHaveCount(1);
   setStage('credential history reload');
   await page.reload();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
-  await expect(history.locator('tbody tr')).toHaveCount(1);
+  await expect(history.locator('.agents-credential')).toHaveCount(1);
   await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
 
@@ -159,7 +159,8 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     await expect(page.getByRole('heading', { name: 'Registration not confirmed', exact: true })).toBeVisible();
     setStage('registration recovery heading visible');
     assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
-    const status = page.getByRole('status');
+    const status = page.getByRole('status').filter({ hasText: 'Registration is not confirmed. The agent records currently shown may not include this request.' });
+    await expect(status).toBeVisible();
     await expect(status).toContainText('Registration is not confirmed. The agent records currently shown may not include this request.');
     setStage('connection status content verified');
     const currentTheme = await page.locator('html').evaluate((element) => element.classList.contains('dark')) ? 'dark' : 'light';
@@ -264,7 +265,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
     await expect(page.getByText(evidence.agent_id, { exact: true })).toBeVisible();
-    await expect(history.locator('tbody tr')).toHaveCount(1);
+    await expect(history.locator('.agents-credential')).toHaveCount(1);
     await expect(history).toContainText(evidence.credential_id);
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
     assert.equal(createRequests, expectedCreates);

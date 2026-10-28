@@ -6,7 +6,7 @@ import { expect } from '@playwright/test';
 export async function runAgentLifecycleJourney({ page, context, fixture, setStage, registration, tokenEvidence }) {
   const origin = new URL(fixture.url).origin;
   const agentPath = `/api/v1/agents/${registration.agent_id}`;
-  const history = page.getByRole('region', { name: 'Credential history', exact: true }).and(page.locator('[tabindex="0"]'));
+  const history = page.locator('.agents-credentials').and(page.getByRole('region', { name: 'Credential history', exact: true }));
   const mutations = [];
   const inspectEmptyDialog = async (dialog, label) => {
     // Only capture before password entry and after any one-time token is cleared.
@@ -75,10 +75,10 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await tokenDialog.getByRole('button', { name: 'Close token', exact: true }).click();
   await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
   assert.equal((await page.locator('body').textContent()).includes(token), false);
-  await expect(history.locator('tbody tr')).toHaveCount(2);
+  await expect(history.locator('.agents-credential')).toHaveCount(2);
 
   setStage('credential revocation confirmation');
-  const row = history.locator('tbody tr').filter({ hasText: replacement.credential_id });
+  const row = history.locator('.agents-credential').filter({ hasText: replacement.credential_id });
   await row.getByRole('button', { name: 'Revoke credential', exact: true }).click();
   const revoke = page.getByRole('dialog', { name: 'Revoke credential', exact: true });
   await expect(revoke).toContainText(replacement.credential_id);
@@ -110,7 +110,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   assert.equal(mutations.length, 3);
   await page.reload();
   await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
-  await expect(history.locator('tbody tr')).toHaveCount(2);
+  await expect(history.locator('.agents-credential')).toHaveCount(2);
   await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
   await writeFile(join(fixture.artifacts, 'agent-lifecycle.json'), JSON.stringify({
     agent_id: registration.agent_id, ...replacement, mutation_count: mutations.length,

@@ -82,6 +82,20 @@ unauthorized records. Navigation must preserve the existing safe-draft and
 uncertain-command recovery contracts, without persisting secrets in URLs or
 browser storage. Reusable shell components appear in the development catalogue.
 
+Product pages do not display loading messages, progress bars or placeholder
+flashes during navigation and reads. Keep the shell and destination heading stable;
+retain existing records during a refresh of the same view. Announce pending work
+accessibly and disable actions that require an unconfirmed result. Pending reads
+must not appear as empty or successful results, and failures must remain actionable.
+This presentation requirement was explicitly accepted by the maintainer on
+2026-10-27; it does not change request, authorization or recovery behavior.
+
+First-use screens identify the next available action before sending the user to
+another page. When SLI creation needs a datasource, expose that prerequisite on
+the SLI list and retain the SLI destination through datasource creation. Respect
+the user's permissions when presenting setup actions. Use plain-language field
+guidance and suggest stable identifiers from display names where supported.
+
 ### Operator journeys
 
 | Journey | Required behavior |

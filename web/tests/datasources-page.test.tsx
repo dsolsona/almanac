@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
@@ -46,6 +46,70 @@ function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, na
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('datasource page', () => {
+  it('returns to SLI creation with the created datasource when invoked from SLI', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
+    installFetch(); render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'http://localhost');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    await waitFor(() => expect(location.pathname + location.search).toBe(`/slis/new?datasource=${sourceID}`));
+  });
+
+  it('retains the SLI return path only after an uncertain create is reconciled', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
+    const calls = installFetch(undefined, ['available'], [], undefined, [503, 201]);
+    render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'http://localhost');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    await screen.findByRole('button', { name: 'Retry same create' });
+    expect(location.pathname).toBe('/datasources/new');
+    await user.click(screen.getByRole('button', { name: 'Retry same create' }));
+    await waitFor(() => expect(location.pathname + location.search).toBe(`/slis/new?datasource=${sourceID}`));
+    const creates = calls.filter((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST');
+    expect(new Headers(creates[0]?.init?.headers).get('Idempotency-Key')).toBe(new Headers(creates[1]?.init?.headers).get('Idempotency-Key'));
+  });
+
+  it('explains how to make an unreported agent eligible', async () => {
+    history.replaceState({}, '', '/datasources/new?return=slis');
+    installFetch([{ id: agentID, name: 'local', display_name: 'Local', enabled: true, runtime: null }]);
+    render(<DatasourcesPage context={admin} />);
+    expect(await screen.findByText(/Start your registered agent before assigning this datasource/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'View agents' })).toBeVisible();
+    expect(screen.getByLabelText('Assigned agent')).toHaveValue('');
+  });
+
+  it('explains that an agent must be registered when none exists', async () => {
+    history.replaceState({}, '', '/datasources/new'); installFetch([]);
+    render(<DatasourcesPage context={admin} />);
+    expect(await screen.findByText(/Register and start an Almanac agent before adding a datasource/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'View agents' })).toBeVisible();
+  });
+
+  it('keeps the current list during paging and marks it stale if the next page fails', async () => {
+    history.replaceState({}, '', '/datasources');
+    let finish!: (response: Response) => void;
+    const page = new Promise<Response>((resolve) => { finish = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('cursor=')
+      ? page : response({ items: [source()], next_cursor: 'next' })));
+    const user = userEvent.setup(); render(<DatasourcesPage context={viewer} />);
+    await user.click(await screen.findByRole('button', { name: 'Next page' }));
+    expect(screen.getByRole('button', { name: /Production metrics/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    expect(screen.getByText('Refreshing datasources')).toHaveClass('sr-only');
+    await act(async () => finish(response({}, 503)));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Showing previous results.');
+    expect(screen.getByRole('button', { name: /Production metrics/ })).toBeVisible();
+  });
+
+  it('does not show an empty datasource state after an initial read fails', async () => {
+    history.replaceState({}, '', '/datasources');
+    vi.stubGlobal('fetch', vi.fn(async () => response({}, 503)));
+    render(<DatasourcesPage context={viewer} />);
+    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'No datasources yet' })).not.toBeInTheDocument();
+  });
+
   it('keeps viewer reads redacted and does not request administrator-only agent assignment data', async () => {
     history.replaceState({}, '', '/datasources');
     const calls = installFetch();

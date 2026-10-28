@@ -7,9 +7,9 @@
 .agents-unknown { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .agents-unknown h2 { flex-basis: 100%; }
 .agents-table-scroll { max-width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.agents-table-scroll:focus { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.agents-table-scroll:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .agents-table-scroll table { width: 100%; min-width: 720px; border-collapse: collapse; text-align: left; }
-.agents-table-scroll th, .agents-table-scroll td { padding: var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; }
+.agents-table-scroll th, .agents-table-scroll td { padding: var(--space-3); border-bottom: 1px solid var(--border); vertical-align: middle; }
 .agents-table-scroll th { color: var(--text-2); font-family: var(--mono); font-size: .8125rem; font-weight: 600; white-space: nowrap; }
 .agents-table-scroll td { font-family: var(--mono); font-size: .8125rem; white-space: nowrap; }
 .agents-table-scroll tbody tr:last-child td { border-bottom: 0; }
@@ -42,3 +42,7 @@
   .agents-title-row .ui-button { width: 100%; }
   .agents-screen { margin-top: var(--space-6); }
 }
+
+.agents-credentials { display: grid; gap: var(--space-3); }
+.agents-credential { display: grid; justify-items: start; gap: var(--space-3); min-width: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.agents-credential .agents-meta { width: 100%; }

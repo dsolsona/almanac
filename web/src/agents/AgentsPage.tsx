@@ -3,7 +3,7 @@ import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, AgentFailure, type Agent, type AgentCredential, type AgentIssuance, type AgentDetail } from './client.ts';
 import { AgentRuntimePanel } from './AgentRuntimePanel.tsx';
 import { AgentLifecycleControls } from './AgentLifecycleControls.tsx';
-import { Button, Dialog, LoadingIndicator, Panel, TextField } from '../components/ui/index.ts';
+import { Button, Dialog, Panel, TextField } from '../components/ui/index.ts';
 import './agents.css';
 
 export type AgentSafeDraft = { name: string; displayName: string; lifetime: string; nameEdited?: boolean };
@@ -94,7 +94,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       actionGeneration.current++;
       if (nextKey !== resultKey.current) {
         readGeneration.current++;
-        setAgents([]); setAgent(null); setCredentials([]); setAgentNext(''); setCredentialNext('');
+        setAgents([]); setAgent(null); setAgentDetail(null); setCredentials([]); setAgentNext(''); setCredentialNext(''); setLoading(true);
         hasCachedData.current = false; lastSuccessAt.current = ''; setError('');
       }
       resultKey.current = nextKey;
@@ -270,18 +270,18 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     {announceUnconfirmed && locationState.agent && <p ref={registrationStatusRef} className="agents-error" role="status" aria-live="polite" tabIndex={-1}>Registration is not confirmed. The agent records currently shown may not include this request.</p>}
     {lifecycleIntent && (lifecycleIntent.userID !== currentUser || lifecycleIntent.agentID !== locationState.agent) && <Panel heading="Credential command needs attention" className="agents-unknown"><p>A {lifecycleIntent.kind} command for agent {lifecycleIntent.agentID} must be reconciled before another credential command can start. Its original command key and resource version are retained.</p><div className="agents-actions"><Button variant="outline" disabled={suspended || submitBusy || lifecycleBusy} onClick={() => setQuery({ agent: lifecycleIntent.agentID, agents_cursor: '', credentials_cursor: '' })}>Return to affected agent</Button><Button variant="ghost" disabled={submitBusy || lifecycleBusy} onClick={() => onLifecycleIntentChange(null)}>Abandon command</Button></div></Panel>}
     {rateLimited && now < throttleUntil && <p role="status">Try registration again in {Math.ceil((throttleUntil - now) / 1000)} seconds.</p>}
-    {loading && <LoadingIndicator label="Loading agent records" />}
-    {!loading && !locationState.agent && <Panel heading="Agent records" className="agents-panel">
+    {loading && <span className="sr-only" role="status">Refreshing agent records</span>}
+    {!locationState.agent && <Panel heading="Agent records" className="agents-panel">
       {announceUnconfirmed && <p ref={registrationStatusRef} className="agents-error" role="status" aria-live="polite" tabIndex={-1}>Registration is not confirmed. The agent records currently shown may not include this request.</p>}
-      {agents.length === 0 ? <p>{error && !hasCachedData.current ? 'Agent records could not be loaded.' : intent?.outcome === 'unknown' ? 'No agents are currently visible.' : 'No agents have been registered.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table><thead><tr><th>Name</th><th>Display name</th><th>Administration</th><th>Created (UTC)</th><th>Updated (UTC)</th></tr></thead><tbody>{agents.map((item) => <tr key={item.id}><td><button className="agents-link" onClick={() => setQuery({ agent: item.id, agents_cursor: '', credentials_cursor: '' })}>{item.name}</button></td><td>{item.display_name}</td><td>{item.enabled ? 'Enabled' : 'Disabled'}</td><td>{date(item.created_at)}</td><td>{date(item.updated_at)}</td></tr>)}</tbody></table></div>}
+      {loading && !hasCachedData.current ? null : agents.length === 0 ? <p>{error && !hasCachedData.current ? 'Agent records could not be loaded.' : intent?.outcome === 'unknown' ? 'No agents are currently visible.' : 'No agents have been registered.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table><thead><tr><th>Name</th><th>Display name</th><th>Administration</th><th>Created (UTC)</th><th>Updated (UTC)</th></tr></thead><tbody>{agents.map((item) => <tr key={item.id}><td><button className="agents-link" onClick={() => setQuery({ agent: item.id, agents_cursor: '', credentials_cursor: '' })}>{item.name}</button></td><td>{item.display_name}</td><td>{item.enabled ? 'Enabled' : 'Disabled'}</td><td>{date(item.created_at)}</td><td>{date(item.updated_at)}</td></tr>)}</tbody></table></div>}
       {agentNext && <Button variant="outline" onClick={() => setQuery({ agents_cursor: agentNext })}>Next agents</Button>}
     </Panel>}
     {locationState.agent && <Button variant="outline" onClick={() => setQuery({ agent: '', credentials_cursor: '' })}>Back to agents</Button>}
-    {!loading && locationState.agent && agent && <>
+    {(!loading || hasCachedData.current) && locationState.agent && agent && <>
       <Panel heading="Agent details" className="agents-panel"><dl className="agents-meta"><div><dt>Name</dt><dd>{agent.name}</dd></div><div><dt>Display name</dt><dd>{agent.display_name}</dd></div><div><dt>Administration</dt><dd>{agent.enabled ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Agent ID</dt><dd>{agent.id}</dd></div><div><dt>Created (UTC)</dt><dd>{date(agent.created_at)}</dd></div><div><dt>Updated (UTC)</dt><dd>{date(agent.updated_at)}</dd></div></dl></Panel>
       <AgentRuntimePanel agent={agent} />
       <Panel heading="Credential history" className="agents-panel"><p>Scheduled retirement and revocation are separate events. This history does not show whether a credential is currently connected or active.</p>
-        {credentials.length === 0 ? <p>No credentials are recorded.</p> : <div className="agents-table-scroll" role="region" aria-label="Credential history" tabIndex={0}><table><thead><tr><th>Credential ID</th><th>Issued (UTC)</th><th>Expires (UTC)</th><th>Scheduled retirement (UTC)</th><th>Revoked (UTC)</th><th>Actions</th></tr></thead><tbody>{credentials.map((item) => <tr key={item.id}><td>{item.id}</td><td>{date(item.issued_at)}</td><td>{date(item.expires_at)}</td><td>{item.retire_at ? date(item.retire_at) : '—'}</td><td>{item.revoked_at ? date(item.revoked_at) : '—'}</td><td>{item.revoked_at === null && <Button variant="danger" onClick={() => setRevokeRequest({ credentialID: item.id, sequence: ++revokeSequence.current })} disabled={suspended || lifecycleBusy || submitBusy || loading || Boolean(error) || !agentDetail || Boolean(intent) || Boolean(lifecycleIntent)}>Revoke credential</Button>}</td></tr>)}</tbody></table></div>}
+        {credentials.length === 0 ? <p>No credentials are recorded.</p> : <div className="agents-credentials" role="region" aria-label="Credential history">{credentials.map((item) => <section className="agents-credential" key={item.id} aria-label={`Credential ${item.id}`}><dl className="agents-meta"><div><dt>Credential ID</dt><dd>{item.id}</dd></div><div><dt>Issued (UTC)</dt><dd>{date(item.issued_at)}</dd></div><div><dt>Expires (UTC)</dt><dd>{date(item.expires_at)}</dd></div><div><dt>Scheduled retirement (UTC)</dt><dd>{item.retire_at ? date(item.retire_at) : '—'}</dd></div><div><dt>Revoked (UTC)</dt><dd>{item.revoked_at ? date(item.revoked_at) : '—'}</dd></div></dl>{item.revoked_at === null && <Button variant="danger" onClick={() => setRevokeRequest({ credentialID: item.id, sequence: ++revokeSequence.current })} disabled={suspended || lifecycleBusy || submitBusy || loading || Boolean(error) || !agentDetail || Boolean(intent) || Boolean(lifecycleIntent)}>Revoke credential</Button>}</section>)}</div>}
         {credentialNext && <Button variant="outline" onClick={() => setQuery({ credentials_cursor: credentialNext })}>Next credential history</Button>}
       </Panel>
     </>}

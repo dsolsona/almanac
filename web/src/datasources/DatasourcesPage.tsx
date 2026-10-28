@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, LoadingIndicator, Panel, SelectField, TextField } from '../components/ui/index.ts';
+import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createDatasourceClient, DatasourceFailure, type Datasource, type DatasourceWrite, type Diagnostic, type Provider } from './client.ts';
 import './datasources.css';
 
@@ -171,6 +171,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [locationKey, setLocationKey] = useState(() => `${location.pathname}${location.search}`);
   const selectedID = useMemo(() => /^\/datasources\/([0-9a-f-]{36})$/.exec(new URL(locationKey, location.origin).pathname)?.[1] ?? null, [locationKey]);
   const isNew = new URL(locationKey, location.origin).pathname === '/datasources/new';
+  const returnToSLI = isNew && new URL(locationKey, location.origin).searchParams.get('return') === 'slis';
   const [items, setItems] = useState<Datasource[]>([]);
   const [cursor, setCursor] = useState('');
   const [nextCursor, setNextCursor] = useState('');
@@ -193,6 +194,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const providerRequest = useRef<AbortController | null>(null);
   const providerGeneration = useRef(0);
   const locationKeyRef = useRef(locationKey);
+  const listResultKey = useRef('');
   const saveIntent = useRef<SaveIntent | null>(null);
   const saveController = useRef<AbortController | null>(null);
   const [uncertainSave, setUncertainSave] = useState(false);
@@ -214,7 +216,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }, [locationKey]);
 
   function changeRoute(nextRoute: string) {
-    if (locationKeyRef.current !== nextRoute) setNameValidationAttempted(false);
+    if (locationKeyRef.current !== nextRoute) { setNameValidationAttempted(false); setLoading(true); }
     locationKeyRef.current = nextRoute;
     if (saveIntent.current && saveIntent.current.route !== nextRoute) {
       saveIntent.current = null;
@@ -229,7 +231,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   const navigate = useCallback((path: string) => {
     history.pushState({}, '', path);
-    changeRoute(`${location.pathname}${location.search}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   }, []);
   useEffect(() => {
     const changed = () => changeRoute(`${location.pathname}${location.search}`);
@@ -238,17 +240,18 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   }, []);
 
   const loadList = useCallback((next = '') => {
-    const request = new AbortController(); setLoading(true); setError('');
+    const request = new AbortController(); const routeAtRequest = locationKeyRef.current; setLoading(true); setError('');
     void (async () => {
       try {
         const [page, agentItems] = await Promise.all([
           client.list(50, next, request.signal),
           admin ? loadAgents(request.signal) : Promise.resolve([]),
         ]);
-        if (request.signal.aborted) return;
+        if (request.signal.aborted || locationKeyRef.current !== routeAtRequest) return;
+        listResultKey.current = routeAtRequest;
         setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setAgents(agentItems);
-      } catch (reason) { if (!request.signal.aborted) setError(safeError(reason)); }
-      finally { if (!request.signal.aborted) setLoading(false); }
+      } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setError(`${safeError(reason)}${listResultKey.current === routeAtRequest ? ' Showing previous results.' : ''}`); }
+      finally { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setLoading(false); }
     })();
     return request;
   }, [admin]);
@@ -343,7 +346,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       if (!activeIntent()) return;
       saveIntent.current = null; setUncertainSave(false); setNotice(intent.isNew ? 'Datasource created.' : 'Datasource settings saved.'); setDiagnostic(null);
       setDraft((current) => ({ ...current, password: '', token: '' }));
-      if (intent.isNew) { setPending(false); navigate('/datasources'); }
+      if (intent.isNew) { setPending(false); navigate(returnToSLI ? `/slis/new?datasource=${encodeURIComponent(saved.id)}` : '/datasources'); }
       else {
         setSource(saved); setEtag(`"datasource:${saved.id}:${saved.version}"`); setDraft(fromDatasource(saved));
         setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
@@ -468,24 +471,28 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     finally { setCancelSubmitting(false); }
   }
 
-  if (loading) return <><PageTitle headingRef={heading} title={isNew ? 'Add datasource' : selectedID ? 'Datasource' : 'Datasources'} /><div className="app-route-loading" role="status"><LoadingIndicator label="Loading datasource details" /></div></>;
+  if (loading && (selectedID || isNew || listResultKey.current !== locationKey)) return <><PageTitle headingRef={heading} title={isNew ? 'Add datasource' : selectedID ? 'Datasource' : 'Datasources'} /><span className="sr-only" role="status">Opening datasource</span></>;
   if (error && !source && selectedID) return <><PageTitle headingRef={heading} title="Datasources" /><Panel heading="Datasource unavailable"><p ref={errorSummary} role="alert" tabIndex={-1}>{error}</p><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button></Panel></>;
-  if (!selectedID && !isNew) return <>
+  if (!selectedID && !isNew) {
+    const currentItems = listResultKey.current === locationKey ? items : [];
+    return <>
     <div className="datasource-list-heading"><PageTitle headingRef={heading} title="Datasources" />{admin && <Button onClick={() => navigate('/datasources/new')}>Add datasource</Button>}</div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
-    <div className="datasource-toolbar"><p>Prometheus sources assigned to collection agents.</p></div>
-    {items.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <div className="datasource-list" aria-label="Datasources">
-      {items.map((item) => <button className="datasource-row" key={item.id} onClick={() => navigate(`/datasources/${item.id}`)}><span><strong>{item.display_name}</strong><small>{item.endpoint}</small></span><span className="datasource-row__meta"><small>{item.authentication.mode === 'none' ? 'No authentication' : `${item.authentication.mode} · secret ${item.authentication[ item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured' ] ? 'configured' : 'not configured'}`}</small><small>Version {item.version}</small></span></button>)}
+    <div className="datasource-toolbar"><p>Prometheus sources assigned to collection agents.</p>{loading && <span className="sr-only" role="status">Refreshing datasources</span>}</div>
+    {currentItems.length === 0 && error && listResultKey.current !== locationKey ? null : currentItems.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <div className="datasource-list" aria-label="Datasources">
+      {currentItems.map((item) => <button className="datasource-row" key={item.id} disabled={loading} onClick={() => navigate(`/datasources/${item.id}`)}><span><strong>{item.display_name}</strong><small>{item.endpoint}</small></span><span className="datasource-row__meta"><small>{item.authentication.mode === 'none' ? 'No authentication' : `${item.authentication.mode} · secret ${item.authentication[ item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured' ] ? 'configured' : 'not configured'}`}</small><small>Version {item.version}</small></span></button>)}
     </div>}
-    {(nextCursor || cursor) && <div className="datasource-pagination">{nextCursor && <Button variant="outline" onClick={() => void loadList(nextCursor)}>Next page</Button>}{cursor && <Button variant="outline" onClick={() => void loadList('')}>First page</Button>}</div>}
+    {listResultKey.current === locationKey && (nextCursor || cursor) && <div className="datasource-pagination">{nextCursor && <Button variant="outline" disabled={loading} onClick={() => void loadList(nextCursor)}>Next page</Button>}{cursor && <Button variant="outline" disabled={loading} onClick={() => void loadList('')}>First page</Button>}</div>}
   </>;
+  }
 
   const readonly = !admin;
   const formDisabled = readonly || pending || currentUncertainSave;
   return <>
     <PageTitle headingRef={heading} title={isNew ? 'Add datasource' : source?.display_name ?? 'Datasource'} />
-    <div className="datasource-toolbar"><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button>{source && <p>Version {source.version} · assigned agent {agents.find((agent) => agent.id === source.agent_id)?.display_name ?? source.agent_id}</p>}</div>
+    <div className="datasource-toolbar"><Button variant="outline" onClick={() => navigate(returnToSLI ? '/slis/new' : '/datasources')}>{returnToSLI ? 'Back to SLI' : 'Back to datasources'}</Button>{source && <p>Version {source.version} · assigned agent {agents.find((agent) => agent.id === source.agent_id)?.display_name ?? source.agent_id}</p>}</div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
+    {isNew && admin && !agents.some(supportsDatasourceDiagnostics) && <p className="datasource-alert">{agents.length === 0 ? 'Register and start an Almanac agent before adding a datasource.' : agents.some((agent) => agent.enabled && datasourceAgentState(agent) === 'unreported') ? 'Start your registered agent before assigning this datasource.' : datasourceAvailabilityMessage(undefined, agents)} <Button variant="outline" onClick={() => navigate('/agents')}>View agents</Button></p>}
     <Panel heading="Connection settings"><form className="datasource-form" onSubmit={(event) => void submit(event)}>
       <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => {
         const display_name = event.target.value;
@@ -503,7 +510,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       {admin && <div className="datasource-actions"><Button type="submit" pending={pending}>{currentUncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || currentUncertainSave} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents)}</span></div>}
       {readonly && <p className="datasource-readonly">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}
     </form></Panel>
-    {source && canPreview && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><p role="status" className="datasource-readiness">{providerReadinessMessage(previewReadiness, providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1'))}</p>{previewReadiness !== 'available' && previewReadiness !== 'loading' && <Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button>}<label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" pending={cancelSubmitting} disabled={cancelSubmitting} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div></Panel>}
+    {source && canPreview && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><p role="status" className={previewReadiness === 'loading' ? 'sr-only' : 'datasource-readiness'}>{providerReadinessMessage(previewReadiness, providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1'))}</p>{previewReadiness !== 'available' && previewReadiness !== 'loading' && <Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button>}<label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" pending={cancelSubmitting} disabled={cancelSubmitting} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div></Panel>}
     {diagnostic && <Panel heading={diagnostic.operation === 'connection_test' ? 'Connection test' : 'Diagnostic result'}><DiagnosticView value={diagnostic} /></Panel>}
   </>;
 }

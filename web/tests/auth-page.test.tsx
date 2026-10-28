@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AuthFailure, type AuthContext, type createAuthClient } from '../src/auth/client.ts';
 import { AuthPage } from '../src/auth/AuthPage.tsx';
 
@@ -30,12 +30,55 @@ afterEach(() => {
 });
 
 describe('authentication page', () => {
+  // This suite tests shell behavior; the real Compose journey covers cold route loading.
+  beforeAll(async () => { await Promise.all([import('../src/datasources/DatasourcesPage.tsx'), import('../src/slis/SlisPage.tsx')]); });
+  it('returns from datasource creation to the actual SLI form and updates shell navigation', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
+    const push = vi.spyOn(history, 'pushState');
+    const client = clientFor(signedIn);
+    const sourceID = '8ed93d7e-51e3-4a3e-9222-3e8a612de20a';
+    const agentID = 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c';
+    const source = { id: sourceID, name: 'metrics-prod', display_name: 'Production metrics', version: '4', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'none', username: null, password_configured: false, token_configured: false }, polling_interval_seconds: 60, settling_delay_seconds: 60, agent_id: agentID, created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = url.startsWith('/api/v1/agents') ? { items: [{ id: agentID, name: 'west', display_name: 'West', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }], next_cursor: '' }
+        : url.startsWith('/api/v1/providers') ? { items: [] }
+          : init?.method === 'POST' && url === '/api/v1/datasources' ? source : { items: [source], next_cursor: '' };
+      return new Response(JSON.stringify(body), { status: init?.method === 'POST' ? 201 : 200, headers: { 'Content-Type': 'application/json', ETag: `"datasource:${sourceID}:4"` } });
+    }));
+    render(<AuthPage client={client} />);
+    await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://metrics.example.test');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    expect(await screen.findByRole('heading', { name: 'Create SLI' })).toBeVisible();
+    expect(await screen.findByLabelText('Datasource')).toHaveValue(sourceID);
+    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('heading', { name: 'Add datasource' })).not.toBeInTheDocument();
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the SLI screen when leaving datasource setup via Back to SLI', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
+    render(<AuthPage client={clientFor(signedIn)} />);
+    await user.click(await screen.findByRole('button', { name: 'Back to SLI' }));
+    expect(await screen.findByRole('heading', { name: 'Create SLI' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('opens the agent screen when the datasource form asks the user to view agents', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
+    render(<AuthPage client={clientFor(signedIn)} />);
+    await user.click(await screen.findByRole('button', { name: 'View agents' }));
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('shows loading, then the anonymous sign-in form with accessible shell', async () => {
     let resolve!: (value: AuthContext) => void;
     const client = clientFor();
     client.context = vi.fn(() => new Promise<AuthContext>((done) => { resolve = done; }));
     render(<AuthPage client={client} />);
-    expect(screen.getByRole('status', { name: 'Checking your session' })).toBeVisible();
+    expect(screen.getByText('Checking your session')).toHaveClass('sr-only');
     expect(screen.getByRole('button', { name: /switch to dark theme/i })).toBeVisible();
     resolve(anonymous);
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
@@ -78,7 +121,7 @@ describe('authentication page', () => {
     await user.type(screen.getByLabelText('Login'), 'é'.repeat(129));
     await user.type(screen.getByLabelText('Password'), ' ');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByText('Login must be at most 256 UTF-8 bytes.')).toBeVisible();
+    expect(await screen.findByText('Login is too long. Check it and try again.')).toBeVisible();
     expect(client.login).not.toHaveBeenCalled();
     await user.clear(screen.getByLabelText('Login'));
     await user.type(screen.getByLabelText('Login'), 'owner');
@@ -158,16 +201,16 @@ describe('authentication page', () => {
     render(<AuthPage client={client} />);
     await screen.findByRole('heading', { name: 'Agents' });
     const workspace = document.querySelector('.app-workspace');
-    await user.click(screen.getByRole('link', { name: 'Datasources' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Datasources' }));
     await waitFor(() => expect(location.pathname).toBe('/datasources'));
     expect(await screen.findByRole('heading', { name: 'Datasources' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('aria-current', 'page');
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Datasources' })).toHaveAttribute('aria-current', 'page');
     expect(document.querySelector('.app-workspace')).toBe(workspace);
-    await user.click(screen.getByRole('link', { name: 'SLIs' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' }));
     await waitFor(() => expect(location.pathname).toBe('/slis'));
     expect(await screen.findByRole('heading', { name: 'SLIs' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
-    await user.click(screen.getByRole('link', { name: 'Agents' }));
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
+    await user.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Agents' }));
     await waitFor(() => expect(location.pathname).toBe('/agents'));
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Agents' })).toHaveFocus();
@@ -257,7 +300,7 @@ describe('authentication page', () => {
     await user.type(screen.getByLabelText('New password'), 'a'.repeat(15));
     await user.type(screen.getByLabelText('Confirm new password'), 'a'.repeat(15));
     await user.click(screen.getByRole('button', { name: 'Set password' }));
-    expect(await screen.findByText('Password must be at most 512 UTF-8 bytes.')).toBeVisible();
+    expect(await screen.findByText('Password is too long. Check it and try again.')).toBeVisible();
     expect(client.changePassword).not.toHaveBeenCalled();
     await user.clear(screen.getByLabelText('Current password'));
     await user.type(screen.getByLabelText('Current password'), 'current');
@@ -268,7 +311,14 @@ describe('authentication page', () => {
     await user.click(screen.getByLabelText('Confirm new password'));
     await user.paste('a'.repeat(129));
     await user.click(screen.getByRole('button', { name: 'Set password' }));
-    expect(await screen.findByText('New password must be 15–128 Unicode code points and at most 512 UTF-8 bytes.')).toBeVisible();
+    expect(await screen.findByText('Use 128 characters or fewer.')).toBeVisible();
+    expect(client.changePassword).not.toHaveBeenCalled();
+    await user.clear(screen.getByLabelText('New password'));
+    await user.type(screen.getByLabelText('New password'), 'too short');
+    await user.clear(screen.getByLabelText('Confirm new password'));
+    await user.type(screen.getByLabelText('Confirm new password'), 'too short');
+    await user.click(screen.getByRole('button', { name: 'Set password' }));
+    expect(await screen.findByText('Use at least 15 characters.')).toBeVisible();
     expect(client.changePassword).not.toHaveBeenCalled();
   });
 

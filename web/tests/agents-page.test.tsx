@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthPage } from '../src/auth/AuthPage.tsx';
+import { AgentsPage } from '../src/agents/AgentsPage.tsx';
 import { type AuthContext, type createAuthClient } from '../src/auth/client.ts';
 
 type AuthClient = ReturnType<typeof createAuthClient>;
@@ -37,6 +38,25 @@ function installFetch(createResponse?: Response) {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal; if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose); else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close; vi.useRealTimers(); });
 
 describe('agent administration screen', () => {
+  it('exposes one keyboard-scrollable agent table within its named panel', async () => {
+    installFetch(); render(<AgentsPage context={admin} recheckSession={async () => ({ confirmed: true, context: admin })} suspended={false} draft={{ name: '', displayName: '', lifetime: '' }} onDraftChange={vi.fn()} intent={null} onIntentChange={vi.fn()} lifecycleIntent={null} onLifecycleIntentChange={vi.fn()} />);
+    await screen.findByRole('button', { name: 'west-1' });
+    const regions = screen.getAllByRole('region', { name: 'Agent records' });
+    const scrollRegions = regions.filter((region) => region.classList.contains('agents-table-scroll'));
+    expect(scrollRegions).toHaveLength(1);
+    expect(scrollRegions[0]).toHaveAttribute('tabindex', '0');
+  });
+
+  it('keeps exact credential values and the action together', async () => {
+    const user = userEvent.setup(); installDialogs(); installFetch();
+    render(<AuthPage client={makeAuth()} />);
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    const record = await screen.findByRole('region', { name: `Credential ${credentialID}` });
+    expect(within(record).getByText(credentialID)).toBeVisible();
+    expect(within(record).getByText('2026-10-20 12:00:00.123456Z')).toBeVisible();
+    expect(within(record).getByRole('button', { name: 'Revoke credential' })).toBeVisible();
+  });
+
   it('suggests a valid identifier from Local and preserves an explicit identifier choice', async () => {
     const user = userEvent.setup(); installDialogs();
     const fetcher = installFetch();
@@ -370,7 +390,8 @@ describe('agent administration screen', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Rotate credential' })).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     await waitFor(() => expect(deferredRefresh).toHaveLength(2));
-    expect(screen.getByRole('status', { name: 'Loading agent records' })).toBeVisible();
+    expect(screen.getByText('Refreshing agent records')).toHaveClass('sr-only');
+    expect(screen.getByRole('heading', { name: 'Credential history' })).toBeVisible();
     expect(screen.getByLabelText('Agent token', { selector: 'output' })).toHaveTextContent('replacement-secret');
     const [url, request] = fetcher.mock.calls.find(([, init]) => init?.method === 'POST')!;
     expect(String(url)).toBe(`/api/v1/agents/${agentID}/credentials/rotate`);

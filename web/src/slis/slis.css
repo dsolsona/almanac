@@ -19,7 +19,7 @@
 .sli-state--attention { border-color: color-mix(in srgb, var(--status-warning) 42%, var(--border)); background: var(--warn-wash); }
 .sli-state--attention strong { color: var(--status-warning); }
 .sli-form { max-width: 920px; }
-.sli-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.sli-form-grid { display: grid; align-items: start; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .sli-measurement-summary { display: grid; grid-template-columns: 1fr 1fr; align-content: center; gap: var(--space-2) var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 .sli-measurement-summary span { color: var(--text-2); font-size: .8rem; }
 .sli-measurement-summary strong { font-family: var(--mono); font-size: .86rem; font-weight: 550; }
@@ -64,3 +64,6 @@
 .sli-queries { display: grid; gap: var(--space-4); margin: 0; }
 .sli-queries dt { color: var(--text-3); font-size: .76rem; }
 .sli-queries dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+.sli-empty { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); max-width: 48rem; }
+.sli-empty p { flex-basis: 100%; margin: 0; color: var(--text-2); }
