@@ -611,6 +611,7 @@ func authorizedMeasurementGrants(ctx context.Context, queries *dbgen.Queries, ow
 		}
 		grants = append(grants, agentprotocol.MeasurementGrant{
 			SLIID: row.SliID.String(), MeasurementRevision: strconv.FormatInt(row.MeasurementRevision, 10),
+			LastAttemptedIntervalEnd: nullableTimestamp(row.LastAttemptedIntervalEnd),
 		})
 	}
 	encoded, err := json.Marshal(grants)

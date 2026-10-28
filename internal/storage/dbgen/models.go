@@ -286,17 +286,18 @@ type AlmanacSliExecutionAttempt struct {
 }
 
 type AlmanacSliMeasurement struct {
-	SliID           pgtype.UUID        `json:"sli_id"`
-	Revision        int64              `json:"revision"`
-	DatasourceID    pgtype.UUID        `json:"datasource_id"`
-	AgentID         pgtype.UUID        `json:"agent_id"`
-	MeasurementKind string             `json:"measurement_kind"`
-	ComponentMode   string             `json:"component_mode"`
-	GoodQuery       string             `json:"good_query"`
-	TotalQuery      string             `json:"total_query"`
-	EffectiveFrom   pgtype.Timestamptz `json:"effective_from"`
-	ActivatedAt     pgtype.Timestamptz `json:"activated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	SliID                    pgtype.UUID        `json:"sli_id"`
+	Revision                 int64              `json:"revision"`
+	DatasourceID             pgtype.UUID        `json:"datasource_id"`
+	AgentID                  pgtype.UUID        `json:"agent_id"`
+	MeasurementKind          string             `json:"measurement_kind"`
+	ComponentMode            string             `json:"component_mode"`
+	GoodQuery                string             `json:"good_query"`
+	TotalQuery               string             `json:"total_query"`
+	EffectiveFrom            pgtype.Timestamptz `json:"effective_from"`
+	ActivatedAt              pgtype.Timestamptz `json:"activated_at"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	LastAttemptedIntervalEnd pgtype.Timestamptz `json:"last_attempted_interval_end"`
 }
 
 type AlmanacSliObservationValue struct {

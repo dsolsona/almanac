@@ -1,6 +1,8 @@
 package sli
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"regexp"
 	"slices"
@@ -8,6 +10,25 @@ import (
 	"strings"
 	"time"
 )
+
+// LatestSettledEnd returns the latest Unix-aligned interval endpoint whose
+// settling delay has elapsed. Cadence must be a positive whole number of seconds.
+func LatestSettledEnd(now time.Time, cadenceSeconds, settlingSeconds int) time.Time {
+	cadence := int64(cadenceSeconds) * 1_000_000
+	us := now.UTC().UnixMicro() - int64(settlingSeconds)*1_000_000
+	quotient := us / cadence
+	if us < 0 && us%cadence != 0 {
+		quotient--
+	}
+	return time.UnixMicro(quotient * cadence).UTC()
+}
+
+// DispatchPhase uses the first 64 bits of SHA-256 of the SLI ID, modulo the
+// cadence in microseconds. This algorithm and precision are stable across runs.
+func DispatchPhase(id string, cadenceSeconds int) time.Duration {
+	digest := sha256.Sum256([]byte(id))
+	return time.Duration(binary.BigEndian.Uint64(digest[:8])%(uint64(cadenceSeconds)*1_000_000)) * time.Microsecond
+}
 
 const (
 	ObservationReplayWindow = 7 * 24 * time.Hour

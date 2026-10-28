@@ -29,6 +29,25 @@ func (operations *savedConnectionTestOperations) PostSavedDatasourceConnectionTe
 	return operations.response, nil
 }
 
+func TestSliResponseAcceptsNullableActivationAndRejectsInvalidFields(t *testing.T) {
+	valid := `{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"requests","display_name":"Requests","version":"1","measurement_revision":"1","datasource_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","datasource_version":"1","agent_id":"4b13e073-3c86-4a7f-b7e5-c15e9626e71c","agent_reachability":"connected","collection_progress":"idle","measurement_kind":"event_counts","component_mode":"interval_count","good_query":"vector(99)","total_query":"vector(100)","polling_interval_seconds":60,"settling_delay_seconds":60,"effective_from":"2026-10-27T11:58:00Z","activated_at":null,"activation_state":"preparing","freshness":"unknown","latest_observation":null,"last_attempt_at":null,"last_observation_at":null,"next_expected_execution_at":null,"created_at":"2026-10-27T12:00:20Z","updated_at":"2026-10-27T12:00:20Z"}`
+	for _, activation := range []string{"null", `"2026-10-27T12:00:21Z"`} {
+		if !validSli([]byte(strings.Replace(valid, `"activated_at":null`, `"activated_at":`+activation, 1))) {
+			t.Fatalf("valid activation %s rejected", activation)
+		}
+	}
+	for _, malformed := range []string{
+		strings.Replace(valid, `,"activated_at":null`, "", 1),
+		strings.Replace(valid, `"activated_at":null`, `"activated_at":"not-a-time"`, 1),
+		strings.Replace(valid, `"activated_at":null`, `"activated_at":"0001-01-01T00:00:00Z"`, 1),
+		strings.Replace(valid, `"activated_at":null`, `"activated_at":null,"extra":true`, 1),
+	} {
+		if validSli([]byte(malformed)) {
+			t.Fatalf("invalid response accepted: %s", malformed)
+		}
+	}
+}
+
 func TestDatasourceResponseValidationRejectsSecretValues(t *testing.T) {
 	valid := []byte(`{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"metrics","display_name":"Metrics","version":"1","provider":"prometheus","configuration_format":"prometheus-http-v1","endpoint":"https://metrics.example.test","tls":{"insecure_skip_verify":false,"ca_pem":null},"authentication":{"mode":"bearer","username":null,"password_configured":false,"token_configured":true},"polling_interval_seconds":60,"settling_delay_seconds":60,"agent_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:00:00Z"}`)
 	if !validDatasource(valid) {

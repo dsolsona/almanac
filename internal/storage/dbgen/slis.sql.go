@@ -15,7 +15,7 @@ const activateSliMeasurement = `-- name: ActivateSliMeasurement :execrows
 UPDATE public.almanac_sli_measurements
 SET activated_at = $4
 WHERE sli_id = $1 AND revision = $2 AND effective_from = $3
-  AND activated_at IS NULL AND effective_from > $4
+  AND activated_at IS NULL AND (revision = 1 OR effective_from > $4)
 `
 
 type ActivateSliMeasurementParams struct {
@@ -36,6 +36,23 @@ func (q *Queries) ActivateSliMeasurement(ctx context.Context, arg ActivateSliMea
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const advanceSliLastAttemptedInterval = `-- name: AdvanceSliLastAttemptedInterval :exec
+UPDATE public.almanac_sli_measurements
+SET last_attempted_interval_end = GREATEST(last_attempted_interval_end, $1::timestamptz)
+WHERE sli_id = $2 AND revision = $3
+`
+
+type AdvanceSliLastAttemptedIntervalParams struct {
+	IntervalEnd pgtype.Timestamptz `json:"interval_end"`
+	SliID       pgtype.UUID        `json:"sli_id"`
+	Revision    int64              `json:"revision"`
+}
+
+func (q *Queries) AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error {
+	_, err := q.db.Exec(ctx, advanceSliLastAttemptedInterval, arg.IntervalEnd, arg.SliID, arg.Revision)
+	return err
 }
 
 const deleteExpiredSliCreateReceipt = `-- name: DeleteExpiredSliCreateReceipt :exec
@@ -608,7 +625,7 @@ func (q *Queries) LatestSliAcceptedAt(ctx context.Context, arg LatestSliAccepted
 }
 
 const listAuthorizedMeasurementGrantsForAgent = `-- name: ListAuthorizedMeasurementGrantsForAgent :many
-SELECT sli.id AS sli_id, sli.measurement_revision
+SELECT sli.id AS sli_id, sli.measurement_revision, measurement.last_attempted_interval_end
 FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
@@ -626,8 +643,9 @@ type ListAuthorizedMeasurementGrantsForAgentParams struct {
 }
 
 type ListAuthorizedMeasurementGrantsForAgentRow struct {
-	SliID               pgtype.UUID `json:"sli_id"`
-	MeasurementRevision int64       `json:"measurement_revision"`
+	SliID                    pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision      int64              `json:"measurement_revision"`
+	LastAttemptedIntervalEnd pgtype.Timestamptz `json:"last_attempted_interval_end"`
 }
 
 func (q *Queries) ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, arg ListAuthorizedMeasurementGrantsForAgentParams) ([]ListAuthorizedMeasurementGrantsForAgentRow, error) {
@@ -639,7 +657,7 @@ func (q *Queries) ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, a
 	items := []ListAuthorizedMeasurementGrantsForAgentRow{}
 	for rows.Next() {
 		var i ListAuthorizedMeasurementGrantsForAgentRow
-		if err := rows.Scan(&i.SliID, &i.MeasurementRevision); err != nil {
+		if err := rows.Scan(&i.SliID, &i.MeasurementRevision, &i.LastAttemptedIntervalEnd); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -846,7 +864,7 @@ const listSlis = `-- name: ListSlis :many
 SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision,
        measurement.datasource_id, datasource.version AS datasource_version,
        measurement.measurement_kind, measurement.component_mode,
-       measurement.good_query, measurement.total_query, measurement.effective_from,
+       measurement.good_query, measurement.total_query, measurement.effective_from, measurement.activated_at,
        datasource.agent_id, datasource.polling_interval_seconds,
        datasource.settling_delay_seconds, sli.created_at, sli.updated_at,
        agent.enabled AS agent_enabled,
@@ -922,6 +940,7 @@ type ListSlisRow struct {
 	GoodQuery                    string             `json:"good_query"`
 	TotalQuery                   string             `json:"total_query"`
 	EffectiveFrom                pgtype.Timestamptz `json:"effective_from"`
+	ActivatedAt                  pgtype.Timestamptz `json:"activated_at"`
 	AgentID                      pgtype.UUID        `json:"agent_id"`
 	PollingIntervalSeconds       int32              `json:"polling_interval_seconds"`
 	SettlingDelaySeconds         int32              `json:"settling_delay_seconds"`
@@ -978,6 +997,7 @@ func (q *Queries) ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisR
 			&i.GoodQuery,
 			&i.TotalQuery,
 			&i.EffectiveFrom,
+			&i.ActivatedAt,
 			&i.AgentID,
 			&i.PollingIntervalSeconds,
 			&i.SettlingDelaySeconds,

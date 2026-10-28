@@ -13,6 +13,7 @@ import (
 type Querier interface {
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
+	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	AgentConfigurationRevisionExists(ctx context.Context, arg AgentConfigurationRevisionExistsParams) (bool, error)
 	AgentHasAssignedDatasources(ctx context.Context, agentID pgtype.UUID) (bool, error)
 	AgentHasDatasourceDependencies(ctx context.Context, agentID pgtype.UUID) (pgtype.Bool, error)

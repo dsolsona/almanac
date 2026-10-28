@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
+import { createAgentClient, type Agent } from '../agents/client.ts';
 import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createDatasourceClient, type Datasource } from '../datasources/client.ts';
 import { createSliClient, SliFailure, type Sli, type SliCreateRequest, type SliObservation, type SliObservationPage } from './client.ts';
@@ -48,8 +49,8 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function PageTitle({ title, subtitle, headingRef }: { title: string; subtitle?: string; headingRef?: RefObject<HTMLHeadingElement | null> }) {
-  return <div className="sli-page-title"><nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Product</span><span aria-hidden="true">/</span><span>SLIs</span>{title !== 'SLIs' && <><span aria-hidden="true">/</span><span>{title}</span></>}</nav><h1 ref={headingRef} tabIndex={-1} className="app-page-heading">{title}</h1>{subtitle && <p>{subtitle}</p>}</div>;
+function PageTitle({ title, subtitle, headingRef, isList = false }: { title: string; subtitle?: string; headingRef?: RefObject<HTMLHeadingElement | null>; isList?: boolean }) {
+  return <div className="sli-page-title"><nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">SLIs</span> : <><a href="/slis" data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav><h1 ref={headingRef} tabIndex={-1} className="app-page-heading">{title}</h1>{subtitle && <p>{subtitle}</p>}</div>;
 }
 
 function InlineState({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'positive' | 'attention' | 'neutral' }) {
@@ -76,11 +77,15 @@ function makeIdempotencyKey(): string {
 }
 
 export function SlisPage({ context }: { context: AuthContext }) {
+  const agentClient = useRef<ReturnType<typeof createAgentClient> | null>(null);
+  if (!agentClient.current) agentClient.current = createAgentClient();
   const [locationKey, setLocationKey] = useState(() => `${window.location.pathname}${window.location.search}`);
   const route = useMemo(() => routeFromPath(new URL(locationKey, window.location.origin).pathname), [locationKey]);
   const [items, setItems] = useState<Sli[]>([]);
   const [sources, setSources] = useState<Datasource[]>([]);
   const [sli, setSli] = useState<Sli | null>(null);
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [agentError, setAgentError] = useState(false);
   const [etag, setETag] = useState('');
   const [history, setHistory] = useState<SliObservation[]>([]);
   const [missing, setMissing] = useState<SliObservationPage['missing_intervals']>([]);
@@ -130,6 +135,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
     historyRequest.current++;
     setListBusy(false);
     setSli(null);
+    setAgent(null);
+    setAgentError(false);
     setHistory([]);
     setMissing([]);
     setEarliest('');
@@ -162,6 +169,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
           setSli(resource.sli);
           setDisplayName(resource.sli.display_name);
           setETag(resource.etag);
+          if (context.session?.role === 'administrator' && !context.session.restricted) {
+            void agentClient.current!.get(resource.sli.agent_id, { signal: request.signal }).then((value) => { if (current()) setAgent(value.agent); }).catch(() => { if (current() && !request.signal.aborted) setAgentError(true); });
+          }
           const historyID = ++historyRequest.current;
           setHistoryBusy(true);
           void fetchHistory(route.id, historyID, generation, '', request.signal);
@@ -175,7 +185,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     };
     void load();
     return () => { active = false; request.abort(); };
-  }, [locationKey, route.kind, route.id, canWrite, loadRevision]);
+  }, [locationKey, route.kind, route.id, canWrite, context.session?.role, context.session?.restricted, loadRevision]);
 
   function updateDraft(key: keyof CreateDraft, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -248,6 +258,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
       setSli(resource.sli);
       setDisplayName((current) => current === sli?.display_name ? resource.sli.display_name : current);
       setETag(resource.etag);
+      void loadSources().then((value) => { if (generation === routeGeneration.current) { setSources(value); setSourceError(''); } }).catch(() => { if (generation === routeGeneration.current) setSourceError('Datasource names could not be loaded. Refresh to try again.'); });
+      if (context.session?.role === 'administrator' && !context.session.restricted) {
+        void agentClient.current!.get(resource.sli.agent_id).then((value) => { if (generation === routeGeneration.current) { setAgent(value.agent); setAgentError(false); } }).catch(() => { if (generation === routeGeneration.current) setAgentError(true); });
+      }
       await fetchHistory(route.id, historyID, generation);
     } catch (failure) {
       if (generation === routeGeneration.current) setError(safeError(failure));
@@ -298,7 +312,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     finally { if (generation === routeGeneration.current) setPending(false); }
   }
 
-  if (loading) return <><PageTitle title={route.kind === 'detail' ? 'SLI details' : route.kind === 'create' ? 'Create SLI' : 'SLIs'} subtitle={route.kind === 'list' ? 'Service level indicators collected from assigned agents.' : route.kind === 'create' ? 'Define good and total interval counts from a Prometheus datasource.' : undefined} /><span className="sr-only" role="status">Opening SLIs</span></>;
+  if (loading) return <><PageTitle isList={route.kind === 'list'} title={route.kind === 'detail' ? 'SLI details' : route.kind === 'create' ? 'Create SLI' : 'SLIs'} subtitle={route.kind === 'list' ? 'Service level indicators collected from assigned agents.' : route.kind === 'create' ? 'Define good and total interval counts from a Prometheus datasource.' : undefined} /><span className="sr-only" role="status">Opening SLIs</span></>;
   if (error && !sli && route.kind === 'detail') return <><PageTitle title="SLI unavailable" /><Panel heading="SLI could not be loaded"><p role="alert">{error}</p><Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></Panel></>;
 
   if (route.kind === 'create') {
@@ -319,7 +333,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
                 <label className="ui-field" htmlFor="sli-good-query"><span className="ui-label">Good count query</span><textarea id="sli-good-query" className="ui-control sli-query" value={draft.goodQuery} onChange={(event) => updateDraft('goodQuery', event.target.value)} spellCheck={false} /></label>
                 <label className="ui-field" htmlFor="sli-total-query"><span className="ui-label">Total count query</span><textarea id="sli-total-query" className="ui-control sli-query" value={draft.totalQuery} onChange={(event) => updateDraft('totalQuery', event.target.value)} spellCheck={false} /></label>
               </div>
-              <p className="sli-form-note">Each query must return one aggregate count for the preceding interval. The collector evaluates it after the datasource settling delay.</p>
+              <p className="sli-form-note">Each query must return one aggregate count for an interval. Create saves a result from recent data already in your datasource, then continues at the datasource’s frequency. The first interval can precede creation.</p>
               {formError && <p className="sli-error" role="alert">{formError}</p>}
               <div className="sli-actions"><Button variant="outline" onClick={() => navigate('/slis')}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
             </Panel>
@@ -330,21 +344,13 @@ export function SlisPage({ context }: { context: AuthContext }) {
   if (route.kind === 'detail' && sli) {
     const datasource = sources.find((item) => item.id === sli.datasource_id);
     const latest = sli.latest_observation;
+    const activatedAt = sli.activated_at;
     return <>
       <div className="sli-detail-heading"><PageTitle title={sli.display_name} subtitle={sli.name} /><div className="sli-actions"><Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button></div></div>
       {error && <p className="sli-error" role="alert">{error}</p>}
       {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
-      <div className="sli-detail-grid">
-        <Panel heading="Collection state">
-          <div className="sli-state-list">
-            <InlineState label="Activation" value={sli.activation_state} tone={sli.activation_state === 'active' ? 'positive' : sli.activation_state === 'blocked' ? 'attention' : 'neutral'} />
-            <InlineState label="Agent reachability" value={sli.agent_reachability} tone={sli.agent_reachability === 'connected' ? 'positive' : sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'attention' : 'neutral'} />
-            <InlineState label="Collection progress" value={sli.collection_progress} tone={sli.collection_progress === 'running' ? 'positive' : sli.collection_progress === 'blocked' ? 'attention' : 'neutral'} />
-            <InlineState label="Freshness" value={sli.freshness} tone={sli.freshness === 'fresh' ? 'positive' : sli.freshness === 'stale' ? 'attention' : 'neutral'} />
-          </div>
-          <dl className="sli-facts"><div><dt>Datasource</dt><dd>{datasource?.display_name ?? sli.datasource_id}</dd></div><div><dt>Assigned agent ID</dt><dd className="sli-mono">{sli.agent_id}</dd></div><div><dt>Cadence</dt><dd>{sli.polling_interval_seconds} seconds</dd></div><div><dt>Settling delay</dt><dd>{sli.settling_delay_seconds} seconds</dd></div><div><dt>Scheduled effective from</dt><dd>{formatTime(sli.effective_from)}</dd></div><div><dt>Next expected execution</dt><dd>{formatTime(sli.next_expected_execution_at)}</dd></div><div><dt>Measurement revision</dt><dd>{sli.measurement_revision}</dd></div><div><dt>Resource version</dt><dd>{sli.version}</dd></div></dl>
-        </Panel>
-        <Panel heading="Latest interval">
+      {agentError && <p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
+      <Panel heading="Latest result" className="sli-detail-section">
           {latest ? <>
             <p className="sli-interval">{formatTime(latest.interval_start)} – {formatTime(latest.interval_end)}</p>
             <p className="sli-outcome">{outcomeLabel(latest.outcome)}</p>
@@ -352,12 +358,19 @@ export function SlisPage({ context }: { context: AuthContext }) {
               : latest.outcome === 'incomplete' ? <p>Missing component: {latest.missing_components.join(', ')}</p>
                 : latest.outcome === 'failed' ? <p>Safe error code: {latest.error_code}</p>
                   : <p>Queries completed without a count value.</p>}
-          </> : <p>No observation has been recorded. Unknown collection state is not treated as zero.</p>}
+          </> : <><p>No observation has been recorded yet; this does not mean the counts are zero. Almanac saves the most recent complete interval, allowing {sli.settling_delay_seconds} seconds for the datasource to finish reporting. This result can cover time before the SLI was created.</p><p>{sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'The assigned agent is unavailable.' : sli.activation_state === 'blocked' || sli.collection_progress === 'blocked' ? 'Collection is blocked. Check the agent and datasource.' : 'The first query runs after the assigned agent receives its configuration and is ready.'}</p></>}
           <p className="sli-muted">Last attempt: {formatTime(sli.last_attempt_at)} · Last observation: {formatTime(sli.last_observation_at)}</p>
         </Panel>
-        <Panel heading="Measurement queries"><dl className="sli-queries"><div><dt>Good count query</dt><dd><code>{sli.good_query}</code></dd></div><div><dt>Total count query</dt><dd><code>{sli.total_query}</code></dd></div></dl></Panel>
-        {canWrite && <Panel heading="Display metadata"><form className="sli-metadata-form" onSubmit={(event) => void saveMetadata(event)}><TextField id="sli-edit-display-name" label="Display name" value={displayName} onChange={(event) => { setDisplayName(event.target.value); setFormError(''); }} /><Button type="submit" pending={pending}>Save display name</Button></form>{formError && <p className="sli-error" role="alert">{formError}</p>}<p className="sli-form-note">Measurement queries and history are immutable from this screen.</p></Panel>}
-      </div>
+      <Panel heading="Collection" className="sli-detail-section">
+        <div className="sli-state-list">
+          <InlineState label="Activation" value={sli.activation_state} tone={sli.activation_state === 'active' ? 'positive' : sli.activation_state === 'blocked' ? 'attention' : 'neutral'} />
+          <InlineState label="Agent reachability" value={sli.agent_reachability} tone={sli.agent_reachability === 'connected' ? 'positive' : sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'attention' : 'neutral'} />
+          <InlineState label="Collection progress" value={sli.collection_progress} tone={sli.collection_progress === 'running' ? 'positive' : sli.collection_progress === 'blocked' ? 'attention' : 'neutral'} />
+          <InlineState label="Freshness" value={sli.freshness} tone={sli.freshness === 'fresh' ? 'positive' : sli.freshness === 'stale' ? 'attention' : 'neutral'} />
+        </div>
+        <dl className="sli-facts"><div><dt>Datasource</dt><dd>{sourceError && !datasource ? 'Datasource name unavailable. Refresh to try again.' : <a href={`/datasources/${sli.datasource_id}`} data-app-route>{datasource?.display_name ?? 'View datasource'}</a>}</dd></div><div><dt>Assigned agent</dt><dd>{context.session?.role !== 'administrator' || context.session.restricted ? 'Agent details are available to administrators.' : agentError && agent?.id !== sli.agent_id ? 'Agent name unavailable. Refresh to try again.' : <a href={`/agents?agent=${sli.agent_id}`} data-app-route>{agent?.id === sli.agent_id ? agent.display_name : 'View assigned agent'}</a>}</dd></div><div><dt>Interval</dt><dd>{sli.polling_interval_seconds} seconds</dd></div><div><dt>Source settling delay</dt><dd>{sli.settling_delay_seconds} seconds</dd></div><div><dt>Collection activated</dt><dd>{activatedAt === null ? 'Not activated yet' : formatTime(activatedAt)}</dd></div><div><dt>Next scheduled query</dt><dd>{formatTime(sli.next_expected_execution_at)}</dd></div></dl>
+        <p className="sli-muted">Each result covers a completed {sli.polling_interval_seconds}-second interval. The query runs after a {sli.settling_delay_seconds}-second delay to allow source data to settle.</p>
+      </Panel>
       <Panel heading="Observation history" className="sli-history-panel">
         {historyError && <p className="sli-error" role="alert">{historyError}</p>}
         {historyBusy && <span className="sr-only" role="status">Refreshing observation history</span>}
@@ -366,12 +379,19 @@ export function SlisPage({ context }: { context: AuthContext }) {
         {history.length === 0 ? historyLoaded && !historyError && <p>No observations have been recorded in this range.</p> : <div className="sli-table-scroll" role="region" aria-label="Observation history" tabIndex={0}><table className="sli-table"><thead><tr><th scope="col">Interval start (UTC)</th><th scope="col">Interval end (UTC)</th><th scope="col">Outcome</th><th scope="col">Good count</th><th scope="col">Total count</th><th scope="col">Details</th></tr></thead><tbody>{history.map((row) => <tr key={row.observation_id}><td className="sli-mono">{new Date(row.interval_start).toISOString()}</td><td className="sli-mono">{new Date(row.interval_end).toISOString()}</td><td>{outcomeLabel(row.outcome)}</td><td className="sli-mono">{row.good_count ?? '—'}</td><td className="sli-mono">{row.total_count ?? '—'}</td><td>{row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—'}</td></tr>)}</tbody></table></div>}
         {nextCursor && <div className="sli-actions"><Button variant="outline" onClick={() => void loadMoreHistory()} pending={historyBusy}>Load more intervals</Button></div>}
       </Panel>
+      <details className="sli-settings"><summary>Settings and technical details</summary>
+        <dl className="sli-queries"><div><dt>Good count query</dt><dd><code>{sli.good_query}</code></dd></div><div><dt>Total count query</dt><dd><code>{sli.total_query}</code></dd></div></dl>
+        <dl className="sli-facts"><div><dt>SLI ID</dt><dd className="sli-mono">{sli.id}</dd></div><div><dt>Assigned agent ID</dt><dd className="sli-mono">{sli.agent_id}</dd></div><div><dt>Measurement revision</dt><dd>{sli.measurement_revision}</dd></div><div><dt>Resource version</dt><dd>{sli.version}</dd></div></dl>
+        {canWrite && <form className="sli-metadata-form" onSubmit={(event) => void saveMetadata(event)}><TextField id="sli-edit-display-name" label="Display name" value={displayName} onChange={(event) => { setDisplayName(event.target.value); setFormError(''); }} /><Button type="submit" pending={pending}>Save display name</Button></form>}
+        {formError && <p className="sli-error" role="alert">{formError}</p>}
+        <p className="sli-form-note">Measurement queries and history are immutable from this screen.</p>
+      </details>
     </>;
   }
 
   const sourceByID = new Map(sources.map((source) => [source.id, source]));
   return <>
-    <div className="sli-list-heading"><PageTitle title="SLIs" subtitle="Service level indicators collected from assigned agents." />{canWrite && items.length > 0 && sources.length > 0 && !sourceError && <Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Add SLI</Button>}</div>
+    <div className="sli-list-heading"><PageTitle isList title="SLIs" subtitle="Service level indicators collected from assigned agents." />{canWrite && items.length > 0 && sources.length > 0 && !sourceError && <Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Add SLI</Button>}</div>
     {error && <p className="sli-error" role="alert">{error}</p>}
     {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
     {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}

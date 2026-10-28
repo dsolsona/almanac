@@ -79,7 +79,7 @@ function validObservation(value: unknown): value is SliObservation {
 }
 
 function validSli(value: unknown): value is Sli {
-  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'measurement_revision', 'datasource_id', 'datasource_version', 'agent_id', 'agent_reachability', 'collection_progress', 'measurement_kind', 'component_mode', 'good_query', 'total_query', 'polling_interval_seconds', 'settling_delay_seconds', 'effective_from', 'activation_state', 'freshness', 'latest_observation', 'last_attempt_at', 'last_observation_at', 'next_expected_execution_at', 'created_at', 'updated_at'])) return false;
+  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'measurement_revision', 'datasource_id', 'datasource_version', 'agent_id', 'agent_reachability', 'collection_progress', 'measurement_kind', 'component_mode', 'good_query', 'total_query', 'polling_interval_seconds', 'settling_delay_seconds', 'effective_from', 'activated_at', 'activation_state', 'freshness', 'latest_observation', 'last_attempt_at', 'last_observation_at', 'next_expected_execution_at', 'created_at', 'updated_at'])) return false;
   return typeof value.id === 'string' && UUID.test(value.id) && typeof value.name === 'string' && value.name.length > 0
     && typeof value.display_name === 'string' && value.display_name.length > 0 && revision(value.version) && revision(value.measurement_revision)
     && typeof value.datasource_id === 'string' && UUID.test(value.datasource_id) && revision(value.datasource_version)
@@ -89,7 +89,7 @@ function validSli(value: unknown): value is Sli {
     && value.measurement_kind === 'event_counts' && value.component_mode === 'interval_count'
     && typeof value.good_query === 'string' && typeof value.total_query === 'string'
     && typeof value.polling_interval_seconds === 'number' && Number.isInteger(value.polling_interval_seconds) && value.polling_interval_seconds >= 15
-    && value.settling_delay_seconds === 60 && timestamp(value.effective_from)
+    && value.settling_delay_seconds === 60 && timestamp(value.effective_from) && (value.activated_at === null || timestamp(value.activated_at))
     && ['preparing', 'scheduled', 'active', 'blocked'].includes(String(value.activation_state))
     && ['unknown', 'fresh', 'stale'].includes(String(value.freshness))
     && (value.latest_observation === null || validObservation(value.latest_observation))

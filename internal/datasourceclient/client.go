@@ -444,7 +444,7 @@ func validSli(data []byte) bool {
 	var value api.Sli
 	var fields map[string]jsontext.Value
 	if json.Unmarshal(data, &fields) != nil || !exactFields(fields,
-		"activation_state", "agent_id", "agent_reachability", "collection_progress", "component_mode", "created_at",
+		"activated_at", "activation_state", "agent_id", "agent_reachability", "collection_progress", "component_mode", "created_at",
 		"datasource_id", "datasource_version", "display_name", "effective_from", "freshness", "good_query", "id",
 		"last_attempt_at", "last_observation_at", "latest_observation", "measurement_kind", "measurement_revision",
 		"name", "next_expected_execution_at", "polling_interval_seconds", "settling_delay_seconds", "total_query", "updated_at", "version") || json.Unmarshal(data, &value) != nil {
@@ -453,7 +453,7 @@ func validSli(data []byte) bool {
 	if !uuidPattern.MatchString(uuidText(value.Id)) || !uuidPattern.MatchString(uuidText(value.DatasourceId)) || !uuidPattern.MatchString(uuidText(value.AgentId)) ||
 		!positiveDecimal(value.Version) || !positiveDecimal(value.MeasurementRevision) || !positiveDecimal(value.DatasourceVersion) ||
 		value.MeasurementKind != "event_counts" || value.ComponentMode != "interval_count" || value.Name == "" || value.DisplayName == "" ||
-		value.PollingIntervalSeconds < 15 || value.SettlingDelaySeconds != 60 || value.EffectiveFrom.IsZero() || value.CreatedAt.IsZero() || value.UpdatedAt.IsZero() ||
+		value.PollingIntervalSeconds < 15 || value.SettlingDelaySeconds != 60 || value.EffectiveFrom.IsZero() || value.ActivatedAt != nil && value.ActivatedAt.IsZero() || value.CreatedAt.IsZero() || value.UpdatedAt.IsZero() ||
 		!value.ActivationState.Valid() || !value.AgentReachability.Valid() || !value.CollectionProgress.Valid() || !value.Freshness.Valid() {
 		return false
 	}

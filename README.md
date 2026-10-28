@@ -96,6 +96,19 @@ provider project, inserts synthetic metrics and spans, checks exact query result
 before and after restart, and removes only its test-owned containers and volumes.
 It does not populate or reset your normal local sources.
 
+To try an SLI locally, assign a connected agent to a Prometheus datasource at
+`http://victoriametrics:8428`, then create an event-count SLI with `vector(99)` as
+the good query and `vector(100)` as the total query. These are synthetic constant
+results; they do not require seeded metrics or represent real service traffic.
+Create requests the latest complete interval after allowing for the source's data
+delay, so the first saved interval can precede creation. Subsequent queries are
+spread across the configured frequency while retaining complete measurement windows.
+
+When updating this code, rebuild the app with `make run`, then stop the attached
+local agent with Ctrl-C and start it again with `make agent` to use the updated
+agent binary. The launcher uses the running app's image; updating the app does not
+replace an already running agent. Its previous ownership lease may need to expire.
+
 ## Runtime foundation
 
 `make setup` installs the pinned Go and web toolchains. `make build` builds the

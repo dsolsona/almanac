@@ -52,7 +52,7 @@ describe('authentication page', () => {
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
     expect(await screen.findByRole('heading', { name: 'Create SLI' })).toBeVisible();
     expect(await screen.findByLabelText('Datasource')).toHaveValue(sourceID);
-    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('heading', { name: 'Add datasource' })).not.toBeInTheDocument();
     expect(push).toHaveBeenCalledTimes(1);
   });
@@ -62,7 +62,7 @@ describe('authentication page', () => {
     render(<AuthPage client={clientFor(signedIn)} />);
     await user.click(await screen.findByRole('button', { name: 'Back to SLI' }));
     expect(await screen.findByRole('heading', { name: 'Create SLI' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
+    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('opens the agent screen when the datasource form asks the user to view agents', async () => {

@@ -3,7 +3,6 @@ import { Button } from './Button.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import './application-shell.css';
 
-const selectionParams = ['agent', 'agents_cursor', 'credentials_cursor'];
 const mobileViewport = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 860px)').matches;
 type IconName = 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents';
 
@@ -79,9 +78,6 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
     if (next.origin !== window.location.origin || !(/^\/(?:agents|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
-    if (next.pathname === '/agents' || next.pathname === '/') {
-      for (const parameter of selectionParams) query.delete(parameter);
-    }
     const path = `${next.pathname === '/' ? '/agents' : next.pathname}${query.size ? `?${query}` : ''}${next.hash}`;
     if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== path) {
       window.history.pushState({}, '', path);

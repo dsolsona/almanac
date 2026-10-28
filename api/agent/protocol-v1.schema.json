@@ -27,7 +27,8 @@
       "required": ["sli_id", "measurement_revision"],
       "properties": {
         "sli_id": { "$ref": "#/$defs/agentId" },
-        "measurement_revision": { "$ref": "#/$defs/positiveDecimal" }
+        "measurement_revision": { "$ref": "#/$defs/positiveDecimal" },
+        "last_attempted_interval_end": { "type": "string", "format": "date-time" }
       },
       "additionalProperties": true
     },

@@ -567,8 +567,16 @@ export interface components {
             total_query: string;
             polling_interval_seconds: number;
             settling_delay_seconds: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Earliest valid measurement interval start; may precede creation.
+             */
             effective_from: string;
+            /**
+             * Format: date-time
+             * @description Configuration acknowledgement time when collection authority was activated.
+             */
+            activated_at: string | null;
             /** @enum {string} */
             activation_state: "preparing" | "scheduled" | "active" | "blocked";
             /** @enum {string} */

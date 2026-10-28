@@ -1865,6 +1865,8 @@ type SecretActionAction string
 
 // Sli defines model for Sli.
 type Sli struct {
+	// ActivatedAt Configuration acknowledgement time when collection authority was activated.
+	ActivatedAt        *time.Time            `json:"activated_at"`
 	ActivationState    SliActivationState    `json:"activation_state"`
 	AgentId            openapi_types.UUID    `json:"agent_id"`
 	AgentReachability  SliAgentReachability  `json:"agent_reachability"`
@@ -1876,6 +1878,8 @@ type Sli struct {
 	DatasourceId      openapi_types.UUID `json:"datasource_id"`
 	DatasourceVersion string             `json:"datasource_version"`
 	DisplayName       string             `json:"display_name"`
+
+	// EffectiveFrom Earliest valid measurement interval start; may precede creation.
 	EffectiveFrom     time.Time          `json:"effective_from"`
 	Freshness         SliFreshness       `json:"freshness"`
 	GoodQuery         string             `json:"good_query"`

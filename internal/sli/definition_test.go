@@ -2,10 +2,35 @@ package sli
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestSettledIntervalAndStablePhase(t *testing.T) {
+	now := time.Date(2026, 10, 28, 13, 45, 20, 0, time.UTC)
+	end := LatestSettledEnd(now, 60, 60)
+	if !end.Equal(time.Date(2026, 10, 28, 13, 44, 0, 0, time.UTC)) {
+		t.Fatalf("settled endpoint %s", end)
+	}
+	end = LatestSettledEnd(time.Unix(250, 0).UTC(), 17, 60)
+	if end.Unix() != 187 {
+		t.Fatalf("17-second endpoint %v", end)
+	}
+	seen := make(map[time.Duration]bool)
+	for i := range 1000 {
+		id := fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
+		phase := DispatchPhase(id, 60)
+		if phase < 0 || phase >= time.Minute || phase != DispatchPhase(id, 60) {
+			t.Fatalf("invalid phase %s", phase)
+		}
+		seen[phase] = true
+	}
+	if len(seen) < 900 {
+		t.Fatalf("only %d distinct phases", len(seen))
+	}
+}
 
 func TestDefinitionRequiresSupportedMeasurementAndConversion(t *testing.T) {
 	definition := Definition{

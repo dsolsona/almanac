@@ -276,7 +276,6 @@ func TestReconnectAckReconcilesBeforeCollectionResumes(t *testing.T) {
 	if requests.Load() != 1 || c.configurationPending || c.collections.paused {
 		t.Fatal("collection resumed without successful configuration reconciliation")
 	}
-	c.collections.nextIntervalEnd[collectionKey(snapshot.SLIs[0])] = now.Truncate(15 * time.Second).Add(-time.Minute)
 	c.collections.dispatchDue(ctx)
 	select {
 	case <-launched:

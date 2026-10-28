@@ -132,3 +132,9 @@ agent record alignment, credential history and plain-language password guidance.
 [F2-T26](F2-T26.md) provides readable credential controls and dependency-aware agent deletion.
 
 [F2-T27](F2-T27.md) implements safe normal reassignment of active datasources under SPEC-0009 and SPEC-0018.
+
+[F2-T28](F2-T28.md) repairs SLI detail hierarchy, spacing, named related records and breadcrumb navigation under SPEC-0012.
+
+[F2-T29](F2-T29.md) repairs prompt, fair live dispatch and overdue interval handling under SPEC-0002, SPEC-0009 and SPEC-0015.
+
+[F2-T30](F2-T30.md) adds immediate initial saved observations and stable recurring dispatch phases under ADR-0021.

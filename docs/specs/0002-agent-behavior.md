@@ -112,6 +112,20 @@ concurrency and query timeouts. Providers execute native queries and translate
 responses into the agreed measurement contract. The backend never takes over a
 query when the agent is missing or incompatible.
 
+On initial SLI creation, promptly collect the most recent complete settled interval
+once configuration and execution authority are ready, as authorized by
+[ADR-0021](../adr/0021-immediate-initial-collection.md). Save through normal ingestion.
+Recurring dispatch uses a stable per-SLI phase across the cadence; provider
+evaluation timestamps and canonical intervals do not move with that phase.
+Configuration reordering and restarts do not randomize recurring dispatch. Persisted
+attempt/coverage state distinguishes initial collection from restart; restart must
+not deliberately requery an already completed interval or repeat the initial burst.
+Phase algorithm v1 hashes the UTF-8 SLI ID with SHA-256, interprets the first eight
+bytes as an unsigned big-endian integer, and takes its remainder modulo the cadence
+in microseconds. It applies that many microseconds after settling, without changing
+the canonical interval. Changing this algorithm requires an explicit migration.
+Keep bounded concurrency, fair admission and visible missed work under saturation.
+
 Each scheduled execution has an identity and records its intended interval,
 attempt, completion status, and any failure. A successful query with no
 observations is explicit and differs from a missing execution. Query completion

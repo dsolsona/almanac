@@ -847,6 +847,28 @@ func (c *client) validateLease(lease agentprotocol.Lease, now time.Time) error {
 		(!c.lease.ValidUntil.IsZero() && lease.AgentID == c.lease.AgentID && lease.SessionGeneration == c.lease.SessionGeneration && lease.ValidUntil.Before(c.lease.ValidUntil)) {
 		return errors.New("execution lease is invalid")
 	}
+	for _, grant := range lease.AllowedMeasurements {
+		if grant.LastAttemptedIntervalEnd != nil && grant.LastAttemptedIntervalEnd.After(now) {
+			return errors.New("execution lease cursor is in the future")
+		}
+	}
+	if len(c.slis) != 0 && c.revision == lease.ConfigurationRevision {
+		for _, grant := range lease.AllowedMeasurements {
+			if grant.LastAttemptedIntervalEnd == nil {
+				continue
+			}
+			for _, definition := range c.slis {
+				if definition.SLIID != grant.SLIID || definition.MeasurementRevision != grant.MeasurementRevision {
+					continue
+				}
+				for _, assignment := range c.assignments {
+					if assignment.DatasourceID == definition.DatasourceID && (grant.LastAttemptedIntervalEnd.UnixMicro()%(int64(assignment.PollingIntervalSeconds)*1_000_000) != 0 || grant.LastAttemptedIntervalEnd.After(now.Add(-time.Duration(assignment.SettlingDelaySeconds)*time.Second))) {
+						return errors.New("execution lease cursor is invalid")
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 

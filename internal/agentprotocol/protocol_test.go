@@ -302,9 +302,33 @@ func TestConfigurationSnapshotFencesLeaseAuthority(t *testing.T) {
 	if err := ValidateSnapshotLease(snapshot, lease); err != nil {
 		t.Fatalf("matching acknowledged measurement grant: %v", err)
 	}
+	unaligned := time.Date(2026, 10, 27, 12, 2, 1, 0, time.UTC)
+	lease.AllowedMeasurements[0].LastAttemptedIntervalEnd = &unaligned
+	if err := ValidateSnapshotLease(snapshot, lease); err == nil {
+		t.Fatal("accepted noncanonical cursor")
+	}
+	lease.AllowedMeasurements[0].LastAttemptedIntervalEnd = nil
 	lease.AllowedMeasurements[0].MeasurementRevision = "2"
 	if err := ValidateSnapshotLease(snapshot, lease); err == nil {
 		t.Fatal("grant for another measurement revision was accepted")
+	}
+}
+
+func TestMeasurementGrantCursorMustBeCanonicalTimestampWithinLease(t *testing.T) {
+	valid := time.Date(2026, 10, 27, 12, 30, 0, 0, time.UTC)
+	lease := Lease{LeaseID: "lease-1", AgentID: "00000000-0000-4000-8000-000000000001", SessionGeneration: "1", ConfigurationRevision: "1", ValidFrom: valid.Add(-59 * time.Minute), ValidUntil: valid.Add(time.Minute), AllowedMeasurements: []MeasurementGrant{{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", LastAttemptedIntervalEnd: &valid}}}
+	if err := lease.Validate(); err != nil {
+		t.Fatalf("valid cursor: %v", err)
+	}
+	future := lease.ValidUntil
+	lease.AllowedMeasurements[0].LastAttemptedIntervalEnd = &future
+	if err := lease.Validate(); err == nil {
+		t.Fatal("accepted cursor at lease expiry")
+	}
+	uncanonical := valid.Add(time.Nanosecond)
+	lease.AllowedMeasurements[0].LastAttemptedIntervalEnd = &uncanonical
+	if err := lease.Validate(); err == nil {
+		t.Fatal("accepted sub-microsecond cursor")
 	}
 }
 

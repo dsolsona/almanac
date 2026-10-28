@@ -419,6 +419,16 @@ async function checkCollectedSLI(page, agentID) {
     const counts = page.locator('.sli-counts strong');
     return await counts.count() === 2 ? [await counts.nth(0).textContent(), await counts.nth(1).textContent()] : [];
   }, { timeout: 110_000, intervals: [1000] }).toEqual(['99', '100']);
+  const firstDetail = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/v1/slis/${id}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('SLI detail unavailable');
+    return response.json();
+  }, firstSLI.id);
+  const firstObservation = firstDetail.latest_observation;
+  assert.equal(firstObservation.outcome, 'observed');
+  assert.equal(Date.parse(firstObservation.interval_end) - Date.parse(firstObservation.interval_start), 15_000);
+  assert.ok(Date.parse(firstObservation.interval_start) >= Date.parse(firstSLI.effective_from));
+  assert.ok(Date.parse(firstObservation.recorded_at) >= Date.parse(firstObservation.interval_end) + 60_000);
   await page.screenshot({ path: join(artifacts, 'sli-first-journey-observed.png'), fullPage: true, animations: 'disabled' });
   stage = 'real Compose browser SLI creation and agent collection';
   const browserResult = await command(process.execPath, [join(root, 'web/scripts/check-sli-browser.mjs')], {
@@ -645,7 +655,72 @@ async function checkAgentRetirement(page, original, collection) {
   assert.equal(await page.evaluate(async (token) => (await fetch('/api/agent/v1/configuration', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } })).status, issuedToken), 401);
   const observations = await page.evaluate(async (id) => (await (await fetch(`/api/v1/slis/${id}/observations?limit=50`)).json()).items, collection.sliID);
   assert.deepEqual(observations.find((item) => item.observation_id === collection.observation.observation_id), collection.observation);
+  await checkDefaultCadenceSLI(page, replacement.agent.id);
   await stopAgent(replacementAgent);
+}
+async function checkDefaultCadenceSLI(page, agentID) {
+  stage = 'real Compose default cadence datasource';
+  await setCaptureViewport(page, 'light', { name: 'desktop', width: 1440, height: 1000 });
+  await page.goto(`${url}/datasources/new`);
+  await page.getByLabel('Display name', { exact: true }).fill('VictoriaMetrics');
+  await page.getByLabel('Prometheus endpoint', { exact: true }).fill('http://victoriametrics:8428');
+  await expect.poll(async () => page.getByLabel('Assigned agent', { exact: true }).locator(`option[value="${agentID}"]`).isEnabled(), { timeout: 25_000 }).toBe(true);
+  await page.getByLabel('Assigned agent', { exact: true }).selectOption(agentID);
+  await expect(page.getByLabel('Polling interval (seconds)', { exact: true })).toHaveValue('60');
+  const datasourceResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/datasources');
+  await page.getByRole('button', { name: 'Create datasource', exact: true }).click();
+  const sourceResponse = await datasourceResponse;
+  assert.equal(sourceResponse.status(), 201);
+  const source = await sourceResponse.json();
+  assert.equal(source.polling_interval_seconds, 60);
+  assert.equal(source.settling_delay_seconds, 60);
+  stage = 'real Compose default cadence SLI creation';
+  await page.goto(`${url}/slis/new`);
+  await page.getByLabel('Display name', { exact: true }).fill('Demo request success');
+  await page.getByLabel('Datasource', { exact: true }).selectOption(source.id);
+  await page.getByLabel('Good count query', { exact: true }).fill('vector(99)');
+  await page.getByLabel('Total count query', { exact: true }).fill('vector(100)');
+  const creationStarted = performance.now();
+  const createdResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/slis');
+  await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
+  const created = await createdResponse;
+  assert.equal(created.status(), 201);
+  const sli = await created.json();
+  assert.equal(sli.datasource_id, source.id);
+  const effective = Date.parse(sli.effective_from);
+  const createdAt = Date.parse(sli.created_at);
+  assert.ok(Number.isFinite(effective) && Number.isFinite(createdAt) && effective < createdAt);
+  await expect(page.getByRole('heading', { name: 'Demo request success', exact: true })).toBeVisible();
+  if (await page.locator('.sli-counts strong').count() === 0) await expect(page.getByText(/most recent complete interval/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'VictoriaMetrics', exact: true })).toHaveAttribute('href', `/datasources/${source.id}`);
+  await expect(page.locator(`a[href="/agents?agent=${agentID}"]`)).toBeVisible();
+  await page.screenshot({ path: join(artifacts, 'sli-default-scheduled-light-desktop.png'), fullPage: true, animations: 'disabled' });
+  writeFileSync(join(artifacts, 'sli-default-progress.json'), JSON.stringify({ stage: 'waiting', effective_from: sli.effective_from, created_at: sli.created_at, interval_seconds: 60, settling_seconds: 60 }) + '\n', { mode: 0o600 });
+  stage = 'real Compose default cadence first observation';
+  try {
+    await expect.poll(async () => {
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      const counts = page.locator('.sli-counts strong');
+      return await counts.count() === 2 ? [await counts.nth(0).textContent(), await counts.nth(1).textContent()] : [];
+    }, { timeout: Math.max(1, 60_000 - (performance.now() - creationStarted)), intervals: [1000] }).toEqual(['99', '100']);
+  } catch (error) {
+    writeFileSync(join(artifacts, 'sli-default-progress.json'), JSON.stringify({ stage: 'first_observation_failed', effective_from: sli.effective_from, created_at: sli.created_at, interval_seconds: 60, settling_seconds: 60 }) + '\n', { mode: 0o600 });
+    throw error;
+  }
+  const elapsedToObservation = performance.now() - creationStarted;
+  assert.ok(elapsedToObservation < 60_000, 'first observation exceeded the 60-second cadence');
+  const rows = await page.evaluate(async (id) => (await (await fetch(`/api/v1/slis/${id}/observations?limit=50`)).json()).items, sli.id);
+  const first = rows.find((row) => row.outcome === 'observed' && row.good_count === '99' && row.total_count === '100');
+  assert.ok(first);
+  assert.equal(Date.parse(first.interval_end) - Date.parse(first.interval_start), 60_000);
+  assert.ok(Date.parse(first.interval_start) >= effective);
+  assert.ok(Date.parse(first.interval_end) <= createdAt, 'first measured interval must precede SLI creation');
+  assert.ok(Date.parse(first.recorded_at) >= Date.parse(first.interval_end) + 60_000, 'first query must preserve source settling delay');
+  for (const theme of ['light', 'dark']) for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile', width: 360, height: 900 }]) {
+    await setCaptureViewport(page, theme, viewport);
+    await page.screenshot({ path: join(artifacts, `sli-default-observed-${viewport.name}-${theme}.png`), fullPage: true, animations: 'disabled' });
+  }
+  writeFileSync(join(artifacts, 'sli-default-progress.json'), JSON.stringify({ stage: 'observed', effective_from: sli.effective_from, created_at: sli.created_at, interval_start: first.interval_start, interval_end: first.interval_end, recorded_at: first.recorded_at, elapsed_to_observation_ms: Math.round(elapsedToObservation), interval_seconds: 60, settling_seconds: 60, good_count: '99', total_count: '100' }) + '\n', { mode: 0o600 });
 }
 async function checkLocalAgentRegistration() {
   const browser = await chromium.launch({ args: [`--ignore-certificate-errors-spki-list=${spki}`] });
@@ -806,7 +881,7 @@ async function checkLocalAgentRegistration() {
     await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
     await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
     stage = 'real Compose verify Local display name after token close';
-    await expect(page.getByText('Local', { exact: true })).toBeVisible();
+    await expect(page.locator('dd').getByText('Local', { exact: true })).toBeVisible();
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
     const agentURL = page.url();
     stage = 'real Compose registration uses the existing administrator session';
@@ -895,7 +970,7 @@ async function checkLocalAgentRegistration() {
     stage = 'real Compose reload persisted agent and one-time-token absence';
     await page.reload();
     await expect(page.getByText('local', { exact: true })).toBeVisible();
-    await expect(page.getByText('Local', { exact: true })).toBeVisible();
+    await expect(page.locator('dd').getByText('Local', { exact: true })).toBeVisible();
     assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
     stage = 'real Compose verify PostgreSQL persistence';
     const persisted = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
@@ -945,7 +1020,7 @@ async function checkLocalAgentRegistration() {
         credential_history_read_seen: credentialHistoryReadSeen,
         credential_history_read_succeeded: credentialHistoryReadSucceeded,
         credential_history_visible: await visible(journeyPage.getByRole('heading', { name: 'Credential history', exact: true })),
-        local_display_name_visible: await visible(journeyPage.getByText('Local', { exact: true })),
+        local_display_name_visible: await visible(journeyPage.locator('dd').getByText('Local', { exact: true })),
       };
       writeFileSync(join(artifacts, 'local-agent-post-create-diagnostic.json'), JSON.stringify(safeState, null, 2), { mode: 0o600 });
       const noPasswords = await journeyPage.locator('input[type="password"]').evaluateAll((inputs) => inputs.every((input) => input.value === ''));
