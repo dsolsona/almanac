@@ -58,7 +58,7 @@ WHERE sli.id = $1;
 SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision,
        measurement.datasource_id, datasource.version AS datasource_version,
        measurement.measurement_kind, measurement.component_mode,
-       measurement.good_query, measurement.total_query, measurement.effective_from,
+       measurement.good_query, measurement.total_query, measurement.effective_from, measurement.activated_at,
        datasource.agent_id, datasource.polling_interval_seconds,
        datasource.settling_delay_seconds, sli.created_at, sli.updated_at,
        agent.enabled AS agent_enabled,
@@ -138,7 +138,7 @@ WHERE datasource.agent_id = $1
 ORDER BY sli.id;
 
 -- name: ListAuthorizedMeasurementGrantsForAgent :many
-SELECT sli.id AS sli_id, sli.measurement_revision
+SELECT sli.id AS sli_id, sli.measurement_revision, measurement.last_attempted_interval_end
 FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
@@ -169,7 +169,7 @@ WHERE sli_id = $2 AND revision = $3 AND effective_from = $4 AND activated_at IS 
 UPDATE public.almanac_sli_measurements
 SET activated_at = $4
 WHERE sli_id = $1 AND revision = $2 AND effective_from = $3
-  AND activated_at IS NULL AND effective_from > $4;
+  AND activated_at IS NULL AND (revision = 1 OR effective_from > $4);
 
 -- name: GetAgentExecutionGrantByLease :one
 SELECT lease_id, agent_id, generation, configuration_revision, allowed_measurements,
@@ -194,6 +194,11 @@ JOIN public.almanac_slis AS sli ON sli.id = measurement.sli_id
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
 WHERE measurement.sli_id = $1 AND measurement.revision = $2
 FOR UPDATE OF measurement, sli, datasource;
+
+-- name: AdvanceSliLastAttemptedInterval :exec
+UPDATE public.almanac_sli_measurements
+SET last_attempted_interval_end = GREATEST(last_attempted_interval_end, sqlc.arg(interval_end)::timestamptz)
+WHERE sli_id = sqlc.arg(sli_id) AND revision = sqlc.arg(revision);
 
 -- name: FindSliDeliveryReceipt :one
 SELECT payload_digest, interval_start, sli_id, measurement_revision,

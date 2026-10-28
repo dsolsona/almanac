@@ -2,6 +2,29 @@
 
 ## Current state
 
+[F2-T28](tasks/F2-T28.md) is verified on `fix/sli-detail-usability`, based on
+`258f968`. Maintainer testing exposed noninteractive breadcrumbs, a raw agent UUID,
+crowded collection status and an uneven SLI detail layout. The repair covers linked
+navigation, named related records, a result-first layout and an explanation of the
+first result's timing. Collection-policy changes are not part of this UI repair.
+The coordinator verified the actual 60/60 Compose case, navigation and both themes
+at desktop/mobile widths. Combined source `a6929f88` passed 255 web, 351 Go, 343 race,
+161 selected integration and 108 browser checks. The task retains the earlier
+unexplained response-read failure; the diagnostic patch does not establish its cause.
+
+[F2-T29](tasks/F2-T29.md) is verified in the same candidate. It
+removes tick-throttled slot refill, rotates admission under saturation and retains
+the current settled interval when an older pending interval expires. The maintainer
+has now approved immediate saved initial data and distributed recurring queries
+under [ADR-0021](adr/0021-immediate-initial-collection.md).
+[F2-T30](tasks/F2-T30.md) is verified on source `4510d93c`. The normal Compose
+journey passed, including
+99/100 visible in 21.407 seconds for the reported 60/60 setup and inspection at
+desktop/mobile widths in both themes. The full Linux gate passed 258 web, 358 Go,
+350 race, 161 selected integration and 108 browser checks. The task records the
+corrected CLI and migration-fixture failures and the verifier's file-watcher warnings.
+This increment has not been deployed to the operator application.
+
 [Agent management](plans/0020-agent-management.md) is verified on
 `feat/agent-management`, stacked on `fix/workspace-usability`. The maintainer
 approved credential-driven `make agent`, dependency-guarded deletion, readable

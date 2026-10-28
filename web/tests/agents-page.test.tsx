@@ -652,7 +652,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'Abandon command' }));
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     await user.click(await screen.findByRole('button', { name: 'east-1' }));
-    expect(await screen.findByText('East collector')).toBeVisible();
+    expect(await screen.findByText('East collector', { selector: 'dd' })).toBeVisible();
     await act(async () => { resolveRotation(response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'late-secret' }, 200)); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(screen.queryByText('late-secret')).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Agent token' })).not.toBeInTheDocument();
@@ -1086,7 +1086,7 @@ describe('agent administration screen', () => {
     expect(screen.queryByRole('dialog', { name: 'Revoke credential' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
-    expect(await screen.findByText('West collector')).toBeVisible();
+    expect(await screen.findByText('West collector', { selector: 'dd' })).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'Revoke credential' })).not.toBeInTheDocument();
     expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
   });

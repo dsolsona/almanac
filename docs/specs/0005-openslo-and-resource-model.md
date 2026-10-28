@@ -63,7 +63,14 @@ Changing objective target, budgeting, window, or indicator creates an SLO revisi
 Metadata edits do not. Use expected revision preconditions to reject lost updates.
 
 The first SLI revision records separate `measurement-valid-from` and live
-collection activation timestamps. During an authorized Editor/Admin setup-backfill
+collection activation timestamps. Under [ADR-0021](../adr/0021-immediate-initial-collection.md),
+creating an agent-collected SLI authorizes an immediate saved measurement of the
+most recent complete settled canonical interval. The fixed validity lower bound
+is the start of the latest settled interval at creation. An agent that becomes
+ready later samples the latest settled interval then; it does not replay all
+intervening intervals. This does not claim collection was operational before
+creation. Execution still requires acknowledged configuration and current authority.
+During an authorized Editor/Admin setup-backfill
 preview, the operator may explicitly apply this initial definition to an earlier
 canonical range within retention and provider availability. The preview identifies
 the historical query, source mapping, range, and retrospective interpretation;
@@ -79,7 +86,12 @@ explicit historical request, validity begins at activation. Later revisions rema
 prospective: setup backfill is not a way to rewrite effective history or backdate
 an ordinary query/target edit.
 
-Operational activation and later revisions use a scheduled canonical interval boundary exposed
+Initial agent-collected SLI activation begins once configuration and authority are
+ready, without intentionally waiting for a future canonical boundary. This bounded
+creation exception does not authorize arbitrary historical collection or retrospective
+application of an SLO target.
+
+Later revisions use a scheduled canonical interval boundary exposed
 in UI/API/CLI. A revision can be cancelled before activation; effective history
 cannot be rewritten. For agent-collected definitions, activation uses the next
 common old/new cadence boundary after the affected agent has acknowledged replacement

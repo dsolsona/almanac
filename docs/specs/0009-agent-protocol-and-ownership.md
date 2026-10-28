@@ -115,6 +115,16 @@ generation changes on identity takeover or datasource reassignment. An execution
 binds agent, ownership generation, configuration and allowed SLI revisions to validity
 bounds. An access token authenticates the identity; it is not a permanent execution lease.
 
+Each measurement grant may carry `last_attempted_interval_end`, a UTC microsecond
+timestamp derived from persisted coverage or execution attempts. An absent value
+means no result has yet been recorded. The hint is dynamic lease state, not an
+immutable configuration field or an expansion of execution authority. Agents use it
+to distinguish first collection from restart and must still enforce effective bounds,
+lease fencing and canonical interval alignment. Agents reject a cursor whose endpoint
+is not cadence-aligned or has not yet settled according to the trusted server clock.
+Older peers may ignore the additive
+field; absence remains compatible with older persisted grants.
+
 Backend keeps durable lease evidence. Leases are opaque random identifiers, not
 client-editable claims. Each renewal responds to a fresh agent nonce. The agent
 conservatively anchors the granted duration to that request's monotonic send time,

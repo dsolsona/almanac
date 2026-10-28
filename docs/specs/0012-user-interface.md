@@ -69,7 +69,8 @@ password setup remain separate from the operational shell.
 
 Signed-in administrators initially land on the actual Agents list, with access to
 agent details and credential history. Do not place operational screens beneath a
-large sign-in confirmation panel. Keep planned SLOs, SLIs, Datasources and Alerts
+large sign-in confirmation panel. Implemented SLIs and Datasources have working
+navigation destinations. Keep planned SLOs and Alerts
 entries visible, noninteractive and explicitly marked “Not available yet”; apply
 the same treatment to other displayed unfinished destinations. Do not link these
 entries to empty dashboards or show illustrative data as product results.
@@ -95,6 +96,29 @@ another page. When SLI creation needs a datasource, expose that prerequisite on
 the SLI list and retain the SLI destination through datasource creation. Respect
 the user's permissions when presenting setup actions. Use plain-language field
 guidance and suggest stable identifiers from display names where supported.
+
+Breadcrumb ancestors with implemented destinations are real links, support browser
+history and keyboard navigation, and preserve the current session. Mark the current
+page with `aria-current`; category labels such as Product and Administration do not
+invent unavailable landing pages. Agent, datasource and SLI details expose their
+actual parent list through the same navigation behaviour.
+
+SLI details lead with the latest measurement or an understandable first-result state,
+then collection context and observation history. Secondary configuration and technical
+identifiers/revisions must not compete with those primary tasks. Show related records
+by display name and link to their detail screens when the user has permission.
+Unavailable names or restricted agent details have explicit fallback explanations;
+do not substitute a raw UUID as the normal label or bypass access control.
+Use consistent alignment and spacing at desktop and mobile widths in both themes,
+without arranging unrelated content into uneven cards. Explain the first interval
+and source settling delay in ordinary language using the actual scheduled times;
+do not imply a connected agent has already collected an observation. Under
+[ADR-0021](../adr/0021-immediate-initial-collection.md), Create requests an immediate
+saved result from existing settled data. Explain this on creation and show the actual
+measured interval in the result; do not describe its start as when collection began.
+Pending configuration, a disconnected agent and source failures remain
+distinguishable from a successful result. Next-query times account for dispatch
+spreading. Do not show a future activation countdown for an immediately ready SLI.
 
 ### Operator journeys
 

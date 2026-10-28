@@ -642,7 +642,7 @@ components:
         next_cursor: {type: string}
     Sli:
       type: object
-      required: [id, name, display_name, version, measurement_revision, datasource_id, datasource_version, agent_id, agent_reachability, collection_progress, measurement_kind, component_mode, good_query, total_query, polling_interval_seconds, settling_delay_seconds, effective_from, activation_state, freshness, latest_observation, last_attempt_at, last_observation_at, next_expected_execution_at, created_at, updated_at]
+      required: [id, name, display_name, version, measurement_revision, datasource_id, datasource_version, agent_id, agent_reachability, collection_progress, measurement_kind, component_mode, good_query, total_query, polling_interval_seconds, settling_delay_seconds, effective_from, activated_at, activation_state, freshness, latest_observation, last_attempt_at, last_observation_at, next_expected_execution_at, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
@@ -660,7 +660,8 @@ components:
         total_query: {type: string, maxLength: 4096}
         polling_interval_seconds: {type: integer, minimum: 15}
         settling_delay_seconds: {type: integer, minimum: 60, maximum: 60}
-        effective_from: {type: string, format: date-time}
+        effective_from: {type: string, format: date-time, description: Earliest valid measurement interval start; may precede creation.}
+        activated_at: {type: string, format: date-time, nullable: true, description: Configuration acknowledgement time when collection authority was activated.}
         activation_state: {type: string, enum: [preparing, scheduled, active, blocked]}
         freshness: {type: string, enum: [unknown, fresh, stale]}
         latest_observation: {allOf: [{$ref: '#/components/schemas/SliObservation'}], nullable: true}

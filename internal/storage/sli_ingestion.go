@@ -241,6 +241,11 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 	}); err != nil {
 		return result, operationError(ctx, "storage: SLI delivery receipt insert failed", err)
 	}
+	if err := state.queries.AdvanceSliLastAttemptedInterval(ctx, dbgen.AdvanceSliLastAttemptedIntervalParams{
+		SliID: sliID, Revision: measurementRevision, IntervalEnd: intervalEnd,
+	}); err != nil {
+		return result, operationError(ctx, "storage: SLI attempt cursor update failed", err)
+	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return result, operationError(ctx, "storage: SLI observation commit failed", err)
 	}

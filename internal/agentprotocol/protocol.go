@@ -151,8 +151,9 @@ type Revoked struct {
 }
 
 type MeasurementGrant struct {
-	SLIID               string `json:"sli_id"`
-	MeasurementRevision string `json:"measurement_revision"`
+	SLIID                    string     `json:"sli_id"`
+	MeasurementRevision      string     `json:"measurement_revision"`
+	LastAttemptedIntervalEnd *time.Time `json:"last_attempted_interval_end,omitempty"`
 }
 
 type MeasurementKind string
@@ -660,6 +661,9 @@ func (l Lease) Validate() error {
 		if err := grant.Validate(); err != nil {
 			return invalidIndexedField("execution_lease.allowed_measurements", i)
 		}
+		if grant.LastAttemptedIntervalEnd != nil && !grant.LastAttemptedIntervalEnd.Before(l.ValidUntil) {
+			return invalidIndexedField("execution_lease.allowed_measurements", i)
+		}
 		if _, ok := seen[grant.SLIID]; ok {
 			return invalidIndexedField("execution_lease.allowed_measurements", i)
 		}
@@ -680,6 +684,9 @@ func (m MeasurementGrant) Validate() error {
 	}
 	if _, err := positiveDecimal(m.MeasurementRevision, false); err != nil {
 		return invalidField("measurement.measurement_revision")
+	}
+	if m.LastAttemptedIntervalEnd != nil && (!isUTC(*m.LastAttemptedIntervalEnd) || m.LastAttemptedIntervalEnd.IsZero() || m.LastAttemptedIntervalEnd.Nanosecond()%1_000 != 0) {
+		return invalidField("measurement.last_attempted_interval_end")
 	}
 	return nil
 }
@@ -958,13 +965,21 @@ func ValidateSnapshotLease(snapshot ConfigurationSnapshot, lease Lease) error {
 	if snapshot.AgentID != lease.AgentID || snapshot.ConfigurationRevision != lease.ConfigurationRevision {
 		return invalidField("configuration_snapshot.execution_lease_binding")
 	}
-	measurements := make(map[string]string, len(snapshot.SLIs))
-	for _, sli := range snapshot.SLIs {
-		measurements[sli.SLIID] = sli.MeasurementRevision
+	measurements := make(map[string]SLICollection, len(snapshot.SLIs))
+	cadences := make(map[string]int, len(snapshot.Assignments))
+	for _, assignment := range snapshot.Assignments {
+		cadences[assignment.DatasourceID] = assignment.PollingIntervalSeconds
+	}
+	for _, definition := range snapshot.SLIs {
+		measurements[definition.SLIID] = definition
 	}
 	for _, grant := range lease.AllowedMeasurements {
-		if measurements[grant.SLIID] != grant.MeasurementRevision {
+		definition, exists := measurements[grant.SLIID]
+		if !exists || definition.MeasurementRevision != grant.MeasurementRevision {
 			return invalidField("execution_lease.allowed_measurements")
+		}
+		if grant.LastAttemptedIntervalEnd != nil && grant.LastAttemptedIntervalEnd.UnixMicro()%(int64(cadences[definition.DatasourceID])*1_000_000) != 0 {
+			return invalidField("execution_lease.last_attempted_interval_end")
 		}
 	}
 	return nil

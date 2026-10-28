@@ -194,7 +194,7 @@ func safeBrowserFailureMarker(output string) string {
 		network = "none"
 	}
 	class := values["class"]
-	if class != "timeout" && class != "assertion" && class != "body_unavailable" && class != "element_detached" && class != "other" {
+	if class != "timeout" && class != "assertion" && class != "body_unavailable" && class != "body_json_invalid" && class != "body_resource_missing" && class != "body_cache_evicted" && class != "body_read_failed" && class != "element_detached" && class != "other" {
 		class = "other"
 	}
 	line := values["source_line"]
@@ -277,9 +277,19 @@ func TestIntegrationSafeBrowserFailureMarkerPreservesBoundedCancellationEvidence
 	if result := safeBrowserFailureMarker(hostile); strings.Contains(result, "secret-token") || !strings.Contains(result, "source_line=none") || !strings.Contains(result, "assert_actual=none") {
 		t.Fatalf("unsafe evidence escaped: %s", result)
 	}
-	worst := "FAIL browser-datasources stage=" + strings.Repeat("a", 48) + " network=ERR_" + strings.Repeat("A", 36) + " class=body_unavailable source_line=9999 assert_actual=succeeded assert_expected=succeeded cancel_response_state=succeeded api_status=599 request_id=00000000-0000-4000-8000-000000000001 api_code=authentication_unavailable diagnostic_state=succeeded diagnostic_error_code=authentication_failed diagnostic_result_class=incomplete\n"
+	worst := "FAIL browser-datasources stage=" + strings.Repeat("a", 48) + " network=ERR_" + strings.Repeat("A", 36) + " class=body_resource_missing source_line=9999 assert_actual=succeeded assert_expected=succeeded cancel_response_state=succeeded api_status=599 request_id=00000000-0000-4000-8000-000000000001 api_code=authentication_unavailable diagnostic_state=succeeded diagnostic_error_code=authentication_failed diagnostic_result_class=incomplete\n"
 	if len(worst) > 512 || !strings.Contains(safeBrowserFailureMarker(worst), "source_line=9999") {
 		t.Fatalf("bounded marker length=%d", len(worst))
+	}
+	for _, category := range []string{"body_json_invalid", "body_resource_missing", "body_cache_evicted", "body_read_failed"} {
+		input := strings.Replace(marker, "class=assertion", "class="+category, 1)
+		if result := safeBrowserFailureMarker(input); !strings.Contains(result, "class="+category) {
+			t.Fatalf("lost response read category %s: %s", category, result)
+		}
+	}
+	hostileClass := strings.Replace(marker, "class=assertion", "class=private-secret", 1)
+	if result := safeBrowserFailureMarker(hostileClass); strings.Contains(result, "private-secret") || !strings.Contains(result, "class=other") {
+		t.Fatalf("unsafe response read category escaped: %s", result)
 	}
 }
 

@@ -395,7 +395,7 @@ func sliDTO(value storage.SliRecord) api.Sli {
 		CollectionProgress: api.SliCollectionProgress(value.CollectionProgress), MeasurementKind: value.MeasurementKind,
 		ComponentMode: value.ComponentMode, GoodQuery: value.GoodQuery, TotalQuery: value.TotalQuery,
 		PollingIntervalSeconds: value.PollingIntervalSeconds, SettlingDelaySeconds: value.SettlingDelaySeconds,
-		EffectiveFrom: value.EffectiveFrom, ActivationState: api.SliActivationState(value.ActivationState), Freshness: api.SliFreshness(value.Freshness),
+		EffectiveFrom: value.EffectiveFrom, ActivatedAt: value.ActivatedAt, ActivationState: api.SliActivationState(value.ActivationState), Freshness: api.SliFreshness(value.Freshness),
 		LatestObservation: optionalObservation(value.LatestObservation), LastAttemptAt: value.LastAttemptAt,
 		LastObservationAt: value.LastObservationAt, NextExpectedExecutionAt: value.NextExpectedExecutionAt,
 		CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}

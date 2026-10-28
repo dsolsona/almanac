@@ -79,6 +79,12 @@ settling delay. Each live execution normally requests one canonical interval. Mi
 past intervals go through repair, not overlapping live-window rewrites. Query delay,
 cadence and measurement resolution are explicit settings with capability validation.
 
+Initial creation collects an already settled complete interval promptly when the
+assigned agent is ready. Recurring requests are spread across the cadence under
+[ADR-0021](../adr/0021-immediate-initial-collection.md), while still evaluating both
+components at the same canonical interval end. Neither initial collection nor
+dispatch spreading shortens the source settling delay.
+
 Connection tests use a bounded authenticated read permitted by the provider; they
 do not create source data. Query previews accept unsaved settings, run through the
 assigned agent, cap time/series/points, and never write production observations.

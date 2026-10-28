@@ -10,9 +10,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
@@ -39,6 +41,433 @@ func TestNextIntervalEndSkipsMissedAndHonorsActivation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExpiredCursorKeepsCurrentSettledInterval(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+	agent := testClient(now, testNonce(71))
+	runner := newCollectionRunner(agent)
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+	definition := agentprotocol.SLICollection{SLIID: "sli", MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: now.Add(-10 * time.Minute)}
+	lease := testLease(now.Add(-time.Minute), "lease", now.Add(time.Hour))
+	lease.ConfigurationRevision = "1"
+	lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: "sli", MeasurementRevision: "1"}}
+	runner.SetLease(lease)
+	runner.SetConfiguration(agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition}})
+	runner.nextIntervalEnd[collectionKey(definition)] = now.Add(-2 * time.Minute)
+	runner.initialPending[collectionKey(definition)] = true
+	launched := make(chan collectionDefinition, 1)
+	var workers sync.WaitGroup
+	runner.workers = &workers
+	runner.launchCollection = func(_ context.Context, d collectionDefinition) { launched <- d }
+	runner.dispatchDue(t.Context())
+	workers.Wait()
+	select {
+	case d := <-launched:
+		if !d.intervalEnd.Equal(now.Add(-time.Minute)) {
+			t.Fatalf("endpoint %v, want %v", d.intervalEnd, now.Add(-time.Minute))
+		}
+	default:
+		t.Fatal("eligible interval was skipped")
+	}
+	if runner.losses["missed"] != 1 {
+		t.Fatalf("missed count = %d, want 1", runner.losses["missed"])
+	}
+}
+
+func TestFreshCursorDoesNotReportPreviousOwnersIntervalsLost(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+	runner := newCollectionRunner(testClient(now, testNonce(74)))
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+	d := agentprotocol.SLICollection{SLIID: "sli", MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: now.Add(-10 * time.Minute)}
+	lease := testLease(now.Add(-time.Minute), "lease", now.Add(time.Hour))
+	lease.ConfigurationRevision = "1"
+	lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: "sli", MeasurementRevision: "1"}}
+	runner.SetLease(lease)
+	runner.SetConfiguration(agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{d}})
+	launched := make(chan collectionDefinition, 1)
+	var workers sync.WaitGroup
+	runner.workers = &workers
+	runner.launchCollection = func(_ context.Context, d collectionDefinition) { launched <- d }
+	runner.dispatchDue(t.Context())
+	workers.Wait()
+	select {
+	case result := <-launched:
+		if !result.intervalEnd.Equal(now.Add(-time.Minute)) {
+			t.Fatalf("endpoint %v, want %v", result.intervalEnd, now.Add(-time.Minute))
+		}
+	default:
+		t.Fatal("latest settled interval was not dispatched")
+	}
+	if runner.losses["missed"] != 0 {
+		t.Fatalf("fresh cursor reported %d historical losses", runner.losses["missed"])
+	}
+	if len(runner.active) != 0 {
+		t.Fatal("worker completion returned before reservation release")
+	}
+}
+
+func TestFreshCursorUsesUnixCanonicalBoundaryForArbitraryCadence(t *testing.T) {
+	now := time.Unix(250, 0).UTC()
+	runner := newCollectionRunner(testClient(now, testNonce(76)))
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 17, SettlingDelaySeconds: 60}
+	d := agentprotocol.SLICollection{SLIID: "sli", MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: time.Unix(85, 0).UTC()}
+	lease := testLease(now.Add(-time.Minute), "lease", now.Add(time.Hour))
+	lease.ConfigurationRevision = "1"
+	lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: "sli", MeasurementRevision: "1"}}
+	runner.SetLease(lease)
+	runner.SetConfiguration(agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{d}})
+	launched := make(chan collectionDefinition, 1)
+	var workers sync.WaitGroup
+	runner.workers = &workers
+	runner.launchCollection = func(_ context.Context, result collectionDefinition) { launched <- result }
+	runner.dispatchDue(t.Context())
+	workers.Wait()
+	select {
+	case result := <-launched:
+		if result.intervalEnd.Unix() != 187 || result.intervalEnd.Unix()%17 != 0 || result.intervalEnd.Add(-17*time.Second).Before(d.EffectiveFrom) {
+			t.Fatalf("invalid endpoint %v for effective bound %v", result.intervalEnd, d.EffectiveFrom)
+		}
+	default:
+		t.Fatal("latest settled canonical interval was not dispatched")
+	}
+}
+
+func TestFirstCollectionIsImmediateAndRestartUsesPersistedCursorAndPhase(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		base := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+		const id = "00000000-0000-4000-8000-000000000011"
+		phase := sli.DispatchPhase(id, 60)
+		if phase == 0 {
+			t.Fatal("test requires a nonzero phase")
+		}
+		agent := testClient(base, testNonce(77))
+		assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+		definition := agentprotocol.SLICollection{SLIID: id, MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: base.Add(-3 * time.Minute)}
+		lease := testLease(base.Add(-time.Minute), "lease", base.Add(time.Hour))
+		lease.ConfigurationRevision = "1"
+		lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: id, MeasurementRevision: "1"}}
+		snapshot := agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition}}
+		runner := newCollectionRunner(agent)
+		var workers sync.WaitGroup
+		runner.workers = &workers
+		launched := make(chan collectionDefinition, 2)
+		runner.launchCollection = func(_ context.Context, d collectionDefinition) { launched <- d }
+		runner.SetLease(lease)
+		runner.SetConfiguration(snapshot)
+		runner.dispatchDue(t.Context())
+		workers.Wait()
+		first := <-launched
+		if !first.intervalEnd.Equal(base.Add(-time.Minute)) {
+			t.Fatalf("initial endpoint %v", first.intervalEnd)
+		}
+
+		// A new process receives a backend-persisted cursor for that first result.
+		last := first.intervalEnd
+		lease.AllowedMeasurements[0].LastAttemptedIntervalEnd = &last
+		restarted := newCollectionRunner(agent)
+		restarted.workers = &workers
+		restarted.launchCollection = func(_ context.Context, d collectionDefinition) { launched <- d }
+		restarted.SetLease(lease)
+		restarted.SetConfiguration(snapshot)
+		restarted.dispatchDue(t.Context())
+		workers.Wait()
+		select {
+		case d := <-launched:
+			t.Fatalf("restart repeated interval %v", d.intervalEnd)
+		default:
+		}
+		// The next canonical endpoint becomes due only after its stable phase.
+		agent.serverClock.mu.Lock()
+		agent.serverClock.serverTime = base.Add(time.Minute + phase - time.Microsecond)
+		agent.serverClock.serverAt = time.Now()
+		agent.serverClock.mu.Unlock()
+		restarted.dispatchDue(t.Context())
+		workers.Wait()
+		select {
+		case d := <-launched:
+			t.Fatalf("recurring interval ran before phase: %v", d.intervalEnd)
+		default:
+		}
+		agent.serverClock.mu.Lock()
+		agent.serverClock.serverTime = base.Add(time.Minute + phase)
+		agent.serverClock.serverAt = time.Now()
+		agent.serverClock.mu.Unlock()
+		restarted.dispatchDue(t.Context())
+		workers.Wait()
+		select {
+		case d := <-launched:
+			if !d.intervalEnd.Equal(base) {
+				t.Fatalf("recurring endpoint %v", d.intervalEnd)
+			}
+		default:
+			t.Fatal("phased recurring interval did not run")
+		}
+	})
+}
+
+func TestRecurringDispatchSpreadsAcrossCadence(t *testing.T) {
+	for _, count := range []int{100, 1000} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				base := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+				agent := testClient(base, testNonce(78))
+				runner := newCollectionRunner(agent)
+				lease := testLease(base.Add(-time.Minute), "lease", base.Add(time.Hour))
+				lease.ConfigurationRevision = "1"
+				snapshot := agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1"}
+				for _, source := range []string{"a", "b", "c"} {
+					snapshot.Assignments = append(snapshot.Assignments, agentprotocol.DatasourceAssignment{DatasourceID: source, DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60})
+				}
+				previous := base.Add(-2 * time.Minute)
+				for i := range count {
+					id := fmt.Sprintf("sli-%04d", i)
+					d := agentprotocol.SLICollection{SLIID: id, MeasurementRevision: "1", DatasourceID: snapshot.Assignments[i%3].DatasourceID, DatasourceVersion: "1", EffectiveFrom: base.Add(-10 * time.Minute)}
+					snapshot.SLIs = append(snapshot.SLIs, d)
+					lease.AllowedMeasurements = append(lease.AllowedMeasurements, agentprotocol.MeasurementGrant{SLIID: id, MeasurementRevision: "1", LastAttemptedIntervalEnd: &previous})
+				}
+				runner.SetLease(lease)
+				runner.SetConfiguration(snapshot)
+				seen := make(map[string]bool)
+				buckets := 0
+				for second := range 60 {
+					agent.serverClock.mu.Lock()
+					agent.serverClock.serverTime = base.Add(time.Duration(second+1)*time.Second - time.Microsecond)
+					agent.serverClock.serverAt = time.Now()
+					agent.serverClock.mu.Unlock()
+					before := len(seen)
+					for {
+						started := make(chan collectionDefinition, maxCollectionQueries)
+						release := make(chan struct{})
+						var workers sync.WaitGroup
+						runner.workers = &workers
+						runner.launchCollection = func(ctx context.Context, d collectionDefinition) {
+							started <- d
+							select {
+							case <-release:
+							case <-ctx.Done():
+							}
+						}
+						runner.dispatchDue(t.Context())
+						active := len(runner.active)
+						if active > maxCollectionQueries {
+							t.Fatalf("active %d", active)
+						}
+						for _, n := range runner.activeSources {
+							if n > maxCollectionPerSource {
+								t.Fatalf("source active %d", n)
+							}
+						}
+						for range active {
+							d := <-started
+							if seen[d.sli.SLIID] || !d.intervalEnd.Equal(base.Add(-time.Minute)) {
+								t.Fatalf("duplicate or wrong endpoint: %+v", d)
+							}
+							seen[d.sli.SLIID] = true
+						}
+						close(release)
+						workers.Wait()
+						if active == 0 {
+							break
+						}
+					}
+					if len(seen) > before {
+						buckets++
+					}
+				}
+				if len(seen) != count || buckets < 30 {
+					t.Fatalf("dispatched %d/%d across %d seconds", len(seen), count, buckets)
+				}
+			})
+		})
+	}
+}
+
+func TestCursorHintRejectsUnsettledOrUnalignedIntervals(t *testing.T) {
+	base := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+	d := agentprotocol.SLICollection{SLIID: "sli", MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: base.Add(-3 * time.Minute)}
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+	for _, hint := range []time.Time{base, base.Add(-time.Minute + time.Second)} {
+		runner := newCollectionRunner(testClient(base, testNonce(79)))
+		lease := testLease(base.Add(-time.Minute), "lease", base.Add(time.Hour))
+		lease.ConfigurationRevision = "1"
+		lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: d.SLIID, MeasurementRevision: "1", LastAttemptedIntervalEnd: &hint}}
+		runner.SetLease(lease)
+		runner.SetConfiguration(agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{d}})
+		runner.dispatchDue(t.Context())
+		if !runner.nextIntervalEnd[collectionKey(d)].IsZero() || len(runner.active) != 0 {
+			t.Fatalf("accepted invalid cursor %v", hint)
+		}
+	}
+}
+
+func TestSchedulerRefillsOnCompletion(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now().UTC().Truncate(time.Minute)
+		agent := testClient(now, testNonce(72))
+		runner := newCollectionRunner(agent)
+		assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+		lease := testLease(now.Add(-time.Minute), "lease", now.Add(time.Hour))
+		lease.ConfigurationRevision = "1"
+		snapshot := agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}}
+		for i := range 5 {
+			id := fmt.Sprintf("sli-%d", i)
+			d := agentprotocol.SLICollection{SLIID: id, MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: now.Add(-10 * time.Minute)}
+			snapshot.SLIs = append(snapshot.SLIs, d)
+			lease.AllowedMeasurements = append(lease.AllowedMeasurements, agentprotocol.MeasurementGrant{SLIID: id, MeasurementRevision: "1"})
+			runner.nextIntervalEnd[collectionKey(d)] = now.Add(-time.Minute)
+			runner.initialPending[collectionKey(d)] = true
+		}
+		runner.SetLease(lease)
+		runner.SetConfiguration(snapshot)
+		started := make(chan string, 5)
+		release := make(chan struct{})
+		runner.launchCollection = func(ctx context.Context, d collectionDefinition) {
+			started <- d.sli.SLIID
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		runner.start(ctx, &workers)
+		defer func() { cancel(); workers.Wait() }()
+		for range 4 {
+			select {
+			case <-started:
+			case <-time.After(3 * time.Second):
+				t.Fatal("initial work did not start")
+			}
+		}
+		close(release)
+		select {
+		case <-started:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("available slot waited for scheduler tick")
+		}
+	})
+}
+
+func TestFairBoundedAdmissionAcrossLargeConfigurations(t *testing.T) {
+	for _, count := range []int{100, 1000} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			now := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+			runner := newCollectionRunner(testClient(now, testNonce(73)))
+			lease := testLease(now.Add(-time.Minute), "lease", now.Add(time.Hour))
+			lease.ConfigurationRevision = "1"
+			snapshot := agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1"}
+			for _, source := range []string{"a", "b", "c"} {
+				snapshot.Assignments = append(snapshot.Assignments, agentprotocol.DatasourceAssignment{DatasourceID: source, DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60})
+			}
+			for i := range count {
+				id := fmt.Sprintf("sli-%04d", i)
+				source := snapshot.Assignments[i%3].DatasourceID
+				d := agentprotocol.SLICollection{SLIID: id, MeasurementRevision: "1", DatasourceID: source, DatasourceVersion: "1", EffectiveFrom: now.Add(-2 * time.Minute)}
+				snapshot.SLIs = append(snapshot.SLIs, d)
+				lease.AllowedMeasurements = append(lease.AllowedMeasurements, agentprotocol.MeasurementGrant{SLIID: id, MeasurementRevision: "1"})
+				runner.nextIntervalEnd[collectionKey(d)] = now.Add(-time.Minute)
+				runner.initialPending[collectionKey(d)] = true
+			}
+			runner.SetLease(lease)
+			runner.SetConfiguration(snapshot)
+			seen := make(map[string]bool)
+			for len(seen) < count {
+				started := make(chan collectionDefinition, maxCollectionQueries)
+				release := make(chan struct{})
+				var workers sync.WaitGroup
+				runner.workers = &workers
+				runner.launchCollection = func(ctx context.Context, d collectionDefinition) {
+					started <- d
+					select {
+					case <-release:
+					case <-ctx.Done():
+					}
+				}
+				runner.dispatchDue(t.Context())
+				active := len(runner.active)
+				if active == 0 || active > maxCollectionQueries {
+					t.Fatalf("active = %d after %d admitted", active, len(seen))
+				}
+				for source, n := range runner.activeSources {
+					if n > maxCollectionPerSource {
+						t.Fatalf("source %s active = %d", source, n)
+					}
+				}
+				for range active {
+					d := <-started
+					if seen[d.sli.SLIID] {
+						t.Fatalf("duplicate admission %s", d.sli.SLIID)
+					}
+					seen[d.sli.SLIID] = true
+				}
+				close(release)
+				workers.Wait()
+				if len(seen) >= count/2 {
+					slices.Reverse(snapshot.SLIs)
+					runner.SetConfiguration(snapshot)
+				}
+			}
+		})
+	}
+}
+
+func TestSaturatedWindowsRotateAdmissionAcrossReorderedConfigurations(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		base := time.Date(2026, 10, 27, 12, 44, 0, 0, time.UTC)
+		agent := testClient(base, testNonce(75))
+		runner := newCollectionRunner(agent)
+		assignment := agentprotocol.DatasourceAssignment{DatasourceID: "source", DatasourceVersion: "1", PollingIntervalSeconds: 60, SettlingDelaySeconds: 60}
+		lease := testLease(base.Add(-time.Minute), "lease", base.Add(time.Hour))
+		lease.ConfigurationRevision = "1"
+		snapshot := agentprotocol.ConfigurationSnapshot{ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{assignment}}
+		var latestPhase time.Duration
+		for i := range 12 {
+			id := fmt.Sprintf("sli-%02d", i)
+			d := agentprotocol.SLICollection{SLIID: id, MeasurementRevision: "1", DatasourceID: "source", DatasourceVersion: "1", EffectiveFrom: base.Add(-2 * time.Minute)}
+			snapshot.SLIs = append(snapshot.SLIs, d)
+			lease.AllowedMeasurements = append(lease.AllowedMeasurements, agentprotocol.MeasurementGrant{SLIID: id, MeasurementRevision: "1"})
+			latestPhase = max(latestPhase, sli.DispatchPhase(id, 60))
+			runner.nextIntervalEnd[collectionKey(d)] = base.Add(-time.Minute)
+		}
+		runner.SetLease(lease)
+		seen := make(map[string]bool)
+		for window := range 3 {
+			agent.serverClock.mu.Lock()
+			agent.serverClock.serverTime = base.Add(time.Duration(window)*time.Minute + latestPhase + time.Microsecond)
+			agent.serverClock.serverAt = time.Now()
+			agent.serverClock.mu.Unlock()
+			slices.Reverse(snapshot.SLIs)
+			runner.SetConfiguration(snapshot)
+			started := make(chan collectionDefinition, maxCollectionPerSource)
+			release := make(chan struct{})
+			var workers sync.WaitGroup
+			runner.workers = &workers
+			runner.launchCollection = func(ctx context.Context, d collectionDefinition) {
+				started <- d
+				select {
+				case <-release:
+				case <-ctx.Done():
+				}
+			}
+			runner.dispatchDue(t.Context())
+			if len(runner.active) != maxCollectionPerSource {
+				t.Fatalf("window %d admitted %d", window, len(runner.active))
+			}
+			for range maxCollectionPerSource {
+				d := <-started
+				if seen[d.sli.SLIID] {
+					t.Fatalf("window %d repeated %s before other definitions ran", window, d.sli.SLIID)
+				}
+				seen[d.sli.SLIID] = true
+			}
+			close(release)
+			workers.Wait()
+		}
+		if len(seen) != 12 {
+			t.Fatalf("admitted %d of 12 definitions", len(seen))
+		}
+	})
 }
 
 func TestCollectedOutcomePreservesMissingAndExactCountSemantics(t *testing.T) {
@@ -322,6 +751,7 @@ func TestDispatchDueReservesGlobalPerSourceAndPerSLIConcurrencyBeforeLaunch(t *t
 	runner.mu.Lock()
 	for _, definition := range slis {
 		runner.nextIntervalEnd[collectionKey(definition)] = now.Add(-61 * time.Second)
+		runner.initialPending[collectionKey(definition)] = true
 	}
 	runner.mu.Unlock()
 
@@ -487,6 +917,7 @@ func TestTransitionKeepsUnchangedCursorAndWithholdsAddedCollection(t *testing.T)
 	runner.SetLease(lease)
 	cursor := now.Add(-61 * time.Second)
 	runner.nextIntervalEnd[collectionKey(retained)] = cursor
+	runner.initialPending[collectionKey(retained)] = true
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	launched := make(chan string, 2)
@@ -517,47 +948,66 @@ func TestTransitionKeepsUnchangedCursorAndWithholdsAddedCollection(t *testing.T)
 	}
 }
 
-func TestTransitionInitializesAddedCursorBeforeDelayedGrant(t *testing.T) {
-	cutoff := time.Now().UTC().Truncate(15 * time.Second).Add(30 * time.Second)
-	agent := testClient(cutoff.Add(-15*time.Second), testNonce(70))
-	runner := newCollectionRunner(agent)
-	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
-	added := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000011", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: cutoff}
-	lease := testLease(cutoff.Add(-time.Minute), "lease-old", cutoff.Add(time.Hour))
-	runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	launched := make(chan collectionDefinition, 1)
-	var workers sync.WaitGroup
-	runner.root, runner.workers = ctx, &workers
-	runner.launchCollection = func(_ context.Context, definition collectionDefinition) { launched <- definition }
-	if err := runner.SetTransitionConfigurationAndDrain(ctx, agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{added}}, map[string]bool{}); err != nil {
-		t.Fatal(err)
-	}
-	runner.dispatchDue(ctx)
-	if got := runner.nextIntervalEnd[collectionKey(added)]; !got.Equal(cutoff.Add(15 * time.Second)) {
-		t.Fatalf("withheld cursor=%v, want first interval after cutoff", got)
-	}
-	select {
-	case <-launched:
-		t.Fatal("added collection executed before its matching grant")
-	default:
-	}
-	lease.ConfigurationRevision = "2"
-	lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: added.SLIID, MeasurementRevision: "1"}}
-	runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
-	agent.serverClock.mu.Lock()
-	agent.serverClock.serverTime = cutoff.Add(75 * time.Second)
-	agent.serverClock.serverAt = time.Now()
-	agent.serverClock.mu.Unlock()
-	runner.dispatchDue(ctx)
-	workers.Wait()
-	select {
-	case definition := <-launched:
-		if !definition.intervalEnd.Equal(cutoff.Add(15 * time.Second)) {
-			t.Fatalf("first interval skipped: %v", definition.intervalEnd)
-		}
-	default:
-		t.Fatal("first settled interval did not run with matching grant")
+func TestTransitionDefersAddedCursorUntilDelayedGrant(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		delay time.Duration
+		want  time.Duration
+	}{
+		{name: "first settled interval", delay: 75 * time.Second, want: 15 * time.Second},
+		{name: "late takeover", delay: 180 * time.Second, want: 120 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cutoff := time.Now().UTC().Truncate(15 * time.Second).Add(30 * time.Second)
+			agent := testClient(cutoff.Add(-15*time.Second), testNonce(70))
+			runner := newCollectionRunner(agent)
+			assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000020", DatasourceVersion: "1", Name: "metrics", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Endpoint: "http://127.0.0.1:8428", AuthenticationMode: "none", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
+			added := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000011", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: cutoff}
+			lease := testLease(cutoff.Add(-time.Minute), "lease-old", cutoff.Add(time.Hour))
+			runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			launched := make(chan collectionDefinition, 1)
+			var workers sync.WaitGroup
+			runner.root, runner.workers = ctx, &workers
+			runner.launchCollection = func(_ context.Context, definition collectionDefinition) { launched <- definition }
+			if err := runner.SetTransitionConfigurationAndDrain(ctx, agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{added}}, map[string]bool{}); err != nil {
+				t.Fatal(err)
+			}
+			runner.dispatchDue(ctx)
+			if got := runner.nextIntervalEnd[collectionKey(added)]; !got.IsZero() {
+				t.Fatalf("withheld cursor=%v, want uninitialized", got)
+			}
+			select {
+			case <-launched:
+				t.Fatal("added collection executed before its matching grant")
+			default:
+			}
+			agent.serverClock.mu.Lock()
+			agent.serverClock.serverTime = cutoff.Add(test.delay)
+			agent.serverClock.serverAt = time.Now()
+			agent.serverClock.mu.Unlock()
+			lease.ConfigurationRevision = "2"
+			runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
+			runner.dispatchDue(ctx)
+			if got := runner.nextIntervalEnd[collectionKey(added)]; !got.IsZero() || runner.losses["missed"] != 0 {
+				t.Fatalf("ungranted cursor=%v missed=%d", got, runner.losses["missed"])
+			}
+			lease.AllowedMeasurements = []agentprotocol.MeasurementGrant{{SLIID: added.SLIID, MeasurementRevision: "1"}}
+			runner.SetLeaseAuthority(lease, time.Now().Add(time.Hour), true)
+			runner.dispatchDue(ctx)
+			workers.Wait()
+			select {
+			case definition := <-launched:
+				if !definition.intervalEnd.Equal(cutoff.Add(test.want)) {
+					t.Fatalf("latest settled interval = %v", definition.intervalEnd)
+				}
+			default:
+				t.Fatal("latest settled interval did not run with matching grant")
+			}
+			if runner.losses["missed"] != 0 {
+				t.Fatalf("reported %d losses before grant", runner.losses["missed"])
+			}
+		})
 	}
 }

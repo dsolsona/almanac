@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
+import { readResponseJSON } from './response-read-diagnostics.mjs';
 
 let stage = 'fixture input';
 let fixture;
@@ -186,7 +187,7 @@ stage = 'browser launch';
   assert.deepEqual(write.authentication.token_secret, { action: 'clear' });
   assert.equal(Object.hasOwn(write.authentication.password_secret, 'value'), false);
   assert.equal(Object.hasOwn(write.authentication.token_secret, 'value'), false);
-  const saved = await updateResponse.json();
+  const saved = await readResponseJSON(updateResponse);
   assert.equal(saved.display_name, nextName);
   assert.equal(saved.version, String(BigInt(createdDetail.version) + 1n));
   stage = 'UI datasource update confirmation';
@@ -444,7 +445,9 @@ stage = 'browser launch';
 } catch (error) {
   const networkMatch = typeof error?.message === 'string' ? error.message.match(/net::(ERR_[A-Z_]+)/)?.[1] : undefined;
   const networkCode = networkMatch && networkMatch.length <= 40 ? networkMatch : 'none';
-  const errorClass = error?.name === 'TimeoutError' ? 'timeout' : error?.code === 'ERR_ASSERTION' ? 'assertion'
+  const responseReadClasses = ['body_json_invalid', 'body_resource_missing', 'body_cache_evicted', 'body_read_failed'];
+  const errorClass = error?.name === 'ResponseReadError' && responseReadClasses.includes(error.category) ? error.category
+    : error?.name === 'TimeoutError' ? 'timeout' : error?.code === 'ERR_ASSERTION' ? 'assertion'
     : typeof error?.message === 'string' && /Response\.(?:body|json):/.test(error.message) ? 'body_unavailable'
     : typeof error?.message === 'string' && /element is not attached|element was detached/i.test(error.message) ? 'element_detached' : 'other';
   const safeAssertionValue = (value) => ['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(value)

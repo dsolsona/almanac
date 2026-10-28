@@ -12,7 +12,7 @@ export type AgentRecoveryCause = 'connection' | 'service' | 'timeout' | 'respons
 export type AgentCreateIntent = { key: string; name: string; displayName: string; lifetimeSeconds?: number; userID: string; outcome: 'unknown' | 'rejected' | 'conflict'; retryRejected?: 'session' | 'permission' | 'other'; recoveryCause?: AgentRecoveryCause; requestID?: string };
 export type AgentLifecycleIntent = { kind: 'rotate' | 'revoke' | 'disable' | 'delete'; key: string; userID: string; agentID: string; credentialID?: string; etag: string; lifetimeSeconds?: number; overlapSeconds?: number; retryAfterDeadline?: number; outcome: 'unknown' | 'rejected' | 'conflict'; retryRejected?: 'session' | 'permission' | 'other' | 'conflict' };
 export type SessionRecheck = { confirmed: true; context: AuthContext } | { confirmed: false };
-type Props = { context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; draft: AgentSafeDraft; onDraftChange: (draft: AgentSafeDraft) => void; intent: AgentCreateIntent | null; onIntentChange: (intent: AgentCreateIntent | null) => void; lifecycleIntent: AgentLifecycleIntent | null; onLifecycleIntentChange: (intent: AgentLifecycleIntent | null) => void };
+type Props = { onBreadcrumbChange?: (value: { id: string; name: string } | null) => void; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; draft: AgentSafeDraft; onDraftChange: (draft: AgentSafeDraft) => void; intent: AgentCreateIntent | null; onIntentChange: (intent: AgentCreateIntent | null) => void; lifecycleIntent: AgentLifecycleIntent | null; onLifecycleIntentChange: (intent: AgentLifecycleIntent | null) => void };
 const emptyDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '', nameEdited: false };
 const safeError = 'The request could not be completed. Check the session and try again.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -50,7 +50,7 @@ function queryState() { const q = new URLSearchParams(location.search); return {
 function setQuery(patch: Partial<ReturnType<typeof queryState>>, replace = false) { const q = new URLSearchParams(location.search); for (const [key, value] of Object.entries(patch)) value ? q.set(key, value) : q.delete(key); const url = `${location.pathname}${q.size ? `?${q}` : ''}`; history[replace ? 'replaceState' : 'pushState']({}, '', url); window.dispatchEvent(new PopStateEvent('popstate')); }
 function date(value: string) { return value.replace('T', ' '); }
 
-export function AgentsPage({ context, recheckSession, suspended, draft, onDraftChange, intent, onIntentChange, lifecycleIntent, onLifecycleIntentChange }: Props) {
+export function AgentsPage({ context, recheckSession, suspended, draft, onDraftChange, intent, onIntentChange, lifecycleIntent, onLifecycleIntentChange, onBreadcrumbChange }: Props) {
   const clientRef = useRef<ReturnType<typeof createAgentClient> | null>(null);
   if (!clientRef.current) clientRef.current = createAgentClient();
   const api = clientRef.current;
@@ -58,6 +58,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentDetail, setAgentDetail] = useState<AgentDetail | null>(null);
+  useEffect(() => { onBreadcrumbChange?.(agent && agent.id === locationState.agent ? { id: agent.id, name: agent.display_name } : null); }, [agent, locationState.agent, onBreadcrumbChange]);
   const [credentials, setCredentials] = useState<AgentCredential[]>([]);
   const [agentNext, setAgentNext] = useState(''); const [credentialNext, setCredentialNext] = useState('');
   const [loading, setLoading] = useState(true); const [error, setError] = useState('');

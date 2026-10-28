@@ -125,10 +125,19 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_measurements SET activated_at=$1 WHERE sli_id=$2`, f.base.Add(4*time.Second), record.ID); err != nil {
 		t.Fatal(err)
 	}
-	now = record.EffectiveFrom.Add(15*time.Second + time.Minute)
+	now = record.CreatedAt
 	item := sli.ObservationItem{DeliveryID: uuid.NewString(), ExecutionID: uuid.NewString(), CreatedAt: now, LeaseID: grant.LeaseID,
 		ConfigurationRevision: "1", SessionGeneration: "1", SLIID: record.ID, MeasurementRevision: "1", IntervalStart: record.EffectiveFrom,
 		IntervalEnd: record.EffectiveFrom.Add(15 * time.Second), Outcome: sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: "query"}}
+	if !record.EffectiveFrom.Before(record.CreatedAt) {
+		t.Fatalf("initial validity %v did not precede creation %v", record.EffectiveFrom, record.CreatedAt)
+	}
+	beforeBound := item
+	beforeBound.IntervalStart = record.EffectiveFrom.Add(-15 * time.Second)
+	beforeBound.IntervalEnd = record.EffectiveFrom
+	if result, err := IngestAgentObservation(t.Context(), f.databaseURL, issued.ID, issued.Verifier, beforeBound, clock); err != nil || result.Status != "rejected" {
+		t.Fatalf("interval before initial validity: %+v, %v", result, err)
+	}
 	wrongSLI := item
 	wrongSLI.SLIID = uuid.NewString()
 	if _, err := IngestAgentObservation(t.Context(), f.databaseURL, issued.ID, issued.Verifier, wrongSLI, clock); !errors.Is(err, ErrObservationDenied) {
@@ -174,6 +183,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("failed attempt: %+v", result)
+	}
+	var cursor time.Time
+	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(item.IntervalEnd) {
+		t.Fatalf("persisted attempt cursor = %v, %v", cursor, err)
 	}
 	repeatedExecution := item
 	repeatedExecution.DeliveryID = uuid.NewString()
@@ -221,6 +234,19 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	item.Outcome = sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "0", TotalCount: "0"}
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("zero traffic after incomplete: %+v", result)
+	}
+	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(item.IntervalEnd) {
+		t.Fatalf("advanced attempt cursor = %v, %v", cursor, err)
+	}
+	older := item
+	older.DeliveryID, older.ExecutionID = uuid.NewString(), uuid.NewString()
+	older.IntervalStart, older.IntervalEnd = record.EffectiveFrom, record.EffectiveFrom.Add(15*time.Second)
+	older.Outcome = sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "99", TotalCount: "100"}
+	if replay := ingest(older); replay.Status != "duplicate" {
+		t.Fatalf("older duplicate: %+v", replay)
+	}
+	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(item.IntervalEnd) {
+		t.Fatalf("older delivery moved cursor: %v, %v", cursor, err)
 	}
 	now = now.Add(45 * time.Second)
 	first, err := ListSliObservations(t.Context(), f.databaseURL, proof, record.ID, 2, "", clock)
@@ -282,7 +308,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_measurements SET activated_at=$1 WHERE sli_id=$2`, now, secondSLI.ID); err != nil {
 		t.Fatal(err)
 	}
-	now = secondSLI.EffectiveFrom.Add(2 * time.Minute)
+	now = secondSLI.CreatedAt.Add(61 * time.Second)
 	fresh := item
 	fresh.DeliveryID, fresh.ExecutionID, fresh.CreatedAt = uuid.NewString(), uuid.NewString(), now
 	fresh.IntervalEnd = floorSliBoundary(now.Add(-time.Minute), 15*time.Second)
@@ -327,7 +353,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_agent_execution_grants SET allowed_measurements=$1 WHERE lease_id=$2`, otherAllowed, otherGrant.LeaseID); err != nil {
 		t.Fatal(err)
 	}
-	now = otherSLI.EffectiveFrom.Add(15*time.Second + time.Minute)
+	now = otherSLI.CreatedAt
 	otherItem := sli.ObservationItem{DeliveryID: accepted.DeliveryID, ExecutionID: uuid.NewString(), CreatedAt: now, LeaseID: otherGrant.LeaseID,
 		ConfigurationRevision: "1", SessionGeneration: "1", SLIID: otherSLI.ID, MeasurementRevision: "1", IntervalStart: otherSLI.EffectiveFrom,
 		IntervalEnd: otherSLI.EffectiveFrom.Add(15 * time.Second), Outcome: sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "2", TotalCount: "2"}}
@@ -339,6 +365,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	empty.DeliveryID, empty.ExecutionID, empty.CreatedAt = uuid.NewString(), uuid.NewString(), now
 	empty.IntervalStart = fresh.IntervalEnd
 	empty.IntervalEnd = empty.IntervalStart.Add(15 * time.Second)
+	if ready := empty.IntervalEnd.Add(time.Minute); now.Before(ready) {
+		now = ready
+		empty.CreatedAt = now
+	}
 	empty.Outcome = sli.ExecutionOutcome{State: sli.OutcomeCompleteEmpty}
 	if result := ingest(empty); result.Status != "accepted" {
 		t.Fatalf("complete empty coverage: %+v", result)
@@ -346,6 +376,54 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	var emptyCount int
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c LEFT JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision) WHERE c.sli_id=$1 AND c.interval_start=$2 AND c.outcome='complete_empty' AND v.sli_id IS NULL`, record.ID, empty.IntervalStart).Scan(&emptyCount); err != nil || emptyCount != 1 {
 		t.Fatalf("complete empty coverage without fabricated values: %d, %v", emptyCount, err)
+	}
+	// Recreate the pre-0016 schema in this disposable fixture, then verify that
+	// upgrading existing history backfills the cursor without changing coverage.
+	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_schema_migrations WHERE version=16`); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 1 || result.DatabaseSchemaVersion != 16 {
+		t.Fatalf("cursor migration: %+v, %v", result, err)
+	}
+	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {
+		t.Fatalf("backfilled cursor = %v, %v", cursor, err)
+	}
+	delayed, err := CreateSli(t.Context(), f.databaseURL, CreateSliInput{Proof: proof, Secrets: secrets, Name: "delayed-ack", DisplayName: "Delayed ACK", DatasourceID: source.ID,
+		MeasurementKind: sli.MeasurementKindEventCounts, ComponentMode: sli.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", IdempotencyKey: "delayed-ack", RequestID: "delayed-ack", Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedStart := sli.LatestSettledEnd(delayed.CreatedAt, 15, 60).Add(-15 * time.Second)
+	if !delayed.EffectiveFrom.Equal(expectedStart) || delayed.ActivatedAt != nil {
+		t.Fatalf("created validity/activation = %+v", delayed)
+	}
+	now = delayed.CreatedAt.Add(3 * time.Minute)
+	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resume, grant.Generation, delayed.ConfigurationRevision, clock); err != nil {
+		t.Fatalf("delayed acknowledgement: %v", err)
+	}
+	delayedAfter, err := GetSli(t.Context(), f.databaseURL, proof, delayed.ID, clock)
+	if err != nil || !delayedAfter.EffectiveFrom.Equal(expectedStart) || delayedAfter.ActivatedAt == nil || !delayedAfter.ActivatedAt.Equal(now) {
+		t.Fatalf("delayed activation shifted validity: %+v, %v", delayedAfter, err)
+	}
+	renewed, err := RenewAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resume, grant.Generation, 1, ownershipNonce(92), clock)
+	if err != nil {
+		t.Fatalf("renewal after persisted observations: %v", err)
+	}
+	var renewedGrants []agentprotocol.MeasurementGrant
+	if err := json.Unmarshal(renewed.AllowedMeasurements, &renewedGrants); err != nil {
+		t.Fatal(err)
+	}
+	foundCursor := false
+	for _, g := range renewedGrants {
+		if g.SLIID == record.ID && g.LastAttemptedIntervalEnd != nil && g.LastAttemptedIntervalEnd.Equal(empty.IntervalEnd) {
+			foundCursor = true
+		}
+	}
+	if !foundCursor {
+		t.Fatalf("renewed grant did not carry last persisted attempt: %+v", renewedGrants)
 	}
 	monthTx, err := conn.Begin(t.Context())
 	if err != nil {

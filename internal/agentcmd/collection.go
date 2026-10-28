@@ -2,6 +2,7 @@ package agentcmd
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -48,6 +49,7 @@ type collectionRunner struct {
 	snapshotRevision  string
 	transitionAllowed map[string]bool
 	nextIntervalEnd   map[string]time.Time
+	initialPending    map[string]bool
 	active            map[string]activeCollection
 	activeSources     map[string]int
 
@@ -63,6 +65,8 @@ type collectionRunner struct {
 	lastAttempt      *time.Time
 	lastSuccess      *time.Time
 	notify           chan struct{}
+	scheduleNotify   chan struct{}
+	lastScheduled    string
 	root             context.Context
 	workers          *sync.WaitGroup
 	launchCollection func(context.Context, collectionDefinition)
@@ -101,8 +105,8 @@ type collectionDefinition struct {
 
 func newCollectionRunner(agent *client) *collectionRunner {
 	return &collectionRunner{client: agent, assignments: make(map[string]agentprotocol.DatasourceAssignment),
-		nextIntervalEnd: make(map[string]time.Time), active: make(map[string]activeCollection), activeSources: make(map[string]int),
-		pending: make(map[string]*pendingLiveResult), losses: make(map[string]uint64), lossLogger: slog.Default(), notify: make(chan struct{}, 1), clockSafe: true}
+		nextIntervalEnd: make(map[string]time.Time), initialPending: make(map[string]bool), active: make(map[string]activeCollection), activeSources: make(map[string]int),
+		pending: make(map[string]*pendingLiveResult), losses: make(map[string]uint64), lossLogger: slog.Default(), notify: make(chan struct{}, 1), scheduleNotify: make(chan struct{}, 1), clockSafe: true}
 }
 
 func (r *collectionRunner) start(ctx context.Context, workers *sync.WaitGroup) {
@@ -143,6 +147,7 @@ func (r *collectionRunner) SetLeaseAuthority(lease agentprotocol.Lease, deadline
 	}
 	r.mu.Unlock()
 	r.signal()
+	r.signalSchedule()
 }
 
 func (r *collectionRunner) SetConfiguration(snapshot agentprotocol.ConfigurationSnapshot) {
@@ -195,15 +200,18 @@ func (r *collectionRunner) setConfiguration(snapshot agentprotocol.Configuration
 		_, exists := allowedNext[key]
 		if !exists || (allowed != nil && !allowed[key]) {
 			delete(r.nextIntervalEnd, key)
+			delete(r.initialPending, key)
 		}
 	}
 	r.snapshotRevision = snapshot.ConfigurationRevision
 	r.transitionAllowed = allowed
 	r.assignments = assignments
 	r.slis = append([]agentprotocol.SLICollection(nil), snapshot.SLIs...)
+	slices.SortFunc(r.slis, func(a, b agentprotocol.SLICollection) int { return cmp.Compare(collectionKey(a), collectionKey(b)) })
 	r.paused = false
 	r.mu.Unlock()
 	r.signal()
+	r.signalSchedule()
 	return removed
 }
 
@@ -212,6 +220,7 @@ func (r *collectionRunner) SetPaused(paused bool) {
 	r.paused = paused
 	r.mu.Unlock()
 	r.signal()
+	r.signalSchedule()
 }
 
 func (r *collectionRunner) Heartbeat() (progress string, lastAttempt, lastSuccess, nextExpected *time.Time) {
@@ -248,17 +257,60 @@ func (r *collectionRunner) Heartbeat() (progress string, lastAttempt, lastSucces
 }
 
 func (r *collectionRunner) schedule(ctx context.Context) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
 	defer r.reportLosses(true)
 	for {
+		r.dispatchDue(ctx)
+		r.reportLosses(false)
+		timer := time.NewTimer(r.nextScheduleDelay())
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
-			r.dispatchDue(ctx)
-			r.reportLosses(false)
+		case <-r.scheduleNotify:
+			timer.Stop()
+		case <-timer.C:
 		}
+	}
+}
+
+func (r *collectionRunner) nextScheduleDelay() time.Duration {
+	now := r.client.currentServerTime().UTC()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delay := time.Minute
+	if r.paused || !r.clockSafe || now.IsZero() || !r.lease.ValidUntil.After(now) || !r.lease.ValidFrom.Before(now.Add(time.Minute)) || len(r.active) >= maxCollectionQueries {
+		return delay
+	}
+	for _, current := range r.slis {
+		key := collectionKey(current)
+		assignment, exists := r.assignments[current.DatasourceID]
+		grant := measurementGrant(r.lease, current.SLIID, current.MeasurementRevision)
+		if !exists || assignment.DatasourceVersion != current.DatasourceVersion || r.activeSources[current.DatasourceID] >= maxCollectionPerSource || grant == nil {
+			continue
+		}
+		if grant.LastAttemptedIntervalEnd != nil && (grant.LastAttemptedIntervalEnd.UnixMicro()%(int64(assignment.PollingIntervalSeconds)*1_000_000) != 0 || grant.LastAttemptedIntervalEnd.After(now.Add(-time.Duration(assignment.SettlingDelaySeconds)*time.Second))) {
+			continue
+		}
+		if _, active := r.active[key]; active || (r.snapshotRevision != "" && r.snapshotRevision != r.lease.ConfigurationRevision && !r.transitionAllowed[key]) {
+			continue
+		}
+		end := r.nextIntervalEnd[key]
+		if end.IsZero() {
+			continue
+		}
+		due := end.Add(time.Duration(assignment.SettlingDelaySeconds) * time.Second)
+		if !r.initialPending[key] {
+			due = due.Add(sli.DispatchPhase(current.SLIID, assignment.PollingIntervalSeconds))
+		}
+		delay = min(delay, max(0, due.Sub(now)))
+	}
+	return delay
+}
+
+func (r *collectionRunner) signalSchedule() {
+	select {
+	case r.scheduleNotify <- struct{}{}:
+	default:
 	}
 }
 
@@ -274,10 +326,21 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		return
 	}
 	definitions := make([]collectionDefinition, 0)
-	for _, current := range r.slis {
-		if len(r.active) >= maxCollectionQueries {
+	type candidate struct {
+		current    agentprotocol.SLICollection
+		assignment agentprotocol.DatasourceAssignment
+		end, ready time.Time
+	}
+	candidates := make([]candidate, 0, len(r.slis))
+	start := 0
+	for i, current := range r.slis {
+		if collectionKey(current) > r.lastScheduled {
+			start = i
 			break
 		}
+	}
+	for i := range len(r.slis) {
+		current := r.slis[(start+i)%len(r.slis)]
 		key := collectionKey(current)
 		if _, alreadyActive := r.active[key]; alreadyActive {
 			continue
@@ -286,16 +349,33 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		if !exists || assignment.DatasourceVersion != current.DatasourceVersion {
 			continue
 		}
-		end := r.nextIntervalEnd[key]
-		if end.IsZero() {
-			end = nextIntervalEnd(now, current.EffectiveFrom, assignment.PollingIntervalSeconds)
-			r.nextIntervalEnd[key] = end
-		}
 		if r.snapshotRevision != "" && r.snapshotRevision != r.lease.ConfigurationRevision && !r.transitionAllowed[key] {
 			continue
 		}
-		if !hasGrant(r.lease, current.SLIID, current.MeasurementRevision) {
+		grant := measurementGrant(r.lease, current.SLIID, current.MeasurementRevision)
+		if grant == nil {
 			continue
+		}
+		if grant.LastAttemptedIntervalEnd != nil && (grant.LastAttemptedIntervalEnd.UnixMicro()%(int64(assignment.PollingIntervalSeconds)*1_000_000) != 0 || grant.LastAttemptedIntervalEnd.After(now.Add(-time.Duration(assignment.SettlingDelaySeconds)*time.Second))) {
+			continue
+		}
+		end := r.nextIntervalEnd[key]
+		if end.IsZero() {
+			cadence := time.Duration(assignment.PollingIntervalSeconds) * time.Second
+			end = current.EffectiveFrom.Add(cadence)
+			settled := now.Add(-time.Duration(assignment.SettlingDelaySeconds) * time.Second)
+			if !settled.Before(end) {
+				end = end.Add((settled.Sub(end) / cadence) * cadence)
+			}
+			if grant.LastAttemptedIntervalEnd != nil {
+				afterLast := grant.LastAttemptedIntervalEnd.Add(cadence)
+				if end.Before(afterLast) {
+					end = afterLast
+				}
+			} else {
+				r.initialPending[key] = true
+			}
+			r.nextIntervalEnd[key] = end
 		}
 		readyAt := end.Add(time.Duration(assignment.SettlingDelaySeconds) * time.Second)
 		if now.Before(readyAt) {
@@ -303,10 +383,28 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		}
 		cadence := time.Duration(assignment.PollingIntervalSeconds) * time.Second
 		if now.Sub(readyAt) >= cadence {
-			end = nextIntervalEnd(now, current.EffectiveFrom, assignment.PollingIntervalSeconds)
+			missed := int64(now.Sub(readyAt) / cadence)
+			first := end.Add(-cadence)
+			last := first.Add(time.Duration(missed-1) * cadence)
+			r.recordMissedLocked(uint64(missed), first, last)
+			end = end.Add(time.Duration(missed) * cadence)
 			r.nextIntervalEnd[key] = end
+			readyAt = end.Add(time.Duration(assignment.SettlingDelaySeconds) * time.Second)
+		}
+		if !r.initialPending[key] {
+			readyAt = readyAt.Add(sli.DispatchPhase(current.SLIID, assignment.PollingIntervalSeconds))
+		}
+		if now.Before(readyAt) {
 			continue
 		}
+		candidates = append(candidates, candidate{current, assignment, end, readyAt})
+	}
+	for _, item := range candidates {
+		if len(r.active) >= maxCollectionQueries {
+			break
+		}
+		current, assignment, end := item.current, item.assignment, item.end
+		key := collectionKey(current)
 		if r.activeSources[current.DatasourceID] >= maxCollectionPerSource {
 			continue
 		}
@@ -316,6 +414,9 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		reservation := r.nextReservation
 		r.active[key] = activeCollection{reservation: reservation, cancel: cancel, datasource: current.DatasourceID, done: make(chan struct{})}
 		r.activeSources[current.DatasourceID]++
+		r.lastScheduled = key
+		delete(r.initialPending, key)
+		cadence := time.Duration(assignment.PollingIntervalSeconds) * time.Second
 		r.nextIntervalEnd[key] = end.Add(cadence)
 		definitions = append(definitions, collectionDefinition{sli: current, assignment: assignment, lease: lease,
 			agentID: lease.AgentID, intervalEnd: end, key: key, reservation: reservation, ctx: collectionCtx,
@@ -329,10 +430,10 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 	r.mu.Unlock()
 	for _, definition := range definitions {
 		go func(definition collectionDefinition) {
-			defer r.releaseCollection(definition)
 			if workers != nil {
 				defer workers.Done()
 			}
+			defer r.releaseCollection(definition)
 			if launch != nil {
 				launch(definition.ctx, definition)
 				return
@@ -426,6 +527,7 @@ func (r *collectionRunner) releaseCollection(definition collectionDefinition) {
 		close(active.done)
 	}
 	r.mu.Unlock()
+	r.signalSchedule()
 }
 
 func (r *collectionRunner) finishCollection(definition collectionDefinition, outcome *sli.ExecutionOutcome, successfulQueryAt *time.Time) {
@@ -649,6 +751,18 @@ func (r *collectionRunner) recordDropLocked(reason string, interval time.Time) {
 	}
 }
 
+func (r *collectionRunner) recordMissedLocked(count uint64, first, last time.Time) {
+	if count == 0 {
+		return
+	}
+	r.recordDropLocked("missed", first)
+	r.dropped += count - 1
+	r.losses["missed"] += count - 1
+	if r.lossLatest.IsZero() || last.After(r.lossLatest) {
+		r.lossLatest = last
+	}
+}
+
 func (r *collectionRunner) reportLosses(force bool) {
 	r.mu.Lock()
 	if len(r.losses) == 0 || !force && time.Since(r.lossLastReport) < time.Minute {
@@ -660,7 +774,7 @@ func (r *collectionRunner) reportLosses(force bool) {
 	r.losses = make(map[string]uint64)
 	r.lossEarliest, r.lossLatest, r.lossLastReport = time.Time{}, time.Time{}, time.Now()
 	r.mu.Unlock()
-	r.lossLogger.Warn("live observation loss", "buffer", counts["buffer"], "encoding", counts["encoding"], "terminal", counts["terminal"], "earliest_interval_start", earliest, "latest_interval_start", latest)
+	r.lossLogger.Warn("live observation loss", "buffer", counts["buffer"], "encoding", counts["encoding"], "terminal", counts["terminal"], "missed", counts["missed"], "earliest_interval_start", earliest, "latest_interval_start", latest)
 }
 
 func (r *collectionRunner) evictOldestLocked() bool {
@@ -870,12 +984,17 @@ func (r *collectionRunner) signal() {
 }
 
 func hasGrant(lease agentprotocol.Lease, sliID, revision string) bool {
-	for _, grant := range lease.AllowedMeasurements {
+	return measurementGrant(lease, sliID, revision) != nil
+}
+
+func measurementGrant(lease agentprotocol.Lease, sliID, revision string) *agentprotocol.MeasurementGrant {
+	for i := range lease.AllowedMeasurements {
+		grant := &lease.AllowedMeasurements[i]
 		if grant.SLIID == sliID && grant.MeasurementRevision == revision {
-			return true
+			return grant
 		}
 	}
-	return false
+	return nil
 }
 
 func collectionKey(definition agentprotocol.SLICollection) string {

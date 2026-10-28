@@ -5,13 +5,18 @@
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
 - Related specs: [SPEC-0003](../specs/0003-ingestion-and-recovery.md), [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md)
-- Supersedes / superseded by: initial exclusion deferral superseded by [ADR-0014](0014-maintenance-exclusion-semantics.md); otherwise accepted
+- Supersedes / superseded by: initial exclusion deferral superseded by [ADR-0014](0014-maintenance-exclusion-semantics.md); initial agent-collected sample authorization amended by [ADR-0021](0021-immediate-initial-collection.md); otherwise accepted
 
 ## Accepted amendment
 
 [ADR-0014](0014-maintenance-exclusion-semantics.md), accepted in Crit review
 `0de0c0e42db6`, supersedes only the initial maintenance-exclusion deferral below.
 The remaining measurement decisions and original rationale stay in force.
+
+[ADR-0021](0021-immediate-initial-collection.md), accepted on 2026-10-28,
+additionally supersedes the separate historical-request requirement for the single
+initial settled interval collected when creating an agent-collected SLI. Later
+revisions and general historical work retain the decisions below.
 
 ## Context
 

@@ -495,12 +495,12 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     finally { setCancelSubmitting(false); }
   }
 
-  if (loading && (selectedID || isNew || listResultKey.current !== locationKey)) return <><PageTitle headingRef={heading} title={isNew ? 'Add datasource' : selectedID ? 'Datasource' : 'Datasources'} /><span className="sr-only" role="status">Opening datasource</span></>;
-  if (error && !source && selectedID) return <><PageTitle headingRef={heading} title="Datasources" /><Panel heading="Datasource unavailable"><p ref={errorSummary} role="alert" tabIndex={-1}>{error}</p><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button></Panel></>;
+  if (loading && (selectedID || isNew || listResultKey.current !== locationKey)) return <><PageTitle headingRef={heading} isList={!selectedID && !isNew} title={isNew ? 'Add datasource' : selectedID ? 'Datasource' : 'Datasources'} /><span className="sr-only" role="status">Opening datasource</span></>;
+  if (error && !source && selectedID) return <><PageTitle headingRef={heading} isList={!selectedID} title="Datasources" /><Panel heading="Datasource unavailable"><p ref={errorSummary} role="alert" tabIndex={-1}>{error}</p><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button></Panel></>;
   if (!selectedID && !isNew) {
     const currentItems = listResultKey.current === locationKey ? items : [];
     return <>
-    <div className="datasource-list-heading"><PageTitle headingRef={heading} title="Datasources" />{admin && <Button onClick={() => navigate('/datasources/new')}>Add datasource</Button>}</div>
+    <div className="datasource-list-heading"><PageTitle headingRef={heading} isList={!selectedID} title="Datasources" />{admin && <Button onClick={() => navigate('/datasources/new')}>Add datasource</Button>}</div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
     <div className="datasource-toolbar"><p>Prometheus sources assigned to collection agents.</p>{loading && <span className="sr-only" role="status">Refreshing datasources</span>}</div>
     {currentItems.length === 0 && error && listResultKey.current !== locationKey ? null : currentItems.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <div className="datasource-list" aria-label="Datasources">
@@ -552,9 +552,9 @@ function DiagnosticView({ value }: { value: Diagnostic }) {
   return <div className="diagnostic-result" aria-live="polite"><div><span className={`datasource-diagnostic-status datasource-diagnostic-status--${value.state}`}>{labels[value.state]}</span>{value.result_class && <span className={`datasource-result-class datasource-result-class--${value.result_class}`}>{value.result_class}</span>}</div><p>Deadline {new Date(value.deadline_at).toLocaleTimeString()}</p>{value.message && <p>{value.message}</p>}{value.error_code && <p>Code: <code>{value.error_code}</code></p>}{value.result && <pre>{JSON.stringify(value.result, null, 2)}</pre>}<span className="sr-only">Diagnostic {labels[value.state].toLowerCase()}</span></div>;
 }
 
-function PageTitle({ title, headingRef }: { title: string; headingRef: RefObject<HTMLHeadingElement | null> }) {
+function PageTitle({ title, headingRef, isList = false }: { title: string; headingRef: RefObject<HTMLHeadingElement | null>; isList?: boolean }) {
   return <div className="app-page-context">
-    <nav className="app-breadcrumbs" aria-label="Breadcrumb"><span>Administration</span><span aria-hidden="true">/</span><a href="/datasources" data-app-route>Datasources</a>{title !== 'Datasources' && <><span aria-hidden="true">/</span><span>{title}</span></>}</nav>
+    <nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">Datasources</span> : <><a href="/datasources" data-app-route>Datasources</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav>
     <h1 ref={headingRef} className="agents-heading app-page-heading" tabIndex={-1}>{title}</h1>
   </div>;
 }

@@ -99,6 +99,7 @@ try {
   stage = 'submit SLI from the browser form';
   const createPromise = page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/v1/slis');
+  const creationStarted = performance.now();
   await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
   stage = 'SLI create response status';
   const createResponse = await createPromise;
@@ -138,16 +139,15 @@ try {
   assert.equal(created.component_mode, 'interval_count');
   stage = 'SLI create response effective time';
   const effectiveAt = new Date(created.effective_from).getTime();
-  const comparedAt = Date.now();
-  effectiveTimeEvidence = { valid: Number.isFinite(effectiveAt), after_check: effectiveAt > comparedAt,
-    within_one_second: Number.isFinite(effectiveAt) && Math.abs(effectiveAt - comparedAt) <= 1000 };
-  assert.ok(effectiveAt > comparedAt);
+  const createdAt = Date.parse(created.created_at);
+  effectiveTimeEvidence = { valid: Number.isFinite(effectiveAt) && Number.isFinite(createdAt), validity_before_creation: effectiveAt < createdAt };
+  assert.ok(Number.isFinite(createdAt) && effectiveAt < createdAt);
   stage = 'SLI create response ETag';
   assert.equal(createResponse.headers()['etag'], `"sli:${created.id}:${created.version}"`);
 
-  stage = 'read scheduled activation in the UI';
+  stage = 'read initial activation in the UI';
   await expect(page.getByRole('heading', { name: 'Request success', exact: true })).toBeVisible();
-  await expect(page.locator('.sli-state').filter({ hasText: 'Activation' }).locator('strong')).toHaveText(/scheduled|preparing/);
+  await expect(page.locator('.sli-state').filter({ hasText: 'Activation' }).locator('strong')).toHaveText(/scheduled|preparing|active/);
   const screenshotDir = fixture.artifacts;
   await mkdir(screenshotDir, { recursive: true, mode: 0o700 });
   await page.screenshot({ path: join(screenshotDir, 'sli-detail-light-desktop.png'), fullPage: true });
@@ -179,6 +179,19 @@ try {
   }
   assert.equal(observed, true, `first 99/100 interval was not visible before deadline; latest_api_status=${latestAPI.status} latest_api_code=${latestAPI.code}`);
   assert.equal(activationState, 'active', `unexpected activation state ${safePart(activationState)}`);
+  const elapsedToObservation = performance.now() - creationStarted;
+  const observedDetail = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/v1/slis/${id}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('SLI detail unavailable');
+    return response.json();
+  }, created.id);
+  const firstObservation = observedDetail.latest_observation;
+  assert.equal(firstObservation.outcome, 'observed');
+  assert.equal(firstObservation.good_count, '99');
+  assert.equal(firstObservation.total_count, '100');
+  assert.equal(Date.parse(firstObservation.interval_end) - Date.parse(firstObservation.interval_start), created.polling_interval_seconds * 1000);
+  assert.ok(Date.parse(firstObservation.interval_start) >= effectiveAt);
+  assert.ok(Date.parse(firstObservation.recorded_at) >= Date.parse(firstObservation.interval_end) + created.settling_delay_seconds * 1000);
   const historyRow = page.getByRole('row').filter({ hasText: 'Observed' });
   await expect(historyRow).toContainText('99');
   await expect(historyRow).toContainText('100');
@@ -203,10 +216,42 @@ try {
   await expect(page.getByRole('dialog', { name: 'Navigation menu' })).toBeVisible();
   await page.getByRole('button', { name: 'Close navigation', exact: true }).click();
 
+  stage = 'navigate related records and breadcrumbs';
+  const detailURL = page.url();
+  const agentLink = page.locator(`a[href="/agents?agent=${fixture.agent_id}"]`);
+  await expect(agentLink).toBeVisible();
+  await agentLink.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/agents\\?agent=${fixture.agent_id}`));
+  await expect(page.getByRole('link', { name: 'Agents', exact: true }).first()).toBeVisible();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Agents' }).click();
+  await expect(page).toHaveURL(new RegExp('/agents$'));
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/agents\\?agent=${fixture.agent_id}`));
+  await page.goBack();
+  await expect(page).toHaveURL(detailURL);
+  await page.locator(`a[href="/datasources/${fixture.datasource_id}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`/datasources/${fixture.datasource_id}$`));
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Datasources' }).click();
+  await expect(page).toHaveURL(new RegExp('/datasources$'));
+  await page.goBack();
+  await page.goBack();
+  await expect(page).toHaveURL(detailURL);
+  await page.goForward();
+  await expect(page).toHaveURL(new RegExp(`/datasources/${fixture.datasource_id}$`));
+  await page.goBack();
+  await expect(page).toHaveURL(detailURL);
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs' }).click();
+  await expect(page).toHaveURL(new RegExp('/slis$'));
+  await page.goBack();
+  await expect(page).toHaveURL(detailURL);
+
+
+
   await writeFile(join(screenshotDir, 'sli-journey.json'), JSON.stringify({
     scenario: 'browser-create-agent-collect-readback', sli_id: created.id, measurement_revision: created.measurement_revision,
     activation_state: activationState, outcome: 'observed', good_count: '99', total_count: '100',
-    datasource_id: fixture.datasource_id, agent_id: fixture.agent_id, create_status: createResponse.status(),
+    datasource_id: fixture.datasource_id, agent_id: fixture.agent_id, create_status: createResponse.status(), elapsed_to_observation_ms: Math.round(elapsedToObservation),
   }, null, 2) + '\n', { mode: 0o600 });
   await context.close();
   await browser.close();

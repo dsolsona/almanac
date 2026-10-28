@@ -71,6 +71,7 @@ type SliRecord struct {
 	PollingIntervalSeconds  int
 	SettlingDelaySeconds    int
 	EffectiveFrom           time.Time
+	ActivatedAt             *time.Time
 	ActivationState         string
 	Freshness               string
 	LatestObservation       *SliObservationRecord
@@ -231,7 +232,7 @@ func CreateSli(ctx context.Context, databaseURL string, input CreateSliInput) (S
 		return SliRecord{}, errors.New("storage: SLI identifier unavailable")
 	}
 	cadence := int(lockedDatasource.PollingIntervalSeconds)
-	effectiveFrom := nextSliActivationBoundary(now, cadence)
+	effectiveFrom := sli.LatestSettledEnd(now, cadence, int(lockedDatasource.SettlingDelaySeconds)).Add(-time.Duration(cadence) * time.Second)
 	if err := queries.InsertSli(ctx, dbgen.InsertSliParams{ID: uuidToPG(id), Name: input.Name, DisplayName: input.DisplayName, CreatedAt: timestamp(now)}); err != nil {
 		if isUniqueViolation(err) {
 			return SliRecord{}, ErrSliConflict
@@ -498,7 +499,7 @@ func sliRecordFromGet(ctx context.Context, queries *dbgen.Queries, row dbgen.Get
 	return sliRecordFromFields(row.ID, row.Name, row.DisplayName, row.Version, row.MeasurementRevision,
 		row.DatasourceID, row.DatasourceVersion, row.AgentID, row.MeasurementKind, row.ComponentMode,
 		row.GoodQuery, row.TotalQuery, row.PollingIntervalSeconds, row.SettlingDelaySeconds,
-		row.EffectiveFrom, row.CreatedAt, row.UpdatedAt, row.AgentEnabled, row.LastHeartbeatAt,
+		row.EffectiveFrom, row.ActivatedAt, row.CreatedAt, row.UpdatedAt, row.AgentEnabled, row.LastHeartbeatAt,
 		row.RuntimeUpdatedAt, row.CollectionProgress, row.DesiredConfigurationRevision, row.AppliedConfigurationRevision,
 		row.ConfigurationFailureCode, row.IncompatibleAttemptedAt, row.LastAttemptAt,
 		row.NextExpectedExecutionAt, latest, acceptedAt, now), nil
@@ -520,7 +521,7 @@ func sliRecordFromListRow(ctx context.Context, queries *dbgen.Queries, row dbgen
 	return sliRecordFromFields(row.ID, row.Name, row.DisplayName, row.Version, row.MeasurementRevision,
 		row.DatasourceID, row.DatasourceVersion, row.AgentID, row.MeasurementKind, row.ComponentMode,
 		row.GoodQuery, row.TotalQuery, row.PollingIntervalSeconds, row.SettlingDelaySeconds,
-		row.EffectiveFrom, row.CreatedAt, row.UpdatedAt, row.AgentEnabled, row.LastHeartbeatAt,
+		row.EffectiveFrom, row.ActivatedAt, row.CreatedAt, row.UpdatedAt, row.AgentEnabled, row.LastHeartbeatAt,
 		row.RuntimeUpdatedAt, row.CollectionProgress, row.DesiredConfigurationRevision, row.AppliedConfigurationRevision,
 		row.ConfigurationFailureCode, row.IncompatibleAttemptedAt, row.LastAttemptAt,
 		row.NextExpectedExecutionAt, latest, acceptedAt, now), nil
@@ -536,7 +537,7 @@ func latestSliAcceptedAt(ctx context.Context, queries *dbgen.Queries, id pgtype.
 
 func sliRecordFromFields(id pgtype.UUID, name, displayName string, version, measurementRevision int64,
 	datasourceID pgtype.UUID, datasourceVersion int64, agentID pgtype.UUID, measurementKind, componentMode,
-	goodQuery, totalQuery string, cadence, settling int32, effectiveFrom, createdAt, updatedAt pgtype.Timestamptz,
+	goodQuery, totalQuery string, cadence, settling int32, effectiveFrom, activatedAt, createdAt, updatedAt pgtype.Timestamptz,
 	agentEnabled bool, lastHeartbeatAt, runtimeUpdatedAt pgtype.Timestamptz, collectionProgress pgtype.Text,
 	desiredRevision, appliedRevision pgtype.Int8,
 	configurationFailureCode pgtype.Text, incompatibleAt, lastAttemptAt, nextExpectedAt pgtype.Timestamptz,
@@ -558,22 +559,30 @@ func sliRecordFromFields(id pgtype.UUID, name, displayName string, version, meas
 	activation := "active"
 	if !agentEnabled || configurationFailureCode.Valid || reachability == "incompatible" {
 		activation = "blocked"
-	} else if !desiredRevision.Valid || !appliedRevision.Valid || appliedRevision.Int64 < desiredRevision.Int64 {
+	} else if !activatedAt.Valid || !desiredRevision.Valid || !appliedRevision.Valid || appliedRevision.Int64 < desiredRevision.Int64 {
 		activation = "preparing"
 	} else if now.Before(effectiveFrom.Time) {
 		activation = "scheduled"
 	}
 	freshness := "unknown"
 	var lastAttempt *time.Time
-	firstExpected := effectiveFrom.Time.Add(time.Duration(int(cadence)+int(settling)) * time.Second)
-	nextExpected := firstExpected
-	if !now.Before(firstExpected) && cadence > 0 {
-		nextExpected = firstExpected.Add((now.Sub(firstExpected)/time.Duration(cadence)/time.Second + 1) * time.Duration(cadence) * time.Second)
+	var nextExpected *time.Time
+	phase := sli.DispatchPhase(id.String(), int(cadence))
+	if activatedAt.Valid {
+		if latest == nil {
+			nextExpected = new(now)
+		} else {
+			base := latest.IntervalEnd.Add(time.Duration(int(cadence)+int(settling)) * time.Second)
+			if now.Sub(base) >= time.Duration(cadence)*time.Second {
+				base = base.Add((now.Sub(base) / (time.Duration(cadence) * time.Second)) * time.Duration(cadence) * time.Second)
+			}
+			nextExpected = new(base.Add(phase))
+		}
 	}
 	if latest != nil {
 		lastAttempt = new(latest.RecordedAt)
 		if latest.Outcome == string(sli.OutcomeObserved) || latest.Outcome == string(sli.OutcomeCompleteEmpty) {
-			freshUntil := latest.IntervalEnd.Add(time.Duration(int(cadence)+int(settling)) * time.Second)
+			freshUntil := latest.IntervalEnd.Add(time.Duration(int(cadence)+int(settling))*time.Second + phase)
 			if !now.After(freshUntil) {
 				freshness = "fresh"
 			} else {
@@ -582,17 +591,17 @@ func sliRecordFromFields(id pgtype.UUID, name, displayName string, version, meas
 		} else {
 			freshness = "stale"
 		}
-	} else if now.After(firstExpected.Add(time.Duration(cadence) * time.Second)) {
+	} else if activatedAt.Valid && now.After(activatedAt.Time.Add(time.Duration(cadence)*time.Second)) {
 		freshness = "stale"
 	}
 	return SliRecord{ID: id.String(), Name: name, DisplayName: displayName, Version: version,
 		MeasurementRevision: measurementRevision, DatasourceID: datasourceID.String(), DatasourceVersion: datasourceVersion,
 		AgentID: agentID.String(), AgentReachability: reachability, CollectionProgress: progress,
 		MeasurementKind: measurementKind, ComponentMode: componentMode, GoodQuery: goodQuery, TotalQuery: totalQuery,
-		PollingIntervalSeconds: int(cadence), SettlingDelaySeconds: int(settling), EffectiveFrom: effectiveFrom.Time.UTC(),
+		PollingIntervalSeconds: int(cadence), SettlingDelaySeconds: int(settling), EffectiveFrom: effectiveFrom.Time.UTC(), ActivatedAt: nullableTimestamp(activatedAt),
 		ActivationState: activation, Freshness: freshness, LatestObservation: latest,
 		LastAttemptAt: lastAttempt, LastObservationAt: lastObservation,
-		NextExpectedExecutionAt: &nextExpected, CreatedAt: createdAt.Time.UTC(), UpdatedAt: updatedAt.Time.UTC()}
+		NextExpectedExecutionAt: nextExpected, CreatedAt: createdAt.Time.UTC(), UpdatedAt: updatedAt.Time.UTC()}
 }
 
 func sliAgentReachability(enabled bool, lastHeartbeatAt, runtimeUpdatedAt, incompatibleAt pgtype.Timestamptz, now time.Time) string {
@@ -680,6 +689,9 @@ func reconcilePendingSliActivation(ctx context.Context, queries *dbgen.Queries, 
 	}
 	rescheduled := false
 	for _, measurement := range pending {
+		if measurement.Revision == 1 {
+			continue
+		}
 		if measurement.EffectiveFrom.Time.After(now) {
 			continue
 		}
@@ -702,7 +714,7 @@ func reconcilePendingSliActivation(ctx context.Context, queries *dbgen.Queries, 
 		return err
 	}
 	for _, measurement := range pending {
-		if !measurement.EffectiveFrom.Time.After(now) {
+		if measurement.Revision != 1 && !measurement.EffectiveFrom.Time.After(now) {
 			return ErrSliConflict
 		}
 		updated, err := queries.ActivateSliMeasurement(ctx, dbgen.ActivateSliMeasurementParams{
