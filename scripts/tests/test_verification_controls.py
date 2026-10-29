@@ -88,6 +88,36 @@ class VerificationControlsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             vc.counted_go_events(events, names)
 
+    def test_timing_ledger_deduplicates_runs_marks_unknown_and_unions_overlap(self):
+        records = [
+            {"id": "a", "mode": "slo-unit", "result": "passed", "started_unix": 100, "ended_unix": 110, "elapsed_seconds": 10, "selected_count": 12, "executed_count": 12},
+            {"id": "a", "mode": "slo-unit", "result": "running", "started_unix": 100},
+            {"id": "b", "mode": "slo-unit", "result": "failed", "started_unix": 105, "ended_unix": 125, "elapsed_seconds": 20},
+            {"id": "c", "mode": "slo-integration", "result": "running", "started_unix": 130},
+            {"id": "d", "mode": "slo-integration", "result": "failed", "started_unix": 80, "ended_unix": 90},
+            {"id": "e", "mode": "slo-unit", "result": "passed", "started_unix": 100, "ended_unix": 200, "elapsed_seconds": 100, "parent_id": "b"},
+        ]
+        summary = vc.timing_ledger(records, 140)
+        totals = summary["totals"]
+        self.assertEqual(totals["runs"], 5)
+        self.assertEqual((totals["passed"], totals["failed"], totals["ongoing"]), (2, 2, 1))
+        self.assertEqual(totals["unknown_duration_runs"], 1)
+        self.assertEqual(totals["cumulative_invocation_seconds"], 30)
+        self.assertEqual(totals["top_level_wall_interval_union_seconds"], 45)
+        self.assertEqual(totals["child_elapsed_seconds_excluded"], 100)
+        self.assertEqual(summary["modes"]["slo-integration"]["ongoing"], 1)
+        self.assertEqual(summary["ledger"][0]["id"], "d")
+
+    def test_timing_ledger_reads_fixed_manual_checks_with_unknown_duration(self):
+        manual = self.root / ".local/verification/manual-runs.jsonl"
+        manual.parent.mkdir(parents=True)
+        manual.write_text(json.dumps({"id": "docs-check", "command": "python3 scripts/check-docs.py", "result": "passed", "selected_count": 134, "executed_count": 937, "elapsed_seconds": None}) + "\n")
+        records, unreadable = vc.timing_receipt_records()
+        summary = vc.timing_ledger(records, 140, unreadable)
+        self.assertEqual(summary["totals"]["passed"], 1)
+        self.assertEqual(summary["totals"]["unknown_duration_runs"], 1)
+        self.assertEqual(summary["ledger"][0]["command"], "python3 scripts/check-docs.py")
+
     def test_asset_preflight_failure_is_returned_and_saved_to_receipt_artifact(self):
         artifact = self.receipts / "preflight.log"
         result = SimpleNamespace(returncode=7, stdout=b"asset build failed\n")

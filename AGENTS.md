@@ -281,6 +281,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   retain it as an open investigation with the evidence needed for diagnosis.
 - Report checks actually run, their results, and any gaps. Do not claim that
   tests passed based on an earlier codebase or a different revision.
+- Keep a persistent test-run ledger: command/mode, start/end, elapsed time,
+  result and rerun count. Report cumulative invocation time and wall time occupied
+  by tests separately so parallel runs are not double-counted. Retain failures,
+  distinguish nested checks from their parent gate, and mark missing timings
+  unknown. Include the current totals in delivery updates.
 - Keep changes reviewable and confined to the current feature. Do not begin
   later milestones merely because related code is available.
 - Use `make bootstrap` for the container-only local app, `make run` (or `make start`)

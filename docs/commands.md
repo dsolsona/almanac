@@ -33,6 +33,18 @@ the canonical task state's `receipts/` directory. Missing, failed, stale or
 incomplete evidence prevents a ready handoff. The local files remain editable;
 the guard prevents accidental loops and does not establish a security boundary.
 
+Every completed verification run refreshes the canonical project-root
+`.local/verification/timing-ledger.json` and `timing-ledger.md`, including runs
+from worker checkouts. `make verification-report` also refreshes and prints timing
+totals before checking handoff readiness; failed readiness still returns nonzero.
+The ledger deduplicates shared receipts, retains failures and reports per-mode run
+counts, invocation elapsed time and overlapping wall time counted once. Invocation
+time includes build/startup/cleanup. History without receipts is incomplete.
+For checks outside these targets, append a record to the fixed local
+`.local/verification/manual-runs.jsonl` with a unique `id`, `command`, `result`,
+`started_unix`, `ended_unix` and `elapsed_seconds`; use null for unknown timings.
+This file records evidence only and never executes its command text.
+
 These invocations have been approved in the current development environment. Recheck
 availability in a new environment; do not extrapolate to other selectors or paths.
 

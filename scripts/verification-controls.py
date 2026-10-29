@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
@@ -459,6 +460,7 @@ def execute(mode: str) -> int:
     # O_EXCL makes the immutability guarantee explicit.
     atomic_json(receipt, record, immutable=True)
     pending_path.unlink()
+    refresh_timing_ledger_safely()
     print(json.dumps(record, sort_keys=True))
     return status
 
@@ -521,6 +523,7 @@ def guard(action: str, args: argparse.Namespace | None = None) -> int:
         pending.update({"ended_unix": ended, "elapsed_seconds": ended - pending["started_unix"], "fingerprint_at_end": end_fingerprint, "exit_code": status, "result": "passed" if status == 0 else "failed"})
         atomic_json(RECEIPTS / f"{args.run_id}.json", pending, immutable=True)
         pending_file.unlink()
+        refresh_timing_ledger_safely()
         if path is not None:
             with locked_state(path) as state:
                 if state is not None and args.run_id in state.get("broad_runs", {}):
@@ -673,7 +676,225 @@ def receipt_valid(name: str, state: dict, expected_mode: str | None = None) -> b
         return False
 
 
+def verification_project_root() -> Path:
+    return ROOT.parent.parent if ROOT.parent.name == ".worktrees" else ROOT
+
+
+def timing_receipt_directories() -> list[Path]:
+    project = verification_project_root()
+    bases = [project / ".local/verification"]
+    worktrees = project / ".worktrees"
+    if worktrees.is_dir():
+        bases.extend(checkout / ".local/verification" for checkout in worktrees.iterdir() if checkout.is_dir() and not checkout.is_symlink())
+    directories = {RECEIPTS.resolve()} if RECEIPTS.is_dir() else set()
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for current, children, _files in os.walk(base, followlinks=False):
+            children[:] = [name for name in children if not (Path(current) / name).is_symlink()]
+            if Path(current).name == "receipts":
+                directories.add(Path(current).resolve())
+                children.clear()
+    return sorted(directories)
+
+
+def timing_receipt_records() -> tuple[list[dict], int]:
+    records, unreadable = [], 0
+    for directory in timing_receipt_directories():
+        for path in directory.glob("*.json"):
+            try:
+                value = json.loads(path.read_text())
+                if isinstance(value, dict) and value.get("mode"):
+                    value.setdefault("id", path.name.removesuffix(".pending.json").removesuffix(".json"))
+                    records.append(value)
+            except (OSError, ValueError, json.JSONDecodeError):
+                unreadable += 1
+    manual_runs = verification_project_root() / ".local/verification/manual-runs.jsonl"
+    if manual_runs.is_file():
+        try:
+            for line in manual_runs.read_text().splitlines():
+                try:
+                    value = json.loads(line)
+                    if isinstance(value, dict) and value.get("id") and value.get("command"):
+                        value.setdefault("mode", "manual")
+                        value.setdefault("result", "unknown")
+                        records.append(value)
+                    else:
+                        unreadable += 1
+                except json.JSONDecodeError:
+                    unreadable += 1
+        except OSError:
+            unreadable += 1
+    return records, unreadable
+
+
+def timing_ledger(records: list[dict], generated_unix: float, unreadable_receipts: int = 0) -> dict:
+    """Summarize immutable top-level receipts; child records never add wall time twice."""
+    unique = {}
+    for record in records:
+        run_id = str(record.get("id", ""))
+        if not run_id:
+            continue
+        current = unique.get(run_id)
+        priority = (bool(record.get("ended_unix")), record.get("result") != "running", bool(record.get("elapsed_seconds") is not None))
+        old_priority = (bool(current and current.get("ended_unix")), bool(current and current.get("result") != "running"), bool(current and current.get("elapsed_seconds") is not None))
+        if current is None or priority > old_priority:
+            unique[run_id] = dict(record)
+
+    modes: dict[str, dict] = {}
+    ledger = []
+    intervals = []
+    invocation_seconds = 0.0
+    child_seconds = 0.0
+    ongoing_seconds = 0.0
+    unknown_duration_runs = 0
+    for record in unique.values():
+        mode = str(record.get("mode", "unknown"))
+        result = str(record.get("result", "unknown"))
+        child = bool(record.get("parent_id") or record.get("parent_run_id"))
+        stats = modes.setdefault(mode, {"runs": 0, "passed": 0, "failed": 0, "ongoing": 0, "other": 0, "child_runs": 0, "unknown_duration_runs": 0, "cumulative_invocation_seconds": 0.0, "child_elapsed_seconds_excluded": 0.0})
+        stats["runs"] += 1
+        if result in {"passed", "failed", "running"}:
+            stats["ongoing" if result == "running" else result] += 1
+        else:
+            stats["other"] += 1
+        if child:
+            stats["child_runs"] += 1
+        elapsed = record.get("elapsed_seconds")
+        duration_known = isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool) and elapsed >= 0 and result != "running"
+        if duration_known:
+            if child:
+                child_seconds += float(elapsed)
+                stats["child_elapsed_seconds_excluded"] += float(elapsed)
+            else:
+                invocation_seconds += float(elapsed)
+                stats["cumulative_invocation_seconds"] += float(elapsed)
+        elif result == "running":
+            start = record.get("started_unix")
+            if isinstance(start, (int, float)) and not isinstance(start, bool):
+                observed = max(0.0, generated_unix - float(start))
+                ongoing_seconds += observed
+            else:
+                observed = None
+        else:
+            observed = None
+            stats["unknown_duration_runs"] += 1
+            unknown_duration_runs += 1
+        start = record.get("started_unix")
+        end = record.get("ended_unix")
+        if isinstance(start, (int, float)) and not isinstance(start, bool):
+            if isinstance(end, (int, float)) and not isinstance(end, bool):
+                interval_end = float(end)
+            elif result == "running":
+                interval_end = generated_unix
+            elif duration_known:
+                interval_end = float(start) + float(elapsed)
+            else:
+                interval_end = None
+            if interval_end is not None and interval_end >= float(start) and not child:
+                intervals.append((float(start), interval_end))
+        ledger.append({
+            "id": record.get("id"), "mode": mode, "origin": record.get("origin"),
+            "started_unix": start, "ended_unix": end, "result": result,
+            "exit_code": record.get("exit_code"), "duration_status": "recorded" if duration_known else ("ongoing" if result == "running" else "unknown"),
+            "elapsed_seconds": float(elapsed) if duration_known else None,
+            "observed_ongoing_seconds": observed if result == "running" else None,
+            "selected_count": record.get("selected_count"), "executed_count": record.get("executed_count"),
+            "selected": record.get("selected"), "selectors": record.get("selectors"),
+            "command": record.get("command"), "artifacts": record.get("artifacts", []), "top_level_invocation": not child,
+        })
+    ledger.sort(key=lambda item: (item["started_unix"] if isinstance(item["started_unix"], (int, float)) else float("inf"), str(item["id"])))
+    wall_union = 0.0
+    last_end = None
+    for start, end in sorted(intervals):
+        if last_end is None or start > last_end:
+            wall_union += end - start
+            last_end = end
+        elif end > last_end:
+            wall_union += end - last_end
+            last_end = end
+    return {
+        "generated_unix": generated_unix,
+        "generated_utc": datetime.fromtimestamp(generated_unix, timezone.utc).isoformat(),
+        "totals": {
+            "runs": len(unique), "passed": sum(x["passed"] for x in modes.values()),
+            "failed": sum(x["failed"] for x in modes.values()), "ongoing": sum(x["ongoing"] for x in modes.values()),
+            "other": sum(x["other"] for x in modes.values()), "unknown_duration_runs": unknown_duration_runs,
+            "cumulative_invocation_seconds": invocation_seconds, "ongoing_observed_seconds": ongoing_seconds,
+            "child_elapsed_seconds_excluded": child_seconds, "top_level_wall_interval_union_seconds": wall_union,
+            "unreadable_receipts": unreadable_receipts,
+        },
+        "modes": {mode: {key: (round(value, 3) if key.endswith("seconds") else value) for key, value in sorted(stats.items())} for mode, stats in sorted(modes.items())},
+        "ledger": ledger,
+        "timing_note": "Recorded elapsed is top-level verification invocation wall time, including preflight, startup/build, and cleanup. Nested commands are included in their parent invocation and are not added separately. Wall interval union counts overlapping top-level runs once; it is not test-only CPU time. Checks without receipts cannot be backfilled, and missing durations are unknown.",
+    }
+
+
+def write_timing_ledger() -> tuple[dict, Path, Path]:
+    records, unreadable = timing_receipt_records()
+    summary = timing_ledger(records, time.time(), unreadable)
+    destination = verification_project_root() / ".local/verification"
+    json_path, markdown_path = destination / "timing-ledger.json", destination / "timing-ledger.md"
+    atomic_json(json_path, summary)
+    lines = [
+        "# Verification timing ledger", "",
+        f"Generated: {summary['generated_utc']}", "",
+        "Recorded elapsed is top-level invocation wall time, including preflight/startup/build/cleanup. Nested commands count only in their parent. The wall interval union counts overlap once; it is not test-only CPU time. Checks without receipts and missing durations remain unknown.", "",
+        f"Totals: {summary['totals']['runs']} runs; {summary['totals']['passed']} passed; {summary['totals']['failed']} failed; {summary['totals']['ongoing']} ongoing; {summary['totals']['unknown_duration_runs']} unknown duration.",
+        f"Cumulative invocation elapsed: {summary['totals']['cumulative_invocation_seconds']:.2f}s; ongoing observed: {summary['totals']['ongoing_observed_seconds']:.2f}s; top-level wall interval union: {summary['totals']['top_level_wall_interval_union_seconds']:.2f}s.", "",
+        "| Mode | Runs | Passed | Failed | Ongoing | Unknown duration | Invocation elapsed |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for mode, stats in summary["modes"].items():
+        lines.append(f"| {mode} | {stats['runs']} | {stats['passed']} | {stats['failed']} | {stats['ongoing']} | {stats['unknown_duration_runs']} | {stats['cumulative_invocation_seconds']:.2f}s |")
+    lines.extend(["", "## Runs (chronological)", "", "| Started UTC | Mode | Result | Duration | Cases selected/run | Command or selection | ID |", "| --- | --- | --- | ---: | ---: | --- | --- |"])
+    for run in summary["ledger"]:
+        start = datetime.fromtimestamp(run["started_unix"], timezone.utc).isoformat() if isinstance(run["started_unix"], (int, float)) else "unknown"
+        duration = f"{run['elapsed_seconds']:.2f}s" if run["elapsed_seconds"] is not None else (f"ongoing ({run['observed_ongoing_seconds']:.2f}s observed)" if run["observed_ongoing_seconds"] is not None else "unknown")
+        counts = f"{run['selected_count'] if run['selected_count'] is not None else '?'} / {run['executed_count'] if run['executed_count'] is not None else '?'}"
+        selection = run.get("command") or (", ".join(run.get("selected") or []) or run["mode"])
+        selection = str(selection).replace("|", "\\|").replace("\n", " ")
+        lines.append(f"| {start} | {run['mode']} | {run['result']} | {duration} | {counts} | {selection} | `{run['id']}` |")
+    atomic_text(markdown_path, "\n".join(lines) + "\n")
+    return summary, json_path, markdown_path
+
+
+def atomic_text(path: Path, contents: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+
+
+def refresh_timing_ledger_safely() -> None:
+    try:
+        write_timing_ledger()
+    except OSError as exc:
+        print(f"warning: could not refresh verification timing ledger: {exc}", file=sys.stderr)
+
+
+def print_timing_summary(summary: dict, json_path: Path, markdown_path: Path) -> None:
+    totals = summary["totals"]
+    print("Verification timing (top-level invocation elapsed)", file=sys.stderr)
+    print("mode | runs | pass | fail | ongoing | unknown duration | elapsed", file=sys.stderr)
+    for mode, stats in summary["modes"].items():
+        print(f"{mode} | {stats['runs']} | {stats['passed']} | {stats['failed']} | {stats['ongoing']} | {stats['unknown_duration_runs']} | {stats['cumulative_invocation_seconds']:.2f}s", file=sys.stderr)
+    print(f"Total invocation elapsed {totals['cumulative_invocation_seconds']:.2f}s; ongoing observed {totals['ongoing_observed_seconds']:.2f}s; top-level interval union {totals['top_level_wall_interval_union_seconds']:.2f}s; {totals['unknown_duration_runs']} duration(s) unknown.", file=sys.stderr)
+    print(f"Ledger: {json_path} and {markdown_path}", file=sys.stderr)
+
+
 def report() -> int:
+    timing, json_path, markdown_path = write_timing_ledger()
+    print_timing_summary(timing, json_path, markdown_path)
     path = task_state_path()
     if path is None or not path.is_file():
         raise ValueError("active task state is required for handoff check")
