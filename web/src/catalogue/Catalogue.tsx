@@ -1,8 +1,16 @@
 import { Component, lazy, Suspense, useRef, useState, type ReactNode } from 'react';
-import { ApplicationShell, Button, DatePicker, Dialog, LoadingIndicator, Panel, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
+import { SliRecentStrip } from '../components/charts/SliRecentStrip.tsx';
+import { ApplicationShell, Button, DatePicker, Dialog, LoadingIndicator, MeasurementChoiceCards, Panel, QueryEditor, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
 import '../styles/catalogue.css';
 
 const ChartsSection = lazy(() => import('./ChartsSection.tsx').then((module) => ({ default: module.ChartsSection })));
+const recentMeasurementExamples = [
+  { interval_start: '2026-10-25T11:58:00Z', interval_end: '2026-10-25T11:58:15Z', state: 'observed', good_count: '98', total_count: '100' },
+  { interval_start: '2026-10-25T11:58:15Z', interval_end: '2026-10-25T11:58:30Z', state: 'zero_traffic', good_count: '0', total_count: '0' },
+  { interval_start: '2026-10-25T11:58:30Z', interval_end: '2026-10-25T11:58:45Z', state: 'missing', good_count: null, total_count: null },
+  { interval_start: '2026-10-25T11:58:45Z', interval_end: '2026-10-25T11:59:00Z', state: 'partial', good_count: null, total_count: null },
+  { interval_start: '2026-10-25T11:59:00Z', interval_end: '2026-10-25T11:59:15Z', state: 'failed', good_count: null, total_count: null },
+] as const;
 
 class ChartsLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -34,6 +42,7 @@ export function Catalogue() {
   const [feedback, setFeedback] = useState('No local action yet.');
   const [shellFeedback, setShellFeedback] = useState('This is a local application shell example.');
   const [demoDate, setDemoDate] = useState('2026-10-25');
+  const [demoQuery, setDemoQuery] = useState('sum(rate(requests_total{status=~"2.."}[1m]))');
   const [chartsOpen, setChartsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   function demonstrateSave() {
@@ -76,7 +85,7 @@ export function Catalogue() {
 
       <section className="catalogue-section" id="buttons" aria-labelledby="buttons-heading">
         <div className="section-heading"><p className="eyebrow mono">02 / INTERACTION</p><h2 id="buttons-heading">Buttons</h2><p>Native button semantics, clear variants and a pending state that blocks repeat actions.</p></div>
-        <Panel heading="Variants and states"><div className="example-row"><Button onClick={() => { setCount((value) => value + 1); setFeedback('Button action updated local count.'); }}>Primary</Button><Button variant="outline" onClick={() => setFeedback('Outline action is local only.')}>Outline</Button><Button variant="ghost" onClick={() => setFeedback('Ghost action is local only.')}>Ghost</Button><Button variant="danger" onClick={() => setFeedback('Danger example did not change application data.')}>Danger</Button><Button disabled>Disabled</Button><Button pending>Pending</Button><Button onClick={demonstrateSave} pending={pending}>{pending ? 'Saving locally' : 'Save local example'}</Button>{pending && <Button variant="outline" onClick={finishSave}>Finish local example</Button>}</div><p className="demo-feedback" role="status">{feedback} Count: {count}.</p></Panel>
+        <Panel heading="Variants and states"><div className="example-row"><Button onClick={() => { setCount((value) => value + 1); setFeedback('Button action updated local count.'); }}>Primary</Button><Button variant="selected" aria-pressed="true">Selected toggle</Button><Button variant="outline" onClick={() => setFeedback('Outline action is local only.')}>Outline</Button><Button variant="ghost" onClick={() => setFeedback('Ghost action is local only.')}>Ghost</Button><Button variant="danger" onClick={() => setFeedback('Danger example did not change application data.')}>Danger</Button><Button disabled>Disabled</Button><Button pending>Pending</Button><Button onClick={demonstrateSave} pending={pending}>{pending ? 'Saving locally' : 'Save local example'}</Button>{pending && <Button variant="outline" onClick={finishSave}>Finish local example</Button>}</div><p className="demo-feedback" role="status">{feedback} Count: {count}.</p></Panel>
       </section>
 
       <section className="catalogue-section" id="forms" aria-labelledby="forms-heading">
@@ -102,7 +111,7 @@ export function Catalogue() {
         <div className="section-heading"><p className="eyebrow mono">06 / OVERLAY</p><h2 id="dialog-heading">Dialog</h2><p>Native dialog handles modal focus and Escape; closing returns focus to its trigger.</p></div>
         <Panel heading="Working modal example"><Button ref={triggerRef} onClick={() => setDialogOpen(true)}>Open dialog</Button><Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title="A local dialog" triggerRef={triggerRef}><p>This is a local example. Press Tab to move among controls and Escape to close.</p><TextField id="dialog-example" label="Example input" hint="Focus remains inside the open dialog."/><div className="example-row dialog-actions"><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => setDialogOpen(false)}>Done</Button></div></Dialog></Panel>
       </section>
-      <section className="catalogue-section" id="controls" aria-labelledby="controls-heading"><div className="section-heading"><p className="eyebrow mono">07 / CONTROLS</p><h2 id="controls-heading">Calendar, switches and loading</h2><p>Keyboard-first controls and visible pending feedback remain responsive at narrow widths.</p></div><div className="control-panels"><Panel heading="Calendar and switches"><div className="feedback-controls"><div className="field-stack"><DatePicker label="Start date" value={demoDate} today="2026-10-25" onValueChange={(date) => { setDemoDate(date); setFeedback(date ? `Calendar selected ${date}.` : 'Calendar selection cleared.'); }} hint="Calendar dates are shown in local form."/><DatePicker label="Locked date" value="2026-10-25" today="2026-10-25" disabled onValueChange={() => undefined}/></div><div className="field-stack"><Switch label="Notifications" hint="Send a local example notification."/><Switch label="Maintenance mode" hint="This is a disabled example." checked disabled onChange={() => undefined}/></div></div></Panel><Panel heading="Loading feedback"><LoadingIndicator label="Refreshing catalogue data"/></Panel></div></section>
+      <section className="catalogue-section" id="controls" aria-labelledby="controls-heading"><div className="section-heading"><p className="eyebrow mono">07 / CONTROLS</p><h2 id="controls-heading">Calendar, switches and loading</h2><p>Keyboard-first controls and visible pending feedback remain responsive at narrow widths.</p></div><div className="control-panels"><Panel heading="Calendar and switches"><div className="feedback-controls"><div className="field-stack"><DatePicker label="Start date" value={demoDate} today="2026-10-25" onValueChange={(date) => { setDemoDate(date); setFeedback(date ? `Calendar selected ${date}.` : 'Calendar selection cleared.'); }} hint="Calendar dates are shown in local form."/><DatePicker label="Locked date" value="2026-10-25" today="2026-10-25" disabled onValueChange={() => undefined}/></div><div className="field-stack"><Switch label="Notifications" hint="Send a local example notification."/><Switch label="Maintenance mode" hint="This is a disabled example." checked disabled onChange={() => undefined}/></div></div></Panel><Panel heading="Loading feedback"><LoadingIndicator label="Refreshing catalogue data"/></Panel></div><Panel heading="SLI measurement and query editors"><div className="measurement-demo"><MeasurementChoiceCards value="event_counts" onChange={() => undefined}/><p className="measurement-units"><strong>Query values represent:</strong> event counts over each completed interval.</p><QueryEditor id="catalogue-good-query" label="Good count query" value={demoQuery} onChange={setDemoQuery} /><QueryEditor id="catalogue-total-query" label="Total count query" value="sum(rate(requests_total[1m]))" onChange={() => undefined} /><SliRecentStrip samples={[...recentMeasurementExamples]} cadenceSeconds={15} /></div></Panel></section>
       {chartsOpen && <ChartsLoadBoundary><Suspense fallback={<p role="status">Loading chart examples…</p>}><ChartsSection /></Suspense></ChartsLoadBoundary>}
       <footer className="catalogue-footer"><span className="mono">ALMANAC · FOUNDATION CATALOGUE</span><a href="#catalogue-main">Back to top ↑</a></footer>
     </main>

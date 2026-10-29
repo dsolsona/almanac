@@ -13,9 +13,10 @@ var (
 )
 
 type OccurrenceResult struct {
-	State, ObservedState                                                   string
-	Provisional                                                            bool
-	Attainment, Bad, Allowed, Remaining, Consumed, RemainingFraction, Burn string
+	State, ObservedState                                                          string
+	Provisional                                                                   bool
+	Attainment, Bad, Allowed, Remaining, Consumed, RemainingFraction, Burn        string
+	ExactBad, ExactAllowed, ExactRemaining, ExactConsumed, ExactRemainingFraction *big.Rat
 }
 
 // CalculateOccurrences calculates on exact decimal quantities, rounding only for output.
@@ -45,10 +46,13 @@ func CalculateOccurrences(goodText, totalText, targetText string, provisional bo
 	if attainment.Cmp(target) >= 0 {
 		state = "met"
 	}
+	remainingFraction := new(big.Rat).Sub(one, consumed)
 	result := OccurrenceResult{State: state, ObservedState: state, Provisional: provisional,
 		Attainment: rounded(attainment), Bad: rounded(bad), Allowed: rounded(allowed),
 		Remaining: rounded(remaining), Consumed: rounded(consumed),
-		RemainingFraction: rounded(new(big.Rat).Sub(one, consumed)), Burn: rounded(consumed)}
+		RemainingFraction: rounded(remainingFraction), Burn: rounded(consumed),
+		ExactBad: new(big.Rat).Set(bad), ExactAllowed: new(big.Rat).Set(allowed), ExactRemaining: new(big.Rat).Set(remaining),
+		ExactConsumed: new(big.Rat).Set(consumed), ExactRemainingFraction: new(big.Rat).Set(remainingFraction)}
 	if provisional {
 		result.State = "unknown"
 	}

@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sli"
@@ -78,14 +82,47 @@ type SliRecord struct {
 	LastAttemptAt           *time.Time
 	LastObservationAt       *time.Time
 	NextExpectedExecutionAt *time.Time
+	ListProjection          *SliListProjection
 	ConfigurationRevision   int64
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
 }
 
+type SliListProjection struct {
+	DatasourceDisplayName        *string
+	RecentMeasurementWindowStart *time.Time
+	RecentMeasurementWindowEnd   *time.Time
+	RecentMeasurements           []SliRecentMeasurement
+	LinkedSLOs                   []SliLinkedObjective
+	LinkedSLOCount               int
+}
+
+type SliRecentMeasurement struct {
+	IntervalStart time.Time `json:"interval_start"`
+	IntervalEnd   time.Time `json:"interval_end"`
+	State         string    `json:"state"`
+	GoodCount     *string   `json:"good_count"`
+	TotalCount    *string   `json:"total_count"`
+}
+
+type SliLinkedObjective struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+}
+
+type sliListCursor struct {
+	Version int       `json:"version"`
+	Kind    string    `json:"kind"`
+	Time    time.Time `json:"time"`
+	ID      string    `json:"id"`
+	Filter  string    `json:"filter,omitempty"`
+}
+
 type SliPage struct {
-	Items      []SliRecord
-	NextCursor string
+	Items       []SliRecord
+	ItemCursors []string
+	NextCursor  string
 }
 
 type SliObservationRecord struct {
@@ -326,6 +363,77 @@ func UpdateSliMetadata(ctx context.Context, databaseURL string, input UpdateSliM
 	return record, nil
 }
 
+func validateSliListPage(limit int, cursor, query, datasourceID string) (int, agentCursor, string, string, pgtype.UUID, error) {
+	if limit == 0 {
+		limit = 50
+	}
+	if limit < 1 || limit > 200 || !utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 {
+		return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+	}
+	for _, character := range query {
+		if unicode.IsControl(character) {
+			return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+		}
+	}
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
+	filterID := ""
+	var datasourceFilter pgtype.UUID
+	if datasourceID != "" {
+		parsed, valid := canonicalUUID(datasourceID)
+		if !valid {
+			return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+		}
+		datasourceFilter = parsed
+		filterID = datasourceID
+	}
+	filter := ""
+	if normalizedQuery != "" || filterID != "" {
+		digest := sha256.Sum256([]byte("almanac:sli-list:v1\x00" + normalizedQuery + "\x00" + filterID))
+		filter = fmt.Sprintf("%x", digest)
+	}
+	if cursor == "" {
+		return limit, agentCursor{Version: 1, Kind: "slis"}, filter, normalizedQuery, datasourceFilter, nil
+	}
+	if len(cursor) > 512 || !isASCII(cursor) {
+		return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil || base64.RawURLEncoding.EncodeToString(raw) != cursor {
+		return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+	}
+	var decoded sliListCursor
+	if json.Unmarshal(raw, &decoded, json.RejectUnknownMembers(true)) != nil || decoded.Kind != "slis" || decoded.Time.IsZero() || decoded.Time.Nanosecond()%1000 != 0 {
+		return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+	}
+	if _, valid := canonicalUUID(decoded.ID); !valid {
+		return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+	}
+	if filter == "" {
+		if decoded.Version != 1 || decoded.Filter != "" {
+			return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+		}
+	} else if decoded.Version != 2 || decoded.Filter != filter {
+		return 0, agentCursor{}, "", "", pgtype.UUID{}, ErrSliInvalid
+	}
+	position := agentCursor{Version: decoded.Version, Kind: decoded.Kind, Time: decoded.Time, ID: decoded.ID}
+	return limit, position, filter, normalizedQuery, datasourceFilter, nil
+}
+
+func encodeSliListCursor(createdAt time.Time, id, filter string) (string, error) {
+	if filter == "" {
+		return encodeAgentCursor(agentCursor{Version: 1, Kind: "slis", Time: createdAt, ID: id})
+	}
+	raw, err := json.Marshal(sliListCursor{Version: 2, Kind: "slis", Time: createdAt, ID: id, Filter: filter})
+	if err != nil {
+		return "", errors.New("storage: SLI cursor encode failed")
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(raw)
+	if len(encoded) > 512 {
+		return "", ErrSliInvalid
+	}
+	return encoded, nil
+}
+
 func GetSli(ctx context.Context, databaseURL string, proof DatasourceProof, sliID string, now func() time.Time) (SliRecord, error) {
 	id, valid := canonicalUUID(sliID)
 	if !valid || proof.SessionVerifier == ([32]byte{}) || now == nil {
@@ -354,8 +462,8 @@ func GetSli(ctx context.Context, databaseURL string, proof DatasourceProof, sliI
 	return record, nil
 }
 
-func ListSlis(ctx context.Context, databaseURL string, proof DatasourceProof, limit int, cursor string, now func() time.Time) (SliPage, error) {
-	bounded, position, err := validateAgentPage("slis", "", limit, cursor)
+func ListSlis(ctx context.Context, databaseURL string, proof DatasourceProof, limit int, cursor, query, datasourceID string, now func() time.Time) (SliPage, error) {
+	bounded, position, filter, normalizedQuery, datasourceFilter, err := validateSliListPage(limit, cursor, query, datasourceID)
 	if err != nil || proof.SessionVerifier == ([32]byte{}) || now == nil {
 		return SliPage{}, ErrSliInvalid
 	}
@@ -365,24 +473,32 @@ func ListSlis(ctx context.Context, databaseURL string, proof DatasourceProof, li
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	rows, err := queries.ListSlis(ctx, dbgen.ListSlisParams{CreatedAt: timestamp(position.Time), Column2: uuidOrZero(position.ID), Limit: int32(bounded + 1), RetentionCutoff: timestamp(normalizedAgentNow(now).Add(-sli.ObservationRetention))})
+	listNow := normalizedAgentNow(now)
+	rows, err := queries.ListSlis(ctx, dbgen.ListSlisParams{CreatedAt: timestamp(position.Time), CursorID: uuidOrZero(position.ID), LimitCount: int32(bounded + 1),
+		RetentionCutoff: timestamp(listNow.Add(-sli.ObservationRetention)), ListNow: timestamp(listNow), Query: normalizedQuery, DatasourceFilter: datasourceFilter})
 	if err != nil {
 		return SliPage{}, operationError(ctx, "storage: SLI list failed", err)
 	}
 	page := SliPage{Items: []SliRecord{}}
+	page.ItemCursors = make([]string, 0, min(len(rows), bounded))
 	for index, row := range rows {
 		if index == bounded {
 			break
 		}
-		record, err := sliRecordFromListRow(ctx, queries, row, normalizedAgentNow(now))
+		record, err := sliRecordFromListRow(ctx, row, listNow)
 		if err != nil {
 			return SliPage{}, err
 		}
 		page.Items = append(page.Items, record)
+		itemCursor, err := encodeSliListCursor(record.CreatedAt, record.ID, filter)
+		if err != nil {
+			return SliPage{}, err
+		}
+		page.ItemCursors = append(page.ItemCursors, itemCursor)
 	}
 	if len(rows) > bounded {
 		last := page.Items[len(page.Items)-1]
-		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: "slis", Time: last.CreatedAt, ID: last.ID})
+		page.NextCursor, err = encodeSliListCursor(last.CreatedAt, last.ID, filter)
 		if err != nil {
 			return SliPage{}, err
 		}
@@ -505,7 +621,7 @@ func sliRecordFromGet(ctx context.Context, queries *dbgen.Queries, row dbgen.Get
 		row.NextExpectedExecutionAt, latest, acceptedAt, now), nil
 }
 
-func sliRecordFromListRow(ctx context.Context, queries *dbgen.Queries, row dbgen.ListSlisRow, now time.Time) (SliRecord, error) {
+func sliRecordFromListRow(ctx context.Context, row dbgen.ListSlisRow, now time.Time) (SliRecord, error) {
 	var latest *SliObservationRecord
 	if row.LatestObservationID.Valid {
 		value := SliObservationRecord{ObservationID: row.LatestObservationID.String(), MeasurementRevision: row.LatestMeasurementRevision,
@@ -514,17 +630,43 @@ func sliRecordFromListRow(ctx context.Context, queries *dbgen.Queries, row dbgen
 			ErrorCode: nullableText(row.LatestErrorCode), MissingComponents: append([]string(nil), row.LatestMissingComponents...), RecordedAt: row.LatestRecordedAt.Time.UTC()}
 		latest = &value
 	}
-	acceptedAt, err := latestSliAcceptedAt(ctx, queries, row.ID, now)
-	if err != nil {
-		return SliRecord{}, err
+	var recent []SliRecentMeasurement
+	if err := json.Unmarshal([]byte(row.RecentMeasurements), &recent); err != nil {
+		return SliRecord{}, operationError(ctx, "storage: malformed recent SLI list projection", err)
 	}
-	return sliRecordFromFields(row.ID, row.Name, row.DisplayName, row.Version, row.MeasurementRevision,
+	for index := range recent {
+		if recent[index].GoodCount != nil {
+			value := sli.NormalizeDecimal(*recent[index].GoodCount)
+			recent[index].GoodCount = &value
+		}
+		if recent[index].TotalCount != nil {
+			value := sli.NormalizeDecimal(*recent[index].TotalCount)
+			recent[index].TotalCount = &value
+		}
+	}
+	var linked []SliLinkedObjective
+	if err := json.Unmarshal([]byte(row.LinkedSlos), &linked); err != nil {
+		return SliRecord{}, operationError(ctx, "storage: malformed linked SLO list projection", err)
+	}
+	if len(recent) > 12 || len(linked) > 5 || row.LinkedSloCount < int32(len(linked)) {
+		return SliRecord{}, operationError(ctx, "storage: invalid bounded SLI list projection", errors.New("projection exceeded its declared bound"))
+	}
+	lastObservation := nullableTimestamp(row.LastObservationAt)
+	record := sliRecordFromFields(row.ID, row.Name, row.DisplayName, row.Version, row.MeasurementRevision,
 		row.DatasourceID, row.DatasourceVersion, row.AgentID, row.MeasurementKind, row.ComponentMode,
 		row.GoodQuery, row.TotalQuery, row.PollingIntervalSeconds, row.SettlingDelaySeconds,
 		row.EffectiveFrom, row.ActivatedAt, row.CreatedAt, row.UpdatedAt, row.AgentEnabled, row.LastHeartbeatAt,
 		row.RuntimeUpdatedAt, row.CollectionProgress, row.DesiredConfigurationRevision, row.AppliedConfigurationRevision,
 		row.ConfigurationFailureCode, row.IncompatibleAttemptedAt, row.LastAttemptAt,
-		row.NextExpectedExecutionAt, latest, acceptedAt, now), nil
+		row.NextExpectedExecutionAt, latest, lastObservation, now)
+	datasourceName := row.DatasourceDisplayName
+	record.ListProjection = &SliListProjection{
+		DatasourceDisplayName:        &datasourceName,
+		RecentMeasurementWindowStart: nullableTimestamp(row.RecentMeasurementWindowStart),
+		RecentMeasurementWindowEnd:   nullableTimestamp(row.RecentMeasurementWindowEnd),
+		RecentMeasurements:           recent, LinkedSLOs: linked, LinkedSLOCount: int(row.LinkedSloCount),
+	}
+	return record, nil
 }
 
 func latestSliAcceptedAt(ctx context.Context, queries *dbgen.Queries, id pgtype.UUID, now time.Time) (*time.Time, error) {

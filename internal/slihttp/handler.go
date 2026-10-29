@@ -30,6 +30,7 @@ const (
 	observationsBodyLimit   = 4 << 20
 	maxObservationItemBytes = 1 << 20
 	maxObservationItems     = 1000
+	maxSliListResponseBytes = 10 << 20
 )
 
 type Options struct {
@@ -118,12 +119,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, query url.Values) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, cursor, valid := pageQuery(query)
+		limit, cursor, search, datasourceID, valid := sliListPageQuery(query)
 		if !valid || hasBody(r) || hasMutationHeaders(r) {
 			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
 			return
 		}
-		page, err := storage.ListSlis(r.Context(), h.databaseURL, proof, limit, cursor, h.now)
+		page, err := storage.ListSlis(r.Context(), h.databaseURL, proof, limit, cursor, search, datasourceID, h.now)
 		if err != nil {
 			h.writeStorageError(w, err, requestID)
 			return
@@ -132,7 +133,12 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID s
 		for _, item := range page.Items {
 			items = append(items, sliDTO(item))
 		}
-		h.writeJSON(w, http.StatusOK, api.SliPage{Items: items, NextCursor: page.NextCursor})
+		response, err := fitSliListPage(items, page.ItemCursors, page.NextCursor)
+		if err != nil {
+			h.writeProblem(w, http.StatusServiceUnavailable, "sli_unavailable", requestID)
+			return
+		}
+		h.writeJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		if len(query) != 0 || r.URL.ForceQuery || len(r.Header.Values("If-Match")) != 0 || len(r.Header.Values("If-None-Match")) != 0 ||
 			!singlePrintableHeader(r.Header, "Idempotency-Key", 1, 128) {
@@ -166,6 +172,81 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID s
 		w.Header().Set("Allow", "GET, POST")
 		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
 	}
+}
+
+func sliListPageQuery(query url.Values) (int, string, string, string, bool) {
+	for key := range query {
+		if key != "limit" && key != "cursor" && key != "q" && key != "datasource_id" {
+			return 0, "", "", "", false
+		}
+	}
+	pagination := url.Values{}
+	for _, key := range []string{"limit", "cursor"} {
+		if values, exists := query[key]; exists {
+			pagination[key] = values
+		}
+	}
+	limit, cursor, valid := pageQuery(pagination)
+	if !valid {
+		return 0, "", "", "", false
+	}
+	readSingle := func(key string, maxBytes int) (string, bool) {
+		values, exists := query[key]
+		if !exists {
+			return "", true
+		}
+		if len(values) != 1 || len(values[0]) > maxBytes {
+			return "", false
+		}
+		return values[0], true
+	}
+	search, ok := readSingle("q", 512)
+	if !ok {
+		return 0, "", "", "", false
+	}
+	datasourceID, ok := readSingle("datasource_id", 36)
+	if !ok || datasourceID != "" && !canonicalID(datasourceID) {
+		return 0, "", "", "", false
+	}
+	return limit, cursor, search, datasourceID, true
+}
+
+func fitSliListPage(items []api.Sli, itemCursors []string, nextCursor string) (api.SliPage, error) {
+	if len(itemCursors) != len(items) {
+		return api.SliPage{}, errors.New("SLI list cursor count did not match its items")
+	}
+	encodedItems := make([][]byte, len(items))
+	itemBytes := 0
+	for index, item := range items {
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			return api.SliPage{}, err
+		}
+		encodedItems[index] = encoded
+		itemBytes += len(encoded)
+	}
+	for count := len(items); count > 0; count-- {
+		cursor := nextCursor
+		if count < len(items) {
+			cursor = itemCursors[count-1]
+		}
+		encodedCursor, err := json.Marshal(cursor)
+		if err != nil {
+			return api.SliPage{}, err
+		}
+		separators := max(count-1, 0)
+		if len(`{"items":[`)+itemBytes+separators+len(`],"next_cursor":`)+len(encodedCursor)+len(`}`) <= maxSliListResponseBytes {
+			return api.SliPage{Items: items[:count], NextCursor: cursor}, nil
+		}
+		itemBytes -= len(encodedItems[count-1])
+	}
+	if len(items) == 0 {
+		encodedCursor, err := json.Marshal(nextCursor)
+		if err == nil && len(`{"items":[],"next_cursor":`)+len(encodedCursor)+len(`}`) <= maxSliListResponseBytes {
+			return api.SliPage{Items: []api.Sli{}, NextCursor: nextCursor}, nil
+		}
+	}
+	return api.SliPage{}, errors.New("one SLI list item exceeds the response byte bound")
 }
 
 func (h *Handler) detail(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, sliID string) {
@@ -388,7 +469,7 @@ func ingestResultDTO(value storage.SliIngestResult) api.ObservationItemResult {
 }
 
 func sliDTO(value storage.SliRecord) api.Sli {
-	return api.Sli{Id: uuid.MustParse(value.ID), Name: value.Name, DisplayName: value.DisplayName,
+	result := api.Sli{Id: uuid.MustParse(value.ID), Name: value.Name, DisplayName: value.DisplayName,
 		Version: strconv.FormatInt(value.Version, 10), MeasurementRevision: strconv.FormatInt(value.MeasurementRevision, 10),
 		DatasourceId: uuid.MustParse(value.DatasourceID), DatasourceVersion: strconv.FormatInt(value.DatasourceVersion, 10),
 		AgentId: uuid.MustParse(value.AgentID), AgentReachability: api.SliAgentReachability(value.AgentReachability),
@@ -399,6 +480,23 @@ func sliDTO(value storage.SliRecord) api.Sli {
 		LatestObservation: optionalObservation(value.LatestObservation), LastAttemptAt: value.LastAttemptAt,
 		LastObservationAt: value.LastObservationAt, NextExpectedExecutionAt: value.NextExpectedExecutionAt,
 		CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+	if projection := value.ListProjection; projection != nil {
+		result.DatasourceDisplayName = projection.DatasourceDisplayName
+		result.RecentMeasurementWindowStart = projection.RecentMeasurementWindowStart
+		result.RecentMeasurementWindowEnd = projection.RecentMeasurementWindowEnd
+		recent := make([]api.SliRecentMeasurement, 0, len(projection.RecentMeasurements))
+		for _, item := range projection.RecentMeasurements {
+			recent = append(recent, api.SliRecentMeasurement{IntervalStart: item.IntervalStart, IntervalEnd: item.IntervalEnd,
+				State: api.SliRecentMeasurementState(item.State), GoodCount: item.GoodCount, TotalCount: item.TotalCount})
+		}
+		result.RecentMeasurements = &recent
+		linked := make([]api.SliLinkedSlo, 0, len(projection.LinkedSLOs))
+		for _, item := range projection.LinkedSLOs {
+			linked = append(linked, api.SliLinkedSlo{Id: uuid.MustParse(item.ID), Name: item.Name, DisplayName: item.DisplayName})
+		}
+		result.LinkedSlos = &api.SliLinkedSlos{Items: linked, TotalCount: projection.LinkedSLOCount}
+	}
+	return result
 }
 
 func optionalObservation(value *storage.SliObservationRecord) *api.SliObservation {

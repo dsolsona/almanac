@@ -555,6 +555,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/slos/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a snapshot-paginated operational SLO overview
+         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four live snapshots per actor/session and 64 per installation are admitted. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+         */
+        get: operations["getSloOperationalOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}/operational": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read current operational evaluation and bounded history
+         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+         */
+        get: operations["getSloOperationalDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/slos/{slo_id}": {
         parameters: {
             query?: never;
@@ -709,6 +749,231 @@ export interface components {
         SloPage: {
             items: components["schemas"]["Slo"][];
             next_cursor: string;
+        };
+        SloOperationalOverviewPage: {
+            /** Format: uuid */
+            snapshot_id: string;
+            items: components["schemas"]["SloOperationalOverviewItem"][];
+            group_counts: components["schemas"]["SloUrgencyCounts"];
+            /** @description Empty string when this snapshot has no further page. */
+            next_cursor: string;
+            /** @description Signed cursor for the previous page of this same snapshot */
+            previous_cursor: string;
+        };
+        SloUrgencyCounts: {
+            /** Format: int64 */
+            needs_attention: number;
+            /** Format: int64 */
+            watch: number;
+            /** Format: int64 */
+            healthy: number;
+        };
+        SloOperationalOverviewItem: {
+            slo: components["schemas"]["Slo"];
+            /** @enum {string} */
+            urgency: "needs_attention" | "watch" | "healthy";
+            leading_reason: components["schemas"]["SloUrgencyReason"];
+            reasons: components["schemas"]["SloUrgencyReason"][];
+            current: components["schemas"]["SloOperationalValue"];
+            burn_1h: components["schemas"]["SloBurnValue"];
+            burn_6h: components["schemas"]["SloBurnValue"];
+            exhaustion: components["schemas"]["SloExhaustionEstimate"];
+            /** @description Exact rolling-budget evaluation samples from the preceding seven days; first/last/min/max per bucket and explicit gaps */
+            budget_sparkline: components["schemas"]["SloOperationalSample"][];
+        };
+        SloUrgencyReason: {
+            /** @enum {string} */
+            code: "on_track" | "stale_observations" | "no_data" | "expired_history" | "complete_window_violation" | "negative_observed_budget" | "low_observed_budget" | "high_1h_burn" | "evaluation_unavailable" | "not_yet_eligible" | "zero_traffic" | "incomplete_coverage" | "short_burn_unavailable" | "budget_below_half";
+            provisional: boolean;
+        };
+        SloOperationalValue: {
+            /** Format: date-time */
+            evaluation_at: string;
+            window: components["schemas"]["SloEvaluationWindow"];
+            quality: components["schemas"]["SloOperationalQuality"];
+            performance: components["schemas"]["SloEvaluationPerformance"];
+        };
+        SloOperationalQuality: {
+            /** @enum {string} */
+            state: "complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_yet_eligible" | "not_applicable" | "unavailable";
+            /** @enum {string} */
+            freshness: "unknown" | "fresh" | "stale";
+            /** Format: int64 */
+            expected_intervals: number;
+            /** Format: int64 */
+            observed_intervals: number;
+            /** Format: int64 */
+            known_empty_intervals: number;
+            /** Format: int64 */
+            missing_intervals: number;
+            /** Format: int64 */
+            expired_intervals: number;
+            /** Format: int64 */
+            zero_traffic_intervals: number;
+            /** @description Exact fraction rounded half-even to 12 decimal places at output. */
+            coverage: string | null;
+            /** Format: date-time */
+            first_observation_at: string | null;
+            /** Format: date-time */
+            last_observation_at: string | null;
+            /**
+             * Format: date-time
+             * @description Receipt metadata only; never an observation commit watermark.
+             */
+            latest_receipt_at: string | null;
+            reason?: string | null;
+        };
+        SloBurnValue: {
+            /** @enum {integer} */
+            window_seconds: 3600 | 21600;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            quality: components["schemas"]["SloOperationalQuality"];
+            performance: components["schemas"]["SloEvaluationPerformance"];
+        };
+        SloExhaustionEstimate: {
+            /** @enum {string} */
+            state: "estimated" | "exhausted" | "unavailable";
+            remaining_events: string | null;
+            bad_events_per_hour: string | null;
+            hours_until_exhaustion: string | null;
+            current_quality: components["schemas"]["SloOperationalQuality"];
+            one_hour_quality: components["schemas"]["SloOperationalQuality"];
+            assumptions: ("freezes_current_allowed_budget" | "continues_observed_one_hour_bad_event_rate" | "rolling_window_expiry_can_change_result" | "future_traffic_can_change_result")[];
+            reason?: string | null;
+        };
+        SloOperationalDetail: {
+            /** Format: uuid */
+            evaluation_id: string;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            effective_at: string;
+            calculation_version: string;
+            /** @enum {string} */
+            snapshot_kind: "current_operational_read";
+            objective: components["schemas"]["Slo"];
+            context: components["schemas"]["SloOperationalContext"];
+            current: components["schemas"]["SloOperationalValue"];
+            /** @enum {string} */
+            urgency: "needs_attention" | "watch" | "healthy";
+            leading_reason: components["schemas"]["SloUrgencyReason"];
+            reasons: components["schemas"]["SloUrgencyReason"][];
+            burn_1h: components["schemas"]["SloBurnValue"];
+            burn_6h: components["schemas"]["SloBurnValue"];
+            exhaustion: components["schemas"]["SloExhaustionEstimate"];
+            range: components["schemas"]["SloOperationalRange"];
+            attainment_series: components["schemas"]["SloOperationalSeries"];
+            budget_series: components["schemas"]["SloOperationalSeries"];
+            burn_series: components["schemas"]["SloOperationalSeries"];
+            compliance_series: components["schemas"]["SloDailyComplianceSeries"];
+            compliance_summary: components["schemas"]["SloDailyComplianceSummary"];
+        };
+        SloDailyComplianceSeries: {
+            /** @enum {string} */
+            kind: "daily_compliance";
+            days: components["schemas"]["SloDailyComplianceDay"][];
+        };
+        SloDailyComplianceDay: {
+            /** Format: date */
+            utc_date: string;
+            /** Format: date-time */
+            day_start: string;
+            /** Format: date-time */
+            day_end: string;
+            /**
+             * Format: date-time
+             * @description Exactly day_end
+             */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description Canonical source-cadence boundary used for the rolling objective calculation; graph marker remains day_end.
+             */
+            effective_at: string;
+            /** Format: uuid */
+            slo_id: string;
+            definition_revision: string;
+            /** @description Exact objective target decimal string. */
+            target: string;
+            quality: components["schemas"]["SloOperationalQuality"];
+            performance: components["schemas"]["SloEvaluationPerformance"];
+            /** @enum {string} */
+            status: "met" | "violated" | "unknown" | "not_applicable";
+            explanation: string;
+        };
+        SloDailyComplianceSummary: {
+            met_days: number;
+            violated_days: number;
+            /** @description Exactly met_days plus violated_days. */
+            evaluable_days: number;
+            unknown_days: number;
+            not_applicable_days: number;
+        };
+        SloOperationalContext: {
+            /** Format: uuid */
+            sli_id: string;
+            sli_name: string;
+            sli_display_name: string;
+            /** Format: uuid */
+            datasource_id: string;
+            datasource_display_name: string;
+            measurement_revision: string;
+            polling_interval_seconds: number;
+            settling_delay_seconds: number;
+            good_query: string;
+            total_query: string;
+        };
+        SloOperationalRange: {
+            /** Format: date-time */
+            requested_start: string;
+            /** Format: date-time */
+            requested_end: string;
+            /** Format: date-time */
+            effective_start: string;
+            /** Format: date-time */
+            effective_end: string;
+            source_cadence_seconds: number;
+            resolution_seconds: number;
+            reduced: boolean;
+            /** @enum {integer} */
+            max_samples_per_series: 1500;
+            /** @enum {string} */
+            bucket_bounds: "half_open";
+        };
+        SloOperationalSeries: {
+            /** @enum {string} */
+            kind: "attainment" | "rolling_budget" | "burn";
+            /** @enum {integer|null} */
+            burn_window_seconds: 3600 | 21600 | null;
+            samples: components["schemas"]["SloOperationalSample"][];
+        };
+        SloOperationalSample: {
+            /** Format: date-time */
+            bucket_start: string;
+            /** Format: date-time */
+            bucket_end: string;
+            /** Format: date-time */
+            evaluation_at: string;
+            /** @enum {string} */
+            state: "observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable" | "partial" | "stale";
+            quality: components["schemas"]["SloOperationalQuality"];
+            revision: string;
+            good: string | null;
+            total: string | null;
+            attainment: string | null;
+            allowed_budget: string | null;
+            remaining_budget: string | null;
+            remaining_fraction: string | null;
+            burn: string | null;
+            /**
+             * Format: date-time
+             * @description Receipt metadata only.
+             */
+            received_at: string | null;
+            retained_extrema: ("first" | "last" | "minimum" | "maximum")[];
         };
         SloEvaluation: {
             /** Format: uuid */
@@ -877,10 +1142,47 @@ export interface components {
             last_observation_at: string | null;
             /** Format: date-time */
             next_expected_execution_at: string | null;
+            /** @description Present on list projections; omitted from detail and create responses. */
+            datasource_display_name?: string | null;
+            /**
+             * Format: date-time
+             * @description Earliest eligible interval in the bounded list projection.
+             */
+            recent_measurement_window_start?: string | null;
+            /**
+             * Format: date-time
+             * @description Latest eligible interval end in the bounded list projection.
+             */
+            recent_measurement_window_end?: string | null;
+            /** @description Last eligible source-cadence intervals for the current measurement revision; explicit states and exact count strings. */
+            recent_measurements?: components["schemas"]["SliRecentMeasurement"][];
+            linked_slos?: components["schemas"]["SliLinkedSlos"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        SliRecentMeasurement: {
+            /** Format: date-time */
+            interval_start: string;
+            /** Format: date-time */
+            interval_end: string;
+            /** @enum {string} */
+            state: "observed" | "zero_traffic" | "known_empty" | "missing" | "partial" | "failed";
+            /** @description Exact decimal integer string; null when no complete observed counts exist. */
+            good_count: string | null;
+            /** @description Exact decimal integer string; null when no complete observed counts exist. */
+            total_count: string | null;
+        };
+        SliLinkedSlos: {
+            items: components["schemas"]["SliLinkedSlo"][];
+            total_count: number;
+        };
+        SliLinkedSlo: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
         };
         SliCreateRequest: {
             name: string;
@@ -2668,6 +2970,10 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["PageLimit"];
                 cursor?: components["parameters"]["PageCursor"];
+                /** @description Case-insensitive substring search across SLI name */
+                q?: string;
+                /** @description Filter by datasource before pagination. */
+                datasource_id?: string;
             };
             header?: never;
             path?: never;
@@ -3101,6 +3407,158 @@ export interface operations {
             };
             /** @description Invalid target or window */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSloOperationalOverview: {
+        parameters: {
+            query?: {
+                q?: string;
+                service_id?: string;
+                urgency?: "needs_attention" | "watch" | "healthy";
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot-consistent overview page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloOperationalOverviewPage"];
+                };
+            };
+            /** @description Invalid filter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session missing or expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current role cannot read SLO operations */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Snapshot expired; restart pagination */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource limit or storage unavailable; no partial overview is returned */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSloOperationalDetail: {
+        parameters: {
+            query?: {
+                at?: string;
+                start?: string;
+                end?: string;
+                burn_window_seconds?: 3600 | 21600;
+            };
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current operational summary and bounded historical series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloOperationalDetail"];
+                };
+            };
+            /** @description Invalid timestamp */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session missing or expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current role cannot read SLO operations */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SLO not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description History too dense for bounded gap/extrema-preserving output */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Resource limit or storage unavailable; no partial detail is returned */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

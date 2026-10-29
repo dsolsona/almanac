@@ -98,7 +98,7 @@ func printHelp(w io.Writer) {
   almanac datasources update --profile-file=FILE --datasource-id=UUID --if-match=ETAG --input-file=FILE [--output=json]
   almanac datasources test --profile-file=FILE --input-file=FILE [--wait] [--cancel-on-timeout]
   almanac providers list --profile-file=FILE [--agent-id=UUID] [--output=json]
-  almanac slis list --profile-file=FILE [--limit=50] [--cursor=CURSOR]
+  almanac slis list --profile-file=FILE [--query=TEXT] [--datasource-id=UUID] [--limit=50] [--cursor=CURSOR]
   almanac slis get --profile-file=FILE --sli-id=UUID
   almanac slis create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
   almanac slis update --profile-file=FILE --sli-id=UUID --if-match=ETAG --input-file=FILE
@@ -113,6 +113,9 @@ func printHelp(w io.Writer) {
   almanac slos create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
   almanac slos update --profile-file=FILE --slo-id=UUID --if-match=ETAG --input-file=FILE
   almanac slos evaluate --profile-file=FILE --slo-id=UUID [--at=TIME] [--timeline-start=TIME --timeline-end=TIME]
+  almanac slos overview --profile-file=FILE [--q=TEXT] [--service-id=UUID] [--urgency=needs_attention|watch|healthy] [--limit=50] [--cursor=CURSOR] [--output=json]
+  almanac slos operational --profile-file=FILE --slo-id=UUID [--at=UTC-TIME] [--start=UTC-TIME --end=UTC-TIME] [--burn-window-seconds=3600|21600] [--output=json]
+    Operational times require UTC RFC3339 with microsecond precision; range bounds are paired and at most 365 days.
   almanac secrets provision-source-keyset --file=FILE --keyset-id=UUID [--output=json]
 
 Implemented component modes:
@@ -320,7 +323,7 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 		return 1
 	}
 	if shutdownResult != nil || (serveResult != nil && !errors.Is(serveResult, http.ErrServerClosed)) {
-		logger.Error("backend shutdown failed", "deadline_exceeded", errors.Is(shutdownResult, context.DeadlineExceeded), "cancelled", errors.Is(shutdownResult, context.Canceled), "serve_failed", serveResult != nil && !errors.Is(serveResult, http.ErrServerClosed))
+		logger.Error("backend shutdown failed", "shutdown_phase", backendhttp.ShutdownPhase(shutdownResult), "deadline_exceeded", errors.Is(shutdownResult, context.DeadlineExceeded), "cancelled", errors.Is(shutdownResult, context.Canceled), "serve_failed", serveResult != nil && !errors.Is(serveResult, http.ErrServerClosed))
 		return 1
 	}
 	logger.Info("component stopped", "component", "backend")

@@ -14,8 +14,7 @@ export class SliFailure extends Error {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// 200 records, each with two 4096-byte queries escaped to six bytes per byte,
-// plus bounded metadata, observation and cursor overhead (under 10 MiB total).
+// The backend returns the largest complete projection prefix within this cap.
 const MAX_SLI_PAGE_BYTES = 10 * 1024 * 1024;
 const MAX_INT64 = '9223372036854775807';
 const messages: Record<string, string> = {
@@ -41,6 +40,11 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
   return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
+function exactKeysWithOptional(value: Record<string, unknown>, required: readonly string[], optional: readonly string[]): boolean {
+  return required.every((key) => Object.hasOwn(value, key))
+    && Object.keys(value).every((key) => required.includes(key) || optional.includes(key));
+}
+
 function revision(value: unknown, allowZero = false): value is string {
   return typeof value === 'string' && (allowZero ? /^(0|[1-9][0-9]*)$/ : /^[1-9][0-9]*$/).test(value)
     && (value.length < MAX_INT64.length || value.length === MAX_INT64.length && value <= MAX_INT64);
@@ -59,6 +63,10 @@ function validCount(value: unknown): value is string {
 function scaledCount(value: string): bigint {
   const [whole, fraction = ''] = value.split('.');
   return BigInt(whole!) * 1_000_000_000_000n + BigInt((fraction + '0'.repeat(12)).slice(0, 12));
+}
+
+function zeroCount(value: string): boolean {
+  return scaledCount(value) === 0n;
 }
 
 function validObservation(value: unknown): value is SliObservation {
@@ -82,7 +90,7 @@ function validObservation(value: unknown): value is SliObservation {
 }
 
 function validSli(value: unknown): value is Sli {
-  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'measurement_revision', 'datasource_id', 'datasource_version', 'agent_id', 'agent_reachability', 'collection_progress', 'measurement_kind', 'component_mode', 'good_query', 'total_query', 'polling_interval_seconds', 'settling_delay_seconds', 'effective_from', 'activated_at', 'activation_state', 'freshness', 'latest_observation', 'last_attempt_at', 'last_observation_at', 'next_expected_execution_at', 'created_at', 'updated_at'])) return false;
+  if (!object(value) || !exactKeysWithOptional(value, ['id', 'name', 'display_name', 'version', 'measurement_revision', 'datasource_id', 'datasource_version', 'agent_id', 'agent_reachability', 'collection_progress', 'measurement_kind', 'component_mode', 'good_query', 'total_query', 'polling_interval_seconds', 'settling_delay_seconds', 'effective_from', 'activated_at', 'activation_state', 'freshness', 'latest_observation', 'last_attempt_at', 'last_observation_at', 'next_expected_execution_at', 'created_at', 'updated_at'], ['datasource_display_name', 'recent_measurement_window_start', 'recent_measurement_window_end', 'recent_measurements', 'linked_slos'])) return false;
   return typeof value.id === 'string' && UUID.test(value.id) && typeof value.name === 'string' && value.name.length > 0
     && typeof value.display_name === 'string' && value.display_name.length > 0 && revision(value.version) && revision(value.measurement_revision)
     && typeof value.datasource_id === 'string' && UUID.test(value.datasource_id) && revision(value.datasource_version)
@@ -97,12 +105,52 @@ function validSli(value: unknown): value is Sli {
     && ['unknown', 'fresh', 'stale'].includes(String(value.freshness))
     && (value.latest_observation === null || validObservation(value.latest_observation))
     && (value.last_attempt_at === null || timestamp(value.last_attempt_at)) && (value.last_observation_at === null || timestamp(value.last_observation_at))
-    && (value.next_expected_execution_at === null || timestamp(value.next_expected_execution_at)) && timestamp(value.created_at) && timestamp(value.updated_at);
+    && (value.next_expected_execution_at === null || timestamp(value.next_expected_execution_at)) && timestamp(value.created_at) && timestamp(value.updated_at)
+    && validSliListProjection(value);
+}
+
+function validSliListProjection(value: Record<string, unknown>): boolean {
+  if (Object.hasOwn(value, 'datasource_display_name') && value.datasource_display_name !== null
+    && (typeof value.datasource_display_name !== 'string' || Array.from(value.datasource_display_name).length > 128)) return false;
+  const hasStart = Object.hasOwn(value, 'recent_measurement_window_start');
+  const hasEnd = Object.hasOwn(value, 'recent_measurement_window_end');
+  if (hasStart !== hasEnd || hasStart && ((value.recent_measurement_window_start === null) !== (value.recent_measurement_window_end === null))) return false;
+  if (hasStart && value.recent_measurement_window_start !== null
+    && (!timestamp(value.recent_measurement_window_start) || !timestamp(value.recent_measurement_window_end)
+      || Date.parse(value.recent_measurement_window_end) <= Date.parse(value.recent_measurement_window_start))) return false;
+  if (Object.hasOwn(value, 'recent_measurements')) {
+    if (!Array.isArray(value.recent_measurements) || value.recent_measurements.length > 12) return false;
+    for (const sample of value.recent_measurements) {
+      if (!object(sample) || !exactKeys(sample, ['interval_start', 'interval_end', 'state', 'good_count', 'total_count'])
+        || !timestamp(sample.interval_start) || !timestamp(sample.interval_end) || Date.parse(sample.interval_end) <= Date.parse(sample.interval_start)
+        || !['observed', 'zero_traffic', 'known_empty', 'missing', 'partial', 'failed'].includes(String(sample.state))) return false;
+      const numeric = sample.state === 'observed' || sample.state === 'zero_traffic';
+      if (numeric) {
+        if (!validCount(sample.good_count) || !validCount(sample.total_count) || scaledCount(sample.good_count) > scaledCount(sample.total_count)
+          || sample.state === 'zero_traffic' && !zeroCount(sample.total_count) || sample.state === 'observed' && zeroCount(sample.total_count)) return false;
+      } else if (sample.good_count !== null || sample.total_count !== null) return false;
+    }
+  }
+  if (Object.hasOwn(value, 'linked_slos')) {
+    const linked = value.linked_slos;
+    if (!object(linked) || !exactKeys(linked, ['items', 'total_count']) || !Array.isArray(linked.items) || linked.items.length > 5
+      || !Number.isInteger(linked.total_count) || Number(linked.total_count) < linked.items.length) return false;
+    for (const item of linked.items) {
+      if (!object(item) || !exactKeys(item, ['id', 'name', 'display_name']) || typeof item.id !== 'string' || !UUID.test(item.id)
+        || typeof item.name !== 'string' || item.name.length < 1 || item.name.length > 63
+        || typeof item.display_name !== 'string' || item.display_name.length < 1 || Array.from(item.display_name).length > 128) return false;
+    }
+  }
+  return true;
+}
+
+function validSliList(value: unknown): value is Sli {
+  return validSli(value) && Object.hasOwn(value, 'datasource_display_name') && Object.hasOwn(value, 'recent_measurements') && Object.hasOwn(value, 'linked_slos');
 }
 
 function validSliPage(value: unknown): value is { items: Sli[]; next_cursor: string } {
   return object(value) && exactKeys(value, ['items', 'next_cursor']) && Array.isArray(value.items) && value.items.length <= 200
-    && value.items.every(validSli) && typeof value.next_cursor === 'string' && value.next_cursor.length <= 512;
+    && value.items.every(validSliList) && typeof value.next_cursor === 'string' && value.next_cursor.length <= 512;
 }
 
 function validObservationPage(value: unknown): value is SliObservationPage {
@@ -163,10 +211,12 @@ function validETag(value: string, id: string): boolean {
 
 export function createSliClient() {
   return {
-    async list(limit = 50, cursor = '', signal?: AbortSignal): Promise<{ items: Sli[]; next_cursor: string }> {
-      if (!Number.isInteger(limit) || limit < 1 || limit > 200 || cursor.length > 512) throw new SliFailure('invalid_request', 'Pagination options are invalid.');
+    async list(limit = 50, cursor = '', signal?: AbortSignal, search = '', datasourceID = ''): Promise<{ items: Sli[]; next_cursor: string }> {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200 || cursor.length > 512 || [...search].length > 128 || datasourceID && !UUID.test(datasourceID)) throw new SliFailure('invalid_request', 'Pagination or filter options are invalid.');
       const query = new URLSearchParams({ limit: String(limit) });
       if (cursor) query.set('cursor', cursor);
+      if (search) query.set('q', search);
+      if (datasourceID) query.set('datasource_id', datasourceID);
       return (await request(`/api/v1/slis?${query}`, { method: 'GET', signal }, 200, validSliPage, MAX_SLI_PAGE_BYTES)).value;
     },
     async get(id: string, signal?: AbortSignal): Promise<{ sli: Sli; etag: string }> {

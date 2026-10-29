@@ -159,6 +159,23 @@ try {
   await expect(page.locator('.sli-state').filter({ hasText: 'Activation' }).locator('strong')).toHaveText(/scheduled|preparing|active/);
   const screenshotDir = fixture.artifacts;
   await mkdir(screenshotDir, { recursive: true, mode: 0o700 });
+  const captureSLILayout = async (name, width, height, editor = false) => {
+    await page.setViewportSize({ width, height });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${name} overflows the viewport`);
+    if (editor) {
+      assert.equal(await page.locator('.query-editor').evaluateAll((editors) => editors.length === 2 && editors.every((item) => {
+        const label = item.querySelector('.query-editor__label')?.getBoundingClientRect();
+        const surface = item.querySelector('.query-editor__surface')?.getBoundingClientRect();
+        const bounds = item.getBoundingClientRect();
+        return label && surface && label.bottom <= surface.top + 1 && surface.bottom <= bounds.bottom + 1;
+      })), true, `${name} query editor labels and inputs overlap`);
+    } else {
+      const bounds = await page.getByRole('region', { name: 'Service level indicator table' }).boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `${name} SLI table escapes the viewport`);
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: join(screenshotDir, `${name}.png`), fullPage: true, animations: 'disabled' });
+  };
   await page.screenshot({ path: join(screenshotDir, 'sli-detail-light-desktop.png'), fullPage: true });
 
   stage = 'wait for agent ACK and first interval';
@@ -205,6 +222,25 @@ try {
   await expect(historyRow).toContainText('99');
   await expect(historyRow).toContainText('100');
   await page.screenshot({ path: join(screenshotDir, 'sli-detail-light-observed.png'), fullPage: true });
+
+  stage = 'seed linked SLO summaries through the API';
+  const linkedSLOs = await page.evaluate(async (sliID) => {
+    const contextResponse = await fetch('/api/v1/auth/context', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!contextResponse.ok) throw new Error('authenticated context unavailable');
+    const context = await contextResponse.json();
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token };
+    const serviceResponse = await fetch('/api/v1/services', { method: 'POST', credentials: 'same-origin', headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ name: 'sli-reference-journey', display_name: 'SLI reference journey' }) });
+    if (serviceResponse.status !== 201) throw new Error('reference service creation failed');
+    const service = await serviceResponse.json();
+    const created = [];
+    for (let index = 0; index < 6; index++) {
+      const response = await fetch('/api/v1/slos', { method: 'POST', credentials: 'same-origin', headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ name: `reference-slo-${index + 1}`, display_name: `Reference SLO ${index + 1}`, service_id: service.id, sli_id: sliID, target: '0.99', rolling_window_seconds: 60 }) });
+      if (response.status !== 201) throw new Error('reference SLO creation failed');
+      created.push(await response.json());
+    }
+    return created.map((item) => ({ id: item.id, display_name: item.display_name }));
+  }, created.id);
+  assert.equal(linkedSLOs.length, 6);
 
   stage = 'inspect dark and mobile layouts';
   await page.setViewportSize({ width: 390, height: 844 });
@@ -258,13 +294,102 @@ try {
   }, { times: 1 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs' }).click();
   await expect(page).toHaveURL(new RegExp('/slis$'));
-  await expect(page.getByRole('button', { name: /Request success/ })).toBeVisible();
+  const recoverySLI = page.getByRole('link', { name: 'Request success', exact: true });
+  await expect(recoverySLI).toBeVisible();
+  await expect(recoverySLI).toHaveAttribute('href', `/slis/${created.id}`);
   await expect(page.getByRole('heading', { name: 'SLIs', exact: true })).toBeFocused();
   await expect(page.getByRole('alert')).toContainText('Datasources could not be loaded');
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Add SLI', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(detailURL);
+
+  stage = 'search and filter the server-backed SLI table';
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs' }).click();
+  await expect(page).toHaveURL(new RegExp('/slis$'));
+  const listRow = page.getByRole('row').filter({ hasText: 'Request success' });
+  await expect(listRow).toBeVisible();
+  await expect(listRow.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
+  await expect(listRow).toContainText('5 of 6');
+  await expect(listRow.getByRole('link', { name: 'Reference SLO 1' })).toHaveAttribute('href', new RegExp('^/slos/[0-9a-f-]{36}$'));
+  await listRow.getByText(/^Exact values ·/).click();
+  const recentTable = listRow.getByRole('table', { name: `Exact counts for recent ${created.polling_interval_seconds}-second intervals` });
+  const observedStart = recentTable.locator('tbody > tr > td:first-child').filter({ hasText: new Date(firstObservation.interval_start).toISOString() });
+  await expect(observedStart).toHaveCount(1);
+  const observedSample = observedStart.locator('..');
+  await expect(observedSample.getByRole('cell', { name: 'Observed', exact: true })).toBeVisible();
+  await expect(observedSample.getByRole('cell', { name: '99', exact: true })).toBeVisible();
+  await expect(observedSample.getByRole('cell', { name: '100', exact: true })).toBeVisible();
+  const searchInput = page.getByRole('textbox', { name: 'Search SLIs', exact: true });
+  await searchInput.fill('request-success');
+  await expect(page).toHaveURL(/q=request-success/);
+  await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
+  const { filteredPage, savedDatasourceName } = await page.evaluate(async (datasourceID) => {
+    const response = await fetch(`/api/v1/slis?limit=50&q=request-success&datasource_id=${encodeURIComponent(datasourceID)}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('filtered SLI page unavailable');
+    const datasourceResponse = await fetch('/api/v1/datasources?limit=200', { credentials: 'same-origin', cache: 'no-store' });
+    if (!datasourceResponse.ok) throw new Error('saved datasource page unavailable');
+    const datasourcePage = await datasourceResponse.json();
+    const datasource = datasourcePage.items.find((item) => item.id === datasourceID);
+    if (!datasource) throw new Error('saved datasource missing from its page');
+    return { filteredPage: await response.json(), savedDatasourceName: datasource.display_name };
+  }, fixture.datasource_id);
+  assert.equal(filteredPage.items.length, 1);
+  assert.equal(filteredPage.items[0].datasource_display_name, savedDatasourceName);
+  assert.ok(filteredPage.items[0].recent_measurements.some((sample) => sample.state === 'observed' && sample.good_count === '99' && sample.total_count === '100'));
+  assert.equal(filteredPage.items[0].linked_slos.total_count, 6);
+  assert.equal(filteredPage.items[0].linked_slos.items.length, 5);
+  await page.getByLabel('Datasource', { exact: true }).selectOption(fixture.datasource_id);
+  await expect(page).toHaveURL(new RegExp(`datasource_id=${fixture.datasource_id}`));
+  const listURL = page.url();
+  await page.reload();
+  await expect(page).toHaveURL(listURL);
+  await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
+  await page.getByRole('row').filter({ hasText: 'Request success' }).getByRole('link', { name: 'Reference SLO 1' }).click();
+  await expect(page).toHaveURL(new RegExp(`/slos/${linkedSLOs[0].id}$`));
+  await page.goBack();
+  await expect(page).toHaveURL(listURL);
+  await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
+
+  stage = 'capture populated editor and list layout matrix';
+  await page.getByRole('button', { name: 'Add SLI', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Create SLI', exact: true })).toBeFocused();
+  await page.getByLabel('Display name', { exact: true }).fill('Reference editor preview');
+  await page.getByLabel('Datasource', { exact: true }).selectOption(fixture.datasource_id);
+  await page.getByLabel('Good count query', { exact: true }).fill('sum(\n  vector(99)\n)');
+  await page.getByLabel('Total count query', { exact: true }).fill('sum(\n  vector(100)\n)');
+  await expect(page.getByLabel('Good count query', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Total count query', { exact: true })).toBeVisible();
+  assert.deepEqual(await page.locator('.query-editor__line-numbers').evaluateAll((gutters) => gutters.map((gutter) => gutter.textContent)), ['123', '123']);
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (theme === 'dark' && await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).count()) {
+      await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
+    }
+    if (theme === 'light' && await page.getByRole('button', { name: 'Switch to light theme', exact: true }).count()) {
+      await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
+    }
+    for (const [viewport, width, height] of [['desktop', 1440, 900], ['intermediate', 1024, 900], ['mobile', 360, 844]]) {
+      await captureSLILayout(`sli-editor-${theme}-${viewport}`, width, height, true);
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Request success', exact: true })).toHaveAttribute('href', `/slis/${created.id}`);
+  await expect(page.getByRole('row').filter({ hasText: '5 of 6' })).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (theme === 'dark' && await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).count()) {
+      await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
+    }
+    if (theme === 'light' && await page.getByRole('button', { name: 'Switch to light theme', exact: true }).count()) {
+      await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
+    }
+    for (const [viewport, width, height] of [['desktop', 1440, 900], ['intermediate', 1024, 900], ['mobile', 360, 844]]) {
+      await expect(page.getByRole('link', { name: 'Request success', exact: true })).toBeVisible();
+      await captureSLILayout(`sli-list-${theme}-${viewport}`, width, height);
+    }
+  }
 
 
 

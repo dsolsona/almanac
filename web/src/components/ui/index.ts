@@ -12,3 +12,5 @@ export { ThemeToggle } from './ThemeToggle.tsx';
 export { Switch } from './Switch.tsx';
 export { DatePicker } from './DatePicker.tsx';
 export { LoadingIndicator } from './LoadingIndicator.tsx';
+export { MeasurementChoiceCards } from './MeasurementChoiceCards.tsx';
+export { QueryEditor } from './QueryEditor.tsx';

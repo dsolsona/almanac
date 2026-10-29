@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Catalogue } from '../src/catalogue/Catalogue.tsx';
-import { DatePicker, LoadingIndicator, Switch } from '../src/components/ui/index.ts';
+import { SliRecentStrip } from '../src/components/charts/SliRecentStrip.tsx';
+import { DatePicker, LoadingIndicator, MeasurementChoiceCards, QueryEditor, Switch } from '../src/components/ui/index.ts';
 import { addDays, addMonths, formatCalendarDate, parseCalendarDate } from '../src/components/ui/dateMath.ts';
 import '../src/styles/global.css';
 
@@ -21,6 +22,45 @@ afterEach(() => {
 });
 
 describe('feedback controls', () => {
+  it('plots recent states and keeps exact bounded measurements available', async () => {
+    const user = userEvent.setup();
+    const samples = [
+      { interval_start: '2026-10-25T11:58:00Z', interval_end: '2026-10-25T11:58:15Z', state: 'observed' as const, good_count: '98', total_count: '100' },
+      { interval_start: '2026-10-25T11:58:15Z', interval_end: '2026-10-25T11:58:30Z', state: 'zero_traffic' as const, good_count: '0', total_count: '0' },
+      { interval_start: '2026-10-25T11:58:30Z', interval_end: '2026-10-25T11:58:45Z', state: 'missing' as const, good_count: null, total_count: null },
+    ];
+    render(<SliRecentStrip samples={samples} cadenceSeconds={15} />);
+    expect(screen.getByRole('img', { name: /15-second cadence: 1 observed, 1 zero traffic, 1 missing/ })).toBeVisible();
+    await user.click(screen.getByText('Exact values · 3'));
+    const table = screen.getByRole('table', { name: 'Exact counts for recent 15-second intervals' });
+    expect(within(table).getByText('98')).toBeVisible();
+    expect(within(table).getByText('Zero traffic')).toBeVisible();
+    expect(within(table).getByText('Missing')).toBeVisible();
+  });
+
+  it('explains the supported count measurement and disables unavailable modes', () => {
+    render(<MeasurementChoiceCards value="event_counts" onChange={() => undefined} />);
+    expect(screen.getByRole('radio', { name: /Ratio · two queries/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Ratio · single fraction/ })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /Threshold/ })).toBeDisabled();
+    expect(screen.getByText(/Each event weighs the same/)).toBeVisible();
+    expect(screen.getByText(/Not available yet\. Fraction collection is not supported by the assigned agent\./)).toBeVisible();
+    expect(screen.getByText(/Not available yet\. Threshold collection is not supported by the assigned agent\./)).toBeVisible();
+  });
+
+  it('keeps query editing native while showing scroll-synchronized line numbers', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<QueryEditor id="good-query" label="Good count query" value={'sum(rate(ok[1m]))\n# second line'} onChange={onChange} />);
+    const editor = screen.getByRole('textbox', { name: 'Good count query' });
+    expect(editor).toHaveClass('ui-control');
+    expect(screen.getByText('PromQL')).toBeVisible();
+    expect(document.querySelector('.query-editor__line-numbers')).toHaveTextContent('1');
+    expect(document.querySelector('.query-editor__line-numbers')).toHaveTextContent('2');
+    await user.type(editor, 'x');
+    expect(onChange).toHaveBeenCalled();
+  });
+
   it('exposes a native accessible switch with a hint and immediate keyboard state', async () => {
     const user = userEvent.setup();
     render(<Switch label="Enable alerts" hint="Sends notifications" />);

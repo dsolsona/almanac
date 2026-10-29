@@ -104,9 +104,18 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("concurrent agent renewal: %v", err)
 	}
 	record := result.record
-	page, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", clock)
-	if err != nil || len(page.Items) != 1 || page.Items[0].ID != record.ID || page.Items[0].LatestObservation != nil {
+	page, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", clock)
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != record.ID || page.Items[0].LatestObservation != nil || page.Items[0].ListProjection == nil ||
+		page.Items[0].ListProjection.DatasourceDisplayName == nil || *page.Items[0].ListProjection.DatasourceDisplayName != source.Settings.DisplayName || len(page.Items[0].ListProjection.RecentMeasurements) != 0 || len(page.Items[0].ListProjection.LinkedSLOs) != 0 {
 		t.Fatalf("new SLI list = %+v, %v", page, err)
+	}
+	filtered, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "REQUESTS", source.ID, clock)
+	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].ID != record.ID {
+		t.Fatalf("case-insensitive pre-pagination SLI filters = %+v, %v", filtered, err)
+	}
+	noMatch, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "missing", source.ID, clock)
+	if err != nil || len(noMatch.Items) != 0 || noMatch.NextCursor != "" {
+		t.Fatalf("nonmatching SLI filter = %+v, %v", noMatch, err)
 	}
 	unchanged, err := UpdateSliMetadata(t.Context(), f.databaseURL, UpdateSliMetadataInput{Proof: proof, SliID: record.ID, ExpectedVersion: record.Version, DisplayName: record.DisplayName, RequestID: "noop", Now: clock})
 	if err != nil || unchanged.Version != record.Version {
@@ -227,6 +236,20 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	var good string
 	if err := conn.QueryRow(t.Context(), `SELECT good_count::text FROM public.almanac_sli_observation_values WHERE sli_id=$1`, record.ID).Scan(&good); err != nil || good != "99.000000000000" {
 		t.Fatalf("canonical value = %q, %v", good, err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=0, total_count=0 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
+		t.Fatal("seed database-backed SLI zero-traffic projection failed")
+	}
+	projectionNow := func() time.Time { return item.IntervalEnd.Add(60 * time.Second) }
+	zeroPage, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", projectionNow)
+	if err != nil || len(zeroPage.Items) != 1 || zeroPage.Items[0].ListProjection == nil || len(zeroPage.Items[0].ListProjection.RecentMeasurements) != 1 ||
+		zeroPage.Items[0].ListProjection.RecentMeasurements[0].State != "zero_traffic" || zeroPage.Items[0].ListProjection.RecentMeasurements[0].GoodCount == nil ||
+		*zeroPage.Items[0].ListProjection.RecentMeasurements[0].GoodCount != "0" || zeroPage.Items[0].ListProjection.RecentMeasurements[0].TotalCount == nil ||
+		*zeroPage.Items[0].ListProjection.RecentMeasurements[0].TotalCount != "0" {
+		t.Fatalf("database-backed zero-traffic list projection = %+v, %v", zeroPage, err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=99, total_count=100 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
+		t.Fatal("restore database-backed SLI sample after zero-traffic projection failed")
 	}
 	serviceInput := CreateObjectiveInput{Proof: proof, Name: "api", DisplayName: "API", IdempotencyKey: "service-create", RequestID: "service-create", Now: clock}
 	service, _, err := CreateObjective(t.Context(), f.databaseURL, serviceInput, false)
@@ -617,10 +640,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19, 20)`); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 4 || result.DatabaseSchemaVersion != 19 {
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 5 || result.DatabaseSchemaVersion != 20 {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {

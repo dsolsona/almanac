@@ -35,6 +35,7 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage"
 	"github.com/dsolsona/almanac/internal/testpostgres"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing.T) {
@@ -232,10 +233,11 @@ func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing
 		if process.ProcessState != nil {
 			exitCode = process.ProcessState.ExitCode()
 		}
-		t.Fatalf("first backend shutdown for reconnect journey failed: exit=%d shutdown_failed=%t deadline_exceeded=%t cancelled=%t serve_failed=%t ownership_lost=%t cleanup_failed=%t",
-			exitCode, strings.Contains(logs, "backend shutdown failed"), strings.Contains(logs, `"deadline_exceeded":true`),
+		snapshot := shutdownFailureSnapshot(t, databaseURL, journey.id)
+		t.Fatalf("first backend shutdown for reconnect journey failed: exit=%d shutdown_failed=%t shutdown_phase=%s deadline_exceeded=%t cancelled=%t serve_failed=%t ownership_lost=%t cleanup_failed=%t %s",
+			exitCode, strings.Contains(logs, "backend shutdown failed"), shutdownPhaseFromRuntimeLogs(logs), strings.Contains(logs, `"deadline_exceeded":true`),
 			strings.Contains(logs, `"cancelled":true`), strings.Contains(logs, `"serve_failed":true`),
-			strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"))
+			strings.Contains(logs, "backend ownership lost"), strings.Contains(logs, "backend ownership cleanup failed"), snapshot)
 	}
 	stderr = newRuntimeLog()
 	process = exec.Command(binary, args...)
@@ -614,6 +616,58 @@ func datasourceAgentStateEvidence(t *testing.T, databaseURL, agentID string) str
 	}
 	return fmt.Sprintf("runtime_generation=%d desired=%d applied=%d heartbeat=%t health=%s progress=%s config_failure=%s assignments=%d",
 		generation, desired, applied, heartbeat, safeDiagnosticToken(health), safeDiagnosticToken(progress), safeDiagnosticToken(failure), assignments)
+}
+
+func shutdownPhaseFromRuntimeLogs(logs string) string {
+	for _, phase := range []string{"reassignment_worker", "agent_sessions", "http_server"} {
+		if strings.Contains(logs, `"shutdown_phase":"`+phase+`"`) {
+			return phase
+		}
+	}
+	return "unknown"
+}
+
+func shutdownFailureSnapshot(t *testing.T, databaseURL, agentID string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	config, err := storage.ParseDatabaseURL(databaseURL)
+	if err != nil {
+		return "shutdown_snapshot=unavailable"
+	}
+	config.ConnectTimeout = 2 * time.Second
+	db, err := pgx.ConnectConfig(ctx, config)
+	if err != nil {
+		return "shutdown_snapshot=unavailable"
+	}
+	defer func() {
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), time.Second)
+		defer cancelClose()
+		_ = db.Close(closeCtx)
+	}()
+	var progress, health string
+	var assignedSLIs, diagnosticPending, diagnosticRunning, diagnosticSucceeded int64
+	var diagnosticFailed, diagnosticCanceled, diagnosticTimedOut, diagnosticUnknown int64
+	err = db.QueryRow(ctx, `SELECT status.collection_progress, status.scheduler_health,
+		(SELECT count(*) FROM public.almanac_sli_measurements measurement
+		 JOIN public.almanac_slis sli ON sli.id=measurement.sli_id AND sli.measurement_revision=measurement.revision
+		 WHERE measurement.agent_id=status.agent_id AND measurement.activated_at IS NOT NULL),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='pending'),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='running'),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='succeeded'),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='failed'),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='canceled'),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='timed_out'),
+		(SELECT count(*) FROM public.almanac_diagnostics diagnostic WHERE diagnostic.agent_id=status.agent_id AND diagnostic.state='unknown')
+		FROM public.almanac_agent_runtime_status status WHERE status.agent_id=$1`, agentID).Scan(
+		&progress, &health, &assignedSLIs, &diagnosticPending, &diagnosticRunning, &diagnosticSucceeded,
+		&diagnosticFailed, &diagnosticCanceled, &diagnosticTimedOut, &diagnosticUnknown)
+	if err != nil {
+		return "shutdown_snapshot=unavailable"
+	}
+	return fmt.Sprintf("shutdown_snapshot=available collection_progress=%s scheduler_health=%s assigned_slis=%d diagnostics_pending=%d diagnostics_running=%d diagnostics_succeeded=%d diagnostics_failed=%d diagnostics_canceled=%d diagnostics_timed_out=%d diagnostics_unknown=%d",
+		safeDiagnosticToken(progress), safeDiagnosticToken(health), assignedSLIs, diagnosticPending, diagnosticRunning,
+		diagnosticSucceeded, diagnosticFailed, diagnosticCanceled, diagnosticTimedOut, diagnosticUnknown)
 }
 
 func datasourceFailureEvidence(stage string, output []byte, err error) string {

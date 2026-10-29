@@ -1,8 +1,65 @@
 # Delivery status
 
+The latest combined candidate passes the real SLI/SLO browser journey and normal
+Compose acceptance. Linux build/unit and race stages pass; its database stage fails
+in `TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict`: the new
+zero-traffic list assertion receives `storage: invalid session`. That failure and
+the earlier shutdown investigation remain unresolved. The maintainer requested
+committing the current work and opening a PR without further implementation.
+
 ## Current state
 
-[F3-T01](tasks/F3-T01.md) is verified locally on `feat/f3-first-objective`,
+The maintainer confirmed on 2026-10-29 that the SLI/SLO screens must match the
+retained [slo-tracker visual reference](design/slo-visual-reference.md), with current
+left navigation retained. Urgency grouping, separate burn windows, budget views and
+all four detail graphs are required F3 scope. The [F3 plan](plans/0021-first-objective.md)
+now tracks [F3-T02](tasks/F3-T02.md) operational views, [F3-T03](tasks/F3-T03.md)
+numerical compliance, [F3-T04](tasks/F3-T04.md) SLI presentation and
+[F3-T06](tasks/F3-T06.md) contextual annotations. The maintainer
+authorized implementation and accepted [ADR-0023](adr/0023-slo-operational-urgency.md)
+in the subsequent working-conversation go-ahead. F3-T02 is in progress on
+`feat/f3-operational-slos`; F3-T03 numerical compliance is now in progress in an
+isolated checkout. F3-T04 SLI presentation is implemented in the working tree and
+under integrated verification; F3-T06 annotations remain draft.
+The operational API, urgency
+overview, independent burn windows, budget history and three-lane detail are
+implemented. The combined `make verify` passed 297 web tests, 410 Go tests,
+tagged integration-test compilation, generated checks, production build and binary
+smoke. The normal isolated Compose journey and cancellation cleanup passed, with
+the SLO list, presets and detail inspected in both themes at 360/1024/1440px.
+Real PostgreSQL storage checks passed, including urgency groups, independent burn
+windows, snapshot replay/expiry/admission, late observations, historical input
+bounds and revocation. Native and Linux full integration both remain unsuccessful:
+the executable agent lifecycle case times out during backend shutdown before its
+reconnect step. Its cause is under focused investigation; no full integration or
+entire-F3 acceptance is claimed. Linux ordinary and race gates passed; the full
+Linux browser stage was not reached. The focused catalogue matrix passed 42 checks.
+The source is integrated into the main working tree without commit or deployment.
+F3-T03 now also implements the fourth daily-compliance lane and exact table,
+with actual rolling attainment, objective references and separate qualified day
+counts. Its focused checks passed 172 unit cases, the real PostgreSQL operational
+case and the executable API/CLI/browser journey. Desktop and mobile captures were
+independently inspected. The combined gate passed 301 web cases, Go/generated/build
+and smoke checks. Normal Compose first exercised the four-lane SLO journey, then
+failed a replacement-collector assertion before that SLI's first permitted dispatch.
+After correcting the harness to derive its deadline from the actual schedule, the
+entire normal Compose journey and cancellation cleanup passed with matching source
+fingerprints. The earlier general shutdown failure remains unresolved; full
+integration acceptance is still outstanding.
+
+The maintainer requested concrete delivery-efficiency improvements while app work
+continues. [F3-T05](tasks/F3-T05.md) adds fixed focused verification, source-bound
+receipts and local task-wide rerun/handoff controls. The tooling is integrated and
+verified: 21 tooling checks passed; shared active-task state refused an unjustified
+broad rerun and an over-budget handoff. Fixed SLO unit checks passed 166 cases in
+7.32 seconds, its real database case passed in 6.52 seconds, and the isolated SLO
+API/CLI/browser journey passed in 39.95 seconds. Prior failures remain retained.
+The maintainer approved the closed command catalog; other approval boundaries and
+required final checks remain in force.
+F3-T01 is merged through `fb648c3`; its functional checks do not establish visual
+acceptance of the simplified screens. No operator deployment change is recorded.
+
+[F3-T01](tasks/F3-T01.md) was verified locally on `feat/f3-first-objective`,
 based on merged `e174291`. The maintainer authorized starting F3 with current
 Prometheus SLIs while external submission remains deferred and F2 incomplete.
 The [first objective plan](plans/0021-first-objective.md) separates the initial
@@ -18,7 +75,7 @@ historical-create recovery preserves its body/key, and sign-out invalidates dela
 navigation. The task records the original regressions and test-helper corrections.
 This is the first usable F3 increment. Target
 revisions, calendar windows, reports, OpenSLO and annotations remain in the plan.
-The increment is published in PR #46; it has not been deployed to the operator app.
+The increment was published in PR #46 and is now merged; it has not been deployed to the operator app.
 F3-T01 remains in review because an earlier run again encountered the existing
 intermittent browser response-read failure before the SLO journey. That investigation
 remains open; the final passing gate is not presented as a fix for it.

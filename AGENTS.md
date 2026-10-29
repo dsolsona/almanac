@@ -64,10 +64,17 @@ directories you change, then the relevant specs and ADRs.
   redirections or working-directory tricks to obtain execution. Never request a
   new command approval during unattended work; leave that operation pending and
   continue independent work. Pass this restriction and exact commands to workers.
+  The maintainer-approved closed focused-verification catalog in
+  [command discipline](docs/commands.md) is reusable within its validated selectors,
+  isolated fixture and local task metadata; do not request that approval again.
 - The implementer submits code and evidence for review; it cannot accept its own
   task, relax checks, change product contracts or start later milestones. After
-  two unsuccessful correction rounds on one issue, reframe the task or ask before
-  taking over substantial implementation. Prefer one consolidated coordinator
+  two unsuccessful handoffs across an increment, change the delivery approach
+  before another handoff. A different error or renamed correction brief does not
+  reset that count. Keep one owner through a working real journey; do not turn
+  unit-only handoffs into a coordinator-owned runtime debugging loop. Reframing
+  preserves the failure history and still requires agreement before the coordinator
+  takes over substantial implementation. Prefer one consolidated coordinator
   review; repeat review only for changed code or unresolved findings.
 - Start a new task turn when assigning corrections to a completed implementer.
   A message to an idle agent does not restart it. Check its state after dispatch
@@ -110,6 +117,12 @@ directories you change, then the relevant specs and ADRs.
   feature screens should reuse them. Shared controls, timeline charts, exact-value
   tables and their catalogue examples exist.
   Backend architecture remains subject to explicit decisions.
+- SLI and SLO screen composition follows the retained
+  [slo-tracker visual references](docs/design/slo-visual-reference.md), with the
+  current left navigation. Preserve dense lists, explained measurement choices,
+  objective presets, urgency groups and the timeline/status-rail detail layout.
+  Matching colors/fonts or rendering a simplified chart is not visual acceptance;
+  compare actual pages side by side and record any undelivered data/interaction gaps.
 - Keep maintenance exclusions, notification silences and graph annotations distinct.
   Maintenance omits eligible measurements without deleting them; silences affect
   delivery only; annotations supply context without changing calculations or alerts.

@@ -399,12 +399,15 @@ func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []b
 	}
 	manifest, err := os.ReadFile(filepath.Join(artifacts, "slo-journey.json"))
 	var evidence struct {
-		SloID      string            `json:"slo_id"`
-		ServiceID  string            `json:"service_id"`
-		SliID      string            `json:"sli_id"`
-		Evaluation api.SloEvaluation `json:"evaluation"`
+		SloID       string                   `json:"slo_id"`
+		ServiceID   string                   `json:"service_id"`
+		SliID       string                   `json:"sli_id"`
+		Operational api.SloOperationalDetail `json:"operational"`
 	}
-	if err != nil || json.Unmarshal(manifest, &evidence) != nil || !validCLIUUID(evidence.SloID) || !validCLIUUID(evidence.ServiceID) || evidence.SliID != sliID || evidence.Evaluation.Performance.Attainment == nil || !sameObjectiveDecimal(*evidence.Evaluation.Performance.Attainment, "0.99") {
+	if err != nil || json.Unmarshal(manifest, &evidence) != nil || !validCLIUUID(evidence.SloID) || !validCLIUUID(evidence.ServiceID) || evidence.SliID != sliID ||
+		evidence.Operational.Objective.Id.String() != evidence.SloID || !validCLIUUID(evidence.Operational.EvaluationId.String()) ||
+		evidence.Operational.Current.Performance.Attainment == nil || !sameObjectiveDecimal(*evidence.Operational.Current.Performance.Attainment, "0.99") ||
+		evidence.Operational.Burn1h.WindowSeconds != api.SloBurnValueWindowSecondsN3600 || evidence.Operational.Burn6h.WindowSeconds != api.SloBurnValueWindowSecondsN21600 {
 		t.Fatalf("browser objective evidence invalid; inspect %s", artifacts)
 	}
 }

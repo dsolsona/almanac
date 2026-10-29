@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/api"
@@ -22,8 +24,7 @@ import (
 
 const (
 	maxBody = 512 << 10
-	// 200 items with two 4096-byte queries at six JSON bytes per byte,
-	// plus bounded metadata, observation and cursor overhead.
+	// SLI pages may return a shorter complete projection prefix to respect this cap.
 	maxSLIPageBody            = 10 << 20
 	maxDiagnosticResponseBody = (1 << 20) + (1 << 18)
 )
@@ -66,13 +67,23 @@ func (c *Client) List(ctx context.Context, limit int, cursor string) ([]byte, er
 	})
 }
 
-func (c *Client) ListSLIs(ctx context.Context, limit int, cursor string) ([]byte, error) {
-	if limit < 1 || limit > 200 || len(cursor) > 512 {
+func (c *Client) ListSLIs(ctx context.Context, limit int, cursor, query, datasourceID string) ([]byte, error) {
+	if limit < 1 || limit > 200 || len(cursor) > 512 || !utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 || strings.IndexFunc(query, unicode.IsControl) >= 0 || len(datasourceID) > 0 && !uuidPattern.MatchString(datasourceID) {
 		return nil, invalid()
 	}
 	p := &api.ListSlisParams{Limit: pageLimit(limit)}
 	if cursor != "" {
 		p.Cursor = pageCursor(cursor)
+	}
+	if query != "" {
+		p.Q = &query
+	}
+	if datasourceID != "" {
+		id, err := parseID(datasourceID)
+		if err != nil {
+			return nil, err
+		}
+		p.DatasourceId = &id
 	}
 	r, err := c.ops.ListSlis(ctx, p, c.editor)
 	return c.readLimit(r, err, http.StatusOK, validSliPage, maxSLIPageBody)
@@ -446,11 +457,12 @@ func validDatasource(data []byte) bool {
 func validSli(data []byte) bool {
 	var value api.Sli
 	var fields map[string]jsontext.Value
-	if json.Unmarshal(data, &fields) != nil || !exactFields(fields,
+	if json.Unmarshal(data, &fields) != nil || !fieldsWithOptional(fields, []string{
 		"activated_at", "activation_state", "agent_id", "agent_reachability", "collection_progress", "component_mode", "created_at",
 		"datasource_id", "datasource_version", "display_name", "effective_from", "freshness", "good_query", "id",
 		"last_attempt_at", "last_observation_at", "latest_observation", "measurement_kind", "measurement_revision",
-		"name", "next_expected_execution_at", "polling_interval_seconds", "settling_delay_seconds", "total_query", "updated_at", "version") || json.Unmarshal(data, &value) != nil {
+		"name", "next_expected_execution_at", "polling_interval_seconds", "settling_delay_seconds", "total_query", "updated_at", "version",
+	}, "datasource_display_name", "recent_measurement_window_start", "recent_measurement_window_end", "recent_measurements", "linked_slos") || json.Unmarshal(data, &value) != nil {
 		return false
 	}
 	if !uuidPattern.MatchString(uuidText(value.Id)) || !uuidPattern.MatchString(uuidText(value.DatasourceId)) || !uuidPattern.MatchString(uuidText(value.AgentId)) ||
@@ -462,6 +474,84 @@ func validSli(data []byte) bool {
 	}
 	if fields["latest_observation"].Kind() != jsontext.KindNull && !validSliObservation(fields["latest_observation"]) {
 		return false
+	}
+	return validSliListProjection(fields, value)
+}
+
+func validSliList(values []byte) bool {
+	var fields map[string]jsontext.Value
+	var value api.Sli
+	if json.Unmarshal(values, &fields) != nil || !validSli(values) || json.Unmarshal(values, &value) != nil {
+		return false
+	}
+	_, hasDatasourceName := fields["datasource_display_name"]
+	return hasDatasourceName && fields["recent_measurements"].Kind() == jsontext.KindBeginArray &&
+		fields["linked_slos"].Kind() == jsontext.KindBeginObject
+}
+
+func validSliListProjection(fields map[string]jsontext.Value, value api.Sli) bool {
+	if raw, exists := fields["datasource_display_name"]; exists && raw.Kind() != jsontext.KindNull {
+		var name string
+		if json.Unmarshal(raw, &name) != nil || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 128 {
+			return false
+		}
+	}
+	start, hasStart := fields["recent_measurement_window_start"]
+	end, hasEnd := fields["recent_measurement_window_end"]
+	if hasStart != hasEnd || hasStart && (start.Kind() != end.Kind() || (value.RecentMeasurementWindowStart == nil) != (value.RecentMeasurementWindowEnd == nil)) {
+		return false
+	}
+	if hasStart && start.Kind() != jsontext.KindNull && (value.RecentMeasurementWindowStart.IsZero() || value.RecentMeasurementWindowEnd.IsZero() || !value.RecentMeasurementWindowEnd.After(*value.RecentMeasurementWindowStart)) {
+		return false
+	}
+	if value.RecentMeasurements != nil {
+		if len(*value.RecentMeasurements) > 12 {
+			return false
+		}
+		var rawItems []jsontext.Value
+		if json.Unmarshal(fields["recent_measurements"], &rawItems) != nil || len(rawItems) != len(*value.RecentMeasurements) {
+			return false
+		}
+		for _, raw := range rawItems {
+			var sample api.SliRecentMeasurement
+			var sampleFields map[string]jsontext.Value
+			if json.Unmarshal(raw, &sampleFields) != nil || !exactFields(sampleFields, "interval_start", "interval_end", "state", "good_count", "total_count") ||
+				json.Unmarshal(raw, &sample) != nil || sample.IntervalStart.IsZero() || !sample.IntervalEnd.After(sample.IntervalStart) || !sample.State.Valid() {
+				return false
+			}
+			numeric := sample.State == "observed" || sample.State == "zero_traffic"
+			if numeric {
+				if sample.GoodCount == nil || sample.TotalCount == nil {
+					return false
+				}
+				_, total, err := sli.ValidateIntervalCounts(*sample.GoodCount, *sample.TotalCount)
+				if err != nil {
+					return false
+				}
+				normalizedTotal := sli.NormalizeDecimal(total)
+				if sample.State == "zero_traffic" && normalizedTotal != "0" || sample.State == "observed" && normalizedTotal == "0" {
+					return false
+				}
+			} else if sample.GoodCount != nil || sample.TotalCount != nil {
+				return false
+			}
+		}
+	}
+	if value.LinkedSlos != nil {
+		var linkedFields map[string]jsontext.Value
+		var linkedItems []jsontext.Value
+		if json.Unmarshal(fields["linked_slos"], &linkedFields) != nil || !exactFields(linkedFields, "items", "total_count") ||
+			json.Unmarshal(linkedFields["items"], &linkedItems) != nil || len(linkedItems) != len(value.LinkedSlos.Items) ||
+			len(value.LinkedSlos.Items) > 5 || value.LinkedSlos.TotalCount < 0 || value.LinkedSlos.TotalCount < len(value.LinkedSlos.Items) {
+			return false
+		}
+		for index, linked := range value.LinkedSlos.Items {
+			var linkedFields map[string]jsontext.Value
+			if json.Unmarshal(linkedItems[index], &linkedFields) != nil || !exactFields(linkedFields, "id", "name", "display_name") ||
+				!uuidPattern.MatchString(uuidText(linked.Id)) || linked.Name == "" || len(linked.Name) > 63 || linked.DisplayName == "" || !utf8.ValidString(linked.DisplayName) || utf8.RuneCountInString(linked.DisplayName) > 128 {
+				return false
+			}
+		}
 	}
 	return true
 }
@@ -477,7 +567,7 @@ func validSliPage(data []byte) bool {
 		return false
 	}
 	for _, item := range raw.Items {
-		if !validSli(item) {
+		if !validSliList(item) {
 			return false
 		}
 	}
@@ -656,6 +746,30 @@ func exactFields(value map[string]jsontext.Value, names ...string) bool {
 	}
 	for _, name := range names {
 		if _, ok := value[name]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func fieldsWithOptional(value map[string]jsontext.Value, required []string, optional ...string) bool {
+	if len(value) < len(required) {
+		return false
+	}
+	for _, name := range required {
+		if _, ok := value[name]; !ok {
+			return false
+		}
+	}
+	allowed := make(map[string]struct{}, len(required)+len(optional))
+	for _, name := range required {
+		allowed[name] = struct{}{}
+	}
+	for _, name := range optional {
+		allowed[name] = struct{}{}
+	}
+	for name := range value {
+		if _, ok := allowed[name]; !ok {
 			return false
 		}
 	}

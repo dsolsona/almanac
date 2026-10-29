@@ -5,10 +5,21 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
+
+func integrationMigrationMarker(t *testing.T, offset int, label string) (int, string) {
+	t.Helper()
+	migrations, err := LoadMigrations(embeddedMigrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := migrations[len(migrations)-1].Version + offset
+	return version, fmt.Sprintf("%04d_%s.sql", version, label)
+}
 
 func TestIntegrationPersistentSessionLifecycleAndExpiryBoundaries(t *testing.T) {
 	databaseURL := integrationDatabase(t)
@@ -645,7 +656,8 @@ func TestIntegrationSessionOperationsFailClosedForIncompatibleOrMissingSchema(t 
 			t.Fatal(err)
 		}
 		conn := integrationConnect(t, databaseURL)
-		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES (20, '0020_future.sql', decode(repeat('ab', 32), 'hex'))"); err != nil {
+		version, filename := integrationMigrationMarker(t, 1, "future")
+		if _, err := conn.Exec(t.Context(), "INSERT INTO public.almanac_schema_migrations (version, filename, checksum) VALUES ($1, $2, decode(repeat('ab', 32), 'hex'))", version, filename); err != nil {
 			t.Fatal("install future schema marker failed")
 		}
 		closeIntegrationConn(conn)
@@ -711,7 +723,7 @@ VALUES ('owner-v2', $1, 'administrator', true, true, 1, $2, $2) RETURNING id`, t
 	}
 	closeIntegrationConn(conn)
 	result, err := Upgrade(t.Context(), databaseURL)
-	if err != nil || result.Applied != 17 || result.DatabaseSchemaVersion != 19 {
+	if err != nil || result.Applied != 18 || result.DatabaseSchemaVersion != 20 {
 		t.Fatalf("schema2 to 13 upgrade = %+v, %v", result, err)
 	}
 	conn = integrationConnect(t, databaseURL)

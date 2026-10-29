@@ -144,3 +144,18 @@ agent record alignment, credential history and plain-language password guidance.
 [F2-T32](F2-T32.md) addresses stack review findings in SLI lists/navigation, collection scheduling and agent lifecycle compatibility.
 
 [F3-T01](F3-T01.md) verifies the first request-count objective journey under the [F3 plan](../plans/0021-first-objective.md).
+
+[F3-T02](F3-T02.md) defines the operational SLO list, separate burn windows,
+rolling-budget history and reference detail composition. [F3-T03](F3-T03.md) completes
+the numerical timeline with daily compliance. [F3-T06](F3-T06.md) supplies the
+separate contextual annotation lifecycle and event layer.
+[F3-T04](F3-T04.md) restores the dense SLI list and explained measurement editor.
+These briefs track required visual completion under SPEC-0012. The maintainer
+authorized implementation and accepted ADR-0023; F3-T02's generated contract is
+reviewed and implementation is in progress. F3-T03 has a reviewed numerical
+contract and is in progress. F3-T04 interface preparation and supported-editor work
+are in progress; F3-T06 remains draft.
+
+[F3-T05](F3-T05.md) improves the current delivery loop with fixed focused checks,
+source-bound evidence and task-wide verification/handoff controls. It supports
+current app delivery without changing product contracts or waiving required gates.

@@ -448,6 +448,8 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/PageLimit'}
         - {$ref: '#/components/parameters/PageCursor'}
+        - {name: q, in: query, required: false, description: Case-insensitive substring search across SLI name, display name and datasource display name; applied before pagination., schema: {type: string, maxLength: 128}}
+        - {name: datasource_id, in: query, required: false, description: Filter by datasource before pagination., schema: {type: string, format: uuid}}
       responses:
         '200': {description: Bounded SLI page, content: {application/json: {schema: {$ref: '#/components/schemas/SliPage'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
@@ -586,6 +588,80 @@ paths:
       responses:
         '201': {description: Created SLO, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Slo'}}}}
         'default': {description: Invalid target or window, duplicate name or idempotency conflict, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/overview:
+    get:
+      operationId: getSloOperationalOverview
+      summary: Read a snapshot-paginated operational SLO overview
+      description: >-
+        Filters by literal case-insensitive substring over name and display_name
+        and optional service_id before calculation. Urgency selection is applied
+        after classification. group_counts describe all name/service matches,
+        before urgency selection; items contain only the selected urgency group.
+        Results are globally ordered by urgency rank, lower(name), then UUID.
+        A PostgreSQL projection snapshot freezes definitions and calculated values
+        across pages; it is bound to the actor, current session, role, filters and
+        limit, expires after two minutes, and is not renewable. At most four live
+        snapshots per actor/session and 64 per installation are admitted. A
+        snapshot may contain at most 10,000 matching objectives and 16 MiB of
+        projection payload; exceeding either returns 503 resource_limit and asks
+        the client to narrow q or service_id. No observation receipt timestamp is
+        a commit watermark. The budget sparkline represents the preceding seven
+        days, with at most 120 exact rolling-evaluation samples preserving actual
+        first/last/min/max values in up to 30 buckets and explicit gaps; represented
+        sample values are exact decimal strings, not averages.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 128}}
+        - {name: service_id, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: urgency, in: query, required: false, schema: {type: string, enum: [needs_attention, watch, healthy]}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 512}}
+      responses:
+        '200': {description: Snapshot-consistent overview page, content: {application/json: {schema: {$ref: '#/components/schemas/SloOperationalOverviewPage'}}}}
+        '400': {description: Invalid filter, cursor or cursor binding, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Snapshot expired; restart pagination, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Resource limit or storage unavailable; no partial overview is returned, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/operational:
+    get:
+      operationId: getSloOperationalDetail
+      summary: Read current operational evaluation and bounded history
+      description: >-
+        Current evaluation is calculated at `at` (default server now), which must
+        be a UTC microsecond-precision instant no later than server now. The chart
+        range is independent of the current objective window: start/end must be
+        supplied together, are UTC and cadence aligned, have end no later than
+        effective at, and span a positive interval of at most 365 days. If omitted,
+        end is the cadence-aligned effective time and start is seven days earlier.
+        Any aligned range within the supported horizon is allowed. 400 is returned
+        for invalid range/window parameters; 503 resource_limit indicates actual
+        canonical coverage rows exceed 2,500,000 across distinct SLI/revision
+        streams or snapshot/query admission failed. Missing and expired spans are
+        computed arithmetically, not expanded into absent ticks. Each series has
+        at most 1,500 samples. Reduced samples retain actual first/last/min/max
+        evaluations and disclose bucket bounds, resolution and reduction; gaps and
+        revision/validity boundaries are never bridged. If those constraints cannot
+        fit, return 422 range_too_dense with narrower-range guidance. Exact-table
+        values are the exact represented response samples; use another bounded
+        operational range request to drill into a reduced region. No full interval
+        timeline is embedded. Detail context includes existing authorized SLI
+        queries and datasource identity/display name, never credentials.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {name: at, in: query, required: false, schema: {type: string, format: date-time, description: UTC with microsecond precision; cannot be in the future}}
+        - {name: start, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: burn_window_seconds, in: query, required: false, schema: {type: integer, enum: [3600, 21600], default: 3600}}
+      responses:
+        '200': {description: Current operational summary and bounded historical series, content: {application/json: {schema: {$ref: '#/components/schemas/SloOperationalDetail'}}}}
+        '400': {description: Invalid timestamp, range, cadence alignment or burn duration, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: SLO not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '422': {description: History too dense for bounded gap/extrema-preserving output, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Resource limit or storage unavailable; no partial detail is returned, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slos/{slo_id}:
     get:
       operationId: getSlo
@@ -824,6 +900,195 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/Slo'}}
         next_cursor: {type: string}
+    SloOperationalOverviewPage:
+      type: object
+      required: [snapshot_id, items, group_counts, next_cursor, previous_cursor]
+      properties:
+        snapshot_id: {type: string, format: uuid}
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SloOperationalOverviewItem'}}
+        group_counts: {$ref: '#/components/schemas/SloUrgencyCounts'}
+        next_cursor: {type: string, maxLength: 512, description: Empty string when this snapshot has no further page.}
+        previous_cursor: {type: string, maxLength: 512, description: Signed cursor for the previous page of this same snapshot, including offset zero; empty on its first page.}
+    SloUrgencyCounts:
+      type: object
+      required: [needs_attention, watch, healthy]
+      properties:
+        needs_attention: {type: integer, format: int64, minimum: 0}
+        watch: {type: integer, format: int64, minimum: 0}
+        healthy: {type: integer, format: int64, minimum: 0}
+    SloOperationalOverviewItem:
+      type: object
+      required: [slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion, budget_sparkline]
+      properties:
+        slo: {$ref: '#/components/schemas/Slo'}
+        urgency: {type: string, enum: [needs_attention, watch, healthy]}
+        leading_reason: {$ref: '#/components/schemas/SloUrgencyReason'}
+        reasons: {type: array, items: {$ref: '#/components/schemas/SloUrgencyReason'}}
+        current: {$ref: '#/components/schemas/SloOperationalValue'}
+        burn_1h: {$ref: '#/components/schemas/SloBurnValue'}
+        burn_6h: {$ref: '#/components/schemas/SloBurnValue'}
+        exhaustion: {$ref: '#/components/schemas/SloExhaustionEstimate'}
+        budget_sparkline: {type: array, maxItems: 120, items: {$ref: '#/components/schemas/SloOperationalSample'}, description: Exact rolling-budget evaluation samples from the preceding seven days; first/last/min/max per bucket and explicit gaps, not averaged.}
+    SloUrgencyReason:
+      type: object
+      required: [code, provisional]
+      properties:
+        code: {type: string, enum: [on_track, stale_observations, no_data, expired_history, complete_window_violation, negative_observed_budget, low_observed_budget, high_1h_burn, evaluation_unavailable, not_yet_eligible, zero_traffic, incomplete_coverage, short_burn_unavailable, budget_below_half]}
+        provisional: {type: boolean}
+    SloOperationalValue:
+      type: object
+      required: [evaluation_at, window, quality, performance]
+      properties:
+        evaluation_at: {type: string, format: date-time}
+        window: {$ref: '#/components/schemas/SloEvaluationWindow'}
+        quality: {$ref: '#/components/schemas/SloOperationalQuality'}
+        performance: {$ref: '#/components/schemas/SloEvaluationPerformance'}
+    SloOperationalQuality:
+      type: object
+      required: [state, freshness, expected_intervals, observed_intervals, known_empty_intervals, missing_intervals, expired_intervals, zero_traffic_intervals, coverage, first_observation_at, last_observation_at, latest_receipt_at]
+      properties:
+        state: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable]}
+        freshness: {type: string, enum: [unknown, fresh, stale]}
+        expected_intervals: {type: integer, format: int64, minimum: 0}
+        observed_intervals: {type: integer, format: int64, minimum: 0}
+        known_empty_intervals: {type: integer, format: int64, minimum: 0}
+        missing_intervals: {type: integer, format: int64, minimum: 0}
+        expired_intervals: {type: integer, format: int64, minimum: 0}
+        zero_traffic_intervals: {type: integer, format: int64, minimum: 0}
+        coverage: {type: string, nullable: true, description: Exact fraction rounded half-even to 12 decimal places at output.}
+        first_observation_at: {type: string, format: date-time, nullable: true}
+        last_observation_at: {type: string, format: date-time, nullable: true}
+        latest_receipt_at: {type: string, format: date-time, nullable: true, description: Receipt metadata only; never an observation commit watermark.}
+        reason: {type: string, nullable: true}
+    SloBurnValue:
+      type: object
+      required: [window_seconds, start, end, quality, performance]
+      properties:
+        window_seconds: {type: integer, enum: [3600, 21600]}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        quality: {$ref: '#/components/schemas/SloOperationalQuality'}
+        performance: {$ref: '#/components/schemas/SloEvaluationPerformance'}
+    SloExhaustionEstimate:
+      type: object
+      required: [state, remaining_events, bad_events_per_hour, hours_until_exhaustion, current_quality, one_hour_quality, assumptions]
+      properties:
+        state: {type: string, enum: [estimated, exhausted, unavailable]}
+        remaining_events: {type: string, nullable: true}
+        bad_events_per_hour: {type: string, nullable: true}
+        hours_until_exhaustion: {type: string, nullable: true}
+        current_quality: {$ref: '#/components/schemas/SloOperationalQuality'}
+        one_hour_quality: {$ref: '#/components/schemas/SloOperationalQuality'}
+        assumptions: {type: array, minItems: 1, items: {type: string, enum: [freezes_current_allowed_budget, continues_observed_one_hour_bad_event_rate, rolling_window_expiry_can_change_result, future_traffic_can_change_result]}}
+        reason: {type: string, nullable: true}
+    SloOperationalDetail:
+      type: object
+      required: [evaluation_id, requested_at, effective_at, calculation_version, snapshot_kind, objective, context, current, urgency, leading_reason, reasons, burn_1h, burn_6h, exhaustion, range, attainment_series, budget_series, burn_series, compliance_series, compliance_summary]
+      properties:
+        evaluation_id: {type: string, format: uuid}
+        requested_at: {type: string, format: date-time}
+        effective_at: {type: string, format: date-time}
+        calculation_version: {type: string}
+        snapshot_kind: {type: string, enum: [current_operational_read]}
+        objective: {$ref: '#/components/schemas/Slo'}
+        context: {$ref: '#/components/schemas/SloOperationalContext'}
+        current: {$ref: '#/components/schemas/SloOperationalValue'}
+        urgency: {type: string, enum: [needs_attention, watch, healthy]}
+        leading_reason: {$ref: '#/components/schemas/SloUrgencyReason'}
+        reasons: {type: array, items: {$ref: '#/components/schemas/SloUrgencyReason'}}
+        burn_1h: {$ref: '#/components/schemas/SloBurnValue'}
+        burn_6h: {$ref: '#/components/schemas/SloBurnValue'}
+        exhaustion: {$ref: '#/components/schemas/SloExhaustionEstimate'}
+        range: {$ref: '#/components/schemas/SloOperationalRange'}
+        attainment_series: {$ref: '#/components/schemas/SloOperationalSeries'}
+        budget_series: {$ref: '#/components/schemas/SloOperationalSeries'}
+        burn_series: {$ref: '#/components/schemas/SloOperationalSeries'}
+        compliance_series: {$ref: '#/components/schemas/SloDailyComplianceSeries'}
+        compliance_summary: {$ref: '#/components/schemas/SloDailyComplianceSummary'}
+    SloDailyComplianceSeries:
+      type: object
+      required: [kind, days]
+      properties:
+        kind: {type: string, enum: [daily_compliance]}
+        days: {type: array, maxItems: 365, items: {$ref: '#/components/schemas/SloDailyComplianceDay'}}
+    SloDailyComplianceDay:
+      type: object
+      required: [utc_date, day_start, day_end, requested_at, effective_at, slo_id, definition_revision, target, quality, performance, status, explanation]
+      properties:
+        utc_date: {type: string, format: date}
+        day_start: {type: string, format: date-time}
+        day_end: {type: string, format: date-time}
+        requested_at: {type: string, format: date-time, description: Exactly day_end, the requested rolling objective evaluation instant.}
+        effective_at: {type: string, format: date-time, description: Canonical source-cadence boundary used for the rolling objective calculation; graph marker remains day_end.}
+        slo_id: {type: string, format: uuid}
+        definition_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        target: {type: string, description: Exact objective target decimal string.}
+        quality: {$ref: '#/components/schemas/SloOperationalQuality'}
+        performance: {$ref: '#/components/schemas/SloEvaluationPerformance'}
+        status: {type: string, enum: [met, violated, unknown, not_applicable]}
+        explanation: {type: string, minLength: 1, maxLength: 512}
+    SloDailyComplianceSummary:
+      type: object
+      required: [met_days, violated_days, evaluable_days, unknown_days, not_applicable_days]
+      properties:
+        met_days: {type: integer, minimum: 0}
+        violated_days: {type: integer, minimum: 0}
+        evaluable_days: {type: integer, minimum: 0, description: Exactly met_days plus violated_days.}
+        unknown_days: {type: integer, minimum: 0}
+        not_applicable_days: {type: integer, minimum: 0}
+    SloOperationalContext:
+      type: object
+      required: [sli_id, sli_name, sli_display_name, datasource_id, datasource_display_name, measurement_revision, polling_interval_seconds, settling_delay_seconds, good_query, total_query]
+      properties:
+        sli_id: {type: string, format: uuid}
+        sli_name: {type: string}
+        sli_display_name: {type: string}
+        datasource_id: {type: string, format: uuid}
+        datasource_display_name: {type: string}
+        measurement_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        polling_interval_seconds: {type: integer, minimum: 15}
+        settling_delay_seconds: {type: integer, minimum: 0}
+        good_query: {type: string, maxLength: 4096}
+        total_query: {type: string, maxLength: 4096}
+    SloOperationalRange:
+      type: object
+      required: [requested_start, requested_end, effective_start, effective_end, source_cadence_seconds, resolution_seconds, reduced, max_samples_per_series, bucket_bounds]
+      properties:
+        requested_start: {type: string, format: date-time}
+        requested_end: {type: string, format: date-time}
+        effective_start: {type: string, format: date-time}
+        effective_end: {type: string, format: date-time}
+        source_cadence_seconds: {type: integer, minimum: 15}
+        resolution_seconds: {type: integer, minimum: 15}
+        reduced: {type: boolean}
+        max_samples_per_series: {type: integer, enum: [1500]}
+        bucket_bounds: {type: string, enum: [half_open]}
+    SloOperationalSeries:
+      type: object
+      required: [kind, burn_window_seconds, samples]
+      properties:
+        kind: {type: string, enum: [attainment, rolling_budget, burn]}
+        burn_window_seconds: {type: integer, enum: [3600, 21600], nullable: true}
+        samples: {type: array, maxItems: 1500, items: {$ref: '#/components/schemas/SloOperationalSample'}}
+    SloOperationalSample:
+      type: object
+      required: [bucket_start, bucket_end, evaluation_at, state, quality, revision, good, total, attainment, allowed_budget, remaining_budget, remaining_fraction, burn, received_at, retained_extrema]
+      properties:
+        bucket_start: {type: string, format: date-time}
+        bucket_end: {type: string, format: date-time}
+        evaluation_at: {type: string, format: date-time}
+        state: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale]}
+        quality: {$ref: '#/components/schemas/SloOperationalQuality'}
+        revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        good: {type: string, nullable: true}
+        total: {type: string, nullable: true}
+        attainment: {type: string, nullable: true}
+        allowed_budget: {type: string, nullable: true}
+        remaining_budget: {type: string, nullable: true}
+        remaining_fraction: {type: string, nullable: true}
+        burn: {type: string, nullable: true}
+        received_at: {type: string, format: date-time, nullable: true, description: Receipt metadata only.}
+        retained_extrema: {type: array, items: {type: string, enum: [first, last, minimum, maximum]}}
     SloEvaluation:
       type: object
       required: [evaluation_id, requested_at, effective_end, calculation_version, snapshot_kind, objective, window, quality, performance, timeline]
@@ -952,8 +1217,35 @@ components:
         last_attempt_at: {type: string, format: date-time, nullable: true}
         last_observation_at: {type: string, format: date-time, nullable: true}
         next_expected_execution_at: {type: string, format: date-time, nullable: true}
+        datasource_display_name: {type: string, nullable: true, description: Present on list projections; omitted from detail and create responses.}
+        recent_measurement_window_start: {type: string, format: date-time, nullable: true, description: Earliest eligible interval in the bounded list projection.}
+        recent_measurement_window_end: {type: string, format: date-time, nullable: true, description: Latest eligible interval end in the bounded list projection.}
+        recent_measurements: {type: array, maxItems: 12, description: Last eligible source-cadence intervals for the current measurement revision; explicit states and exact count strings., items: {$ref: '#/components/schemas/SliRecentMeasurement'}}
+        linked_slos: {$ref: '#/components/schemas/SliLinkedSlos'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    SliRecentMeasurement:
+      type: object
+      required: [interval_start, interval_end, state, good_count, total_count]
+      properties:
+        interval_start: {type: string, format: date-time}
+        interval_end: {type: string, format: date-time}
+        state: {type: string, enum: [observed, zero_traffic, known_empty, missing, partial, failed]}
+        good_count: {type: string, nullable: true, description: Exact decimal integer string; null when no complete observed counts exist.}
+        total_count: {type: string, nullable: true, description: Exact decimal integer string; null when no complete observed counts exist.}
+    SliLinkedSlos:
+      type: object
+      required: [items, total_count]
+      properties:
+        items: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/SliLinkedSlo'}}
+        total_count: {type: integer, minimum: 0}
+    SliLinkedSlo:
+      type: object
+      required: [id, name, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
     SliCreateRequest:
       type: object
       additionalProperties: false

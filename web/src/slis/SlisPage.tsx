@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, type Agent } from '../agents/client.ts';
-import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
+import { SliRecentStrip } from '../components/charts/SliRecentStrip.tsx';
+import { Button, MeasurementChoiceCards, Panel, QueryEditor, SelectField, StatusBadge, TextField } from '../components/ui/index.ts';
 import { createDatasourceClient, type Datasource } from '../datasources/client.ts';
 import { createSliClient, SliFailure, type Sli, type SliCreateRequest, type SliObservation, type SliObservationPage } from './client.ts';
 import './slis.css';
@@ -49,8 +50,15 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function PageTitle({ title, subtitle, headingRef, isList = false }: { title: string; subtitle?: string; headingRef?: RefObject<HTMLHeadingElement | null>; isList?: boolean }) {
-  return <div className="sli-page-title"><nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">SLIs</span> : <><a href="/slis" data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav><h1 ref={headingRef} tabIndex={-1} className="app-page-heading">{title}</h1>{subtitle && <p>{subtitle}</p>}</div>;
+function sliListPath(search: string, datasourceID: string): string {
+  const query = new URLSearchParams();
+  if (search) query.set('q', search);
+  if (datasourceID) query.set('datasource_id', datasourceID);
+  return `/slis${query.size ? `?${query}` : ''}`;
+}
+
+function PageTitle({ title, subtitle, headingRef, isList = false, parentHref = '/slis' }: { title: string; subtitle?: string; headingRef?: RefObject<HTMLHeadingElement | null>; isList?: boolean; parentHref?: string }) {
+  return <div className="sli-page-title"><nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">SLIs</span> : <><a href={parentHref} data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav><h1 ref={headingRef} tabIndex={-1} className="app-page-heading">{title}</h1>{subtitle && <p>{subtitle}</p>}</div>;
 }
 
 function InlineState({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'positive' | 'attention' | 'neutral' }) {
@@ -68,6 +76,18 @@ function outcomeLabel(value: SliObservation['outcome']): string {
 
 function formatTime(value: string | null): string {
   return value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC' }) + ' UTC' : 'Not recorded';
+}
+
+function shortTime(value: string): string {
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC';
+}
+
+function sliListHealth(item: Sli): 'healthy' | 'warning' | 'no-data' | 'stale' {
+  const latest = item.latest_observation;
+  if (item.freshness === 'stale') return 'stale';
+  if (!latest || item.freshness === 'unknown' || latest.outcome === 'complete_empty' || latest.total_count === '0') return 'no-data';
+  if (latest.outcome === 'failed' || latest.outcome === 'incomplete') return 'warning';
+  return 'healthy';
 }
 
 function makeIdempotencyKey(): string {
@@ -92,6 +112,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [earliest, setEarliest] = useState('');
   const [nextCursor, setNextCursor] = useState('');
   const [listNextCursor, setListNextCursor] = useState('');
+  const [listSearch, setListSearch] = useState(() => new URL(window.location.href).searchParams.get('q') ?? '');
+  const [listDatasourceID, setListDatasourceID] = useState(() => new URL(window.location.href).searchParams.get('datasource_id') ?? '');
   const [draft, setDraft] = useState<CreateDraft>(emptyDraft);
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -108,6 +130,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const nameEdited = useRef(false);
   const routeGeneration = useRef(0);
   const historyRequest = useRef(0);
+  const listRequest = useRef(0);
+  const listAbort = useRef<AbortController | null>(null);
   const createIntent = useRef<CreateIntent | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const currentLocation = useRef(locationKey);
@@ -143,6 +167,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setHistoryBusy(false);
     setHistoryLoaded(false);
     historyRequest.current++;
+    listRequest.current++;
+    listAbort.current?.abort();
+    listAbort.current = null;
     setListBusy(false);
     setSli(null);
     setAgent(null);
@@ -157,7 +184,12 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const load = async () => {
       try {
         if (route.kind === 'list') {
-          const page = await slis.list(50, '', request.signal);
+          const filters = new URLSearchParams(new URL(locationKey, window.location.origin).search);
+          const search = filters.get('q') ?? '';
+          const datasourceID = filters.get('datasource_id') ?? '';
+          setListSearch(search);
+          setListDatasourceID(datasourceID);
+          const page = await slis.list(50, '', request.signal, search, datasourceID);
           if (!current()) return;
           setItems(page.items);
           setListNextCursor(page.next_cursor);
@@ -302,14 +334,46 @@ export function SlisPage({ context }: { context: AuthContext }) {
   async function loadMoreSLIs() {
     if (!listNextCursor) return;
     const generation = routeGeneration.current;
+    const requestID = ++listRequest.current;
+    const controller = new AbortController();
+    listAbort.current?.abort();
+    listAbort.current = controller;
     setListBusy(true);
     try {
-      const page = await slis.list(50, listNextCursor);
-      if (generation !== routeGeneration.current) return;
+      const page = await slis.list(50, listNextCursor, controller.signal, listSearch, listDatasourceID);
+      if (generation !== routeGeneration.current || requestID !== listRequest.current) return;
       setItems((current) => [...current, ...page.items]);
       setListNextCursor(page.next_cursor);
-    } catch (failure) { if (generation === routeGeneration.current) setError(safeError(failure)); }
-    finally { if (generation === routeGeneration.current) setListBusy(false); }
+    } catch (failure) { if (generation === routeGeneration.current && requestID === listRequest.current && !controller.signal.aborted) setError(safeError(failure)); }
+    finally { if (generation === routeGeneration.current && requestID === listRequest.current) setListBusy(false); }
+  }
+
+  async function updateListFilters(search: string, datasourceID: string) {
+    setListSearch(search);
+    setListDatasourceID(datasourceID);
+    const query = new URLSearchParams();
+    if (search) query.set('q', search);
+    if (datasourceID) query.set('datasource_id', datasourceID);
+    const path = `/slis${query.size ? `?${query}` : ''}`;
+    window.history.replaceState({}, '', path);
+    currentLocation.current = path;
+    const generation = routeGeneration.current;
+    const requestID = ++listRequest.current;
+    const controller = new AbortController();
+    listAbort.current?.abort();
+    listAbort.current = controller;
+    setListBusy(true);
+    setError('');
+    try {
+      const page = await slis.list(50, '', controller.signal, search, datasourceID);
+      if (generation !== routeGeneration.current || requestID !== listRequest.current) return;
+      setItems(page.items);
+      setListNextCursor(page.next_cursor);
+    } catch (failure) {
+      if (generation === routeGeneration.current && requestID === listRequest.current && !controller.signal.aborted) setError(safeError(failure));
+    } finally {
+      if (generation === routeGeneration.current && requestID === listRequest.current) setListBusy(false);
+    }
   }
 
   async function saveMetadata(event: FormEvent<HTMLFormElement>) {
@@ -335,7 +399,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   if (route.kind === 'create') {
     const options = [{ value: '', label: 'Select a datasource', disabled: true }, ...sources.map((source) => ({ value: source.id, label: `${source.display_name} · ${source.polling_interval_seconds}s cadence` }))];
     return <>
-      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} />
+      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID)} />
       {error && <p className="sli-error" role="alert">{error}</p>}
       {!canWrite ? <Panel heading="Access required"><p>Editor or administrator access is required to create SLIs.</p></Panel>
         : sourceError ? <div className="sli-empty"><p role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></div>
@@ -346,13 +410,14 @@ export function SlisPage({ context }: { context: AuthContext }) {
                 <TextField id="sli-display-name" label="Display name" value={draft.displayName} onChange={(event) => { const value = event.target.value; setDraft((current) => ({ ...current, displayName: value, ...(!nameEdited.current ? { name: suggestName(value) } : {}) })); setFormError(''); }} />
                 <TextField id="sli-name" label="SLI name" value={draft.name} onChange={(event) => { nameEdited.current = true; updateDraft('name', event.target.value); }} hint="Suggested from the display name. Use lowercase letters, numbers, or hyphens; start and end with a letter or number." autoComplete="off" />
                 <SelectField id="sli-datasource" label="Datasource" options={options} value={draft.datasourceID} onChange={(event) => updateDraft('datasourceID', event.target.value)} hint="Collection runs only on the agent assigned to this datasource." />
-                <div className="sli-measurement-summary"><span>Measurement</span><strong>Good and total counts per interval</strong></div>
-                <label className="ui-field" htmlFor="sli-good-query"><span className="ui-label">Good count query</span><textarea id="sli-good-query" className="ui-control sli-query" value={draft.goodQuery} onChange={(event) => updateDraft('goodQuery', event.target.value)} spellCheck={false} /></label>
-                <label className="ui-field" htmlFor="sli-total-query"><span className="ui-label">Total count query</span><textarea id="sli-total-query" className="ui-control sli-query" value={draft.totalQuery} onChange={(event) => updateDraft('totalQuery', event.target.value)} spellCheck={false} /></label>
+                <div className="sli-measurement-picker"><MeasurementChoiceCards value="event_counts" onChange={() => undefined} /></div>
+                <p className="measurement-units"><strong>Query values represent:</strong> event counts over each completed interval. Every event contributes one count, so busy intervals carry more weight than quiet intervals.</p>
+                <QueryEditor id="sli-good-query" label="Good count query" value={draft.goodQuery} onChange={(value) => updateDraft('goodQuery', value)} />
+                <QueryEditor id="sli-total-query" label="Total count query" value={draft.totalQuery} onChange={(value) => updateDraft('totalQuery', value)} />
               </div>
               <p className="sli-form-note">Each query must return one aggregate count for an interval. Create saves a result from recent data already in your datasource, then continues at the datasource’s frequency. The first interval can precede creation.</p>
               {formError && <p className="sli-error" role="alert">{formError}</p>}
-              <div className="sli-actions"><Button variant="outline" onClick={() => navigate('/slis')}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
+              <div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID))}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
             </Panel>
           </form>}
     </>;
@@ -363,7 +428,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const latest = sli.latest_observation;
     const activatedAt = sli.activated_at;
     return <>
-      <div className="sli-detail-heading"><PageTitle title={sli.display_name} subtitle={sli.name} headingRef={titleRef} /><div className="sli-actions"><Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button></div></div>
+      <div className="sli-detail-heading"><PageTitle title={sli.display_name} subtitle={sli.name} headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID)} /><div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID))}>Back to SLIs</Button><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button></div></div>
       {error && <p className="sli-error" role="alert">{error}</p>}
       {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
       {agentError && <p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
@@ -406,20 +471,31 @@ export function SlisPage({ context }: { context: AuthContext }) {
     </>;
   }
 
-  const sourceByID = new Map(sources.map((source) => [source.id, source]));
+  const datasourceOptions = [{ value: '', label: 'All datasources' }, ...sources.map((source) => ({ value: source.id, label: source.display_name }))];
+  const hasListFilters = listSearch.trim() !== '' || listDatasourceID !== '';
   return <>
     <div className="sli-list-heading"><PageTitle isList title="SLIs" subtitle="Service level indicators collected from assigned agents." headingRef={titleRef} />{canWrite && items.length > 0 && sources.length > 0 && !sourceError && <Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Add SLI</Button>}</div>
     {error && <p className="sli-error" role="alert">{error}</p>}
     {sourceError && <><p className="sli-error" role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></>}
     {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}
-    {items.length === 0 ? error || sourceLoading ? null : <div className="sli-empty">
+    <div className="sli-list-toolbar"><TextField id="sli-list-search" label="Search SLIs" placeholder="Name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} /><SelectField id="sli-list-datasource" label="Datasource" options={datasourceOptions} value={listDatasourceID} onChange={(event) => void updateListFilters(listSearch, event.target.value)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</div>
+    {items.length === 0 ? error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
       {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p>{context.session?.role === 'administrator' && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}</> : <><p>Create your first SLI from a Prometheus datasource.</p><Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Create SLI</Button></>}
     </div>
-      : <div className="sli-list" aria-label="Service level indicators">{items.map((item) => {
+      : <div className="sli-table-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table"><thead><tr><th scope="col">Health</th><th scope="col">SLI</th><th scope="col">Type</th><th scope="col">Datasource</th><th scope="col">Recent measurements</th><th scope="col">Last sample</th><th scope="col">SLOs</th></tr></thead><tbody>{items.map((item) => {
         const observation = item.latest_observation;
-        const datasource = sourceByID.get(item.datasource_id);
-        return <button className="sli-row" key={item.id} onClick={() => navigate(`/slis/${item.id}`)}><span className="sli-row-main"><strong>{item.display_name}</strong><small>{item.name} · {datasource?.display_name ?? item.datasource_id}</small>{observation?.outcome === 'observed' && <small>Latest {observation.good_count} good / {observation.total_count} total</small>}</span><span className="sli-row-meta"><InlineState label="Activation" value={item.activation_state} tone={item.activation_state === 'active' ? 'positive' : item.activation_state === 'blocked' ? 'attention' : 'neutral'} /><InlineState label="Freshness" value={item.freshness} tone={item.freshness === 'fresh' ? 'positive' : item.freshness === 'stale' ? 'attention' : 'neutral'} /></span></button>;
-      })}</div>}
+        const linked = item.linked_slos?.items ?? [];
+        const recent = item.recent_measurements ?? [];
+        return <tr key={item.id}>
+          <td data-label="Health"><StatusBadge status={sliListHealth(item)} /><small className="sli-row-health-context">{item.agent_reachability === 'connected' && !observation ? 'Agent connected · no sample yet' : `Agent ${item.agent_reachability.replaceAll('_', ' ')}`}</small></td>
+          <td data-label="SLI" className="sli-list-name"><a href={`/slis/${item.id}`} data-app-route><strong>{item.display_name}</strong></a><small>{item.name}</small></td>
+          <td data-label="Type">{item.measurement_kind === 'event_counts' && item.component_mode === 'interval_count' ? 'Ratio · two queries' : 'Unsupported mode'}</td>
+          <td data-label="Datasource">{item.datasource_display_name ? <a href={`/datasources/${item.datasource_id}`} data-app-route>{item.datasource_display_name}</a> : <span>Datasource name unavailable</span>}</td>
+          <td data-label="Recent measurements"><SliRecentStrip samples={recent} cadenceSeconds={item.polling_interval_seconds} /><small>{recent.length ? `${recent.length} eligible intervals` : 'No eligible samples yet'}</small></td>
+          <td data-label="Last sample">{observation ? <><time dateTime={observation.interval_end}>{shortTime(observation.interval_end)}</time><small>{observation.outcome === 'observed' ? `Latest ${observation.good_count} good / ${observation.total_count} total` : outcomeLabel(observation.outcome)}</small></> : <span>No sample yet</span>}</td>
+          <td data-label="SLOs">{linked.length ? <><div className="sli-list-links">{linked.map((objective) => <a key={objective.id} href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a>)}</div>{item.linked_slos && item.linked_slos.total_count > linked.length && <small>Showing {linked.length} of {item.linked_slos.total_count}</small>}</> : <span>No linked SLOs</span>}</td>
+        </tr>;
+      })}</tbody></table></div>}
     {listNextCursor && <div className="sli-actions"><Button variant="outline" onClick={() => void loadMoreSLIs()} pending={listBusy}>Load more SLIs</Button></div>}
   </>;
 }

@@ -26,6 +26,8 @@ type Querier interface {
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
+	CountLiveSloOverviewSnapshots(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error)
+	CountLiveSloOverviewSnapshotsForSession(ctx context.Context, arg CountLiveSloOverviewSnapshotsForSessionParams) (int64, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
 	DeleteAcknowledgedAgentHandoffConfiguration(ctx context.Context, arg DeleteAcknowledgedAgentHandoffConfigurationParams) (int64, error)
 	DeleteAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) error
@@ -36,10 +38,12 @@ type Querier interface {
 	DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error)
 	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
 	DeleteExpiredSliCreateReceipt(ctx context.Context, arg DeleteExpiredSliCreateReceiptParams) error
+	DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error
 	DeleteExpiredSourceHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) error
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteObjectiveCreateReceipt(ctx context.Context, arg DeleteObjectiveCreateReceiptParams) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
@@ -54,6 +58,7 @@ type Querier interface {
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	FindSliCreateReceipt(ctx context.Context, arg FindSliCreateReceiptParams) (FindSliCreateReceiptRow, error)
 	FindSliDeliveryReceipt(ctx context.Context, arg FindSliDeliveryReceiptParams) (FindSliDeliveryReceiptRow, error)
+	FinishSloOverviewSnapshot(ctx context.Context, arg FinishSloOverviewSnapshotParams) error
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
 	GetAgentExecutionGrant(ctx context.Context, arg GetAgentExecutionGrantParams) (GetAgentExecutionGrantRow, error)
@@ -73,6 +78,8 @@ type Querier interface {
 	GetSli(ctx context.Context, id pgtype.UUID) (GetSliRow, error)
 	GetSliCoverageByCanonicalInterval(ctx context.Context, arg GetSliCoverageByCanonicalIntervalParams) (GetSliCoverageByCanonicalIntervalRow, error)
 	GetSlo(ctx context.Context, id pgtype.UUID) (GetSloRow, error)
+	GetSloOperationalContext(ctx context.Context, arg GetSloOperationalContextParams) (GetSloOperationalContextRow, error)
+	GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (AlmanacSloOverviewSnapshot, error)
 	HasAgentOwnershipProof(ctx context.Context, arg HasAgentOwnershipProofParams) (bool, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
@@ -110,6 +117,8 @@ type Querier interface {
 	InsertSliOwnershipEpoch(ctx context.Context, arg InsertSliOwnershipEpochParams) error
 	InsertSlo(ctx context.Context, arg InsertSloParams) error
 	InsertSloDefinition(ctx context.Context, arg InsertSloDefinitionParams) error
+	InsertSloOverviewSnapshot(ctx context.Context, arg InsertSloOverviewSnapshotParams) error
+	InsertSloOverviewSnapshotItem(ctx context.Context, arg InsertSloOverviewSnapshotItemParams) error
 	LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDatasourceGrantExpiryParams) (pgtype.Timestamptz, error)
 	LatestSliAcceptedAt(ctx context.Context, arg LatestSliAcceptedAtParams) (pgtype.Timestamptz, error)
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
@@ -118,12 +127,15 @@ type Querier interface {
 	ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, arg ListAuthorizedMeasurementGrantsForAgentParams) ([]ListAuthorizedMeasurementGrantsForAgentRow, error)
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
+	ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error)
+	ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
 	ListReadyDatasourceReassignments(ctx context.Context, authorityExpiresAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
 	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)
 	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
 	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
+	ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloOverviewSnapshotItemsParams) ([]ListSloOverviewSnapshotItemsRow, error)
 	ListSloTimelineFacts(ctx context.Context, arg ListSloTimelineFactsParams) ([]ListSloTimelineFactsRow, error)
 	ListSlos(ctx context.Context, arg ListSlosParams) ([]ListSlosRow, error)
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan

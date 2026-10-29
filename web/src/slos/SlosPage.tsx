@@ -1,20 +1,23 @@
-import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
-import { ExactValuesTable, type ExactValueRow } from '../components/charts/ExactValuesTable.tsx';
-import type { Coverage, TimelineChart } from '../components/charts/timelineModel.ts';
 import { createSliClient, type Sli } from '../slis/client.ts';
-import { sloClient, SloFailure, type CreateSlo, type Evaluation, type Service, type Slo } from './client.ts';
+import { OperationalDetailView, OperationalOverviewView } from './OperationalViews.tsx';
+import { sloClient, SloFailure, type CreateSlo, type Service, type Slo } from './client.ts';
 import './slos.css';
-export class ChartBoundary extends Component<{children: React.ReactNode}, {failed:boolean}> { state={failed:false}; static getDerivedStateFromError(){return {failed:true};} render(){return this.state.failed ? <p role="alert">The chart could not be opened. Exact values remain available below.</p> : this.props.children;} }
-const Chart = lazy(() => import('../components/charts/TimelineChartView.tsx').then(m => ({default:m.TimelineChartView})));
+
+export class ChartBoundary extends Component<{children:ReactNode},{failed:boolean}> {
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  render(){return this.state.failed?<p role="alert">The chart could not be opened. Exact values remain available.</p>:this.props.children;}
+}
 const sliClient = createSliClient();
 const namePattern = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
 const suggest = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0,63).replace(/-+$/g,'');
 const date = (s: string | null) => s ? `${new Date(s).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'medium',timeZone:'UTC'})} UTC` : 'Not recorded';
 const key = () => crypto.randomUUID();
 const message = (e: unknown) => e instanceof Error ? e.message : 'The request could not be completed.';
-function navigate(path: string) { if (`${location.pathname}${location.search}` !== path) { history.pushState({}, '', path); dispatchEvent(new PopStateEvent('popstate')); } }
+function navigate(path: string,state:unknown={}) { if (`${location.pathname}${location.search}` !== path) { history.pushState(state, '', path); dispatchEvent(new PopStateEvent('popstate')); } }
 // Shift the decimal point with strings so that exact targets and values never pass through binary floating point.
 function shift(value: string, places: number): string {
   const neg = value.startsWith('-');
@@ -31,17 +34,8 @@ function percentTarget(value: string): string | null {
   const [whole] = value.split('.'); if (BigInt(whole!) >= 100n) return null;
   return shift(value, -2);
 }
-const decimal = (value: string) => value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
-function compactPercent(value: string) { const percentage=shift(value,2);
-  const [whole,fraction='']=percentage.split('.');
-      if(fraction.length<=2 || /^0*$/.test(fraction.slice(2))) return decimal(percentage);
-  const hundredths=BigInt(whole!)*100n+BigInt((fraction+'00').slice(0,2))+(Number(fraction[2])>=5?1n:0n);
-  return `≈${hundredths/100n}.${(hundredths%100n).toString().padStart(2,'0')}`; }
 function windowLabel(seconds: number) { for (const [unit, size] of [['week',604800],['day',86400],['hour',3600],['minute',60]] as const) if (seconds % size === 0) { const n=seconds/size;
   return `${n} ${unit}${n===1?'':'s'}`; } return `${seconds} seconds`; }
-function coverage(state: Evaluation['timeline']['items'][number]['state']): Coverage {
-  return ({ observed:'complete', zero_traffic:'zero-traffic', known_empty:'known-empty', missing:'missing', expired:'expired', not_applicable:'not-applicable' } as const)[state];
-}
 function Heading({title, list=false}:{title:string; list?:boolean}) { return <div>
       <nav className="app-breadcrumbs" aria-label="Breadcrumb">{list ? <span aria-current="page">SLOs</span> : <>
       <a href="/slos" data-app-route>SLOs</a>
@@ -58,21 +52,15 @@ async function allPages<T>(fn:(cursor:string)=>Promise<{items:T[];next_cursor:st
 type Intent = {body:string; key:string; uncertain:boolean};
 export function SlosPage({context}:{context:AuthContext}) {
   const [locationKey,setLocationKey]=useState(() => location.pathname + location.search);
-  const [list,setList]=useState<Slo[]>([]);
-  const [cursor,setCursor]=useState('');
   const [services,setServices]=useState<Service[]>([]);
   const [slis,setSlis]=useState<Sli[]>([]);
   const [slo,setSlo]=useState<Slo|null>(null);
   const [service,setService]=useState<Service|null>(null);
   const [etag,setEtag]=useState('');
-  const [evaluation,setEvaluation]=useState<Evaluation|null>(null);
   const [loading,setLoading]=useState(true);
-  const [evaluationBusy,setEvaluationBusy]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
-  const [evalError,setEvalError]=useState('');
   const [formError,setFormError]=useState('');
-  const [page,setPage]=useState(1);
   const [metadata,setMetadata]=useState('');
   const [display,setDisplay]=useState('');
   const [name,setName]=useState('');
@@ -117,19 +105,14 @@ export function SlosPage({context}:{context:AuthContext}) {
     const abort = new AbortController();
     let active = true;
     setLoading(true);
-    setEvaluationBusy(false);
     setBusy(false);
     setError('');
-    setEvalError('');
     setSlo(null);
     setService(null);
-    setEvaluation(null);
-    setPage(1);
     const run = async () => {
       try {
         if (isList) {
-          const data = await sloClient.list('', abort.signal);
-          if (active) { setList(data.items); setCursor(data.next_cursor); }
+          // The operational overview owns the server-filtered, snapshot-paginated read.
         } else if (isNew) {
           const [availableServices, availableSlis] = await Promise.all([
             allPages(cursor => sloClient.services(cursor, abort.signal)),
@@ -143,15 +126,6 @@ export function SlosPage({context}:{context:AuthContext}) {
           const data = await sloClient.get(id, abort.signal);
           if (active) {
             setSlo(data.value); setMetadata(data.value.display_name); setEtag(data.etag);
-            setLoading(false); setEvaluationBusy(true);
-          }
-          try {
-            const result = await sloClient.evaluation(id, abort.signal);
-            if (active) setEvaluation(result);
-          } catch (failure) {
-            if (active) setEvalError(message(failure));
-          } finally {
-            if (active) setEvaluationBusy(false);
           }
         }
       } catch (failure) {
@@ -171,7 +145,7 @@ export function SlosPage({context}:{context:AuthContext}) {
     };
     void run();
     return () => { active = false; abort.abort(); };
-  }, [locationKey]);
+  }, [path,id,isService,isNew,isList]);
 
   useEffect(() => {
     setBound(''); setBoundError(''); setHistorical(false);
@@ -273,7 +247,7 @@ export function SlosPage({context}:{context:AuthContext}) {
   async function refresh() {
     if (!id) return;
     const current = generation.current;
-    setBusy(true); setError(''); setEvalError('');
+      setBusy(true); setError('');
     try {
       if (isService) {
         const result = await sloClient.service(id);
@@ -283,21 +257,11 @@ export function SlosPage({context}:{context:AuthContext}) {
         const result = await sloClient.get(id);
         if (current !== generation.current) return;
         setSlo(result.value); setMetadata(result.value.display_name); setEtag(result.etag);
-        try {
-          const updated = await sloClient.evaluation(id);
-          if (current === generation.current) setEvaluation(updated);
-        } catch (failure) {
-          if (current === generation.current) {
-            if (failure instanceof SloFailure && (failure.status === 401 || failure.status === 403)) {
-              setSlo(null); setEvaluation(null); setError(message(failure));
-            } else setEvalError(`${message(failure)} Previously shown values may be stale.`);
-          }
-        }
       }
     } catch (failure) {
       if (current === generation.current) {
         if (failure instanceof SloFailure && (failure.status === 401 || failure.status === 403)) {
-          setSlo(null); setService(null); setEvaluation(null); setError(message(failure));
+          setSlo(null); setService(null); setError(message(failure));
         } else setError(`${message(failure)} Previously shown values may be stale.`);
       }
     } finally {
@@ -326,16 +290,9 @@ export function SlosPage({context}:{context:AuthContext}) {
   const title=isList?'SLOs':isNew?'Create SLO':isService?(service?.display_name??'Service details'):(slo?.display_name??'SLO details');
   return <div className="slos-page" ref={heading}>
       <div className="slo-title">
-      <Heading title={title} list={isList}/>{!loading&&isList&&canWrite&&list.length>0&&<Button onClick={()=>navigate('/slos/new')}>Create SLO</Button>}{id&&<Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button>}</div>
+      <Heading title={title} list={isList}/>{id&&isService&&<Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button>}</div>
     {loading&&<span className="sr-only" role="status">Opening {isService?'service':'SLOs'}</span>}{error&&<p className="slo-error" role="alert">{error}</p>}
-    {!loading&&isList&&<>{list.length===0&&!error?<div className="slo-empty">
-      <p>{canWrite?'Create your first objective using an existing SLI.':'There are no objectives to show.'}</p>{canWrite&&<Button onClick={()=>navigate('/slos/new')}>Create SLO</Button>}</div>:<div className="slo-list">{list.map(item=>
-      <a data-app-route href={`/slos/${item.id}`} className="slo-row" key={item.id}>
-      <strong>{item.display_name}</strong>
-      <span>{item.service_display_name} · {shift(item.target,2)}% target · {windowLabel(item.rolling_window_seconds)}</span>
-      </a>)}</div>}{cursor&&<Button variant="outline" pending={busy} onClick={()=>{const current=generation.current;
-      setBusy(true);void sloClient.list(cursor).then(x=>{if(current===generation.current){setList(v=>[...v,...x.items]);
-      setCursor(x.next_cursor);}}).catch(e=>{if(current===generation.current)setError(message(e));}).finally(()=>{if(current===generation.current)setBusy(false);});}}>Load more SLOs</Button>}</>}
+    {!loading&&isList&&<OperationalOverviewView locationKey={locationKey} canWrite={canWrite} onCreate={()=>navigate('/slos/new')} onLocationChange={navigate}/>}
     {!loading&&isNew&&(!canWrite?<p>Editor or administrator access is required to create SLOs.</p>:<>
       <p>Define an objective from an existing request-count SLI.</p>{slis.length===0&&!frozen?<div className="slo-empty">
       <p>Create an SLI before creating an objective.</p>
@@ -367,10 +324,11 @@ export function SlosPage({context}:{context:AuthContext}) {
       <Button variant="outline" onClick={()=>{setAddingService(true);
       setFormError('');}}>Create service</Button>
       </div>
-      <SelectField id="slo-sli" label="SLI" value={sliID} onChange={e=>setSliID(e.target.value)} options={[{value:'',label:'Select an SLI',disabled:true},...slis.map(x=>({value:x.id,label:x.display_name}))]}/>
-      <TextField id="slo-target" label="Target (%)" inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} hint="From 0 up to but not including 100%."/>
-      <TextField id="slo-duration" label="Rolling window" inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/>
-      <SelectField id="slo-unit" label="Window unit" value={unit} onChange={e=>setUnit(e.target.value)} options={['minutes','hours','days','weeks'].map(x=>({value:x,label:x}))}/>
+      <div className="slo-sli-field"><SelectField id="slo-sli" label="SLI" value={sliID} onChange={e=>setSliID(e.target.value)} options={[{value:'',label:'Select an SLI',disabled:true},...slis.map(x=>({value:x.id,label:x.display_name}))]}/></div>
+      <div className="slo-preset-field"><TextField id="slo-target" label="Target (%)" inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} hint="From 0 up to but not including 100%."/><div className="slo-presets" aria-label="Common target presets">{['99','99.5','99.9','99.95','99.99'].map(value=><Button key={value} variant={target===value?'selected':'outline'} aria-pressed={target===value} onClick={()=>setTarget(value)}>{value}%</Button>)}</div></div>
+      <div className="slo-preset-field slo-window-field"><div className="slo-duration-pair"><TextField id="slo-duration" label="Rolling window" inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/>
+      <SelectField id="slo-unit" label="Window unit" value={unit} onChange={e=>setUnit(e.target.value)} options={['minutes','hours','days','weeks'].map(x=>({value:x,label:x}))}/></div>
+      <div className="slo-presets" aria-label="Common rolling window presets">{[['7d',7],['28d',28],['30d',30],['90d',90]].map(([label,days])=><Button key={label} variant={Number(duration)===days&&unit==='days'?'selected':'outline'} aria-pressed={Number(duration)===days&&unit==='days'} onClick={()=>{setDuration(String(days));setUnit('days');}}>{label}</Button>)}</div></div>
       </div>
       <p>A day is 24 hours. The window must align with the SLI’s {selectedSli?.polling_interval_seconds ?? 'selected'}-second collection interval.</p>{sliID&&<div className="slo-history">
       <label>
@@ -394,72 +352,13 @@ export function SlosPage({context}:{context:AuthContext}) {
     {!loading&&!isService&&slo&&<>
       <p className="slo-subtitle">{shift(slo.target,2)}% target · rolling {windowLabel(slo.rolling_window_seconds)}</p>
       <p className="slo-related">Service: <a href={`/services/${slo.service_id}`} data-app-route>{slo.service_display_name}</a> · SLI: <a href={`/slis/${slo.sli_id}`} data-app-route>{slo.sli_display_name}</a></p>
-      {evalError&&<p className="slo-error" role="alert">{evalError}</p>}{evaluationBusy&&<span className="sr-only" role="status">Opening evaluation</span>}{evaluation&&<Results evaluation={evaluation} page={page} setPage={setPage}/>}<details>
+      <OperationalDetailView id={slo.id} definition={slo} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}}/>{slo&&<details>
       <summary>Settings and technical details</summary>
       <p>Identifier: {slo.name} · Definition revision: {slo.definition_revision} · Resource version: {slo.version}</p>
       <p>Activated: {date(slo.activated_at)} · Evaluation valid from: {date(slo.evaluation_valid_from)}</p>{slo.historical_requested_at&&<p>This target was explicitly applied to earlier measurements on {date(slo.historical_requested_at)}.</p>}{canWrite&&<form onSubmit={e=>void saveMetadata(e)}>
       <TextField id="slo-rename" label="Display name" value={metadata} onChange={e=>setMetadata(e.target.value)}/>
       <Button type="submit" pending={busy}>Save display name</Button>
-      </form>}{formError&&<p role="alert">{formError}</p>}</details>
+      </form>}{formError&&<p role="alert">{formError}</p>}</details>}
       </>}
   </div>;
-}
-function Results({evaluation:e,page,setPage}:{evaluation:Evaluation;page:number;
-      setPage:(n:number)=>void}) { const p=e.performance,q=e.quality,t=e.timeline;
-  const eligible=t.items.filter(x=>x.state!=='not_applicable');
-  const points=eligible.map(x=>({timestamp:x.start,value:x.attainment,coverage:coverage(x.state)}));
-  const rows:ExactValueRow[]=points.map(x=>({timestamp:x.timestamp,lane:'Success',series:'Observed',unit:'ratio',value:x.value,coverage:x.coverage}));
-  const chart:TimelineChart={title:'Success over recent intervals',summary:'Observed success for each collection interval. Gaps are not zero.',start:eligible[0]?.start ?? t.start,end:t.end,stepMs:t.cadence_seconds*1000,lanes:[{id:'success',label:'Success',unit:'ratio',series:[{id:'observed',label:'Observed success',points}]}]};
-  const causes = [
-    q.missing_intervals ? `${q.missing_intervals} missing` : '',
-    q.expired_intervals ? `${q.expired_intervals} expired` : '',
-    q.known_empty_intervals ? `${q.known_empty_intervals} ${q.known_empty_intervals === 1 ? 'interval returned' : 'intervals returned'} no measurement` : '',
-  ].filter(Boolean);
-  return <>
-      <section className="slo-result" aria-labelledby="result-heading">
-      <h2 id="result-heading">Current objective</h2>
-      <p>{date(e.window.effective_start)} – {date(e.window.end)} (end excluded)</p>
-      <p>Evaluating measurements since {date(e.window.eligible_start)}.</p>
-      {p.attainment===null&&<p>{q.state==='zero_traffic'?'There was no traffic in the eligible intervals, so success and burn are unavailable.':q.state==='not_applicable'?'No intervals are eligible yet.':'There is not enough measured traffic to calculate success or burn.'}</p>}<dl className="slo-metrics">
-      <div>
-      <dt>Measured success</dt>
-      <dd>{p.attainment===null?'—':`${compactPercent(p.attainment)}%`}</dd>
-      </div>
-      <div>
-      <dt>Remaining error budget</dt>
-      <dd>{p.remaining_budget===null?'—':`${decimal(p.remaining_budget)} events`}</dd>
-      </div>
-      <div>
-      <dt>Burn</dt>
-      <dd>{p.burn===null?'—':`${decimal(p.burn)}×`}</dd>
-      </div>
-      <div>
-      <dt>Coverage</dt>
-      <dd>{q.coverage===null?'—':`${compactPercent(q.coverage)}%`}</dd>
-      </div>
-      </dl>
-      {p.provisional&&<p className="slo-qualification">{causes.length > 0 && <>{causes.join('; ')}. </>}{q.known_empty_intervals > 0 && <>Collection coverage includes intervals that returned no measurement. </>}These results cover observed traffic only{p.observed_state?` and ${p.observed_state==='met'?'meet':'do not meet'} the target for that traffic`:''}; the full window cannot be assessed.</p>}
-      <details>
-      <summary>Coverage details</summary>
-      <p>Collection coverage counts accepted observations and known-empty intervals; it does not measure traffic or success.</p>
-      <p>{q.observed_intervals} observed, {q.known_empty_intervals} known empty, {q.missing_intervals} missing, {q.zero_traffic_intervals} zero traffic and {q.expired_intervals} expired of {q.expected_intervals} eligible intervals. Freshness: {q.freshness.replaceAll('_',' ')}.</p>
-      <p>Last observation: {date(q.last_observation_at)} · Last receipt: {date(q.latest_receipt_at)}</p>
-      </details>
-      <details>
-      <summary>Exact summary values</summary>
-      <p>Attainment: {p.attainment ?? '—'} · Remaining budget: {p.remaining_budget ?? '—'} events · Burn: {p.burn ?? '—'} · Coverage: {q.coverage ?? '—'}</p>
-      </details>{!p.provisional&&p.attainment!==null&&<p>Full-window status: {p.state.replaceAll('_',' ')}.</p>}</section>
-      <section className="slo-timeline">
-      <p>Eligible recent intervals: {date(eligible[0]?.start ?? t.start)} – {date(t.end)}. The summary covers the full objective window; the timeline excludes intervals before eligibility and shows at most {t.max_intervals} recent intervals.</p>{eligible.length>0&&<>
-      <ChartBoundary>
-      <Suspense fallback={<span className="sr-only" role="status">Opening chart</span>}>
-      <Chart chart={chart}/>
-      </Suspense>
-      </ChartBoundary>
-      <details>
-      <summary>View exact values</summary>
-      <ExactValuesTable rows={rows.slice((page-1)*50,page*50)} page={page} totalRows={rows.length} onPageChange={setPage}/>
-      </details>
-      </>}</section>
-      </>;
 }

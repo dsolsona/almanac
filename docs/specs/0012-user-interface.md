@@ -20,6 +20,13 @@ On 2026-10-27 the maintainer confirmed the established Almanac application layou
 and styling, and explicitly selected visible unfinished navigation entries marked
 “Not available yet.” The application-shell contract below records that agreement.
 
+On 2026-10-29 the maintainer confirmed that the existing left navigation stays,
+and selected the retained [slo-tracker visual references](../design/slo-visual-reference.md)
+as the target for SLI/SLO content, hierarchy and interactions. Urgency grouping,
+separate burn windows, the error-budget view and all four SLO detail graphs are
+required F3 outcomes. The maintainer subsequently authorized implementation of this
+plan and [ADR-0023](../adr/0023-slo-operational-urgency.md) in the working conversation.
+
 ## Purpose
 
 Give operators a clear path from installation and observation setup to trustworthy
@@ -160,6 +167,54 @@ conflicts without silently losing a move or resetting filters.
 
 ### Charts, lists and interaction
 
+#### Operational SLI and SLO composition
+
+Use the [visual reference](../design/slo-visual-reference.md) for the dense SLI
+table, explained measurement choices/query editors, grouped SLO list and objective
+presets. A generic list of objective names or a single success chart is not visual
+completion. The reference adapts to the accepted shell rather than replacing it.
+
+The SLI list is a dense ruled table with health, name/description, measurement
+type, datasource, recent measurements, latest sample and linked objectives. Search
+and supported filters run on the server before cursor pagination. List rows may
+include bounded recent data for the latest 12 completed cadence intervals of the
+current measurement revision, from interval-time coverage retained by the backend;
+missing, zero, empty, partial and failed results stay explicit, with cadence and
+the eligible interval range disclosed. A compact plot does not classify samples
+against an SLO target; exact counts, timestamps and coverage states remain available
+from the same bounded projection. Linked objectives show at most five names with
+the exact total when more exist. Datasource and
+objective links use the signed-in user's normal permissions. This compact list
+projection does not replace full observation history or alter collection.
+
+The editor presents two-query event counts as the supported, event-weighted
+measurement. Fraction and threshold choices explain that their collector modes
+are unavailable and remain disabled. Query inputs keep native text editing and
+show PromQL context and line numbers. Query values are counts for each completed
+source-cadence interval; the editor does not imply that a connected agent has
+already produced an observation.
+
+The SLO list defaults to Needs attention, Watch and Healthy groups with reason text,
+status, linked objective/SLI/service context, budget history sparkline, remaining
+percentage and meter, 1 h burn with 6 h context, and a qualified exhaustion estimate.
+Search, supported filters and bounded pagination operate over the actual result set.
+Urgency does not override performance, data quality, freshness or alert state.
+
+SLO detail uses a broad timeline and a narrower status/definition rail. Events sit
+above four aligned numerical lanes: SLI attainment, rolling budget remaining,
+selectable 1 h/6 h burn, and daily compliance. Keep lane labels, current values,
+reference lines, exact-table actions, common range/timezone controls and shared
+crosshair. The right rail leads with remaining budget, then attainment, target,
+burn windows, remaining event quantity and exhaustion; calculation detail is
+expandable and related definitions link by name. All numerical data is calculated
+by the backend under SPEC-0006, with explicit qualifications for partial coverage.
+
+All four numerical lanes and contextual annotation events are F3 work. Alert
+occurrences, mute/silence actions and maintenance overlays arrive with their F4
+domains; F3 must not invent records or enable unsupported commands. Unsupported
+measurement choices and organization controls similarly cannot imply delivered
+capabilities. Their absence does not justify replacing the agreed composition.
+
 SLO timelines share aligned time grids, a single bottom axis and a common crosshair;
 short windows retain time-of-day labels. Mark real gaps, notification silences
 and definition changes distinctly. Add maintenance shading and informational event
@@ -257,6 +312,19 @@ view. Error pages preserve navigation and a safe retry path.
   controls and a working Agents destination. Unfinished destinations are visibly
   marked “Not available yet” and cannot navigate. Direct links, browser history,
   keyboard navigation, authorization and recovery retain their specified behavior.
+- AC-11: SLI list/editor and SLO list/editor/detail receive side-by-side acceptance
+  against the retained visual references for hierarchy, density, typography,
+  controls and alignment, in both themes and at mobile/intermediate/desktop widths.
+- AC-12: The operational SLO list shows backend-owned urgency with reasons, real
+  budget sparklines/meters and separately computed 1 h/6 h burn. Global filtering,
+  grouping and pagination do not classify only the currently loaded browser page.
+- AC-13: SLO detail shows attainment, rolling-budget, selectable burn and daily
+  compliance graphs on one timeline with exact tables, target/1x reference lines,
+  common range/timezone controls and a status/definition rail. Annotations use
+  SPEC-0017; unavailable F4 event domains cannot fabricate overlays.
+- AC-14: Incomplete, stale, no-data, zero-traffic, expired and pre-validity states
+  stay explicit in list groups, figures, estimates, graph gaps and tables. Rounded
+  values never decide urgency or performance; partial data cannot prove success.
 
 ## Dependencies and open questions
 

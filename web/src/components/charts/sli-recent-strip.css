@@ -1,0 +1,17 @@
+.sli-recent-strip { display: grid; justify-items: start; gap: 2px; min-width: 7rem; }
+.sli-recent-strip__plot { display: block; width: 8.75rem; max-width: 100%; height: 1.5rem; overflow: visible; }
+.sli-recent-strip__baseline { stroke: var(--border); stroke-width: 1; }
+.sli-recent-strip__observed { fill: var(--good); }
+.sli-recent-strip__zero { fill: var(--surface); stroke: var(--status-no-data); stroke-width: 1.5; }
+.sli-recent-strip__empty { fill: var(--surface-2); stroke: var(--status-no-data); stroke-width: 1.5; }
+.sli-recent-strip__partial { stroke: var(--status-warning); stroke-width: 2.5; stroke-dasharray: 2 1; }
+.sli-recent-strip__failed { fill: none; stroke: var(--status-breached); stroke-width: 1.8; }
+.sli-recent-strip__missing { stroke: var(--status-no-data); stroke-width: 1.5; stroke-dasharray: 1 1.5; }
+.sli-recent-strip__details { position: relative; font-size: .7rem; }
+.sli-recent-strip__details summary { color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.sli-recent-strip__table-scroll { position: absolute; z-index: 2; top: 1.4rem; left: 0; width: min(42rem, 80vw); max-height: 18rem; overflow: auto; border: 1px solid var(--border-strong); background: var(--surface); box-shadow: var(--shadow); }
+.sli-recent-strip__table-scroll table { width: 100%; border-collapse: collapse; font-size: .75rem; text-align: left; }
+.sli-recent-strip__table-scroll caption { padding: var(--space-2); text-align: left; color: var(--text-2); }
+.sli-recent-strip__table-scroll th, .sli-recent-strip__table-scroll td { padding: var(--space-1) var(--space-2); border-top: 1px solid var(--border); }
+.sli-recent-strip__table-scroll th { background: var(--surface-2); }
+.sli-recent-strip__timestamp { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }

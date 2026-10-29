@@ -270,13 +270,33 @@ func (s *Server) closeNewConnections() {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.closeNewConnections()
 	if err := s.stopReassignmentWorker(ctx); err != nil {
-		return err
+		return shutdownPhaseError{phase: "reassignment_worker", cause: err}
 	}
 	if err := s.agentSessions.Drain(ctx); err != nil {
 		_ = s.agentSessions.Close()
-		return err
+		return shutdownPhaseError{phase: "agent_sessions", cause: err}
 	}
-	return s.http.Shutdown(ctx)
+	if err := s.http.Shutdown(ctx); err != nil {
+		return shutdownPhaseError{phase: "http_server", cause: err}
+	}
+	return nil
+}
+
+type shutdownPhaseError struct {
+	phase string
+	cause error
+}
+
+func (e shutdownPhaseError) Error() string { return "backend shutdown phase failed" }
+func (e shutdownPhaseError) Unwrap() error { return e.cause }
+
+// ShutdownPhase returns a safe phase label for backend shutdown errors.
+func ShutdownPhase(err error) string {
+	phase, ok := errors.AsType[shutdownPhaseError](err)
+	if !ok {
+		return "unknown"
+	}
+	return phase.phase
 }
 
 func (s *Server) Close() error {
@@ -338,8 +358,8 @@ func writeHealth(w http.ResponseWriter, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	if status != http.StatusOK {
 		w.WriteHeader(status)
-		_ = json.MarshalWrite(w, api.HealthResponse{Status: api.Unavailable, Component: api.Backend})
+		_ = json.MarshalWrite(w, api.HealthResponse{Status: api.HealthResponseStatusUnavailable, Component: api.Backend})
 		return
 	}
-	_ = json.MarshalWrite(w, api.HealthResponse{Status: api.Ok, Component: api.Backend})
+	_ = json.MarshalWrite(w, api.HealthResponse{Status: api.HealthResponseStatusOk, Component: api.Backend})
 }

@@ -4,6 +4,7 @@ import { validateTimeline, type Coverage, type TimelineChart } from '../src/comp
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { ExactValuesTable } from '../src/components/charts/ExactValuesTable.tsx';
+import { SloBudgetSparkline } from '../src/components/charts/SloBudgetSparkline.tsx';
 
 afterEach(cleanup);
 type SpawnSync = (command: string, args: string[], options: { encoding: 'utf8'; timeout: number }) => { error?: Error; status: number | null; stdout: string };
@@ -26,6 +27,20 @@ describe('timeline model and options', () => {
     expect(normalized.series[0]?.partial.map((item) => item.value)).toEqual([0]);
     expect(normalized.exactValues.get('2026-01-01T00:00:00.000Z')).toBe('99.970000');
     expect(normalized.series[0]?.tooltipData.map((item) => item.coverage)).toEqual(['complete', 'missing', 'partial']);
+  });
+
+  it('preserves irregular operational samples without synthesizing regular ticks', () => {
+    const points=[
+      {timestamp:'2026-01-01T00:00:00Z',value:'0.99',coverage:'complete' as const},
+      {timestamp:'2026-01-01T04:00:00Z',value:'0.98',coverage:'complete' as const},
+    ];
+    const irregular:TimelineChart={...chart,end:'2026-01-01T05:00:00Z',lanes:[{...chart.lanes[0]!,series:[{id:'budget',label:'Budget',points}]}],fillExpectedGaps:false};
+    expect(validateTimeline(irregular).series[0]?.data.map(point=>point.timestamp)).toEqual(points.map(point=>Date.parse(point.timestamp)));
+  });
+
+  it('keeps an end-aligned operational evaluation on the shared chart boundary',()=>{
+    const irregular:TimelineChart={...chart,end:'2026-01-01T00:05:00Z',fillExpectedGaps:false,lanes:[{...chart.lanes[0]!,series:[{id:'budget',label:'Budget',points:[{timestamp:'2026-01-01T00:05:00Z',value:'0.5',coverage:'complete'}]}]}]};
+    expect(validateTimeline(irregular).series[0]?.data.map(point=>point.timestamp)).toEqual([Date.parse(irregular.end)]);
   });
 
   it('keeps known-empty, expired and not-applicable gaps distinct from numeric zero', () => {
@@ -53,6 +68,35 @@ describe('timeline model and options', () => {
     expect(screen.getByText('Expired history')).toBeVisible();
     expect(screen.getByText('Not applicable')).toBeVisible();
     expect(screen.getAllByText('—')).toHaveLength(3);
+  });
+
+  it('accepts partial samples without ratios as qualified gaps',()=>{
+    const points=[
+      {timestamp:'2026-01-01T00:00:00Z',value:'0.8',coverage:'complete' as const},
+      {timestamp:'2026-01-01T00:01:00Z',value:null,coverage:'partial' as const},
+      {timestamp:'2026-01-01T00:02:00Z',value:'0.7',coverage:'complete' as const},
+    ];
+    const fixture:TimelineChart={...chart,lanes:[{...chart.lanes[0]!,series:[{id:'budget',label:'Budget',points}]}]};
+    const normalized=validateTimeline(fixture);
+    expect(normalized.series[0]?.data.map(point=>point.value)).toEqual([0.8,null,0.7]);
+    expect(normalized.series[0]?.partial).toEqual([]);
+    expect(normalized.series[0]?.tooltipData.map(point=>point.coverage)).toEqual(['complete','partial','complete']);
+    const rows=points.map(point=>({...point,lane:'Budget',series:'Rolling window',unit:'fraction'}));
+    render(<ExactValuesTable rows={rows} page={1} totalRows={rows.length} onPageChange={()=>undefined}/>);
+    expect(screen.getByText('Partial')).toBeVisible();
+    expect(screen.getByText('—')).toBeVisible();
+  });
+
+  it('breaks the overview sparkline across partial coverage and names that gap accessibly',()=>{
+    const {container}=render(<SloBudgetSparkline label="Checkout budget" samples={[
+      {remaining_fraction:'0.8',state:'observed'},
+      {remaining_fraction:'0.8',state:'partial'},
+      {remaining_fraction:'0.8',state:'observed'},
+    ]}/>);
+    const path=container.querySelector('.slo-budget-sparkline__line');
+    expect(path).not.toBeNull();
+    expect(path?.getAttribute('d')?.match(/M/g)).toHaveLength(2);
+    expect(container.querySelector('svg')?.getAttribute('aria-label')).toContain('partial-coverage gaps');
   });
 
   it('rejects invalid ranges, unsorted timestamps, nonfinite values and oversized series', () => {
@@ -93,6 +137,21 @@ describe('timeline model and options', () => {
     expect(option.tooltip).toMatchObject({ backgroundColor: palette.surface, borderColor: palette.surfaceBorder, textStyle: { color: palette.text } });
     expect(series.some((item) => item && 'type' in item && item.type === 'line' && 'connectNulls' in item && item.connectNulls === false)).toBe(true);
     expect(option.animation).toBe(false);
+  });
+
+  it('includes reference targets outside automatic domains and preserves negative measurements',()=>{
+    const empty:TimelineChart={...chart,fillExpectedGaps:false,referenceLines:[{lane:'availability',value:'99.9',label:'Target 99.9%'}],lanes:[{...chart.lanes[0]!,series:[{id:'daily',label:'Daily attainment',points:[{timestamp:chart.start,value:null,coverage:'not-applicable'}]}]}]};
+    const emptyAxis=(buildTimelineOption(empty,validateTimeline(empty),palette).yAxis as Array<{min?:number;max?:number}>)[0]!;
+    expect(emptyAxis.min).toBeLessThan(99.9);expect(emptyAxis.max).toBeGreaterThan(99.9);
+    const lowBurn:TimelineChart={...empty,referenceLines:[{lane:'availability',value:'1',label:'1×'}],lanes:[{...chart.lanes[0]!,series:[{id:'burn',label:'Burn',points:[{timestamp:chart.start,value:'0.02',coverage:'complete'}]}]}]};
+    const burnAxis=(buildTimelineOption(lowBurn,validateTimeline(lowBurn),palette).yAxis as Array<{min?:number;max?:number}>)[0]!;
+    expect(burnAxis.max).toBeGreaterThan(1);expect(burnAxis.min).toBeLessThan(0.02);
+    const negative:TimelineChart={...empty,referenceLines:[{lane:'availability',value:'0',label:'0% remaining'}],lanes:[{...chart.lanes[0]!,series:[{id:'budget',label:'Budget',points:[{timestamp:chart.start,value:'-0.2',coverage:'complete'}]}]}]};
+    const negativeAxis=(buildTimelineOption(negative,validateTimeline(negative),palette).yAxis as Array<{min?:number;max?:number}>)[0]!;
+    expect(negativeAxis.min).toBeLessThan(-0.2);expect(negativeAxis.max).toBeGreaterThan(0);
+    const within:TimelineChart={...empty,referenceLines:[{lane:'availability',value:'0.5',label:'Target'}],lanes:[{...chart.lanes[0]!,series:[{id:'sli',label:'SLI',points:[{timestamp:chart.start,value:'0.4',coverage:'complete'},{timestamp:'2026-01-01T00:01:00Z',value:'0.6',coverage:'complete'}]}]}]};
+    const withinAxis=(buildTimelineOption(within,validateTimeline(within),palette).yAxis as Array<{min?:number;max?:number}>)[0]!;
+    expect(withinAxis.min).toBeUndefined();expect(withinAxis.max).toBeUndefined();
   });
 
   it('uses the available plot height for one and four aligned lanes', () => {

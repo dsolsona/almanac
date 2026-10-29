@@ -379,6 +379,7 @@ func TestIntegrationDatasourceReassignmentWaitsForV2DrainAndPreservesEpochs(t *t
 	if err := conn.QueryRow(t.Context(), `SELECT ends_at FROM public.almanac_sli_ownership_epochs WHERE sli_id=$1 AND agent_id=$2`, measurement.ID, sourceAgent.Agent.ID).Scan(&cutoff); err != nil {
 		t.Fatal(err)
 	}
+	cutoff = cutoff.UTC()
 	now = cutoff.Add(2 * time.Minute)
 	item := sli.ObservationItem{DeliveryID: uuid.NewString(), ExecutionID: uuid.NewString(), CreatedAt: now, LeaseID: sourceGrant.LeaseID, ConfigurationRevision: fmt.Sprint(sourceGrant.ConfigurationRevision), SessionGeneration: "1", SLIID: measurement.ID, MeasurementRevision: "1", IntervalStart: f.base.Add(-time.Minute), IntervalEnd: f.base, Outcome: sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: "query"}}
 	if result, err := IngestAgentObservation(t.Context(), f.databaseURL, sourceCredential.ID, sourceCredential.Verifier, item, clock); err != nil || result.Status != "accepted" {

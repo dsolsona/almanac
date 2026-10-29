@@ -29,28 +29,30 @@ func (operations *savedConnectionTestOperations) PostSavedDatasourceConnectionTe
 	return operations.response, nil
 }
 
-const validSLIResponse = `{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"requests","display_name":"Requests","version":"1","measurement_revision":"1","datasource_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","datasource_version":"1","agent_id":"4b13e073-3c86-4a7f-b7e5-c15e9626e71c","agent_reachability":"connected","collection_progress":"idle","measurement_kind":"event_counts","component_mode":"interval_count","good_query":"vector(99)","total_query":"vector(100)","polling_interval_seconds":60,"settling_delay_seconds":60,"effective_from":"2026-10-27T11:58:00Z","activated_at":null,"activation_state":"preparing","freshness":"unknown","latest_observation":null,"last_attempt_at":null,"last_observation_at":null,"next_expected_execution_at":null,"created_at":"2026-10-27T12:00:20Z","updated_at":"2026-10-27T12:00:20Z"}`
+const validSLIResponse = `{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"requests","display_name":"Requests","version":"1","measurement_revision":"1","datasource_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c","datasource_version":"1","agent_id":"4b13e073-3c86-4a7f-b7e5-c15e9626e71c","agent_reachability":"connected","collection_progress":"idle","measurement_kind":"event_counts","component_mode":"interval_count","good_query":"vector(99)","total_query":"vector(100)","polling_interval_seconds":60,"settling_delay_seconds":60,"effective_from":"2026-10-27T11:58:00Z","activated_at":null,"activation_state":"preparing","freshness":"unknown","latest_observation":null,"last_attempt_at":null,"last_observation_at":null,"next_expected_execution_at":null,"datasource_display_name":"Production metrics","recent_measurements":[],"linked_slos":{"items":[],"total_count":0},"created_at":"2026-10-27T12:00:20Z","updated_at":"2026-10-27T12:00:20Z"}`
 
 type sliListOperations struct {
 	setupclient.DatasourceOperations
 	response *http.Response
+	params   *api.ListSlisParams
 }
 
-func (o *sliListOperations) ListSlis(_ context.Context, _ *api.ListSlisParams, _ ...api.RequestEditorFn) (*http.Response, error) {
+func (o *sliListOperations) ListSlis(_ context.Context, params *api.ListSlisParams, _ ...api.RequestEditorFn) (*http.Response, error) {
+	o.params = params
 	return o.response, nil
 }
 
-func TestSLIListAcceptsMaxEscapedPageAndRejectsOversize(t *testing.T) {
+func TestSLIListAcceptsBoundedProjectionAndRejectsOversize(t *testing.T) {
 	query, err := json.Marshal(strings.Repeat("\x01", 4096))
 	if err != nil {
 		t.Fatal(err)
 	}
 	item := strings.Replace(validSLIResponse, `"good_query":"vector(99)"`, `"good_query":`+string(query), 1)
 	item = strings.Replace(item, `"total_query":"vector(100)"`, `"total_query":`+string(query), 1)
-	body := `{"items":[` + strings.TrimSuffix(strings.Repeat(item+",", 200), ",") + `],"next_cursor":""}`
+	body := `{"items":[` + strings.TrimSuffix(strings.Repeat(item+",", 100), ",") + `],"next_cursor":""}`
 	ops := &sliListOperations{response: &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}}
 	client := New(ops, nil)
-	if _, err := client.ListSLIs(t.Context(), 200, ""); err != nil {
+	if _, err := client.ListSLIs(t.Context(), 100, "", "", ""); err != nil {
 		t.Fatalf("valid escaped page rejected: %v", err)
 	}
 	padded := `{"items":[` + validSLIResponse + `],"next_cursor":""}` + strings.Repeat(" ", 10<<20)
@@ -58,8 +60,38 @@ func TestSLIListAcceptsMaxEscapedPageAndRejectsOversize(t *testing.T) {
 		t.Fatal("oversized fixture must remain a valid page")
 	}
 	ops.response = &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(padded))}
-	if _, err := client.ListSLIs(t.Context(), 200, ""); err == nil {
+	if _, err := client.ListSLIs(t.Context(), 100, "", "", ""); err == nil {
 		t.Fatal("oversized page accepted")
+	}
+}
+
+func TestSLIListCarriesUnicodeSearchAndDatasourceFilter(t *testing.T) {
+	ops := &sliListOperations{response: &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"items":[],"next_cursor":""}`))}}
+	client := New(ops, nil)
+	datasourceID := "b13e0739-3c86-4a7f-b7e5-c15e9626e71c"
+	if _, err := client.ListSLIs(t.Context(), 50, "", "café", datasourceID); err != nil {
+		t.Fatalf("Unicode SLI search failed: %v", err)
+	}
+	if ops.params == nil || ops.params.Q == nil || *ops.params.Q != "café" || ops.params.DatasourceId == nil || ops.params.DatasourceId.String() != datasourceID {
+		t.Fatalf("SLI filters = %+v", ops.params)
+	}
+}
+
+func TestSLIListValidationAcceptsCanonicalZeroAndCodepointBoundedNames(t *testing.T) {
+	zero := strings.Replace(validSLIResponse, `"recent_measurements":[]`, `"recent_measurements":[{"interval_start":"2026-10-27T11:58:00Z","interval_end":"2026-10-27T11:59:00Z","state":"zero_traffic","good_count":"0.000000000000","total_count":"0.000000000000"}]`, 1)
+	if !validSliList([]byte(zero)) {
+		t.Fatal("exact decimal zero was rejected as zero traffic")
+	}
+	unicodeName := strings.Repeat("🚀", 128)
+	unicodePage := strings.Replace(validSLIResponse, `"datasource_display_name":"Production metrics"`, `"datasource_display_name":"`+unicodeName+`"`, 1)
+	linked := `"linked_slos":{"items":[{"id":"8ed93d7e-51e3-4a3e-9222-3e8a612de20a","name":"valid-slo","display_name":"` + unicodeName + `"}],"total_count":1}`
+	unicodePage = strings.Replace(unicodePage, `"linked_slos":{"items":[],"total_count":0}`, linked, 1)
+	if !validSliList([]byte(unicodePage)) {
+		t.Fatal("128 Unicode codepoint projection names were rejected")
+	}
+	tooLong := strings.Replace(unicodePage, unicodeName, strings.Repeat("🚀", 129), 1)
+	if validSliList([]byte(tooLong)) {
+		t.Fatal("129-codepoint projection name was accepted")
 	}
 }
 

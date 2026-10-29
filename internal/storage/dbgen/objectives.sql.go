@@ -64,6 +64,53 @@ func (q *Queries) AggregateSloObservations(ctx context.Context, arg AggregateSlo
 	return i, err
 }
 
+const countLiveSloOverviewSnapshots = `-- name: CountLiveSloOverviewSnapshots :one
+SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots WHERE expires_at>$1
+`
+
+func (q *Queries) CountLiveSloOverviewSnapshots(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveSloOverviewSnapshots, expiresAt)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countLiveSloOverviewSnapshotsForSession = `-- name: CountLiveSloOverviewSnapshotsForSession :one
+SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots
+WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3
+`
+
+type CountLiveSloOverviewSnapshotsForSessionParams struct {
+	ActorID         pgtype.UUID        `json:"actor_id"`
+	SessionVerifier []byte             `json:"session_verifier"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CountLiveSloOverviewSnapshotsForSession(ctx context.Context, arg CountLiveSloOverviewSnapshotsForSessionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveSloOverviewSnapshotsForSession, arg.ActorID, arg.SessionVerifier, arg.ExpiresAt)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const deleteExpiredSloOverviewSnapshots = `-- name: DeleteExpiredSloOverviewSnapshots :exec
+WITH expired AS (
+    SELECT snapshot.id FROM public.almanac_slo_overview_snapshots snapshot
+    WHERE snapshot.expires_at <= $1 ORDER BY snapshot.expires_at, snapshot.id LIMIT $2 FOR UPDATE SKIP LOCKED
+)
+DELETE FROM public.almanac_slo_overview_snapshots s USING expired e WHERE s.id=e.id
+`
+
+type DeleteExpiredSloOverviewSnapshotsParams struct {
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Limit     int32              `json:"limit"`
+}
+
+func (q *Queries) DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error {
+	_, err := q.db.Exec(ctx, deleteExpiredSloOverviewSnapshots, arg.ExpiresAt, arg.Limit)
+	return err
+}
+
 const deleteObjectiveCreateReceipt = `-- name: DeleteObjectiveCreateReceipt :exec
 DELETE FROM public.almanac_objective_create_receipts WHERE actor_id=$1 AND operation=$2 AND idempotency_key=$3 AND expires_at <= $4
 `
@@ -82,6 +129,15 @@ func (q *Queries) DeleteObjectiveCreateReceipt(ctx context.Context, arg DeleteOb
 		arg.IdempotencyKey,
 		arg.ExpiresAt,
 	)
+	return err
+}
+
+const deleteSloOverviewSnapshot = `-- name: DeleteSloOverviewSnapshot :exec
+DELETE FROM public.almanac_slo_overview_snapshots WHERE id=$1
+`
+
+func (q *Queries) DeleteSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSloOverviewSnapshot, id)
 	return err
 }
 
@@ -113,6 +169,20 @@ func (q *Queries) FindObjectiveCreateReceipt(ctx context.Context, arg FindObject
 		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const finishSloOverviewSnapshot = `-- name: FinishSloOverviewSnapshot :exec
+UPDATE public.almanac_slo_overview_snapshots SET state='ready',payload_bytes=$2 WHERE id=$1 AND state='preparing'
+`
+
+type FinishSloOverviewSnapshotParams struct {
+	ID           pgtype.UUID `json:"id"`
+	PayloadBytes int32       `json:"payload_bytes"`
+}
+
+func (q *Queries) FinishSloOverviewSnapshot(ctx context.Context, arg FinishSloOverviewSnapshotParams) error {
+	_, err := q.db.Exec(ctx, finishSloOverviewSnapshot, arg.ID, arg.PayloadBytes)
+	return err
 }
 
 const getService = `-- name: GetService :one
@@ -194,6 +264,81 @@ func (q *Queries) GetSlo(ctx context.Context, id pgtype.UUID) (GetSloRow, error)
 		&i.HistoricalRequestedBy,
 		&i.HistoricalRequestedAt,
 		&i.SliValidFrom,
+	)
+	return i, err
+}
+
+const getSloOperationalContext = `-- name: GetSloOperationalContext :one
+SELECT sli.id AS sli_id, sli.name AS sli_name, sli.display_name AS sli_display_name,
+       m.revision AS measurement_revision, m.good_query, m.total_query,
+       datasource.id AS datasource_id, datasource.display_name AS datasource_display_name,
+       datasource.polling_interval_seconds, datasource.settling_delay_seconds
+FROM public.almanac_sli_measurements m
+JOIN public.almanac_slis sli ON sli.id=m.sli_id
+JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+WHERE m.sli_id=$1 AND m.revision=$2
+`
+
+type GetSloOperationalContextParams struct {
+	SliID    pgtype.UUID `json:"sli_id"`
+	Revision int64       `json:"revision"`
+}
+
+type GetSloOperationalContextRow struct {
+	SliID                  pgtype.UUID `json:"sli_id"`
+	SliName                string      `json:"sli_name"`
+	SliDisplayName         string      `json:"sli_display_name"`
+	MeasurementRevision    int64       `json:"measurement_revision"`
+	GoodQuery              string      `json:"good_query"`
+	TotalQuery             string      `json:"total_query"`
+	DatasourceID           pgtype.UUID `json:"datasource_id"`
+	DatasourceDisplayName  string      `json:"datasource_display_name"`
+	PollingIntervalSeconds int32       `json:"polling_interval_seconds"`
+	SettlingDelaySeconds   int32       `json:"settling_delay_seconds"`
+}
+
+func (q *Queries) GetSloOperationalContext(ctx context.Context, arg GetSloOperationalContextParams) (GetSloOperationalContextRow, error) {
+	row := q.db.QueryRow(ctx, getSloOperationalContext, arg.SliID, arg.Revision)
+	var i GetSloOperationalContextRow
+	err := row.Scan(
+		&i.SliID,
+		&i.SliName,
+		&i.SliDisplayName,
+		&i.MeasurementRevision,
+		&i.GoodQuery,
+		&i.TotalQuery,
+		&i.DatasourceID,
+		&i.DatasourceDisplayName,
+		&i.PollingIntervalSeconds,
+		&i.SettlingDelaySeconds,
+	)
+	return i, err
+}
+
+const getSloOverviewSnapshot = `-- name: GetSloOverviewSnapshot :one
+SELECT id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urgency,page_limit,
+       group_counts,state,payload_bytes,created_at,expires_at
+FROM public.almanac_slo_overview_snapshots WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (AlmanacSloOverviewSnapshot, error) {
+	row := q.db.QueryRow(ctx, getSloOverviewSnapshot, id)
+	var i AlmanacSloOverviewSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.CursorSecret,
+		&i.ActorID,
+		&i.SessionVerifier,
+		&i.Role,
+		&i.QueryText,
+		&i.ServiceID,
+		&i.Urgency,
+		&i.PageLimit,
+		&i.GroupCounts,
+		&i.State,
+		&i.PayloadBytes,
+		&i.CreatedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -316,6 +461,236 @@ func (q *Queries) InsertSloDefinition(ctx context.Context, arg InsertSloDefiniti
 	return err
 }
 
+const insertSloOverviewSnapshot = `-- name: InsertSloOverviewSnapshot :exec
+INSERT INTO public.almanac_slo_overview_snapshots
+(id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urgency,page_limit,group_counts,state,payload_bytes,created_at,expires_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'preparing',0,$11,$12)
+`
+
+type InsertSloOverviewSnapshotParams struct {
+	ID              pgtype.UUID        `json:"id"`
+	CursorSecret    []byte             `json:"cursor_secret"`
+	ActorID         pgtype.UUID        `json:"actor_id"`
+	SessionVerifier []byte             `json:"session_verifier"`
+	Role            string             `json:"role"`
+	QueryText       string             `json:"query_text"`
+	ServiceID       pgtype.UUID        `json:"service_id"`
+	Urgency         pgtype.Text        `json:"urgency"`
+	PageLimit       int32              `json:"page_limit"`
+	GroupCounts     []byte             `json:"group_counts"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertSloOverviewSnapshot(ctx context.Context, arg InsertSloOverviewSnapshotParams) error {
+	_, err := q.db.Exec(ctx, insertSloOverviewSnapshot,
+		arg.ID,
+		arg.CursorSecret,
+		arg.ActorID,
+		arg.SessionVerifier,
+		arg.Role,
+		arg.QueryText,
+		arg.ServiceID,
+		arg.Urgency,
+		arg.PageLimit,
+		arg.GroupCounts,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertSloOverviewSnapshotItem = `-- name: InsertSloOverviewSnapshotItem :exec
+INSERT INTO public.almanac_slo_overview_snapshot_items(snapshot_id,ordinal,urgency,payload,payload_bytes)
+VALUES ($1,$2,$3,$4,$5)
+`
+
+type InsertSloOverviewSnapshotItemParams struct {
+	SnapshotID   pgtype.UUID `json:"snapshot_id"`
+	Ordinal      int32       `json:"ordinal"`
+	Urgency      string      `json:"urgency"`
+	Payload      []byte      `json:"payload"`
+	PayloadBytes int32       `json:"payload_bytes"`
+}
+
+func (q *Queries) InsertSloOverviewSnapshotItem(ctx context.Context, arg InsertSloOverviewSnapshotItemParams) error {
+	_, err := q.db.Exec(ctx, insertSloOverviewSnapshotItem,
+		arg.SnapshotID,
+		arg.Ordinal,
+		arg.Urgency,
+		arg.Payload,
+		arg.PayloadBytes,
+	)
+	return err
+}
+
+const listOperationalSloDefinitions = `-- name: ListOperationalSloDefinitions :many
+SELECT s.id, s.name, s.display_name, s.version, s.definition_revision,
+       s.created_at, s.updated_at, d.service_id, service.display_name AS service_display_name,
+       d.sli_id, sli.name AS sli_name, sli.display_name AS sli_display_name,
+       d.measurement_revision, d.target::text AS target, d.rolling_window_seconds,
+       d.cadence_seconds, d.activated_at, d.evaluation_valid_from,
+       d.historical_requested_by, d.historical_requested_at,
+       measurement.effective_from AS sli_valid_from, measurement.good_query, measurement.total_query,
+       datasource.id AS datasource_id, datasource.display_name AS datasource_display_name,
+       datasource.polling_interval_seconds, datasource.settling_delay_seconds
+FROM public.almanac_slos s
+JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+JOIN public.almanac_services service ON service.id=d.service_id
+JOIN public.almanac_slis sli ON sli.id=d.sli_id
+JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=d.sli_id AND measurement.revision=d.measurement_revision
+JOIN public.almanac_datasources datasource ON datasource.id=measurement.datasource_id
+WHERE ($2::text IS NULL OR strpos(lower(s.name || ' ' || s.display_name), lower($2::text)) > 0)
+  AND ($3::uuid IS NULL OR d.service_id=$3::uuid)
+ORDER BY lower(s.name), s.id LIMIT $1
+`
+
+type ListOperationalSloDefinitionsParams struct {
+	Limit     int32       `json:"limit"`
+	QueryText pgtype.Text `json:"query_text"`
+	ServiceID pgtype.UUID `json:"service_id"`
+}
+
+type ListOperationalSloDefinitionsRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	Name                   string             `json:"name"`
+	DisplayName            string             `json:"display_name"`
+	Version                int64              `json:"version"`
+	DefinitionRevision     int64              `json:"definition_revision"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ServiceID              pgtype.UUID        `json:"service_id"`
+	ServiceDisplayName     string             `json:"service_display_name"`
+	SliID                  pgtype.UUID        `json:"sli_id"`
+	SliName                string             `json:"sli_name"`
+	SliDisplayName         string             `json:"sli_display_name"`
+	MeasurementRevision    int64              `json:"measurement_revision"`
+	Target                 string             `json:"target"`
+	RollingWindowSeconds   int64              `json:"rolling_window_seconds"`
+	CadenceSeconds         int32              `json:"cadence_seconds"`
+	ActivatedAt            pgtype.Timestamptz `json:"activated_at"`
+	EvaluationValidFrom    pgtype.Timestamptz `json:"evaluation_valid_from"`
+	HistoricalRequestedBy  pgtype.UUID        `json:"historical_requested_by"`
+	HistoricalRequestedAt  pgtype.Timestamptz `json:"historical_requested_at"`
+	SliValidFrom           pgtype.Timestamptz `json:"sli_valid_from"`
+	GoodQuery              string             `json:"good_query"`
+	TotalQuery             string             `json:"total_query"`
+	DatasourceID           pgtype.UUID        `json:"datasource_id"`
+	DatasourceDisplayName  string             `json:"datasource_display_name"`
+	PollingIntervalSeconds int32              `json:"polling_interval_seconds"`
+	SettlingDelaySeconds   int32              `json:"settling_delay_seconds"`
+}
+
+func (q *Queries) ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error) {
+	rows, err := q.db.Query(ctx, listOperationalSloDefinitions, arg.Limit, arg.QueryText, arg.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperationalSloDefinitionsRow{}
+	for rows.Next() {
+		var i ListOperationalSloDefinitionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Version,
+			&i.DefinitionRevision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ServiceID,
+			&i.ServiceDisplayName,
+			&i.SliID,
+			&i.SliName,
+			&i.SliDisplayName,
+			&i.MeasurementRevision,
+			&i.Target,
+			&i.RollingWindowSeconds,
+			&i.CadenceSeconds,
+			&i.ActivatedAt,
+			&i.EvaluationValidFrom,
+			&i.HistoricalRequestedBy,
+			&i.HistoricalRequestedAt,
+			&i.SliValidFrom,
+			&i.GoodQuery,
+			&i.TotalQuery,
+			&i.DatasourceID,
+			&i.DatasourceDisplayName,
+			&i.PollingIntervalSeconds,
+			&i.SettlingDelaySeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOperationalSloFacts = `-- name: ListOperationalSloFacts :many
+SELECT c.interval_start, c.interval_end, c.outcome,
+       (CASE WHEN c.outcome='observed' THEN v.good_count::text END)::text AS good,
+       (CASE WHEN c.outcome='observed' THEN v.total_count::text END)::text AS total,
+       c.recorded_at
+FROM public.almanac_sli_coverage c
+LEFT JOIN public.almanac_sli_observation_values v
+  ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision
+WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start >= $3 AND c.interval_end <= $4
+ORDER BY c.interval_start LIMIT $5
+`
+
+type ListOperationalSloFactsParams struct {
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	IntervalStart       pgtype.Timestamptz `json:"interval_start"`
+	IntervalEnd         pgtype.Timestamptz `json:"interval_end"`
+	Limit               int32              `json:"limit"`
+}
+
+type ListOperationalSloFactsRow struct {
+	IntervalStart pgtype.Timestamptz `json:"interval_start"`
+	IntervalEnd   pgtype.Timestamptz `json:"interval_end"`
+	Outcome       string             `json:"outcome"`
+	Good          string             `json:"good"`
+	Total         string             `json:"total"`
+	RecordedAt    pgtype.Timestamptz `json:"recorded_at"`
+}
+
+func (q *Queries) ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error) {
+	rows, err := q.db.Query(ctx, listOperationalSloFacts,
+		arg.SliID,
+		arg.MeasurementRevision,
+		arg.IntervalStart,
+		arg.IntervalEnd,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperationalSloFactsRow{}
+	for rows.Next() {
+		var i ListOperationalSloFactsRow
+		if err := rows.Scan(
+			&i.IntervalStart,
+			&i.IntervalEnd,
+			&i.Outcome,
+			&i.Good,
+			&i.Total,
+			&i.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServices = `-- name: ListServices :many
 SELECT id, name, display_name, version, created_at, updated_at FROM public.almanac_services
 WHERE (created_at, id) > ($1, $2::uuid) ORDER BY created_at, id LIMIT $3
@@ -344,6 +719,42 @@ func (q *Queries) ListServices(ctx context.Context, arg ListServicesParams) ([]A
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSloOverviewSnapshotItems = `-- name: ListSloOverviewSnapshotItems :many
+SELECT ordinal, payload FROM public.almanac_slo_overview_snapshot_items
+WHERE snapshot_id=$1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3
+`
+
+type ListSloOverviewSnapshotItemsParams struct {
+	SnapshotID pgtype.UUID `json:"snapshot_id"`
+	Ordinal    int32       `json:"ordinal"`
+	Limit      int32       `json:"limit"`
+}
+
+type ListSloOverviewSnapshotItemsRow struct {
+	Ordinal int32  `json:"ordinal"`
+	Payload []byte `json:"payload"`
+}
+
+func (q *Queries) ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloOverviewSnapshotItemsParams) ([]ListSloOverviewSnapshotItemsRow, error) {
+	rows, err := q.db.Query(ctx, listSloOverviewSnapshotItems, arg.SnapshotID, arg.Ordinal, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSloOverviewSnapshotItemsRow{}
+	for rows.Next() {
+		var i ListSloOverviewSnapshotItemsRow
+		if err := rows.Scan(&i.Ordinal, &i.Payload); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

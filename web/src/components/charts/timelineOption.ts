@@ -22,6 +22,7 @@ function coverageLabel(coverage: string): string {
     case 'known-empty': return 'Known empty';
     case 'expired': return 'Expired history';
     case 'not-applicable': return 'Not applicable';
+    case 'stale': return 'Stale';
     case 'missing': return 'Missing';
     case 'partial': return 'Partial';
     default: return 'Complete';
@@ -41,17 +42,28 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     axisLabel: { show: index === lanes - 1, color: labelText, hideOverlap: true, formatter: (value: number) => {
       const date = new Date(value);
       const short = Date.parse(chart.end) - Date.parse(chart.start) < 86_400_000;
+      if(chart.timeZone==='local') return short ? date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}) : date.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'});
       return short ? `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')} UTC` : `${date.toISOString().slice(0, 10)} UTC`;
     } }, splitLine: { show: false }, axisPointer: { show: true, label: { show: false } },
   }));
-  const yAxis = chart.lanes.map((lane, index) => ({
-    type: 'value' as const, gridIndex: index, name: `${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
+  const yAxis = chart.lanes.map((lane, index) => {
+    const values=model.series.filter(item=>item.lane===index).flatMap(item=>[...item.data.map(point=>point.value),...item.partial.map(point=>point.value)]).filter((value):value is number=>value!==null);
+    const references=chart.referenceLines?.filter(line=>line.lane===lane.id).map(line=>Number(line.value)).filter(Number.isFinite)??[];
+    const referenceExtent=references.length ? (()=>{
+      const low=Math.min(...values,...references),high=Math.max(...values,...references);
+      if(values.length&&references.every(value=>value>=Math.min(...values)&&value<=Math.max(...values)))return {};
+      const padding=Math.max((high-low)*0.05,Math.abs(low)*0.05,Math.abs(high)*0.05,1e-9);
+      return {min:low-padding,max:high+padding};
+    })() : {};
+    return {
+    type: 'value' as const, gridIndex: index, ...referenceExtent, name: chart.showLaneNames===false?'':`${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
     nameGap: 46, nameTextStyle: { color: labelText, fontSize: 11 }, axisLabel: {
       color: labelText, fontSize: 10, margin: 4, hideOverlap: true,
       showMaxLabel: true, showMinLabel: true,
+      formatter: (value:string|number)=>{const numeric=Number(value);return Number.isFinite(numeric)?String(Number(numeric.toPrecision(6))):String(value);},
     }, splitNumber: 2,
     axisLine: { show: true, lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } },
-  }));
+  };});
   const series = model.series.flatMap((item, index) => {
     const lane = chart.lanes[item.lane]!;
     const color = colors[index % colors.length]!;
@@ -62,6 +74,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     return [
       { id: `${seriesId}-line`, name: `${lane.label} · ${item.label}`, type: 'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
         showSymbol: false, connectNulls: false, animation: false, itemStyle: { color }, lineStyle: { color, width: 2 },
+        ...(item.seriesIndex===0 && chart.referenceLines?.some(line=>line.lane===lane.id) ? {markLine:{silent:true,symbol:['none','none'],lineStyle:{color:palette.crosshair,type:'dashed',width:1},label:{color:palette.labelText,fontSize:10,position:'insideEndBottom',align:'right'},data:chart.referenceLines.filter(line=>line.lane===lane.id).map(line=>({yAxis:Number(line.value),name:line.label,label:{formatter:line.label}}))}} : {}),
         data: item.data.map((point) => [point.timestamp, point.value]),
       },
       ...(isolated.length ? [{ id: `${seriesId}-isolated`, name: `${lane.label} · ${item.label}`, type: 'scatter' as const,
@@ -99,7 +112,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
           const display = point.value === null ? label : `${escapeHTML(point.value)} ${escapeHTML(lane.unit)} · ${label}`;
           rows.push(`<div>${escapeHTML(lane.label)} · ${escapeHTML(item.label)}: <strong>${display}</strong></div>`);
         }
-        const label = `${exactTime.slice(0, 16).replace('T', ' ')} UTC`;
+        const label = chart.timeZone==='local' ? new Date(time).toLocaleString() : `${exactTime.slice(0, 16).replace('T', ' ')} UTC`;
         return `<div><strong>${label}</strong>${rows.join('') || '<div>No sample at this timestamp</div>'}</div>`;
       },
     },

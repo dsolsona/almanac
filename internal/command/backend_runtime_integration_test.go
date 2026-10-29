@@ -224,7 +224,7 @@ func testExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T, components 
 		t.Fatal("decode readiness failed")
 	}
 	response.Body.Close()
-	if response.StatusCode != http.StatusOK || health.Component != api.Backend || health.Status != api.Ok {
+	if response.StatusCode != http.StatusOK || health.Component != api.Backend || health.Status != api.HealthResponseStatusOk {
 		t.Fatal("backend did not report ready after provisioning")
 	}
 	duplicateCtx, cancelDuplicate := context.WithTimeout(t.Context(), 5*time.Second)
