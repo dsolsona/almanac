@@ -9,15 +9,19 @@ The [first objective plan](plans/0021-first-objective.md) separates the initial
 usable SLO journey from the remaining F3 reporting, import and annotation work.
 Users can create services and single-indicator request-count SLOs, evaluate fixed
 rolling windows, and inspect exact success, budget, burn and qualified coverage
-through UI/API/CLI. Product source `fa071adf` passed 279 web, 378 Go, 370 race and
-166 PostgreSQL integration tests. A test-only catalogue expectation correction then
-passed all 108 browser checks on unchanged product code. The normal Compose journey
-and cancellation cleanup passed; desktop/mobile forms and results in both themes
-were inspected. The task records the failed wrapper stages, their corrections,
-the overnight interruption and earlier unexplained browser response-read failures.
-This completes the first usable F3 increment, not the whole milestone. Target
+through UI/API/CLI. The PR #46 review candidate at source `33b85ced` passed the full
+Linux gate: 282 web, 379 Go, 371 race, 166 PostgreSQL integration and 108 browser
+tests. Normal Compose and cancellation cleanup passed; recovered SLO results were
+inspected in light desktop and dark mobile layouts. The three Greptile findings
+are corrected: evaluation retries serialization conflicts with fresh authorization,
+historical-create recovery preserves its body/key, and sign-out invalidates delayed
+navigation. The task records the original regressions and test-helper corrections.
+This is the first usable F3 increment. Target
 revisions, calendar windows, reports, OpenSLO and annotations remain in the plan.
-The increment is prepared for PR review; it has not been deployed to the operator app.
+The increment is published in PR #46; it has not been deployed to the operator app.
+F3-T01 remains in review because an earlier run again encountered the existing
+intermittent browser response-read failure before the SLO journey. That investigation
+remains open; the final passing gate is not presented as a fix for it.
 
 [F2-T32](tasks/F2-T32.md) is verified on `fix/stack-review`, based on `bcd636b`.
 It repairs thirteen review findings across the SLI and agent stack: empty-history

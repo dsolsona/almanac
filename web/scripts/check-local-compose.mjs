@@ -531,7 +531,7 @@ async function checkCollectedSLI(page, agentID) {
   assert.equal(evidence.total_count, '100');
   stage = 'real Compose first SLO journey';
   const sloBrowserResult = await command(process.execPath, [join(root, 'web/scripts/check-slo-browser.mjs')], {
-    input: JSON.stringify({ url, spki, login: 'admin', password: permanent, sli_id: evidence.sli_id, artifacts }), timeout: 125_000 });
+    input: JSON.stringify({ url, spki, certificate, login: 'admin', password: permanent, sli_id: evidence.sli_id, artifacts }), timeout: 125_000 });
   assert.equal(sloBrowserResult.trim(), 'PASS browser-slo-journey');
   stage = 'capture observed SLI in both themes and mobile layout';
   await page.goto(`${url}/slis/${evidence.sli_id}`);

@@ -12,6 +12,7 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -20,6 +21,40 @@ type EvaluateSloInput struct {
 	ID                             string
 	At, TimelineStart, TimelineEnd *time.Time
 	Now                            func() time.Time
+}
+
+// Keep database details private while allowing the evaluation to retry the
+// whole transaction when PostgreSQL rejects its repeatable-read snapshot.
+var errReadSerialization = errors.New("storage: read transaction serialization failure")
+
+func readTransactionError(ctx context.Context, message string, err error) error {
+	if ctx.Err() == nil {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "40001" {
+			return errReadSerialization
+		}
+	}
+	return operationError(ctx, message, err)
+}
+
+const sloEvaluationAttempts = 3
+
+func retrySloEvaluation(ctx context.Context, attempt func() (api.SloEvaluation, error)) (api.SloEvaluation, error) {
+	for range sloEvaluationAttempts {
+		if err := ctx.Err(); err != nil {
+			return api.SloEvaluation{}, operationError(ctx, "storage: SLO evaluation cancelled", err)
+		}
+		result, err := attempt()
+		if err == nil {
+			return result, nil
+		}
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "40001" {
+			err = errReadSerialization
+		}
+		if !errors.Is(err, errReadSerialization) {
+			return api.SloEvaluation{}, err
+		}
+	}
+	return api.SloEvaluation{}, errReadSerialization
 }
 
 func optionalTime(v pgtype.Timestamptz) *time.Time {
@@ -38,6 +73,12 @@ func EvaluateSlo(ctx context.Context, databaseURL string, input EvaluateSloInput
 	if (input.TimelineStart == nil) != (input.TimelineEnd == nil) {
 		return api.SloEvaluation{}, ErrObjectiveTimelineRange
 	}
+	return retrySloEvaluation(ctx, func() (api.SloEvaluation, error) {
+		return evaluateSloAttempt(ctx, databaseURL, input, id)
+	})
+}
+
+func evaluateSloAttempt(ctx context.Context, databaseURL string, input EvaluateSloInput, id pgtype.UUID) (api.SloEvaluation, error) {
 	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
 	if err != nil {
 		return api.SloEvaluation{}, err
@@ -96,11 +137,11 @@ func EvaluateSlo(ctx context.Context, databaseURL string, input EvaluateSloInput
 	}
 	aggregate, err := q.AggregateSloObservations(ctx, dbgen.AggregateSloObservationsParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, IntervalStart: timestamp(retainedStart), IntervalEnd: timestamp(end)})
 	if err != nil {
-		return api.SloEvaluation{}, operationError(ctx, "storage: SLO aggregate failed", err)
+		return api.SloEvaluation{}, readTransactionError(ctx, "storage: SLO aggregate failed", err)
 	}
 	facts, err := q.ListSloTimelineFacts(ctx, dbgen.ListSloTimelineFactsParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, IntervalStart: timestamp(maxTime(intervalStart, retainedStart)), IntervalEnd: timestamp(intervalEnd)})
 	if err != nil {
-		return api.SloEvaluation{}, operationError(ctx, "storage: SLO timeline failed", err)
+		return api.SloEvaluation{}, readTransactionError(ctx, "storage: SLO timeline failed", err)
 	}
 	missing := expected - expired - aggregate.ObservedIntervals - aggregate.KnownEmptyIntervals
 	if missing < 0 {

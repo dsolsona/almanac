@@ -6,10 +6,12 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/agentprotocol"
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
@@ -300,6 +302,62 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	if evaluation.Quality.Freshness != "fresh" {
 		t.Fatalf("settled latest observation unexpectedly stale: %+v", evaluation.Quality)
+	}
+	// Establish the repeatable-read snapshot while another transaction owns the
+	// user lock and has updated this session. The session lock then sees a row
+	// changed after the snapshot and PostgreSQL aborts that transaction with 40001.
+	lockTx, err = locker.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lockTx.Rollback(t.Context())
+	if _, err := lockTx.Exec(t.Context(), `SELECT id FROM public.almanac_users WHERE id=(SELECT user_id FROM public.almanac_sessions WHERE verifier=$1) FOR UPDATE`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockTx.Exec(t.Context(), `UPDATE public.almanac_sessions SET last_seen_at=last_seen_at + interval '1 microsecond' WHERE verifier=$1`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	type evaluationResult struct {
+		value api.SloEvaluation
+		err   error
+	}
+	evaluations := make(chan evaluationResult, 1)
+	go func() {
+		value, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, Now: clock})
+		evaluations <- evaluationResult{value, err}
+	}()
+	waitForAgentQueryWait(t, observer, "%FROM public.almanac_users%")
+	if err := lockTx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	retried := <-evaluations
+	if retried.err != nil || !reflect.DeepEqual(retried.value.Performance, evaluation.Performance) || !reflect.DeepEqual(retried.value.Quality, evaluation.Quality) || !reflect.DeepEqual(retried.value.Timeline, evaluation.Timeline) {
+		t.Fatalf("evaluation after concurrent session update: %+v, %v", retried.value, retried.err)
+	}
+	lockTx, err = locker.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lockTx.Rollback(t.Context())
+	if _, err := lockTx.Exec(t.Context(), `SELECT id FROM public.almanac_users WHERE id=(SELECT user_id FROM public.almanac_sessions WHERE verifier=$1) FOR UPDATE`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockTx.Exec(t.Context(), `UPDATE public.almanac_sessions SET restricted=true WHERE verifier=$1`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		value, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, Now: clock})
+		evaluations <- evaluationResult{value, err}
+	}()
+	waitForAgentQueryWait(t, observer, "%FROM public.almanac_users%")
+	if err := lockTx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if retried = <-evaluations; !errors.Is(retried.err, ErrAgentForbidden) {
+		t.Fatalf("evaluation must recheck restricted session after retry: %v", retried.err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sessions SET restricted=false WHERE verifier=$1`, f.verifier[:]); err != nil {
+		t.Fatal(err)
 	}
 	setIntegrationUserRole(t, f, "viewer")
 	if _, _, err := CreateObjective(t.Context(), f.databaseURL, CreateObjectiveInput{Proof: proof, Name: "denied", DisplayName: "Denied", IdempotencyKey: "denied", RequestID: "denied", Now: clock}, false); !errors.Is(err, ErrAgentForbidden) {

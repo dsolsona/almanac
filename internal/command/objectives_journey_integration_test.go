@@ -376,7 +376,8 @@ func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []b
 		Password  string `json:"password"`
 		SliID     string `json:"sli_id"`
 		Artifacts string `json:"artifacts"`
-	}{baseURL, base64.StdEncoding.EncodeToString(hash[:]), login, password, sliID, artifacts}
+		CA        string `json:"certificate"`
+	}{baseURL, base64.StdEncoding.EncodeToString(hash[:]), login, password, sliID, artifacts, string(certificatePEM)}
 	input, err := json.Marshal(fixture)
 	if err != nil || len(input) > 16*1024 {
 		t.Fatal("encode objective browser fixture failed")

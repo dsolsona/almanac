@@ -100,6 +100,7 @@ export function SlosPage({context}:{context:AuthContext}) {
   const isService=path.startsWith('/services/');
   const isNew=path==='/slos/new';
   const isList=path==='/slos';
+  useEffect(() => () => { generation.current++; }, []);
   useEffect(() => {
     const change = () => {
       const next = location.pathname + location.search;
@@ -205,16 +206,17 @@ export function SlosPage({context}:{context:AuthContext}) {
     if (!serviceIntent.current || serviceIntent.current.body !== body) {
       serviceIntent.current = { body, key: key(), uncertain: false };
     }
+    const intent = serviceIntent.current;
     const current = generation.current;
     setBusy(true);
     try {
-      const result = await sloClient.createService(JSON.parse(body), context, serviceIntent.current.key);
-      serviceIntent.current = null;
+      const result = await sloClient.createService(JSON.parse(body), context, intent.key);
+      if (serviceIntent.current === intent) serviceIntent.current = null;
       if (current !== generation.current) return;
       setServices(items => [...items, result]);
       setServiceID(result.id); setAddingService(false); setServiceDisplay(''); setServiceName('');
     } catch (failure) {
-      if (failure instanceof SloFailure && failure.uncertain && serviceIntent.current) serviceIntent.current.uncertain = true;
+      if (failure instanceof SloFailure && failure.uncertain && serviceIntent.current === intent) intent.uncertain = true;
       if (current === generation.current) setFormError(message(failure));
     } finally {
       if (current === generation.current) setBusy(false);
@@ -224,37 +226,41 @@ export function SlosPage({context}:{context:AuthContext}) {
   async function create(event: FormEvent) {
     event.preventDefault();
     setFormError('');
-    const targetFraction = percentTarget(target);
-    const problem = !display.trim() ? 'Enter a display name.'
-      : !namePattern.test(name) ? 'Use lowercase letters, numbers and hyphens for the SLO identifier.'
-      : !serviceID ? 'Select a service.'
-      : !selectedSli ? 'Select an SLI.'
-      : targetFraction === null ? 'Target must be from 0% up to but not including 100%.'
-      : !/^\d+$/.test(duration) || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 2147483647
-        ? 'Enter a positive whole window within the supported limit.'
-      : seconds % selectedSli.polling_interval_seconds !== 0
-        ? `The window must be a multiple of the ${selectedSli.polling_interval_seconds}-second collection interval.`
-      : historical && !historyStart ? 'The eligible historical range is unavailable. Refresh and try again.' : '';
-    if (problem) {
-      setFormError(problem);
-      heading.current?.querySelector('h1')?.focus();
-      return;
+    let intent = sloIntent.current;
+    if (!intent?.uncertain) {
+      const targetFraction = percentTarget(target);
+      const problem = !display.trim() ? 'Enter a display name.'
+        : !namePattern.test(name) ? 'Use lowercase letters, numbers and hyphens for the SLO identifier.'
+        : !serviceID ? 'Select a service.'
+        : !selectedSli ? 'Select an SLI.'
+        : targetFraction === null ? 'Target must be from 0% up to but not including 100%.'
+        : !/^\d+$/.test(duration) || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 2147483647
+          ? 'Enter a positive whole window within the supported limit.'
+        : seconds % selectedSli.polling_interval_seconds !== 0
+          ? `The window must be a multiple of the ${selectedSli.polling_interval_seconds}-second collection interval.`
+        : historical && !historyStart ? 'The eligible historical range is unavailable. Refresh and try again.' : '';
+      if (problem) {
+        setFormError(problem);
+        heading.current?.querySelector('h1')?.focus();
+        return;
+      }
+      const input: CreateSlo = {
+        name, display_name: display.trim(), service_id: serviceID, sli_id: sliID,
+        target: targetFraction!, rolling_window_seconds: seconds,
+        ...(historical ? { evaluation_valid_from: historyStart } : {}),
+      };
+      const body = JSON.stringify(input);
+      if (!intent || intent.body !== body) intent = { body, key: key(), uncertain: false };
+      sloIntent.current = intent;
     }
-    const input: CreateSlo = {
-      name, display_name: display.trim(), service_id: serviceID, sli_id: sliID,
-      target: targetFraction!, rolling_window_seconds: seconds,
-      ...(historical ? { evaluation_valid_from: historyStart } : {}),
-    };
-    const body = JSON.stringify(input);
-    if (!sloIntent.current || sloIntent.current.body !== body) sloIntent.current = { body, key: key(), uncertain: false };
     const current = generation.current;
     setBusy(true);
     try {
-      const result = await sloClient.create(input, context, sloIntent.current.key);
-      sloIntent.current = null;
+      const result = await sloClient.create(JSON.parse(intent.body) as CreateSlo, context, intent.key);
+      if (sloIntent.current === intent) sloIntent.current = null;
       if (current === generation.current) navigate(`/slos/${result.id}`);
     } catch (failure) {
-      if (failure instanceof SloFailure && failure.uncertain && sloIntent.current) sloIntent.current.uncertain = true;
+      if (failure instanceof SloFailure && failure.uncertain && sloIntent.current === intent) intent.uncertain = true;
       if (current === generation.current) {
         setFormError(message(failure));
         heading.current?.querySelector('h1')?.focus();
@@ -331,7 +337,7 @@ export function SlosPage({context}:{context:AuthContext}) {
       setBusy(true);void sloClient.list(cursor).then(x=>{if(current===generation.current){setList(v=>[...v,...x.items]);
       setCursor(x.next_cursor);}}).catch(e=>{if(current===generation.current)setError(message(e));}).finally(()=>{if(current===generation.current)setBusy(false);});}}>Load more SLOs</Button>}</>}
     {!loading&&isNew&&(!canWrite?<p>Editor or administrator access is required to create SLOs.</p>:<>
-      <p>Define an objective from an existing request-count SLI.</p>{slis.length===0?<div className="slo-empty">
+      <p>Define an objective from an existing request-count SLI.</p>{slis.length===0&&!frozen?<div className="slo-empty">
       <p>Create an SLI before creating an objective.</p>
       <a href="/slis" data-app-route>Go to SLIs</a>
       </div>:<>

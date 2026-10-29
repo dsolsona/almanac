@@ -376,7 +376,7 @@ func finishAgentRead(ctx context.Context, tx pgx.Tx, clock func() time.Time, sta
 		return ErrInvalidSession
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return operationError(ctx, "storage: agent read commit failed", err)
+		return readTransactionError(ctx, "storage: agent read commit failed", err)
 	}
 	return nil
 }
@@ -384,7 +384,7 @@ func readAuthorityError(ctx context.Context, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInvalidSession
 	}
-	return operationError(ctx, "storage: agent read authority lock failed", err)
+	return readTransactionError(ctx, "storage: agent read authority lock failed", err)
 }
 func normalizedAgentNow(clock func() time.Time) time.Time {
 	now := clock()
