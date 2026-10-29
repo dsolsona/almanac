@@ -723,8 +723,8 @@ VALUES ('owner-v2', $1, 'administrator', true, true, 1, $2, $2) RETURNING id`, t
 	}
 	closeIntegrationConn(conn)
 	result, err := Upgrade(t.Context(), databaseURL)
-	if err != nil || result.Applied != 18 || result.DatabaseSchemaVersion != 20 {
-		t.Fatalf("schema2 to 13 upgrade = %+v, %v", result, err)
+	if err != nil || result.Applied != 19 || result.DatabaseSchemaVersion != 21 {
+		t.Fatalf("schema2 to 21 upgrade = %+v, %v", result, err)
 	}
 	conn = integrationConnect(t, databaseURL)
 	var savedVerifier, savedEpoch, savedInstallation string

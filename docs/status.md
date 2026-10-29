@@ -1,7 +1,13 @@
 # Delivery status
 
-The latest combined candidate passes the real SLI/SLO browser journey and normal
-Compose acceptance. Linux build/unit and race stages pass. Its database-stage
+The prior combined candidate passed the real SLI/SLO browser journey and normal
+Compose acceptance. The current review corrections pass 254 focused cases in
+9.52 seconds and both selected PostgreSQL cases in 17.59 seconds. They restore
+known-empty operational reads, evaluable mixed-traffic days, globally bounded
+graph-gap retention, fresh overview refreshes, initial-error recovery controls and
+secondary urgency reasons, and align migration fixtures with schema 21. The
+current Linux build/unit and race stages pass; integration is running.
+The previous database-stage
 failure was traced to two fixture errors: a clock preceding session creation and
 rollback expectations that omitted migration 0021. Both corrected storage cases
 passed the fixed `slo-integration` check in 15.77 seconds (receipt
@@ -10,6 +16,11 @@ investigation remains unresolved; full Linux acceptance is still outstanding.
 The current work is published
 in [PR #47](https://github.com/dsolsona/almanac/pull/47). The maintainer requested
 continued implementation.
+
+Persistent test-time accounting is published in the verification tooling. Every
+completed run updates the local shared timing ledger; the existing report shows
+run counts, failures, invocation durations and overlapping wall time counted once.
+Earlier checks without receipts remain an explicit gap.
 
 ## Current state
 

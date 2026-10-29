@@ -204,14 +204,81 @@ func TestDailyComplianceUsesRollingResultsAndRetainsUncertainDays(t *testing.T) 
 	base.Observations = facts
 	series, summary, err = buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
 		series.Days[0].SloId, "1", "0.99", window, cadence)
+	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusMet || series.Days[0].Performance.Provisional || summary.MetDays != 1 || summary.EvaluableDays != 1 || series.Days[0].Quality.ZeroTrafficIntervals != 1 {
+		t.Fatalf("mixed quiet and positive rolling day = %+v summary=%+v err=%v", series, summary, err)
+	}
+
+	for index := range facts {
+		facts[index].Good, facts[index].Total = "98", "100"
+	}
+	facts[0].Good, facts[0].Total = "0", "0"
+	base.Observations = facts
+	series, summary, err = buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
+		series.Days[0].SloId, "1", "0.99", window, cadence)
+	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusViolated || summary.ViolatedDays != 1 || summary.EvaluableDays != 1 || series.Days[0].Quality.ZeroTrafficIntervals != 1 {
+		t.Fatalf("mixed quiet and violating rolling day = %+v summary=%+v err=%v", series, summary, err)
+	}
+
+	for index := range facts {
+		facts[index].Good, facts[index].Total = "0", "0"
+	}
+	base.Observations = facts
+	series, summary, err = buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
+		series.Days[0].SloId, "1", "0.99", window, cadence)
 	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusUnknown || !series.Days[0].Performance.Provisional || summary.UnknownDays != 1 || summary.EvaluableDays != 0 || series.Days[0].Explanation != "zero_traffic" {
-		t.Fatalf("zero-traffic rolling day = %+v summary=%+v err=%v", series, summary, err)
+		t.Fatalf("all-zero-traffic rolling day = %+v summary=%+v err=%v", series, summary, err)
 	}
 	if status, reason := dailyComplianceStatus(slo.WindowResult{RequestedStart: dayEnd.Add(-window), EligibleStart: dayEnd.Add(-30 * time.Minute), Expected: 30, Performance: "met"}, dayEnd, dayEnd.Add(-24*time.Hour), window, cadence); status != api.SloDailyComplianceDayStatusUnknown || reason != "shortened_window" {
 		t.Fatalf("shortened rolling day = %s %s", status, reason)
 	}
 	if status, reason := dailyComplianceStatus(slo.WindowResult{Performance: "not_applicable"}, dayEnd, dayEnd, window, cadence); status != api.SloDailyComplianceDayStatusNotApplicable || reason != "before_evaluation_validity" {
 		t.Fatalf("pre-validity day = %s %s", status, reason)
+	}
+}
+
+func TestOperationalSamplesKeepMultipleShortGapTransitionsWithinOverviewBudget(t *testing.T) {
+	cadence := time.Minute
+	start := time.Date(2026, 10, 29, 16, 0, 0, 0, time.UTC)
+	observations := make([]slo.Observation, 0, 298)
+	for index := range 300 {
+		if index == 101 || index == 104 {
+			continue
+		}
+		intervalStart := start.Add(time.Duration(index) * cadence)
+		observations = append(observations, slo.Observation{Start: intervalStart, End: intervalStart.Add(cadence), Received: intervalStart.Add(cadence), Outcome: "observed", Good: "100", Total: "100"})
+	}
+	base := slo.WindowInput{Now: start.Add(300 * cadence), ValidFrom: start, SliValidFrom: start, RetentionStart: start.Add(-time.Hour),
+		Cadence: cadence, Target: "0.99", FreshnessGrace: time.Hour, Observations: observations}
+	samples, err := buildOperationalSamples(context.Background(), base, start, start.Add(300*cadence), cadence, cadence, "1", "remaining_fraction", 30)
+	if err != nil {
+		t.Fatalf("two short gaps in one overview bucket: %v", err)
+	}
+	for _, want := range []time.Time{start.Add(102 * cadence), start.Add(103 * cadence), start.Add(105 * cadence), start.Add(106 * cadence)} {
+		if !slices.ContainsFunc(samples, func(sample api.SloOperationalSample) bool { return sample.EvaluationAt.Equal(want) }) {
+			t.Errorf("gap transition at %s was not retained; samples=%+v", want, samples)
+		}
+	}
+	if len(samples) > 120 {
+		t.Fatalf("overview returned %d samples, want at most 120", len(samples))
+	}
+}
+
+func TestOperationalSamplesRejectGloballyDenseCriticalPoints(t *testing.T) {
+	cadence := time.Minute
+	start := time.Date(2026, 10, 29, 18, 0, 0, 0, time.UTC)
+	observations := make([]slo.Observation, 0, 150)
+	for index := range 300 {
+		intervalStart := start.Add(time.Duration(index) * cadence)
+		if index%2 == 1 {
+			observations = append(observations, slo.Observation{Start: intervalStart, End: intervalStart.Add(cadence), Outcome: "complete_empty"})
+			continue
+		}
+		observations = append(observations, slo.Observation{Start: intervalStart, End: intervalStart.Add(cadence), Received: intervalStart.Add(cadence), Outcome: "observed", Good: "100", Total: "100"})
+	}
+	base := slo.WindowInput{Now: start.Add(300 * cadence), ValidFrom: start, SliValidFrom: start, RetentionStart: start.Add(-time.Hour),
+		Cadence: cadence, Target: "0.99", FreshnessGrace: time.Hour, Observations: observations}
+	if _, err := buildOperationalSamples(context.Background(), base, start, start.Add(300*cadence), cadence, cadence, "1", "remaining_fraction", 30); !errors.Is(err, ErrOperationalRangeDense) {
+		t.Fatalf("globally over-budget transitions error = %v, want ErrOperationalRangeDense", err)
 	}
 }
 

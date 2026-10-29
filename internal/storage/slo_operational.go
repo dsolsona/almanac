@@ -346,7 +346,7 @@ func dailyComplianceStatus(result slo.WindowResult, dayEnd, validFrom time.Time,
 	if result.EligibleStart.After(result.RequestedStart) || result.Expected != int64(window/cadence) {
 		return api.SloDailyComplianceDayStatusUnknown, "shortened_window"
 	}
-	if result.ZeroTraffic > 0 {
+	if result.State == "zero_traffic" {
 		return api.SloDailyComplianceDayStatusUnknown, "zero_traffic"
 	}
 	if result.KnownEmpty > 0 {
@@ -1279,6 +1279,7 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 	if buckets <= 0 {
 		return nil, ErrOperationalRangeDense
 	}
+	sampleLimit := min(sloOperationalSeriesLimit, buckets*4)
 	boundaries := bucketBoundaries(start, end, ticks, buckets, cadence)
 	events := make([]int64, 0, 2*len(base.Observations)+len(boundaries)+4)
 	for _, boundary := range boundaries {
@@ -1349,6 +1350,7 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 		collected[index] = sampleBucket{start: boundaries[index], end: boundaries[index+1], byTime: make(map[int64]sampleCandidate, 4), critical: make(map[int64]bool)}
 	}
 	previousState := ""
+	retainedCount := 0
 	for eventIndex, eventMicros := range events {
 		if eventIndex&1023 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -1397,13 +1399,15 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 		for criticalKey := range bucket.critical {
 			keys[criticalKey] = true
 		}
+		newRetainedCount := retainedCount - len(bucket.byTime) + len(keys)
+		if newRetainedCount > sampleLimit {
+			return nil, ErrOperationalRangeDense
+		}
+		retainedCount = newRetainedCount
 		for existingKey := range bucket.byTime {
 			if !keys[existingKey] {
 				delete(bucket.byTime, existingKey)
 			}
-		}
-		if len(keys) > 4 {
-			return nil, ErrOperationalRangeDense
 		}
 		candidate := sampleCandidate{value: sample, labels: make(map[api.SloOperationalSampleRetainedExtrema]bool, 4)}
 		if keys[key] {
@@ -1415,7 +1419,7 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 			}
 		}
 	}
-	result := make([]api.SloOperationalSample, 0, min(sloOperationalSeriesLimit, buckets*4))
+	result := make([]api.SloOperationalSample, 0, sampleLimit)
 	for bucketIndex, bucket := range collected {
 		if bucketIndex&127 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -1446,7 +1450,7 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 			result = append(result, candidate.value)
 		}
 	}
-	if len(result) > sloOperationalSeriesLimit {
+	if len(result) > sampleLimit {
 		return nil, ErrOperationalRangeDense
 	}
 	return result, nil

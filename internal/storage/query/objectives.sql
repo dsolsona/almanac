@@ -114,8 +114,8 @@ WHERE m.sli_id=$1 AND m.revision=$2;
 
 -- name: ListOperationalSloFacts :many
 SELECT c.interval_start, c.interval_end, c.outcome,
-       (CASE WHEN c.outcome='observed' THEN v.good_count::text END)::text AS good,
-       (CASE WHEN c.outcome='observed' THEN v.total_count::text END)::text AS total,
+       CASE WHEN c.outcome='observed' THEN COALESCE(v.good_count::text, '') ELSE '' END::text AS good,
+       CASE WHEN c.outcome='observed' THEN COALESCE(v.total_count::text, '') ELSE '' END::text AS total,
        c.recorded_at
 FROM public.almanac_sli_coverage c
 LEFT JOIN public.almanac_sli_observation_values v

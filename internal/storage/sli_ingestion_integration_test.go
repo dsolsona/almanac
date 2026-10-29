@@ -595,6 +595,11 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c LEFT JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision) WHERE c.sli_id=$1 AND c.interval_start=$2 AND c.outcome='complete_empty' AND v.sli_id IS NULL`, record.ID, empty.IntervalStart).Scan(&emptyCount); err != nil || emptyCount != 1 {
 		t.Fatalf("complete empty coverage without fabricated values: %d, %v", emptyCount, err)
 	}
+	emptyFacts, err := dbgen.New(conn).ListOperationalSloFacts(t.Context(), dbgen.ListOperationalSloFactsParams{SliID: mustPGUUID(record.ID), MeasurementRevision: 1,
+		IntervalStart: timestamp(empty.IntervalStart), IntervalEnd: timestamp(empty.IntervalEnd), Limit: 1})
+	if err != nil || len(emptyFacts) != 1 || emptyFacts[0].Outcome != "complete_empty" || emptyFacts[0].Good != "" || emptyFacts[0].Total != "" {
+		t.Fatalf("known-empty operational facts = %+v, %v; want one complete-empty fact with empty numeric fields", emptyFacts, err)
+	}
 	emptyFrom := empty.IntervalStart
 	emptyInput := CreateObjectiveInput{Proof: proof, Name: "empty-only", DisplayName: "Empty only", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 120, EvaluationValidFrom: &emptyFrom, IdempotencyKey: "empty-only", RequestID: "empty-only", Now: clock}
 	_, emptySlo, err := CreateObjective(t.Context(), f.databaseURL, emptyInput, true)

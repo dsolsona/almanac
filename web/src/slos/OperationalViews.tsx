@@ -105,8 +105,10 @@ function RemainingMeter({fraction,label}:{fraction:string|null;label:string}) {
 function OverviewRow({item}:{item:OverviewItem}) {
   const slo=item.slo,p=item.current.performance,q=item.current.quality;
   const first=qualityWarning(q),oneHour=qualityWarning(item.burn_1h.quality),sixHour=qualityWarning(item.burn_6h.quality);
+  const leadingIndex=item.reasons.findIndex(reason=>reason.code===item.leading_reason.code&&reason.provisional===item.leading_reason.provisional);
+  const secondaryReasons=item.reasons.filter((_,index)=>index!==leadingIndex);
   return <article className="slo-operational-row" role="row">
-    <div role="cell" className="slo-operational-row__status"><span className="slo-operational-row__label">Status</span><StatusBadge status={statusFor(item.current)}/><span className="slo-reason">{reasonLabel(item.leading_reason.code)}{item.leading_reason.provisional?' · observed only':''}</span></div>
+    <div role="cell" className="slo-operational-row__status"><span className="slo-operational-row__label">Status</span><StatusBadge status={statusFor(item.current)}/><span className="slo-reason">{reasonLabel(item.leading_reason.code)}{item.leading_reason.provisional?' · observed only':''}</span>{secondaryReasons.length>0&&<details className="slo-reasons-disclosure"><summary>More reasons ({secondaryReasons.length})</summary><ul>{secondaryReasons.map((reason,index)=><li key={`${reason.code}-${reason.provisional}-${index}`}>{reasonLabel(reason.code)}{reason.provisional?' · observed only':''}</li>)}</ul></details>}</div>
     <div role="cell" className="slo-operational-row__objective">
       <span className="slo-operational-row__label">Objective and context</span>
       <a data-app-route className="slo-operational-row__name" href={`/slos/${slo.id}`}>{slo.display_name}</a>
@@ -171,7 +173,10 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       <SelectField id="slo-service-filter" label="Service" value={serviceID} onChange={event=>apply({service_id:event.target.value})} options={[{value:'',label:'All services'},...services.map(service=>({value:service.id,label:service.display_name}))]}/>
       <SelectField id="slo-urgency-filter" label="Urgency" value={urgency} onChange={event=>changeUrgency(event.target.value)} options={[{value:'',label:'All urgency groups'},...groups.map(([value,label])=>({value,label}))]}/>
       {canWrite&&<Button onClick={onCreate}>Create SLO</Button>}
-      <Button variant="outline" onClick={()=>setRefreshCount(value=>value+1)} pending={busy}>Refresh</Button>
+      <Button variant="outline" onClick={()=>{
+        if(cursor){onLocationChange(updateQuery(locationKey,{},['cursor','previous_cursor']));return;}
+        setRefreshCount(value=>value+1);
+      }} pending={busy}>Refresh</Button>
     </div>
     <p className="slo-overview-meta">{page?`${Object.values(page.group_counts).reduce((a,b)=>a+b,0)} matching SLOs · counts apply to search and service before urgency filter`:'Operational values are calculated by the server.'}</p>
     {busy&&<span className="sr-only" role="status">Refreshing operational SLOs</span>}
@@ -222,6 +227,13 @@ function LaneTable({title,rows,page,onPageChange}:{title:string;rows:ExactValueR
 }
 function burnValue(value:components['schemas']['SloBurnValue']) {return value.performance.burn===null?'—':`${decimal(value.performance.burn)}×`;}
 function railStatus(detail:OperationalDetail) {return <StatusBadge status={statusFor(detail.current)}/>;}
+function TimelineControls({range,zone,burnWindow,onChange}:{range:'7d'|'90d'|'1y';zone:'UTC'|'local';burnWindow:3600|21600;onChange:(values:Record<string,string>)=>void}) {
+  return <div className="slo-timeline-controls" aria-label="Timeline controls">
+    <fieldset><legend>Range</legend>{(['7d','90d','1y'] as const).map(value=><Button key={value} variant={range===value?'selected':'outline'} aria-pressed={range===value} onClick={()=>onChange({range:value})}>{value}</Button>)}</fieldset>
+    <fieldset><legend>Time zone</legend>{(['UTC','local'] as const).map(value=><Button key={value} variant={zone===value?'selected':'outline'} aria-pressed={zone===value} onClick={()=>onChange({tz:value})}>{value==='UTC'?'UTC':'Local'}</Button>)}</fieldset>
+    <SelectField id="slo-burn-window" label="Burn window" value={String(burnWindow)} onChange={event=>onChange({burn_window:event.target.value})} options={[{value:'3600',label:'1 hour'},{value:'21600',label:'6 hours'}]}/>
+  </div>;
+}
 
 export function OperationalDetailView({id,definition,locationKey,onLocationChange,refreshVersion=0,onSessionFailure=()=>{}}:{id:string;definition:Slo;locationKey:string;onLocationChange:(path:string)=>void;refreshVersion?:number;onSessionFailure?:()=>void}) {
   const [detail,setDetail]=useState<OperationalDetail|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -281,7 +293,12 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
         {id:'compliance',label:'Daily compliance',unit:'%',series:[{id:'compliance-series',label:'Rolling attainment at UTC day end',points:days.map(day=>({timestamp:day.day_end,value:day.performance.attainment===null?null:shift(day.performance.attainment,2),coverage:day.status==='unknown'&&day.performance.attainment!==null?'partial':dailyChartCoverage(day)}))}]},
       ]};
   },[detail,definition.target,zone]);
-  if(!detail)return <section className="slo-operational-detail" aria-label="Operational SLO detail">{busy&&<span className="sr-only" role="status">Loading operational evaluation</span>}{error&&<p className="slo-error" role="alert">{error}</p>}</section>;
+  if(!detail)return <section className="slo-operational-detail" aria-label="Operational SLO detail">
+    <div className="slo-detail-heading"><h2>Operational SLO timeline</h2><div className="slo-detail-tools"><Button variant="outline" pending={busy} onClick={()=>setRefreshCount(value=>value+1)}>Refresh timeline</Button></div></div>
+    {error&&<div className="slo-error" role="alert"><p>{error}</p><p>Refresh or select a shorter range to retry the operational evaluation.</p></div>}
+    {busy&&<span className="sr-only" role="status">Loading operational evaluation</span>}
+    <Panel heading="Timeline" className="slo-timeline-panel"><TimelineControls range={range} zone={zone} burnWindow={burnWindow} onChange={changeView}/></Panel>
+  </section>;
   const current=detail.current,p=current.performance,q=current.quality;
   const metricWarning=qualityWarning(q,p,current.window),oneHourWarning=qualityWarning(detail.burn_1h.quality,detail.burn_1h.performance),sixHourWarning=qualityWarning(detail.burn_6h.quality,detail.burn_6h.performance);
   const activeBurn=activeBurnWindow===3600?detail.burn_1h:detail.burn_6h;
@@ -304,11 +321,7 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
     <div className="slo-operational-layout">
       <div className="slo-operational-timeline">
         <Panel heading="Timeline" className="slo-timeline-panel">
-          <div className="slo-timeline-controls" aria-label="Timeline controls">
-            <fieldset><legend>Range</legend>{(['7d','90d','1y'] as const).map(value=><Button key={value} variant={range===value?'selected':'outline'} aria-pressed={range===value} onClick={()=>changeView({range:value})}>{value}</Button>)}</fieldset>
-            <fieldset><legend>Time zone</legend>{(['UTC','local'] as const).map(value=><Button key={value} variant={zone===value?'selected':'outline'} aria-pressed={zone===value} onClick={()=>changeView({tz:value})}>{value==='UTC'?'UTC':'Local'}</Button>)}</fieldset>
-            <SelectField id="slo-burn-window" label="Burn window" value={String(burnWindow)} onChange={event=>changeView({burn_window:event.target.value})} options={[{value:'3600',label:'1 hour'},{value:'21600',label:'6 hours'}]}/>
-          </div>
+          <TimelineControls range={range} zone={zone} burnWindow={burnWindow} onChange={changeView}/>
           {detail&&(!rangeMatches||activeBurnWindow!==burnWindow)&&<p className="slo-qualification" role={busy?'status':'alert'}>Showing the last confirmed {Math.round((Date.parse(detail.range.requested_end)-Date.parse(detail.range.requested_start))/86_400_000)} d range and {activeBurnLabel} burn{busy?`; loading ${range} and ${burnWindow===3600?'1 h':'6 h'} results.`:`; the requested ${range} and ${burnWindow===3600?'1 h':'6 h'} result has not replaced it.`}</p>}
           {chart&&chart.lanes.every(lane=>lane.series[0]?.points.length===0)&&<p className="slo-empty">No chart samples are available in this range. Missing data is not drawn as zero.</p>}
           {chart&&<>
