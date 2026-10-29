@@ -1239,6 +1239,189 @@ func (e SliObservationOutcome) Valid() bool {
 	}
 }
 
+// Defines values for SloEvaluationSnapshotKind.
+const (
+	CurrentEvaluation SloEvaluationSnapshotKind = "current_evaluation"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationSnapshotKind enum.
+func (e SloEvaluationSnapshotKind) Valid() bool {
+	switch e {
+	case CurrentEvaluation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationObjectiveMethod.
+const (
+	Occurrences SloEvaluationObjectiveMethod = "occurrences"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationObjectiveMethod enum.
+func (e SloEvaluationObjectiveMethod) Valid() bool {
+	switch e {
+	case Occurrences:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationPerformanceBudgetUnit.
+const (
+	Events SloEvaluationPerformanceBudgetUnit = "events"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationPerformanceBudgetUnit enum.
+func (e SloEvaluationPerformanceBudgetUnit) Valid() bool {
+	switch e {
+	case Events:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationPerformanceObservedState.
+const (
+	SloEvaluationPerformanceObservedStateMet      SloEvaluationPerformanceObservedState = "met"
+	SloEvaluationPerformanceObservedStateViolated SloEvaluationPerformanceObservedState = "violated"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationPerformanceObservedState enum.
+func (e SloEvaluationPerformanceObservedState) Valid() bool {
+	switch e {
+	case SloEvaluationPerformanceObservedStateMet:
+		return true
+	case SloEvaluationPerformanceObservedStateViolated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationPerformanceState.
+const (
+	SloEvaluationPerformanceStateMet           SloEvaluationPerformanceState = "met"
+	SloEvaluationPerformanceStateNotApplicable SloEvaluationPerformanceState = "not_applicable"
+	SloEvaluationPerformanceStateUnknown       SloEvaluationPerformanceState = "unknown"
+	SloEvaluationPerformanceStateViolated      SloEvaluationPerformanceState = "violated"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationPerformanceState enum.
+func (e SloEvaluationPerformanceState) Valid() bool {
+	switch e {
+	case SloEvaluationPerformanceStateMet:
+		return true
+	case SloEvaluationPerformanceStateNotApplicable:
+		return true
+	case SloEvaluationPerformanceStateUnknown:
+		return true
+	case SloEvaluationPerformanceStateViolated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationQualityFreshness.
+const (
+	SloEvaluationQualityFreshnessFresh   SloEvaluationQualityFreshness = "fresh"
+	SloEvaluationQualityFreshnessStale   SloEvaluationQualityFreshness = "stale"
+	SloEvaluationQualityFreshnessUnknown SloEvaluationQualityFreshness = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationQualityFreshness enum.
+func (e SloEvaluationQualityFreshness) Valid() bool {
+	switch e {
+	case SloEvaluationQualityFreshnessFresh:
+		return true
+	case SloEvaluationQualityFreshnessStale:
+		return true
+	case SloEvaluationQualityFreshnessUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationQualityState.
+const (
+	SloEvaluationQualityStateComplete       SloEvaluationQualityState = "complete"
+	SloEvaluationQualityStateExpiredHistory SloEvaluationQualityState = "expired_history"
+	SloEvaluationQualityStateNoData         SloEvaluationQualityState = "no_data"
+	SloEvaluationQualityStateNotApplicable  SloEvaluationQualityState = "not_applicable"
+	SloEvaluationQualityStatePartial        SloEvaluationQualityState = "partial"
+	SloEvaluationQualityStateZeroTraffic    SloEvaluationQualityState = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationQualityState enum.
+func (e SloEvaluationQualityState) Valid() bool {
+	switch e {
+	case SloEvaluationQualityStateComplete:
+		return true
+	case SloEvaluationQualityStateExpiredHistory:
+		return true
+	case SloEvaluationQualityStateNoData:
+		return true
+	case SloEvaluationQualityStateNotApplicable:
+		return true
+	case SloEvaluationQualityStatePartial:
+		return true
+	case SloEvaluationQualityStateZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloEvaluationTimelineMaxIntervals.
+const (
+	N1500 SloEvaluationTimelineMaxIntervals = 1500
+)
+
+// Valid indicates whether the value is a known member of the SloEvaluationTimelineMaxIntervals enum.
+func (e SloEvaluationTimelineMaxIntervals) Valid() bool {
+	switch e {
+	case N1500:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloTimelineItemState.
+const (
+	SloTimelineItemStateExpired       SloTimelineItemState = "expired"
+	SloTimelineItemStateKnownEmpty    SloTimelineItemState = "known_empty"
+	SloTimelineItemStateMissing       SloTimelineItemState = "missing"
+	SloTimelineItemStateNotApplicable SloTimelineItemState = "not_applicable"
+	SloTimelineItemStateObserved      SloTimelineItemState = "observed"
+	SloTimelineItemStateZeroTraffic   SloTimelineItemState = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloTimelineItemState enum.
+func (e SloTimelineItemState) Valid() bool {
+	switch e {
+	case SloTimelineItemStateExpired:
+		return true
+	case SloTimelineItemStateKnownEmpty:
+		return true
+	case SloTimelineItemStateMissing:
+		return true
+	case SloTimelineItemStateNotApplicable:
+		return true
+	case SloTimelineItemStateObserved:
+		return true
+	case SloTimelineItemStateZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
 // Agent defines model for Agent.
 type Agent struct {
 	CreatedAt   time.Time           `json:"created_at"`
@@ -1790,6 +1973,11 @@ type QueryPreviewRequest struct {
 	Query string `json:"query"`
 }
 
+// ResourceMetadataWrite defines model for ResourceMetadataWrite.
+type ResourceMetadataWrite struct {
+	DisplayName string `json:"display_name"`
+}
+
 // RotateAgentRequest defines model for RotateAgentRequest.
 type RotateAgentRequest struct {
 	LifetimeSeconds *int32 `json:"lifetime_seconds,omitempty"`
@@ -1862,6 +2050,28 @@ type SecretAction struct {
 
 // SecretActionAction defines model for SecretAction.Action.
 type SecretActionAction string
+
+// Service defines model for Service.
+type Service struct {
+	CreatedAt   time.Time          `json:"created_at"`
+	DisplayName string             `json:"display_name"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+	Version     string             `json:"version"`
+}
+
+// ServiceCreateRequest defines model for ServiceCreateRequest.
+type ServiceCreateRequest struct {
+	DisplayName string `json:"display_name"`
+	Name        string `json:"name"`
+}
+
+// ServicePage defines model for ServicePage.
+type ServicePage struct {
+	Items      []Service `json:"items"`
+	NextCursor string    `json:"next_cursor"`
+}
 
 // Sli defines model for Sli.
 type Sli struct {
@@ -1976,6 +2186,172 @@ type SliPage struct {
 	NextCursor string `json:"next_cursor"`
 }
 
+// Slo defines model for Slo.
+type Slo struct {
+	ActivatedAt           time.Time           `json:"activated_at"`
+	CadenceSeconds        int                 `json:"cadence_seconds"`
+	CreatedAt             time.Time           `json:"created_at"`
+	DefinitionRevision    string              `json:"definition_revision"`
+	DisplayName           string              `json:"display_name"`
+	EvaluationValidFrom   time.Time           `json:"evaluation_valid_from"`
+	HistoricalRequestedAt *time.Time          `json:"historical_requested_at"`
+	HistoricalRequestedBy *openapi_types.UUID `json:"historical_requested_by"`
+	Id                    openapi_types.UUID  `json:"id"`
+	Name                  string              `json:"name"`
+	RollingWindowSeconds  int64               `json:"rolling_window_seconds"`
+	ServiceDisplayName    string              `json:"service_display_name"`
+	ServiceId             openapi_types.UUID  `json:"service_id"`
+	SliDisplayName        string              `json:"sli_display_name"`
+	SliId                 openapi_types.UUID  `json:"sli_id"`
+	Target                string              `json:"target"`
+	UpdatedAt             time.Time           `json:"updated_at"`
+	Version               string              `json:"version"`
+}
+
+// SloCreateRequest defines model for SloCreateRequest.
+type SloCreateRequest struct {
+	DisplayName string `json:"display_name"`
+
+	// EvaluationValidFrom Optional aligned retained historical start; omission begins validity at activation and does not start backfill.
+	EvaluationValidFrom *time.Time `json:"evaluation_valid_from,omitempty"`
+	Name                string     `json:"name"`
+
+	// RollingWindowSeconds Positive fixed seconds divisible by the SLI cadence.
+	RollingWindowSeconds int64              `json:"rolling_window_seconds"`
+	ServiceId            openapi_types.UUID `json:"service_id"`
+	SliId                openapi_types.UUID `json:"sli_id"`
+
+	// Target Exact fractional target in [0,1); 1 is invalid.
+	Target string `json:"target"`
+}
+
+// SloEvaluation defines model for SloEvaluation.
+type SloEvaluation struct {
+	CalculationVersion string                    `json:"calculation_version"`
+	EffectiveEnd       time.Time                 `json:"effective_end"`
+	EvaluationId       openapi_types.UUID        `json:"evaluation_id"`
+	Objective          SloEvaluationObjective    `json:"objective"`
+	Performance        SloEvaluationPerformance  `json:"performance"`
+	Quality            SloEvaluationQuality      `json:"quality"`
+	RequestedAt        time.Time                 `json:"requested_at"`
+	SnapshotKind       SloEvaluationSnapshotKind `json:"snapshot_kind"`
+	Timeline           SloEvaluationTimeline     `json:"timeline"`
+	Window             SloEvaluationWindow       `json:"window"`
+}
+
+// SloEvaluationSnapshotKind defines model for SloEvaluation.SnapshotKind.
+type SloEvaluationSnapshotKind string
+
+// SloEvaluationObjective defines model for SloEvaluationObjective.
+type SloEvaluationObjective struct {
+	CadenceSeconds       int                          `json:"cadence_seconds"`
+	DefinitionRevision   string                       `json:"definition_revision"`
+	MeasurementRevision  string                       `json:"measurement_revision"`
+	Method               SloEvaluationObjectiveMethod `json:"method"`
+	RollingWindowSeconds int64                        `json:"rolling_window_seconds"`
+	SliId                openapi_types.UUID           `json:"sli_id"`
+	SloId                openapi_types.UUID           `json:"slo_id"`
+	Target               string                       `json:"target"`
+}
+
+// SloEvaluationObjectiveMethod defines model for SloEvaluationObjective.Method.
+type SloEvaluationObjectiveMethod string
+
+// SloEvaluationPerformance defines model for SloEvaluationPerformance.
+type SloEvaluationPerformance struct {
+	AllowedBudget     *string                                `json:"allowed_budget"`
+	Attainment        *string                                `json:"attainment"`
+	Bad               *string                                `json:"bad"`
+	BudgetUnit        SloEvaluationPerformanceBudgetUnit     `json:"budget_unit"`
+	Burn              *string                                `json:"burn"`
+	ConsumedFraction  *string                                `json:"consumed_fraction"`
+	Good              *string                                `json:"good"`
+	ObservedState     *SloEvaluationPerformanceObservedState `json:"observed_state"`
+	Provisional       bool                                   `json:"provisional"`
+	Reason            *string                                `json:"reason"`
+	RemainingBudget   *string                                `json:"remaining_budget"`
+	RemainingFraction *string                                `json:"remaining_fraction"`
+	State             SloEvaluationPerformanceState          `json:"state"`
+	Total             *string                                `json:"total"`
+}
+
+// SloEvaluationPerformanceBudgetUnit defines model for SloEvaluationPerformance.BudgetUnit.
+type SloEvaluationPerformanceBudgetUnit string
+
+// SloEvaluationPerformanceObservedState defines model for SloEvaluationPerformance.ObservedState.
+type SloEvaluationPerformanceObservedState string
+
+// SloEvaluationPerformanceState defines model for SloEvaluationPerformance.State.
+type SloEvaluationPerformanceState string
+
+// SloEvaluationQuality defines model for SloEvaluationQuality.
+type SloEvaluationQuality struct {
+	Coverage             *string                       `json:"coverage"`
+	ExpectedIntervals    int64                         `json:"expected_intervals"`
+	ExpiredIntervals     int64                         `json:"expired_intervals"`
+	FirstObservationAt   *time.Time                    `json:"first_observation_at"`
+	Freshness            SloEvaluationQualityFreshness `json:"freshness"`
+	KnownEmptyIntervals  int64                         `json:"known_empty_intervals"`
+	LastObservationAt    *time.Time                    `json:"last_observation_at"`
+	LatestReceiptAt      *time.Time                    `json:"latest_receipt_at"`
+	MissingIntervals     int64                         `json:"missing_intervals"`
+	ObservedIntervals    int64                         `json:"observed_intervals"`
+	State                SloEvaluationQualityState     `json:"state"`
+	ZeroTrafficIntervals int64                         `json:"zero_traffic_intervals"`
+}
+
+// SloEvaluationQualityFreshness defines model for SloEvaluationQuality.Freshness.
+type SloEvaluationQualityFreshness string
+
+// SloEvaluationQualityState defines model for SloEvaluationQuality.State.
+type SloEvaluationQualityState string
+
+// SloEvaluationTimeline defines model for SloEvaluationTimeline.
+type SloEvaluationTimeline struct {
+	CadenceSeconds int                               `json:"cadence_seconds"`
+	End            time.Time                         `json:"end"`
+	Items          []SloTimelineItem                 `json:"items"`
+	MaxIntervals   SloEvaluationTimelineMaxIntervals `json:"max_intervals"`
+	Start          time.Time                         `json:"start"`
+}
+
+// SloEvaluationTimelineMaxIntervals defines model for SloEvaluationTimeline.MaxIntervals.
+type SloEvaluationTimelineMaxIntervals int
+
+// SloEvaluationWindow defines model for SloEvaluationWindow.
+type SloEvaluationWindow struct {
+	ActivatedAt           time.Time           `json:"activated_at"`
+	EffectiveStart        time.Time           `json:"effective_start"`
+	EligibleStart         time.Time           `json:"eligible_start"`
+	End                   time.Time           `json:"end"`
+	EvaluationValidFrom   time.Time           `json:"evaluation_valid_from"`
+	HistoricalRequestedAt *time.Time          `json:"historical_requested_at"`
+	HistoricalRequestedBy *openapi_types.UUID `json:"historical_requested_by"`
+	RequestedStart        time.Time           `json:"requested_start"`
+	RetentionStart        time.Time           `json:"retention_start"`
+}
+
+// SloPage defines model for SloPage.
+type SloPage struct {
+	Items      []Slo  `json:"items"`
+	NextCursor string `json:"next_cursor"`
+}
+
+// SloTimelineItem defines model for SloTimelineItem.
+type SloTimelineItem struct {
+	Attainment *string              `json:"attainment"`
+	Burn       *string              `json:"burn"`
+	End        time.Time            `json:"end"`
+	Good       *string              `json:"good"`
+	ReceivedAt *time.Time           `json:"received_at"`
+	Start      time.Time            `json:"start"`
+	State      SloTimelineItemState `json:"state"`
+	Total      *string              `json:"total"`
+}
+
+// SloTimelineItemState defines model for SloTimelineItem.State.
+type SloTimelineItemState string
+
 // AgentId defines model for AgentId.
 type AgentId = openapi_types.UUID
 
@@ -2000,11 +2376,20 @@ type PageCursor = string
 // PageLimit defines model for PageLimit.
 type PageLimit = int
 
+// ResourceIfMatch defines model for ResourceIfMatch.
+type ResourceIfMatch = string
+
+// ServiceId defines model for ServiceId.
+type ServiceId = openapi_types.UUID
+
 // SliId defines model for SliId.
 type SliId = openapi_types.UUID
 
 // SliIfMatch defines model for SliIfMatch.
 type SliIfMatch = string
+
+// SloId defines model for SloId.
+type SloId = openapi_types.UUID
 
 // AuthenticationMethodNotAllowed defines model for AuthenticationMethodNotAllowed.
 type AuthenticationMethodNotAllowed = Problem
@@ -2118,6 +2503,24 @@ type GetProvidersParams struct {
 	AgentId *openapi_types.UUID `form:"agent_id,omitempty" json:"agent_id,omitempty"`
 }
 
+// ListServicesParams defines parameters for ListServices.
+type ListServicesParams struct {
+	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateServiceParams defines parameters for CreateService.
+type CreateServiceParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PatchServiceMetadataParams defines parameters for PatchServiceMetadata.
+type PatchServiceMetadataParams struct {
+	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
 // ListSlisParams defines parameters for ListSlis.
 type ListSlisParams struct {
 	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2140,6 +2543,32 @@ type PatchSliMetadataParams struct {
 type ListSliObservationsParams struct {
 	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListSlosParams defines parameters for ListSlos.
+type ListSlosParams struct {
+	Limit     *PageLimit          `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor    *PageCursor         `form:"cursor,omitempty" json:"cursor,omitempty"`
+	ServiceId *openapi_types.UUID `form:"service_id,omitempty" json:"service_id,omitempty"`
+}
+
+// CreateSloParams defines parameters for CreateSlo.
+type CreateSloParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PatchSloMetadataParams defines parameters for PatchSloMetadata.
+type PatchSloMetadataParams struct {
+	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
+// EvaluateSloParams defines parameters for EvaluateSlo.
+type EvaluateSloParams struct {
+	At            *time.Time `form:"at,omitempty" json:"at,omitempty"`
+	TimelineStart *time.Time `form:"timeline_start,omitempty" json:"timeline_start,omitempty"`
+	TimelineEnd   *time.Time `form:"timeline_end,omitempty" json:"timeline_end,omitempty"`
 }
 
 // PostAgentDiagnosticResultJSONRequestBody defines body for PostAgentDiagnosticResult for application/json ContentType.
@@ -2193,11 +2622,23 @@ type PostDatasourceQueryPreviewJSONRequestBody = QueryPreviewRequest
 // PostDiagnosticCancelJSONRequestBody defines body for PostDiagnosticCancel for application/json ContentType.
 type PostDiagnosticCancelJSONRequestBody = EmptyAuthRequest
 
+// CreateServiceJSONRequestBody defines body for CreateService for application/json ContentType.
+type CreateServiceJSONRequestBody = ServiceCreateRequest
+
+// PatchServiceMetadataJSONRequestBody defines body for PatchServiceMetadata for application/json ContentType.
+type PatchServiceMetadataJSONRequestBody = ResourceMetadataWrite
+
 // CreateSliJSONRequestBody defines body for CreateSli for application/json ContentType.
 type CreateSliJSONRequestBody = SliCreateRequest
 
 // PatchSliMetadataJSONRequestBody defines body for PatchSliMetadata for application/json ContentType.
 type PatchSliMetadataJSONRequestBody = SliMetadataWrite
+
+// CreateSloJSONRequestBody defines body for CreateSlo for application/json ContentType.
+type CreateSloJSONRequestBody = SloCreateRequest
+
+// PatchSloMetadataJSONRequestBody defines body for PatchSloMetadata for application/json ContentType.
+type PatchSloMetadataJSONRequestBody = ResourceMetadataWrite
 
 // AsObservedOutcome returns the union data inside the ObservationExecutionOutcome as a ObservedOutcome
 func (t ObservationExecutionOutcome) AsObservedOutcome() (ObservedOutcome, error) {
@@ -2857,6 +3298,44 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListServices List services
+	//
+	// Corresponds with GET /api/v1/services (the `ListServices` operationId).
+	ListServices(ctx context.Context, params *ListServicesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateServiceWithBody Create a service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+	CreateServiceWithBody(ctx context.Context, params *CreateServiceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateService Create a service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+	CreateService(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetService Read a service
+	//
+	// Corresponds with GET /api/v1/services/{service_id} (the `GetService` operationId).
+	GetService(ctx context.Context, serviceId ServiceId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchServiceMetadataWithBody Update service display metadata
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+	PatchServiceMetadataWithBody(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchServiceMetadata Update service display metadata
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+	PatchServiceMetadata(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListSlis List SLIs
 	//
 	// Corresponds with GET /api/v1/slis (the `ListSlis` operationId).
@@ -2909,6 +3388,55 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
 	ListSliObservations(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSlos List SLO definitions
+	//
+	// Corresponds with GET /api/v1/slos (the `ListSlos` operationId).
+	ListSlos(ctx context.Context, params *ListSlosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSloWithBody Create a single-indicator occurrence SLO
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+	CreateSloWithBody(ctx context.Context, params *CreateSloParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSlo Create a single-indicator occurrence SLO
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+	CreateSlo(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSlo Read an SLO definition
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id} (the `GetSlo` operationId).
+	GetSlo(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSloMetadataWithBody Update SLO display metadata
+	//
+	// Target, window and indicator are immutable in this increment.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+	PatchSloMetadataWithBody(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSloMetadata Update SLO display metadata
+	//
+	// Target, window and indicator are immutable in this increment.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+	PatchSloMetadata(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, body PatchSloMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EvaluateSlo Evaluate a rolling occurrence objective
+	//
+	// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
+	EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLiveness Report whether the UI process is alive
 	//
@@ -3700,6 +4228,104 @@ func (c *Client) GetProviders(ctx context.Context, params *GetProvidersParams, r
 	return c.Client.Do(req)
 }
 
+// ListServices List services
+//
+// Corresponds with GET /api/v1/services (the `ListServices` operationId).
+func (c *Client) ListServices(ctx context.Context, params *ListServicesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListServicesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateServiceWithBody Create a service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+func (c *Client) CreateServiceWithBody(ctx context.Context, params *CreateServiceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateServiceRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateService Create a service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+func (c *Client) CreateService(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateServiceRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetService Read a service
+//
+// Corresponds with GET /api/v1/services/{service_id} (the `GetService` operationId).
+func (c *Client) GetService(ctx context.Context, serviceId ServiceId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetServiceRequest(c.Server, serviceId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchServiceMetadataWithBody Update service display metadata
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+func (c *Client) PatchServiceMetadataWithBody(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchServiceMetadataRequestWithBody(c.Server, serviceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchServiceMetadata Update service display metadata
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+func (c *Client) PatchServiceMetadata(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchServiceMetadataRequest(c.Server, serviceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListSlis List SLIs
 //
 // Corresponds with GET /api/v1/slis (the `ListSlis` operationId).
@@ -3813,6 +4439,125 @@ func (c *Client) PatchSliMetadata(ctx context.Context, sliId SliId, params *Patc
 // Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
 func (c *Client) ListSliObservations(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListSliObservationsRequest(c.Server, sliId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListSlos List SLO definitions
+//
+// Corresponds with GET /api/v1/slos (the `ListSlos` operationId).
+func (c *Client) ListSlos(ctx context.Context, params *ListSlosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSlosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSloWithBody Create a single-indicator occurrence SLO
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+func (c *Client) CreateSloWithBody(ctx context.Context, params *CreateSloParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSloRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSlo Create a single-indicator occurrence SLO
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+func (c *Client) CreateSlo(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSloRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSlo Read an SLO definition
+//
+// Corresponds with GET /api/v1/slos/{slo_id} (the `GetSlo` operationId).
+func (c *Client) GetSlo(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSloRequest(c.Server, sloId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSloMetadataWithBody Update SLO display metadata
+//
+// Target, window and indicator are immutable in this increment.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+func (c *Client) PatchSloMetadataWithBody(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSloMetadataRequestWithBody(c.Server, sloId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSloMetadata Update SLO display metadata
+//
+// Target, window and indicator are immutable in this increment.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+func (c *Client) PatchSloMetadata(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, body PatchSloMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSloMetadataRequest(c.Server, sloId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EvaluateSlo Evaluate a rolling occurrence objective
+//
+// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
+func (c *Client) EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEvaluateSloRequest(c.Server, sloId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5241,6 +5986,219 @@ func NewGetProvidersRequest(server string, params *GetProvidersParams) (*http.Re
 	return req, nil
 }
 
+// NewListServicesRequest constructs an http.Request for the ListServices method
+func NewListServicesRequest(server string, params *ListServicesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/services")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateServiceRequest calls the generic CreateService builder with application/json body
+func NewCreateServiceRequest(server string, params *CreateServiceParams, body CreateServiceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateServiceRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateServiceRequestWithBody constructs an http.Request for the CreateService method, with any body, and a specified content type
+func NewCreateServiceRequestWithBody(server string, params *CreateServiceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/services")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetServiceRequest constructs an http.Request for the GetService method
+func NewGetServiceRequest(server string, serviceId ServiceId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "service_id", serviceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchServiceMetadataRequest calls the generic PatchServiceMetadata builder with application/json body
+func NewPatchServiceMetadataRequest(server string, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchServiceMetadataRequestWithBody(server, serviceId, params, "application/json", bodyReader)
+}
+
+// NewPatchServiceMetadataRequestWithBody constructs an http.Request for the PatchServiceMetadata method, with any body, and a specified content type
+func NewPatchServiceMetadataRequestWithBody(server string, serviceId ServiceId, params *PatchServiceMetadataParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "service_id", serviceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewListSlisRequest constructs an http.Request for the ListSlis method
 func NewListSlisRequest(server string, params *ListSlisParams) (*http.Request, error) {
 	var err error
@@ -5504,6 +6462,316 @@ func NewListSliObservationsRequest(server string, sliId SliId, params *ListSliOb
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListSlosRequest constructs an http.Request for the ListSlos method
+func NewListSlosRequest(server string, params *ListSlosParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ServiceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "service_id", *params.ServiceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSloRequest calls the generic CreateSlo builder with application/json body
+func NewCreateSloRequest(server string, params *CreateSloParams, body CreateSloJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSloRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateSloRequestWithBody constructs an http.Request for the CreateSlo method, with any body, and a specified content type
+func NewCreateSloRequestWithBody(server string, params *CreateSloParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetSloRequest constructs an http.Request for the GetSlo method
+func NewGetSloRequest(server string, sloId SloId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchSloMetadataRequest calls the generic PatchSloMetadata builder with application/json body
+func NewPatchSloMetadataRequest(server string, sloId SloId, params *PatchSloMetadataParams, body PatchSloMetadataJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchSloMetadataRequestWithBody(server, sloId, params, "application/json", bodyReader)
+}
+
+// NewPatchSloMetadataRequestWithBody constructs an http.Request for the PatchSloMetadata method, with any body, and a specified content type
+func NewPatchSloMetadataRequestWithBody(server string, sloId SloId, params *PatchSloMetadataParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewEvaluateSloRequest constructs an http.Request for the EvaluateSlo method
+func NewEvaluateSloRequest(server string, sloId SloId, params *EvaluateSloParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/evaluation", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.At != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "at", *params.At, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TimelineStart != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "timeline_start", *params.TimelineStart, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.TimelineEnd != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "timeline_end", *params.TimelineEnd, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -5992,6 +7260,48 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProvidersWithResponse(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*GetProvidersResponse, error)
 
+	// ListServicesWithResponse List services
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/services (the `ListServices` operationId).
+	ListServicesWithResponse(ctx context.Context, params *ListServicesParams, reqEditors ...RequestEditorFn) (*ListServicesResponse, error)
+
+	// CreateServiceWithBodyWithResponse Create a service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+	CreateServiceWithBodyWithResponse(ctx context.Context, params *CreateServiceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateServiceResponse, error)
+
+	// CreateServiceWithResponse Create a service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+	CreateServiceWithResponse(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateServiceResponse, error)
+
+	// GetServiceWithResponse Read a service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/services/{service_id} (the `GetService` operationId).
+	GetServiceWithResponse(ctx context.Context, serviceId ServiceId, reqEditors ...RequestEditorFn) (*GetServiceResponse, error)
+
+	// PatchServiceMetadataWithBodyWithResponse Update service display metadata
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+	PatchServiceMetadataWithBodyWithResponse(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchServiceMetadataResponse, error)
+
+	// PatchServiceMetadataWithResponse Update service display metadata
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+	PatchServiceMetadataWithResponse(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchServiceMetadataResponse, error)
+
 	// ListSlisWithResponse List SLIs
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6050,6 +7360,61 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/slis/{sli_id}/observations (the `ListSliObservations` operationId).
 	ListSliObservationsWithResponse(ctx context.Context, sliId SliId, params *ListSliObservationsParams, reqEditors ...RequestEditorFn) (*ListSliObservationsResponse, error)
+
+	// ListSlosWithResponse List SLO definitions
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos (the `ListSlos` operationId).
+	ListSlosWithResponse(ctx context.Context, params *ListSlosParams, reqEditors ...RequestEditorFn) (*ListSlosResponse, error)
+
+	// CreateSloWithBodyWithResponse Create a single-indicator occurrence SLO
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+	CreateSloWithBodyWithResponse(ctx context.Context, params *CreateSloParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSloResponse, error)
+
+	// CreateSloWithResponse Create a single-indicator occurrence SLO
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+	CreateSloWithResponse(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSloResponse, error)
+
+	// GetSloWithResponse Read an SLO definition
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id} (the `GetSlo` operationId).
+	GetSloWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloResponse, error)
+
+	// PatchSloMetadataWithBodyWithResponse Update SLO display metadata
+	//
+	// Target, window and indicator are immutable in this increment.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+	PatchSloMetadataWithBodyWithResponse(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSloMetadataResponse, error)
+
+	// PatchSloMetadataWithResponse Update SLO display metadata
+	//
+	// Target, window and indicator are immutable in this increment.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+	PatchSloMetadataWithResponse(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, body PatchSloMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSloMetadataResponse, error)
+
+	// EvaluateSloWithResponse Evaluate a rolling occurrence objective
+	//
+	// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
+	EvaluateSloWithResponse(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*EvaluateSloResponse, error)
 
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
@@ -7734,6 +9099,219 @@ func (r GetProvidersResponse) ContentType() string {
 	return ""
 }
 
+type ListServicesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ServicePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListServicesResponse) GetJSON200() *ServicePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListServicesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListServicesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListServicesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListServicesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListServicesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreateServiceResponse201Headers the declared response headers of an HTTP 201 response for CreateService
+type CreateServiceResponse201Headers struct {
+	ETag *string
+}
+
+type CreateServiceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Service
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateServiceResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateServiceResponse) GetJSON201() *Service {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateServiceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateServiceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateServiceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateServiceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateServiceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetServiceResponse200Headers the declared response headers of an HTTP 200 response for GetService
+type GetServiceResponse200Headers struct {
+	ETag *string
+}
+
+type GetServiceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Service
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetServiceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetServiceResponse) GetJSON200() *Service {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetServiceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetServiceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetServiceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetServiceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetServiceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PatchServiceMetadataResponse200Headers the declared response headers of an HTTP 200 response for PatchServiceMetadata
+type PatchServiceMetadataResponse200Headers struct {
+	ETag *string
+}
+
+type PatchServiceMetadataResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Service
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PatchServiceMetadataResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchServiceMetadataResponse) GetJSON200() *Service {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchServiceMetadataResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchServiceMetadataResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchServiceMetadataResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchServiceMetadataResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchServiceMetadataResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListSlisResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8038,6 +9616,274 @@ func (r ListSliObservationsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListSliObservationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListSlosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSlosResponse) GetJSON200() *SloPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSlosResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSlosResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSlosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSlosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSlosResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreateSloResponse201Headers the declared response headers of an HTTP 201 response for CreateSlo
+type CreateSloResponse201Headers struct {
+	ETag *string
+}
+
+type CreateSloResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Slo
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateSloResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSloResponse) GetJSON201() *Slo {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateSloResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSloResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSloResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSloResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSloResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetSloResponse200Headers the declared response headers of an HTTP 200 response for GetSlo
+type GetSloResponse200Headers struct {
+	ETag *string
+}
+
+type GetSloResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Slo
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetSloResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSloResponse) GetJSON200() *Slo {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSloResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSloResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSloResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSloResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSloResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PatchSloMetadataResponse200Headers the declared response headers of an HTTP 200 response for PatchSloMetadata
+type PatchSloMetadataResponse200Headers struct {
+	ETag *string
+}
+
+type PatchSloMetadataResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Slo
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PatchSloMetadataResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchSloMetadataResponse) GetJSON200() *Slo {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchSloMetadataResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchSloMetadataResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchSloMetadataResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchSloMetadataResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchSloMetadataResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EvaluateSloResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloEvaluation
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EvaluateSloResponse) GetJSON200() *SloEvaluation {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r EvaluateSloResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EvaluateSloResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EvaluateSloResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EvaluateSloResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EvaluateSloResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EvaluateSloResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8758,6 +10604,84 @@ func (c *ClientWithResponses) GetProvidersWithResponse(ctx context.Context, para
 	return ParseGetProvidersResponse(rsp)
 }
 
+// ListServicesWithResponse List services
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/services (the `ListServices` operationId).
+func (c *ClientWithResponses) ListServicesWithResponse(ctx context.Context, params *ListServicesParams, reqEditors ...RequestEditorFn) (*ListServicesResponse, error) {
+	rsp, err := c.ListServices(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListServicesResponse(rsp)
+}
+
+// CreateServiceWithBodyWithResponse Create a service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+func (c *ClientWithResponses) CreateServiceWithBodyWithResponse(ctx context.Context, params *CreateServiceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateServiceResponse, error) {
+	rsp, err := c.CreateServiceWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateServiceResponse(rsp)
+}
+
+// CreateServiceWithResponse Create a service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/services (the `CreateService` operationId).
+func (c *ClientWithResponses) CreateServiceWithResponse(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateServiceResponse, error) {
+	rsp, err := c.CreateService(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateServiceResponse(rsp)
+}
+
+// GetServiceWithResponse Read a service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/services/{service_id} (the `GetService` operationId).
+func (c *ClientWithResponses) GetServiceWithResponse(ctx context.Context, serviceId ServiceId, reqEditors ...RequestEditorFn) (*GetServiceResponse, error) {
+	rsp, err := c.GetService(ctx, serviceId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetServiceResponse(rsp)
+}
+
+// PatchServiceMetadataWithBodyWithResponse Update service display metadata
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+func (c *ClientWithResponses) PatchServiceMetadataWithBodyWithResponse(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchServiceMetadataResponse, error) {
+	rsp, err := c.PatchServiceMetadataWithBody(ctx, serviceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchServiceMetadataResponse(rsp)
+}
+
+// PatchServiceMetadataWithResponse Update service display metadata
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
+func (c *ClientWithResponses) PatchServiceMetadataWithResponse(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchServiceMetadataResponse, error) {
+	rsp, err := c.PatchServiceMetadata(ctx, serviceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchServiceMetadataResponse(rsp)
+}
+
 // ListSlisWithResponse List SLIs
 //
 // Returns a wrapper object for the known response body format(s).
@@ -8857,6 +10781,103 @@ func (c *ClientWithResponses) ListSliObservationsWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseListSliObservationsResponse(rsp)
+}
+
+// ListSlosWithResponse List SLO definitions
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos (the `ListSlos` operationId).
+func (c *ClientWithResponses) ListSlosWithResponse(ctx context.Context, params *ListSlosParams, reqEditors ...RequestEditorFn) (*ListSlosResponse, error) {
+	rsp, err := c.ListSlos(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSlosResponse(rsp)
+}
+
+// CreateSloWithBodyWithResponse Create a single-indicator occurrence SLO
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+func (c *ClientWithResponses) CreateSloWithBodyWithResponse(ctx context.Context, params *CreateSloParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSloResponse, error) {
+	rsp, err := c.CreateSloWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSloResponse(rsp)
+}
+
+// CreateSloWithResponse Create a single-indicator occurrence SLO
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
+func (c *ClientWithResponses) CreateSloWithResponse(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSloResponse, error) {
+	rsp, err := c.CreateSlo(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSloResponse(rsp)
+}
+
+// GetSloWithResponse Read an SLO definition
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id} (the `GetSlo` operationId).
+func (c *ClientWithResponses) GetSloWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloResponse, error) {
+	rsp, err := c.GetSlo(ctx, sloId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSloResponse(rsp)
+}
+
+// PatchSloMetadataWithBodyWithResponse Update SLO display metadata
+//
+// Target, window and indicator are immutable in this increment.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+func (c *ClientWithResponses) PatchSloMetadataWithBodyWithResponse(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSloMetadataResponse, error) {
+	rsp, err := c.PatchSloMetadataWithBody(ctx, sloId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSloMetadataResponse(rsp)
+}
+
+// PatchSloMetadataWithResponse Update SLO display metadata
+//
+// Target, window and indicator are immutable in this increment.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/slos/{slo_id} (the `PatchSloMetadata` operationId).
+func (c *ClientWithResponses) PatchSloMetadataWithResponse(ctx context.Context, sloId SloId, params *PatchSloMetadataParams, body PatchSloMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSloMetadataResponse, error) {
+	rsp, err := c.PatchSloMetadata(ctx, sloId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSloMetadataResponse(rsp)
+}
+
+// EvaluateSloWithResponse Evaluate a rolling occurrence objective
+//
+// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
+func (c *ClientWithResponses) EvaluateSloWithResponse(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*EvaluateSloResponse, error) {
+	rsp, err := c.EvaluateSlo(ctx, sloId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEvaluateSloResponse(rsp)
 }
 
 // GetLivenessWithResponse Report whether the UI process is alive
@@ -10253,6 +12274,177 @@ func ParseGetProvidersResponse(rsp *http.Response) (*GetProvidersResponse, error
 	return response, nil
 }
 
+// ParseListServicesResponse parses an HTTP response from a ListServicesWithResponse call
+func ParseListServicesResponse(rsp *http.Response) (*ListServicesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListServicesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ServicePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateServiceResponse parses an HTTP response from a CreateServiceWithResponse call
+func ParseCreateServiceResponse(rsp *http.Response) (*CreateServiceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateServiceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Service
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateServiceResponse201Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetServiceResponse parses an HTTP response from a GetServiceWithResponse call
+func ParseGetServiceResponse(rsp *http.Response) (*GetServiceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetServiceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Service
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetServiceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePatchServiceMetadataResponse parses an HTTP response from a PatchServiceMetadataWithResponse call
+func ParsePatchServiceMetadataResponse(rsp *http.Response) (*PatchServiceMetadataResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchServiceMetadataResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Service
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PatchServiceMetadataResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseListSlisResponse parses an HTTP response from a ListSlisWithResponse call
 func ParseListSlisResponse(rsp *http.Response) (*ListSlisResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10506,6 +12698,217 @@ func ParseListSliObservationsResponse(rsp *http.Response) (*ListSliObservationsR
 	return response, nil
 }
 
+// ParseListSlosResponse parses an HTTP response from a ListSlosWithResponse call
+func ParseListSlosResponse(rsp *http.Response) (*ListSlosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSlosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateSloResponse parses an HTTP response from a CreateSloWithResponse call
+func ParseCreateSloResponse(rsp *http.Response) (*CreateSloResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSloResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Slo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateSloResponse201Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetSloResponse parses an HTTP response from a GetSloWithResponse call
+func ParseGetSloResponse(rsp *http.Response) (*GetSloResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSloResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Slo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetSloResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePatchSloMetadataResponse parses an HTTP response from a PatchSloMetadataWithResponse call
+func ParsePatchSloMetadataResponse(rsp *http.Response) (*PatchSloMetadataResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchSloMetadataResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Slo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PatchSloMetadataResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEvaluateSloResponse parses an HTTP response from a EvaluateSloWithResponse call
+func ParseEvaluateSloResponse(rsp *http.Response) (*EvaluateSloResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EvaluateSloResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloEvaluation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
 func ParseGetLivenessResponse(rsp *http.Response) (*GetLivenessResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10651,6 +13054,18 @@ type ServerInterface interface {
 	// GetProviders List provider descriptors and selected-agent availability
 	// (GET /api/v1/providers)
 	GetProviders(w http.ResponseWriter, r *http.Request, params GetProvidersParams)
+	// ListServices List services
+	// (GET /api/v1/services)
+	ListServices(w http.ResponseWriter, r *http.Request, params ListServicesParams)
+	// CreateService Create a service
+	// (POST /api/v1/services)
+	CreateService(w http.ResponseWriter, r *http.Request, params CreateServiceParams)
+	// GetService Read a service
+	// (GET /api/v1/services/{service_id})
+	GetService(w http.ResponseWriter, r *http.Request, serviceId ServiceId)
+	// PatchServiceMetadata Update service display metadata
+	// (PATCH /api/v1/services/{service_id})
+	PatchServiceMetadata(w http.ResponseWriter, r *http.Request, serviceId ServiceId, params PatchServiceMetadataParams)
 	// ListSlis List SLIs
 	// (GET /api/v1/slis)
 	ListSlis(w http.ResponseWriter, r *http.Request, params ListSlisParams)
@@ -10666,6 +13081,21 @@ type ServerInterface interface {
 	// ListSliObservations Read bounded SLI interval history
 	// (GET /api/v1/slis/{sli_id}/observations)
 	ListSliObservations(w http.ResponseWriter, r *http.Request, sliId SliId, params ListSliObservationsParams)
+	// ListSlos List SLO definitions
+	// (GET /api/v1/slos)
+	ListSlos(w http.ResponseWriter, r *http.Request, params ListSlosParams)
+	// CreateSlo Create a single-indicator occurrence SLO
+	// (POST /api/v1/slos)
+	CreateSlo(w http.ResponseWriter, r *http.Request, params CreateSloParams)
+	// GetSlo Read an SLO definition
+	// (GET /api/v1/slos/{slo_id})
+	GetSlo(w http.ResponseWriter, r *http.Request, sloId SloId)
+	// PatchSloMetadata Update SLO display metadata
+	// (PATCH /api/v1/slos/{slo_id})
+	PatchSloMetadata(w http.ResponseWriter, r *http.Request, sloId SloId, params PatchSloMetadataParams)
+	// EvaluateSlo Evaluate a rolling occurrence objective
+	// (GET /api/v1/slos/{slo_id}/evaluation)
+	EvaluateSlo(w http.ResponseWriter, r *http.Request, sloId SloId, params EvaluateSloParams)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -11765,6 +14195,177 @@ func (siw *ServerInterfaceWrapper) GetProviders(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListServices operation middleware
+func (siw *ServerInterfaceWrapper) ListServices(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListServicesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListServices(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateService operation middleware
+func (siw *ServerInterfaceWrapper) CreateService(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateServiceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateService(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetService operation middleware
+func (siw *ServerInterfaceWrapper) GetService(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "service_id" -------------
+	var serviceId ServiceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "service_id", r.PathValue("service_id"), &serviceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetService(w, r, serviceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchServiceMetadata operation middleware
+func (siw *ServerInterfaceWrapper) PatchServiceMetadata(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "service_id" -------------
+	var serviceId ServiceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "service_id", r.PathValue("service_id"), &serviceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PatchServiceMetadataParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchServiceMetadata(w, r, serviceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSlis operation middleware
 func (siw *ServerInterfaceWrapper) ListSlis(w http.ResponseWriter, r *http.Request) {
 
@@ -11991,6 +14592,258 @@ func (siw *ServerInterfaceWrapper) ListSliObservations(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListSlos operation middleware
+func (siw *ServerInterfaceWrapper) ListSlos(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSlosParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service_id", r.URL.Query(), &params.ServiceId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSlos(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSlo operation middleware
+func (siw *ServerInterfaceWrapper) CreateSlo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateSloParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSlo(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSlo operation middleware
+func (siw *ServerInterfaceWrapper) GetSlo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSlo(w, r, sloId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchSloMetadata operation middleware
+func (siw *ServerInterfaceWrapper) PatchSloMetadata(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PatchSloMetadataParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchSloMetadata(w, r, sloId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EvaluateSlo operation middleware
+func (siw *ServerInterfaceWrapper) EvaluateSlo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EvaluateSloParams
+
+	// ------------- Optional query parameter "at" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "at", r.URL.Query(), &params.At, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "at"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "at", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "timeline_start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "timeline_start", r.URL.Query(), &params.TimelineStart, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "timeline_start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "timeline_start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "timeline_end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "timeline_end", r.URL.Query(), &params.TimelineEnd, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "timeline_end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "timeline_end", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EvaluateSlo(w, r, sloId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
 
@@ -12170,6 +15023,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.GetSli)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.PatchSliMetadata)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/observations", wrapper.ListSliObservations)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/services", wrapper.ListServices)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/services", wrapper.CreateService)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.GetService)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.PatchServiceMetadata)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos", wrapper.ListSlos)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slos", wrapper.CreateSlo)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}", wrapper.GetSlo)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slos/{slo_id}", wrapper.PatchSloMetadata)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/evaluation", wrapper.EvaluateSlo)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/livez", wrapper.GetLiveness)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReadiness)
 

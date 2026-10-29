@@ -13,6 +13,11 @@ Crit review `0de0c0e42db6` adds [SPEC-0017](0017-slo-timeline-annotations.md)
 to F3 and [SPEC-0016](0016-maintenance-exclusions.md) to F4. Maintenance exclusions
 are part of initial delivery; the sequence and checks below reflect that approval.
 
+On 2026-10-28 the maintainer authorized starting F3 on existing agent-collected
+Prometheus SLIs while deferring direct external submission for further resource-model
+review. F2 remains incomplete; this sequencing exception does not accept a change
+from the existing external-SLI contract. Backfill and repair remain in F4.
+
 ## Purpose
 
 Reach a working application through complete demonstrable increments. Specifications

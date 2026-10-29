@@ -2,6 +2,27 @@
 
 ## Current state
 
+[F3-T01](tasks/F3-T01.md) is verified locally on `feat/f3-first-objective`,
+based on merged `e174291`. The maintainer authorized starting F3 with current
+Prometheus SLIs while external submission remains deferred and F2 incomplete.
+The [first objective plan](plans/0021-first-objective.md) separates the initial
+usable SLO journey from the remaining F3 reporting, import and annotation work.
+Users can create services and single-indicator request-count SLOs, evaluate fixed
+rolling windows, and inspect exact success, budget, burn and qualified coverage
+through UI/API/CLI. The PR #46 review candidate at source `33b85ced` passed the full
+Linux gate: 282 web, 379 Go, 371 race, 166 PostgreSQL integration and 108 browser
+tests. Normal Compose and cancellation cleanup passed; recovered SLO results were
+inspected in light desktop and dark mobile layouts. The three Greptile findings
+are corrected: evaluation retries serialization conflicts with fresh authorization,
+historical-create recovery preserves its body/key, and sign-out invalidates delayed
+navigation. The task records the original regressions and test-helper corrections.
+This is the first usable F3 increment. Target
+revisions, calendar windows, reports, OpenSLO and annotations remain in the plan.
+The increment is published in PR #46; it has not been deployed to the operator app.
+F3-T01 remains in review because an earlier run again encountered the existing
+intermittent browser response-read failure before the SLO journey. That investigation
+remains open; the final passing gate is not presented as a fix for it.
+
 [F2-T32](tasks/F2-T32.md) is verified on `fix/stack-review`, based on `bcd636b`.
 It repairs thirteen review findings across the SLI and agent stack: empty-history
 lists, bounded large responses, focus and retry, lease indexes, month-end partitions,
@@ -10,7 +31,7 @@ Source `06f59ca3` passed 261 web, 365 Go, 357 race, 165 PostgreSQL integration a
 108 browser tests. Normal Compose acceptance covered navigation/retry, exact 99/100
 collection and clean/forced/backend restarts; desktop/mobile pages in both themes
 were inspected. F2-T32 records first failures, corrections and compatibility limits.
-This correction is prepared at the stack tip; the operator app remains unchanged.
+The correction and its dependency stack merged into main at `e174291`; the operator app remains unchanged.
 
 [F2-T31](tasks/F2-T31.md) is verified on `fix/agent-restart`, based on `c6b8674`.
 [ADR-0022](adr/0022-restartable-agent-ownership.md) replaces the one-hour restart

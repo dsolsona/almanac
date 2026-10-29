@@ -305,6 +305,10 @@ func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, 
 }
 
 func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	return beginAgentReadWithOptions(ctx, databaseURL, verifier, clock, pgx.TxOptions{}, roles...)
+}
+
+func beginAgentReadWithOptions(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, options pgx.TxOptions, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	conn, err := connectCurrentSchema(ctx, databaseURL)
 	if err != nil {
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
@@ -319,7 +323,7 @@ func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read session lookup failed", err)
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := conn.BeginTx(ctx, options)
 	if err != nil {
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read transaction failed", err)
@@ -372,7 +376,7 @@ func finishAgentRead(ctx context.Context, tx pgx.Tx, clock func() time.Time, sta
 		return ErrInvalidSession
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return operationError(ctx, "storage: agent read commit failed", err)
+		return readTransactionError(ctx, "storage: agent read commit failed", err)
 	}
 	return nil
 }
@@ -380,7 +384,7 @@ func readAuthorityError(ctx context.Context, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInvalidSession
 	}
-	return operationError(ctx, "storage: agent read authority lock failed", err)
+	return readTransactionError(ctx, "storage: agent read authority lock failed", err)
 }
 func normalizedAgentNow(clock func() time.Time) time.Time {
 	now := clock()

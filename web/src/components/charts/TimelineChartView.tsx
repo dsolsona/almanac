@@ -63,7 +63,7 @@ export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
     <h2 id={titleId}>{chart.title}</h2>
     <p className="timeline-chart__summary">{chart.summary}</p>
     <p className="timeline-chart__meta">Range: {chart.start} to {chart.end} (end excluded) · UTC · step {Math.round(chart.stepMs / 1000)} seconds</p>
-    <p className="timeline-chart__coverage">Coverage: complete samples are lines, with circles for isolated points; partial samples use diamonds and are labelled; missing and zero-traffic samples break lines.</p>
-    {result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" role="img" aria-label={`${chart.title}. ${chart.summary}`} />}
+    <details className="timeline-chart__coverage"><summary>Coverage key</summary><p>Complete samples are lines, with circles for isolated points; partial samples use diamonds. Missing, known-empty, expired, not-applicable and zero-traffic samples break lines.</p></details>
+    {result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} role="img" aria-label={`${chart.title}. ${chart.summary}`} />}
   </section>;
 }

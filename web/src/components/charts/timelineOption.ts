@@ -19,6 +19,9 @@ function escapeHTML(value: string): string {
 function coverageLabel(coverage: string): string {
   switch (coverage) {
     case 'zero-traffic': return 'Zero traffic';
+    case 'known-empty': return 'Known empty';
+    case 'expired': return 'Expired history';
+    case 'not-applicable': return 'Not applicable';
     case 'missing': return 'Missing';
     case 'partial': return 'Partial';
     default: return 'Complete';
@@ -28,7 +31,10 @@ function coverageLabel(coverage: string): string {
 export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeline, palette: TimelinePalette): EChartsOption {
   const { axis, grid, labelText, crosshair, series: colors } = palette;
   const lanes = chart.lanes.length;
-  const grids = chart.lanes.map((_, index) => ({ left: 66, right: 20, top: `${6 + index * 22}%`, height: '16%', containLabel: false }));
+  const top = 6;
+  const gap = 6;
+  const laneHeight = (78 - gap * (lanes - 1)) / lanes;
+  const grids = chart.lanes.map((_, index) => ({ left: 66, right: 20, top: `${top + index * (laneHeight + gap)}%`, height: `${laneHeight}%`, containLabel: false }));
   const xAxis = chart.lanes.map((_, index) => ({
     type: 'time' as const, gridIndex: index, min: Date.parse(chart.start), max: Date.parse(chart.end),
     axisLine: { lineStyle: { color: axis } }, axisTick: { show: index === lanes - 1 },

@@ -12,11 +12,12 @@ const lanes = [
 const pointsFor = (lane: typeof lanes[number]): TimelinePoint[] => Array.from({ length: 16 }, (_, index) => index)
   .filter((index) => index !== 8)
   .map((index) => {
-    const coverage = index === 4 ? 'partial' : index === 5 ? 'missing' : index === 10 ? 'zero-traffic' : 'complete';
+    const coverage = index === 4 ? 'partial' : index === 5 ? 'missing' : index === 10 ? 'zero-traffic'
+      : index === 11 ? 'known-empty' : index === 12 ? 'expired' : index === 13 ? 'not-applicable' : 'complete';
     const numeric = index === 6 ? 0 : lane.base - (index % 3) * 0.01;
     return {
       timestamp: new Date(start + index * 60_000).toISOString(),
-      value: coverage === 'missing' || coverage === 'zero-traffic' ? null : numeric.toFixed(6),
+      value: coverage === 'complete' || coverage === 'partial' ? numeric.toFixed(6) : null,
       coverage,
     };
   });

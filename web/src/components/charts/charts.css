@@ -2,7 +2,12 @@
 .timeline-chart h2, .exact-values h2 { margin: 0 0 var(--space-2); font-family: var(--almanac-heading); font-size: 1.25rem; font-weight: 400; }
 .timeline-chart__summary, .timeline-chart__meta, .timeline-chart__coverage { margin: 0 0 var(--space-2); color: var(--text-2); }
 .timeline-chart__meta, .timeline-chart__coverage { font-size: .875rem; }
+.timeline-chart__coverage summary { cursor: pointer; }
+.timeline-chart__coverage p { margin: var(--space-2) 0; }
 .timeline-chart__plot { width: 100%; height: 420px; min-width: 0; }
+.timeline-chart__plot[data-lanes="1"] { height: 240px; }
+.timeline-chart__plot[data-lanes="2"] { height: 300px; }
+.timeline-chart__plot[data-lanes="3"] { height: 360px; }
 .timeline-chart__plot svg { max-width: 100%; }
 .timeline-chart__error { padding: var(--space-3); border-inline-start: 3px solid var(--status-breached); background: var(--crit-wash); color: var(--crit-text); }
 .exact-values__scroll { max-width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
@@ -20,6 +25,6 @@
 .exact-values__controls > div { display: flex; gap: var(--space-2); }
 
 @media (max-width: 700px) {
-  .timeline-chart__plot { height: 400px; }
+  .timeline-chart__plot[data-lanes="4"] { height: 400px; }
   .exact-values__controls { align-items: flex-start; flex-direction: column; }
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/dsolsona/almanac/internal/datasourcehttp"
 	"github.com/dsolsona/almanac/internal/secretfile"
 	"github.com/dsolsona/almanac/internal/slihttp"
+	"github.com/dsolsona/almanac/internal/slohttp"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
 )
@@ -127,6 +128,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid SLI handler configuration")
 	}
+	objectives, err := slohttp.New(databaseURL, auth, time.Now, s.authenticationPreflight)
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid objective handler configuration")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
@@ -140,6 +145,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.Handle("/api/v1/diagnostics/", datasources)
 	mux.Handle("/api/v1/slis", slis)
 	mux.Handle("/api/v1/slis/", slis)
+	mux.Handle("/api/v1/services", objectives)
+	mux.Handle("/api/v1/services/", objectives)
+	mux.Handle("/api/v1/slos", objectives)
+	mux.Handle("/api/v1/slos/", objectives)
 	mux.Handle("/api/v1/", agents)
 	mux.Handle("/api/agent/v1/configuration", configuration)
 	mux.Handle("/api/agent/v1/observations", slis)

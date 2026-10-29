@@ -522,6 +522,111 @@ paths:
         '200': {description: Exact persisted interval outcomes, content: {application/json: {schema: {$ref: '#/components/schemas/SliObservationPage'}}}}
         '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/services:
+    get:
+      operationId: listServices
+      summary: List services
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      responses:
+        '200': {description: Bounded service page, content: {application/json: {schema: {$ref: '#/components/schemas/ServicePage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: createService
+      summary: Create a service
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceCreateRequest'}}}}
+      responses:
+        '201': {description: Created service, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Service'}}}}
+        'default': {description: Invalid request, duplicate name or idempotency conflict, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/services/{service_id}:
+    get:
+      operationId: getService
+      summary: Read a service
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ServiceId'}
+      responses:
+        '200': {description: Service, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Service'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    patch:
+      operationId: patchServiceMetadata
+      summary: Update service display metadata
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ServiceId'}
+        - {$ref: '#/components/parameters/ResourceIfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceMetadataWrite'}}}}
+      responses:
+        '200': {description: Updated service, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Service'}}}}
+        'default': {description: Request rejected or stale version, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos:
+    get:
+      operationId: listSlos
+      summary: List SLO definitions
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+        - {name: service_id, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Bounded SLO page, content: {application/json: {schema: {$ref: '#/components/schemas/SloPage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: createSlo
+      summary: Create a single-indicator occurrence SLO
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SloCreateRequest'}}}}
+      responses:
+        '201': {description: Created SLO, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Slo'}}}}
+        'default': {description: Invalid target or window, duplicate name or idempotency conflict, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}:
+    get:
+      operationId: getSlo
+      summary: Read an SLO definition
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+      responses:
+        '200': {description: SLO, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Slo'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    patch:
+      operationId: patchSloMetadata
+      summary: Update SLO display metadata
+      description: Target, window and indicator are immutable in this increment.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {$ref: '#/components/parameters/ResourceIfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceMetadataWrite'}}}}
+      responses:
+        '200': {description: Updated SLO, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Slo'}}}}
+        'default': {description: Request rejected or stale version, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/evaluation:
+    get:
+      operationId: evaluateSlo
+      summary: Evaluate a rolling occurrence objective
+      description: >-
+        This ephemeral current evaluation reads the summary and bounded timeline in one
+        repeatable-read snapshot. It is not a retained report or a commit watermark.
+        Both timeline bounds must be provided together, aligned to cadence, within the
+        objective window and at most 1500 intervals. Future evaluation times are rejected.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {name: at, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: timeline_start, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: timeline_end, in: query, required: false, schema: {type: string, format: date-time}}
+      responses:
+        '200': {description: Current evaluation and bounded exact timeline, content: {application/json: {schema: {$ref: '#/components/schemas/SloEvaluation'}}}}
+        '400': {description: Invalid time, alignment or timeline range, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /livez:
     get:
       operationId: getLiveness
@@ -574,6 +679,22 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    ServiceId:
+      name: service_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    SloId:
+      name: slo_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ResourceIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+      schema: {type: string}
     DiagnosticId:
       name: diagnostic_id
       in: path
@@ -634,6 +755,169 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    ServiceCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, display_name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+    ResourceMetadataWrite:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 128}
+    Service:
+      type: object
+      required: [id, name, display_name, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        version: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ServicePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Service'}}
+        next_cursor: {type: string}
+    SloCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, display_name, service_id, sli_id, target, rolling_window_seconds]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        service_id: {type: string, format: uuid}
+        sli_id: {type: string, format: uuid}
+        target: {type: string, pattern: '^(0(?:\.[0-9]{1,12})?)$', description: 'Exact fractional target in [0,1); 1 is invalid.'}
+        rolling_window_seconds: {type: integer, format: int64, minimum: 1, maximum: 2147483647, description: Positive fixed seconds divisible by the SLI cadence.}
+        evaluation_valid_from: {type: string, format: date-time, description: Optional aligned retained historical start; omission begins validity at activation and does not start backfill.}
+    Slo:
+      type: object
+      required: [id, name, display_name, version, definition_revision, service_id, service_display_name, sli_id, sli_display_name, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        version: {type: string}
+        definition_revision: {type: string}
+        service_id: {type: string, format: uuid}
+        service_display_name: {type: string}
+        sli_id: {type: string, format: uuid}
+        sli_display_name: {type: string}
+        target: {type: string}
+        rolling_window_seconds: {type: integer, format: int64}
+        cadence_seconds: {type: integer}
+        activated_at: {type: string, format: date-time}
+        evaluation_valid_from: {type: string, format: date-time}
+        historical_requested_by: {type: string, format: uuid, nullable: true}
+        historical_requested_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SloPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Slo'}}
+        next_cursor: {type: string}
+    SloEvaluation:
+      type: object
+      required: [evaluation_id, requested_at, effective_end, calculation_version, snapshot_kind, objective, window, quality, performance, timeline]
+      properties:
+        evaluation_id: {type: string, format: uuid}
+        requested_at: {type: string, format: date-time}
+        effective_end: {type: string, format: date-time}
+        calculation_version: {type: string}
+        snapshot_kind: {type: string, enum: [current_evaluation]}
+        objective: {$ref: '#/components/schemas/SloEvaluationObjective'}
+        window: {$ref: '#/components/schemas/SloEvaluationWindow'}
+        quality: {$ref: '#/components/schemas/SloEvaluationQuality'}
+        performance: {$ref: '#/components/schemas/SloEvaluationPerformance'}
+        timeline: {$ref: '#/components/schemas/SloEvaluationTimeline'}
+    SloEvaluationObjective:
+      type: object
+      required: [slo_id, definition_revision, sli_id, measurement_revision, target, method, rolling_window_seconds, cadence_seconds]
+      properties:
+        slo_id: {type: string, format: uuid}
+        definition_revision: {type: string}
+        sli_id: {type: string, format: uuid}
+        measurement_revision: {type: string}
+        target: {type: string}
+        method: {type: string, enum: [occurrences]}
+        rolling_window_seconds: {type: integer, format: int64}
+        cadence_seconds: {type: integer}
+    SloEvaluationWindow:
+      type: object
+      required: [requested_start, effective_start, end, eligible_start, retention_start, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at]
+      properties:
+        requested_start: {type: string, format: date-time}
+        effective_start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        eligible_start: {type: string, format: date-time}
+        retention_start: {type: string, format: date-time}
+        activated_at: {type: string, format: date-time}
+        evaluation_valid_from: {type: string, format: date-time}
+        historical_requested_by: {type: string, format: uuid, nullable: true}
+        historical_requested_at: {type: string, format: date-time, nullable: true}
+    SloEvaluationQuality:
+      type: object
+      required: [state, expected_intervals, observed_intervals, known_empty_intervals, missing_intervals, zero_traffic_intervals, expired_intervals, coverage, first_observation_at, last_observation_at, latest_receipt_at, freshness]
+      properties:
+        state: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_applicable]}
+        expected_intervals: {type: integer, format: int64}
+        observed_intervals: {type: integer, format: int64}
+        known_empty_intervals: {type: integer, format: int64}
+        missing_intervals: {type: integer, format: int64}
+        zero_traffic_intervals: {type: integer, format: int64}
+        expired_intervals: {type: integer, format: int64}
+        coverage: {type: string, nullable: true}
+        first_observation_at: {type: string, format: date-time, nullable: true}
+        last_observation_at: {type: string, format: date-time, nullable: true}
+        latest_receipt_at: {type: string, format: date-time, nullable: true}
+        freshness: {type: string, enum: [unknown, fresh, stale]}
+    SloEvaluationPerformance:
+      type: object
+      required: [state, observed_state, provisional, reason, good, total, bad, attainment, allowed_budget, remaining_budget, consumed_fraction, remaining_fraction, burn, budget_unit]
+      properties:
+        state: {type: string, enum: [met, violated, unknown, not_applicable]}
+        observed_state: {type: string, enum: [met, violated], nullable: true}
+        provisional: {type: boolean}
+        reason: {type: string, nullable: true}
+        good: {type: string, nullable: true}
+        total: {type: string, nullable: true}
+        bad: {type: string, nullable: true}
+        attainment: {type: string, nullable: true}
+        allowed_budget: {type: string, nullable: true}
+        remaining_budget: {type: string, nullable: true}
+        consumed_fraction: {type: string, nullable: true}
+        remaining_fraction: {type: string, nullable: true}
+        burn: {type: string, nullable: true}
+        budget_unit: {type: string, enum: [events]}
+    SloEvaluationTimeline:
+      type: object
+      required: [start, end, cadence_seconds, max_intervals, items]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        cadence_seconds: {type: integer}
+        max_intervals: {type: integer, enum: [1500]}
+        items: {type: array, maxItems: 1500, items: {$ref: '#/components/schemas/SloTimelineItem'}}
+    SloTimelineItem:
+      type: object
+      required: [start, end, state, good, total, attainment, burn, received_at]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        state: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable]}
+        good: {type: string, nullable: true}
+        total: {type: string, nullable: true}
+        attainment: {type: string, nullable: true}
+        burn: {type: string, nullable: true}
+        received_at: {type: string, format: date-time, nullable: true}
     SliPage:
       type: object
       required: [items, next_cursor]

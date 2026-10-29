@@ -124,6 +124,8 @@ calculate SLOs, budgets or burn rates.
 
 Pair every chart with `ExactValuesTable`, backed by the same sample objects. It
 shows exact decimal strings and coverage in a keyboard-focusable scroll region,
-with controlled pages of at most 50 rows. Keep missing, partial and zero-traffic
-labels distinct. Synthetic catalogue fixtures must be explicitly labelled and
+with controlled pages of at most 50 rows. Keep missing, partial, zero-traffic,
+known-empty, expired and not-applicable labels distinct in charts, tooltips and
+tables. Known-empty, expired and not-applicable samples remain gaps, never numeric
+zero. Synthetic catalogue fixtures must be explicitly labelled and
 must never look like live service data.

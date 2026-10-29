@@ -1,4 +1,4 @@
-export type Coverage = 'complete' | 'partial' | 'missing' | 'zero-traffic';
+export type Coverage = 'complete' | 'partial' | 'missing' | 'zero-traffic' | 'known-empty' | 'expired' | 'not-applicable';
 export type TimelinePoint = { timestamp: string; value: string | null; coverage: Coverage };
 export type TimelineSeries = { id: string; label: string; points: TimelinePoint[] };
 export type TimelineLane = { id: string; label: string; unit: string; series: TimelineSeries[] };
@@ -37,8 +37,8 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
         if (time <= previous) throw new Error(`Series ${item.label} timestamps must be strictly ordered`);
         previous = time;
         timestamps.add(time);
-        if (!['complete', 'partial', 'missing', 'zero-traffic'].includes(point.coverage)) throw new Error(`Unsupported coverage state: ${String(point.coverage)}`);
-        if ((point.coverage === 'missing' || point.coverage === 'zero-traffic') && point.value !== null) throw new Error(`${point.coverage} samples must not have a value`);
+        if (!['complete', 'partial', 'missing', 'zero-traffic', 'known-empty', 'expired', 'not-applicable'].includes(point.coverage)) throw new Error(`Unsupported coverage state: ${String(point.coverage)}`);
+        if (!['complete', 'partial'].includes(point.coverage) && point.value !== null) throw new Error(`${point.coverage} samples must not have a value`);
         if ((point.coverage === 'complete' || point.coverage === 'partial') && point.value === null) throw new Error(`${point.coverage} samples require a value`);
         let numeric: number | null = null;
         if (point.value !== null) {

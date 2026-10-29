@@ -1,0 +1,30 @@
+.slos-page { max-width: 1120px; }
+.slo-title { display:flex; align-items:flex-end; justify-content:space-between; gap:var(--space-4); margin-bottom:var(--space-6); }
+.slo-title h1 { margin-bottom:0; }
+.slo-subtitle,.slo-muted { color:var(--text-2); }
+.slo-empty,.slo-result,.slo-timeline { margin:var(--space-6) 0; }
+.slo-list { border-top:1px solid var(--border); margin-bottom:var(--space-4); }
+.slo-row { display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-4); border-bottom:1px solid var(--border); color:var(--text); text-decoration:none; }
+.slo-row:hover { background:var(--surface-2); }
+.slo-row span { color:var(--text-2); }
+.slo-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:var(--space-4); }
+.slo-fields { border:0; padding:0; margin:0; min-width:0; }
+.slo-add-service { display:flex; align-self:end; }
+.slo-history { border-top:1px solid var(--border); margin-top:var(--space-4); padding-top:var(--space-4); }
+.slo-history label { display:flex; align-items:start; gap:var(--space-2); font-weight:600; }
+.slo-history input { margin-top:4px; }
+.slo-actions { display:flex; justify-content:flex-end; gap:var(--space-3); margin-top:var(--space-5); }
+.slo-error { color:var(--status-breached); }
+.slo-result { border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:var(--space-4) 0; }
+.slo-result h2 { margin-top:0; }
+.slo-qualification { color:var(--status-warning); }
+.slo-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-4); margin:var(--space-5) 0; }
+.slo-metrics div { min-width:0; }
+.slo-metrics dt { color:var(--text-2); }
+.slo-metrics dd { margin:var(--space-2) 0 0; font-size:1.25rem; font-weight:700; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.slo-related { color:var(--text-2); overflow-wrap:anywhere; }
+.slos-page details { margin:var(--space-6) 0; }
+.slos-page summary { cursor:pointer; font-weight:600; }
+.slos-page form > .ui-field { max-width:32rem; margin:var(--space-4) 0; }
+@media(max-width:700px) { .slo-title { align-items:flex-start; flex-wrap:wrap; } .slo-form-grid,.slo-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:480px) { .slo-form-grid { grid-template-columns:1fr; } }

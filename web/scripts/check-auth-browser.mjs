@@ -271,11 +271,14 @@ try {
   const failureCategory = /strict mode violation/i.test(errorText) ? 'strict-locator'
     : error?.name === 'TimeoutError' || /timeout .* exceeded|timed out/i.test(errorText) ? 'timeout'
       : error?.name === 'AssertionError' || error?.name === 'ExpectError' || /expect\(/.test(errorText) ? 'assertion' : 'other';
+  // Only the fixed categories from readResponseJSON are eligible for output.
+  const responseCategories = ['body_json_invalid', 'body_resource_missing', 'body_cache_evicted', 'body_read_failed'];
+  const responseCategory = error?.name === 'ResponseReadError' && responseCategories.includes(error.category) ? error.category : 'none';
   const safeLocation = await page?.evaluate(() => {
     const agent = new URL(location.href).searchParams.get('agent') ?? '';
     return { pathname: location.pathname, agent: /^[0-9a-f-]{36}$/.test(agent) ? agent : '(none or invalid)' };
   }).catch(() => ({ pathname: 'unavailable', agent: 'unavailable' })) ?? { pathname: 'unavailable', agent: 'unavailable' };
-  await writeFile(join(fixture.artifacts, 'failure.txt'), `Failed stage: ${stage}\nActual pathname: ${safeLocation.pathname}\nActual agent: ${safeLocation.agent}\nNetwork code: ${networkCode}\nFailure category: ${failureCategory}\nLogin requests: ${counts.login}\nPassword requests: ${counts.password}\n`, { mode: 0o600 });
+  await writeFile(join(fixture.artifacts, 'failure.txt'), `Failed stage: ${stage}\nActual pathname: ${safeLocation.pathname}\nActual agent: ${safeLocation.agent}\nNetwork code: ${networkCode}\nFailure category: ${failureCategory}\nResponse read category: ${responseCategory}\nLogin requests: ${counts.login}\nPassword requests: ${counts.password}\n`, { mode: 0o600 });
   try {
     if (!fixture.scenario.startsWith('agents')) {
       await page?.screenshot({ path: join(fixture.artifacts, 'failure.png'),

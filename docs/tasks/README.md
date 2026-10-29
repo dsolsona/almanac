@@ -142,3 +142,5 @@ agent record alignment, credential history and plain-language password guidance.
 [F2-T31](F2-T31.md) makes authenticated process replacement immediate and fences superseded processes under ADR-0022.
 
 [F2-T32](F2-T32.md) addresses stack review findings in SLI lists/navigation, collection scheduling and agent lifecycle compatibility.
+
+[F3-T01](F3-T01.md) verifies the first request-count objective journey under the [F3 plan](../plans/0021-first-objective.md).

@@ -189,11 +189,31 @@ type AlmanacManagementReceipt struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 }
 
+type AlmanacObjectiveCreateReceipt struct {
+	ActorID        pgtype.UUID        `json:"actor_id"`
+	Operation      string             `json:"operation"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	RequestDigest  []byte             `json:"request_digest"`
+	ResultID       pgtype.UUID        `json:"result_id"`
+	Result         []byte             `json:"result"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
 type AlmanacSchemaMigration struct {
 	Version   int64              `json:"version"`
 	Filename  string             `json:"filename"`
 	Checksum  []byte             `json:"checksum"`
 	AppliedAt pgtype.Timestamptz `json:"applied_at"`
+}
+
+type AlmanacService struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	DisplayName string             `json:"display_name"`
+	Version     int64              `json:"version"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AlmanacSession struct {
@@ -315,6 +335,31 @@ type AlmanacSliOwnershipEpoch struct {
 	StartsAt              pgtype.Timestamptz `json:"starts_at"`
 	EndsAt                pgtype.Timestamptz `json:"ends_at"`
 	ConfigurationRevision int64              `json:"configuration_revision"`
+}
+
+type AlmanacSlo struct {
+	ID                 pgtype.UUID        `json:"id"`
+	Name               string             `json:"name"`
+	DisplayName        string             `json:"display_name"`
+	Version            int64              `json:"version"`
+	DefinitionRevision int64              `json:"definition_revision"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacSloDefinition struct {
+	SloID                 pgtype.UUID        `json:"slo_id"`
+	Revision              int64              `json:"revision"`
+	ServiceID             pgtype.UUID        `json:"service_id"`
+	SliID                 pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision   int64              `json:"measurement_revision"`
+	Target                pgtype.Numeric     `json:"target"`
+	RollingWindowSeconds  int64              `json:"rolling_window_seconds"`
+	CadenceSeconds        int32              `json:"cadence_seconds"`
+	ActivatedAt           pgtype.Timestamptz `json:"activated_at"`
+	EvaluationValidFrom   pgtype.Timestamptz `json:"evaluation_valid_from"`
+	HistoricalRequestedBy pgtype.UUID        `json:"historical_requested_by"`
+	HistoricalRequestedAt pgtype.Timestamptz `json:"historical_requested_at"`
 }
 
 type AlmanacUser struct {

@@ -28,6 +28,33 @@ describe('timeline model and options', () => {
     expect(normalized.series[0]?.tooltipData.map((item) => item.coverage)).toEqual(['complete', 'missing', 'partial']);
   });
 
+  it('keeps known-empty, expired and not-applicable gaps distinct from numeric zero', () => {
+    const states = ['known-empty', 'expired', 'not-applicable'] as const;
+    const points = [
+      { timestamp: '2026-01-01T00:00:00Z', value: '0', coverage: 'complete' as const },
+      ...states.map((state, index) => ({ timestamp: `2026-01-01T00:0${index + 1}:00Z`, value: null, coverage: state })),
+    ];
+    const fixture: TimelineChart = { ...chart, lanes: [{ ...chart.lanes[0]!, series: [{ id: 'sli', label: 'SLI', points }] }] };
+    const normalized = validateTimeline(fixture);
+    expect(normalized.series[0]?.data.map(point => point.value)).toEqual([0, null, null, null]);
+    expect(normalized.series[0]?.tooltipData.map(point => point.coverage)).toEqual(['complete', ...states]);
+    const option = buildTimelineOption(fixture, normalized, palette);
+    const tooltip = option.tooltip as unknown as { formatter: (params: { axisValue: number }) => string };
+    for (const [index, label] of ['Known empty', 'Expired history', 'Not applicable'].entries()) {
+      expect(tooltip.formatter({ axisValue: Date.parse(points[index + 1]!.timestamp) })).toContain(label);
+    }
+    for (const state of states) {
+      expect(() => validateTimeline({ ...fixture, lanes: [{ ...fixture.lanes[0]!, series: [{ id: 'sli', label: 'SLI', points: [{ ...points[0]!, coverage: state }] }] }] })).toThrow(/must not have a value/);
+    }
+    const rows = points.map(point => ({ ...point, lane: 'Availability', series: 'SLI', unit: '%' }));
+    render(<ExactValuesTable rows={rows} page={1} totalRows={rows.length} onPageChange={() => undefined} />);
+    expect(screen.getByText('0 %')).toBeVisible();
+    expect(screen.getByText('Known empty')).toBeVisible();
+    expect(screen.getByText('Expired history')).toBeVisible();
+    expect(screen.getByText('Not applicable')).toBeVisible();
+    expect(screen.getAllByText('—')).toHaveLength(3);
+  });
+
   it('rejects invalid ranges, unsorted timestamps, nonfinite values and oversized series', () => {
     expect(() => validateTimeline({ ...chart, end: chart.start })).toThrow(/range/i);
     expect(() => validateTimeline({ ...chart, start: '2026-02-28T00:00:00Z', end: '2026-03-04T00:00:00Z', lanes: [{ ...chart.lanes[0]!, series: [{ ...chart.lanes[0]!.series[0]!, points: [{ timestamp: '2026-02-31T00:00:00Z', value: '1', coverage: 'complete' }] }] }] })).toThrow(/valid timestamp/i);
@@ -66,6 +93,22 @@ describe('timeline model and options', () => {
     expect(option.tooltip).toMatchObject({ backgroundColor: palette.surface, borderColor: palette.surfaceBorder, textStyle: { color: palette.text } });
     expect(series.some((item) => item && 'type' in item && item.type === 'line' && 'connectNulls' in item && item.connectNulls === false)).toBe(true);
     expect(option.animation).toBe(false);
+  });
+
+  it('uses the available plot height for one and four aligned lanes', () => {
+    for (const count of [1, 4]) {
+      const fixture = { ...chart, lanes: Array.from({ length: count }, (_, index) => ({ ...chart.lanes[0]!, id: `lane-${index}` })) };
+      const option = buildTimelineOption(fixture, validateTimeline(fixture), palette);
+      const grids = (Array.isArray(option.grid) ? option.grid : [option.grid]) as { top: string; height: string; left: number; right: number }[];
+      expect(grids).toHaveLength(count);
+      expect(grids[0]?.top).toBe('6%');
+      expect(grids[0]?.height).toBe(count === 1 ? '78%' : '15%');
+      expect(grids.map(grid => [grid.left, grid.right])).toEqual(Array(count).fill([66, 20]));
+      for (let index = 1; index < grids.length; index++) {
+        expect(parseFloat(grids[index]!.top)).toBeGreaterThan(parseFloat(grids[index - 1]!.top) + parseFloat(grids[index - 1]!.height));
+      }
+      expect(parseFloat(grids.at(-1)!.top) + parseFloat(grids.at(-1)!.height)).toBe(84);
+    }
   });
 
   it('renders complete samples with visible symbols when null gaps isolate them', () => {
