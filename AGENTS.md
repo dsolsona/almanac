@@ -219,6 +219,14 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   accepting combined work and broader checks at the required milestone/risk boundary.
   Do not wrap every focused test in a full build/browser matrix. Separate cached
   setup from execution, and verify the stack matches the candidate revision.
+- Reserve Compose end-to-end, the catalogue browser matrix and the database/API
+  integration suite for a completed, integrated task candidate and PR verification.
+  Use focused unit/component tests and static checks during implementation. Early
+  inspection of a running page or one user journey does not authorize those broad
+  suites. A worker handoff or small edit does not trigger them. Reuse passing task
+  evidence for the PR when relevant inputs match. After a gate failure, diagnose
+  and correct with focused checks; rerun the affected gate when the corrected
+  candidate is ready, retaining evidence for unaffected gates and all failures.
 - Keep the maintainer's preview available during verification. Browser checks own
   a separate port and server; never stop the preview to free their port. If a
   preview must restart after integration, restore it and verify the URL before

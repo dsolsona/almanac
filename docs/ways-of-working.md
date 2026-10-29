@@ -103,10 +103,12 @@ test. Keep internal service/storage/HTTP steps within that bounded outcome where
 practical; do not require a PR per layer. Publish reviewable vertical increments,
 not arbitrary file-count batches. Accepted contracts remain prerequisites.
 
-Run a minimal real user journey as soon as the path is wired, before broad checks.
-Inspect the real rendered application early for UI work. Then use focused checks
-while editing, one consolidated coordinator review, and the integrated gate before
-publication. Review corrected areas and unresolved findings without restarting the
+Inspect a running real page or one user journey early, without launching broad
+acceptance suites. Use focused unit/component checks while editing. Reserve Compose
+end-to-end, the catalogue browser matrix and the database/API integration suite for
+the completed integrated task candidate and PR verification. Worker handoffs do not
+trigger those suites. Reuse matching completion evidence for the PR. Review
+corrected areas and unresolved findings without restarting the
 whole review. Do not repeat a passing gate without changed inputs or a specific
 unresolved concern. Keep required boundary evidence; this changes sequencing, not
 acceptance standards. Finish the current milestone's usable outcomes before optional
