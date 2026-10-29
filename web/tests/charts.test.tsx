@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { ExactValuesTable } from '../src/components/charts/ExactValuesTable.tsx';
 import { SloBudgetSparkline } from '../src/components/charts/SloBudgetSparkline.tsx';
+import { illustrativeChart, intentionallyOmittedTimestamp } from '../src/catalogue/chartFixture.ts';
 
 afterEach(cleanup);
 type SpawnSync = (command: string, args: string[], options: { encoding: 'utf8'; timeout: number }) => { error?: Error; status: number | null; stdout: string };
@@ -21,6 +22,19 @@ const chart: TimelineChart = {
 const palette = { axis: '#111111', labelText: '#444444', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
 
 describe('timeline model and options', () => {
+  it('keeps the illustrative missing timestamp absent from every lane while retaining daily compliance outcomes', () => {
+    expect(illustrativeChart.lanes).toHaveLength(4);
+    for (const lane of illustrativeChart.lanes) {
+      expect(lane.series[0]?.points).toHaveLength(59);
+      expect(lane.series[0]?.points.some(point => point.timestamp === intentionallyOmittedTimestamp)).toBe(false);
+    }
+    const compliancePoints = illustrativeChart.lanes.find(lane => lane.id === 'compliance')?.series[0]?.points ?? [];
+    expect(compliancePoints.some(point => point.coverage === 'complete' && Number(point.value) >= 99)).toBe(true);
+    expect(compliancePoints.some(point => point.coverage === 'complete' && Number(point.value) < 99)).toBe(true);
+    expect(compliancePoints.some(point => point.coverage === 'partial')).toBe(true);
+    expect(compliancePoints.some(point => point.coverage === 'not-applicable' && point.value === null)).toBe(true);
+  });
+
   it('inserts nulls for absent steps and retains missing, zero and partial semantics', () => {
     const normalized = validateTimeline(chart);
     expect(normalized.series[0]?.data.map((item) => item.value)).toEqual([99.97, null, null, null]);

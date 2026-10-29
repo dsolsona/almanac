@@ -1,12 +1,19 @@
 # Delivery status
 
-The prior combined candidate passed the real SLI/SLO browser journey and normal
-Compose acceptance. The current review corrections pass 254 focused cases in
-9.52 seconds and both selected PostgreSQL cases in 17.59 seconds. They restore
+The current review corrections pass 255 focused cases in 11.70 seconds and both
+selected PostgreSQL cases in 17.59 seconds. They restore
 known-empty operational reads, evaluable mixed-traffic days, globally bounded
 graph-gap retention, fresh overview refreshes, initial-error recovery controls and
 secondary urgency reasons, and align migration fixtures with schema 21. The
-current Linux build/unit and race stages pass; integration is running.
+Linux candidate passed its build/unit stage (309 web and 417 Go cases, 67 seconds),
+409 race cases (39 seconds), and all 167 PostgreSQL/API/browser integration cases
+(503 seconds). Normal Compose acceptance and cancellation cleanup passed in
+485.93 seconds. The Linux catalogue stage exposed fixture/range and outdated
+assertion failures. After correcting only two catalogue files and their two test
+files, the coordinator's native catalogue matrix passed all 108 checks in 80.81
+seconds; both themes and mobile captures were inspected. A SHA256 comparison
+confirmed all other checked runtime, API, build and verification sources unchanged.
+The complete Linux gate has not been rerun or described as passing.
 The previous database-stage
 failure was traced to two fixture errors: a clock preceding session creation and
 rollback expectations that omitted migration 0021. Both corrected storage cases
