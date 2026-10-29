@@ -15,6 +15,7 @@ import (
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -225,6 +226,101 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if err := conn.QueryRow(t.Context(), `SELECT good_count::text FROM public.almanac_sli_observation_values WHERE sli_id=$1`, record.ID).Scan(&good); err != nil || good != "99.000000000000" {
 		t.Fatalf("canonical value = %q, %v", good, err)
 	}
+	serviceInput := CreateObjectiveInput{Proof: proof, Name: "api", DisplayName: "API", IdempotencyKey: "service-create", RequestID: "service-create", Now: clock}
+	service, _, err := CreateObjective(t.Context(), f.databaseURL, serviceInput, false)
+	if err != nil {
+		t.Fatalf("create service: %v", err)
+	}
+	from := record.EffectiveFrom
+	objectiveInput := CreateObjectiveInput{Proof: proof, Name: "availability", DisplayName: "Availability", ServiceID: service.ID, SliID: record.ID, Target: "0.999", RollingWindowSeconds: 120, EvaluationValidFrom: &from, IdempotencyKey: "slo-create", RequestID: "slo-create", Now: clock}
+	_, objective, err := CreateObjective(t.Context(), f.databaseURL, objectiveInput, true)
+	if err != nil {
+		t.Fatalf("create SLO: %v", err)
+	}
+	_, replayObjective, err := CreateObjective(t.Context(), f.databaseURL, objectiveInput, true)
+	if err != nil || replayObjective.ID != objective.ID || replayObjective.HistoricalRequestedBy == nil {
+		t.Fatalf("SLO replay: %+v %v", replayObjective, err)
+	}
+	conflictingInput := objectiveInput
+	conflictingInput.Target = "0.99"
+	if _, _, err := CreateObjective(t.Context(), f.databaseURL, conflictingInput, true); !errors.Is(err, ErrObjectiveConflict) {
+		t.Fatalf("changed SLO replay: %v", err)
+	}
+	type createServiceResult struct {
+		service ServiceRecord
+		err     error
+	}
+	createConcurrently := func(a, b CreateObjectiveInput) (createServiceResult, createServiceResult) {
+		start := make(chan struct{})
+		results := make(chan createServiceResult, 2)
+		for _, input := range []CreateObjectiveInput{a, b} {
+			go func() {
+				<-start
+				service, _, err := CreateObjective(t.Context(), f.databaseURL, input, false)
+				results <- createServiceResult{service, err}
+			}()
+		}
+		close(start)
+		return <-results, <-results
+	}
+	parallel := CreateObjectiveInput{Proof: proof, Name: "parallel", DisplayName: "Parallel", IdempotencyKey: "parallel", RequestID: "parallel", Now: clock}
+	left, right := createConcurrently(parallel, parallel)
+	if left.err != nil || right.err != nil || left.service.ID != right.service.ID {
+		t.Fatalf("concurrent replay: %+v %+v", left, right)
+	}
+	other := parallel
+	other.IdempotencyKey = "parallel-other"
+	other.Name = "new-concurrent"
+	parallel.Name = other.Name
+	parallel.IdempotencyKey = "parallel-new"
+	left, right = createConcurrently(parallel, other)
+	if !((left.err == nil && errors.Is(right.err, ErrObjectiveConflict)) || (right.err == nil && errors.Is(left.err, ErrObjectiveConflict))) {
+		t.Fatalf("concurrent same-name creation: %+v %+v", left, right)
+	}
+	startUpdates := make(chan struct{})
+	updates := make(chan error, 2)
+	for _, name := range []string{"Service A", "Service B"} {
+		go func() {
+			<-startUpdates
+			_, _, err := UpdateObjectiveMetadata(t.Context(), f.databaseURL, proof, service.ID, name, "service-update", service.Version, clock, false)
+			updates <- err
+		}()
+	}
+	close(startUpdates)
+	updateA, updateB := <-updates, <-updates
+	if !((updateA == nil && errors.Is(updateB, ErrObjectiveConflict)) || (updateB == nil && errors.Is(updateA, ErrObjectiveConflict))) {
+		t.Fatalf("concurrent metadata update: %v %v", updateA, updateB)
+	}
+	evaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, Now: clock})
+	if err != nil {
+		t.Fatalf("evaluate SLO: %v", err)
+	}
+	if evaluation.Performance.Attainment == nil || *evaluation.Performance.Attainment != "0.990000000000" || evaluation.Performance.State != "unknown" || !evaluation.Performance.Provisional || evaluation.Quality.ObservedIntervals != 1 || evaluation.Quality.MissingIntervals == 0 {
+		t.Fatalf("partial SLO evaluation: %+v %+v", evaluation.Performance, evaluation.Quality)
+	}
+	if evaluation.Quality.Freshness != "fresh" {
+		t.Fatalf("settled latest observation unexpectedly stale: %+v", evaluation.Quality)
+	}
+	setIntegrationUserRole(t, f, "viewer")
+	if _, _, err := CreateObjective(t.Context(), f.databaseURL, CreateObjectiveInput{Proof: proof, Name: "denied", DisplayName: "Denied", IdempotencyKey: "denied", RequestID: "denied", Now: clock}, false); !errors.Is(err, ErrAgentForbidden) {
+		t.Fatalf("viewer create: %v", err)
+	}
+	if _, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, Now: clock}); err != nil {
+		t.Fatalf("viewer evaluate: %v", err)
+	}
+	setIntegrationUserRole(t, f, "administrator")
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sessions SET restricted=true WHERE verifier=$1`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ReadObjective(t.Context(), f.databaseURL, proof, service.ID, clock, false); !errors.Is(err, ErrAgentForbidden) {
+		t.Fatalf("restricted service read: %v", err)
+	}
+	if _, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, Now: clock}); !errors.Is(err, ErrAgentForbidden) {
+		t.Fatalf("restricted SLO evaluation: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sessions SET restricted=false WHERE verifier=$1`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
 	now = now.Add(15 * time.Second)
 	item.DeliveryID, item.ExecutionID = uuid.NewString(), uuid.NewString()
 	item.CreatedAt = now
@@ -238,6 +334,36 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	item.Outcome = sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "0", TotalCount: "0"}
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("zero traffic after incomplete: %+v", result)
+	}
+	zeroFrom := item.IntervalStart
+	zeroInput := CreateObjectiveInput{Proof: proof, Name: "zero-window", DisplayName: "Zero window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 120, EvaluationValidFrom: &zeroFrom, IdempotencyKey: "zero-window", RequestID: "zero-window", Now: clock}
+	_, zeroSlo, err := CreateObjective(t.Context(), f.databaseURL, zeroInput, true)
+	if err != nil {
+		t.Fatalf("create zero SLO: %v", err)
+	}
+	zeroEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: zeroSlo.ID, Now: clock})
+	if err != nil || !zeroEvaluation.Performance.Provisional || zeroEvaluation.Performance.Reason == nil || *zeroEvaluation.Performance.Reason != "incomplete_measurements" || zeroEvaluation.Quality.MissingIntervals == 0 {
+		t.Fatalf("zero traffic with missing intervals: %+v %v", zeroEvaluation, err)
+	}
+	asOf := item.IntervalEnd
+	zeroComplete, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: zeroSlo.ID, At: &asOf, Now: clock})
+	if err != nil || zeroComplete.Quality.State != "zero_traffic" || zeroComplete.Performance.Provisional || zeroComplete.Performance.Reason == nil || *zeroComplete.Performance.Reason != "zero_traffic" || zeroComplete.Performance.Attainment != nil {
+		t.Fatalf("complete zero traffic: %+v %v", zeroComplete, err)
+	}
+	mixed, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, At: &asOf, Now: clock})
+	if err != nil || mixed.Performance.State != "violated" || mixed.Quality.ZeroTrafficIntervals != 1 || mixed.Performance.Attainment == nil || *mixed.Performance.Attainment != "0.990000000000" {
+		t.Fatalf("positive plus zero traffic: %+v %v", mixed, err)
+	}
+	future := now.Add(time.Second)
+	if _, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, At: &future, Now: clock}); !errors.Is(err, ErrObjectiveEvaluationTime) {
+		t.Fatalf("future evaluation: %v", err)
+	}
+	badBound := asOf.Add(-time.Second)
+	if _, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, TimelineStart: &badBound, TimelineEnd: &asOf, Now: clock}); !errors.Is(err, ErrObjectiveTimelineRange) {
+		t.Fatalf("unaligned timeline: %v", err)
+	}
+	if _, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: objective.ID, TimelineStart: &asOf, Now: clock}); !errors.Is(err, ErrObjectiveTimelineRange) {
+		t.Fatalf("one timeline bound: %v", err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(item.IntervalEnd) {
 		t.Fatalf("advanced attempt cursor = %v, %v", cursor, err)
@@ -381,15 +507,62 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c LEFT JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision) WHERE c.sli_id=$1 AND c.interval_start=$2 AND c.outcome='complete_empty' AND v.sli_id IS NULL`, record.ID, empty.IntervalStart).Scan(&emptyCount); err != nil || emptyCount != 1 {
 		t.Fatalf("complete empty coverage without fabricated values: %d, %v", emptyCount, err)
 	}
+	emptyFrom := empty.IntervalStart
+	emptyInput := CreateObjectiveInput{Proof: proof, Name: "empty-only", DisplayName: "Empty only", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 120, EvaluationValidFrom: &emptyFrom, IdempotencyKey: "empty-only", RequestID: "empty-only", Now: clock}
+	_, emptySlo, err := CreateObjective(t.Context(), f.databaseURL, emptyInput, true)
+	if err != nil {
+		t.Fatalf("create empty SLO: %v", err)
+	}
+	emptyEnd := empty.IntervalEnd
+	emptyEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: emptySlo.ID, At: &emptyEnd, Now: clock})
+	if err != nil || emptyEvaluation.Quality.KnownEmptyIntervals != 1 || emptyEvaluation.Quality.FirstObservationAt != nil || emptyEvaluation.Quality.LastObservationAt != nil || emptyEvaluation.Quality.LatestReceiptAt == nil || emptyEvaluation.Quality.Freshness != "unknown" || emptyEvaluation.Performance.Attainment != nil || emptyEvaluation.Performance.Good != nil || emptyEvaluation.Performance.State != "unknown" {
+		t.Fatalf("empty-only evaluation: %+v %v", emptyEvaluation, err)
+	}
+	positiveFrom := fresh.IntervalStart
+	positiveInput := emptyInput
+	positiveInput.Name = "positive-and-empty"
+	positiveInput.IdempotencyKey = "positive-and-empty"
+	positiveInput.EvaluationValidFrom = &positiveFrom
+	_, positiveSlo, err := CreateObjective(t.Context(), f.databaseURL, positiveInput, true)
+	if err != nil {
+		t.Fatalf("create positive SLO: %v", err)
+	}
+	positiveEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: positiveSlo.ID, At: &emptyEnd, Now: clock})
+	if err != nil || positiveEvaluation.Quality.KnownEmptyIntervals != 1 || positiveEvaluation.Performance.State != "unknown" || !positiveEvaluation.Performance.Provisional || positiveEvaluation.Performance.Attainment == nil || *positiveEvaluation.Performance.Attainment != "1.000000000000" {
+		t.Fatalf("positive and empty evaluation: %+v %v", positiveEvaluation, err)
+	}
+	now = maxTime(now, fresh.IntervalEnd.Add(15*time.Second+time.Minute+sli.DispatchPhase(record.ID, 15)+time.Microsecond))
+	staleEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: positiveSlo.ID, Now: clock})
+	if err != nil || staleEvaluation.Quality.LastObservationAt == nil || !staleEvaluation.Quality.LastObservationAt.Equal(fresh.IntervalEnd) || staleEvaluation.Quality.LatestReceiptAt == nil || staleEvaluation.Quality.Freshness != "stale" {
+		t.Fatalf("known-empty refreshed numerical observation: %+v %v", staleEvaluation.Quality, err)
+	}
+	longStart := record.EffectiveFrom
+	longInput := CreateObjectiveInput{Proof: proof, Name: "retention-window", DisplayName: "Retention window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 401 * 86400, EvaluationValidFrom: &longStart, IdempotencyKey: "retention-window", RequestID: "retention-window", Now: clock}
+	_, longSlo, err := CreateObjective(t.Context(), f.databaseURL, longInput, true)
+	if err != nil {
+		t.Fatalf("create retention SLO: %v", err)
+	}
+	futureNow := now.Add(sli.ObservationRetention + time.Minute)
+	futureVerifier := [32]byte{126}
+	if _, err := IssueSession(t.Context(), f.databaseURL, IssueSessionInput{UserID: f.userID, ExpectedCredentialEpoch: f.epoch, ExpectedCredentialRevision: f.revision, Verifier: futureVerifier, Now: futureNow, RequestID: "future-session"}); err != nil {
+		t.Fatalf("future session: %v", err)
+	}
+	chartStart := longStart.Add(-15 * time.Second)
+	chartEnd := ceilSliBoundary(futureNow.Add(-sli.ObservationRetention), 15*time.Second).Add(15 * time.Second)
+	futureClock := func() time.Time { return futureNow }
+	expiredEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: DatasourceProof{SessionVerifier: futureVerifier}, ID: longSlo.ID, TimelineStart: &chartStart, TimelineEnd: &chartEnd, Now: futureClock})
+	if err != nil || expiredEvaluation.Quality.State != "expired_history" || expiredEvaluation.Quality.ExpiredIntervals == 0 || len(expiredEvaluation.Timeline.Items) < 2 || expiredEvaluation.Timeline.Items[0].State != "not_applicable" || expiredEvaluation.Timeline.Items[1].State != "expired" {
+		t.Fatalf("expiry versus validity: %+v %v", expiredEvaluation, err)
+	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19)`); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 3 || result.DatabaseSchemaVersion != 18 {
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 4 || result.DatabaseSchemaVersion != 19 {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {
@@ -428,6 +601,39 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	if !foundCursor {
 		t.Fatalf("renewed grant did not carry last persisted attempt: %+v", renewedGrants)
+	}
+	// Keep the original cursor migration and renewal assertions above before
+	// inserting the later observation used for the snapshot isolation test.
+	snapshotConn := integrationConnect(t, f.databaseURL)
+	defer closeIntegrationConn(snapshotConn)
+	snapshotTx, err := snapshotConn.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshotTx.Rollback(t.Context())
+	snapshotQueries := dbgen.New(snapshotTx)
+	sliID, _ := canonicalUUID(record.ID)
+	nextEnd := empty.IntervalEnd.Add(15 * time.Second)
+	aggregateBefore, err := snapshotQueries.AggregateSloObservations(t.Context(), dbgen.AggregateSloObservationsParams{SliID: sliID, MeasurementRevision: 1, IntervalStart: timestamp(fresh.IntervalStart), IntervalEnd: timestamp(nextEnd)})
+	if err != nil {
+		t.Fatalf("snapshot aggregate: %v", err)
+	}
+	inserted := empty
+	inserted.DeliveryID = uuid.NewString()
+	inserted.ExecutionID = uuid.NewString()
+	inserted.CreatedAt = now
+	inserted.IntervalStart = empty.IntervalEnd
+	inserted.IntervalEnd = nextEnd
+	inserted.Outcome = sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "1", TotalCount: "1"}
+	if result := ingest(inserted); result.Status != "accepted" {
+		t.Fatalf("concurrent snapshot insert: %+v", result)
+	}
+	snapshotFacts, err := snapshotQueries.ListSloTimelineFacts(t.Context(), dbgen.ListSloTimelineFactsParams{SliID: sliID, MeasurementRevision: 1, IntervalStart: timestamp(fresh.IntervalStart), IntervalEnd: timestamp(nextEnd)})
+	if err != nil || int64(len(snapshotFacts)) != aggregateBefore.ObservedIntervals+aggregateBefore.KnownEmptyIntervals {
+		t.Fatalf("snapshot mixed generations: aggregate=%+v facts=%d error=%v", aggregateBefore, len(snapshotFacts), err)
+	}
+	if err := snapshotTx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 	monthTx, err := conn.Begin(t.Context())
 	if err != nil {

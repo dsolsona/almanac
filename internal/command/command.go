@@ -64,6 +64,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return agentsCommand(ctx, args[1:], stdout, stderr)
 	case "datasources", "providers", "slis":
 		return datasourceCommand(ctx, args, stdout, stderr)
+	case "services", "slos":
+		return objectivesCommand(ctx, args[0], args[1:], stdout, stderr)
 	case "secrets":
 		return secretsCommand(ctx, args[1:], stdout, stderr)
 	default:
@@ -102,6 +104,15 @@ func printHelp(w io.Writer) {
   almanac slis update --profile-file=FILE --sli-id=UUID --if-match=ETAG --input-file=FILE
   almanac slis observations --profile-file=FILE --sli-id=UUID [--limit=50] [--cursor=CURSOR]
   almanac slis test --profile-file=FILE --datasource-id=UUID --query=PROMQL [--wait] [--cancel-on-timeout]
+  almanac services list --profile-file=FILE [--limit=50] [--cursor=CURSOR]
+  almanac services get --profile-file=FILE --service-id=UUID
+  almanac services create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
+  almanac services update --profile-file=FILE --service-id=UUID --if-match=ETAG --input-file=FILE
+  almanac slos list --profile-file=FILE [--service-id=UUID] [--limit=50] [--cursor=CURSOR]
+  almanac slos get --profile-file=FILE --slo-id=UUID
+  almanac slos create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
+  almanac slos update --profile-file=FILE --slo-id=UUID --if-match=ETAG --input-file=FILE
+  almanac slos evaluate --profile-file=FILE --slo-id=UUID [--at=TIME] [--timeline-start=TIME --timeline-end=TIME]
   almanac secrets provision-source-keyset --file=FILE --keyset-id=UUID [--output=json]
 
 Implemented component modes:

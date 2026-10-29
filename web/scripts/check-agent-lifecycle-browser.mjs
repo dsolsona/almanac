@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
+import { readResponseJSON } from './response-read-diagnostics.mjs';
 
 export async function runAgentLifecycleJourney({ page, context, fixture, setStage, registration, tokenEvidence }) {
   const origin = new URL(fixture.url).origin;
@@ -47,7 +48,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   assert.equal(mutations.length, 0);
   const rotatedResponse = await submit(rotation, '/credentials/rotate');
   setStage('credential rotation response decoding');
-  const rotated = await rotatedResponse.json();
+  const rotated = await readResponseJSON(rotatedResponse);
   setStage('credential rotation fresh issuance and target');
   assert.equal(rotated.replayed, false);
   assert.equal(rotated.agent.id, registration.agent_id);
@@ -83,7 +84,8 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await revoke.getByRole('checkbox', { name: 'I understand this action takes effect immediately.' }).check();
   assert.equal(mutations.length, 1);
   const revokedResponse = await submit(revoke, `/credentials/${replacement.credential_id}/revoke`);
-  const revoked = await revokedResponse.json();
+  setStage('credential revocation response decoding');
+  const revoked = await readResponseJSON(revokedResponse);
   assert.equal(revoked.changed, true);
   assert.equal(revoked.credential.id, replacement.credential_id);
   assert.ok(revoked.credential.revoked_at);
@@ -99,7 +101,8 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await disable.getByRole('checkbox', { name: 'I understand this action takes effect immediately.' }).check();
   assert.equal(mutations.length, 2);
   const disabledResponse = await submit(disable, '/disable');
-  const disabled = await disabledResponse.json();
+  setStage('agent disable response decoding');
+  const disabled = await readResponseJSON(disabledResponse);
   assert.equal(disabled.agent.enabled, false);
   assert.equal((await disabledResponse.request().allHeaders())['if-match'], `"agent:${registration.agent_id}:3"`);
   await expect(disable).not.toBeVisible();

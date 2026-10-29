@@ -501,6 +501,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List services */
+        get: operations["listServices"];
+        put?: never;
+        /** Create a service */
+        post: operations["createService"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{service_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a service */
+        get: operations["getService"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update service display metadata */
+        patch: operations["patchServiceMetadata"];
+        trace?: never;
+    };
+    "/api/v1/slos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List SLO definitions */
+        get: operations["listSlos"];
+        put?: never;
+        /** Create a single-indicator occurrence SLO */
+        post: operations["createSlo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an SLO definition */
+        get: operations["getSlo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update SLO display metadata
+         * @description Target, window and indicator are immutable in this increment.
+         */
+        patch: operations["patchSloMetadata"];
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}/evaluation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evaluate a rolling occurrence objective
+         * @description This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+         */
+        get: operations["evaluateSlo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/livez": {
         parameters: {
             query?: never;
@@ -539,6 +634,200 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ServiceCreateRequest: {
+            name: string;
+            display_name: string;
+        };
+        ResourceMetadataWrite: {
+            display_name: string;
+        };
+        Service: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            version: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ServicePage: {
+            items: components["schemas"]["Service"][];
+            next_cursor: string;
+        };
+        SloCreateRequest: {
+            name: string;
+            display_name: string;
+            /** Format: uuid */
+            service_id: string;
+            /** Format: uuid */
+            sli_id: string;
+            /** @description Exact fractional target in [0,1); 1 is invalid. */
+            target: string;
+            /**
+             * Format: int64
+             * @description Positive fixed seconds divisible by the SLI cadence.
+             */
+            rolling_window_seconds: number;
+            /**
+             * Format: date-time
+             * @description Optional aligned retained historical start; omission begins validity at activation and does not start backfill.
+             */
+            evaluation_valid_from?: string;
+        };
+        Slo: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            version: string;
+            definition_revision: string;
+            /** Format: uuid */
+            service_id: string;
+            service_display_name: string;
+            /** Format: uuid */
+            sli_id: string;
+            sli_display_name: string;
+            target: string;
+            /** Format: int64 */
+            rolling_window_seconds: number;
+            cadence_seconds: number;
+            /** Format: date-time */
+            activated_at: string;
+            /** Format: date-time */
+            evaluation_valid_from: string;
+            /** Format: uuid */
+            historical_requested_by: string | null;
+            /** Format: date-time */
+            historical_requested_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SloPage: {
+            items: components["schemas"]["Slo"][];
+            next_cursor: string;
+        };
+        SloEvaluation: {
+            /** Format: uuid */
+            evaluation_id: string;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            effective_end: string;
+            calculation_version: string;
+            /** @enum {string} */
+            snapshot_kind: "current_evaluation";
+            objective: components["schemas"]["SloEvaluationObjective"];
+            window: components["schemas"]["SloEvaluationWindow"];
+            quality: components["schemas"]["SloEvaluationQuality"];
+            performance: components["schemas"]["SloEvaluationPerformance"];
+            timeline: components["schemas"]["SloEvaluationTimeline"];
+        };
+        SloEvaluationObjective: {
+            /** Format: uuid */
+            slo_id: string;
+            definition_revision: string;
+            /** Format: uuid */
+            sli_id: string;
+            measurement_revision: string;
+            target: string;
+            /** @enum {string} */
+            method: "occurrences";
+            /** Format: int64 */
+            rolling_window_seconds: number;
+            cadence_seconds: number;
+        };
+        SloEvaluationWindow: {
+            /** Format: date-time */
+            requested_start: string;
+            /** Format: date-time */
+            effective_start: string;
+            /** Format: date-time */
+            end: string;
+            /** Format: date-time */
+            eligible_start: string;
+            /** Format: date-time */
+            retention_start: string;
+            /** Format: date-time */
+            activated_at: string;
+            /** Format: date-time */
+            evaluation_valid_from: string;
+            /** Format: uuid */
+            historical_requested_by: string | null;
+            /** Format: date-time */
+            historical_requested_at: string | null;
+        };
+        SloEvaluationQuality: {
+            /** @enum {string} */
+            state: "complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_applicable";
+            /** Format: int64 */
+            expected_intervals: number;
+            /** Format: int64 */
+            observed_intervals: number;
+            /** Format: int64 */
+            known_empty_intervals: number;
+            /** Format: int64 */
+            missing_intervals: number;
+            /** Format: int64 */
+            zero_traffic_intervals: number;
+            /** Format: int64 */
+            expired_intervals: number;
+            coverage: string | null;
+            /** Format: date-time */
+            first_observation_at: string | null;
+            /** Format: date-time */
+            last_observation_at: string | null;
+            /** Format: date-time */
+            latest_receipt_at: string | null;
+            /** @enum {string} */
+            freshness: "unknown" | "fresh" | "stale";
+        };
+        SloEvaluationPerformance: {
+            /** @enum {string} */
+            state: "met" | "violated" | "unknown" | "not_applicable";
+            /** @enum {string|null} */
+            observed_state: "met" | "violated" | null;
+            provisional: boolean;
+            reason: string | null;
+            good: string | null;
+            total: string | null;
+            bad: string | null;
+            attainment: string | null;
+            allowed_budget: string | null;
+            remaining_budget: string | null;
+            consumed_fraction: string | null;
+            remaining_fraction: string | null;
+            burn: string | null;
+            /** @enum {string} */
+            budget_unit: "events";
+        };
+        SloEvaluationTimeline: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            cadence_seconds: number;
+            /** @enum {integer} */
+            max_intervals: 1500;
+            items: components["schemas"]["SloTimelineItem"][];
+        };
+        SloTimelineItem: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @enum {string} */
+            state: "observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable";
+            good: string | null;
+            total: string | null;
+            attainment: string | null;
+            burn: string | null;
+            /** Format: date-time */
+            received_at: string | null;
+        };
         SliPage: {
             items: components["schemas"]["Sli"][];
             next_cursor: string;
@@ -1150,6 +1439,10 @@ export interface components {
         AgentId: string;
         DatasourceId: string;
         SliId: string;
+        ServiceId: string;
+        SloId: string;
+        /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+        ResourceIfMatch: string;
         DiagnosticId: string;
         /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
         DatasourceIfMatch: string;
@@ -2589,6 +2882,331 @@ export interface operations {
             };
             /** @description SLI not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listServices: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded service page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicePage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createService: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created service */
+            201: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Service"];
+                };
+            };
+            /** @description Invalid request */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getService: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_id: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Service"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    patchServiceMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                service_id: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceMetadataWrite"];
+            };
+        };
+        responses: {
+            /** @description Updated service */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Service"];
+                };
+            };
+            /** @description Request rejected or stale version */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSlos: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+                service_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded SLO page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloPage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createSlo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SloCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created SLO */
+            201: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Slo"];
+                };
+            };
+            /** @description Invalid target or window */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSlo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SLO */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Slo"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    patchSloMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceMetadataWrite"];
+            };
+        };
+        responses: {
+            /** @description Updated SLO */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Slo"];
+                };
+            };
+            /** @description Request rejected or stale version */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    evaluateSlo: {
+        parameters: {
+            query?: {
+                at?: string;
+                timeline_start?: string;
+                timeline_end?: string;
+            };
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current evaluation and bounded exact timeline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloEvaluation"];
+                };
+            };
+            /** @description Invalid time */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

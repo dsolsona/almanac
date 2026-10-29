@@ -53,15 +53,16 @@ design catalogue are separate. This is a local development stack, not production
 deployment or restore qualification.
 
 The current app supports administrator onboarding, agent and datasource management,
-and agent-collected event-count SLIs. SLO dashboards and alerting remain under development.
+agent-collected event-count SLIs, and request-count SLOs with fixed rolling windows.
+Calendar reports, OpenSLO import, annotations and alerting remain under development.
 
 ### Start a local agent
 
 After `make run`, register an agent in Almanac and copy its one-time credential.
 In a separate terminal run `make agent` and paste the credential at the private
 prompt. The command stays attached; press Ctrl-C to stop that agent. Check the
-agent's status in the UI to confirm it connected. A previous ownership lease may
-need to expire before a restarted agent can connect.
+agent's status in the UI to confirm it connected. Starting a replacement immediately
+supersedes the previous process using that credential; no lease-expiry wait is needed.
 
 For noninteractive use, set `AGENT_TOKEN_FILE` to an owner-only regular file
 owned by your user, for example `AGENT_TOKEN_FILE=/path/to/token make agent`.
@@ -108,6 +109,26 @@ When updating this code, rebuild the app with `make run`, then stop the attached
 local agent with Ctrl-C and start it again with `make agent` to use the updated
 agent binary. The launcher uses the running app's image; starting it replaces any
 older process for the same agent identity immediately.
+
+### Create a first SLO
+
+Once the SLI has an observation, open **SLOs**, choose **Create SLO**, create or
+select a service, and select the SLI by name. Enter a target such as **99.9%** and
+a rolling window such as **30 days**. A day is a fixed 24-hour period.
+
+By default, evaluation begins when the SLO is created. To evaluate measurements
+already collected for the SLI, explicitly select the option to apply the target
+to earlier measurements. This uses retained data and does not start backfill.
+
+The synthetic 99/100 SLI gives 99% measured success. Against a 99.9% target,
+its burn is 10x and its observed error budget is negative. The page shows the
+eligible evaluation range and collection coverage alongside those results.
+Missing measurements qualify observed results; they are never counted as successful
+requests or zero traffic. Expand the exact-value controls for the decimal values
+returned by the API, without additional display rounding.
+
+Service and SLO display names can be updated. Target/window revisions, calendar
+windows and exports are subsequent increments; see [delivery status](docs/status.md).
 
 ## Runtime foundation
 

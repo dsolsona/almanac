@@ -28,7 +28,7 @@ export function ExactValuesTable({ rows, page, totalRows, onPageChange }: {
         <tbody>{rows.map((row, index) => <tr key={`${row.timestamp}-${row.lane}-${row.series}-${index}`}>
           <td className="mono">{row.timestamp}</td><td>{row.lane}</td><td>{row.series}</td>
           <td className="mono">{row.value === null ? '—' : `${row.value} ${row.unit}`}</td>
-          <td><span className={`coverage-label coverage-label--${row.coverage}`}>{row.coverage === 'zero-traffic' ? 'Zero traffic' : row.coverage === 'missing' ? 'Missing' : row.coverage === 'partial' ? 'Partial' : 'Complete'}</span></td>
+          <td><span className={`coverage-label coverage-label--${row.coverage}`}>{({ 'zero-traffic': 'Zero traffic', missing: 'Missing', partial: 'Partial', complete: 'Complete', 'known-empty': 'Known empty', expired: 'Expired history', 'not-applicable': 'Not applicable' })[row.coverage]}</span></td>
         </tr>)}</tbody>
       </table>
     </div>

@@ -22,6 +22,7 @@ sql:
       - internal/storage/migrations/0016_sli_attempt_cursor.sql
       - internal/storage/migrations/0017_agent_ownership_proof_index.sql
       - internal/storage/migrations/0018_sli_lease_indexes.sql
+      - internal/storage/migrations/0019_first_objective.sql
     gen:
       go:
         package: dbgen

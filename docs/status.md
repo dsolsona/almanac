@@ -2,6 +2,23 @@
 
 ## Current state
 
+[F3-T01](tasks/F3-T01.md) is verified locally on `feat/f3-first-objective`,
+based on merged `e174291`. The maintainer authorized starting F3 with current
+Prometheus SLIs while external submission remains deferred and F2 incomplete.
+The [first objective plan](plans/0021-first-objective.md) separates the initial
+usable SLO journey from the remaining F3 reporting, import and annotation work.
+Users can create services and single-indicator request-count SLOs, evaluate fixed
+rolling windows, and inspect exact success, budget, burn and qualified coverage
+through UI/API/CLI. Product source `fa071adf` passed 279 web, 378 Go, 370 race and
+166 PostgreSQL integration tests. A test-only catalogue expectation correction then
+passed all 108 browser checks on unchanged product code. The normal Compose journey
+and cancellation cleanup passed; desktop/mobile forms and results in both themes
+were inspected. The task records the failed wrapper stages, their corrections,
+the overnight interruption and earlier unexplained browser response-read failures.
+This completes the first usable F3 increment, not the whole milestone. Target
+revisions, calendar windows, reports, OpenSLO and annotations remain in the plan.
+The increment is prepared for PR review; it has not been deployed to the operator app.
+
 [F2-T32](tasks/F2-T32.md) is verified on `fix/stack-review`, based on `bcd636b`.
 It repairs thirteen review findings across the SLI and agent stack: empty-history
 lists, bounded large responses, focus and retry, lease indexes, month-end partitions,
@@ -10,7 +27,7 @@ Source `06f59ca3` passed 261 web, 365 Go, 357 race, 165 PostgreSQL integration a
 108 browser tests. Normal Compose acceptance covered navigation/retry, exact 99/100
 collection and clean/forced/backend restarts; desktop/mobile pages in both themes
 were inspected. F2-T32 records first failures, corrections and compatibility limits.
-This correction is prepared at the stack tip; the operator app remains unchanged.
+The correction and its dependency stack merged into main at `e174291`; the operator app remains unchanged.
 
 [F2-T31](tasks/F2-T31.md) is verified on `fix/agent-restart`, based on `c6b8674`.
 [ADR-0022](adr/0022-restartable-agent-ownership.md) replaces the one-hour restart

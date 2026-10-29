@@ -305,6 +305,10 @@ func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, 
 }
 
 func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	return beginAgentReadWithOptions(ctx, databaseURL, verifier, clock, pgx.TxOptions{}, roles...)
+}
+
+func beginAgentReadWithOptions(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, options pgx.TxOptions, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	conn, err := connectCurrentSchema(ctx, databaseURL)
 	if err != nil {
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
@@ -319,7 +323,7 @@ func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read session lookup failed", err)
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := conn.BeginTx(ctx, options)
 	if err != nil {
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read transaction failed", err)
