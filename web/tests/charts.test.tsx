@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { ExactValuesTable } from '../src/components/charts/ExactValuesTable.tsx';
 import { SloBudgetSparkline } from '../src/components/charts/SloBudgetSparkline.tsx';
+import { TimelineChartHeader } from '../src/components/charts/TimelineChartHeader.tsx';
 import { illustrativeChart, intentionallyOmittedTimestamp } from '../src/catalogue/chartFixture.ts';
 
 afterEach(cleanup);
@@ -22,6 +23,15 @@ const chart: TimelineChart = {
 const palette = { axis: '#111111', labelText: '#444444', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
 
 describe('timeline model and options', () => {
+  it('keeps range and sampling metadata in the collapsed chart details',()=>{
+    render(<TimelineChartHeader chart={{...chart,fillExpectedGaps:false}}/>);
+    expect(screen.getByRole('heading',{name:'Synthetic'})).toBeVisible();
+    expect(screen.getByText('Illustrative samples only')).toBeVisible();
+    const details=screen.getByText('Chart details').closest('details');
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent('Range: 2026-01-01T00:00:00Z');
+    expect(details).toHaveTextContent('step 60 seconds');
+  });
   it('keeps the illustrative missing timestamp absent from every lane while retaining daily compliance outcomes', () => {
     expect(illustrativeChart.lanes).toHaveLength(4);
     for (const lane of illustrativeChart.lanes) {
@@ -166,6 +176,22 @@ describe('timeline model and options', () => {
     const within:TimelineChart={...empty,referenceLines:[{lane:'availability',value:'0.5',label:'Target'}],lanes:[{...chart.lanes[0]!,series:[{id:'sli',label:'SLI',points:[{timestamp:chart.start,value:'0.4',coverage:'complete'},{timestamp:'2026-01-01T00:01:00Z',value:'0.6',coverage:'complete'}]}]}]};
     const withinAxis=(buildTimelineOption(within,validateTimeline(within),palette).yAxis as Array<{min?:number;max?:number}>)[0]!;
     expect(withinAxis.min).toBeUndefined();expect(withinAxis.max).toBeUndefined();
+  });
+
+  it('uses readable stable ranges for an empty lane around a zero reference',()=>{
+    const emptyBudget:TimelineChart={...chart,fillExpectedGaps:false,referenceLines:[{lane:'availability',value:'0',label:'0% remaining'}],lanes:[{...chart.lanes[0]!,id:'availability',label:'Budget remaining',series:[{id:'budget',label:'Remaining budget',points:[{timestamp:chart.start,value:null,coverage:'missing'}]}]}]};
+    const axis=(buildTimelineOption(emptyBudget,validateTimeline(emptyBudget),palette).yAxis as Array<{min?:number;max?:number}>)[0]!;
+    expect(axis.min).toBe(0);expect(axis.max).toBe(100);
+  });
+
+  it('reserves inline table space without changing the lane heights or shared timestamps',()=>{
+    const fixture:TimelineChart={...chart,lanes:Array.from({length:4},(_,index)=>({...chart.lanes[0]!,id:`lane-${index}`,extra:index===0?340:0}))};
+    const option=buildTimelineOption(fixture,validateTimeline(fixture),palette,940);
+    const grids=option.grid as Array<{top:number;height:number}>;
+    expect(grids.map(grid=>grid.height)).toEqual([90,90,90,90]);
+    expect(grids.map(grid=>grid.top)).toEqual([36,502,628,754]);
+    const axes=option.xAxis as Array<{min:number;max:number}>;
+    expect(axes.every(axis=>axis.min===Date.parse(fixture.start)&&axis.max===Date.parse(fixture.end))).toBe(true);
   });
 
   it('uses the available plot height for one and four aligned lanes', () => {

@@ -1,6 +1,21 @@
 # Delivery status
 
-The current review corrections pass 255 focused cases in 11.70 seconds and both
+The [F3-T07](tasks/F3-T07.md) correction implements an immediately editable SLO
+form, concise historical-measurement wording, aligned filters/presets, compact
+urgency rows, one detail context row and exact tables directly beneath their graph
+lane. Empty plots use readable ranges and missing budget has a neutral label.
+The frozen candidate passes 263 focused cases (13.58 seconds), the real SLO
+browser journey (77.03 seconds including build/startup) and all 108 catalogue
+checks (80.52 seconds). The coordinator inspected the actual list, form, detail
+and inline-table captures against the retained reference, including both themes
+and mobile widths. Normal Compose verification and cancellation cleanup pass in
+476.17 seconds on matching source inputs; its actual SLO pages were also inspected.
+The real journey measured an editable form after 58 ms and service/SLI choices
+after 2.98 seconds; this establishes form responsiveness, not a backend latency
+improvement or the controlled performance envelope. F3 annotations and the earlier
+shutdown investigation remain open.
+
+Before F3-T07, the review corrections passed 255 focused cases in 11.70 seconds and both
 selected PostgreSQL cases in 17.59 seconds. They restore
 known-empty operational reads, evaluable mixed-traffic days, globally bounded
 graph-gap retention, fresh overview refreshes, initial-error recovery controls and

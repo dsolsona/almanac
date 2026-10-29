@@ -41,11 +41,11 @@ export function TimelineChartView({ chart, showHeader = true }: { chart: Timelin
     instanceRef.current = instance;
     const update = () => {
       const latest = latestRef.current;
-      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, readTimelinePalette()), true);
+      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, readTimelinePalette(),host.clientHeight), true);
     };
     applyRef.current = update;
     update();
-    const resize = new ResizeObserver(() => instance.resize());
+    const resize = new ResizeObserver(() => {instance.resize();update();});
     resize.observe(host);
     const theme = new MutationObserver(update);
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
@@ -60,7 +60,8 @@ export function TimelineChartView({ chart, showHeader = true }: { chart: Timelin
 
   useEffect(() => { applyRef.current(); }, [chart, result]);
 
-  const content = result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} role="img" aria-label={`${chart.title}. ${chart.summary}`} />;
+  const extraHeight=chart.lanes.reduce((sum,lane)=>sum+(lane.extra??0),0);
+  const content = result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} style={extraHeight?{height:`calc(var(--timeline-base-height) + ${extraHeight}px)`}:undefined} role="img" aria-label={`${chart.title}. ${chart.summary}`} />;
   if (!showHeader) return <div className="timeline-chart__surface" role="group" aria-label={chart.title}>{content}</div>;
   return <section className="timeline-chart" aria-labelledby={titleId}>
     <div className="timeline-chart__header"><TimelineChartHeader chart={chart} titleId={titleId}/></div>

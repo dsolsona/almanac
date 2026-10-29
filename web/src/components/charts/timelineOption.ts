@@ -29,13 +29,22 @@ function coverageLabel(coverage: string): string {
   }
 }
 
-export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeline, palette: TimelinePalette): EChartsOption {
+export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeline, palette: TimelinePalette, plotHeight?: number): EChartsOption {
   const { axis, grid, labelText, crosshair, series: colors } = palette;
   const lanes = chart.lanes.length;
   const top = 6;
   const gap = 6;
   const laneHeight = (78 - gap * (lanes - 1)) / lanes;
-  const grids = chart.lanes.map((_, index) => ({ left: 66, right: 20, top: `${top + index * (laneHeight + gap)}%`, height: `${laneHeight}%`, containLabel: false }));
+  const extraHeight=chart.lanes.reduce((sum,lane)=>sum+(lane.extra??0),0);
+  const baseHeight=plotHeight===undefined?undefined:plotHeight-extraHeight;
+  let reservedBefore=0;
+  const grids = chart.lanes.map((lane, index) => {
+    const geometry=extraHeight>0&&baseHeight!==undefined&&baseHeight>0
+      ? {top:baseHeight*(top+index*(laneHeight+gap))/100+reservedBefore,height:baseHeight*laneHeight/100}
+      : {top:`${top+index*(laneHeight+gap)}%`,height:`${laneHeight}%`};
+    reservedBefore+=lane.extra??0;
+    return {left:66,right:20,...geometry,containLabel:false};
+  });
   const xAxis = chart.lanes.map((_, index) => ({
     type: 'time' as const, gridIndex: index, min: Date.parse(chart.start), max: Date.parse(chart.end),
     axisLine: { lineStyle: { color: axis } }, axisTick: { show: index === lanes - 1 },
@@ -51,6 +60,8 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     const references=chart.referenceLines?.filter(line=>line.lane===lane.id).map(line=>Number(line.value)).filter(Number.isFinite)??[];
     const referenceExtent=references.length ? (()=>{
       const low=Math.min(...values,...references),high=Math.max(...values,...references);
+      if(!values.length&&lane.unit==='%')return {min:Math.min(0,...references),max:Math.max(100,...references)};
+      if(!values.length&&(lane.unit==='×'||lane.unit==='x'))return {min:Math.min(0,...references),max:Math.max(2,...references.map(value=>value*2))};
       if(values.length&&references.every(value=>value>=Math.min(...values)&&value<=Math.max(...values)))return {};
       const padding=Math.max((high-low)*0.05,Math.abs(low)*0.05,Math.abs(high)*0.05,1e-9);
       return {min:low-padding,max:high+padding};

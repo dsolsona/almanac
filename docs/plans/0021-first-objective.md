@@ -3,6 +3,8 @@
 > Use subagent-driven development with two independent implementers once interfaces
 > are settled. F3-T01 used the maintainer's session selection of GPT-6.1 Terra;
 > subsequent work uses the standing gpt-6-luna workflow unless explicitly changed.
+> For the current F3-T07 session the maintainer explicitly selected primary-agent
+> implementation, with a subagent restricted to executing and reporting checks.
 > The coordinator
 > owns integration and acceptance under [ways of working](../ways-of-working.md).
 
@@ -54,6 +56,10 @@ and all four numerical detail lanes on 2026-10-29, with the left navigation reta
 These tasks make the missing accepted budget/burn/history behavior concrete; they
 are required F3 outcomes, not optional polish. F3-T01's functional evidence does not
 establish acceptance of the simplified list/detail composition.
+
+[F3-T07](../tasks/F3-T07.md) restores the reported creation and visual user
+experience after the maintainer rejected the implemented screens during actual
+use. Existing passing checks do not establish acceptance of those screens.
 
 The maintainer authorized implementation and accepted the detailed policy in
 [ADR-0023](../adr/0023-slo-operational-urgency.md) on 2026-10-29. F3-T02 starts with

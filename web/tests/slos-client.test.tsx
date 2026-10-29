@@ -64,7 +64,7 @@ it('rejects an evaluation for a different SLO',async()=>{
 });
 it('shows safe guidance for an invalid historical start without echoing server text',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({code:'invalid_request',field_errors:[{field:'evaluation_valid_from',code:'historical_start_invalid',message:'untrusted server text'}]}),{status:400})));
- await expect(sloClient.create({name:'availability',display_name:'Availability',service_id:id,sli_id:id,target:'0.99',rolling_window_seconds:60,evaluation_valid_from:'2026-01-01T00:00:00Z'},context,'key')).rejects.toThrow('Refresh the eligible range');
+ await expect(sloClient.create({name:'availability',display_name:'Availability',service_id:id,sli_id:id,target:'0.99',rolling_window_seconds:60,evaluation_valid_from:'2026-01-01T00:00:00Z'},context,'key')).rejects.toThrow('The selected history is no longer available. Turn off earlier measurements, or reload the page and choose history again.');
 });
 
 it('requests server-filtered operational pages and rejects incomplete operational projections', async () => {

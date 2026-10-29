@@ -153,7 +153,7 @@ export function SlosPage({context}:{context:AuthContext}) {
     const abort = new AbortController();
     void sliClient.observations(sliID, 1, '', abort.signal)
       .then(result => setBound(result.earliest_queryable_interval_start))
-      .catch(() => { if (!abort.signal.aborted) setBoundError('The eligible historical range could not be loaded.'); });
+      .catch(() => { if (!abort.signal.aborted) setBoundError('Measurement history could not be loaded. Try again.'); });
     return () => abort.abort();
   }, [sliID, boundRevision]);
 
@@ -212,7 +212,7 @@ export function SlosPage({context}:{context:AuthContext}) {
           ? 'Enter a positive whole window within the supported limit.'
         : seconds % selectedSli.polling_interval_seconds !== 0
           ? `The window must be a multiple of the ${selectedSli.polling_interval_seconds}-second collection interval.`
-        : historical && !historyStart ? 'The eligible historical range is unavailable. Refresh and try again.' : '';
+        : historical && !historyStart ? 'Measurement history is unavailable. Retry loading history before including it.' : '';
       if (problem) {
         setFormError(problem);
         heading.current?.querySelector('h1')?.focus();
@@ -291,10 +291,10 @@ export function SlosPage({context}:{context:AuthContext}) {
   return <div className="slos-page" ref={heading}>
       <div className="slo-title">
       <Heading title={title} list={isList}/>{id&&isService&&<Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button>}</div>
-    {loading&&<span className="sr-only" role="status">Opening {isService?'service':'SLOs'}</span>}{error&&<p className="slo-error" role="alert">{error}</p>}
+    {loading&&!isNew&&<span className="sr-only" role="status">Opening {isService?'service':'SLOs'}</span>}{error&&<p className="slo-error" role="alert">{error}</p>}
     {!loading&&isList&&<OperationalOverviewView locationKey={locationKey} canWrite={canWrite} onCreate={()=>navigate('/slos/new')} onLocationChange={navigate}/>}
-    {!loading&&isNew&&(!canWrite?<p>Editor or administrator access is required to create SLOs.</p>:<>
-      <p>Define an objective from an existing request-count SLI.</p>{slis.length===0&&!frozen?<div className="slo-empty">
+    {isNew&&(!canWrite?<p>Editor or administrator access is required to create SLOs.</p>:<>
+      <p>Set a target for an existing SLI.</p>{!loading&&slis.length===0&&!frozen?<div className="slo-empty">
       <p>Create an SLI before creating an objective.</p>
       <a href="/slis" data-app-route>Go to SLIs</a>
       </div>:<>
@@ -313,32 +313,33 @@ export function SlosPage({context}:{context:AuthContext}) {
       </Panel>
       </form>:<form onSubmit={e=>void create(e)} noValidate>
       <Panel heading="Objective">
+      {loading&&<p role="status" className="slo-choice-loading">Loading services and SLIs. You can enter the objective while they load.</p>}
       <fieldset disabled={frozen||busy} className="slo-fields">
       <div className="slo-form-grid">
       <TextField id="slo-display" label="Display name" value={display} onChange={e=>{setDisplay(e.target.value);
       if(!nameEdited)setName(suggest(e.target.value));}}/>
       <TextField id="slo-name" label="SLO identifier" value={name} onChange={e=>{setNameEdited(true);
       setName(e.target.value);}} hint="Lowercase letters, numbers and hyphens."/>
-      <SelectField id="slo-service" label="Service" value={serviceID} onChange={e=>setServiceID(e.target.value)} options={[{value:'',label:'Select a service',disabled:true},...services.map(x=>({value:x.id,label:x.display_name}))]}/>
+      <SelectField id="slo-service" label="Service" value={serviceID} disabled={loading} onChange={e=>setServiceID(e.target.value)} options={[{value:'',label:loading?'Loading services…':'Select a service',disabled:true},...services.map(x=>({value:x.id,label:x.display_name}))]}/>
       <div className="slo-add-service">
-      <Button variant="outline" onClick={()=>{setAddingService(true);
+      <Button variant="outline" disabled={loading} onClick={()=>{setAddingService(true);
       setFormError('');}}>Create service</Button>
       </div>
-      <div className="slo-sli-field"><SelectField id="slo-sli" label="SLI" value={sliID} onChange={e=>setSliID(e.target.value)} options={[{value:'',label:'Select an SLI',disabled:true},...slis.map(x=>({value:x.id,label:x.display_name}))]}/></div>
+      <div className="slo-sli-field"><SelectField id="slo-sli" label="SLI" value={sliID} disabled={loading} onChange={e=>setSliID(e.target.value)} options={[{value:'',label:loading?'Loading SLIs…':'Select an SLI',disabled:true},...slis.map(x=>({value:x.id,label:x.display_name}))]}/></div>
       <div className="slo-preset-field"><TextField id="slo-target" label="Target (%)" inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} hint="From 0 up to but not including 100%."/><div className="slo-presets" aria-label="Common target presets">{['99','99.5','99.9','99.95','99.99'].map(value=><Button key={value} variant={target===value?'selected':'outline'} aria-pressed={target===value} onClick={()=>setTarget(value)}>{value}%</Button>)}</div></div>
       <div className="slo-preset-field slo-window-field"><div className="slo-duration-pair"><TextField id="slo-duration" label="Rolling window" inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/>
       <SelectField id="slo-unit" label="Window unit" value={unit} onChange={e=>setUnit(e.target.value)} options={['minutes','hours','days','weeks'].map(x=>({value:x,label:x}))}/></div>
       <div className="slo-presets" aria-label="Common rolling window presets">{[['7d',7],['28d',28],['30d',30],['90d',90]].map(([label,days])=><Button key={label} variant={Number(duration)===days&&unit==='days'?'selected':'outline'} aria-pressed={Number(duration)===days&&unit==='days'} onClick={()=>{setDuration(String(days));setUnit('days');}}>{label}</Button>)}</div></div>
       </div>
-      <p>A day is 24 hours. The window must align with the SLI’s {selectedSli?.polling_interval_seconds ?? 'selected'}-second collection interval.</p>{sliID&&<div className="slo-history">
+      {sliID&&<div className="slo-history">
       <label>
       <input type="checkbox" checked={historical} disabled={!historyStart} onChange={e=>setHistorical(e.target.checked)}/> Apply this target to earlier SLI measurements{historyStart?` from ${date(historyStart)}`:''}</label>
-      <p>This eligible retained range may contain gaps. It evaluates existing measurements retrospectively, does not start backfill, and does not establish a past operational commitment.</p>
+      <p>Uses measurements already collected for this SLI. Missing intervals remain unknown.</p>
       {boundError&&<p role="alert">{boundError}</p>}
-      <Button variant="outline" onClick={() => setBoundRevision(value => value + 1)}>Refresh eligible range</Button>
+      {boundError&&<Button variant="outline" onClick={() => setBoundRevision(value => value + 1)}>Retry loading history</Button>}
       </div>}</fieldset>{formError&&<p role="alert" className="slo-error">{formError}</p>}<div className="slo-actions">
       <Button variant="outline" disabled={frozen} onClick={()=>navigate('/slos')}>Cancel</Button>
-      <Button type="submit" pending={busy}>{frozen?'Retry same SLO request':'Create SLO'}</Button>
+      <Button type="submit" disabled={loading} pending={busy}>{frozen?'Retry same SLO request':'Create SLO'}</Button>
       </div>{frozen&&<p>Check the SLO list before retrying. The original request and key are retained.</p>}</Panel>
       </form>}</>}</>)}
     {!loading&&isService&&service&&<>
@@ -350,8 +351,7 @@ export function SlosPage({context}:{context:AuthContext}) {
       <Button type="submit" pending={busy}>Save display name</Button>
       </form>}{formError&&<p role="alert">{formError}</p>}</>}
     {!loading&&!isService&&slo&&<>
-      <p className="slo-subtitle">{shift(slo.target,2)}% target · rolling {windowLabel(slo.rolling_window_seconds)}</p>
-      <p className="slo-related">Service: <a href={`/services/${slo.service_id}`} data-app-route>{slo.service_display_name}</a> · SLI: <a href={`/slis/${slo.sli_id}`} data-app-route>{slo.sli_display_name}</a></p>
+      <p className="slo-detail-context"><a href={`/services/${slo.service_id}`} data-app-route>{slo.service_display_name}</a> · {shift(slo.target,2)}% target · rolling {windowLabel(slo.rolling_window_seconds)} · <a href={`/slis/${slo.sli_id}`} data-app-route>{slo.sli_display_name}</a></p>
       <OperationalDetailView id={slo.id} definition={slo} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}}/>{slo&&<details>
       <summary>Settings and technical details</summary>
       <p>Identifier: {slo.name} · Definition revision: {slo.definition_revision} · Resource version: {slo.version}</p>

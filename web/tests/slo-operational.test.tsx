@@ -19,7 +19,13 @@ function operationalDetail(requestedStart='2026-10-01T00:00:00Z',requestedEnd='2
 
 it('shows server group counts and sends submitted filters through the operational endpoint',async()=>{
  const id='11111111-1111-1111-1111-111111111111';
- const fetcher=vi.fn(async()=>new Response(JSON.stringify({snapshot_id:id,items:[],group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
+ const detail=operationalDetail();
+ const items=['needs_attention','watch','healthy'].map((urgency,index)=>({
+  slo:{...definition,id:`11111111-1111-1111-1111-11111111111${index}`},current:detail.current,
+  urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,
+  burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[],
+ }));
+ const fetcher=vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(new URL(String(input),'https://localhost').pathname==='/api/v1/services'?{items:[],next_cursor:''}:{snapshot_id:id,items,group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
  vi.stubGlobal('fetch',fetcher);
  history.replaceState({},'','/slos');
  const updateLocation=vi.fn();
@@ -32,11 +38,25 @@ it('shows server group counts and sends submitted filters through the operationa
  await waitFor(()=>expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('q=checkout')));
 });
 
+it('shows one empty-state message without empty urgency tables or false pagination',async()=>{
+ const fetcher=vi.fn(async(input:RequestInfo|URL)=>{
+  const path=new URL(String(input),'https://localhost').pathname;
+  return path==='/api/v1/services'
+   ? new Response(JSON.stringify({items:[],next_cursor:''}),{status:200})
+   : new Response(JSON.stringify({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''}),{status:200});
+ });
+ vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');
+ render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
+ expect(await screen.findByRole('heading',{name:'No SLOs yet'})).toBeVisible();
+ expect(screen.queryByRole('table')).not.toBeInTheDocument();
+ expect(screen.queryByRole('navigation',{name:'SLO result pages'})).not.toBeInTheDocument();
+});
+
 it('uses the signed previous cursor from the same server snapshot',async()=>{
  const id='11111111-1111-1111-1111-111111111111';
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const query=new URL(String(input),'http://localhost').searchParams;const second=query.get('cursor')==='next-token';return new Response(JSON.stringify({snapshot_id:id,items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:second?'':'next-token',previous_cursor:second?'signed-first-page-token':''}),{status:200});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const onLocationChange=vi.fn();const props={canWrite:false,onCreate:()=>undefined,onLocationChange};
- const view=render(<OperationalOverviewView {...props} locationKey="/slos"/>);await screen.findByRole('heading',{name:'Needs attention, 0 SLOs'});expect(screen.getByRole('button',{name:'Previous page'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Next page'}));expect(onLocationChange).toHaveBeenCalledWith('/slos?cursor=next-token');
+ const view=render(<OperationalOverviewView {...props} locationKey="/slos"/>);await screen.findByRole('heading',{name:'No SLOs yet'});expect(screen.getByRole('button',{name:'Previous page'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Next page'}));expect(onLocationChange).toHaveBeenCalledWith('/slos?cursor=next-token');
  view.rerender(<OperationalOverviewView {...props} locationKey="/slos?cursor=next-token"/>);await waitFor(()=>expect(screen.getByRole('button',{name:'Previous page'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Previous page'}));expect(onLocationChange).toHaveBeenLastCalledWith('/slos?cursor=signed-first-page-token');
 });
 
@@ -44,7 +64,7 @@ it('refreshes a later overview page from a fresh first-page snapshot and retains
  const seen:URLSearchParams[]=[];
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const url=new URL(String(input),'https://localhost');if(url.pathname==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});seen.push(url.searchParams);return new Response(JSON.stringify({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'next-page',previous_cursor:'previous-page'}),{status:200});});
  vi.stubGlobal('fetch',fetcher);const filters='q=checkout&service_id=55555555-5555-5555-5555-555555555555&urgency=watch';const later=`/slos?${filters}&cursor=page-two&previous_cursor=page-one`;history.replaceState({},'',later);const onLocationChange=vi.fn();const props={canWrite:false,onCreate:()=>undefined,onLocationChange};
- const view=render(<OperationalOverviewView {...props} locationKey={later}/>);await screen.findByRole('heading',{name:'Needs attention, 0 SLOs'});fireEvent.click(screen.getByRole('button',{name:'Refresh'}));const first=`/slos?${filters}`;expect(onLocationChange).toHaveBeenCalledWith(first);view.rerender(<OperationalOverviewView {...props} locationKey={first}/>);await waitFor(()=>expect(seen).toHaveLength(2));expect(seen[0]?.get('cursor')).toBe('page-two');expect(seen[1]?.has('cursor')).toBe(false);expect(seen[1]?.get('q')).toBe('checkout');expect(seen[1]?.get('service_id')).toBe('55555555-5555-5555-5555-555555555555');expect(seen[1]?.get('urgency')).toBe('watch');
+ const view=render(<OperationalOverviewView {...props} locationKey={later}/>);await screen.findByText('No SLOs match these filters.');fireEvent.click(screen.getByRole('button',{name:'Refresh'}));const first=`/slos?${filters}`;expect(onLocationChange).toHaveBeenCalledWith(first);view.rerender(<OperationalOverviewView {...props} locationKey={first}/>);await waitFor(()=>expect(seen).toHaveLength(2));expect(seen[0]?.get('cursor')).toBe('page-two');expect(seen[1]?.has('cursor')).toBe(false);expect(seen[1]?.get('q')).toBe('checkout');expect(seen[1]?.get('service_id')).toBe('55555555-5555-5555-5555-555555555555');expect(seen[1]?.get('urgency')).toBe('watch');
 });
 
 it('keeps retry and range controls available after the first detail read fails, then recovers on a new range',async()=>{

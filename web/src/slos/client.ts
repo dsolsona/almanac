@@ -137,7 +137,7 @@ const messages: Record<string, string> = {
 const fieldMessages: Record<string, string> = {
   'target:target_invalid': 'Target must be from 0% up to but not including 100%.',
   'rolling_window_seconds:window_invalid': 'Enter a positive window within the supported limit and aligned to the SLI collection interval.',
-  'evaluation_valid_from:historical_start_invalid': 'The eligible retained range changed. Refresh the eligible range and review the historical start before retrying.',
+  'evaluation_valid_from:historical_start_invalid': 'The selected history is no longer available. Turn off earlier measurements, or reload the page and choose history again.',
   'timeline_start:timeline_range_invalid': 'Choose both aligned timeline bounds within the objective window, with at most 1,500 intervals.',
   'at:evaluation_time_invalid': 'Choose a valid evaluation time that is not in the future.',
 };

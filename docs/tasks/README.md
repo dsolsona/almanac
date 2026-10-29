@@ -159,3 +159,6 @@ are in progress; F3-T06 remains draft.
 [F3-T05](F3-T05.md) improves the current delivery loop with fixed focused checks,
 source-bound evidence and task-wide verification/handoff controls. It supports
 current app delivery without changing product contracts or waiving required gates.
+
+[F3-T07](F3-T07.md) corrects the maintainer's reported SLO creation, table,
+empty-state, wording and visual acceptance failures under the existing contracts.
