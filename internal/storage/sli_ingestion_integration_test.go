@@ -240,13 +240,20 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=0, total_count=0 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
 		t.Fatal("seed database-backed SLI zero-traffic projection failed")
 	}
-	projectionNow := func() time.Time { return item.IntervalEnd.Add(60 * time.Second) }
-	zeroPage, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", projectionNow)
-	if err != nil || len(zeroPage.Items) != 1 || zeroPage.Items[0].ListProjection == nil || len(zeroPage.Items[0].ListProjection.RecentMeasurements) != 1 ||
-		zeroPage.Items[0].ListProjection.RecentMeasurements[0].State != "zero_traffic" || zeroPage.Items[0].ListProjection.RecentMeasurements[0].GoodCount == nil ||
-		*zeroPage.Items[0].ListProjection.RecentMeasurements[0].GoodCount != "0" || zeroPage.Items[0].ListProjection.RecentMeasurements[0].TotalCount == nil ||
-		*zeroPage.Items[0].ListProjection.RecentMeasurements[0].TotalCount != "0" {
+	zeroPage, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", clock)
+	if err != nil || len(zeroPage.Items) != 1 || zeroPage.Items[0].ListProjection == nil {
 		t.Fatalf("database-backed zero-traffic list projection = %+v, %v", zeroPage, err)
+	}
+	var zeroSample *SliRecentMeasurement
+	for index := range zeroPage.Items[0].ListProjection.RecentMeasurements {
+		sample := &zeroPage.Items[0].ListProjection.RecentMeasurements[index]
+		if sample.IntervalStart.Equal(item.IntervalStart) {
+			zeroSample = sample
+			break
+		}
+	}
+	if zeroSample == nil || zeroSample.State != "zero_traffic" || zeroSample.GoodCount == nil || *zeroSample.GoodCount != "0" || zeroSample.TotalCount == nil || *zeroSample.TotalCount != "0" {
+		t.Fatalf("database-backed zero-traffic sample = %+v, page: %+v", zeroSample, zeroPage)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=99, total_count=100 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
 		t.Fatal("restore database-backed SLI sample after zero-traffic projection failed")
@@ -640,10 +647,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19, 20)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19, 20, 21)`); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 5 || result.DatabaseSchemaVersion != 20 {
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 21 {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {

@@ -41,8 +41,17 @@ class VerificationControlsTest(unittest.TestCase):
         for relative in vc.WEB_TESTS:
             self.assertTrue((REPO_ROOT / "web" / relative).is_file(), relative)
         self.assertEqual(vc.GO_PACKAGES, ("./internal/slo", "./internal/sloclient", "./internal/slohttp", "./internal/sli", "./internal/datasourceclient", "./internal/storage", "./internal/command"))
-        self.assertEqual(vc.DB_TESTS["agent-lifecycle"], "TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle")
-        self.assertIn(vc.DB_TESTS["agent-lifecycle"], (REPO_ROOT / "internal/command/agent_management_runtime_integration_test.go").read_text())
+        self.assertEqual(vc.DB_TESTS["slo-integration"], ("TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows", "TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict"))
+        self.assertEqual(vc.DB_TESTS["slo-journey"], ("TestIntegrationExecutableFirstObjectiveJourney",))
+        self.assertEqual(vc.DB_TESTS["agent-lifecycle"], ("TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle",))
+        for relative, test_name in (
+            ("internal/storage/slo_operational_integration_test.go", vc.DB_TESTS["slo-integration"][0]),
+            ("internal/storage/sli_ingestion_integration_test.go", vc.DB_TESTS["slo-integration"][1]),
+            ("internal/command/objectives_journey_integration_test.go", vc.DB_TESTS["slo-journey"][0]),
+            ("internal/command/agent_management_runtime_integration_test.go", vc.DB_TESTS["agent-lifecycle"][0]),
+        ):
+            self.assertIn(test_name, (REPO_ROOT / relative).read_text())
+        self.assertEqual(vc.db_test_pattern("slo-integration"), "^(TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows|TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict)$")
         self.assertNotIn("slo-chart-boundary.test.tsx", vc.WEB_TESTS)
 
     def test_make_does_not_expand_user_reason_or_plan_as_make_code(self):
@@ -69,6 +78,15 @@ class VerificationControlsTest(unittest.TestCase):
         events.write_text(json.dumps({"Action": "run", "Test": "TestLifecycle"}) + "\n" + json.dumps({"Action": "skip", "Test": "TestLifecycle"}))
         with self.assertRaises(ValueError):
             vc.counted_go_events(events, {"TestLifecycle"})
+
+    def test_integration_receipt_requires_both_fixed_slo_and_sli_cases(self):
+        events = self.receipts / "two-go.jsonl"
+        names = set(vc.DB_TESTS["slo-integration"])
+        events.write_text("\n".join(json.dumps({"Action": action, "Test": name}) for name in sorted(names) for action in ("run", "pass")))
+        self.assertEqual(vc.counted_go_events(events, names), 2)
+        events.write_text(json.dumps({"Action": "run", "Test": sorted(names)[0]}))
+        with self.assertRaises(ValueError):
+            vc.counted_go_events(events, names)
 
     def test_asset_preflight_failure_is_returned_and_saved_to_receipt_artifact(self):
         artifact = self.receipts / "preflight.log"

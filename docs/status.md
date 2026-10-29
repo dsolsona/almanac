@@ -1,11 +1,15 @@
 # Delivery status
 
 The latest combined candidate passes the real SLI/SLO browser journey and normal
-Compose acceptance. Linux build/unit and race stages pass; its database stage fails
-in `TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict`: the new
-zero-traffic list assertion receives `storage: invalid session`. That failure and
-the earlier shutdown investigation remain unresolved. The maintainer requested
-committing the current work and opening a PR without further implementation.
+Compose acceptance. Linux build/unit and race stages pass. Its database-stage
+failure was traced to two fixture errors: a clock preceding session creation and
+rollback expectations that omitted migration 0021. Both corrected storage cases
+passed the fixed `slo-integration` check in 15.77 seconds (receipt
+`20261029T193436Z-bdb454bac61344758fb2028dbbea9ff8`). The earlier shutdown
+investigation remains unresolved; full Linux acceptance is still outstanding.
+The current work is published
+in [PR #47](https://github.com/dsolsona/almanac/pull/47). The maintainer requested
+continued implementation.
 
 ## Current state
 

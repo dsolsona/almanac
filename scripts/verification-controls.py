@@ -43,9 +43,9 @@ MODES = {"slo-unit": ("web", MODE_PATHS["slo-unit"]), "slo-integration": ("db", 
 WEB_TESTS = ("tests/slos-client.test.tsx", "tests/slos-page.test.tsx", "tests/slo-operational.test.tsx", "tests/charts.test.tsx", "tests/controls.test.tsx", "tests/slis-client.test.tsx", "tests/slis-page.test.tsx")
 GO_PACKAGES = ("./internal/slo", "./internal/sloclient", "./internal/slohttp", "./internal/sli", "./internal/datasourceclient", "./internal/storage", "./internal/command")
 DB_TESTS = {
-    "slo-integration": "TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows",
-    "slo-journey": "TestIntegrationExecutableFirstObjectiveJourney",
-    "agent-lifecycle": "TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle",
+    "slo-integration": ("TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows", "TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict"),
+    "slo-journey": ("TestIntegrationExecutableFirstObjectiveJourney",),
+    "agent-lifecycle": ("TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle",),
 }
 BROAD_MODES = {"ordinary", "linux", "linux-sli", "go", "go-portability", "go-race", "auth-bench", "integration", "journey", "compose", "providers", "smoke", "unit", "browser"}
 BROAD_INPUTS = {
@@ -255,6 +255,12 @@ def go_run_count(path: Path, expected: set[str]) -> int:
     return len(found)
 
 
+def db_test_pattern(mode: str) -> str:
+    """Build an anchored Go regexp solely from the fixed catalog for a mode."""
+    names = DB_TESTS[mode]
+    return "^(" + "|".join(re.escape(name) for name in names) + ")$"
+
+
 def ensure_web_assets(artifact: Path, env: dict[str, str]) -> int:
     result = subprocess.run(["make", "_ensure_web_assets"], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     output = result.stdout or b""
@@ -391,15 +397,18 @@ def execute(mode: str) -> int:
                 raise ValueError("ALMANAC_TEST_DATABASE_URL must select the isolated local fixture")
             if not (ROOT / ".local/bin/go").is_file() or not os.access(ROOT / ".local/bin/go", os.X_OK):
                 raise ValueError("pinned Go is missing; use make setup SETUP_MODE=go")
-            test_name = DB_TESTS[mode]
+            test_names = DB_TESTS[mode]
+            expected = set(test_names)
+            test_pattern = db_test_pattern(mode)
             package = "./internal/storage" if mode == "slo-integration" else "./internal/command"
             env = os.environ.copy()
             env.update(GOTOOLCHAIN="local", GOPROXY="off", GOMODCACHE=str(ROOT / ".local/go/mod"), GOCACHE=str(ROOT / ".local/go/build"))
-            discovery = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-tags=integration", "-list", f"^{test_name}$", package], cwd=ROOT, env=env, text=True, capture_output=True)
-            found = [line for line in discovery.stdout.splitlines() if line == test_name]
-            if discovery.returncode or len(found) != 1:
-                raise ValueError(f"expected exactly one {test_name}; discovery failed or found {len(found)}")
-            selected = len(found)
+            discovery = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-tags=integration", "-list", test_pattern, package], cwd=ROOT, env=env, text=True, capture_output=True)
+            found = {line.strip() for line in discovery.stdout.splitlines() if line.strip().startswith("Test")}
+            if discovery.returncode or found != expected:
+                missing, extra = sorted(expected - found), sorted(found - expected)
+                raise ValueError(f"expected exactly fixed tests {sorted(expected)}; discovery failed, missing={missing}, extra={extra}")
+            selected = len(expected)
             preflight = subprocess.run(["make", "_verify_sqlc_generated"], cwd=ROOT, env=env, capture_output=True)
             if preflight.returncode:
                 with artifact.open("wb") as log:
@@ -419,7 +428,7 @@ def execute(mode: str) -> int:
                 status = build.returncode
                 raise RuntimeError("candidate build failed")
             with artifact.open("wb") as log:
-                proc = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-json", "-race", "-tags=integration", "-p=1", "-run", f"^{test_name}$", "-count=1", "-timeout=2m", package], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+                proc = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-json", "-race", "-tags=integration", "-p=1", "-run", test_pattern, "-count=1", "-timeout=2m", package], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
                 output = proc.stdout
                 dsn = env.get("ALMANAC_TEST_DATABASE_URL", "").encode()
                 if dsn:
@@ -429,9 +438,9 @@ def execute(mode: str) -> int:
             result_json.write_bytes(output)
             artifact_paths.append(result_json)
             status = proc.returncode
-            executed = go_run_count(result_json, {test_name})
+            executed = go_run_count(result_json, expected)
             if status == 0:
-                selected = counted_go_events(result_json, {test_name})
+                selected = counted_go_events(result_json, expected)
     except (OSError, ValueError, RuntimeError) as exc:
         with artifact.open("ab") as log:
             log.write((str(exc) + "\n").encode())
@@ -444,7 +453,7 @@ def execute(mode: str) -> int:
         with artifact.open("ab") as log:
             log.write(b"relevant source changed during verification; result is not accepted\n")
     artifacts = [p.name for p in artifact_paths if p.is_file()]
-    selected_items = list(WEB_TESTS) + list(GO_PACKAGES) if kind == "web" else (["scripts/tests/test_verification_controls.py"] if kind == "tools" else [DB_TESTS[mode]])
+    selected_items = list(WEB_TESTS) + list(GO_PACKAGES) if kind == "web" else (["scripts/tests/test_verification_controls.py"] if kind == "tools" else list(DB_TESTS[mode]))
     record = {"id": run_id, "mode": mode, "origin": str(ROOT), "fingerprint": before, "fingerprint_at_end": after, "started_unix": started, "ended_unix": ended, "elapsed_seconds": ended-started, "exit_code": status, "result": "passed" if status == 0 else "failed", "selected_count": selected, "executed_count": executed, "selected_count_kind": "test-cases", "selected": selected_items, "artifacts": artifacts, "receipt": receipt.name, "limitations": "Local filesystem evidence; not tamper-proof."}
     # Immutable receipt creation; UUID collision is practically impossible and
     # O_EXCL makes the immutability guarantee explicit.
