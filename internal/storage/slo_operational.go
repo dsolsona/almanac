@@ -22,6 +22,7 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -613,6 +614,17 @@ func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input O
 			return api.SloOperationalOverviewPage{}, ErrOperationalRange
 		}
 	}
+	var reservedID uuid.UUID
+	cleanupFailedRead := func(readErr error) error {
+		if reservedID == uuid.Nil {
+			return readErr
+		}
+		// A cancelled browser request must not occupy a session snapshot slot
+		// until expiry. Release only the reservation created by this request.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		return errors.Join(readErr, deleteSloOverviewSnapshot(cleanupCtx, databaseURL, input, reservedID))
+	}
 	if input.Cursor == "" && input.snapshotID == "" {
 		var id uuid.UUID
 		var role string
@@ -624,12 +636,12 @@ func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input O
 		if err != nil {
 			return api.SloOperationalOverviewPage{}, err
 		}
+		reservedID = id
 		err = retryOperationalRead(ctx, func() error {
 			return materializeSloOverviewSnapshot(ctx, databaseURL, input, id, role)
 		})
 		if err != nil {
-			cleanupErr := deleteSloOverviewSnapshot(ctx, databaseURL, input, id)
-			return api.SloOperationalOverviewPage{}, errors.Join(err, cleanupErr)
+			return api.SloOperationalOverviewPage{}, cleanupFailedRead(err)
 		}
 		input.snapshotID = id.String()
 	}
@@ -639,7 +651,10 @@ func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input O
 		result, attemptErr = readSloOverviewPage(ctx, databaseURL, input)
 		return attemptErr
 	})
-	return result, err
+	if err != nil {
+		return result, cleanupFailedRead(err)
+	}
+	return result, nil
 }
 
 func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput) (uuid.UUID, string, error) {
@@ -650,12 +665,17 @@ func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input O
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
 	now := normalizedAgentNow(input.Now)
-	var acquired bool
-	if err = tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission', 0))").Scan(&acquired); err != nil {
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview admission lock failed", err)
+	// Filter changes may overlap briefly while the preceding HTTP request is
+	// being cancelled. Serialize admission without mistaking that overlap for
+	// an exhausted snapshot budget; keep the wait bounded and cancellable.
+	if _, err = tx.Exec(ctx, "SET LOCAL lock_timeout = '1s'"); err != nil {
+		return uuid.Nil, "", readTransactionError(ctx, "storage: overview admission timeout setup failed", err)
 	}
-	if !acquired {
-		return uuid.Nil, "", ErrOperationalResource
+	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission', 0))"); err != nil {
+		if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "55P03" {
+			return uuid.Nil, "", ErrOperationalResource
+		}
+		return uuid.Nil, "", readTransactionError(ctx, "storage: overview admission lock failed", err)
 	}
 	if err = q.DeleteExpiredSloOverviewSnapshots(ctx, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
 		return uuid.Nil, "", readTransactionError(ctx, "storage: overview snapshot cleanup failed", err)

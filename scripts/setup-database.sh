@@ -55,7 +55,9 @@ if [ "$container_check" -eq 1 ]; then
 	exit 0
 fi
 
-image_id=$(docker image inspect "$image" --format '{{.Id}}' 2>/dev/null || true)
+# Preserve Docker's diagnostic: an unreachable daemon or denied socket is not
+# evidence that the pinned image is absent.
+image_id=$(docker image inspect "$image" --format '{{.Id}}' || true)
 if [ -z "$image_id" ]; then
 	if [ "$check_only" -eq 1 ]; then
 		echo 'Required pinned PostgreSQL 18.6 image is not available locally' >&2

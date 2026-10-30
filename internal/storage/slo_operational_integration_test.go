@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"math/big"
@@ -120,6 +121,48 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	watch := createSLO("operational-watch", goodSLI.ID, at.Add(-30*time.Minute))
 	readAt := at
 	readNow := func() time.Time { return readAt }
+	t.Run("overlapping overview admission waits for the preceding filter", func(t *testing.T) {
+		lockTx, err := conn.Begin(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lockTx.Rollback(t.Context())
+		if _, err := lockTx.Exec(t.Context(), "SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission', 0))"); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		released := make(chan error, 1)
+		timer := time.AfterFunc(100*time.Millisecond, func() { released <- lockTx.Rollback(ctx) })
+		defer timer.Stop()
+		_, err = ReadSloOperationalOverview(ctx, f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
+		if releaseErr := <-released; releaseErr != nil {
+			t.Fatal(releaseErr)
+		}
+		if err != nil {
+			t.Fatalf("overview rejected a transient admission overlap: %v", err)
+		}
+	})
+	t.Run("cancelled filter releases its reserved snapshot", func(t *testing.T) {
+		lockTx, err := conn.Begin(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lockTx.Rollback(t.Context())
+		if _, err := lockTx.Exec(t.Context(), "LOCK TABLE public.almanac_slos IN ACCESS EXCLUSIVE MODE"); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+		defer cancel()
+		_, err = ReadSloOperationalOverview(ctx, f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("cancelled filter returned %v", err)
+		}
+		var live int
+		if err := lockTx.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2`, f.userID, freshVerifier[:]).Scan(&live); err != nil || live != 0 {
+			t.Fatalf("cancelled filter retained %d snapshots: %v", live, err)
+		}
+	})
 	var page api.SloOperationalOverviewPage
 	for refresh := range 5 {
 		page, err = ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})

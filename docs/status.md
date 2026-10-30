@@ -1,5 +1,18 @@
 # Delivery status
 
+F3-T07 visual acceptance is reopened after the maintainer rejected the completion
+claim. The source-port evidence below establishes functional checks, not identical
+screenshots. The current follow-up restores missing chart coverage shading and
+source scaling, fixes table counts/timezone presentation and emits a direct
+supplied-image/real-page comparison. A wide capture exposed the shared 1240px shell
+cap; SLO pages now fill the available workspace. The actual browser journey also
+encountered a resource-limit error during overview filtering. Bounded admission
+waiting and cancellation cleanup now pass deterministic regressions and that real
+journey. Current evidence: 266 focused cases (13.168s), 135 storage tests (567.414s
+including build/setup) and the real journey (71.028s). The remaining reference
+control/event gaps and exact visual acceptance remain open. The comparison report
+is `.local/browser-sli-objective-3538560505/visual-comparison.html`.
+
 [F3-T07](tasks/F3-T07.md) now ports the actual slo-tracker SLO list/detail
 markup, CSS and chart geometry, with the current left navigation. It replaces the
 prior visual approximation, including its generic tables and proportional chart

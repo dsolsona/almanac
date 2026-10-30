@@ -1,5 +1,8 @@
 /* Ported from slo-tracker: app-list.css, app-detail.css and styles/almanac.css.
    Keep these layout rules aligned with the source reference. */
+.app-main:has(.slos-page) { width:calc(100% - 64px); }
+@media(max-width:860px) { .app-main:has(.slos-page) { width:calc(100% - 32px); } }
+@media(max-width:420px) { .app-main:has(.slos-page) { width:calc(100% - 24px); } }
 .slo-reference-status { display:inline-flex; align-items:center; gap:6px; font:600 12px/1.5 var(--font-body); white-space:nowrap; }
 .slo-reference-status[data-status="healthy"] { color:var(--status-healthy); }
 .slo-reference-status[data-status="warning"] { color:var(--status-warning); }
@@ -41,6 +44,7 @@
 .app-timeline-controls .ui-button,.app-lane-tools .ui-button { min-height:30px; padding:5px 8px; font:12px/1.4 var(--mono); }
 .app-timeline-controls>[role="group"]>.ui-button,.app-lane-tools>[role="group"]>.ui-button { border-color:transparent; }
 .app-rail-card>header>.ui-button { min-height:28px; padding:0 4px; border:0; font-size:20px; }
+.app-slo-refresh { display:grid; place-items:center; }
 .app-rail-card>header>a { font:12px var(--mono); }
 .app-lane-label { box-sizing:border-box; }
 .app-lane-insert { box-sizing:border-box; }
@@ -54,6 +58,7 @@
 .app-lane-insert .exact-values__scroll { max-height:190px; }
 .slos-page .app-calculation-disclosure { padding:16px; margin:0; }
 .app-calculation-disclosure[open]>summary { margin-bottom:16px; }
+.slos-page .app-calculation-disclosure>summary { font:12px/1.6 var(--mono); }
 .app-calculation-disclosure p { overflow-wrap:anywhere; font-size:12px; }
 .app-query-label { font:11px var(--mono); margin:12px 0 0; color:var(--text-3); }
 .app-timeline-plot .timeline-chart__plot { width:100%; }
@@ -188,7 +193,7 @@
 }
 
 
-.app-detail-back { display:inline-flex; color:var(--text-3); font-size:13px; margin-bottom:8px; }
+.app-detail-back { display:inline-flex; color:var(--text-3); font-size:13px; margin-bottom:8px; text-decoration:none; }
 .app-detail-heading { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
 .app-detail-heading h1 { font-size:24px; font-weight:700; letter-spacing:-.02em; margin:0; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .app-detail-meta { display:flex; gap:12px; flex-wrap:wrap; color:var(--text-3); font-size:13px; margin-top:6px; align-items:center; }

@@ -6,6 +6,7 @@ import { afterEach } from 'vitest';
 import { ExactValuesTable } from '../src/components/charts/ExactValuesTable.tsx';
 import { buildBudgetSparklineOption } from '../src/components/charts/SloBudgetSparkline.tsx';
 import { TimelineChartHeader } from '../src/components/charts/TimelineChartHeader.tsx';
+import { SloExactValuesTable } from '../src/components/charts/SloExactValuesTable.tsx';
 import { illustrativeChart, intentionallyOmittedTimestamp } from '../src/catalogue/chartFixture.ts';
 
 afterEach(cleanup);
@@ -199,6 +200,30 @@ describe('timeline model and options', () => {
     const grids=option.grid as Array<{top:number;height:number;left:number;right:number}>;
     expect(grids).toEqual([{left:46,right:26,top:20,height:110},{left:46,right:26,top:522,height:150},{left:46,right:26,top:724,height:150},{left:46,right:26,top:926,height:90}]);
     expect((option.series as Array<{type:string}>).some(series=>series.type==='bar')).toBe(true);
+  });
+
+  it('copies reference axis scaling and shades unavailable coverage without drawing a line through it',()=>{
+    const fixture:TimelineChart={...chart,fillExpectedGaps:false,referenceLines:[{lane:'attainment',value:'99.9',label:'Target 99.9%'}],lanes:[{...chart.lanes[0]!,id:'attainment',height:162}]};
+    const option=buildTimelineOption(fixture,validateTimeline(fixture),{...palette,sli:'#246469',muted:'#eeeade'});
+    expect((option.yAxis as unknown[])[0]).toMatchObject({scale:true});
+    expect((option.yAxis as Array<{min?:number}>)[0]?.min).toBeUndefined();
+    const line=(option.series as Array<{type:string;markArea?:{data:Array<[{xAxis:number},{xAxis:number}]>}}>).find(series=>series.type==='line')!;
+    expect(line).toMatchObject({lineStyle:{color:'#246469',width:1.7},connectNulls:false});
+    expect(line.markArea?.data).toMatchObject([[{xAxis:Date.parse('2026-01-01T00:01:00Z')},{xAxis:Date.parse(chart.end)}]]);
+    expect(option.useUTC).toBe(true);
+    expect(buildTimelineOption({...fixture,timeZone:'local'},validateTimeline(fixture),palette).useUTC).toBe(false);
+    const highBurn:TimelineChart={...fixture,referenceLines:[{lane:'burn',value:'1',label:'1×'}],lanes:[{id:'burn',label:'Burn rate',unit:'×',height:202,series:[{id:'burn',label:'Observed burn',points:[{timestamp:fixture.start,value:'10',coverage:'partial'}]}]}]};
+    const burnAxis=(buildTimelineOption(highBurn,validateTimeline(highBurn),palette).yAxis as Array<{min:number;max:number}>)[0]!;
+    expect(burnAxis.min).toBeLessThanOrEqual(1);expect(burnAxis.max).toBeGreaterThanOrEqual(10);
+  });
+
+  it('shows the source table counts and local timestamps while retaining the exact UTC identity',()=>{
+    const timestamp='2026-01-01T00:01:00Z';
+    render(<SloExactValuesTable title="SLI" rows={[{timestamp,lane:'SLI attainment',series:'Observed',unit:'ratio',value:'0.99',coverage:'complete',good:'99',total:'100',samples:1}]} page={1} totalRows={1} onPageChange={()=>undefined} timeZone="local"/>);
+    expect(screen.getByRole('columnheader',{name:'Time (local)'})).toBeVisible();
+    expect(screen.getByText('99')).toBeVisible();expect(screen.getByText('100')).toBeVisible();
+    expect(screen.getByText(new Date(timestamp).toLocaleString())).toHaveAttribute('datetime',timestamp);
+    expect(screen.getByText('99%')).toBeVisible();
   });
 
   it('uses the available plot height for one and four aligned lanes', () => {

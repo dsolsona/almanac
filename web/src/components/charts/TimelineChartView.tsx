@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import { use } from 'echarts/core';
 import { BarChart, LineChart, ScatterChart } from 'echarts/charts';
-import { AriaComponent, GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
+import { AriaComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { SVGRenderer } from 'echarts/renderers';
 import { init } from 'echarts/core';
 import type { ECharts } from 'echarts/core';
@@ -10,7 +10,7 @@ import { TimelineChartHeader } from './TimelineChartHeader.tsx';
 import { buildTimelineOption, type TimelinePalette } from './timelineOption.ts';
 import './charts.css';
 
-use([BarChart, LineChart, ScatterChart, AriaComponent, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
+use([BarChart, LineChart, ScatterChart, AriaComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 function readTimelinePalette(): TimelinePalette {
   const style = getComputedStyle(document.documentElement);
@@ -18,7 +18,7 @@ function readTimelinePalette(): TimelinePalette {
   return {
     axis: color('--axis'), labelText: color('--text-3'), grid: color('--grid'), crosshair: color('--crosshair'),
     series: [color('--s1'), color('--s2')] as [string, string], surface: color('--surface'),
-    surfaceBorder: color('--border'), text: color('--text'),healthy:color('--status-healthy'),breached:color('--status-breached'),
+    surfaceBorder: color('--border'), text: color('--text'),healthy:color('--status-healthy'),breached:color('--status-breached'),sli:color('--s3'),muted:color('--surface-2'),
   };
 }
 

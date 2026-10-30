@@ -12,6 +12,8 @@ export type TimelinePalette = {
   text: string;
   healthy?:string;
   breached?:string;
+  sli?: string;
+  muted?: string;
 };
 
 function escapeHTML(value: string): string {
@@ -55,7 +57,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     axisLine: { show:!referenceLayout||index===lanes-1,lineStyle: { color: axis } }, axisTick: { show: !referenceLayout&&index === lanes - 1 },
     axisLabel: { show: index === lanes - 1, color: labelText, hideOverlap: true,...(referenceLayout?{fontFamily:'monospace',fontSize:11}:{}), formatter: (value: number) => {
       const date = new Date(value);
-      const short = Date.parse(chart.end) - Date.parse(chart.start) < 86_400_000;
+      const short = Date.parse(chart.end) - Date.parse(chart.start) <= (referenceLayout?2:1)*86_400_000;
       if(referenceLayout)return date.toLocaleString('en-US',{month:'short',day:'numeric',...(short?{hour:'2-digit',minute:'2-digit',hour12:false}:{}),...(chart.timeZone==='local'?{}:{timeZone:'UTC'})});
       if(chart.timeZone==='local') return short ? date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}) : date.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'});
       return short ? `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')} UTC` : `${date.toISOString().slice(0, 10)} UTC`;
@@ -73,7 +75,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
       return {min:low-padding,max:high+padding};
     })() : {};
     return {
-    type: 'value' as const, gridIndex: index, ...referenceExtent,...(lane.range?{min:lane.range[0],max:lane.range[1]}:{}), name: chart.showLaneNames===false?'':`${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
+    type: 'value' as const, gridIndex: index, ...(referenceLayout&&values.length?{scale:!lane.range,...(lane.unit==='×'?referenceExtent:{})}:referenceExtent),...(lane.range?{min:lane.range[0],max:lane.range[1]}:{}), name: chart.showLaneNames===false?'':`${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
     nameGap: 46, nameTextStyle: { color: labelText, fontSize: 11 }, axisLabel: {
       color: labelText, fontSize: 10, margin: 4, hideOverlap: true,
       showMaxLabel: true, showMinLabel: true,
@@ -83,14 +85,28 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   };});
   const series = model.series.flatMap((item, index) => {
     const lane = chart.lanes[item.lane]!;
-    const color = referenceLayout?colors[0]:colors[index % colors.length]!;
+    const color = referenceLayout?(lane.id==='attainment'?palette.sli??colors[0]:colors[0]):colors[index % colors.length]!;
     const seriesId = `lane-${item.lane}-series-${item.seriesIndex}`;
     const isolated = item.data.filter((point, pointIndex) => point.value !== null &&
       (pointIndex === 0 || item.data[pointIndex - 1]?.value === null) &&
       (pointIndex === item.data.length - 1 || item.data[pointIndex + 1]?.value === null));
+    // Copy slo-tracker's gap bands, using the actual coverage of each lane.
+    // Partial numeric observations keep their separate markers; a band never
+    // converts missing coverage into a successful line segment.
+    const gaps:Array<[{xAxis:number;itemStyle:unknown},{xAxis:number}]>=[];
+    if(referenceLayout&&!lane.bars){
+      let start:number|undefined;
+      for(const point of item.data){
+        const unavailable=point.coverage!=='complete'&&point.coverage!=='stale';
+        if(unavailable&&start===undefined)start=point.timestamp;
+        if(!unavailable&&start!==undefined){gaps.push([{xAxis:start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:point.timestamp}]);start=undefined;}
+      }
+      if(start!==undefined)gaps.push([{xAxis:start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:Date.parse(chart.end)}]);
+    }
     return [
       { id: `${seriesId}-line`, name: `${lane.label} · ${item.label}`, type: lane.bars?'bar' as const:'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
-        showSymbol: false, connectNulls: false, animation: false, barMaxWidth:18,barMinHeight:lane.bars?3:undefined,itemStyle: { color }, lineStyle: { color, width: referenceLayout?1.7:2 },
+        showSymbol: false, connectNulls: false, animation: false, barMaxWidth:18,barMinHeight:lane.bars?3:undefined,itemStyle: { color,borderRadius:lane.bars?[3,3,0,0]:0 }, lineStyle: { color, width: referenceLayout?1.7:2 },
+        ...(gaps.length?{markArea:{silent:true,label:{show:false},data:gaps}}:{}),
         ...(item.seriesIndex===0 && chart.referenceLines?.some(line=>line.lane===lane.id) ? {markLine:{silent:true,symbol:['none','none'],lineStyle:{color:palette.crosshair,type:'dashed',width:1},label:{color:palette.labelText,fontSize:10,position:referenceLayout?'insideEndTop':'insideEndBottom',align:'right'},data:chart.referenceLines.filter(line=>line.lane===lane.id).map(line=>({yAxis:Number(line.value),name:line.label,label:{formatter:line.label}}))}} : {}),
         data: item.data.map((point,position) => lane.colors?{value:[point.timestamp,point.value],itemStyle:{color:palette[lane.colors[position]??'healthy']??color,opacity:lane.colors[position]==='healthy'?.55:1}}:[point.timestamp, point.value]),
       },
@@ -105,6 +121,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     ];
   });
   return {
+    useUTC: chart.timeZone!=='local',
     animation: false,
     aria: { enabled: true, label: { description: chart.summary } },
     color: colors,

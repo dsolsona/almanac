@@ -18,6 +18,12 @@ Use [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md) for those contra
 | Objective editor | [Screenshot](references/slo-tracker/objective-presets.png) | Adjacent target and rolling-window inputs with common presets; clear selection and guidance; primary create/save action. |
 | SLO detail | [Screenshot](references/slo-tracker/slo-detail.png) | Broad timeline with events above four aligned numerical lanes: SLI attainment, budget remaining, selectable burn rate and daily compliance. Lane labels/current values and exact-table actions sit on the left; status, calculation disclosure and definition occupy the right rail. |
 
+The maintainer's later [four-row Needs attention crop](references/slo-tracker/slo-needs-attention.png)
+is the specific list-row reference: filled square/triangle or open-circle status,
+two-line name/context, broad budget curve, right-aligned percentage/meter, compact
+burn pair and exhaustion. Browser evidence must compare this supplied image with
+the actual group rather than infer visual acceptance from copied source files.
+
 ## Adaptation rules
 
 - Keep the existing application shell, left navigation, account controls and mobile drawer.
