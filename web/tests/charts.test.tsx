@@ -4,7 +4,7 @@ import { validateTimeline, type Coverage, type TimelineChart } from '../src/comp
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { ExactValuesTable } from '../src/components/charts/ExactValuesTable.tsx';
-import { SloBudgetSparkline } from '../src/components/charts/SloBudgetSparkline.tsx';
+import { buildBudgetSparklineOption } from '../src/components/charts/SloBudgetSparkline.tsx';
 import { TimelineChartHeader } from '../src/components/charts/TimelineChartHeader.tsx';
 import { illustrativeChart, intentionallyOmittedTimestamp } from '../src/catalogue/chartFixture.ts';
 
@@ -111,16 +111,15 @@ describe('timeline model and options', () => {
     expect(screen.getByText('—')).toBeVisible();
   });
 
-  it('breaks the overview sparkline across partial coverage and names that gap accessibly',()=>{
-    const {container}=render(<SloBudgetSparkline label="Checkout budget" samples={[
+  it('breaks the overview sparkline across partial coverage and shows its numeric observation separately',()=>{
+    const option=buildBudgetSparklineOption([
       {remaining_fraction:'0.8',state:'observed'},
       {remaining_fraction:'0.8',state:'partial'},
       {remaining_fraction:'0.8',state:'observed'},
-    ]}/>);
-    const path=container.querySelector('.slo-budget-sparkline__line');
-    expect(path).not.toBeNull();
-    expect(path?.getAttribute('d')?.match(/M/g)).toHaveLength(2);
-    expect(container.querySelector('svg')?.getAttribute('aria-label')).toContain('partial-coverage gaps');
+    ],'Checkout budget','#246469');
+    expect(option.series[0]?.data).toEqual([[0,80],[1,null],[2,80]]);
+    expect(option.series[1]?.data).toEqual([[1,80]]);
+    expect(option.series[0]?.connectNulls).toBe(false);
   });
 
   it('rejects invalid ranges, unsorted timestamps, nonfinite values and oversized series', () => {
@@ -192,6 +191,14 @@ describe('timeline model and options', () => {
     expect(grids.map(grid=>grid.top)).toEqual([36,502,628,754]);
     const axes=option.xAxis as Array<{min:number;max:number}>;
     expect(axes.every(axis=>axis.min===Date.parse(fixture.start)&&axis.max===Date.parse(fixture.end))).toBe(true);
+  });
+
+  it('copies the slo-tracker lane heights, insets and inline table offset',()=>{
+    const fixture:TimelineChart={...chart,lanes:[162,202,202,142].map((height,index)=>({...chart.lanes[0]!,id:`lane-${index}`,height,extra:index===0?340:0,bars:index===3}))};
+    const option=buildTimelineOption(fixture,validateTimeline(fixture),palette,1048);
+    const grids=option.grid as Array<{top:number;height:number;left:number;right:number}>;
+    expect(grids).toEqual([{left:46,right:26,top:20,height:110},{left:46,right:26,top:522,height:150},{left:46,right:26,top:724,height:150},{left:46,right:26,top:926,height:90}]);
+    expect((option.series as Array<{type:string}>).some(series=>series.type==='bar')).toBe(true);
   });
 
   it('uses the available plot height for one and four aligned lanes', () => {

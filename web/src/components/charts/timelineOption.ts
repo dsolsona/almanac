@@ -10,6 +10,8 @@ export type TimelinePalette = {
   surface: string;
   surfaceBorder: string;
   text: string;
+  healthy?:string;
+  breached?:string;
 };
 
 function escapeHTML(value: string): string {
@@ -38,7 +40,10 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   const extraHeight=chart.lanes.reduce((sum,lane)=>sum+(lane.extra??0),0);
   const baseHeight=plotHeight===undefined?undefined:plotHeight-extraHeight;
   let reservedBefore=0;
+  let referenceTop=0;
+  const referenceLayout=chart.lanes.every(lane=>lane.height!==undefined);
   const grids = chart.lanes.map((lane, index) => {
+    if(referenceLayout){const geometry={left:46,right:26,top:referenceTop+20,height:lane.height!-52};referenceTop+=lane.height!+(lane.extra??0);return geometry;}
     const geometry=extraHeight>0&&baseHeight!==undefined&&baseHeight>0
       ? {top:baseHeight*(top+index*(laneHeight+gap))/100+reservedBefore,height:baseHeight*laneHeight/100}
       : {top:`${top+index*(laneHeight+gap)}%`,height:`${laneHeight}%`};
@@ -47,13 +52,14 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   });
   const xAxis = chart.lanes.map((_, index) => ({
     type: 'time' as const, gridIndex: index, min: Date.parse(chart.start), max: Date.parse(chart.end),
-    axisLine: { lineStyle: { color: axis } }, axisTick: { show: index === lanes - 1 },
-    axisLabel: { show: index === lanes - 1, color: labelText, hideOverlap: true, formatter: (value: number) => {
+    axisLine: { show:!referenceLayout||index===lanes-1,lineStyle: { color: axis } }, axisTick: { show: !referenceLayout&&index === lanes - 1 },
+    axisLabel: { show: index === lanes - 1, color: labelText, hideOverlap: true,...(referenceLayout?{fontFamily:'monospace',fontSize:11}:{}), formatter: (value: number) => {
       const date = new Date(value);
       const short = Date.parse(chart.end) - Date.parse(chart.start) < 86_400_000;
+      if(referenceLayout)return date.toLocaleString('en-US',{month:'short',day:'numeric',...(short?{hour:'2-digit',minute:'2-digit',hour12:false}:{}),...(chart.timeZone==='local'?{}:{timeZone:'UTC'})});
       if(chart.timeZone==='local') return short ? date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}) : date.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'});
       return short ? `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')} UTC` : `${date.toISOString().slice(0, 10)} UTC`;
-    } }, splitLine: { show: false }, axisPointer: { show: true, label: { show: false } },
+    } }, splitLine: { show: referenceLayout,lineStyle:{color:grid} }, axisPointer: { show: true, label: { show: false } },
   }));
   const yAxis = chart.lanes.map((lane, index) => {
     const values=model.series.filter(item=>item.lane===index).flatMap(item=>[...item.data.map(point=>point.value),...item.partial.map(point=>point.value)]).filter((value):value is number=>value!==null);
@@ -67,28 +73,28 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
       return {min:low-padding,max:high+padding};
     })() : {};
     return {
-    type: 'value' as const, gridIndex: index, ...referenceExtent, name: chart.showLaneNames===false?'':`${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
+    type: 'value' as const, gridIndex: index, ...referenceExtent,...(lane.range?{min:lane.range[0],max:lane.range[1]}:{}), name: chart.showLaneNames===false?'':`${lane.label} (${lane.unit})`, nameLocation: 'middle' as const,
     nameGap: 46, nameTextStyle: { color: labelText, fontSize: 11 }, axisLabel: {
       color: labelText, fontSize: 10, margin: 4, hideOverlap: true,
       showMaxLabel: true, showMinLabel: true,
-      formatter: (value:string|number)=>{const numeric=Number(value);return Number.isFinite(numeric)?String(Number(numeric.toPrecision(6))):String(value);},
-    }, splitNumber: 2,
-    axisLine: { show: true, lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { lineStyle: { color: grid } },
+      formatter: (value:string|number)=>{const numeric=Number(value);return Number.isFinite(numeric)?referenceLayout?`${Number(numeric.toFixed(lane.decimals??2))}${lane.unit}`:String(Number(numeric.toPrecision(6))):String(value);},
+    }, splitNumber: referenceLayout?5:2,
+    axisLine: { show: !referenceLayout, lineStyle: { color: axis } }, axisTick: { show: false }, splitLine: { lineStyle: { color: referenceLayout?palette.surfaceBorder:grid } },
   };});
   const series = model.series.flatMap((item, index) => {
     const lane = chart.lanes[item.lane]!;
-    const color = colors[index % colors.length]!;
+    const color = referenceLayout?colors[0]:colors[index % colors.length]!;
     const seriesId = `lane-${item.lane}-series-${item.seriesIndex}`;
     const isolated = item.data.filter((point, pointIndex) => point.value !== null &&
       (pointIndex === 0 || item.data[pointIndex - 1]?.value === null) &&
       (pointIndex === item.data.length - 1 || item.data[pointIndex + 1]?.value === null));
     return [
-      { id: `${seriesId}-line`, name: `${lane.label} · ${item.label}`, type: 'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
-        showSymbol: false, connectNulls: false, animation: false, itemStyle: { color }, lineStyle: { color, width: 2 },
-        ...(item.seriesIndex===0 && chart.referenceLines?.some(line=>line.lane===lane.id) ? {markLine:{silent:true,symbol:['none','none'],lineStyle:{color:palette.crosshair,type:'dashed',width:1},label:{color:palette.labelText,fontSize:10,position:'insideEndBottom',align:'right'},data:chart.referenceLines.filter(line=>line.lane===lane.id).map(line=>({yAxis:Number(line.value),name:line.label,label:{formatter:line.label}}))}} : {}),
-        data: item.data.map((point) => [point.timestamp, point.value]),
+      { id: `${seriesId}-line`, name: `${lane.label} · ${item.label}`, type: lane.bars?'bar' as const:'line' as const, xAxisIndex: item.lane, yAxisIndex: item.lane,
+        showSymbol: false, connectNulls: false, animation: false, barMaxWidth:18,barMinHeight:lane.bars?3:undefined,itemStyle: { color }, lineStyle: { color, width: referenceLayout?1.7:2 },
+        ...(item.seriesIndex===0 && chart.referenceLines?.some(line=>line.lane===lane.id) ? {markLine:{silent:true,symbol:['none','none'],lineStyle:{color:palette.crosshair,type:'dashed',width:1},label:{color:palette.labelText,fontSize:10,position:referenceLayout?'insideEndTop':'insideEndBottom',align:'right'},data:chart.referenceLines.filter(line=>line.lane===lane.id).map(line=>({yAxis:Number(line.value),name:line.label,label:{formatter:line.label}}))}} : {}),
+        data: item.data.map((point,position) => lane.colors?{value:[point.timestamp,point.value],itemStyle:{color:palette[lane.colors[position]??'healthy']??color,opacity:lane.colors[position]==='healthy'?.55:1}}:[point.timestamp, point.value]),
       },
-      ...(isolated.length ? [{ id: `${seriesId}-isolated`, name: `${lane.label} · ${item.label}`, type: 'scatter' as const,
+      ...(!lane.bars&&isolated.length ? [{ id: `${seriesId}-isolated`, name: `${lane.label} · ${item.label}`, type: 'scatter' as const,
         xAxisIndex: item.lane, yAxisIndex: item.lane, symbolSize: 9, itemStyle: { color, borderColor: palette.surface, borderWidth: 2 },
         data: isolated.map((point) => [point.timestamp, point.value]),
       }] : []),

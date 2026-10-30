@@ -121,6 +121,8 @@ directories you change, then the relevant specs and ADRs.
   [slo-tracker visual references](docs/design/slo-visual-reference.md), with the
   current left navigation. Preserve dense lists, explained measurement choices,
   objective presets, urgency groups and the timeline/status-rail detail layout.
+  Copy the existing slo-tracker list/detail markup, layout rules and chart geometry
+  directly; do not reinterpret, redesign or approximate those pages.
   Matching colors/fonts or rendering a simplified chart is not visual acceptance;
   compare actual pages side by side and record any undelivered data/interaction gaps.
 - Keep maintenance exclusions, notification silences and graph annotations distinct.

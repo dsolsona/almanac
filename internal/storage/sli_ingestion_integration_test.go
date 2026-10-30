@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"path/filepath"
@@ -255,6 +256,50 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if zeroSample == nil || zeroSample.State != "zero_traffic" || zeroSample.GoodCount == nil || *zeroSample.GoodCount != "0" || zeroSample.TotalCount == nil || *zeroSample.TotalCount != "0" {
 		t.Fatalf("database-backed zero-traffic sample = %+v, page: %+v", zeroSample, zeroPage)
 	}
+	t.Run("recent list bounds and query plan", func(t *testing.T) {
+		tx, err := conn.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(t.Context())
+		captured := &rotationIndexQueryCapture{Tx: tx}
+		for _, slots := range []int{0, 1, 12, 24} {
+			listNow := zeroPage.Items[0].EffectiveFrom.Add(time.Duration(60+15*slots) * time.Second)
+			rows, err := dbgen.New(captured).ListSlis(t.Context(), dbgen.ListSlisParams{
+				CreatedAt: timestamp(time.Time{}), CursorID: uuidOrZero(""), LimitCount: 51,
+				RetentionCutoff: timestamp(listNow.Add(-sli.ObservationRetention)), ListNow: timestamp(listNow),
+			})
+			if err != nil || len(rows) != 1 {
+				t.Fatalf("list with %d elapsed intervals: rows=%d, error=%v", slots, len(rows), err)
+			}
+			var recent []jsontext.Value
+			if err := json.Unmarshal([]byte(rows[0].RecentMeasurements), &recent); err != nil || len(recent) != min(slots, 12) {
+				t.Fatalf("list with %d elapsed intervals returned %d recent slots: %v", slots, len(recent), err)
+			}
+		}
+		var raw []byte
+		if err := tx.QueryRow(t.Context(), "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+captured.query, captured.args...).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var explained []struct {
+			Plan struct {
+				TotalCost float64 `json:"Total Cost"`
+			} `json:"Plan"`
+			PlanningTime  float64 `json:"Planning Time"`
+			ExecutionTime float64 `json:"Execution Time"`
+			JIT           struct {
+				Functions int `json:"Functions"`
+			} `json:"JIT"`
+		}
+		if err := json.Unmarshal(raw, &explained); err != nil || len(explained) != 1 {
+			t.Fatalf("decode SLI list plan: %v", err)
+		}
+		plan := explained[0]
+		t.Logf("SLI list: planning %.3f ms; execution %.3f ms; estimated cost %.2f; JIT functions %d", plan.PlanningTime, plan.ExecutionTime, plan.Plan.TotalCost, plan.JIT.Functions)
+		if plan.JIT.Functions != 0 {
+			t.Fatalf("bounded twelve-slot SLI list unexpectedly requires JIT compilation: %s", raw)
+		}
+	})
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=99, total_count=100 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
 		t.Fatal("restore database-backed SLI sample after zero-traffic projection failed")
 	}

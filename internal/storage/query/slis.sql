@@ -163,19 +163,26 @@ LEFT JOIN LATERAL (
                END::text AS state,
                evidence.good_count,
                evidence.total_count
-        FROM generate_series(
-            GREATEST(
+        FROM LATERAL (
+            SELECT GREATEST(
                 GREATEST(
                     to_timestamp(ceil(extract(epoch FROM sqlc.arg(retention_cutoff)::timestamptz) / datasource.polling_interval_seconds) * datasource.polling_interval_seconds),
                     measurement.effective_from
                 ),
                 to_timestamp(floor(extract(epoch FROM (sqlc.arg(list_now)::timestamptz - make_interval(secs => datasource.settling_delay_seconds))) / datasource.polling_interval_seconds) * datasource.polling_interval_seconds)
                     - make_interval(secs => 12 * datasource.polling_interval_seconds)
-            ),
+            ) AS first_interval_start,
             to_timestamp(floor(extract(epoch FROM (sqlc.arg(list_now)::timestamptz - make_interval(secs => datasource.settling_delay_seconds))) / datasource.polling_interval_seconds) * datasource.polling_interval_seconds)
-                - make_interval(secs => datasource.polling_interval_seconds),
-            make_interval(secs => datasource.polling_interval_seconds)
-        ) AS slot(interval_start)
+                - make_interval(secs => datasource.polling_interval_seconds) AS last_interval_start
+        ) AS recent_bounds
+        -- This view has at most twelve slots. A timestamp generate_series is
+        -- estimated as 1,000 rows, inflating every partitioned evidence join.
+        CROSS JOIN generate_series(0, 11) AS slot_number(sample_offset)
+        CROSS JOIN LATERAL (
+            SELECT recent_bounds.first_interval_start
+                + make_interval(secs => slot_number.sample_offset * datasource.polling_interval_seconds)
+                AS interval_start
+        ) AS slot
         LEFT JOIN LATERAL (
             SELECT picked.outcome, picked.good_count, picked.total_count
             FROM (
@@ -211,6 +218,7 @@ LEFT JOIN LATERAL (
             LIMIT 1
         ) AS evidence ON true
         WHERE measurement.activated_at IS NOT NULL
+          AND slot.interval_start <= recent_bounds.last_interval_start
     ) AS sample
 ) AS recent ON true
 LEFT JOIN LATERAL (

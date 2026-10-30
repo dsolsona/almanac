@@ -1,7 +1,7 @@
 export type Coverage = 'complete' | 'partial' | 'missing' | 'zero-traffic' | 'known-empty' | 'expired' | 'not-applicable' | 'stale';
 export type TimelinePoint = { timestamp: string; value: string | null; coverage: Coverage };
 export type TimelineSeries = { id: string; label: string; points: TimelinePoint[] };
-export type TimelineLane = { id: string; label: string; unit: string; series: TimelineSeries[]; extra?: number };
+export type TimelineLane = { id: string; label: string; unit: string; series: TimelineSeries[]; extra?: number; height?:number; bars?:boolean; range?:[number,number]; decimals?:number; colors?:('healthy'|'breached')[] };
 export type TimelineChart = { title: string; summary: string; start: string; end: string; stepMs: number; lanes: TimelineLane[]; fillExpectedGaps?: boolean; timeZone?: 'UTC'|'local'; showLaneNames?:boolean; referenceLines?: {lane:string;value:string;label:string}[] };
 export type PlotPoint = { timestamp: number; value: number | null; exact: string | null; coverage: Coverage };
 export type PlotSeries = { lane: number; seriesIndex: number; id: string; label: string; data: PlotPoint[]; partial: PlotPoint[]; tooltipData: TimelinePoint[] };
@@ -26,6 +26,7 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
   const timestamps = new Set<number>();
   chart.lanes.forEach((lane, laneIndex) => {
     if(lane.extra!==undefined&&(!Number.isFinite(lane.extra)||lane.extra<0))throw new Error('Reserved lane space must be a non-negative finite number');
+    if(lane.height!==undefined&&(!Number.isFinite(lane.height)||lane.height<52))throw new Error('Lane height must be at least 52 pixels');
     if (lane.series.length < 1 || lane.series.length > 2) throw new Error(`Lane ${lane.label} must have between 1 and 2 series`);
     lane.series.forEach((item, seriesIndex) => {
       if (item.points.length > 1500) throw new Error(`Series ${item.label} exceeds the 1500 plotted point limit`);

@@ -34,8 +34,6 @@ function percentTarget(value: string): string | null {
   const [whole] = value.split('.'); if (BigInt(whole!) >= 100n) return null;
   return shift(value, -2);
 }
-function windowLabel(seconds: number) { for (const [unit, size] of [['week',604800],['day',86400],['hour',3600],['minute',60]] as const) if (seconds % size === 0) { const n=seconds/size;
-  return `${n} ${unit}${n===1?'':'s'}`; } return `${seconds} seconds`; }
 function Heading({title, list=false}:{title:string; list?:boolean}) { return <div>
       <nav className="app-breadcrumbs" aria-label="Breadcrumb">{list ? <span aria-current="page">SLOs</span> : <>
       <a href="/slos" data-app-route>SLOs</a>
@@ -289,8 +287,8 @@ export function SlosPage({context}:{context:AuthContext}) {
   }
   const title=isList?'SLOs':isNew?'Create SLO':isService?(service?.display_name??'Service details'):(slo?.display_name??'SLO details');
   return <div className="slos-page" ref={heading}>
-      <div className="slo-title">
-      <Heading title={title} list={isList}/>{id&&isService&&<Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button>}</div>
+      {!isList&&(!id||isService)&&<div className="slo-title">
+      <Heading title={title} list={isList}/>{id&&isService&&<Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button>}</div>}
     {loading&&!isNew&&<span className="sr-only" role="status">Opening {isService?'service':'SLOs'}</span>}{error&&<p className="slo-error" role="alert">{error}</p>}
     {!loading&&isList&&<OperationalOverviewView locationKey={locationKey} canWrite={canWrite} onCreate={()=>navigate('/slos/new')} onLocationChange={navigate}/>}
     {isNew&&(!canWrite?<p>Editor or administrator access is required to create SLOs.</p>:<>
@@ -351,7 +349,6 @@ export function SlosPage({context}:{context:AuthContext}) {
       <Button type="submit" pending={busy}>Save display name</Button>
       </form>}{formError&&<p role="alert">{formError}</p>}</>}
     {!loading&&!isService&&slo&&<>
-      <p className="slo-detail-context"><a href={`/services/${slo.service_id}`} data-app-route>{slo.service_display_name}</a> · {shift(slo.target,2)}% target · rolling {windowLabel(slo.rolling_window_seconds)} · <a href={`/slis/${slo.sli_id}`} data-app-route>{slo.sli_display_name}</a></p>
       <OperationalDetailView id={slo.id} definition={slo} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}}/>{slo&&<details>
       <summary>Settings and technical details</summary>
       <p>Identifier: {slo.name} · Definition revision: {slo.definition_revision} · Resource version: {slo.version}</p>

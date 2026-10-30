@@ -1,19 +1,25 @@
 # Delivery status
 
-The [F3-T07](tasks/F3-T07.md) correction implements an immediately editable SLO
-form, concise historical-measurement wording, aligned filters/presets, compact
-urgency rows, one detail context row and exact tables directly beneath their graph
-lane. Empty plots use readable ranges and missing budget has a neutral label.
-The frozen candidate passes 263 focused cases (13.58 seconds), the real SLO
-browser journey (77.03 seconds including build/startup) and all 108 catalogue
-checks (80.52 seconds). The coordinator inspected the actual list, form, detail
-and inline-table captures against the retained reference, including both themes
-and mobile widths. Normal Compose verification and cancellation cleanup pass in
-476.17 seconds on matching source inputs; its actual SLO pages were also inspected.
-The real journey measured an editable form after 58 ms and service/SLI choices
-after 2.98 seconds; this establishes form responsiveness, not a backend latency
-improvement or the controlled performance envelope. F3 annotations and the earlier
-shutdown investigation remain open.
+[F3-T07](tasks/F3-T07.md) now ports the actual slo-tracker SLO list/detail
+markup, CSS and chart geometry, with the current left navigation. It replaces the
+prior visual approximation, including its generic tables and proportional chart
+lanes. Reading values use the reference's compact formatting; exact decimals
+remain available in the tables and metric titles.
+
+The final focused suite passes 264 cases in 9.77 seconds and the real SLO journey
+passes in 43.78 seconds. Both selected storage cases pass in 15.60 seconds. The
+12-slot SLI list query logs 1.459ms execution with no JIT functions; actual SLI list
+navigation renders in 135.72ms and eight API reads take 24.38–32.77ms in the fixture.
+The source-port catalogue passed all 108 checks in 84.80 seconds. Its shared
+components did not change in the final feature-formatting delta, which has fresh
+focused and journey evidence. The final matching-source Compose journey and
+cancellation cleanup passed in 407.15 seconds, with captures in
+`.local/compose-check-Jg2axD/`.
+
+The coordinator compared actual list/detail/table captures with the retained
+reference in both themes and at mobile/intermediate/desktop widths. The measured
+SLI/UI timings establish this fixture's responsiveness; the wider F3 performance
+envelope, contextual annotations and earlier shutdown investigation remain open.
 
 Before F3-T07, the review corrections passed 255 focused cases in 11.70 seconds and both
 selected PostgreSQL cases in 17.59 seconds. They restore

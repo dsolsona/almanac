@@ -52,6 +52,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
   context.setDefaultTimeout(10_000);
   page = await context.newPage();
+  const sliListTimings=[];
   page.on('response', async (response) => {
     let url;
     try { url = new URL(response.url()); } catch { return; }
@@ -63,6 +64,11 @@ try {
       requestID: /^[0-9a-f]{32}$/.test(requestID) || /^[0-9a-f-]{36}$/.test(requestID) ? requestID : 'none',
       code: 'none',
     };
+    if(url.pathname==='/api/v1/slis'&&response.request().method()==='GET'){
+      await response.finished().catch(()=>undefined);
+      const timing=response.request().timing();
+      if(timing.responseEnd>=0)sliListTimings.push({status:response.status(),duration_ms:timing.responseEnd});
+    }
     if (response.status() >= 400) {
       try {
         const body = await response.json();
@@ -305,10 +311,12 @@ try {
   await expect(page).toHaveURL(detailURL);
 
   stage = 'search and filter the server-backed SLI table';
+  const listNavigationStarted=performance.now();
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs' }).click();
   await expect(page).toHaveURL(new RegExp('/slis$'));
   const listRow = page.getByRole('row').filter({ hasText: 'Request success' });
   await expect(listRow).toBeVisible();
+  const listNavigationMs=performance.now()-listNavigationStarted;
   await expect(listRow.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
   await expect(listRow).toContainText('5 of 6');
   await expect(listRow.getByRole('link', { name: 'Reference SLO 1' })).toHaveAttribute('href', new RegExp('^/slos/[0-9a-f-]{36}$'));
@@ -393,6 +401,7 @@ try {
 
 
 
+  await writeFile(join(screenshotDir,'sli-list-timing.json'),JSON.stringify({list_navigation_ms:listNavigationMs,api_reads:sliListTimings},null,2)+'\n',{mode:0o600});
   await writeFile(join(screenshotDir, 'sli-journey.json'), JSON.stringify({
     scenario: 'browser-create-agent-collect-readback', sli_id: created.id, measurement_revision: created.measurement_revision,
     activation_state: activationState, outcome: 'observed', good_count: '99', total_count: '100',

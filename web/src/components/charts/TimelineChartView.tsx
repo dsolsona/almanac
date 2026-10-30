@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import { use } from 'echarts/core';
-import { LineChart, ScatterChart } from 'echarts/charts';
+import { BarChart, LineChart, ScatterChart } from 'echarts/charts';
 import { AriaComponent, GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { SVGRenderer } from 'echarts/renderers';
 import { init } from 'echarts/core';
@@ -10,7 +10,7 @@ import { TimelineChartHeader } from './TimelineChartHeader.tsx';
 import { buildTimelineOption, type TimelinePalette } from './timelineOption.ts';
 import './charts.css';
 
-use([LineChart, ScatterChart, AriaComponent, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
+use([BarChart, LineChart, ScatterChart, AriaComponent, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 function readTimelinePalette(): TimelinePalette {
   const style = getComputedStyle(document.documentElement);
@@ -18,7 +18,7 @@ function readTimelinePalette(): TimelinePalette {
   return {
     axis: color('--axis'), labelText: color('--text-3'), grid: color('--grid'), crosshair: color('--crosshair'),
     series: [color('--s1'), color('--s2')] as [string, string], surface: color('--surface'),
-    surfaceBorder: color('--border'), text: color('--text'),
+    surfaceBorder: color('--border'), text: color('--text'),healthy:color('--status-healthy'),breached:color('--status-breached'),
   };
 }
 
@@ -61,7 +61,8 @@ export function TimelineChartView({ chart, showHeader = true }: { chart: Timelin
   useEffect(() => { applyRef.current(); }, [chart, result]);
 
   const extraHeight=chart.lanes.reduce((sum,lane)=>sum+(lane.extra??0),0);
-  const content = result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} style={extraHeight?{height:`calc(var(--timeline-base-height) + ${extraHeight}px)`}:undefined} role="img" aria-label={`${chart.title}. ${chart.summary}`} />;
+  const explicitHeight=chart.lanes.every(lane=>lane.height!==undefined)?chart.lanes.reduce((sum,lane)=>sum+lane.height!+(lane.extra??0),0):undefined;
+  const content = result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} style={explicitHeight?{height:explicitHeight}:extraHeight?{height:`calc(var(--timeline-base-height) + ${extraHeight}px)`}:undefined} role="img" aria-label={`${chart.title}. ${chart.summary}`} />;
   if (!showHeader) return <div className="timeline-chart__surface" role="group" aria-label={chart.title}>{content}</div>;
   return <section className="timeline-chart" aria-labelledby={titleId}>
     <div className="timeline-chart__header"><TimelineChartHeader chart={chart} titleId={titleId}/></div>
