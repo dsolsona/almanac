@@ -117,7 +117,7 @@ function OverviewRow({item}:{item:OverviewItem}) {
   const budget=p.remaining_fraction===null?null:Number(p.remaining_fraction),burn=item.burn_1h.performance.burn;
   const caption=status==='stale'?'not reporting':partial?'partial window':status==='no-data'?'no samples':'at 1 h rate';
   return <article className="app-slo-row" role="row">
-    <div className="app-slo-status" role="cell"><ReferenceStatus status={status} title={reason}/><span className="sr-only">{reason}</span></div>
+    <div className="app-slo-status" role="cell"><ReferenceStatus status={status} title={reason}/>{item.reasons.length>1?<details><summary>Reasons ({item.reasons.length})</summary><ul>{item.reasons.map(value=><li key={value.code}>{reasonLabel(value.code)}{value.provisional?' · observed only':''}</li>)}</ul></details>:<span className="sr-only">{reason}</span>}</div>
     <div className="app-slo-name" role="cell"><a data-app-route className="app-slo-hitarea" href={`/slos/${slo.id}`} title={slo.display_name}>{slo.display_name}</a><small><a data-app-route href={`/services/${slo.service_id}`}>{slo.service_display_name}</a><span>·</span><a data-app-route className="app-slo-indicator" href={`/slis/${slo.sli_id}`}>{slo.sli_display_name}</a></small><span className="sr-only">Target {shift(slo.target,2)}% over {windowDuration(slo.rolling_window_seconds)}</span></div>
     <div className="app-slo-spark" role="cell"><span className="app-slo-window" title="Budget history shown for the last 7 days">{windowDuration(slo.rolling_window_seconds)}</span><SloBudgetSparkline samples={item.budget_sparkline} label={`${slo.display_name} rolling remaining budget`}/></div>
     <div className="app-slo-budget" role="cell" title={partial?'Observed only; collection coverage is incomplete':undefined}><b className={budget===null?'muted':budget<0?'crit':budget<.2?'warn':''} title={p.remaining_fraction===null?undefined:`${shift(p.remaining_fraction,2)}%`}>{budgetPercent(p.remaining_fraction,1)}</b><span className="slo-reference-meter" role="progressbar" aria-label={`${slo.display_name} budget remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={budget===null?undefined:meterFraction(p.remaining_fraction)*100} aria-valuetext={budget===null?'Unavailable':budgetPercent(p.remaining_fraction)}><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${status})`}}/></span><span className="sr-only">{partial?'Observed only; ':''}{p.remaining_budget===null?'Budget unavailable':`${decimal(p.remaining_budget)} bad events left`}</span></div>
@@ -247,10 +247,10 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
     const abort=new AbortController(),requestID=++generation.current;setBusy(true);
     setError('');
     const read=async()=>{
-      const fresh=await sloClient.operational(id,{burn_window_seconds:burnWindow},abort.signal);
-      if(range==='7d')return fresh;
+      if(range==='7d')return sloClient.operational(id,{burn_window_seconds:burnWindow},abort.signal);
+      const serverTime=await sloClient.serverTime(id,abort.signal);
       const cadence=definition.cadence_seconds*1000,rangeMs=(range==='1y'?365:Number.parseInt(range,10))*86_400_000;
-      const end=Math.floor(Date.parse(fresh.effective_at)/cadence)*cadence;
+      const end=Math.floor(serverTime/cadence)*cadence;
       const start=Math.ceil((end-rangeMs)/cadence)*cadence;
       return sloClient.operational(id,{start:new Date(start).toISOString(),end:new Date(end).toISOString(),burn_window_seconds:burnWindow},abort.signal);
     };

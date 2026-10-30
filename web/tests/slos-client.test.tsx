@@ -19,6 +19,13 @@ function operationalDetail(objectiveID=id):components['schemas']['SloOperational
  return {evaluation_id:'22222222-2222-2222-2222-222222222222',requested_at:instant,effective_at:instant,calculation_version:'1',snapshot_kind:'current_operational_read',objective,context:{sli_id:id,sli_name:'request-success',sli_display_name:'Request success',datasource_id:'33333333-3333-3333-3333-333333333333',datasource_display_name:'Metrics',measurement_revision:'1',polling_interval_seconds:60,settling_delay_seconds:0,good_query:'good',total_query:'total'},current:value,urgency:'healthy',leading_reason:{code:'on_track',provisional:false},reasons:[{code:'on_track',provisional:false}],burn_1h:burn(3600),burn_6h:burn(21600),exhaustion:{state:'unavailable',remaining_events:null,bad_events_per_hour:null,hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[]},range:{requested_start:'2026-10-22T12:00:00Z',requested_end:instant,effective_start:'2026-10-22T12:00:00Z',effective_end:instant,source_cadence_seconds:60,resolution_seconds:60,reduced:false,max_samples_per_series:1500,bucket_bounds:'half_open'},attainment_series:series('attainment',null),budget_series:series('rolling_budget',null),burn_series:series('burn',3600),compliance_series:{kind:'daily_compliance',days},compliance_summary:{met_days:7,violated_days:0,evaluable_days:7,unknown_days:0,not_applicable_days:0}};
 }
 afterEach(()=>vi.unstubAllGlobals());
+it('uses the lightweight definition response Date for server-anchored history bounds',async()=>{
+ const fetcher=vi.fn(async(_input:RequestInfo|URL)=>new Response(JSON.stringify(operationalDetail().objective),{status:200,headers:{ETag:`"slo:${id}:1"`,Date:'Thu, 29 Oct 2026 12:00:00 GMT'}}));
+ vi.stubGlobal('fetch',fetcher);
+ await expect(sloClient.serverTime(id)).resolves.toBe(Date.parse(instant));
+ expect(fetcher.mock.calls).toHaveLength(1);
+ expect(String(fetcher.mock.calls[0]?.[0])).toBe(`/api/v1/slos/${id}`);
+});
 it('rejects malformed list and evaluation responses rather than treating them as empty',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({items:'not a page'}),{status:200}))); await expect(sloClient.list()).rejects.toThrow('invalid response');
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({window:{},quality:{},performance:{},timeline:{items:[]}}),{status:200}))); await expect(sloClient.evaluation(id)).rejects.toThrow('invalid response');

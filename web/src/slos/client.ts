@@ -141,7 +141,7 @@ const fieldMessages: Record<string, string> = {
   'timeline_start:timeline_range_invalid': 'Choose both aligned timeline bounds within the objective window, with at most 1,500 intervals.',
   'at:evaluation_time_invalid': 'Choose a valid evaluation time that is not in the future.',
 };
-async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string }> {
+async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch { throw new SloFailure(mutation ? 'The request may have succeeded. Check the list before deliberately retrying the same request.' : 'Almanac could not be reached.', mutation); }
@@ -192,7 +192,8 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
     if (tag !== `"${isService ? 'service' : 'slo'}:${value.id}:${value.version}"`)
       throw new SloFailure(mutation ? 'The request may have succeeded, but its version could not be confirmed. Check the record before retrying.' : 'The record version could not be confirmed.', mutation, response.status);
   }
-  return { value: data as T, etag: response.headers.get('ETag') ?? '' };
+  const serverTime=response.headers.get('Date');
+  return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}) };
 }
 function write(context: AuthContext, body: unknown, key?: string, etag?: string): RequestInit {
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
@@ -204,6 +205,12 @@ export const sloClient = {
   updateService: (id: string, name: string, etag: string, context: AuthContext) => request<Service>(`/api/v1/services/${id}`, write(context, {display_name:name}, undefined, etag), true),
   list: (cursor = '', signal?: AbortSignal) => request<{items:Slo[]; next_cursor:string}>(`/api/v1/slos?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),
   get: (id: string, signal?: AbortSignal) => request<Slo>(`/api/v1/slos/${id}`, {signal}),
+  serverTime: async (id:string,signal?:AbortSignal) => {
+    const result=await request<Slo>(`/api/v1/slos/${id}`,{signal});
+    const timestamp=Date.parse(result.serverTime??'');
+    if(!Number.isFinite(timestamp))throw new SloFailure('The server time could not be confirmed. Refresh to try again.');
+    return timestamp;
+  },
   create: (body: CreateSlo, context: AuthContext, key: string) => request<Slo>('/api/v1/slos', write(context, body, key), true).then(x => x.value),
   update: (id: string, name: string, etag: string, context: AuthContext) => request<Slo>(`/api/v1/slos/${id}`, write(context, {display_name:name}, undefined, etag), true),
   evaluation: (id: string, signal?: AbortSignal) => request<Evaluation>(`/api/v1/slos/${id}/evaluation`, {signal}).then(x => x.value),

@@ -1,10 +1,11 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { OperationalDetailView, OperationalOverviewView } from '../src/slos/OperationalViews.tsx';
 import { sloClient, type OperationalDetail, type OperationalOverview } from '../src/slos/client.ts';
 import type { components } from '../src/api/generated.ts';
 
 afterEach(()=>{cleanup();history.replaceState({},'','/');vi.unstubAllGlobals();vi.restoreAllMocks();});
+beforeEach(()=>{vi.spyOn(sloClient,'serverTime').mockResolvedValue(Date.parse('2026-10-08T00:00:00Z'));});
 
 const sloID='22222222-2222-2222-2222-222222222222';
 const definition:components['schemas']['Slo']={id:sloID,name:'checkout',display_name:'Checkout',version:'1',definition_revision:'1',service_id:'11111111-1111-1111-1111-111111111111',service_display_name:'Checkout service',sli_id:'33333333-3333-3333-3333-333333333333',sli_display_name:'Request success',target:'0.99',rolling_window_seconds:86400,cadence_seconds:60,activated_at:'2026-10-01T00:00:00Z',evaluation_valid_from:'2026-10-01T00:00:00Z',historical_requested_by:null,historical_requested_at:null,created_at:'2026-10-01T00:00:00Z',updated_at:'2026-10-01T00:00:00Z'};
@@ -71,7 +72,7 @@ it('keeps retry and range controls available after the first detail read fails, 
  const read=vi.spyOn(sloClient,'operational').mockRejectedValueOnce(new Error('temporary read failure')).mockRejectedValueOnce(new Error('temporary retry failure')).mockImplementation((_id,options)=>Promise.resolve(operationalDetail(options?.start,options?.end)));
  const locationKey=`/slos/${sloID}`;history.replaceState({},'',locationKey);let view!:ReturnType<typeof render>;const onLocationChange=(path:string)=>{history.replaceState({},'',path);view.rerender(<OperationalDetailView id={sloID} definition={definition} locationKey={path} onLocationChange={onLocationChange}/>);};
  view=render(<OperationalDetailView id={sloID} definition={definition} locationKey={locationKey} onLocationChange={onLocationChange}/>);expect(await screen.findByRole('alert')).toHaveTextContent('temporary read failure');expect(screen.getByRole('button',{name:'Refresh objective history'})).toBeEnabled();expect(screen.getByRole('button',{name:'90 d'})).toBeEnabled();expect(screen.getByRole('button',{name:'90 d'})).toBeEnabled();
- fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(await screen.findByRole('alert')).toHaveTextContent('temporary retry failure');fireEvent.click(screen.getByRole('button',{name:'90 d'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(4));expect(read.mock.calls[2]?.[1]).toMatchObject({burn_window_seconds:3600});expect(read.mock.calls[3]?.[1]).toMatchObject({start:expect.any(String),end:expect.any(String),burn_window_seconds:3600});expect(await screen.findByText('Bad events left')).toBeVisible();expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(await screen.findByRole('alert')).toHaveTextContent('temporary retry failure');fireEvent.click(screen.getByRole('button',{name:'90 d'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(3));expect(read.mock.calls[2]?.[1]).toMatchObject({start:expect.any(String),end:expect.any(String),burn_window_seconds:3600});expect(await screen.findByText('Bad events left')).toBeVisible();expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('marks retained overview values with their last confirmed evaluation after a same-view refresh fails',async()=>{
@@ -86,5 +87,6 @@ it('marks retained overview values with their last confirmed evaluation after a 
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const path=new URL(String(input),'https://localhost').pathname;if(path==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});reads++;if(reads===1)return new Response(JSON.stringify({snapshot_id:id,items:[item],group_counts:{needs_attention:1,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as unknown as OperationalOverview),{status:200});return new Response(JSON.stringify({message:'refresh failed'}),{status:503});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const props={canWrite:false,onCreate:()=>undefined,onLocationChange:vi.fn()};
  render(<OperationalOverviewView {...props} locationKey="/slos"/>);expect(await screen.findByRole('link',{name:/^Checkout$/})).toBeVisible();expect(document.querySelector('.slo-reference-status')).toHaveAttribute('title','Observations are stale; Complete window is below target');fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
+ const disclosure=screen.getByText('Reasons (2)').closest('details');expect(disclosure).not.toBeNull();disclosure!.open=true;expect(screen.getByText('Complete window is below target')).toBeVisible();
  await waitFor(()=>expect(screen.getAllByRole('alert').some(alert=>alert.textContent?.includes('request could not be completed'))).toBe(true));const alert=screen.getAllByRole('alert').find(value=>value.textContent?.includes('request could not be completed'));expect(alert).toHaveTextContent(`Last confirmed evaluation: ${evaluatedAt}`);expect(screen.getByRole('link',{name:/^Checkout$/})).toBeVisible();
 });
