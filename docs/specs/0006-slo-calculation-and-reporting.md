@@ -1,5 +1,10 @@
 # SPEC-0006: SLO calculation and reporting
 
+> Accepted amendment, 2026-10-30: Operational reads use exact derived generations with calculation/source/revision evidence. Expensive preparation runs asynchronously; clock-driven updates and stale/preparing states remain explicit. Aggregate and cached results must equal the canonical evaluator at identical bounds.
+> [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
+> behavior and additional acceptance criteria AC-01 through AC-09, approved by the
+> maintainer after Crit review. Implementation remains outstanding.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

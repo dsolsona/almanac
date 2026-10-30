@@ -1,5 +1,10 @@
 # SPEC-0012: User interface
 
+> Accepted amendment, 2026-10-30: Operational screens share bounded in-flight/cached reads and load current status independently from history. Previous results retain explicit stale/preparing labels. Existing composition, exact tables, extrema/gaps, point limits and frontend budgets remain required.
+> [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
+> behavior and additional acceptance criteria AC-01 through AC-09, approved by the
+> maintainer after Crit review. Implementation remains outstanding.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

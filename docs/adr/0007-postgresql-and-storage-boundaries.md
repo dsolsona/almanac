@@ -1,5 +1,10 @@
 # ADR-0007: PostgreSQL and storage boundaries
 
+> Partial supersession, accepted 2026-10-30: [ADR-0024](0024-precomputed-operational-reads.md)
+> replaces optional acceleration with required pooled access and exact derived
+> operational reads. The original rationale below is retained; other decisions
+> remain in force.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

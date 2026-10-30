@@ -1,5 +1,16 @@
 # Delivery status
 
+Feature implementation is paused by maintainer direction on 2026-10-30 pending
+backend stabilization. [ADR-0024](adr/0024-precomputed-operational-reads.md),
+[SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and the
+[delivery plan](plans/0022-backend-stabilization.md) define pooled access,
+exact derived data and background preparation with measurable acceptance gates.
+The maintainer accepted the design and plan after Crit review on 2026-10-30;
+implementation remains outstanding. Existing uncommitted
+performance changes remain a candidate; the latest real journey timed out and the
+reported loading failures remain unresolved. Earlier passing small fixtures do not
+establish performance at the proposed workload.
+
 F3-T07 visual acceptance is reopened after the maintainer rejected the completion
 claim. The source-port evidence below establishes functional checks, not identical
 screenshots. The current follow-up restores missing chart coverage shading and

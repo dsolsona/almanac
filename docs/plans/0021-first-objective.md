@@ -1,5 +1,10 @@
 # First objective implementation plan
 
+Feature delivery is paused by the maintainer's 2026-10-30 instruction. Prioritize
+the [backend stabilization plan](0022-backend-stabilization.md), accepted after Crit
+review on 2026-10-30. Preserve existing work and unresolved acceptance failures.
+Do not start later entries below while this pause remains in force.
+
 > Use subagent-driven development with two independent implementers once interfaces
 > are settled. F3-T01 used the maintainer's session selection of GPT-6.1 Terra;
 > subsequent work uses the standing gpt-6-luna workflow unless explicitly changed.

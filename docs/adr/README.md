@@ -49,3 +49,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0021](0021-immediate-initial-collection.md) | Collect an initial settled interval and spread recurring queries | accepted |
 | [ADR-0022](0022-restartable-agent-ownership.md) | Replace agent processes without an ownership-expiry wait | accepted |
 | [ADR-0023](0023-slo-operational-urgency.md) | Separate SLO operational urgency from performance | accepted |
+| [ADR-0024](0024-precomputed-operational-reads.md) | Precompute operational reads with exact derived data | accepted |
