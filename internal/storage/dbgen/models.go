@@ -362,6 +362,31 @@ type AlmanacSloDefinition struct {
 	HistoricalRequestedAt pgtype.Timestamptz `json:"historical_requested_at"`
 }
 
+type AlmanacSloOverviewSnapshot struct {
+	ID              pgtype.UUID        `json:"id"`
+	CursorSecret    []byte             `json:"cursor_secret"`
+	ActorID         pgtype.UUID        `json:"actor_id"`
+	SessionVerifier []byte             `json:"session_verifier"`
+	Role            string             `json:"role"`
+	QueryText       string             `json:"query_text"`
+	ServiceID       pgtype.UUID        `json:"service_id"`
+	Urgency         pgtype.Text        `json:"urgency"`
+	PageLimit       int32              `json:"page_limit"`
+	GroupCounts     []byte             `json:"group_counts"`
+	State           string             `json:"state"`
+	PayloadBytes    int32              `json:"payload_bytes"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+type AlmanacSloOverviewSnapshotItem struct {
+	SnapshotID   pgtype.UUID `json:"snapshot_id"`
+	Ordinal      int32       `json:"ordinal"`
+	Urgency      string      `json:"urgency"`
+	Payload      []byte      `json:"payload"`
+	PayloadBytes int32       `json:"payload_bytes"`
+}
+
 type AlmanacUser struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Login              string             `json:"login"`

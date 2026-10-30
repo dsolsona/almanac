@@ -1,5 +1,10 @@
 # SPEC-0006: SLO calculation and reporting
 
+> Accepted amendment, 2026-10-30: Operational reads use exact derived generations with calculation/source/revision evidence. Expensive preparation runs asynchronously; clock-driven updates and stale/preparing states remain explicit. Aggregate and cached results must equal the canonical evaluator at identical bounds.
+> [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
+> behavior and additional acceptance criteria AC-01 through AC-09, approved by the
+> maintainer after Crit review. Implementation remains outstanding.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24
@@ -14,6 +19,25 @@
 [SPEC-0016](0016-maintenance-exclusions.md) adds initial-release maintenance
 exclusions and audited revisions, approved in Crit review `0de0c0e42db6`.
 The calculation and acceptance sections below include that amendment.
+
+On 2026-10-29 the maintainer authorized the operational SLO view plan under
+[ADR-0023](../adr/0023-slo-operational-urgency.md). It adds backend-owned urgency
+independent of performance/quality, distinct 1 h/6 h burn windows, historical rolling
+budget evaluations, UTC day-end rolling-objective compliance and an explicitly
+qualified frozen-budget exhaustion estimate. The stationarity assumptions required
+below remain mandatory; this is not a forecast of actual rolling-window breach.
+The [F3 plan](../plans/0021-first-objective.md) tracks delivery; none of these new
+views is established as implemented by acceptance of the decision.
+
+The compliance graph requests the ordinary rolling-objective evaluation at each
+completed UTC day end. It exposes both that requested midnight and the existing
+cadence-aligned effective evaluation boundary at or before it; local display does
+not change day membership or calculation bounds. Plot the actual rolling attainment
+percentage against the objective target; report the day's classification separately.
+Met/violated days require complete,
+unshortened, evaluable windows. Unknown and not-applicable days remain explicit;
+the evaluable-day denominator contains met plus violated days. This graph is
+distinct from the local-date daily report/export grouping below.
 
 ## Purpose
 

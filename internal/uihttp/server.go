@@ -70,7 +70,7 @@ func (h healthHandler) GetLiveness(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	writeHealth(w, api.HealthResponse{Status: api.Ok, Component: api.Ui})
+	writeHealth(w, api.HealthResponse{Status: api.HealthResponseStatusOk, Component: api.Ui})
 }
 
 func (h healthHandler) GetReadiness(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +95,7 @@ func (h healthHandler) GetReadiness(w http.ResponseWriter, r *http.Request) {
 		writeUnavailable(w)
 		return
 	}
-	writeHealth(w, api.HealthResponse{Status: api.Ok, Component: api.Ui})
+	writeHealth(w, api.HealthResponse{Status: api.HealthResponseStatusOk, Component: api.Ui})
 }
 
 func writeHealth(w http.ResponseWriter, value api.HealthResponse) {
@@ -106,7 +106,7 @@ func writeHealth(w http.ResponseWriter, value api.HealthResponse) {
 func writeUnavailable(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_ = json.MarshalWrite(w, api.HealthResponse{Status: api.Unavailable, Component: api.Ui})
+	_ = json.MarshalWrite(w, api.HealthResponse{Status: api.HealthResponseStatusUnavailable, Component: api.Ui})
 }
 
 func (s *Server) proxy() http.Handler {

@@ -33,6 +33,8 @@ a { color: var(--accent-ink); }
 .ui-button:disabled { opacity: .62; cursor: not-allowed; }
 .ui-button--primary { background: var(--accent); color: var(--primary-foreground); }
 .ui-button--primary:hover:not(:disabled) { background: var(--accent-ink); }
+.ui-button--selected { background: var(--selection); color: var(--selection-foreground); }
+.ui-button--selected:hover:not(:disabled) { filter: brightness(.92); }
 .ui-button--outline { border-color: var(--border-strong); background: var(--surface); }
 .ui-button--outline:hover:not(:disabled), .ui-button--ghost:hover:not(:disabled) { background: var(--surface-2); }
 .ui-button--ghost { background: transparent; }

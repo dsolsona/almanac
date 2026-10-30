@@ -79,6 +79,18 @@ every invocation. Coordinate handoffs directly between active implementers and
 report live handles and terminal results to the coordinator. An observation failure
 alone does not authorize restarting a gate: inspect its existing process first.
 
+Assign the real database and application journey lane when implementation starts,
+not only after a unit-test handoff. The implementer keeps ownership through a
+working ordinary user journey and the relevant persistence checks. The coordinator
+then independently reviews that result; it does not repeatedly take over runtime
+debugging for an increment that has only passed mocked checks or compilation.
+
+Readiness includes a verification plan naming the permitted focused commands,
+required final gates, owners and evidence paths. Resolve a missing focused entry
+point before dispatching work that would otherwise require a full suite for each
+edit. New entry points are fixed-purpose, reject unsupported selectors and require
+the actual invocation's authorization under [command discipline](commands.md).
+
 Increase concurrency only for tasks with stable interfaces, disjoint edits and
 independent fixtures. A shared contract/schema change precedes its consumers; it
 cannot be delegated as conflicting parallel guesses. No worker may delegate further
@@ -91,14 +103,28 @@ test. Keep internal service/storage/HTTP steps within that bounded outcome where
 practical; do not require a PR per layer. Publish reviewable vertical increments,
 not arbitrary file-count batches. Accepted contracts remain prerequisites.
 
-Run a minimal real user journey as soon as the path is wired, before broad checks.
-Inspect the real rendered application early for UI work. Then use focused checks
-while editing, one consolidated coordinator review, and the integrated gate before
-publication. Review corrected areas and unresolved findings without restarting the
+Inspect a running real page or one user journey early, without launching broad
+acceptance suites. Use focused unit/component checks while editing. Reserve Compose
+end-to-end, the catalogue browser matrix and the database/API integration suite for
+the completed integrated task candidate and PR verification. Worker handoffs do not
+trigger those suites. Reuse matching completion evidence for the PR. Review
+corrected areas and unresolved findings without restarting the
 whole review. Do not repeat a passing gate without changed inputs or a specific
 unresolved concern. Keep required boundary evidence; this changes sequencing, not
 acceptance standards. Finish the current milestone's usable outcomes before optional
 polish or unrelated refactors.
+
+Use focused checks during correction. A changed file by itself is not a reason to
+repeat every gate: name the affected boundary and retain still-valid evidence for
+unaffected paths. Reserve broad gates for the stable integrated candidate. Check
+receipts identify their actual inputs and result; a worker's summary is not a
+replacement for those receipts. Preserve failures even when a later run passes.
+
+Count unsuccessful handoffs across the entire increment. After two, stop the
+handoff-and-patch loop and record a changed delivery approach with one owner of the
+complete failing path. Finding a different error, creating another brief or moving
+to a different checkout does not erase the counter or earlier evidence. This does
+not waive required checks or authorize substantial coordinator implementation.
 
 Follow [command discipline](commands.md). A new test selector or Make mode does not
 inherit approval merely because a similar command worked. Exact command availability

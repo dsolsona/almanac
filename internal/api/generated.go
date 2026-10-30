@@ -764,16 +764,16 @@ func (e HealthResponseComponent) Valid() bool {
 
 // Defines values for HealthResponseStatus.
 const (
-	Ok          HealthResponseStatus = "ok"
-	Unavailable HealthResponseStatus = "unavailable"
+	HealthResponseStatusOk          HealthResponseStatus = "ok"
+	HealthResponseStatusUnavailable HealthResponseStatus = "unavailable"
 )
 
 // Valid indicates whether the value is a known member of the HealthResponseStatus enum.
 func (e HealthResponseStatus) Valid() bool {
 	switch e {
-	case Ok:
+	case HealthResponseStatusOk:
 		return true
-	case Unavailable:
+	case HealthResponseStatusUnavailable:
 		return true
 	default:
 		return false
@@ -1239,6 +1239,93 @@ func (e SliObservationOutcome) Valid() bool {
 	}
 }
 
+// Defines values for SliRecentMeasurementState.
+const (
+	SliRecentMeasurementStateFailed      SliRecentMeasurementState = "failed"
+	SliRecentMeasurementStateKnownEmpty  SliRecentMeasurementState = "known_empty"
+	SliRecentMeasurementStateMissing     SliRecentMeasurementState = "missing"
+	SliRecentMeasurementStateObserved    SliRecentMeasurementState = "observed"
+	SliRecentMeasurementStatePartial     SliRecentMeasurementState = "partial"
+	SliRecentMeasurementStateZeroTraffic SliRecentMeasurementState = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SliRecentMeasurementState enum.
+func (e SliRecentMeasurementState) Valid() bool {
+	switch e {
+	case SliRecentMeasurementStateFailed:
+		return true
+	case SliRecentMeasurementStateKnownEmpty:
+		return true
+	case SliRecentMeasurementStateMissing:
+		return true
+	case SliRecentMeasurementStateObserved:
+		return true
+	case SliRecentMeasurementStatePartial:
+		return true
+	case SliRecentMeasurementStateZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloBurnValueWindowSeconds.
+const (
+	SloBurnValueWindowSecondsN21600 SloBurnValueWindowSeconds = 21600
+	SloBurnValueWindowSecondsN3600  SloBurnValueWindowSeconds = 3600
+)
+
+// Valid indicates whether the value is a known member of the SloBurnValueWindowSeconds enum.
+func (e SloBurnValueWindowSeconds) Valid() bool {
+	switch e {
+	case SloBurnValueWindowSecondsN21600:
+		return true
+	case SloBurnValueWindowSecondsN3600:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloDailyComplianceDayStatus.
+const (
+	SloDailyComplianceDayStatusMet           SloDailyComplianceDayStatus = "met"
+	SloDailyComplianceDayStatusNotApplicable SloDailyComplianceDayStatus = "not_applicable"
+	SloDailyComplianceDayStatusUnknown       SloDailyComplianceDayStatus = "unknown"
+	SloDailyComplianceDayStatusViolated      SloDailyComplianceDayStatus = "violated"
+)
+
+// Valid indicates whether the value is a known member of the SloDailyComplianceDayStatus enum.
+func (e SloDailyComplianceDayStatus) Valid() bool {
+	switch e {
+	case SloDailyComplianceDayStatusMet:
+		return true
+	case SloDailyComplianceDayStatusNotApplicable:
+		return true
+	case SloDailyComplianceDayStatusUnknown:
+		return true
+	case SloDailyComplianceDayStatusViolated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloDailyComplianceSeriesKind.
+const (
+	DailyCompliance SloDailyComplianceSeriesKind = "daily_compliance"
+)
+
+// Valid indicates whether the value is a known member of the SloDailyComplianceSeriesKind enum.
+func (e SloDailyComplianceSeriesKind) Valid() bool {
+	switch e {
+	case DailyCompliance:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloEvaluationSnapshotKind.
 const (
 	CurrentEvaluation SloEvaluationSnapshotKind = "current_evaluation"
@@ -1379,13 +1466,301 @@ func (e SloEvaluationQualityState) Valid() bool {
 
 // Defines values for SloEvaluationTimelineMaxIntervals.
 const (
-	N1500 SloEvaluationTimelineMaxIntervals = 1500
+	SloEvaluationTimelineMaxIntervalsN1500 SloEvaluationTimelineMaxIntervals = 1500
 )
 
 // Valid indicates whether the value is a known member of the SloEvaluationTimelineMaxIntervals enum.
 func (e SloEvaluationTimelineMaxIntervals) Valid() bool {
 	switch e {
-	case N1500:
+	case SloEvaluationTimelineMaxIntervalsN1500:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloExhaustionEstimateAssumptions.
+const (
+	ContinuesObservedOneHourBadEventRate SloExhaustionEstimateAssumptions = "continues_observed_one_hour_bad_event_rate"
+	FreezesCurrentAllowedBudget          SloExhaustionEstimateAssumptions = "freezes_current_allowed_budget"
+	FutureTrafficCanChangeResult         SloExhaustionEstimateAssumptions = "future_traffic_can_change_result"
+	RollingWindowExpiryCanChangeResult   SloExhaustionEstimateAssumptions = "rolling_window_expiry_can_change_result"
+)
+
+// Valid indicates whether the value is a known member of the SloExhaustionEstimateAssumptions enum.
+func (e SloExhaustionEstimateAssumptions) Valid() bool {
+	switch e {
+	case ContinuesObservedOneHourBadEventRate:
+		return true
+	case FreezesCurrentAllowedBudget:
+		return true
+	case FutureTrafficCanChangeResult:
+		return true
+	case RollingWindowExpiryCanChangeResult:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloExhaustionEstimateState.
+const (
+	SloExhaustionEstimateStateEstimated   SloExhaustionEstimateState = "estimated"
+	SloExhaustionEstimateStateExhausted   SloExhaustionEstimateState = "exhausted"
+	SloExhaustionEstimateStateUnavailable SloExhaustionEstimateState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SloExhaustionEstimateState enum.
+func (e SloExhaustionEstimateState) Valid() bool {
+	switch e {
+	case SloExhaustionEstimateStateEstimated:
+		return true
+	case SloExhaustionEstimateStateExhausted:
+		return true
+	case SloExhaustionEstimateStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalDetailSnapshotKind.
+const (
+	CurrentOperationalRead SloOperationalDetailSnapshotKind = "current_operational_read"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalDetailSnapshotKind enum.
+func (e SloOperationalDetailSnapshotKind) Valid() bool {
+	switch e {
+	case CurrentOperationalRead:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalDetailUrgency.
+const (
+	SloOperationalDetailUrgencyHealthy        SloOperationalDetailUrgency = "healthy"
+	SloOperationalDetailUrgencyNeedsAttention SloOperationalDetailUrgency = "needs_attention"
+	SloOperationalDetailUrgencyWatch          SloOperationalDetailUrgency = "watch"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalDetailUrgency enum.
+func (e SloOperationalDetailUrgency) Valid() bool {
+	switch e {
+	case SloOperationalDetailUrgencyHealthy:
+		return true
+	case SloOperationalDetailUrgencyNeedsAttention:
+		return true
+	case SloOperationalDetailUrgencyWatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalOverviewItemUrgency.
+const (
+	SloOperationalOverviewItemUrgencyHealthy        SloOperationalOverviewItemUrgency = "healthy"
+	SloOperationalOverviewItemUrgencyNeedsAttention SloOperationalOverviewItemUrgency = "needs_attention"
+	SloOperationalOverviewItemUrgencyWatch          SloOperationalOverviewItemUrgency = "watch"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalOverviewItemUrgency enum.
+func (e SloOperationalOverviewItemUrgency) Valid() bool {
+	switch e {
+	case SloOperationalOverviewItemUrgencyHealthy:
+		return true
+	case SloOperationalOverviewItemUrgencyNeedsAttention:
+		return true
+	case SloOperationalOverviewItemUrgencyWatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalQualityFreshness.
+const (
+	SloOperationalQualityFreshnessFresh   SloOperationalQualityFreshness = "fresh"
+	SloOperationalQualityFreshnessStale   SloOperationalQualityFreshness = "stale"
+	SloOperationalQualityFreshnessUnknown SloOperationalQualityFreshness = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalQualityFreshness enum.
+func (e SloOperationalQualityFreshness) Valid() bool {
+	switch e {
+	case SloOperationalQualityFreshnessFresh:
+		return true
+	case SloOperationalQualityFreshnessStale:
+		return true
+	case SloOperationalQualityFreshnessUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalQualityState.
+const (
+	SloOperationalQualityStateComplete       SloOperationalQualityState = "complete"
+	SloOperationalQualityStateExpiredHistory SloOperationalQualityState = "expired_history"
+	SloOperationalQualityStateNoData         SloOperationalQualityState = "no_data"
+	SloOperationalQualityStateNotApplicable  SloOperationalQualityState = "not_applicable"
+	SloOperationalQualityStateNotYetEligible SloOperationalQualityState = "not_yet_eligible"
+	SloOperationalQualityStatePartial        SloOperationalQualityState = "partial"
+	SloOperationalQualityStateUnavailable    SloOperationalQualityState = "unavailable"
+	SloOperationalQualityStateZeroTraffic    SloOperationalQualityState = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalQualityState enum.
+func (e SloOperationalQualityState) Valid() bool {
+	switch e {
+	case SloOperationalQualityStateComplete:
+		return true
+	case SloOperationalQualityStateExpiredHistory:
+		return true
+	case SloOperationalQualityStateNoData:
+		return true
+	case SloOperationalQualityStateNotApplicable:
+		return true
+	case SloOperationalQualityStateNotYetEligible:
+		return true
+	case SloOperationalQualityStatePartial:
+		return true
+	case SloOperationalQualityStateUnavailable:
+		return true
+	case SloOperationalQualityStateZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalRangeBucketBounds.
+const (
+	HalfOpen SloOperationalRangeBucketBounds = "half_open"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalRangeBucketBounds enum.
+func (e SloOperationalRangeBucketBounds) Valid() bool {
+	switch e {
+	case HalfOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalRangeMaxSamplesPerSeries.
+const (
+	SloOperationalRangeMaxSamplesPerSeriesN1500 SloOperationalRangeMaxSamplesPerSeries = 1500
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalRangeMaxSamplesPerSeries enum.
+func (e SloOperationalRangeMaxSamplesPerSeries) Valid() bool {
+	switch e {
+	case SloOperationalRangeMaxSamplesPerSeriesN1500:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalSampleRetainedExtrema.
+const (
+	First   SloOperationalSampleRetainedExtrema = "first"
+	Last    SloOperationalSampleRetainedExtrema = "last"
+	Maximum SloOperationalSampleRetainedExtrema = "maximum"
+	Minimum SloOperationalSampleRetainedExtrema = "minimum"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalSampleRetainedExtrema enum.
+func (e SloOperationalSampleRetainedExtrema) Valid() bool {
+	switch e {
+	case First:
+		return true
+	case Last:
+		return true
+	case Maximum:
+		return true
+	case Minimum:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalSampleState.
+const (
+	SloOperationalSampleStateExpired       SloOperationalSampleState = "expired"
+	SloOperationalSampleStateKnownEmpty    SloOperationalSampleState = "known_empty"
+	SloOperationalSampleStateMissing       SloOperationalSampleState = "missing"
+	SloOperationalSampleStateNotApplicable SloOperationalSampleState = "not_applicable"
+	SloOperationalSampleStateObserved      SloOperationalSampleState = "observed"
+	SloOperationalSampleStatePartial       SloOperationalSampleState = "partial"
+	SloOperationalSampleStateStale         SloOperationalSampleState = "stale"
+	SloOperationalSampleStateZeroTraffic   SloOperationalSampleState = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalSampleState enum.
+func (e SloOperationalSampleState) Valid() bool {
+	switch e {
+	case SloOperationalSampleStateExpired:
+		return true
+	case SloOperationalSampleStateKnownEmpty:
+		return true
+	case SloOperationalSampleStateMissing:
+		return true
+	case SloOperationalSampleStateNotApplicable:
+		return true
+	case SloOperationalSampleStateObserved:
+		return true
+	case SloOperationalSampleStatePartial:
+		return true
+	case SloOperationalSampleStateStale:
+		return true
+	case SloOperationalSampleStateZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalSeriesBurnWindowSeconds.
+const (
+	SloOperationalSeriesBurnWindowSecondsN21600 SloOperationalSeriesBurnWindowSeconds = 21600
+	SloOperationalSeriesBurnWindowSecondsN3600  SloOperationalSeriesBurnWindowSeconds = 3600
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalSeriesBurnWindowSeconds enum.
+func (e SloOperationalSeriesBurnWindowSeconds) Valid() bool {
+	switch e {
+	case SloOperationalSeriesBurnWindowSecondsN21600:
+		return true
+	case SloOperationalSeriesBurnWindowSecondsN3600:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalSeriesKind.
+const (
+	Attainment    SloOperationalSeriesKind = "attainment"
+	Burn          SloOperationalSeriesKind = "burn"
+	RollingBudget SloOperationalSeriesKind = "rolling_budget"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalSeriesKind enum.
+func (e SloOperationalSeriesKind) Valid() bool {
+	switch e {
+	case Attainment:
+		return true
+	case Burn:
+		return true
+	case RollingBudget:
 		return true
 	default:
 		return false
@@ -1416,6 +1791,99 @@ func (e SloTimelineItemState) Valid() bool {
 	case SloTimelineItemStateObserved:
 		return true
 	case SloTimelineItemStateZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloUrgencyReasonCode.
+const (
+	SloUrgencyReasonCodeBudgetBelowHalf         SloUrgencyReasonCode = "budget_below_half"
+	SloUrgencyReasonCodeCompleteWindowViolation SloUrgencyReasonCode = "complete_window_violation"
+	SloUrgencyReasonCodeEvaluationUnavailable   SloUrgencyReasonCode = "evaluation_unavailable"
+	SloUrgencyReasonCodeExpiredHistory          SloUrgencyReasonCode = "expired_history"
+	SloUrgencyReasonCodeHigh1hBurn              SloUrgencyReasonCode = "high_1h_burn"
+	SloUrgencyReasonCodeIncompleteCoverage      SloUrgencyReasonCode = "incomplete_coverage"
+	SloUrgencyReasonCodeLowObservedBudget       SloUrgencyReasonCode = "low_observed_budget"
+	SloUrgencyReasonCodeNegativeObservedBudget  SloUrgencyReasonCode = "negative_observed_budget"
+	SloUrgencyReasonCodeNoData                  SloUrgencyReasonCode = "no_data"
+	SloUrgencyReasonCodeNotYetEligible          SloUrgencyReasonCode = "not_yet_eligible"
+	SloUrgencyReasonCodeOnTrack                 SloUrgencyReasonCode = "on_track"
+	SloUrgencyReasonCodeShortBurnUnavailable    SloUrgencyReasonCode = "short_burn_unavailable"
+	SloUrgencyReasonCodeStaleObservations       SloUrgencyReasonCode = "stale_observations"
+	SloUrgencyReasonCodeZeroTraffic             SloUrgencyReasonCode = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloUrgencyReasonCode enum.
+func (e SloUrgencyReasonCode) Valid() bool {
+	switch e {
+	case SloUrgencyReasonCodeBudgetBelowHalf:
+		return true
+	case SloUrgencyReasonCodeCompleteWindowViolation:
+		return true
+	case SloUrgencyReasonCodeEvaluationUnavailable:
+		return true
+	case SloUrgencyReasonCodeExpiredHistory:
+		return true
+	case SloUrgencyReasonCodeHigh1hBurn:
+		return true
+	case SloUrgencyReasonCodeIncompleteCoverage:
+		return true
+	case SloUrgencyReasonCodeLowObservedBudget:
+		return true
+	case SloUrgencyReasonCodeNegativeObservedBudget:
+		return true
+	case SloUrgencyReasonCodeNoData:
+		return true
+	case SloUrgencyReasonCodeNotYetEligible:
+		return true
+	case SloUrgencyReasonCodeOnTrack:
+		return true
+	case SloUrgencyReasonCodeShortBurnUnavailable:
+		return true
+	case SloUrgencyReasonCodeStaleObservations:
+		return true
+	case SloUrgencyReasonCodeZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetSloOperationalOverviewParamsUrgency.
+const (
+	GetSloOperationalOverviewParamsUrgencyHealthy        GetSloOperationalOverviewParamsUrgency = "healthy"
+	GetSloOperationalOverviewParamsUrgencyNeedsAttention GetSloOperationalOverviewParamsUrgency = "needs_attention"
+	GetSloOperationalOverviewParamsUrgencyWatch          GetSloOperationalOverviewParamsUrgency = "watch"
+)
+
+// Valid indicates whether the value is a known member of the GetSloOperationalOverviewParamsUrgency enum.
+func (e GetSloOperationalOverviewParamsUrgency) Valid() bool {
+	switch e {
+	case GetSloOperationalOverviewParamsUrgencyHealthy:
+		return true
+	case GetSloOperationalOverviewParamsUrgencyNeedsAttention:
+		return true
+	case GetSloOperationalOverviewParamsUrgencyWatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetSloOperationalDetailParamsBurnWindowSeconds.
+const (
+	GetSloOperationalDetailParamsBurnWindowSecondsN21600 GetSloOperationalDetailParamsBurnWindowSeconds = 21600
+	GetSloOperationalDetailParamsBurnWindowSecondsN3600  GetSloOperationalDetailParamsBurnWindowSeconds = 3600
+)
+
+// Valid indicates whether the value is a known member of the GetSloOperationalDetailParamsBurnWindowSeconds enum.
+func (e GetSloOperationalDetailParamsBurnWindowSeconds) Valid() bool {
+	switch e {
+	case GetSloOperationalDetailParamsBurnWindowSecondsN21600:
+		return true
+	case GetSloOperationalDetailParamsBurnWindowSecondsN3600:
 		return true
 	default:
 		return false
@@ -2083,11 +2551,14 @@ type Sli struct {
 	CollectionProgress SliCollectionProgress `json:"collection_progress"`
 
 	// ComponentMode Component conversion mode; this increment supports interval_count.
-	ComponentMode     string             `json:"component_mode"`
-	CreatedAt         time.Time          `json:"created_at"`
-	DatasourceId      openapi_types.UUID `json:"datasource_id"`
-	DatasourceVersion string             `json:"datasource_version"`
-	DisplayName       string             `json:"display_name"`
+	ComponentMode string    `json:"component_mode"`
+	CreatedAt     time.Time `json:"created_at"`
+
+	// DatasourceDisplayName Present on list projections; omitted from detail and create responses.
+	DatasourceDisplayName *string            `json:"datasource_display_name,omitempty"`
+	DatasourceId          openapi_types.UUID `json:"datasource_id"`
+	DatasourceVersion     string             `json:"datasource_version"`
+	DisplayName           string             `json:"display_name"`
 
 	// EffectiveFrom Earliest valid measurement interval start; may precede creation.
 	EffectiveFrom     time.Time          `json:"effective_from"`
@@ -2097,6 +2568,7 @@ type Sli struct {
 	LastAttemptAt     *time.Time         `json:"last_attempt_at"`
 	LastObservationAt *time.Time         `json:"last_observation_at"`
 	LatestObservation *SliObservation    `json:"latest_observation"`
+	LinkedSlos        *SliLinkedSlos     `json:"linked_slos,omitempty"`
 
 	// MeasurementKind Typed measurement kind; this increment supports event_counts.
 	MeasurementKind         string     `json:"measurement_kind"`
@@ -2104,10 +2576,19 @@ type Sli struct {
 	Name                    string     `json:"name"`
 	NextExpectedExecutionAt *time.Time `json:"next_expected_execution_at"`
 	PollingIntervalSeconds  int        `json:"polling_interval_seconds"`
-	SettlingDelaySeconds    int        `json:"settling_delay_seconds"`
-	TotalQuery              string     `json:"total_query"`
-	UpdatedAt               time.Time  `json:"updated_at"`
-	Version                 string     `json:"version"`
+
+	// RecentMeasurementWindowEnd Latest eligible interval end in the bounded list projection.
+	RecentMeasurementWindowEnd *time.Time `json:"recent_measurement_window_end,omitempty"`
+
+	// RecentMeasurementWindowStart Earliest eligible interval in the bounded list projection.
+	RecentMeasurementWindowStart *time.Time `json:"recent_measurement_window_start,omitempty"`
+
+	// RecentMeasurements Last eligible source-cadence intervals for the current measurement revision; explicit states and exact count strings.
+	RecentMeasurements   *[]SliRecentMeasurement `json:"recent_measurements,omitempty"`
+	SettlingDelaySeconds int                     `json:"settling_delay_seconds"`
+	TotalQuery           string                  `json:"total_query"`
+	UpdatedAt            time.Time               `json:"updated_at"`
+	Version              string                  `json:"version"`
 }
 
 // SliActivationState defines model for Sli.ActivationState.
@@ -2134,6 +2615,19 @@ type SliCreateRequest struct {
 	MeasurementKind string `json:"measurement_kind"`
 	Name            string `json:"name"`
 	TotalQuery      string `json:"total_query"`
+}
+
+// SliLinkedSlo defines model for SliLinkedSlo.
+type SliLinkedSlo struct {
+	DisplayName string             `json:"display_name"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+}
+
+// SliLinkedSlos defines model for SliLinkedSlos.
+type SliLinkedSlos struct {
+	Items      []SliLinkedSlo `json:"items"`
+	TotalCount int            `json:"total_count"`
 }
 
 // SliMetadataWrite defines model for SliMetadataWrite.
@@ -2186,6 +2680,21 @@ type SliPage struct {
 	NextCursor string `json:"next_cursor"`
 }
 
+// SliRecentMeasurement defines model for SliRecentMeasurement.
+type SliRecentMeasurement struct {
+	// GoodCount Exact decimal integer string; null when no complete observed counts exist.
+	GoodCount     *string                   `json:"good_count"`
+	IntervalEnd   time.Time                 `json:"interval_end"`
+	IntervalStart time.Time                 `json:"interval_start"`
+	State         SliRecentMeasurementState `json:"state"`
+
+	// TotalCount Exact decimal integer string; null when no complete observed counts exist.
+	TotalCount *string `json:"total_count"`
+}
+
+// SliRecentMeasurementState defines model for SliRecentMeasurement.State.
+type SliRecentMeasurementState string
+
 // Slo defines model for Slo.
 type Slo struct {
 	ActivatedAt           time.Time           `json:"activated_at"`
@@ -2208,6 +2717,18 @@ type Slo struct {
 	Version               string              `json:"version"`
 }
 
+// SloBurnValue defines model for SloBurnValue.
+type SloBurnValue struct {
+	End           time.Time                 `json:"end"`
+	Performance   SloEvaluationPerformance  `json:"performance"`
+	Quality       SloOperationalQuality     `json:"quality"`
+	Start         time.Time                 `json:"start"`
+	WindowSeconds SloBurnValueWindowSeconds `json:"window_seconds"`
+}
+
+// SloBurnValueWindowSeconds defines model for SloBurnValue.WindowSeconds.
+type SloBurnValueWindowSeconds int
+
 // SloCreateRequest defines model for SloCreateRequest.
 type SloCreateRequest struct {
 	DisplayName string `json:"display_name"`
@@ -2223,6 +2744,50 @@ type SloCreateRequest struct {
 
 	// Target Exact fractional target in [0,1); 1 is invalid.
 	Target string `json:"target"`
+}
+
+// SloDailyComplianceDay defines model for SloDailyComplianceDay.
+type SloDailyComplianceDay struct {
+	DayEnd             time.Time `json:"day_end"`
+	DayStart           time.Time `json:"day_start"`
+	DefinitionRevision string    `json:"definition_revision"`
+
+	// EffectiveAt Canonical source-cadence boundary used for the rolling objective calculation; graph marker remains day_end.
+	EffectiveAt time.Time                `json:"effective_at"`
+	Explanation string                   `json:"explanation"`
+	Performance SloEvaluationPerformance `json:"performance"`
+	Quality     SloOperationalQuality    `json:"quality"`
+
+	// RequestedAt Exactly day_end
+	RequestedAt time.Time                   `json:"requested_at"`
+	SloId       openapi_types.UUID          `json:"slo_id"`
+	Status      SloDailyComplianceDayStatus `json:"status"`
+
+	// Target Exact objective target decimal string.
+	Target  string             `json:"target"`
+	UtcDate openapi_types.Date `json:"utc_date"`
+}
+
+// SloDailyComplianceDayStatus defines model for SloDailyComplianceDay.Status.
+type SloDailyComplianceDayStatus string
+
+// SloDailyComplianceSeries defines model for SloDailyComplianceSeries.
+type SloDailyComplianceSeries struct {
+	Days []SloDailyComplianceDay      `json:"days"`
+	Kind SloDailyComplianceSeriesKind `json:"kind"`
+}
+
+// SloDailyComplianceSeriesKind defines model for SloDailyComplianceSeries.Kind.
+type SloDailyComplianceSeriesKind string
+
+// SloDailyComplianceSummary defines model for SloDailyComplianceSummary.
+type SloDailyComplianceSummary struct {
+	// EvaluableDays Exactly met_days plus violated_days.
+	EvaluableDays     int `json:"evaluable_days"`
+	MetDays           int `json:"met_days"`
+	NotApplicableDays int `json:"not_applicable_days"`
+	UnknownDays       int `json:"unknown_days"`
+	ViolatedDays      int `json:"violated_days"`
 }
 
 // SloEvaluation defines model for SloEvaluation.
@@ -2331,6 +2896,191 @@ type SloEvaluationWindow struct {
 	RetentionStart        time.Time           `json:"retention_start"`
 }
 
+// SloExhaustionEstimate defines model for SloExhaustionEstimate.
+type SloExhaustionEstimate struct {
+	Assumptions          []SloExhaustionEstimateAssumptions `json:"assumptions"`
+	BadEventsPerHour     *string                            `json:"bad_events_per_hour"`
+	CurrentQuality       SloOperationalQuality              `json:"current_quality"`
+	HoursUntilExhaustion *string                            `json:"hours_until_exhaustion"`
+	OneHourQuality       SloOperationalQuality              `json:"one_hour_quality"`
+	Reason               *string                            `json:"reason,omitempty"`
+	RemainingEvents      *string                            `json:"remaining_events"`
+	State                SloExhaustionEstimateState         `json:"state"`
+}
+
+// SloExhaustionEstimateAssumptions defines model for SloExhaustionEstimate.Assumptions.
+type SloExhaustionEstimateAssumptions string
+
+// SloExhaustionEstimateState defines model for SloExhaustionEstimate.State.
+type SloExhaustionEstimateState string
+
+// SloOperationalContext defines model for SloOperationalContext.
+type SloOperationalContext struct {
+	DatasourceDisplayName  string             `json:"datasource_display_name"`
+	DatasourceId           openapi_types.UUID `json:"datasource_id"`
+	GoodQuery              string             `json:"good_query"`
+	MeasurementRevision    string             `json:"measurement_revision"`
+	PollingIntervalSeconds int                `json:"polling_interval_seconds"`
+	SettlingDelaySeconds   int                `json:"settling_delay_seconds"`
+	SliDisplayName         string             `json:"sli_display_name"`
+	SliId                  openapi_types.UUID `json:"sli_id"`
+	SliName                string             `json:"sli_name"`
+	TotalQuery             string             `json:"total_query"`
+}
+
+// SloOperationalDetail defines model for SloOperationalDetail.
+type SloOperationalDetail struct {
+	AttainmentSeries   SloOperationalSeries             `json:"attainment_series"`
+	BudgetSeries       SloOperationalSeries             `json:"budget_series"`
+	Burn1h             SloBurnValue                     `json:"burn_1h"`
+	Burn6h             SloBurnValue                     `json:"burn_6h"`
+	BurnSeries         SloOperationalSeries             `json:"burn_series"`
+	CalculationVersion string                           `json:"calculation_version"`
+	ComplianceSeries   SloDailyComplianceSeries         `json:"compliance_series"`
+	ComplianceSummary  SloDailyComplianceSummary        `json:"compliance_summary"`
+	Context            SloOperationalContext            `json:"context"`
+	Current            SloOperationalValue              `json:"current"`
+	EffectiveAt        time.Time                        `json:"effective_at"`
+	EvaluationId       openapi_types.UUID               `json:"evaluation_id"`
+	Exhaustion         SloExhaustionEstimate            `json:"exhaustion"`
+	LeadingReason      SloUrgencyReason                 `json:"leading_reason"`
+	Objective          Slo                              `json:"objective"`
+	Range              SloOperationalRange              `json:"range"`
+	Reasons            []SloUrgencyReason               `json:"reasons"`
+	RequestedAt        time.Time                        `json:"requested_at"`
+	SnapshotKind       SloOperationalDetailSnapshotKind `json:"snapshot_kind"`
+	Urgency            SloOperationalDetailUrgency      `json:"urgency"`
+}
+
+// SloOperationalDetailSnapshotKind defines model for SloOperationalDetail.SnapshotKind.
+type SloOperationalDetailSnapshotKind string
+
+// SloOperationalDetailUrgency defines model for SloOperationalDetail.Urgency.
+type SloOperationalDetailUrgency string
+
+// SloOperationalOverviewItem defines model for SloOperationalOverviewItem.
+type SloOperationalOverviewItem struct {
+	// BudgetSparkline Exact rolling-budget evaluation samples from the preceding seven days; first/last/min/max per bucket and explicit gaps
+	BudgetSparkline []SloOperationalSample            `json:"budget_sparkline"`
+	Burn1h          SloBurnValue                      `json:"burn_1h"`
+	Burn6h          SloBurnValue                      `json:"burn_6h"`
+	Current         SloOperationalValue               `json:"current"`
+	Exhaustion      SloExhaustionEstimate             `json:"exhaustion"`
+	LeadingReason   SloUrgencyReason                  `json:"leading_reason"`
+	Reasons         []SloUrgencyReason                `json:"reasons"`
+	Slo             Slo                               `json:"slo"`
+	Urgency         SloOperationalOverviewItemUrgency `json:"urgency"`
+}
+
+// SloOperationalOverviewItemUrgency defines model for SloOperationalOverviewItem.Urgency.
+type SloOperationalOverviewItemUrgency string
+
+// SloOperationalOverviewPage defines model for SloOperationalOverviewPage.
+type SloOperationalOverviewPage struct {
+	GroupCounts SloUrgencyCounts             `json:"group_counts"`
+	Items       []SloOperationalOverviewItem `json:"items"`
+
+	// NextCursor Empty string when this snapshot has no further page.
+	NextCursor string `json:"next_cursor"`
+
+	// PreviousCursor Signed cursor for the previous page of this same snapshot
+	PreviousCursor string             `json:"previous_cursor"`
+	SnapshotId     openapi_types.UUID `json:"snapshot_id"`
+}
+
+// SloOperationalQuality defines model for SloOperationalQuality.
+type SloOperationalQuality struct {
+	// Coverage Exact fraction rounded half-even to 12 decimal places at output.
+	Coverage            *string                        `json:"coverage"`
+	ExpectedIntervals   int64                          `json:"expected_intervals"`
+	ExpiredIntervals    int64                          `json:"expired_intervals"`
+	FirstObservationAt  *time.Time                     `json:"first_observation_at"`
+	Freshness           SloOperationalQualityFreshness `json:"freshness"`
+	KnownEmptyIntervals int64                          `json:"known_empty_intervals"`
+	LastObservationAt   *time.Time                     `json:"last_observation_at"`
+
+	// LatestReceiptAt Receipt metadata only; never an observation commit watermark.
+	LatestReceiptAt      *time.Time                 `json:"latest_receipt_at"`
+	MissingIntervals     int64                      `json:"missing_intervals"`
+	ObservedIntervals    int64                      `json:"observed_intervals"`
+	Reason               *string                    `json:"reason,omitempty"`
+	State                SloOperationalQualityState `json:"state"`
+	ZeroTrafficIntervals int64                      `json:"zero_traffic_intervals"`
+}
+
+// SloOperationalQualityFreshness defines model for SloOperationalQuality.Freshness.
+type SloOperationalQualityFreshness string
+
+// SloOperationalQualityState defines model for SloOperationalQuality.State.
+type SloOperationalQualityState string
+
+// SloOperationalRange defines model for SloOperationalRange.
+type SloOperationalRange struct {
+	BucketBounds         SloOperationalRangeBucketBounds        `json:"bucket_bounds"`
+	EffectiveEnd         time.Time                              `json:"effective_end"`
+	EffectiveStart       time.Time                              `json:"effective_start"`
+	MaxSamplesPerSeries  SloOperationalRangeMaxSamplesPerSeries `json:"max_samples_per_series"`
+	Reduced              bool                                   `json:"reduced"`
+	RequestedEnd         time.Time                              `json:"requested_end"`
+	RequestedStart       time.Time                              `json:"requested_start"`
+	ResolutionSeconds    int                                    `json:"resolution_seconds"`
+	SourceCadenceSeconds int                                    `json:"source_cadence_seconds"`
+}
+
+// SloOperationalRangeBucketBounds defines model for SloOperationalRange.BucketBounds.
+type SloOperationalRangeBucketBounds string
+
+// SloOperationalRangeMaxSamplesPerSeries defines model for SloOperationalRange.MaxSamplesPerSeries.
+type SloOperationalRangeMaxSamplesPerSeries int
+
+// SloOperationalSample defines model for SloOperationalSample.
+type SloOperationalSample struct {
+	AllowedBudget *string               `json:"allowed_budget"`
+	Attainment    *string               `json:"attainment"`
+	BucketEnd     time.Time             `json:"bucket_end"`
+	BucketStart   time.Time             `json:"bucket_start"`
+	Burn          *string               `json:"burn"`
+	EvaluationAt  time.Time             `json:"evaluation_at"`
+	Good          *string               `json:"good"`
+	Quality       SloOperationalQuality `json:"quality"`
+
+	// ReceivedAt Receipt metadata only.
+	ReceivedAt        *time.Time                            `json:"received_at"`
+	RemainingBudget   *string                               `json:"remaining_budget"`
+	RemainingFraction *string                               `json:"remaining_fraction"`
+	RetainedExtrema   []SloOperationalSampleRetainedExtrema `json:"retained_extrema"`
+	Revision          string                                `json:"revision"`
+	State             SloOperationalSampleState             `json:"state"`
+	Total             *string                               `json:"total"`
+}
+
+// SloOperationalSampleRetainedExtrema defines model for SloOperationalSample.RetainedExtrema.
+type SloOperationalSampleRetainedExtrema string
+
+// SloOperationalSampleState defines model for SloOperationalSample.State.
+type SloOperationalSampleState string
+
+// SloOperationalSeries defines model for SloOperationalSeries.
+type SloOperationalSeries struct {
+	BurnWindowSeconds *SloOperationalSeriesBurnWindowSeconds `json:"burn_window_seconds"`
+	Kind              SloOperationalSeriesKind               `json:"kind"`
+	Samples           []SloOperationalSample                 `json:"samples"`
+}
+
+// SloOperationalSeriesBurnWindowSeconds defines model for SloOperationalSeries.BurnWindowSeconds.
+type SloOperationalSeriesBurnWindowSeconds int
+
+// SloOperationalSeriesKind defines model for SloOperationalSeries.Kind.
+type SloOperationalSeriesKind string
+
+// SloOperationalValue defines model for SloOperationalValue.
+type SloOperationalValue struct {
+	EvaluationAt time.Time                `json:"evaluation_at"`
+	Performance  SloEvaluationPerformance `json:"performance"`
+	Quality      SloOperationalQuality    `json:"quality"`
+	Window       SloEvaluationWindow      `json:"window"`
+}
+
 // SloPage defines model for SloPage.
 type SloPage struct {
 	Items      []Slo  `json:"items"`
@@ -2351,6 +3101,22 @@ type SloTimelineItem struct {
 
 // SloTimelineItemState defines model for SloTimelineItem.State.
 type SloTimelineItemState string
+
+// SloUrgencyCounts defines model for SloUrgencyCounts.
+type SloUrgencyCounts struct {
+	Healthy        int64 `json:"healthy"`
+	NeedsAttention int64 `json:"needs_attention"`
+	Watch          int64 `json:"watch"`
+}
+
+// SloUrgencyReason defines model for SloUrgencyReason.
+type SloUrgencyReason struct {
+	Code        SloUrgencyReasonCode `json:"code"`
+	Provisional bool                 `json:"provisional"`
+}
+
+// SloUrgencyReasonCode defines model for SloUrgencyReason.Code.
+type SloUrgencyReasonCode string
 
 // AgentId defines model for AgentId.
 type AgentId = openapi_types.UUID
@@ -2525,6 +3291,12 @@ type PatchServiceMetadataParams struct {
 type ListSlisParams struct {
 	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Q Case-insensitive substring search across SLI name
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// DatasourceId Filter by datasource before pagination.
+	DatasourceId *openapi_types.UUID `form:"datasource_id,omitempty" json:"datasource_id,omitempty"`
 }
 
 // CreateSliParams defines parameters for CreateSli.
@@ -2558,6 +3330,18 @@ type CreateSloParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetSloOperationalOverviewParams defines parameters for GetSloOperationalOverview.
+type GetSloOperationalOverviewParams struct {
+	Q         *string                                 `form:"q,omitempty" json:"q,omitempty"`
+	ServiceId *openapi_types.UUID                     `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Urgency   *GetSloOperationalOverviewParamsUrgency `form:"urgency,omitempty" json:"urgency,omitempty"`
+	Limit     *int                                    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor    *string                                 `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetSloOperationalOverviewParamsUrgency defines parameters for GetSloOperationalOverview.
+type GetSloOperationalOverviewParamsUrgency string
+
 // PatchSloMetadataParams defines parameters for PatchSloMetadata.
 type PatchSloMetadataParams struct {
 	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
@@ -2570,6 +3354,17 @@ type EvaluateSloParams struct {
 	TimelineStart *time.Time `form:"timeline_start,omitempty" json:"timeline_start,omitempty"`
 	TimelineEnd   *time.Time `form:"timeline_end,omitempty" json:"timeline_end,omitempty"`
 }
+
+// GetSloOperationalDetailParams defines parameters for GetSloOperationalDetail.
+type GetSloOperationalDetailParams struct {
+	At                *time.Time                                      `form:"at,omitempty" json:"at,omitempty"`
+	Start             *time.Time                                      `form:"start,omitempty" json:"start,omitempty"`
+	End               *time.Time                                      `form:"end,omitempty" json:"end,omitempty"`
+	BurnWindowSeconds *GetSloOperationalDetailParamsBurnWindowSeconds `form:"burn_window_seconds,omitempty" json:"burn_window_seconds,omitempty"`
+}
+
+// GetSloOperationalDetailParamsBurnWindowSeconds defines parameters for GetSloOperationalDetail.
+type GetSloOperationalDetailParamsBurnWindowSeconds int
 
 // PostAgentDiagnosticResultJSONRequestBody defines body for PostAgentDiagnosticResult for application/json ContentType.
 type PostAgentDiagnosticResultJSONRequestBody = DiagnosticResultPayload
@@ -3408,6 +4203,13 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
 	CreateSlo(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+	//
+	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four live snapshots per actor/session and 64 per installation are admitted. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+	//
+	// Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
+	GetSloOperationalOverview(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetSlo Read an SLO definition
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id} (the `GetSlo` operationId).
@@ -3437,6 +4239,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 	EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSloOperationalDetail Read current operational evaluation and bounded history
+	//
+	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
+	GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLiveness Report whether the UI process is alive
 	//
@@ -4498,6 +5307,23 @@ func (c *Client) CreateSlo(ctx context.Context, params *CreateSloParams, body Cr
 	return c.Client.Do(req)
 }
 
+// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+//
+// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four live snapshots per actor/session and 64 per installation are admitted. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+//
+// Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
+func (c *Client) GetSloOperationalOverview(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSloOperationalOverviewRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetSlo Read an SLO definition
 //
 // Corresponds with GET /api/v1/slos/{slo_id} (the `GetSlo` operationId).
@@ -4558,6 +5384,23 @@ func (c *Client) PatchSloMetadata(ctx context.Context, sloId SloId, params *Patc
 // Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 func (c *Client) EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEvaluateSloRequest(c.Server, sloId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSloOperationalDetail Read current operational evaluation and bounded history
+//
+// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
+func (c *Client) GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSloOperationalDetailRequest(c.Server, sloId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6251,6 +7094,30 @@ func NewListSlisRequest(server string, params *ListSlisParams) (*http.Request, e
 
 		}
 
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DatasourceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "datasource_id", *params.DatasourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -6616,6 +7483,108 @@ func NewCreateSloRequestWithBody(server string, params *CreateSloParams, content
 	return req, nil
 }
 
+// NewGetSloOperationalOverviewRequest constructs an http.Request for the GetSloOperationalOverview method
+func NewGetSloOperationalOverviewRequest(server string, params *GetSloOperationalOverviewParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/overview")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ServiceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "service_id", *params.ServiceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Urgency != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "urgency", *params.Urgency, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSloRequest constructs an http.Request for the GetSlo method
 func NewGetSloRequest(server string, sloId SloId) (*http.Request, error) {
 	var err error
@@ -6772,6 +7741,103 @@ func NewEvaluateSloRequest(server string, sloId SloId, params *EvaluateSloParams
 		if params.TimelineEnd != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "timeline_end", *params.TimelineEnd, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSloOperationalDetailRequest constructs an http.Request for the GetSloOperationalDetail method
+func NewGetSloOperationalDetailRequest(server string, sloId SloId, params *GetSloOperationalDetailParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/operational", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.At != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "at", *params.At, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Start != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "start", *params.Start, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.End != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "end", *params.End, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.BurnWindowSeconds != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "burn_window_seconds", *params.BurnWindowSeconds, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -7382,6 +8448,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
 	CreateSloWithResponse(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSloResponse, error)
 
+	// GetSloOperationalOverviewWithResponse Read a snapshot-paginated operational SLO overview
+	//
+	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four live snapshots per actor/session and 64 per installation are admitted. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
+	GetSloOperationalOverviewWithResponse(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*GetSloOperationalOverviewResponse, error)
+
 	// GetSloWithResponse Read an SLO definition
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -7415,6 +8490,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 	EvaluateSloWithResponse(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*EvaluateSloResponse, error)
+
+	// GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
+	//
+	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
+	GetSloOperationalDetailWithResponse(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*GetSloOperationalDetailResponse, error)
 
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
@@ -9725,6 +10809,82 @@ func (r CreateSloResponse) ContentType() string {
 	return ""
 }
 
+type GetSloOperationalOverviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloOperationalOverviewPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Problem
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSloOperationalOverviewResponse) GetJSON200() *SloOperationalOverviewPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON403() *Problem {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSloOperationalOverviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSloOperationalOverviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSloOperationalOverviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSloOperationalOverviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetSloResponse200Headers the declared response headers of an HTTP 200 response for GetSlo
 type GetSloResponse200Headers struct {
 	ETag *string
@@ -9884,6 +11044,89 @@ func (r EvaluateSloResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EvaluateSloResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSloOperationalDetailResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloOperationalDetail
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSloOperationalDetailResponse) GetJSON200() *SloOperationalDetail {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r GetSloOperationalDetailResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r GetSloOperationalDetailResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r GetSloOperationalDetailResponse) GetApplicationproblemJSON403() *Problem {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r GetSloOperationalDetailResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GetSloOperationalDetailResponse) GetApplicationproblemJSON422() *Problem {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetSloOperationalDetailResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSloOperationalDetailResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSloOperationalDetailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSloOperationalDetailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSloOperationalDetailResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -10822,6 +12065,21 @@ func (c *ClientWithResponses) CreateSloWithResponse(ctx context.Context, params 
 	return ParseCreateSloResponse(rsp)
 }
 
+// GetSloOperationalOverviewWithResponse Read a snapshot-paginated operational SLO overview
+//
+// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four live snapshots per actor/session and 64 per installation are admitted. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
+func (c *ClientWithResponses) GetSloOperationalOverviewWithResponse(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*GetSloOperationalOverviewResponse, error) {
+	rsp, err := c.GetSloOperationalOverview(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSloOperationalOverviewResponse(rsp)
+}
+
 // GetSloWithResponse Read an SLO definition
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10878,6 +12136,21 @@ func (c *ClientWithResponses) EvaluateSloWithResponse(ctx context.Context, sloId
 		return nil, err
 	}
 	return ParseEvaluateSloResponse(rsp)
+}
+
+// GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
+//
+// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
+func (c *ClientWithResponses) GetSloOperationalDetailWithResponse(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*GetSloOperationalDetailResponse, error) {
+	rsp, err := c.GetSloOperationalDetail(ctx, sloId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSloOperationalDetailResponse(rsp)
 }
 
 // GetLivenessWithResponse Report whether the UI process is alive
@@ -12777,6 +14050,67 @@ func ParseCreateSloResponse(rsp *http.Response) (*CreateSloResponse, error) {
 	return response, nil
 }
 
+// ParseGetSloOperationalOverviewResponse parses an HTTP response from a GetSloOperationalOverviewWithResponse call
+func ParseGetSloOperationalOverviewResponse(rsp *http.Response) (*GetSloOperationalOverviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSloOperationalOverviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloOperationalOverviewPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetSloResponse parses an HTTP response from a GetSloWithResponse call
 func ParseGetSloResponse(rsp *http.Response) (*GetSloResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -12903,6 +14237,74 @@ func ParseEvaluateSloResponse(rsp *http.Response) (*EvaluateSloResponse, error) 
 			return nil, err
 		}
 		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSloOperationalDetailResponse parses an HTTP response from a GetSloOperationalDetailWithResponse call
+func ParseGetSloOperationalDetailResponse(rsp *http.Response) (*GetSloOperationalDetailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSloOperationalDetailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloOperationalDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
 
 	}
 
@@ -13087,6 +14489,9 @@ type ServerInterface interface {
 	// CreateSlo Create a single-indicator occurrence SLO
 	// (POST /api/v1/slos)
 	CreateSlo(w http.ResponseWriter, r *http.Request, params CreateSloParams)
+	// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+	// (GET /api/v1/slos/overview)
+	GetSloOperationalOverview(w http.ResponseWriter, r *http.Request, params GetSloOperationalOverviewParams)
 	// GetSlo Read an SLO definition
 	// (GET /api/v1/slos/{slo_id})
 	GetSlo(w http.ResponseWriter, r *http.Request, sloId SloId)
@@ -13096,6 +14501,9 @@ type ServerInterface interface {
 	// EvaluateSlo Evaluate a rolling occurrence objective
 	// (GET /api/v1/slos/{slo_id}/evaluation)
 	EvaluateSlo(w http.ResponseWriter, r *http.Request, sloId SloId, params EvaluateSloParams)
+	// GetSloOperationalDetail Read current operational evaluation and bounded history
+	// (GET /api/v1/slos/{slo_id}/operational)
+	GetSloOperationalDetail(w http.ResponseWriter, r *http.Request, sloId SloId, params GetSloOperationalDetailParams)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -14401,6 +15809,32 @@ func (siw *ServerInterfaceWrapper) ListSlis(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "datasource_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "datasource_id", r.URL.Query(), &params.DatasourceId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "datasource_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "datasource_id", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListSlis(w, r, params)
 	}))
@@ -14696,6 +16130,91 @@ func (siw *ServerInterfaceWrapper) CreateSlo(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// GetSloOperationalOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetSloOperationalOverview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSloOperationalOverviewParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service_id", r.URL.Query(), &params.ServiceId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "urgency" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "urgency", r.URL.Query(), &params.Urgency, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "urgency"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "urgency", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSloOperationalOverview(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSlo operation middleware
 func (siw *ServerInterfaceWrapper) GetSlo(w http.ResponseWriter, r *http.Request) {
 
@@ -14835,6 +16354,87 @@ func (siw *ServerInterfaceWrapper) EvaluateSlo(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.EvaluateSlo(w, r, sloId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSloOperationalDetail operation middleware
+func (siw *ServerInterfaceWrapper) GetSloOperationalDetail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSloOperationalDetailParams
+
+	// ------------- Optional query parameter "at" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "at", r.URL.Query(), &params.At, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "at"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "at", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "burn_window_seconds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "burn_window_seconds", r.URL.Query(), &params.BurnWindowSeconds, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "burn_window_seconds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "burn_window_seconds", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSloOperationalDetail(w, r, sloId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -15029,6 +16629,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.PatchServiceMetadata)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos", wrapper.ListSlos)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slos", wrapper.CreateSlo)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/overview", wrapper.GetSloOperationalOverview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/operational", wrapper.GetSloOperationalDetail)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}", wrapper.GetSlo)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slos/{slo_id}", wrapper.PatchSloMetadata)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/evaluation", wrapper.EvaluateSlo)

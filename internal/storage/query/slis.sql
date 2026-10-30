@@ -55,8 +55,23 @@ LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompat
 WHERE sli.id = $1;
 
 -- name: ListSlis :many
+WITH page AS MATERIALIZED (
+    SELECT sli.id, sli.created_at
+    FROM public.almanac_slis AS sli
+    JOIN public.almanac_sli_measurements AS measurement
+      ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
+    JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
+    WHERE (sqlc.arg(query)::text = '' OR position(sqlc.arg(query)::text IN lower(sli.name)) > 0
+           OR position(sqlc.arg(query)::text IN lower(sli.display_name)) > 0
+           OR position(sqlc.arg(query)::text IN lower(datasource.display_name)) > 0)
+      AND (sqlc.narg(datasource_filter)::uuid IS NULL OR datasource.id = sqlc.narg(datasource_filter)::uuid)
+      AND (sli.created_at, sli.id) > (sqlc.arg(created_at)::timestamptz, sqlc.arg(cursor_id)::uuid)
+    ORDER BY sli.created_at, sli.id
+    LIMIT sqlc.arg(limit_count)::integer
+)
 SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision,
        measurement.datasource_id, datasource.version AS datasource_version,
+       datasource.display_name AS datasource_display_name,
        measurement.measurement_kind, measurement.component_mode,
        measurement.good_query, measurement.total_query, measurement.effective_from, measurement.activated_at,
        datasource.agent_id, datasource.polling_interval_seconds,
@@ -77,14 +92,30 @@ SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision
        latest.total_count AS latest_total_count,
        latest.error_code AS latest_error_code,
        latest.missing_components AS latest_missing_components,
-       latest.recorded_at AS latest_recorded_at
-FROM public.almanac_slis AS sli
+       latest.recorded_at AS latest_recorded_at,
+       accepted.last_observation_at,
+       recent.window_start AS recent_measurement_window_start,
+       recent.window_end AS recent_measurement_window_end,
+       recent.items::text AS recent_measurements,
+       linked.items::text AS linked_slos,
+       linked.total_count AS linked_slo_count
+FROM page
+JOIN public.almanac_slis AS sli ON sli.id = page.id
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
 LEFT JOIN public.almanac_agent_runtime_status AS runtime ON runtime.agent_id = datasource.agent_id
 JOIN public.almanac_agents AS agent ON agent.id = datasource.agent_id
 LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompatible.agent_id = datasource.agent_id
+LEFT JOIN LATERAL (
+    SELECT coverage.recorded_at::timestamptz AS last_observation_at
+    FROM public.almanac_sli_coverage AS coverage
+    WHERE coverage.sli_id = sli.id
+      AND coverage.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
+      AND coverage.outcome IN ('observed', 'complete_empty')
+    ORDER BY coverage.recorded_at DESC
+    LIMIT 1
+) AS accepted ON true
 LEFT JOIN LATERAL (
     SELECT coverage.observation_id, coverage.measurement_revision, coverage.interval_start,
            coverage.interval_end, coverage.outcome, COALESCE(obs.good_count::text, '') AS good_count,
@@ -109,9 +140,108 @@ LEFT JOIN LATERAL (
     ORDER BY interval_start DESC, recorded_at DESC
     LIMIT 1
 ) AS latest ON true
-WHERE (sli.created_at, sli.id) > ($1, $2::uuid)
-ORDER BY sli.created_at, sli.id
-LIMIT $3;
+LEFT JOIN LATERAL (
+    SELECT min(sample.interval_start)::timestamptz AS window_start,
+           max(sample.interval_end)::timestamptz AS window_end,
+           COALESCE(jsonb_agg(jsonb_build_object(
+               'interval_start', sample.interval_start,
+               'interval_end', sample.interval_end,
+               'state', sample.state,
+               'good_count', sample.good_count,
+               'total_count', sample.total_count
+           ) ORDER BY sample.interval_start), '[]'::jsonb) AS items
+    FROM (
+        SELECT slot.interval_start,
+               slot.interval_start + make_interval(secs => datasource.polling_interval_seconds) AS interval_end,
+               CASE
+                   WHEN evidence.outcome = 'observed' AND evidence.total_count::numeric = 0 THEN 'zero_traffic'
+                   WHEN evidence.outcome = 'observed' THEN 'observed'
+                   WHEN evidence.outcome = 'complete_empty' THEN 'known_empty'
+                   WHEN evidence.outcome = 'incomplete' THEN 'partial'
+                   WHEN evidence.outcome = 'failed' THEN 'failed'
+                   ELSE 'missing'
+               END::text AS state,
+               evidence.good_count,
+               evidence.total_count
+        FROM LATERAL (
+            SELECT GREATEST(
+                GREATEST(
+                    to_timestamp(ceil(extract(epoch FROM sqlc.arg(retention_cutoff)::timestamptz) / datasource.polling_interval_seconds) * datasource.polling_interval_seconds),
+                    measurement.effective_from
+                ),
+                to_timestamp(floor(extract(epoch FROM (sqlc.arg(list_now)::timestamptz - make_interval(secs => datasource.settling_delay_seconds))) / datasource.polling_interval_seconds) * datasource.polling_interval_seconds)
+                    - make_interval(secs => 12 * datasource.polling_interval_seconds)
+            ) AS first_interval_start,
+            to_timestamp(floor(extract(epoch FROM (sqlc.arg(list_now)::timestamptz - make_interval(secs => datasource.settling_delay_seconds))) / datasource.polling_interval_seconds) * datasource.polling_interval_seconds)
+                - make_interval(secs => datasource.polling_interval_seconds) AS last_interval_start
+        ) AS recent_bounds
+        -- This view has at most twelve slots. A timestamp generate_series is
+        -- estimated as 1,000 rows, inflating every partitioned evidence join.
+        CROSS JOIN generate_series(0, 11) AS slot_number(sample_offset)
+        CROSS JOIN LATERAL (
+            SELECT recent_bounds.first_interval_start
+                + make_interval(secs => slot_number.sample_offset * datasource.polling_interval_seconds)
+                AS interval_start
+        ) AS slot
+        LEFT JOIN LATERAL (
+            SELECT picked.outcome, picked.good_count, picked.total_count
+            FROM (
+                SELECT coverage.outcome,
+                       obs.good_count::text AS good_count,
+                       obs.total_count::text AS total_count,
+                       0 AS precedence,
+                       coverage.recorded_at,
+                       coverage.observation_id AS tie_id
+                FROM public.almanac_sli_coverage AS coverage
+                LEFT JOIN public.almanac_sli_observation_values AS obs
+                  ON obs.interval_start = coverage.interval_start
+                 AND obs.sli_id = coverage.sli_id
+                 AND obs.measurement_revision = coverage.measurement_revision
+                WHERE coverage.sli_id = sli.id
+                  AND coverage.measurement_revision = measurement.revision
+                  AND coverage.interval_start = slot.interval_start
+                UNION ALL
+                SELECT attempt.outcome, NULL::text, NULL::text, 1 AS precedence,
+                       attempt.recorded_at, attempt.execution_id AS tie_id
+                FROM public.almanac_sli_execution_attempts AS attempt
+                WHERE attempt.sli_id = sli.id
+                  AND attempt.measurement_revision = measurement.revision
+                  AND attempt.interval_start = slot.interval_start
+                  AND NOT EXISTS (
+                      SELECT 1 FROM public.almanac_sli_coverage AS covered
+                      WHERE covered.sli_id = attempt.sli_id
+                        AND covered.measurement_revision = attempt.measurement_revision
+                        AND covered.interval_start = attempt.interval_start
+                  )
+            ) AS picked
+            ORDER BY picked.precedence, picked.recorded_at DESC, picked.tie_id DESC
+            LIMIT 1
+        ) AS evidence ON true
+        WHERE measurement.activated_at IS NOT NULL
+          AND slot.interval_start <= recent_bounds.last_interval_start
+    ) AS sample
+) AS recent ON true
+LEFT JOIN LATERAL (
+    SELECT COALESCE((
+               SELECT jsonb_agg(jsonb_build_object('id', capped.id, 'name', capped.name, 'display_name', capped.display_name)
+                                ORDER BY capped.created_at, capped.id)
+               FROM (
+                   SELECT slo.id, slo.name, slo.display_name, slo.created_at
+                   FROM public.almanac_slo_definitions AS definition
+                   JOIN public.almanac_slos AS slo
+                     ON slo.id = definition.slo_id AND slo.definition_revision = definition.revision
+                   WHERE definition.sli_id = sli.id
+                   ORDER BY slo.created_at, slo.id
+                   LIMIT 5
+               ) AS capped
+           ), '[]'::jsonb) AS items,
+           (SELECT count(*)::integer
+            FROM public.almanac_slo_definitions AS definition
+            JOIN public.almanac_slos AS slo
+              ON slo.id = definition.slo_id AND slo.definition_revision = definition.revision
+            WHERE definition.sli_id = sli.id) AS total_count
+) AS linked ON true
+ORDER BY page.created_at, page.id;
 
 -- name: UpdateSliDisplayName :one
 UPDATE public.almanac_slis

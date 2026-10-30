@@ -55,6 +55,36 @@ func TestSLIActivationBoundaryIsFutureCanonicalBoundary(t *testing.T) {
 	}
 }
 
+func TestSliListCursorBindsNormalizedUnicodeFiltersAndPreservesLegacyCursor(t *testing.T) {
+	when := time.Date(2026, 10, 29, 12, 30, 0, 0, time.UTC)
+	itemID := "8ed93d7e-51e3-4a3e-9222-3e8a612de20a"
+	datasourceID := "b13e0739-3c86-4a7f-b7e5-c15e9626e71c"
+	limit, _, filter, query, datasource, err := validateSliListPage(50, "", "  Café  ", datasourceID)
+	if err != nil || limit != 50 || query != "café" || !datasource.Valid {
+		t.Fatalf("normalized SLI filters: limit=%d query=%q datasource=%+v err=%v", limit, query, datasource, err)
+	}
+	encoded, err := encodeSliListCursor(when, itemID, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit, position, sameFilter, query, datasource, err := validateSliListPage(50, encoded, "Café", datasourceID)
+	if err != nil || limit != 50 || sameFilter != filter || query != "café" || position.ID != itemID || !position.Time.Equal(when) || !datasource.Valid {
+		t.Fatalf("Unicode filter cursor roundtrip: limit=%d position=%+v query=%q datasource=%+v err=%v", limit, position, query, datasource, err)
+	}
+	for _, change := range []struct{ query, datasource string }{{"cafe", datasourceID}, {"café", itemID}} {
+		if _, _, _, _, _, err := validateSliListPage(50, encoded, change.query, change.datasource); err == nil {
+			t.Fatalf("cursor accepted changed filters query=%q datasource=%q", change.query, change.datasource)
+		}
+	}
+	legacy, err := encodeAgentCursor(agentCursor{Version: 1, Kind: "slis", Time: when, ID: itemID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, position, _, _, _, err := validateSliListPage(50, legacy, "", ""); err != nil || position.ID != itemID {
+		t.Fatalf("legacy unfiltered cursor rejected: %+v, %v", position, err)
+	}
+}
+
 func TestMigrationSQLStateDiagnosticRejectsUntrustedText(t *testing.T) {
 	for _, value := range []string{"42P01", "23505"} {
 		if !safeSQLState(value) {

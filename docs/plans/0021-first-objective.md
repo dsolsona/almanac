@@ -1,7 +1,16 @@
 # First objective implementation plan
 
+Feature delivery is paused by the maintainer's 2026-10-30 instruction. Prioritize
+the [backend stabilization plan](0022-backend-stabilization.md), accepted after Crit
+review on 2026-10-30. Preserve existing work and unresolved acceptance failures.
+Do not start later entries below while this pause remains in force.
+
 > Use subagent-driven development with two independent implementers once interfaces
-> are settled. The maintainer selected GPT-6.1 Terra for this session. The coordinator
+> are settled. F3-T01 used the maintainer's session selection of GPT-6.1 Terra;
+> subsequent work uses the standing gpt-6-luna workflow unless explicitly changed.
+> For the current F3-T07 session the maintainer explicitly selected primary-agent
+> implementation, with a subagent restricted to executing and reporting checks.
+> The coordinator
 > owns integration and acceptance under [ways of working](../ways-of-working.md).
 
 Goal: define a request-count objective on an existing Prometheus SLI and inspect
@@ -25,15 +34,51 @@ Governing contracts: [SPEC-0005](../specs/0005-openslo-and-resource-model.md),
 - [x] First usable objective: [F3-T01](../tasks/F3-T01.md), service and single-indicator
   occurrence objective creation, fixed rolling window, exact evaluation, bounded
   recent timeline, UI/API/CLI parity and real Compose acceptance.
+- [ ] Operational SLO overview and investigation: [F3-T02](../tasks/F3-T02.md),
+  backend urgency projection, separate 1 h/6 h burn, rolling-budget history,
+  grouped list, target/window presets and timeline/status-rail composition.
+- [ ] Complete the numerical timeline: [F3-T03](../tasks/F3-T03.md), UTC day-end
+  rolling-objective compliance graph, summary and exact values.
+- [ ] Contextual event lifecycle: [F3-T06](../tasks/F3-T06.md), real annotations
+  and an independent event layer under SPEC-0017.
+- [ ] Restore SLI presentation: [F3-T04](../tasks/F3-T04.md), dense operational
+  table and explained measurement/query editor using supported collector modes.
 - [ ] Extend the objective journey with prospective semantic revision management,
   supported calendar windows and daily CSV/JSON reports with consistent snapshots.
 - [ ] Add the accepted OpenSLO validation/preview/application/export profile using
   explicit mappings and visible inactive unsupported definitions.
-- [ ] Add contextual timeline annotations under SPEC-0017 and complete F3 acceptance.
+- [ ] Complete F3 acceptance, including the operational visual reference and
+  performance fixture; annotations are delivered by F3-T06 above.
 
 Later entries are dependency checkpoints, not speculative implementation briefs.
 Prepare each bounded task after its preceding interfaces and evidence are established.
 The first increment does not establish completion of the whole F3 milestone.
+
+## Operational visual completion
+
+The maintainer confirmed the [visual target](../design/slo-visual-reference.md)
+and all four numerical detail lanes on 2026-10-29, with the left navigation retained.
+These tasks make the missing accepted budget/burn/history behavior concrete; they
+are required F3 outcomes, not optional polish. F3-T01's functional evidence does not
+establish acceptance of the simplified list/detail composition.
+
+[F3-T07](../tasks/F3-T07.md) restores the reported creation and visual user
+experience after the maintainer rejected the implemented screens during actual
+use. Existing passing checks do not establish acceptance of those screens.
+
+The maintainer authorized implementation and accepted the detailed policy in
+[ADR-0023](../adr/0023-slo-operational-urgency.md) on 2026-10-29. F3-T02 starts with
+coordinator review of the designated API contract prerequisite. F3-T03 remains
+dependent on that contract and F3-T02. F3-T04 is an independent presentation increment, but its
+bounded list projection must be settled before dispatch. No product implementation
+is authorized by an unaccepted proposal. API design is part of preparing these
+complete usable increments, not a separate series of storage/API/UI-only deliveries.
+
+Keep numerical computation on the backend and use bounded list projections rather
+than one full evaluation per row. Reuse the actual shared controls and charts;
+extend their catalogue examples alongside feature changes. The UI/client worker
+begins after the coordinator reviews the generated wire contract. Run a real
+list → create → detail → SLI → back journey early, before broad verification.
 
 The maintainer explicitly deferred external submission on 2026-10-28 and then
 requested F3. F2 remains incomplete. The proposed external-datasource mental model

@@ -64,10 +64,17 @@ directories you change, then the relevant specs and ADRs.
   redirections or working-directory tricks to obtain execution. Never request a
   new command approval during unattended work; leave that operation pending and
   continue independent work. Pass this restriction and exact commands to workers.
+  The maintainer-approved closed focused-verification catalog in
+  [command discipline](docs/commands.md) is reusable within its validated selectors,
+  isolated fixture and local task metadata; do not request that approval again.
 - The implementer submits code and evidence for review; it cannot accept its own
   task, relax checks, change product contracts or start later milestones. After
-  two unsuccessful correction rounds on one issue, reframe the task or ask before
-  taking over substantial implementation. Prefer one consolidated coordinator
+  two unsuccessful handoffs across an increment, change the delivery approach
+  before another handoff. A different error or renamed correction brief does not
+  reset that count. Keep one owner through a working real journey; do not turn
+  unit-only handoffs into a coordinator-owned runtime debugging loop. Reframing
+  preserves the failure history and still requires agreement before the coordinator
+  takes over substantial implementation. Prefer one consolidated coordinator
   review; repeat review only for changed code or unresolved findings.
 - Start a new task turn when assigning corrections to a completed implementer.
   A message to an idle agent does not restart it. Check its state after dispatch
@@ -110,6 +117,14 @@ directories you change, then the relevant specs and ADRs.
   feature screens should reuse them. Shared controls, timeline charts, exact-value
   tables and their catalogue examples exist.
   Backend architecture remains subject to explicit decisions.
+- SLI and SLO screen composition follows the retained
+  [slo-tracker visual references](docs/design/slo-visual-reference.md), with the
+  current left navigation. Preserve dense lists, explained measurement choices,
+  objective presets, urgency groups and the timeline/status-rail detail layout.
+  Copy the existing slo-tracker list/detail markup, layout rules and chart geometry
+  directly; do not reinterpret, redesign or approximate those pages.
+  Matching colors/fonts or rendering a simplified chart is not visual acceptance;
+  compare actual pages side by side and record any undelivered data/interaction gaps.
 - Keep maintenance exclusions, notification silences and graph annotations distinct.
   Maintenance omits eligible measurements without deleting them; silences affect
   delivery only; annotations supply context without changing calculations or alerts.
@@ -206,6 +221,14 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   accepting combined work and broader checks at the required milestone/risk boundary.
   Do not wrap every focused test in a full build/browser matrix. Separate cached
   setup from execution, and verify the stack matches the candidate revision.
+- Reserve Compose end-to-end, the catalogue browser matrix and the database/API
+  integration suite for a completed, integrated task candidate and PR verification.
+  Use focused unit/component tests and static checks during implementation. Early
+  inspection of a running page or one user journey does not authorize those broad
+  suites. A worker handoff or small edit does not trigger them. Reuse passing task
+  evidence for the PR when relevant inputs match. After a gate failure, diagnose
+  and correct with focused checks; rerun the affected gate when the corrected
+  candidate is ready, retaining evidence for unaffected gates and all failures.
 - Keep the maintainer's preview available during verification. Browser checks own
   a separate port and server; never stop the preview to free their port. If a
   preview must restart after integration, restore it and verify the URL before
@@ -268,6 +291,11 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   retain it as an open investigation with the evidence needed for diagnosis.
 - Report checks actually run, their results, and any gaps. Do not claim that
   tests passed based on an earlier codebase or a different revision.
+- Keep a persistent test-run ledger: command/mode, start/end, elapsed time,
+  result and rerun count. Report cumulative invocation time and wall time occupied
+  by tests separately so parallel runs are not double-counted. Retain failures,
+  distinguish nested checks from their parent gate, and mark missing timings
+  unknown. Include the current totals in delivery updates.
 - Keep changes reviewable and confined to the current feature. Do not begin
   later milestones merely because related code is available.
 - Use `make bootstrap` for the container-only local app, `make run` (or `make start`)

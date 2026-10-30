@@ -1,5 +1,10 @@
 # SPEC-0014: Delivery and verification
 
+> Accepted amendment, 2026-10-30: Feature delivery is paused for backend stabilization. Acceptance requires the specified real PostgreSQL/API/browser workloads, latency/currentness gates, fault recovery and live-ingestion isolation. Existing frontend-only fixtures cannot establish backend capacity.
+> [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
+> behavior and additional acceptance criteria AC-01 through AC-09, approved by the
+> maintainer after Crit review. Implementation remains outstanding.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

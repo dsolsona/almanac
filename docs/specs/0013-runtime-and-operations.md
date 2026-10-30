@@ -1,5 +1,10 @@
 # SPEC-0013: Runtime and operations
 
+> Accepted amendment, 2026-10-30: The backend owns bounded database pools and durable derivation workers. Schema compatibility is gated at startup/readiness, with lag, queue and pool diagnostics. Restart and shutdown preserve dirty generations and reserved live capacity.
+> [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
+> behavior and additional acceptance criteria AC-01 through AC-09, approved by the
+> maintainer after Crit review. Implementation remains outstanding.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"path/filepath"
@@ -104,9 +105,18 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("concurrent agent renewal: %v", err)
 	}
 	record := result.record
-	page, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", clock)
-	if err != nil || len(page.Items) != 1 || page.Items[0].ID != record.ID || page.Items[0].LatestObservation != nil {
+	page, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", clock)
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != record.ID || page.Items[0].LatestObservation != nil || page.Items[0].ListProjection == nil ||
+		page.Items[0].ListProjection.DatasourceDisplayName == nil || *page.Items[0].ListProjection.DatasourceDisplayName != source.Settings.DisplayName || len(page.Items[0].ListProjection.RecentMeasurements) != 0 || len(page.Items[0].ListProjection.LinkedSLOs) != 0 {
 		t.Fatalf("new SLI list = %+v, %v", page, err)
+	}
+	filtered, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "REQUESTS", source.ID, clock)
+	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].ID != record.ID {
+		t.Fatalf("case-insensitive pre-pagination SLI filters = %+v, %v", filtered, err)
+	}
+	noMatch, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "missing", source.ID, clock)
+	if err != nil || len(noMatch.Items) != 0 || noMatch.NextCursor != "" {
+		t.Fatalf("nonmatching SLI filter = %+v, %v", noMatch, err)
 	}
 	unchanged, err := UpdateSliMetadata(t.Context(), f.databaseURL, UpdateSliMetadataInput{Proof: proof, SliID: record.ID, ExpectedVersion: record.Version, DisplayName: record.DisplayName, RequestID: "noop", Now: clock})
 	if err != nil || unchanged.Version != record.Version {
@@ -227,6 +237,71 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	var good string
 	if err := conn.QueryRow(t.Context(), `SELECT good_count::text FROM public.almanac_sli_observation_values WHERE sli_id=$1`, record.ID).Scan(&good); err != nil || good != "99.000000000000" {
 		t.Fatalf("canonical value = %q, %v", good, err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=0, total_count=0 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
+		t.Fatal("seed database-backed SLI zero-traffic projection failed")
+	}
+	zeroPage, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", clock)
+	if err != nil || len(zeroPage.Items) != 1 || zeroPage.Items[0].ListProjection == nil {
+		t.Fatalf("database-backed zero-traffic list projection = %+v, %v", zeroPage, err)
+	}
+	var zeroSample *SliRecentMeasurement
+	for index := range zeroPage.Items[0].ListProjection.RecentMeasurements {
+		sample := &zeroPage.Items[0].ListProjection.RecentMeasurements[index]
+		if sample.IntervalStart.Equal(item.IntervalStart) {
+			zeroSample = sample
+			break
+		}
+	}
+	if zeroSample == nil || zeroSample.State != "zero_traffic" || zeroSample.GoodCount == nil || *zeroSample.GoodCount != "0" || zeroSample.TotalCount == nil || *zeroSample.TotalCount != "0" {
+		t.Fatalf("database-backed zero-traffic sample = %+v, page: %+v", zeroSample, zeroPage)
+	}
+	t.Run("recent list bounds and query plan", func(t *testing.T) {
+		tx, err := conn.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(t.Context())
+		captured := &rotationIndexQueryCapture{Tx: tx}
+		for _, slots := range []int{0, 1, 12, 24} {
+			listNow := zeroPage.Items[0].EffectiveFrom.Add(time.Duration(60+15*slots) * time.Second)
+			rows, err := dbgen.New(captured).ListSlis(t.Context(), dbgen.ListSlisParams{
+				CreatedAt: timestamp(time.Time{}), CursorID: uuidOrZero(""), LimitCount: 51,
+				RetentionCutoff: timestamp(listNow.Add(-sli.ObservationRetention)), ListNow: timestamp(listNow),
+			})
+			if err != nil || len(rows) != 1 {
+				t.Fatalf("list with %d elapsed intervals: rows=%d, error=%v", slots, len(rows), err)
+			}
+			var recent []jsontext.Value
+			if err := json.Unmarshal([]byte(rows[0].RecentMeasurements), &recent); err != nil || len(recent) != min(slots, 12) {
+				t.Fatalf("list with %d elapsed intervals returned %d recent slots: %v", slots, len(recent), err)
+			}
+		}
+		var raw []byte
+		if err := tx.QueryRow(t.Context(), "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+captured.query, captured.args...).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var explained []struct {
+			Plan struct {
+				TotalCost float64 `json:"Total Cost"`
+			} `json:"Plan"`
+			PlanningTime  float64 `json:"Planning Time"`
+			ExecutionTime float64 `json:"Execution Time"`
+			JIT           struct {
+				Functions int `json:"Functions"`
+			} `json:"JIT"`
+		}
+		if err := json.Unmarshal(raw, &explained); err != nil || len(explained) != 1 {
+			t.Fatalf("decode SLI list plan: %v", err)
+		}
+		plan := explained[0]
+		t.Logf("SLI list: planning %.3f ms; execution %.3f ms; estimated cost %.2f; JIT functions %d", plan.PlanningTime, plan.ExecutionTime, plan.Plan.TotalCost, plan.JIT.Functions)
+		if plan.JIT.Functions != 0 {
+			t.Fatalf("bounded twelve-slot SLI list unexpectedly requires JIT compilation: %s", raw)
+		}
+	})
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=99, total_count=100 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
+		t.Fatal("restore database-backed SLI sample after zero-traffic projection failed")
 	}
 	serviceInput := CreateObjectiveInput{Proof: proof, Name: "api", DisplayName: "API", IdempotencyKey: "service-create", RequestID: "service-create", Now: clock}
 	service, _, err := CreateObjective(t.Context(), f.databaseURL, serviceInput, false)
@@ -565,6 +640,11 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c LEFT JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision) WHERE c.sli_id=$1 AND c.interval_start=$2 AND c.outcome='complete_empty' AND v.sli_id IS NULL`, record.ID, empty.IntervalStart).Scan(&emptyCount); err != nil || emptyCount != 1 {
 		t.Fatalf("complete empty coverage without fabricated values: %d, %v", emptyCount, err)
 	}
+	emptyFacts, err := dbgen.New(conn).ListOperationalSloFacts(t.Context(), dbgen.ListOperationalSloFactsParams{SliID: mustPGUUID(record.ID), MeasurementRevision: 1,
+		IntervalStart: timestamp(empty.IntervalStart), IntervalEnd: timestamp(empty.IntervalEnd), Limit: 1})
+	if err != nil || len(emptyFacts) != 1 || emptyFacts[0].Outcome != "complete_empty" || emptyFacts[0].Good != "" || emptyFacts[0].Total != "" {
+		t.Fatalf("known-empty operational facts = %+v, %v; want one complete-empty fact with empty numeric fields", emptyFacts, err)
+	}
 	emptyFrom := empty.IntervalStart
 	emptyInput := CreateObjectiveInput{Proof: proof, Name: "empty-only", DisplayName: "Empty only", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 120, EvaluationValidFrom: &emptyFrom, IdempotencyKey: "empty-only", RequestID: "empty-only", Now: clock}
 	_, emptySlo, err := CreateObjective(t.Context(), f.databaseURL, emptyInput, true)
@@ -617,10 +697,10 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19, 20, 21)`); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 4 || result.DatabaseSchemaVersion != 19 {
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 21 {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {

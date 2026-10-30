@@ -18,10 +18,11 @@ not that the API, database, authentication or collector works.
 | Go unit/calculation | Arithmetic, validation, state transitions and boundary cases without network/DB | Focused during edits; complete unit suite in integration gate |
 | UI unit/component | Formatting, controls, forms, loading/error states and keyboard behavior | Focused during edits; complete suite in gate |
 | API/contract | Request/response compatibility, auth decisions, CLI/API parity and generated contract consistency | When relevant contracts/handlers/clients change; full contract check in gate |
-| PostgreSQL integration | Real constraints, transactions, concurrent writes, persistence, leases, retention and upgrades | Focused affected cases during edits; full suite in gate |
-| Agent/protocol integration | Actual agent/backend communication, ingestion, reconnects, capabilities and isolation | On agent/API changes; critical path in gate |
-| Browser smoke | Small set of real authenticated user journeys across UI/API/DB | UI or integration changes and integration gate |
-| Browser broad | Wider workflows, permission failures, themes/mobile and supported browsers | Affected flows before acceptance; full suite before milestone/release |
+| PostgreSQL integration | Real constraints, transactions, concurrent writes, persistence, leases, retention and upgrades | Completed integrated task candidate and PR verification |
+| Agent/protocol integration | Actual agent/backend communication, ingestion, reconnects, capabilities and isolation | Completed task/PR verification for agent/API changes |
+| Browser smoke | Small set of real authenticated user journeys across UI/API/DB | Completed task candidate and integration gate |
+| Browser broad | Wider workflows, permission failures, themes/mobile and supported browsers | Catalogue matrix at task completion/PR verification; full supported matrix before milestone/release |
+| Compose end-to-end | Normal container deployment, onboarding, collection, user journeys, restarts and cleanup | Completed integrated task candidate and PR verification |
 | Performance/recovery | UI budgets, sustained isolation, process failure, upgrade/restore and deployment | Affected boundary changes and milestone/release, independently reported |
 
 Use Go's standard test facilities. Choose/pin compatible UI/component and browser
@@ -31,18 +32,26 @@ assert specific tool versions merely because a reference setup uses them.
 
 ## Gate selection
 
-Start an end-to-end feature with one real user journey as soon as it is wired.
-Diagnose shared failures there before multiplying them across scenarios. For UI,
-inspect an actual rendered page before completing the broad theme/viewport matrix.
-Use focused checks for corrections, then the required integrated gate once the
-candidate is ready. This sequencing never waives a failed required gate.
+Inspect a running real page or a single user journey early. This inspection must
+not launch the Compose end-to-end suite, catalogue browser matrix or database/API
+integration suite. Those broad suites run once implementation is complete and the
+task is integrated for completion/PR verification. A partial worker handoff, small
+edit or request for status does not trigger them. Reuse passing completion evidence
+for the PR when its relevant inputs match; publishing the same candidate does not
+require another run.
+
+If a completion gate fails, preserve the failure, diagnose it and use focused
+unit/component checks during correction. Run the affected gate when the corrected
+candidate is ready, retaining passing evidence for unaffected gates. This sequencing
+does not waive a failed required gate or replace real-stack acceptance with mocks.
 Command availability is governed by [command discipline](commands.md); do not
 request new approvals or improvise invocation variations to obtain a focused run.
 
-- **Edit loop:** formatting/type checks and focused affected tests. It must support
-  selecting one Go package/test, UI test or browser journey. It never implicitly
-  installs dependencies or runs every browser/project.
-- **Task review:** focused checks plus the boundaries the task changes. API/storage
+- **Edit loop:** formatting/type checks and focused unit/component tests. Inspect
+  the existing running application as needed; reserve the broad suites above for
+  completion/PR verification. Never implicitly install dependencies or run every
+  browser/project.
+- **Task review:** once implementation is complete, verify the boundaries the task changes. API/storage
   changes need real integration evidence; UI flows need the real stack, and agent
   changes need real agent/backend execution. The coordinator records why a check is
   inapplicable. An uncertain dependency scope expands verification, not shrinks it.

@@ -3,7 +3,7 @@ import { Button } from '../ui/Button.tsx';
 import type { Coverage } from './timelineModel.ts';
 import './charts.css';
 
-export type ExactValueRow = { timestamp: string; lane: string; series: string; unit: string; value: string | null; coverage: Coverage };
+export type ExactValueRow = { timestamp: string; lane: string; series: string; unit: string; value: string | null; coverage: Coverage; details?: string };
 export function ExactValuesTable({ rows, page, totalRows, onPageChange }: {
   rows: ExactValueRow[]; page: number; totalRows: number; onPageChange: (page: number) => void;
 }) {
@@ -19,16 +19,17 @@ export function ExactValuesTable({ rows, page, totalRows, onPageChange }: {
   if (error) return <section className="exact-values" aria-labelledby={titleId}><h2 id={titleId}>Exact values</h2><p role="alert">Table unavailable: {error}</p></section>;
   const first = totalRows === 0 ? 0 : (page - 1) * 50 + 1;
   const last = Math.min(page * 50, totalRows);
+  const hasDetails = rows.some(row => row.details !== undefined);
   return <section className="exact-values" aria-labelledby={titleId}>
     <h2 id={titleId}>Exact values</h2>
     <div className="exact-values__scroll" role="region" aria-label="Exact timeline values" tabIndex={0}>
       <table>
         <caption>Exact timeline values for the displayed range</caption>
-        <thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Lane</th><th scope="col">Series</th><th scope="col">Value</th><th scope="col">Coverage</th></tr></thead>
+        <thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Lane</th><th scope="col">Series</th><th scope="col">Value</th><th scope="col">Coverage</th>{hasDetails&&<th scope="col">Details</th>}</tr></thead>
         <tbody>{rows.map((row, index) => <tr key={`${row.timestamp}-${row.lane}-${row.series}-${index}`}>
           <td className="mono">{row.timestamp}</td><td>{row.lane}</td><td>{row.series}</td>
           <td className="mono">{row.value === null ? '—' : `${row.value} ${row.unit}`}</td>
-          <td><span className={`coverage-label coverage-label--${row.coverage}`}>{({ 'zero-traffic': 'Zero traffic', missing: 'Missing', partial: 'Partial', complete: 'Complete', 'known-empty': 'Known empty', expired: 'Expired history', 'not-applicable': 'Not applicable' })[row.coverage]}</span></td>
+          <td><span className={`coverage-label coverage-label--${row.coverage}`}>{({ 'zero-traffic': 'Zero traffic', missing: 'Missing', partial: 'Partial', complete: 'Complete', 'known-empty': 'Known empty', expired: 'Expired history', 'not-applicable': 'Not applicable', stale: 'Stale' })[row.coverage]}</span></td>{hasDetails&&<td>{row.details??'—'}</td>}
         </tr>)}</tbody>
       </table>
     </div>

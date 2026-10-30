@@ -19,11 +19,45 @@ These rules apply to the coordinator and every implementer, including future ses
 
 ## Recorded verification invocations
 
+On 2026-10-29 the maintainer approved a closed verification catalog: the fixed
+`verification-tools`, `slo-unit`, `slo-integration`, `slo-journey` and
+`agent-lifecycle` modes, plus local `verification-init`, `verification-report` and
+`verification-handoff` targets with validated task-plan/replan metadata. Database
+checks use the existing isolated fixture below. Reuse this approval throughout the
+authorized task. Other selectors and command forms retain the exact-invocation rule.
+
+The controls live in `scripts/verification-controls.py`. An active local
+`.local/verification/task.json` enables task-wide budgets; worker checkouts share
+the same state through a symlink. Source-bound pass/fail receipts are retained in
+the canonical task state's `receipts/` directory. Missing, failed, stale or
+incomplete evidence prevents a ready handoff. The local files remain editable;
+the guard prevents accidental loops and does not establish a security boundary.
+
+Every completed verification run refreshes the canonical project-root
+`.local/verification/timing-ledger.json` and `timing-ledger.md`, including runs
+from worker checkouts. `make verification-report` also refreshes and prints timing
+totals before checking handoff readiness; failed readiness still returns nonzero.
+The ledger deduplicates shared receipts, retains failures and reports per-mode run
+counts, invocation elapsed time and overlapping wall time counted once. Invocation
+time includes build/startup/cleanup. History without receipts is incomplete.
+For checks outside these targets, append a record to the fixed local
+`.local/verification/manual-runs.jsonl` with a unique `id`, `command`, `result`,
+`started_unix`, `ended_unix` and `elapsed_seconds`; use null for unknown timings.
+This file records evidence only and never executes its command text.
+
 These invocations have been approved in the current development environment. Recheck
 availability in a new environment; do not extrapolate to other selectors or paths.
 
 ```sh
 make verify
+make verify VERIFY_MODE=verification-tools
+make verify VERIFY_MODE=slo-unit
+make verify VERIFY_MODE=slo-integration ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=slo-journey ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=agent-lifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verification-init VERIFICATION_PLAN=.local/verification-plan.json
+make verification-report
+make verification-handoff
 make verify VERIFY_MODE=compose
 make verify VERIFY_MODE=go-race
 make verify VERIFY_MODE=unit TEST_FILE=tests/agents-client.test.tsx
@@ -44,6 +78,10 @@ on the F2-T16 candidate and checks that the named journey actually executed; it 
 not replace the full required integration gate.
 Fixture credentials above belong only to the isolated local acceptance database.
 Keep real credentials out of commands, logs and published artifacts.
+
+The focused tooling and SLO checks above have executed successfully. Report and
+handoff commands have also been verified to refuse the active task while required
+evidence or a recorded replan is missing. A deliberate guard refusal runs no tests.
 
 Local Compose startup requires host curl as well as Docker Compose and Make. It
 checks host HTTPS readiness with the application's public certificate before

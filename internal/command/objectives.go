@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/cliprofile"
@@ -29,12 +30,13 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	operation := kind + " " + action
 	rest := args[1:]
 	jsonOut := requestedJSON(rest)
-	valid := kind == "services" && (action == "list" || action == "get" || action == "create" || action == "update") || kind == "slos" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "evaluate")
+	valid := kind == "services" && (action == "list" || action == "get" || action == "create" || action == "update") || kind == "slos" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "evaluate" || action == "overview" || action == "operational")
 	if !valid {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("choose a supported command"))
 	}
 	var profile, id, serviceID, inputFile, etag, key, cursor, output, at, start, end string
-	var limit int
+	var query, urgency, operationalStart, operationalEnd string
+	var limit, burnWindowSeconds int
 	var timeout time.Duration
 	fs := flag.NewFlagSet(operation, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -53,6 +55,11 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	fs.StringVar(&at, "at", "", "evaluation time")
 	fs.StringVar(&start, "timeline-start", "", "timeline start")
 	fs.StringVar(&end, "timeline-end", "", "timeline end")
+	fs.StringVar(&query, "q", "", "literal name search")
+	fs.StringVar(&urgency, "urgency", "", "needs_attention, watch or healthy")
+	fs.StringVar(&operationalStart, "start", "", "operational history range start")
+	fs.StringVar(&operationalEnd, "end", "", "operational history range end")
+	fs.IntVar(&burnWindowSeconds, "burn-window-seconds", 3600, "selected operational burn window")
 	// Services already uses service-id as its resource ID.
 	if kind == "services" {
 		_ = serviceID
@@ -83,6 +90,13 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if action == "evaluate" {
 		allowed["at"], allowed["timeline-start"], allowed["timeline-end"] = true, true, true
 	}
+	if action == "overview" {
+		allowed["q"], allowed["urgency"], allowed["service-id"] = true, true, true
+		allowed["limit"], allowed["cursor"] = true, true
+	}
+	if action == "operational" {
+		allowed[idFlag], allowed["at"], allowed["start"], allowed["end"], allowed["burn-window-seconds"] = true, true, true, true, true
+	}
 	for k := range seen {
 		if !allowed[k] {
 			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("a flag is not valid for this operation"))
@@ -91,8 +105,14 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if output != "json" && output != "text" || profile == "" || timeout <= 0 || timeout > 2*time.Minute || limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("invalid output, profile, deadline or pagination"))
 	}
-	if (action == "get" || action == "update" || action == "evaluate") && !validCLIUUID(id) || serviceID != "" && !validCLIUUID(serviceID) {
+	if (action == "get" || action == "update" || action == "evaluate" || action == "operational") && !validCLIUUID(id) || serviceID != "" && !validCLIUUID(serviceID) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("resource identifier must be a canonical UUID"))
+	}
+	if action == "overview" && (!utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 || urgency != "" && urgency != "needs_attention" && urgency != "watch" && urgency != "healthy") {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("overview search or urgency filter is invalid"))
+	}
+	if action == "operational" && burnWindowSeconds != 3600 && burnWindowSeconds != 21600 {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("burn window must be 3600 or 21600 seconds"))
 	}
 	if action == "create" && (inputFile == "" || !validKey(key)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and idempotency-key are required"))
@@ -118,6 +138,22 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	endTime, e3 := parse(end)
 	if e1 != nil || e2 != nil || e3 != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("times must be RFC3339 instants"))
+	}
+	var operationalStartTime, operationalEndTime *time.Time
+	if action == "operational" {
+		var ok bool
+		atTime, ok = parseOperationalTime(at)
+		if !ok {
+			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("operational times must be UTC RFC3339 instants with microsecond precision"))
+		}
+		operationalStartTime, ok = parseOperationalTime(operationalStart)
+		if !ok {
+			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("operational times must be UTC RFC3339 instants with microsecond precision"))
+		}
+		operationalEndTime, ok = parseOperationalTime(operationalEnd)
+		if !ok || !validOperationalRange(operationalStartTime, operationalEndTime) {
+			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("provide both operational range bounds, aligned, positive and no longer than 365 days"))
+		}
 	}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -171,7 +207,7 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if !ok {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("objective operations unavailable"))
 	}
-	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime})
+	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
 	if err != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err)
 	}
@@ -206,6 +242,41 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 		}
 		return 0
 	}
+	if action == "overview" {
+		var overview api.SloOperationalOverviewPage
+		if json.Unmarshal(data, &overview) == nil {
+			if len(overview.Items) == 0 {
+				fmt.Fprintln(stdout, "No SLOs match these filters.")
+			}
+			fmt.Fprintln(stdout, "SLO\tUrgency\tRemaining events\tBurn 1 h\tBurn 6 h\tExhaustion")
+			for _, item := range overview.Items {
+				performance := item.Current.Performance
+				fmt.Fprintf(stdout, "%s\t%s (%s)\t%s\t%s\t%s\t%s\n", item.Slo.DisplayName, item.Urgency, item.LeadingReason.Code, objectiveValue(performance.RemainingBudget), burnSummary(item.Burn1h), burnSummary(item.Burn6h), objectiveExhaustion(item.Exhaustion))
+				fmt.Fprintf(stdout, "  %s · %s · %s target over %d seconds · sparkline %d samples\n", item.Slo.ServiceDisplayName, item.Slo.SliDisplayName, item.Slo.Target, item.Slo.RollingWindowSeconds, len(item.BudgetSparkline))
+			}
+			if overview.NextCursor != "" {
+				fmt.Fprintf(stdout, "Next cursor: %s\n", overview.NextCursor)
+			}
+			return 0
+		}
+	}
+	if action == "operational" {
+		var detail api.SloOperationalDetail
+		if json.Unmarshal(data, &detail) == nil {
+			p, q := detail.Current.Performance, detail.Current.Quality
+			selectedBurn := detail.Burn1h.Performance.Burn
+			if burnWindowSeconds == 21600 {
+				selectedBurn = detail.Burn6h.Performance.Burn
+			}
+			fmt.Fprintf(stdout, "%s · %s · %s\n", detail.Objective.DisplayName, detail.Urgency, detail.LeadingReason.Code)
+			fmt.Fprintf(stdout, "Performance: %s%s · attainment: %s · remaining: %s events (fraction %s)\n", p.State, provisionalSuffix(p.Provisional), objectiveValue(p.Attainment), objectiveValue(p.RemainingBudget), objectiveValue(p.RemainingFraction))
+			fmt.Fprintf(stdout, "Burn 1 h: %s · Burn 6 h: %s · selected %d h: %s\n", burnSummary(detail.Burn1h), burnSummary(detail.Burn6h), burnWindowSeconds/3600, objectiveBurn(selectedBurn))
+			fmt.Fprintf(stdout, "Coverage: %s · observed %d, missing %d, expired %d of %d intervals · freshness %s\n", objectiveValue(q.Coverage), q.ObservedIntervals, q.MissingIntervals, q.ExpiredIntervals, q.ExpectedIntervals, q.Freshness)
+			fmt.Fprintf(stdout, "Exhaustion: %s · history %s to %s · %d attainment, %d budget and %d burn samples\n", objectiveExhaustion(detail.Exhaustion), detail.Range.EffectiveStart.Format(time.RFC3339Nano), detail.Range.EffectiveEnd.Format(time.RFC3339Nano), len(detail.AttainmentSeries.Samples), len(detail.BudgetSeries.Samples), len(detail.BurnSeries.Samples))
+			fmt.Fprintf(stdout, "Service: %s · SLI: %s · datasource: %s\n", detail.Objective.ServiceDisplayName, detail.Context.SliDisplayName, detail.Context.DatasourceDisplayName)
+			return 0
+		}
+	}
 	if action == "evaluate" {
 		var evaluation api.SloEvaluation
 		if json.Unmarshal(data, &evaluation) == nil {
@@ -237,11 +308,77 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	}
 	return 0
 }
+
+func parseOperationalTime(value string) (*time.Time, bool) {
+	if value == "" {
+		return nil, true
+	}
+	if !strings.HasSuffix(value, "Z") {
+		return nil, false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil || parsed.Nanosecond()%1_000 != 0 {
+		return nil, false
+	}
+	return &parsed, true
+}
+
+func validOperationalRange(start, end *time.Time) bool {
+	if (start == nil) != (end == nil) {
+		return false
+	}
+	if start == nil {
+		return true
+	}
+	rangeLength := end.Sub(*start)
+	return rangeLength > 0 && rangeLength <= 365*24*time.Hour
+}
+
 func objectiveValue(value *string) string {
 	if value == nil {
 		return "—"
 	}
 	return *value
+}
+
+func objectiveBurn(value *string) string {
+	if value == nil {
+		return "unavailable"
+	}
+	return *value + "×"
+}
+
+func burnSummary(value api.SloBurnValue) string {
+	if value.Performance.Burn != nil {
+		return objectiveBurn(value.Performance.Burn)
+	}
+	if value.Quality.Reason != nil && *value.Quality.Reason != "" {
+		return "unavailable (" + *value.Quality.Reason + ")"
+	}
+	return "unavailable (" + string(value.Quality.State) + ")"
+}
+
+func objectiveExhaustion(value api.SloExhaustionEstimate) string {
+	switch value.State {
+	case "exhausted":
+		return "exhausted"
+	case "estimated":
+		if value.HoursUntilExhaustion != nil {
+			return *value.HoursUntilExhaustion + " h at observed 1 h bad-event rate"
+		}
+	case "unavailable":
+		if value.Reason != nil {
+			return *value.Reason
+		}
+	}
+	return "no finite estimate"
+}
+
+func provisionalSuffix(provisional bool) string {
+	if provisional {
+		return " (observed only)"
+	}
+	return ""
 }
 func validObjectiveETag(tag, kind, id string) bool {
 	prefix := `"` + kind + ":" + id + ":"

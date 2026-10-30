@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('charts load on demand and render SVG with exact table paging and hover details', async ({ page }, testInfo) => {
   const chartRequests: string[] = [];
-  page.on('request', (request) => { if (/echarts|components\/charts|ChartsSection|chartFixture/.test(request.url())) chartRequests.push(request.url()); });
+  page.on('request', (request) => { if (/echarts|\/src\/components\/charts\/(?:TimelineChartView|timelineModel|timelineOption)\.tsx?|\/src\/catalogue\/(?:ChartsSection|chartFixture)\.tsx?/.test(request.url())) chartRequests.push(request.url()); });
   await page.goto('/design-system');
   await expect(page.getByRole('heading', { name: 'Clear signals. Steady decisions.' })).toBeVisible();
   expect(chartRequests).toHaveLength(0);
@@ -12,9 +12,9 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await expect(plot.locator('svg')).toBeVisible();
   const visiblePointMarkers = await plot.locator('svg path[fill]:not([fill="none"])').count();
   expect(visiblePointMarkers).toBeGreaterThanOrEqual(8);
-  const isolatedMinuteNineMarker = await plot.locator('svg path[fill]:not([fill="none"])').evaluateAll((paths, plotRect) => {
+  const isolatedDailyMarker = await plot.locator('svg path[fill]:not([fill="none"])').evaluateAll((paths, plotRect) => {
     const bounds = plotRect as { x: number; y: number; width: number; height: number };
-    const expectedX = bounds.x + 66 + (9 / 16) * (bounds.width - 86);
+    const expectedX = bounds.x + 66 + (9 / 60) * (bounds.width - 86);
     return paths.some((path) => {
       const marker = path.getBoundingClientRect();
       const centerX = marker.x + marker.width / 2;
@@ -23,7 +23,8 @@ test('charts load on demand and render SVG with exact table paging and hover det
         Math.abs(centerX - expectedX) <= 5 && centerY >= bounds.y + bounds.height * .05 && centerY <= bounds.y + bounds.height * .25;
     });
   }, await plot.boundingBox());
-  expect(isolatedMinuteNineMarker, 'isolated complete sample at minute 9 has a visible SVG marker').toBe(true);
+  expect(isolatedDailyMarker, 'isolated complete sample at day 9 has a visible SVG marker').toBe(true);
+  await page.locator('.timeline-chart__lane-control').first().click();
   await expect(page.getByRole('table').locator('tbody').getByText('99.970000 %', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Complete', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('page 1 of 2')).toBeVisible();
@@ -37,22 +38,28 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await plot.scrollIntoViewIfNeeded();
   const box = await plot.boundingBox();
   if (!box) throw new Error('Chart plot has no visible bounds');
-  const moveToMinute = (minute: number) => page.mouse.move(box.x + 66 + (minute / 16) * (box.width - 66 - 20), box.y + box.height * 0.18);
-  await moveToMinute(4);
+  const moveToDay = (day: number) => page.mouse.move(box.x + 66 + (day / 60) * (box.width - 86), box.y + box.height * 0.18);
+  await moveToDay(4);
   const tooltip = page.locator('.timeline-chart-tooltip');
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toContainText('SLI · Example service');
   await expect(tooltip).toContainText('99.960000 % · Partial');
-  await moveToMinute(5);
+  await moveToDay(5);
   await expect(tooltip).toContainText('SLI · Example service: Missing');
   await expect(tooltip).not.toContainText('99.960000 %');
-  await moveToMinute(6);
+  await moveToDay(6);
   await expect(tooltip).toContainText('SLI · Example service: 0.000000 % · Complete');
-  await moveToMinute(8);
+  await moveToDay(8);
   await expect(tooltip).toContainText('No sample at this timestamp');
   await expect(tooltip).not.toContainText('99.950000 %');
-  await moveToMinute(10);
+  await moveToDay(10);
   await expect(tooltip).toContainText('SLI · Example service: Zero traffic');
+  await moveToDay(11);
+  await expect(tooltip).toContainText('SLI · Example service: Known empty');
+  await moveToDay(12);
+  await expect(tooltip).toContainText('SLI · Example service: Expired');
+  await moveToDay(13);
+  await expect(tooltip).toContainText('SLI · Example service: Not applicable');
   await page.screenshot({ path: test.info().outputPath('charts.png'), fullPage: true });
 });
 
@@ -61,6 +68,7 @@ test('chart theme updates and keyboard pagination work without page overflow', a
   await page.getByRole('navigation', { name: 'Catalogue sections' }).getByRole('button', { name: 'Charts' }).click();
   const svg = page.locator('.timeline-chart__plot svg');
   await expect(svg).toBeVisible();
+  await page.locator('.timeline-chart__lane-control').first().click();
   const before = await svg.locator('path').first().getAttribute('stroke');
   const themeToggle = page.locator('.masthead').getByRole('button', { name: /switch to (light|dark) theme/i });
   const startedDark = await themeToggle.getAttribute('aria-pressed') === 'true';
@@ -100,8 +108,9 @@ test('chart and table retain their shared layout without catalogue styles', asyn
   const plot = page.locator('.timeline-chart__plot');
   const tableScroll = page.locator('.exact-values__scroll');
   await expect(plot.locator('svg')).toBeVisible();
+  await page.locator('.timeline-chart__lane-control').first().click();
   await expect.poll(() => panel.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe('1px');
-  expect(await plot.evaluate((element) => getComputedStyle(element).height)).toBe('420px');
+  expect(await plot.evaluate((element) => getComputedStyle(element).height)).toBe('600px');
   expect(await tableScroll.evaluate((element) => getComputedStyle(element).overflow)).toBe('auto');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await plot.evaluate((element) => getComputedStyle(element).height)).toBe('400px');
@@ -119,7 +128,8 @@ test('rendered axis labels meet text contrast in light and dark themes', async (
   for (const dark of [false, true]) {
     await page.evaluate((useDark) => document.documentElement.classList.toggle('dark', useDark), dark);
     const contrast = await page.evaluate(() => {
-      const label = [...document.querySelectorAll('.timeline-chart__plot svg text')].find((element) => element.textContent?.trim() === 'SLI (%)');
+      const label = [...document.querySelectorAll('.timeline-chart__plot svg text, .timeline-chart__plot svg tspan')]
+        .find((element) => element.textContent?.replace(/[\s\u200b]+/g, '') === 'SLI(%)');
       const panel = document.querySelector('.timeline-chart');
       if (!label || !panel) return null;
       const rgb = (color: string) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);

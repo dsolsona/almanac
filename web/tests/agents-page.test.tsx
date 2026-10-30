@@ -47,7 +47,11 @@ describe('agent administration screen', () => {
       if (url.includes(`/agents/${agentID}`)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
       return response({ items: [agent()], next_cursor: '' });
     }));
-    render(<AuthPage client={makeAuth()} />); await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await act(async () => {
+      render(<AuthPage client={makeAuth()} />);
+      await vi.dynamicImportSettled();
+    });
+    await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Delete agent' }));
     const dialog = screen.getByRole('dialog', { name: 'Delete agent' });
     await within(dialog).findByRole('link', { name: 'First (first)' });

@@ -1,4 +1,14 @@
-.PHONY: setup build verify preview generate bootstrap run start stop logs credentials agent _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup build verify preview generate bootstrap run start stop logs credentials agent verification-init verification-report verification-handoff _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
+
+verification-init:
+	@test -n "$${VERIFICATION_PLAN:-}" || { echo 'VERIFICATION_PLAN must name the task budget JSON' >&2; exit 2; }
+	@python3 scripts/verification-controls.py init
+
+verification-report:
+	@python3 scripts/verification-controls.py report
+
+verification-handoff:
+	@python3 scripts/verification-controls.py handoff
 
 setup:
 	@set -eu; case "$${SETUP_MODE:-all}" in \
@@ -58,40 +68,32 @@ agent:
 	@sh scripts/local-agent.sh
 
 verify:
-	@if [ "$${VERIFY_MODE:-}" = "linux-sli" ]; then sh scripts/verify-linux.sh sli; \
-	elif [ "$${VERIFY_MODE:-}" = "linux" ]; then sh scripts/verify-linux.sh verify; \
-	elif [ "$${VERIFY_MODE:-}" = "go" ]; then $(MAKE) _verify_go; \
-	elif [ "$${VERIFY_MODE:-}" = "go-portability" ]; then $(MAKE) _verify_go_portability; \
-	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then $(MAKE) _verify_go_race; \
-	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then $(MAKE) _verify_auth_bench; \
-	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then $(MAKE) _verify_integration; \
-	elif [ "$${VERIFY_MODE:-}" = "journey" ]; then $(MAKE) _verify_journey; \
-	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then python3 scripts/local-agent-tty-test.py && cd web && node scripts/check-local-agent.mjs && node scripts/check-local-compose.mjs && node scripts/check-local-compose-cancellation.mjs; \
-	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then $(MAKE) _verify_providers; \
-	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then $(MAKE) _verify_smoke; \
+	@if [ "$${VERIFY_MODE:-}" = "slo-unit" ]; then python3 scripts/verification-controls.py run slo-unit; \
+	elif [ "$${VERIFY_MODE:-}" = "slo-integration" ]; then python3 scripts/verification-controls.py run slo-integration; \
+	elif [ "$${VERIFY_MODE:-}" = "slo-journey" ]; then python3 scripts/verification-controls.py run slo-journey; \
+	elif [ "$${VERIFY_MODE:-}" = "agent-lifecycle" ]; then python3 scripts/verification-controls.py run agent-lifecycle; \
+	elif [ "$${VERIFY_MODE:-}" = "verification-tools" ]; then python3 scripts/verification-controls.py run verification-tools; \
+	elif [ "$${VERIFY_MODE:-}" = "linux-sli" ]; then python3 scripts/verification-controls.py run-gate linux-sli; \
+	elif [ "$${VERIFY_MODE:-}" = "linux" ]; then python3 scripts/verification-controls.py run-gate linux; \
+	elif [ "$${VERIFY_MODE:-}" = "go" ]; then python3 scripts/verification-controls.py run-gate go; \
+	elif [ "$${VERIFY_MODE:-}" = "go-portability" ]; then python3 scripts/verification-controls.py run-gate go-portability; \
+	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then python3 scripts/verification-controls.py run-gate go-race; \
+	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then python3 scripts/verification-controls.py run-gate auth-bench; \
+	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then python3 scripts/verification-controls.py run-gate integration; \
+	elif [ "$${VERIFY_MODE:-}" = "journey" ]; then python3 scripts/verification-controls.py run-gate journey; \
+	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then python3 scripts/verification-controls.py run-gate compose; \
+	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then python3 scripts/verification-controls.py run-gate providers; \
+	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then python3 scripts/verification-controls.py run-gate smoke; \
 	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
-	  if [ -n "$${TEST_FILE:-}" ]; then \
+	  if [ -z "$${TEST_FILE:-}" ]; then python3 scripts/verification-controls.py run-gate unit; else \
 	    case "$${TEST_FILE}" in tests/*.test.tsx) ;; *) echo 'TEST_FILE must select a tests/*.test.tsx file' >&2; exit 2;; esac; \
 	    case "$${TEST_FILE}" in *[!A-Za-z0-9_./-]*|*..*) echo 'TEST_FILE contains unsupported characters' >&2; exit 2;; esac; \
 	    cd web && if [ ! -f "$${TEST_FILE}" ]; then echo 'TEST_FILE must name an existing test file' >&2; exit 2; fi && \
-	      ./node_modules/.bin/vitest run --config vitest.config.ts "$${TEST_FILE}"; \
-	  else cd web && ./node_modules/.bin/vitest run --config vitest.config.ts; fi; \
-	elif [ "$${VERIFY_MODE:-}" = "browser" ]; then \
-	  set --; \
-	  if [ -n "$${TEST_FILE:-}" ]; then \
-	    case "$${TEST_FILE}" in browser/*.spec.ts) ;; *) echo 'TEST_FILE must select a browser/*.spec.ts file' >&2; exit 2;; esac; \
-	    case "$${TEST_FILE}" in *[!A-Za-z0-9_./-]*|*..*) echo 'TEST_FILE contains unsupported characters' >&2; exit 2;; esac; \
-	    if [ ! -f "web/$${TEST_FILE}" ]; then echo 'TEST_FILE must name an existing test file' >&2; exit 2; fi; \
-	    set -- "$${TEST_FILE}"; \
-	  fi; \
-	  if [ -n "$${BROWSER_PROJECT:-}" ]; then \
-	    case "$${BROWSER_PROJECT}" in desktop-light|desktop-dark|intermediate-light|intermediate-dark|mobile-light|mobile-dark) ;; *) echo 'Unknown BROWSER_PROJECT' >&2; exit 2;; esac; \
-	    set -- "$$@" --project "$${BROWSER_PROJECT}"; \
-	  fi; \
-	  cd web && ./node_modules/.bin/playwright test --config playwright.config.ts "$$@"; \
+	      ./node_modules/.bin/vitest run --config vitest.config.ts "$${TEST_FILE}"; fi; \
+	elif [ "$${VERIFY_MODE:-}" = "browser" ]; then python3 scripts/verification-controls.py run-gate browser; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
-	  $(MAKE) _verify_all; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, providers, compose, smoke, linux, or linux-sli)' >&2; exit 2; fi
+	  python3 scripts/verification-controls.py run-gate ordinary; \
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, journey, providers, compose, smoke, linux, linux-sli, slo-unit, slo-integration, slo-journey, agent-lifecycle, or verification-tools)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:

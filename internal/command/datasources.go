@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/cliprofile"
@@ -81,7 +83,7 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 		allowed["input-file"], allowed["datasource-id"], allowed["if-match"], allowed["idempotency-key"] = true, true, true, true
 		allowed["wait"], allowed["cancel-on-timeout"] = true, true
 	case "slis list":
-		allowed["limit"], allowed["cursor"] = true, true
+		allowed["limit"], allowed["cursor"], allowed["query"], allowed["datasource-id"] = true, true, true, true
 	case "slis get", "slis observations":
 		allowed["sli-id"] = true
 		if operation == "slis observations" {
@@ -104,7 +106,7 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	if profile == "" || timeout <= 0 || timeout > 2*time.Minute {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("profile-file is required and timeout must be positive and at most 2m"))
 	}
-	if (operation == "datasources get" || operation == "datasources update" || operation == "slis test" || operation == "datasources test" && seen["datasource-id"]) && (!seen["datasource-id"] || !validCLIUUID(id)) {
+	if (operation == "datasources get" || operation == "datasources update" || operation == "slis test" || operation == "slis list" && seen["datasource-id"] || operation == "datasources test" && seen["datasource-id"]) && (!seen["datasource-id"] || !validCLIUUID(id)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("datasource-id must be a canonical UUID"))
 	}
 	if (operation == "slis get" || operation == "slis observations" || operation == "slis update") && (!seen["sli-id"] || !validCLIUUID(sliID)) {
@@ -112,6 +114,9 @@ func datasourceCommand(parent context.Context, args []string, stdout, stderr io.
 	}
 	if (operation == "datasources list" || operation == "slis list" || operation == "slis observations") && (limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("pagination options are invalid"))
+	}
+	if operation == "slis list" && (!utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 || strings.IndexFunc(query, unicode.IsControl) >= 0) {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("search query must be at most 128 characters without control characters"))
 	}
 	if operation == "datasources create" && (!seen["input-file"] || inputFile == "" || !seen["idempotency-key"] || !validKey(key)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and a valid idempotency-key are required"))
@@ -232,7 +237,7 @@ func performDatasource(parent context.Context, operation, profile, id, sliID, ag
 			}{jsontext.Value(data), tag})
 		}
 	case "slis list":
-		data, err = client.ListSLIs(parent, limit, cursor)
+		data, err = client.ListSLIs(parent, limit, cursor, query, id)
 	case "slis get":
 		var tag string
 		data, tag, err = client.GetSLI(parent, sliID)

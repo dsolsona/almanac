@@ -39,6 +39,8 @@ these foundations to UI roles:
 | Action text | `--accent-ink` | `#99371f` | `#f5b59c` |
 | Action wash | `--accent-wash` | `#f3e2d7` | `#4c3830` |
 | Action foreground | `--primary-foreground` | `#ffffff` | `#202725` |
+| Selected control | `--selection` | `#246469` | `#98c6bc` |
+| Selected control text | `--selection-foreground` | `#ffffff` | `#202725` |
 | Focus | `--focus-ring` | action color | action color |
 | Healthy text | `--status-healthy` | `#31665e` | `#98c6bc` |
 | Warning text | `--status-warning` | `#ae4b00` | `#e5c06e` |
@@ -69,7 +71,9 @@ and the shared `--dialog-scrim` token.
 
 Import controls from `src/components/ui/` and prefer native semantics:
 
-- `Button` supports primary, outline, ghost and danger variants. It defaults to
+- `Button` supports primary, selected, outline, ghost and danger variants. Use the
+  teal selected variant with `aria-pressed` for active presets and view controls.
+  It defaults to
   `type="button"`; pending actions are disabled and announced as busy.
 - `TextField` and `SelectField` require an id and visible label; hints and errors
   are programmatically associated. Select options are native options.
@@ -92,6 +96,13 @@ Import controls from `src/components/ui/` and prefer native semantics:
   failed reads.
 - `ApplicationShell` provides desktop navigation, a focus-contained mobile drawer,
   account controls and visibly unavailable planned destinations.
+- `MeasurementChoiceCards` explains the supported event-count mode and keeps
+  unsupported collection modes disabled with an availability reason.
+- `QueryEditor` preserves a native labelled textarea with PromQL context and
+  scroll-synchronized, screen-reader-hidden line numbers.
+- `SliRecentStrip` plots the bounded interval states without assigning an SLO
+  target classification. Its native details table exposes exact counts, interval
+  timestamps and coverage labels from the same list projection.
 
 ## Catalogue and scope
 
@@ -107,8 +118,8 @@ with the unit mode.
 The catalogue demonstrates actual shared control exports and local-only state,
 including the signed-in application shell. It includes palette and type specimens,
 disabled/pending/invalid/empty/loading/
-error/long-content examples, switches, date selection, a working dialog, and a
-lazy charts section. Its local save example completes only when the explicit
+error/long-content examples, switches, date selection, a working dialog, SLI
+measurement/query controls, and a lazy charts section. Its local save example completes only when the explicit
 finish control is pressed. It is imported only by the development build; examples
 do not imply application data, authentication or backend operation.
 
@@ -116,11 +127,17 @@ do not imply application data, authentication or backend operation.
 
 Timeline charts use the shared wrappers in `src/components/charts/`. Each lane
 shares the declared UTC range and step; missing samples and absent expected steps
-break lines, while partial samples use a distinct marker. Zero remains numeric.
+break lines, while numeric partial samples use a distinct marker. Partial samples
+with no numeric value remain gaps. Zero remains numeric.
 Units, range, UTC timezone and coverage meaning are shown next to every plot.
 Charts are SVG rendered, theme-aware, resize-aware and bounded to 1,500 plotted
 points per series. Chart values are display inputs only; the browser does not
 calculate SLOs, budgets or burn rates.
+
+Operational lanes can display server-supplied target and burn reference lines and
+share either UTC or local display time. Keep their controls and exact-value actions
+available when chart loading, validation or rendering fails. Budget sparklines also
+break at partial coverage; they must not connect across an unknown interval.
 
 Pair every chart with `ExactValuesTable`, backed by the same sample objects. It
 shows exact decimal strings and coverage in a keyboard-focusable scroll region,

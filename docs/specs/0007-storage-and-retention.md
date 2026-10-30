@@ -1,5 +1,10 @@
 # SPEC-0007: Storage and retention
 
+> Accepted amendment, 2026-10-30: Exact hourly count/coverage aggregates and current/history projections are required caches. Canonical retention remains 400 days. Durable dirty ranges, fenced publication, pooled connections and separate admission budgets follow the accepted stabilization contract.
+> [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
+> behavior and additional acceptance criteria AC-01 through AC-09, approved by the
+> maintainer after Crit review. Implementation remains outstanding.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

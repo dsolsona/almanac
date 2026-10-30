@@ -1,15 +1,16 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import { use } from 'echarts/core';
-import { LineChart, ScatterChart } from 'echarts/charts';
-import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components';
+import { BarChart, LineChart, ScatterChart } from 'echarts/charts';
+import { AriaComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { SVGRenderer } from 'echarts/renderers';
 import { init } from 'echarts/core';
 import type { ECharts } from 'echarts/core';
 import { validateTimeline, type TimelineChart as TimelineChartData } from './timelineModel.ts';
+import { TimelineChartHeader } from './TimelineChartHeader.tsx';
 import { buildTimelineOption, type TimelinePalette } from './timelineOption.ts';
 import './charts.css';
 
-use([LineChart, ScatterChart, AriaComponent, GridComponent, TooltipComponent, SVGRenderer]);
+use([BarChart, LineChart, ScatterChart, AriaComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 function readTimelinePalette(): TimelinePalette {
   const style = getComputedStyle(document.documentElement);
@@ -17,11 +18,11 @@ function readTimelinePalette(): TimelinePalette {
   return {
     axis: color('--axis'), labelText: color('--text-3'), grid: color('--grid'), crosshair: color('--crosshair'),
     series: [color('--s1'), color('--s2')] as [string, string], surface: color('--surface'),
-    surfaceBorder: color('--border'), text: color('--text'),
+    surfaceBorder: color('--border'), text: color('--text'),healthy:color('--status-healthy'),breached:color('--status-breached'),sli:color('--s3'),muted:color('--surface-2'),
   };
 }
 
-export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
+export function TimelineChartView({ chart, showHeader = true }: { chart: TimelineChartData; showHeader?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const instanceRef = useRef<ECharts | null>(null);
@@ -40,11 +41,11 @@ export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
     instanceRef.current = instance;
     const update = () => {
       const latest = latestRef.current;
-      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, readTimelinePalette()), true);
+      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, readTimelinePalette(),host.clientHeight), true);
     };
     applyRef.current = update;
     update();
-    const resize = new ResizeObserver(() => instance.resize());
+    const resize = new ResizeObserver(() => {instance.resize();update();});
     resize.observe(host);
     const theme = new MutationObserver(update);
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
@@ -59,11 +60,12 @@ export function TimelineChartView({ chart }: { chart: TimelineChartData }) {
 
   useEffect(() => { applyRef.current(); }, [chart, result]);
 
+  const extraHeight=chart.lanes.reduce((sum,lane)=>sum+(lane.extra??0),0);
+  const explicitHeight=chart.lanes.every(lane=>lane.height!==undefined)?chart.lanes.reduce((sum,lane)=>sum+lane.height!+(lane.extra??0),0):undefined;
+  const content = result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} style={explicitHeight?{height:explicitHeight}:extraHeight?{height:`calc(var(--timeline-base-height) + ${extraHeight}px)`}:undefined} role="img" aria-label={`${chart.title}. ${chart.summary}`} />;
+  if (!showHeader) return <div className="timeline-chart__surface" role="group" aria-label={chart.title}>{content}</div>;
   return <section className="timeline-chart" aria-labelledby={titleId}>
-    <h2 id={titleId}>{chart.title}</h2>
-    <p className="timeline-chart__summary">{chart.summary}</p>
-    <p className="timeline-chart__meta">Range: {chart.start} to {chart.end} (end excluded) · UTC · step {Math.round(chart.stepMs / 1000)} seconds</p>
-    <details className="timeline-chart__coverage"><summary>Coverage key</summary><p>Complete samples are lines, with circles for isolated points; partial samples use diamonds. Missing, known-empty, expired, not-applicable and zero-traffic samples break lines.</p></details>
-    {result.error ? <p className="timeline-chart__error" role="alert">Chart unavailable: {result.error}</p> : <div ref={hostRef} className="timeline-chart__plot" data-lanes={chart.lanes.length} role="img" aria-label={`${chart.title}. ${chart.summary}`} />}
+    <div className="timeline-chart__header"><TimelineChartHeader chart={chart} titleId={titleId}/></div>
+    <div className="timeline-chart__surface">{content}</div>
   </section>;
 }

@@ -602,6 +602,10 @@ async function recordHandoffProgress(datasourceID, sliID, targetID, phase) {
   const sql = `SELECT jsonb_build_object(
     'captured_at', now(), 'datasource_id', '${datasourceID}', 'sli_id', '${sliID}', 'target_agent_id', '${targetID}',
     'datasource', (SELECT jsonb_build_object('agent_id', agent_id, 'version', version, 'polling_interval_seconds', polling_interval_seconds, 'settling_delay_seconds', settling_delay_seconds) FROM public.almanac_datasources WHERE id='${datasourceID}'),
+    'measurement', (SELECT jsonb_build_object('revision', measurement.revision, 'effective_from', measurement.effective_from,
+      'activated_at', measurement.activated_at, 'last_attempted_interval_end', measurement.last_attempted_interval_end)
+      FROM public.almanac_sli_measurements measurement JOIN public.almanac_slis sli
+        ON sli.id=measurement.sli_id AND sli.measurement_revision=measurement.revision WHERE sli.id='${sliID}'),
     'runtime', (SELECT jsonb_build_object('agent_id', agent_id, 'generation', generation, 'desired_revision', desired_configuration_revision,
       'applied_revision', applied_configuration_revision, 'scheduler_health', scheduler_health, 'collection_progress', collection_progress,
       'configuration_failure_code', configuration_failure_code, 'configuration_failure_revision', configuration_failure_revision,
@@ -610,7 +614,8 @@ async function recordHandoffProgress(datasourceID, sliID, targetID, phase) {
       FROM public.almanac_agent_runtime_status WHERE agent_id='${targetID}'),
     'current_grant', (SELECT jsonb_build_object('generation', g.generation, 'configuration_revision', g.configuration_revision,
       'valid_from', g.valid_from, 'valid_until', g.valid_until, 'renewal_sequence', g.renewal_sequence,
-      'allowed_measurements', COALESCE((SELECT jsonb_agg(jsonb_build_object('sli_id', item->>'sli_id', 'measurement_revision', item->>'measurement_revision'))
+      'allowed_measurements', COALESCE((SELECT jsonb_agg(jsonb_build_object('sli_id', item->>'sli_id', 'measurement_revision', item->>'measurement_revision',
+        'last_attempted_interval_end', item->>'last_attempted_interval_end'))
         FROM (SELECT value AS item FROM jsonb_array_elements(g.allowed_measurements)
           WHERE value->>'sli_id' ~ '^[0-9a-f-]{36}$' AND value->>'measurement_revision' ~ '^[0-9]{1,19}$' LIMIT 256) bounded), '[]'::jsonb))
       FROM public.almanac_agent_ownership o JOIN public.almanac_agent_execution_grants g ON g.lease_id=o.current_lease_id
@@ -631,10 +636,70 @@ async function recordHandoffProgress(datasourceID, sliID, targetID, phase) {
   const previousFailure = lastFailure;
   try {
     const output = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc', sql]);
-    writeFileSync(path, JSON.stringify(JSON.parse(output), null, 2), { mode: 0o600 });
+    const snapshot = JSON.parse(output);
+    snapshot.first_permitted_dispatch = firstPermittedDispatch(snapshot);
+    writeFileSync(path, JSON.stringify(snapshot, null, 2), { mode: 0o600 });
+    return snapshot;
   } catch {
     writeFileSync(path, JSON.stringify({ phase, error: 'Handoff diagnostics unavailable.' }), { mode: 0o600 });
+    return null;
   } finally { lastFailure = previousFailure; }
+}
+
+function timestampMicroseconds(value) {
+  if (typeof value !== 'string') return null;
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) return null;
+  const fraction = value.match(/\.(\d+)(?=Z$|[+-]\d{2}:?\d{2}$)/)?.[1] ?? '';
+  const subMillisecondMicros = BigInt(fraction.slice(3, 6).padEnd(3, '0') || '0');
+  return BigInt(milliseconds) * 1000n + subMillisecondMicros;
+}
+
+function timestampFromMicroseconds(value) {
+  const milliseconds = Number(value / 1000n);
+  const subMillisecondMicros = String(value % 1000n).padStart(3, '0');
+  return new Date(milliseconds).toISOString().replace(/Z$/, `${subMillisecondMicros}Z`);
+}
+
+function firstPermittedDispatch(snapshot) {
+  const measurement = snapshot.measurement;
+  const datasource = snapshot.datasource;
+  const epoch = snapshot.epochs?.find((item) => item.agent_id === snapshot.target_agent_id && item.ends_at === null);
+  const cadenceSeconds = datasource?.polling_interval_seconds;
+  const settlingDelaySeconds = datasource?.settling_delay_seconds;
+  if (!measurement || !epoch || measurement.activated_at === null || !Number.isInteger(cadenceSeconds) || !Number.isInteger(settlingDelaySeconds)
+    || cadenceSeconds < 1 || settlingDelaySeconds < 0) {
+    return { state: 'unavailable' };
+  }
+  const effectiveFrom = timestampMicroseconds(measurement.effective_from);
+  const ownershipStart = timestampMicroseconds(epoch.starts_at);
+  const previousEnd = timestampMicroseconds(measurement.last_attempted_interval_end);
+  const capturedAt = timestampMicroseconds(snapshot.captured_at);
+  if (effectiveFrom === null || ownershipStart === null || capturedAt === null) return { state: 'unavailable' };
+  const intervalStart = [effectiveFrom, ownershipStart, ...(previousEnd === null ? [] : [previousEnd])].reduce((later, value) => value > later ? value : later);
+  const cadenceMicros = BigInt(cadenceSeconds) * 1_000_000n;
+  const settlingMicros = BigInt(settlingDelaySeconds) * 1_000_000n;
+  const digest = createHash('sha256').update(snapshot.sli_id).digest();
+  const dispatchPhaseMicros = previousEnd === null ? 0n : digest.readBigUInt64BE(0) % cadenceMicros;
+  const intervalEnd = intervalStart + cadenceMicros;
+  const expectedAt = intervalEnd + settlingMicros + dispatchPhaseMicros;
+  const observationDeadline = expectedAt + cadenceMicros;
+  const grant = snapshot.current_grant;
+  const grantMeasurement = grant?.allowed_measurements?.find((item) => item.sli_id === snapshot.sli_id && item.measurement_revision === String(measurement.revision));
+  return {
+    state: 'derived',
+    epoch_starts_at: epoch.starts_at,
+    eligible_interval_start: timestampFromMicroseconds(intervalStart),
+    eligible_interval_end: timestampFromMicroseconds(intervalEnd),
+    dispatch_phase_microseconds: Number(dispatchPhaseMicros),
+    expected_at: timestampFromMicroseconds(expectedAt),
+    observation_deadline_at: timestampFromMicroseconds(observationDeadline),
+    delivery_allowance_seconds: cadenceSeconds,
+    target_grant_ready: Boolean(grantMeasurement && grant.configuration_revision === epoch.configuration_revision),
+    target_revision: String(measurement.revision),
+    target_configuration_revision: epoch.configuration_revision,
+    capture_at: timestampFromMicroseconds(capturedAt),
+  };
 }
 async function checkAgentRetirement(page, original, collection) {
   const agentURL = `${url}/agents?agent=${original.agent.id}`;
@@ -723,10 +788,17 @@ async function checkAgentRetirement(page, original, collection) {
   await page.getByRole('button', { name: 'Refresh reassignment', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Moving datasource', exact: true })).toHaveCount(0);
   stage = 'real Compose replacement collector resumes observations';
-  await recordHandoffProgress(collection.datasource.id, collection.sliID, replacement.agent.id, 'start');
+  const handoffStart = await recordHandoffProgress(collection.datasource.id, collection.sliID, replacement.agent.id, 'start');
+  const firstDispatch = handoffStart?.first_permitted_dispatch;
+  const deadlineAt = timestampMicroseconds(firstDispatch?.observation_deadline_at);
+  const snapshotAt = timestampMicroseconds(handoffStart?.captured_at);
+  if (firstDispatch?.state !== 'derived' || deadlineAt === null || snapshotAt === null || deadlineAt <= snapshotAt) {
+    throw new Error('Replacement SLI has no bounded eligible dispatch schedule; inspect handoff-progress-start.json.');
+  }
+  const observationTimeoutMS = Number((deadlineAt - snapshotAt + 999n) / 1000n);
   try {
     await expect.poll(async () => (await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
-      `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id='${collection.sliID}' AND agent_id='${replacement.agent.id}' AND outcome='observed'`])).trim(), { timeout: 110_000, intervals: [1000] }).not.toBe('0');
+      `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id='${collection.sliID}' AND agent_id='${replacement.agent.id}' AND outcome='observed'`])).trim(), { timeout: observationTimeoutMS, intervals: [1000] }).not.toBe('0');
   } catch (error) {
     await recordHandoffProgress(collection.datasource.id, collection.sliID, replacement.agent.id, 'failure');
     throw error;

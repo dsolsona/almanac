@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -80,6 +81,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isSlo := parts[0] == "slos"
+	if len(parts) == 2 && isSlo && parts[1] == "overview" {
+		h.operationalOverview(w, r, reqID, proof, query)
+		return
+	}
 	if len(parts) == 1 {
 		h.collection(w, r, reqID, proof, query, isSlo)
 		return
@@ -93,11 +98,123 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.evaluate(w, r, reqID, proof, parts[1], query)
 		return
 	}
+	if len(parts) == 3 && isSlo && parts[2] == "operational" {
+		h.operationalDetail(w, r, reqID, proof, parts[1], query)
+		return
+	}
 	if len(parts) != 2 {
 		problem(w, 404, "not_found", reqID)
 		return
 	}
 	h.detail(w, r, reqID, proof, parts[1], query, isSlo)
+}
+
+func (h *Handler) operationalOverview(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, q url.Values) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		problem(w, 405, "method_not_allowed", requestID)
+		return
+	}
+	if hasBody(r) || hasConditional(r) {
+		problem(w, 400, "invalid_request", requestID)
+		return
+	}
+	input := storage.OperationalOverviewInput{Proof: proof, Now: h.now}
+	for key, values := range q {
+		if len(values) != 1 {
+			problem(w, 400, "invalid_request", requestID)
+			return
+		}
+		value := values[0]
+		switch key {
+		case "q":
+			if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 128 {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+			input.Query = value
+		case "service_id":
+			input.ServiceID = value
+		case "urgency":
+			input.Urgency = value
+		case "limit":
+			limit, err := strconv.Atoi(value)
+			if err != nil || limit < 1 || limit > 200 || strconv.Itoa(limit) != value {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+			input.Limit = limit
+		case "cursor":
+			if value == "" || len(value) > 512 {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+			input.Cursor = value
+		default:
+			problem(w, 400, "invalid_request", requestID)
+			return
+		}
+	}
+	result, err := storage.ReadSloOperationalOverview(r.Context(), h.databaseURL, input)
+	if err != nil {
+		storageError(w, err, requestID)
+		return
+	}
+	write(w, 200, result)
+}
+
+func (h *Handler) operationalDetail(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, id string, q url.Values) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		problem(w, 405, "method_not_allowed", requestID)
+		return
+	}
+	if hasBody(r) || hasConditional(r) {
+		problem(w, 400, "invalid_request", requestID)
+		return
+	}
+	input := storage.OperationalDetailInput{Proof: proof, ID: id, Now: h.now, BurnWindow: 3600}
+	seen := make(map[string]bool, len(q))
+	for key, values := range q {
+		if len(values) != 1 || values[0] == "" || seen[key] {
+			problem(w, 400, "invalid_request", requestID)
+			return
+		}
+		seen[key] = true
+		value := values[0]
+		switch key {
+		case "at", "start", "end":
+			parsed, err := time.Parse(time.RFC3339Nano, value)
+			if err != nil {
+				fieldProblem(w, requestID, key, "time_invalid", "Use a UTC RFC3339 time with microsecond precision.")
+				return
+			}
+			switch key {
+			case "at":
+				input.At = &parsed
+			case "start":
+				input.Start = &parsed
+			case "end":
+				input.End = &parsed
+			}
+		case "burn_window_seconds":
+			seconds, err := strconv.Atoi(value)
+			if err != nil || strconv.Itoa(seconds) != value || seconds != 3600 && seconds != 21600 {
+				fieldProblem(w, requestID, key, "burn_window_invalid", "Choose 3600 or 21600 seconds.")
+				return
+			}
+			input.BurnWindow = seconds
+		default:
+			problem(w, 400, "invalid_request", requestID)
+			return
+		}
+	}
+	result, err := storage.ReadSloOperationalDetail(r.Context(), h.databaseURL, input)
+	if err != nil {
+		storageError(w, err, requestID)
+		return
+	}
+	write(w, 200, result)
 }
 
 func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, q url.Values, isSlo bool) {
@@ -400,6 +517,16 @@ func fieldProblem(w http.ResponseWriter, requestID, field, code, message string)
 }
 func storageError(w http.ResponseWriter, err error, id string) {
 	switch {
+	case errors.Is(err, storage.ErrOperationalSnapshot):
+		problem(w, 400, "invalid_request", id)
+	case errors.Is(err, storage.ErrOperationalSnapshotOld):
+		problemMessage(w, 409, "snapshot_expired", "This operational overview snapshot expired. Restart pagination with the current filters.", id)
+	case errors.Is(err, storage.ErrOperationalResource):
+		problemMessage(w, 503, "resource_limit", "The operational read exceeded its bounded resource limit. Narrow the name or service filter and retry.", id)
+	case errors.Is(err, storage.ErrOperationalRangeDense):
+		problemMessage(w, 422, "range_too_dense", "This history range has too many gaps or extrema to represent safely. Request a narrower range.", id)
+	case errors.Is(err, storage.ErrOperationalRange):
+		fieldProblem(w, id, "start", "operational_range_invalid", "Use paired UTC cadence-aligned bounds spanning no more than 365 days, ending no later than at.")
 	case errors.Is(err, storage.ErrObjectiveTarget):
 		fieldProblem(w, id, "target", "target_invalid", "Enter a target from 0 up to, but not including, 1.")
 	case errors.Is(err, storage.ErrObjectiveWindow):
@@ -423,4 +550,14 @@ func storageError(w http.ResponseWriter, err error, id string) {
 	default:
 		problem(w, 503, "unavailable", id)
 	}
+}
+
+func problemMessage(w http.ResponseWriter, status int, code, message, requestID string) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.MarshalWrite(w, api.Problem{Code: code, Message: message, RequestId: requestID, FieldErrors: []struct {
+		Code    string `json:"code"`
+		Field   string `json:"field"`
+		Message string `json:"message"`
+	}{}})
 }
