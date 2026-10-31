@@ -99,11 +99,17 @@ func loadPublishedOverview(ctx context.Context, q *dbgen.Queries, input Operatio
 	if len(rows) > sloOverviewDefinitionLimit {
 		return nil, ErrOperationalResource
 	}
-	items := make([]api.SloOperationalOverviewItem, 0, len(rows))
+	var pending []pgtype.UUID
 	for _, row := range rows {
 		if !row.Current || !row.GenerationID.Valid {
-			return nil, ErrDerivedPending
+			pending = append(pending, row.ID)
 		}
+	}
+	if len(pending) > 0 {
+		return nil, overviewPreparationError(ctx, q, pending, now)
+	}
+	items := make([]api.SloOperationalOverviewItem, 0, len(rows))
+	for _, row := range rows {
 		var item api.SloOperationalOverviewItem
 		if err := json.Unmarshal(row.Payload, &item); err != nil || !item.Urgency.Valid() {
 			return nil, errors.New("storage: invalid published SLO projection")
@@ -111,6 +117,34 @@ func loadPublishedOverview(ctx context.Context, q *dbgen.Queries, input Operatio
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func overviewPreparationError(ctx context.Context, q *dbgen.Queries, ids []pgtype.UUID, now time.Time) error {
+	rows, err := q.ListCurrentPreparationStates(ctx, dbgen.ListCurrentPreparationStatesParams{SloIds: ids, CalculationVersion: operationalCalculationVersion})
+	if err != nil {
+		return err
+	}
+	params := dbgen.AnyExhaustedDerivedSourcesParams{Now: timestamp(now)}
+	for _, row := range rows {
+		if row.Exhausted {
+			return ErrDerivedFailed
+		}
+		definition := dbgen.GetSloRow{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, CadenceSeconds: row.CadenceSeconds,
+			RollingWindowSeconds: row.RollingWindowSeconds, EvaluationValidFrom: row.EvaluationValidFrom, SliValidFrom: row.SliValidFrom}
+		bounds := failedSourceParams(definition, now, floorSliBoundary(now, time.Duration(row.CadenceSeconds)*time.Second))
+		params.SliIds = append(params.SliIds, bounds.SliID)
+		params.Revisions = append(params.Revisions, bounds.MeasurementRevision)
+		params.Starts = append(params.Starts, bounds.FullStart)
+		params.Ends = append(params.Ends, bounds.FullEnd)
+	}
+	failed, err := q.AnyExhaustedDerivedSources(ctx, params)
+	if err != nil {
+		return err
+	}
+	if failed {
+		return ErrDerivedSourceFailed
+	}
+	return ErrDerivedPending
 }
 
 func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() time.Time) error {
@@ -157,12 +191,20 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 		return err
 	}
 	defer func() {
-		if resultErr == nil || errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) || ctx.Err() != nil {
+		if resultErr == nil || ctx.Err() != nil {
 			return
 		}
 		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := tx.Rollback(cleanup); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			resultErr = errors.Join(resultErr, err)
+			return
+		}
+		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) {
+			err := dbgen.New(conn).DeferCurrentPreparation(cleanup, dbgen.DeferCurrentPreparationParams{
+				SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+				CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock()),
+			})
 			resultErr = errors.Join(resultErr, err)
 			return
 		}

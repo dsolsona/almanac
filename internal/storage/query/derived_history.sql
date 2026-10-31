@@ -141,7 +141,7 @@ SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,
 WHERE id=$1 AND lease_epoch=$2;
 
 -- name: LockHistoryAdmission :exec
-SELECT pg_advisory_xact_lock(1095520259, 1);
+UPDATE public.almanac_slo_history_admission SET singleton=true WHERE singleton;
 
 -- name: DeleteExpiredDerivedGenerations :execrows
 DELETE FROM public.almanac_slo_derived_generations g

@@ -15,7 +15,47 @@ WHERE (f.slo_id IS NULL OR (f.attempts<5 AND f.next_attempt_at<=sqlc.arg(now)::t
    OR p.payload_digest IS DISTINCT FROM sha256(convert_to(p.payload::text,'UTF8'))
    OR g.source_generation<>coalesce(source.generation,0)
    OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds))
-ORDER BY g.evaluated_through NULLS FIRST, s.id LIMIT sqlc.arg(batch_limit);
+ORDER BY f.next_attempt_at NULLS FIRST, g.evaluated_through NULLS FIRST, s.id LIMIT sqlc.arg(batch_limit);
+
+-- Waiting on source work is schedulable state, not a failed calculation attempt.
+-- Preserve an existing failure budget for this revision instead of resetting it.
+-- name: DeferCurrentPreparation :exec
+INSERT INTO public.almanac_slo_current_failures
+    (slo_id,definition_revision,measurement_revision,calculation_version,attempts,next_attempt_at,last_error)
+VALUES ($1,$2,$3,$4,0,$5::timestamptz+interval '2 seconds','current_waiting_for_source')
+ON CONFLICT (slo_id) DO UPDATE
+SET definition_revision=EXCLUDED.definition_revision,measurement_revision=EXCLUDED.measurement_revision,
+    calculation_version=EXCLUDED.calculation_version,
+    attempts=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)
+         = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
+         THEN almanac_slo_current_failures.attempts ELSE 0 END,
+    next_attempt_at=EXCLUDED.next_attempt_at,last_error=EXCLUDED.last_error;
+
+-- Fetch preparation metadata once for the non-current filtered set, not once
+-- per objective. Source-window bounds are calculated by the shared exact helper.
+-- name: ListCurrentPreparationStates :many
+SELECT s.id,d.sli_id,d.measurement_revision,d.cadence_seconds,d.rolling_window_seconds,
+       d.evaluation_valid_from,m.effective_from AS sli_valid_from,
+       EXISTS(SELECT 1 FROM public.almanac_slo_current_failures f
+           WHERE f.slo_id=s.id AND f.definition_revision=d.revision
+             AND f.measurement_revision=d.measurement_revision
+             AND f.calculation_version=sqlc.arg(calculation_version) AND f.attempts>=5) AS exhausted
+FROM unnest(sqlc.arg(slo_ids)::uuid[]) requested(id)
+JOIN public.almanac_slos s ON s.id=requested.id
+JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision;
+
+-- name: AnyExhaustedDerivedSources :one
+WITH windows AS (
+    SELECT unnest(sqlc.arg(sli_ids)::uuid[]) AS sli_id,unnest(sqlc.arg(revisions)::bigint[]) AS revision,
+           unnest(sqlc.arg(starts)::timestamptz[]) AS start_at,unnest(sqlc.arg(ends)::timestamptz[]) AS end_at
+)
+SELECT EXISTS (
+    SELECT 1 FROM windows w
+    JOIN public.almanac_derived_dirty_ranges d ON d.sli_id=w.sli_id AND d.measurement_revision=w.revision
+    WHERE w.start_at<w.end_at AND d.range_start<w.end_at AND d.range_end>w.start_at
+      AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=sqlc.arg(now)::timestamptz)
+);
 
 -- name: RecordCurrentPreparationFailure :exec
 INSERT INTO public.almanac_slo_current_failures

@@ -24,6 +24,7 @@ type Querier interface {
 	AgentHasPendingReassignments(ctx context.Context, sourceAgentID pgtype.UUID) (bool, error)
 	AgentHasUnsettledCurrentLease(ctx context.Context, arg AgentHasUnsettledCurrentLeaseParams) (bool, error)
 	AggregateSloObservations(ctx context.Context, arg AggregateSloObservationsParams) (AggregateSloObservationsRow, error)
+	AnyExhaustedDerivedSources(ctx context.Context, arg AnyExhaustedDerivedSourcesParams) (bool, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
 	AttachPreparedBudgetSparkline(ctx context.Context, arg AttachPreparedBudgetSparklineParams) (int64, error)
 	BudgetPreparationExhausted(ctx context.Context, arg BudgetPreparationExhaustedParams) (bool, error)
@@ -40,6 +41,9 @@ type Querier interface {
 	CountLiveSloOverviewSnapshotsForSession(ctx context.Context, arg CountLiveSloOverviewSnapshotsForSessionParams) (int64, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
 	CurrentPreparationExhausted(ctx context.Context, arg CurrentPreparationExhaustedParams) (bool, error)
+	// Waiting on source work is schedulable state, not a failed calculation attempt.
+	// Preserve an existing failure budget for this revision instead of resetting it.
+	DeferCurrentPreparation(ctx context.Context, arg DeferCurrentPreparationParams) error
 	DeleteAcknowledgedAgentHandoffConfiguration(ctx context.Context, arg DeleteAcknowledgedAgentHandoffConfigurationParams) (int64, error)
 	DeleteAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) error
 	DeleteCorruptPreparedSloHistory(ctx context.Context, generationID pgtype.UUID) (int64, error)
@@ -153,6 +157,9 @@ type Querier interface {
 	ListAgentDatasourceDependencies(ctx context.Context, arg ListAgentDatasourceDependenciesParams) ([]AlmanacDatasource, error)
 	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
 	ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, arg ListAuthorizedMeasurementGrantsForAgentParams) ([]ListAuthorizedMeasurementGrantsForAgentRow, error)
+	// Fetch preparation metadata once for the non-current filtered set, not once
+	// per objective. Source-window bounds are calculated by the shared exact helper.
+	ListCurrentPreparationStates(ctx context.Context, arg ListCurrentPreparationStatesParams) ([]ListCurrentPreparationStatesRow, error)
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
 	ListDerivedHourlyCounts(ctx context.Context, arg ListDerivedHourlyCountsParams) ([]ListDerivedHourlyCountsRow, error)

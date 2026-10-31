@@ -59,7 +59,9 @@ func TestOperationalRetryAndCancellationAreBounded(t *testing.T) {
 	err := retryOperationalRead(ctx, func() error {
 		attempts++
 		if attempts < 3 {
-			return errReadSerialization
+			// QueueVisibleBudgetHistory can return PostgreSQL's original error
+			// while a worker concurrently publishes the same history job.
+			return &pgconn.PgError{Code: "40001"}
 		}
 		return nil
 	})

@@ -65,6 +65,9 @@ func retryOperationalRead(ctx context.Context, attempt func() error) error {
 			return operationError(ctx, "storage: operational read cancelled", err)
 		}
 		err := attempt()
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "40001" {
+			err = errReadSerialization
+		}
 		if !errors.Is(err, errReadSerialization) {
 			return err
 		}

@@ -92,6 +92,10 @@ func derivedWindowParams(sliID pgtype.UUID, revision int64, input slo.WindowInpu
 }
 
 func hasFailedSourceAt(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now, at time.Time) (bool, error) {
+	return q.HasExhaustedDerivedSource(ctx, failedSourceParams(row, now, at))
+}
+
+func failedSourceParams(row dbgen.GetSloRow, now, at time.Time) dbgen.HasExhaustedDerivedSourceParams {
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	window := time.Duration(row.RollingWindowSeconds) * time.Second
 	if 6*time.Hour%cadence == 0 {
@@ -99,5 +103,5 @@ func hasFailedSourceAt(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRo
 	}
 	input := slo.WindowInput{Now: now, At: at, Duration: window, Cadence: cadence, ValidFrom: row.EvaluationValidFrom.Time, SliValidFrom: row.SliValidFrom.Time, RetentionStart: now.Add(-sli.ObservationRetention)}
 	params := derivedWindowParams(row.SliID, row.MeasurementRevision, input)
-	return q.HasExhaustedDerivedSource(ctx, dbgen.HasExhaustedDerivedSourceParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, FullStart: params.FullStart, FullEnd: params.FullEnd, Now: params.Now})
+	return dbgen.HasExhaustedDerivedSourceParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, FullStart: params.FullStart, FullEnd: params.FullEnd, Now: params.Now}
 }
