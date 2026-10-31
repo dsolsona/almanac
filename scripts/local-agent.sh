@@ -78,6 +78,8 @@ fi
 { base64 < "$directory/token" | tr -d '\n'; printf '\n'; base64 < "$directory/ca.pem" | tr -d '\n'; printf '\n'; } > "$directory/input"
 name="almanac-agent-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 container=$(docker create -i --name "$name" --label almanac.local-agent=owned --label "almanac.local-app=$app" \
+  --env OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://victoriatraces:10428/insert/opentelemetry/v1/traces \
+  --env "OTEL_SDK_DISABLED=${ALMANAC_TELEMETRY_DISABLED:-false}" --env ALMANAC_ENVIRONMENT=local \
   --network "container:$app" --user 10001:10001 --read-only --cap-drop ALL \
   --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
   --entrypoint /bin/sh "$image" -c '

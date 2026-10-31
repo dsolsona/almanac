@@ -1,6 +1,6 @@
 # SPEC-0007: Storage and retention
 
-> Accepted amendment, 2026-10-30: Exact hourly count/coverage aggregates and current/history projections are required caches. Canonical retention remains 400 days. Durable dirty ranges, fenced publication, pooled connections and separate admission budgets follow the accepted stabilization contract.
+> Accepted amendment, 2026-10-30: Exact hourly count/coverage aggregates and current/history projections are required caches. Canonical retention remains 365 days. Durable dirty ranges, fenced publication, pooled connections and separate admission budgets follow the accepted stabilization contract.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the
 > maintainer after Crit review. Implementation remains outstanding.
@@ -80,8 +80,16 @@ publish only if contributing revisions still match; stale calculations retry.
 
 ## Retention and partitioning
 
-Provisional defaults: retain canonical observations, empty coverage, effective
-definitions and referenced receipts for **400 days**. This deliberately avoids
+[ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md) replaces the old
+provisional retention with one year (365 days). Retain calculated SLO attainment,
+budget remaining and supported burn time series for that year independently of
+short-lived response caches. Stable resolution summaries serve bounded chart reads;
+preserve exact values/provenance and pinned exports. Preview and audit existing-data
+cutoff effects before cleanup; a documentation change does not delete operator data.
+
+
+Accepted 2026-10-31 retention: retain canonical observations, empty coverage, effective
+definitions and referenced receipts for **365 days**. This deliberately avoids
 lossy historical aggregation during the first implementation. Hourly materialized
 summaries are optional caches, never substitutes unless they preserve the exact
 budgeting semantics and requested boundaries. Mark older requested history as
@@ -109,18 +117,18 @@ partition keys in parent unique constraints; use keys that include interval star
 Retention changes are previewed for impact and audited. Increasing retention does
 not recreate deleted data. Decreasing it never deletes pending unexpired notification
 work or active job state without an explicit cleanup outcome. Audit defaults to
-400 days; operational completed jobs default to 30 days with compact repair
+365 days; operational completed jobs default to 30 days with compact repair
 exhaustion summaries retained across the observation horizon.
 
 Keep active incidents and undelivered outbox entries regardless of ordinary history
-age. Retain resolved alert/event history and terminal delivery outcomes for 400 days;
+age. Retain resolved alert/event history and terminal delivery outcomes for 365 days;
 maintain event/destination deduplication tombstones through that horizon. Expired
 events cannot be manually redelivered without an explicit new notification operation.
 
 ## Capacity and operations
 
 Estimate rows before enablement: 100 SLIs at 60-second resolution produce 144,000
-observations/day, or 57.6 million over 400 days, before indexes and metadata.
+observations/day, or 52.56 million over 365 days, before indexes and metadata.
 This is arithmetic, not a benchmark. Surface configured retention and storage growth.
 Warn before admitting a configuration beyond tested capacity; do not promise a
 specific supported scale without load evidence.
@@ -158,7 +166,7 @@ old writes. Restore never silently revives credentials revoked after the snapsho
 
 ## Review notes and evidence
 
-- **REVIEW-S01:** 400-day canonical retention favors correctness over disk cost.
+- **REVIEW-S01:** 365-day canonical retention favors correctness over disk cost.
   Confirm the desired history and deployment scale; reduce the default if needed,
   without claiming arbitrary long reports from lossy rollups.
 - **REVIEW-S02:** Decimal count precision and seven-day delivery replay horizon are
@@ -176,7 +184,7 @@ old writes. Restore never silently revives credentials revoked after the snapsho
 Store the versioned exclusions, annotation revisions/tombstones and external event-ID
 uniqueness required by [SPEC-0016](0016-maintenance-exclusions.md) and
 [SPEC-0017](0017-slo-timeline-annotations.md). Retain their audit/history for at least
-400 days and preserve exclusion provenance needed by retained measurement/report
+365 days and preserve exclusion provenance needed by retained measurement/report
 evidence. Exclusion revision changes atomically invalidate dependent calculations;
 annotation changes never invalidate measurement math. Apply the same snapshot,
 transaction and bounded retention discipline as other persistent records.

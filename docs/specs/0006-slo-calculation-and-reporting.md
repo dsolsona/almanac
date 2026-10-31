@@ -1,6 +1,6 @@
 # SPEC-0006: SLO calculation and reporting
 
-> Accepted amendment, 2026-10-30: Operational reads use exact derived generations with calculation/source/revision evidence. Expensive preparation runs asynchronously; clock-driven updates and stale/preparing states remain explicit. Aggregate and cached results must equal the canonical evaluator at identical bounds.
+> Accepted amendment, 2026-10-30: Operational reads use exact derived generations with calculation/source/revision evidence. Heavy maintenance runs asynchronously; ordinary page reads do not wait for jobs. Current summaries and historical SLO points are maintained on ingestion and due time boundaries, with explicit freshness. Aggregate and cached results must equal the canonical evaluator at identical bounds.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the
 > maintainer after Crit review. Implementation remains outstanding.
@@ -324,7 +324,7 @@ and [SPEC-0005](0005-openslo-and-resource-model.md) for revisions and compatibil
 - REVIEW-M06: Approve aligned whole-interval queries, restricted calendar anchors,
   and maintenance under SPEC-0016 (initial deferral superseded). More flexible boundaries need finer
   retained facts; notification silences remain independent of this decision.
-- REVIEW-M07: Approve exact decimal counts and proposed 400-day raw retention as the
+- REVIEW-M07: Approve exact decimal counts and accepted one-year raw retention as the
   initial correctness baseline; aggregates may accelerate but not replace facts needed
   for supported reports. Capacity testing must validate deployment defaults.
 

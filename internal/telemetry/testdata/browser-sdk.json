@@ -1,0 +1,659 @@
+[
+  {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "almanac-web"
+              }
+            },
+            {
+              "key": "service.version",
+              "value": {
+                "stringValue": "client.ts"
+              }
+            },
+            {
+              "key": "deployment.environment.name",
+              "value": {
+                "stringValue": "development"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "almanac-web"
+            },
+            "spans": [
+              {
+                "traceId": "fbc888ce16e802780b57dc963fdc6039",
+                "spanId": "9aaa984311348880",
+                "name": "ui.management",
+                "kind": 1,
+                "startTimeUnixNano": "1793478001651399902",
+                "endTimeUnixNano": "1793478001967699951",
+                "attributes": [
+                  {
+                    "key": "almanac.journey",
+                    "value": {
+                      "stringValue": "management"
+                    }
+                  },
+                  {
+                    "key": "almanac.action",
+                    "value": {
+                      "stringValue": "document"
+                    }
+                  },
+                  {
+                    "key": "almanac.result",
+                    "value": {
+                      "stringValue": "cancelled"
+                    }
+                  },
+                  {
+                    "key": "almanac.duration_ms",
+                    "value": {
+                      "doubleValue": 316.29999999701977
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "46ba2fa8ef4d594d9e72ac5ffd4ee2f0",
+                "spanId": "764621aec2003b12",
+                "parentSpanId": "618614850d5940d3",
+                "name": "http.GET /api/v1/slis",
+                "kind": 3,
+                "startTimeUnixNano": "1793478001969000000",
+                "endTimeUnixNano": "1793478001975300000",
+                "attributes": [
+                  {
+                    "key": "http.request.method",
+                    "value": {
+                      "stringValue": "GET"
+                    }
+                  },
+                  {
+                    "key": "http.route",
+                    "value": {
+                      "stringValue": "/api/v1/slis"
+                    }
+                  },
+                  {
+                    "key": "http.response.status_code",
+                    "value": {
+                      "intValue": 200
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "46ba2fa8ef4d594d9e72ac5ffd4ee2f0",
+                "spanId": "c9b7306451da6ea0",
+                "parentSpanId": "764621aec2003b12",
+                "name": "http.response.read",
+                "kind": 1,
+                "startTimeUnixNano": "1793478001975000000",
+                "endTimeUnixNano": "1793478001975600000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "46ba2fa8ef4d594d9e72ac5ffd4ee2f0",
+                "spanId": "b161caacce4fec53",
+                "parentSpanId": "764621aec2003b12",
+                "name": "ui.json.parse",
+                "kind": 1,
+                "startTimeUnixNano": "1793478001976000000",
+                "endTimeUnixNano": "1793478001976000000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "46ba2fa8ef4d594d9e72ac5ffd4ee2f0",
+                "spanId": "e165bca1939c6adb",
+                "parentSpanId": "618614850d5940d3",
+                "name": "ui.chart.render",
+                "kind": 1,
+                "startTimeUnixNano": "1793478001976000000",
+                "endTimeUnixNano": "1793478001976000000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "46ba2fa8ef4d594d9e72ac5ffd4ee2f0",
+                "spanId": "618614850d5940d3",
+                "name": "ui.sli.list",
+                "kind": 1,
+                "startTimeUnixNano": "1793478001968799805",
+                "endTimeUnixNano": "1793478002013799805",
+                "attributes": [
+                  {
+                    "key": "almanac.journey",
+                    "value": {
+                      "stringValue": "sli.list"
+                    }
+                  },
+                  {
+                    "key": "almanac.action",
+                    "value": {
+                      "stringValue": "navigation"
+                    }
+                  },
+                  {
+                    "key": "almanac.result",
+                    "value": {
+                      "stringValue": "ready"
+                    }
+                  },
+                  {
+                    "key": "almanac.duration_ms",
+                    "value": {
+                      "intValue": 45
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "almanac-web"
+              }
+            },
+            {
+              "key": "service.version",
+              "value": {
+                "stringValue": "client.ts"
+              }
+            },
+            {
+              "key": "deployment.environment.name",
+              "value": {
+                "stringValue": "development"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "almanac-web"
+            },
+            "spans": [
+              {
+                "traceId": "2f21245bf00787111c3d5f167b8c3565",
+                "spanId": "1c236c4718f59a49",
+                "name": "ui.management",
+                "kind": 1,
+                "startTimeUnixNano": "1793478002328800049",
+                "endTimeUnixNano": "1793478002543100098",
+                "attributes": [
+                  {
+                    "key": "almanac.journey",
+                    "value": {
+                      "stringValue": "management"
+                    }
+                  },
+                  {
+                    "key": "almanac.action",
+                    "value": {
+                      "stringValue": "document"
+                    }
+                  },
+                  {
+                    "key": "almanac.result",
+                    "value": {
+                      "stringValue": "cancelled"
+                    }
+                  },
+                  {
+                    "key": "almanac.duration_ms",
+                    "value": {
+                      "doubleValue": 214.30000000074506
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "2fa2a26f2909cd2155439d1b6255d3a9",
+                "spanId": "d277e0fab64a2f31",
+                "parentSpanId": "03ed916268ecaab5",
+                "name": "http.GET /api/v1/slis",
+                "kind": 3,
+                "startTimeUnixNano": "1793478002543000000",
+                "endTimeUnixNano": "1793478002568900000",
+                "attributes": [
+                  {
+                    "key": "http.request.method",
+                    "value": {
+                      "stringValue": "GET"
+                    }
+                  },
+                  {
+                    "key": "http.route",
+                    "value": {
+                      "stringValue": "/api/v1/slis"
+                    }
+                  },
+                  {
+                    "key": "http.response.status_code",
+                    "value": {
+                      "intValue": 200
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "2fa2a26f2909cd2155439d1b6255d3a9",
+                "spanId": "c788a18ddddae398",
+                "parentSpanId": "d277e0fab64a2f31",
+                "name": "http.response.read",
+                "kind": 1,
+                "startTimeUnixNano": "1793478002569000000",
+                "endTimeUnixNano": "1793478002578400000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "2fa2a26f2909cd2155439d1b6255d3a9",
+                "spanId": "2d17162dd91691a2",
+                "parentSpanId": "d277e0fab64a2f31",
+                "name": "ui.json.parse",
+                "kind": 1,
+                "startTimeUnixNano": "1793478002578000000",
+                "endTimeUnixNano": "1793478002578000000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "2fa2a26f2909cd2155439d1b6255d3a9",
+                "spanId": "36b1bbc68873f75b",
+                "parentSpanId": "03ed916268ecaab5",
+                "name": "ui.chart.render",
+                "kind": 1,
+                "startTimeUnixNano": "1793478002578000000",
+                "endTimeUnixNano": "1793478002578000000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "2fa2a26f2909cd2155439d1b6255d3a9",
+                "spanId": "03ed916268ecaab5",
+                "name": "ui.sli.list",
+                "kind": 1,
+                "startTimeUnixNano": "1793478002543400146",
+                "endTimeUnixNano": "1793478002596600098",
+                "attributes": [
+                  {
+                    "key": "almanac.journey",
+                    "value": {
+                      "stringValue": "sli.list"
+                    }
+                  },
+                  {
+                    "key": "almanac.action",
+                    "value": {
+                      "stringValue": "navigation"
+                    }
+                  },
+                  {
+                    "key": "almanac.result",
+                    "value": {
+                      "stringValue": "ready"
+                    }
+                  },
+                  {
+                    "key": "almanac.duration_ms",
+                    "value": {
+                      "doubleValue": 53.19999999925494
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "almanac-web"
+              }
+            },
+            {
+              "key": "service.version",
+              "value": {
+                "stringValue": "client.ts"
+              }
+            },
+            {
+              "key": "deployment.environment.name",
+              "value": {
+                "stringValue": "development"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "almanac-web"
+            },
+            "spans": [
+              {
+                "traceId": "eaff63f5bd12f792b48ec535924dabd4",
+                "spanId": "3c256961eaf0e845",
+                "name": "ui.management",
+                "kind": 1,
+                "startTimeUnixNano": "1793478002803199951",
+                "endTimeUnixNano": "1793478003006800049",
+                "attributes": [
+                  {
+                    "key": "almanac.journey",
+                    "value": {
+                      "stringValue": "management"
+                    }
+                  },
+                  {
+                    "key": "almanac.action",
+                    "value": {
+                      "stringValue": "document"
+                    }
+                  },
+                  {
+                    "key": "almanac.result",
+                    "value": {
+                      "stringValue": "cancelled"
+                    }
+                  },
+                  {
+                    "key": "almanac.duration_ms",
+                    "value": {
+                      "doubleValue": 203.60000000149012
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "285aa951c2c97ccb8e911b5a7e42baf3",
+                "spanId": "e69e2b07bdc71851",
+                "parentSpanId": "577e0563bc4c0ca5",
+                "name": "http.GET /api/v1/slis",
+                "kind": 3,
+                "startTimeUnixNano": "1793478003007000000",
+                "endTimeUnixNano": "1793478003028900000",
+                "attributes": [
+                  {
+                    "key": "http.request.method",
+                    "value": {
+                      "stringValue": "GET"
+                    }
+                  },
+                  {
+                    "key": "http.route",
+                    "value": {
+                      "stringValue": "/api/v1/slis"
+                    }
+                  },
+                  {
+                    "key": "http.response.status_code",
+                    "value": {
+                      "intValue": 200
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "285aa951c2c97ccb8e911b5a7e42baf3",
+                "spanId": "0ecbf8c60cda9f72",
+                "parentSpanId": "e69e2b07bdc71851",
+                "name": "http.response.read",
+                "kind": 1,
+                "startTimeUnixNano": "1793478003029000000",
+                "endTimeUnixNano": "1793478003038300000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "285aa951c2c97ccb8e911b5a7e42baf3",
+                "spanId": "5c4fb8a4f89d2bc1",
+                "parentSpanId": "e69e2b07bdc71851",
+                "name": "ui.json.parse",
+                "kind": 1,
+                "startTimeUnixNano": "1793478003038000000",
+                "endTimeUnixNano": "1793478003038000000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "285aa951c2c97ccb8e911b5a7e42baf3",
+                "spanId": "99f091eac6168d8e",
+                "parentSpanId": "577e0563bc4c0ca5",
+                "name": "ui.chart.render",
+                "kind": 1,
+                "startTimeUnixNano": "1793478003038000000",
+                "endTimeUnixNano": "1793478003038100000",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              },
+              {
+                "traceId": "285aa951c2c97ccb8e911b5a7e42baf3",
+                "spanId": "577e0563bc4c0ca5",
+                "name": "ui.sli.list",
+                "kind": 1,
+                "startTimeUnixNano": "1793478003007000000",
+                "endTimeUnixNano": "1793478003062099854",
+                "attributes": [
+                  {
+                    "key": "almanac.journey",
+                    "value": {
+                      "stringValue": "sli.list"
+                    }
+                  },
+                  {
+                    "key": "almanac.action",
+                    "value": {
+                      "stringValue": "navigation"
+                    }
+                  },
+                  {
+                    "key": "almanac.result",
+                    "value": {
+                      "stringValue": "ready"
+                    }
+                  },
+                  {
+                    "key": "almanac.duration_ms",
+                    "value": {
+                      "doubleValue": 55.099999997764826
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

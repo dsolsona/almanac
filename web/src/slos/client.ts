@@ -1,6 +1,7 @@
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { clearQueryCache, sharedRead, waitForReadRetry } from '../queryCache.ts';
+import { traceJSON } from '../telemetry/client.ts';
 
 export type Service = components['schemas']['Service'];
 export type Slo = components['schemas']['Slo'];
@@ -202,7 +203,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     try { while (true) { const item = await reader.read(); if (item.done) break; size += item.value.length; if (size > responseLimit) { await reader.cancel(); throw new Error('large response'); } chunks.push(item.value); } }
     finally { reader.releaseLock(); }
     const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-    data = JSON.parse(new TextDecoder().decode(bytes));
+    data = traceJSON(response, new TextDecoder().decode(bytes));
   } catch { throw new SloFailure(mutation ? 'The request may have succeeded, but its response could not be confirmed. Check the list before retrying.' : 'The server returned an invalid response.', mutation, response.status); }
   if (!response.ok) {
     const code = typeof data === 'object' && data !== null && 'code' in data && typeof data.code === 'string' ? data.code : '';

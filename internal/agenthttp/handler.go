@@ -25,6 +25,7 @@ import (
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	googleuuid "github.com/google/uuid"
 )
 
@@ -668,6 +669,7 @@ func problemMessage(code string) string {
 	}
 }
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
+	defer telemetry.ResponseEncoding(w)()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, value)

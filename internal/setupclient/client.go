@@ -23,6 +23,7 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authhttp"
 	"github.com/dsolsona/almanac/internal/identity"
+	"github.com/dsolsona/almanac/internal/telemetry"
 )
 
 const maxResponseBytes = 64 << 10
@@ -99,7 +100,7 @@ func newClient(options Options, requireLogin bool) (*Client, error) {
 		MaxIdleConns:          2,
 		IdleConnTimeout:       30 * time.Second,
 	}
-	hc := &http.Client{Transport: transport, Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	hc := &http.Client{Transport: telemetry.ClientTransport(transport, "backend.request"), Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	generated, err := api.NewClient(u.String(), api.WithHTTPClient(hc))
 	if err != nil {
 		transport.CloseIdleConnections()
@@ -109,9 +110,7 @@ func newClient(options Options, requireLogin bool) (*Client, error) {
 }
 
 func (c *Client) Close() {
-	if tr, ok := c.http.Transport.(*http.Transport); ok {
-		tr.CloseIdleConnections()
-	}
+	c.http.CloseIdleConnections()
 }
 
 func (c *Client) Complete(ctx context.Context, initialPassword, newPassword string) (Result, error) {

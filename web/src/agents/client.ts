@@ -1,5 +1,6 @@
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
+import { traceJSON } from '../telemetry/client.ts';
 export type { AuthContext } from '../auth/client.ts';
 
 export type Agent = components['schemas']['Agent'];
@@ -226,7 +227,7 @@ async function readBytes(response: Response, signal: AbortSignal): Promise<Uint8
   return bytes;
 }
 async function readJSON(response: Response, signal: AbortSignal): Promise<unknown> {
-  return JSON.parse(new TextDecoder().decode(await readBytes(response, signal))) as unknown;
+  return traceJSON(response, new TextDecoder().decode(await readBytes(response, signal)));
 }
 function discard(response: Response): void {
   try { const result = response.body?.cancel(); if (result) void result.catch(() => undefined); } catch { /* Closed bodies need no public detail. */ }

@@ -1,4 +1,5 @@
 import type { components } from '../api/generated.ts';
+import { traceJSON } from '../telemetry/client.ts';
 import type { AuthContext } from '../auth/client.ts';
 
 export type Sli = components['schemas']['Sli'];
@@ -178,7 +179,7 @@ async function readJSON(response: Response, maxBytes = 512 * 1024): Promise<unkn
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch { throw new SliFailure('invalid_response', 'The server returned an invalid SLI response.'); }
+  try { return traceJSON(response, new TextDecoder().decode(bytes)); } catch { throw new SliFailure('invalid_response', 'The server returned an invalid SLI response.'); }
 }
 
 async function request<T>(path: string, init: RequestInit, expected: number, validate: (value: unknown) => value is T, maxBytes?: number): Promise<{ value: T; response: Response }> {

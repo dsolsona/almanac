@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Labels describe fixed traffic classes and stages, never users, SQL, URLs or
@@ -93,18 +95,28 @@ var queryDurationBounds = [...]time.Duration{time.Millisecond, 5 * time.Millisec
 
 type queryTimingKey struct{}
 
-type runtimeQueryTracer struct{ metrics *queryMetrics }
+type runtimeQueryTracer struct {
+	metrics *queryMetrics
+	class   string
+}
 
-func (t runtimeQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
-	return context.WithValue(ctx, queryTimingKey{}, time.Now())
+type tracedQuery struct {
+	started time.Time
+	span    trace.Span
+}
+
+func (t runtimeQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	ctx, span := telemetry.DatabaseQuery(ctx, data.SQL, t.class)
+	return context.WithValue(ctx, queryTimingKey{}, tracedQuery{started: time.Now(), span: span})
 }
 
 func (t runtimeQueryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
-	start, ok := ctx.Value(queryTimingKey{}).(time.Time)
+	query, ok := ctx.Value(queryTimingKey{}).(tracedQuery)
 	if !ok {
 		return
 	}
-	t.metrics.observe(time.Since(start), data.Err)
+	t.metrics.observe(time.Since(query.started), data.Err)
+	telemetry.DatabaseResult(query.span, data.CommandTag.RowsAffected(), data.Err)
 }
 
 func (m *queryMetrics) observe(elapsed time.Duration, err error) {
@@ -147,8 +159,20 @@ func (r *Runtime) sampleDerivedMetrics(ctx context.Context, now time.Time) error
 // No profiling or management endpoint is registered here.
 func (r *Runtime) MetricsHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, request *http.Request) {
 		var body strings.Builder
+		queue := telemetry.TraceQueueMetrics(request.Context())
+		if queue.Available {
+			metric(&body, "almanac_trace_queue_metrics_ready", "", 1)
+		} else {
+			metric(&body, "almanac_trace_queue_metrics_ready", "", 0)
+		}
+		metric(&body, "almanac_trace_queue_dropped_spans_total", "", queue.Dropped)
+		metric(&body, "almanac_trace_queue_spans", "", queue.Size)
+		metric(&body, "almanac_trace_queue_capacity", "", queue.Capacity)
+		metric(&body, "almanac_trace_export_failures_total", "", telemetry.ExportFailures())
+		metric(&body, "almanac_browser_trace_dropped_batches_total", "", telemetry.BrowserDroppedBatches())
+		metric(&body, "almanac_browser_trace_export_failures_total", "", telemetry.BrowserExportFailures())
 		body.WriteString("# TYPE almanac_db_query_duration_seconds histogram\n")
 		body.WriteString("# TYPE almanac_ingestion_batch_duration_seconds histogram\n")
 		for index, result := range [...]string{"accepted", "duplicate", "unsuccessful"} {

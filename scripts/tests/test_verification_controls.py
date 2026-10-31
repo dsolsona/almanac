@@ -17,6 +17,14 @@ SPEC.loader.exec_module(vc)
 
 
 class VerificationControlsTest(unittest.TestCase):
+    def test_forward_and_backward_clock_steps_do_not_change_test_duration(self):
+        for wall_end in (488, -288):
+            evidence = vc.elapsed_evidence(100, wall_end, 20, 38.929)
+            self.assertAlmostEqual(evidence["elapsed_seconds"], 18.929)
+            self.assertEqual(evidence["wall_elapsed_seconds"], wall_end - 100)
+            self.assertAlmostEqual(evidence["clock_adjustment_seconds"], wall_end - 100 - 18.929)
+            self.assertEqual(evidence["elapsed_clock"], "monotonic")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "checkout"

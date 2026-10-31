@@ -2,11 +2,11 @@
 
 - Status: accepted
 - Created: 2026-10-30
-- Accepted: 2026-10-30
+- Accepted: 2026-10-30; amended 2026-10-31 after maintainer approval of the performance/tracing intervention in Crit
 - Approval: maintainer explicitly replied "approved" after the combined Crit review of this spec, ADR-0024 and the stabilization plan
 - Implementation: in progress
 - Verification: acceptance evidence remains outstanding, tracked in [F3-T08](../tasks/F3-T08.md)
-- Related ADRs: [ADR-0024](../adr/0024-precomputed-operational-reads.md), [ADR-0005](../adr/0005-measurement-semantics.md), [ADR-0007](../adr/0007-postgresql-and-storage-boundaries.md), [ADR-0023](../adr/0023-slo-operational-urgency.md)
+- Related ADRs: [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md), [ADR-0024](../adr/0024-precomputed-operational-reads.md), [ADR-0005](../adr/0005-measurement-semantics.md), [ADR-0007](../adr/0007-postgresql-and-storage-boundaries.md), [ADR-0023](../adr/0023-slo-operational-urgency.md)
 - Plan: [Backend stabilization](../plans/0022-backend-stabilization.md)
 - Supersedes / superseded by: amends the existing contracts in the table below
 
@@ -20,7 +20,7 @@ data, credentials and preview availability must be preserved.
 ## Scope and non-goals
 
 Includes pooled PostgreSQL access, bounded SLI lists, exact aggregate storage,
-durable recomputation, current projections, cached history, list pagination,
+durable recomputation, current projections, retained SLO time series, list pagination,
 independent browser loading, diagnostics and production-stack acceptance.
 The first implementation supports the currently executable single-SLI occurrence
 objectives. Later methods must use their own proven sufficient aggregates or remain
@@ -41,8 +41,8 @@ remain stable; AC-01 through AC-09 below govern the added stabilization requirem
 | ADR-0005 | No mathematical amendment: exact counts, complete intervals, unknown coverage, revisions and immutable exports remain required. |
 | ADR-0023 | No urgency-threshold amendment. Clarify that bounded list/history projections are served from coherent published derived generations; currentness and stale results follow this spec. |
 | SPEC-0003 | Canonical acceptance and its dirty-generation marker commit atomically; duplicates do not advance generations; derived failures cannot reverse accepted ingestion. |
-| SPEC-0006 | Define exact aggregate equivalence, generation metadata, bounded asynchronous preparation, time-driven recomputation and stale-cache behavior. Replace any implication that an interactive read must calculate from raw facts with calculation provenance and exact equivalence. |
-| SPEC-0007 | Make hourly count/coverage aggregates and derived status/history required caches; retain 400-day canonical data. Specify dirty ranges, generation fencing, cache retention, pools and admission budgets. |
+| SPEC-0006 | Define exact aggregate equivalence, generation metadata, incremental maintenance, bounded foreground reads, time-driven recomputation and stale-cache behavior. Replace any implication that an interactive read must calculate from raw facts with calculation provenance and exact equivalence. |
+| SPEC-0007 | Maintain exact source summaries and one year of retained SLO attainment/budget/burn time series; retain 365-day canonical data. Specify dirty ranges, generation fencing, cache retention, pools and admission budgets. |
 | SPEC-0010 | Describe coherent generation fields, preparation/unavailable responses, pinned exact-value pagination and UI/CLI parity. Final endpoint/schema diffs are reviewed before implementation. |
 | SPEC-0012 | Add shared bounded request caching and independent status/history loading. Keep page composition, 1,500-point cap, extrema/gaps, exact tables and existing frontend budgets. |
 | SPEC-0013 | Own pools/workers in backend lifecycle; validate schema at startup/readiness; expose lag, queue, query and pool metrics; test restart/shutdown. |
@@ -85,16 +85,22 @@ summary becoming visible is at most 10 seconds. Clock-driven status must advance
 within 10 seconds after its required cadence boundary. Large historical rebuilding
 has explicit progress and a separate budget; it cannot delay current summaries.
 
-For an absent/invalidated generation, return HTTP 503 with a stable problem code
-`derived_data_pending`, `Retry-After: 2`, and bounded preparation metadata. Preparation
-is idempotently queued; repeated reads do not duplicate jobs. This is distinct from
-source no-data, zero traffic, not-applicable eligibility, expired history and a
-database failure. Browser/CLI show that distinction. Do not synchronously rebuild
-months of history as a fallback. Preserve unrelated controls and any independently
-available section. A previously confirmed value may remain visible only with an
-explicit stale/preparing label and its evaluation time.
+Normal list/detail/range navigation returns bounded results from maintained time
+series and exact bounded edges; it cannot enqueue graph work and poll before
+showing useful results. Response-cache misses, minute boundaries, new observations
+and restart with retained data are ordinary reads, not exempt preparation phases.
+Explicit import/repair/disaster recovery may expose preparation/failure metadata;
+it is distinct from source no-data, zero traffic, not-applicable eligibility,
+expired history and database failures. Never fabricate current success.
 
-Once preparation completes, ordinary reads use published projections. Global
+Current attainment, remaining budget and supported burn windows are maintained on
+affected ingestion and due window/freshness boundaries. Persist their historical
+points for one year independently of ephemeral response caches. Historical
+resolution summaries retain extrema/gaps and are keyed independently of moving
+page ranges. A graph's display period is separate from its burn window: a year of
+1-hour or 6-hour burn is a historical range, not a year-long burn calculation.
+
+Global
 filters, urgency counts, ordering and pagination pin one coherent generation or
 immutable set of generation references. A cursor cannot mix updates between pages;
 expired generations return an explicit expired-cursor error. Background publication
@@ -145,6 +151,9 @@ read previously authorized derived responses.
 ## Workloads and acceptance budgets
 
 Use production builds, real PostgreSQL 18 and ordinary authenticated HTTP paths.
+The 2026-10-31 amendment requires 10/100/1,000-SLO installation fixtures, with
+10/20-row UI pages and one year of shared/independent SLI history. The original
+100-SLI fixture below remains an intermediate checkpoint, not full scale acceptance.
 Record CPU/RAM, storage, PostgreSQL settings, dataset, image/source revision,
 query plans, connection counts, memory and derived disk cost. These are acceptance
 fixtures, not an unmeasured capacity promise.
@@ -153,13 +162,12 @@ fixtures, not an unmeasured capacity promise.
 | --- | --- |
 | Focused regression | One SLI at 15 s for 14 days (80,640 intervals), plus one at 60 s for 56 days; 28-day occurrence windows. Reproduce dense reads without a broad matrix. |
 | Integrated workload | 100 SLIs at 60 s for 56 days (8.064 million canonical intervals), 100 SLOs, 10 agents and 10 interactive users. Include shared-SLI objectives in the 100 total, fractional/large counts, incidents, gaps, known-empty and zero traffic. |
-| Retention boundary | The same 100 SLIs over 400 days (57.6 million intervals), including month partitions and expiry. Run once on the final candidate; record required resources and setup separately. |
+| Retention boundary | The same 100 SLIs over 365 days (52.56 million intervals), including month partitions and expiry. Run once on the final candidate; record required resources and setup separately. |
 
 Evaluate 7/28/90/365-day graph ranges with truthful unavailable regions. Use a
-50-row list page and at most 1,500 points per numerical series. For API statistics
-collect at least 100 reads per operation at ten-user concurrency after derived
-preparation; measure cold application/cache startup separately with persisted
-derived data. Include a blank-derived rebuild scenario and report its duration,
+10- or 20-row list page and at most 1,500 points per numerical series. For API statistics
+collect at least 100 reads per operation at ten-user concurrency without excluding normal cache-miss/first-visit waits. Measure cold application/cache
+startup separately with persisted derived data. Include a blank-derived rebuild scenario and report its duration,
 without charging preparation as an ordinary ready-data latency or hiding it.
 
 | Operation, ready derived data | Required p95 server latency |
@@ -168,11 +176,21 @@ without charging preparation as an ordinary ready-data latency or hiding it.
 | SLO four-lane history; bounded exact-value page | <= 500 ms each |
 | Accepted ingestion under simultaneous reads/rebuild | <= 250 ms and <= 1.25 times its measured ingestion-only p95 |
 
-For the production browser fixture, record 20 cold loads and 50 navigations or
-filter/range interactions. SLI/SLO lists must show primary rows at p75 <= 1 s;
-SLO details must show primary content and chart at p75 <= 2.5 s under SPEC-0012's
-network/CPU settings. Existing 200 ms interaction/chart-update budgets remain.
-Measure backend, transport, parsing and rendering separately.
+For the production browser fixture, record at least 20 first/cold and repeat
+loads per critical page and 50 interactions. Every SLI/SLO list sample must become
+usable in < 1,000 ms, preferably <= 500 ms; every SLO-detail and range/burn change
+must complete in < 500 ms. Include rendered graphs, not just API completion or a
+loading shell. Keep the existing <= 200 ms feedback/chart-update budgets and
+SPEC-0012's CPU/network settings. Report p50/p95/max and retain every failure;
+percentiles do not exempt samples exceeding the action-specific limit.
+
+Trace browser navigation through fetch, HTTP/auth/services, pool acquisition,
+named SQL, calculations, serialization and chart paint with OpenTelemetry. Send
+bounded OTLP/HTTP exports to VictoriaTraces; include agent, CLI and background
+paths and W3C propagation. Protect secrets, bound authenticated browser intake,
+and isolate exporter failures from application work. Full local acceptance capture
+is required; missing/incomplete traces fail evidence. Tracing establishes duration,
+while independent exact expected values establish numerical correctness.
 
 During a 15-minute integrated live run, each agent must remain within its existing
 scheduling/resource contract; backend-induced collection lateness p99 may increase
@@ -183,8 +201,9 @@ Do not increase pool sizes, timeouts or retry counts to hide unbounded query wor
 
 ## Acceptance criteria
 
-- AC-01: Ready list/status/history reads meet the stated latency budgets in the
-  integrated and retention fixtures; cold/rebuild results are reported separately.
+- AC-01: Actual SLI/SLO lists load in < 1,000 ms and detail/range/burn actions in
+  < 500 ms at 10/100/1,000 SLOs with one year of history; first visits, response-cache
+  misses and ordinary restart/time-boundary loads are included. API budgets also apply.
 - AC-02: Canonical versus aggregate/cached output matches exactly for fractional
   and maximum counts, equality thresholds, negative budgets, partial/empty/gapped
   intervals, non-hour windows, validity, exclusion and retention boundaries.
@@ -205,10 +224,20 @@ Do not increase pool sizes, timeouts or retry counts to hide unbounded query wor
   reads do not sweep canonical retention or rebuild every objective; report derived
   storage bytes and worker backlog/drain rates as well as HTTP percentiles.
 
+- AC-10: OpenTelemetry traces in VictoriaTraces cover complete rendered journeys,
+  backend/database/calculation work and agent/CLI/background paths; missing spans,
+  export failures or incorrect source identity cannot produce passing evidence.
+- AC-11: Normal navigation does not wait for queued preparation; current summaries
+  and stable historical inputs are maintained independently of page visits.
+- AC-12: A year of historical attainment, remaining budget and both supported burn
+  windows survives cache expiry/restart and supports bounded month/year graphs
+  with exact drill-down, coherent late corrections and preserved extrema/gaps.
+
 ## Dependencies and open questions
 
-The architecture, numeric budgets and additive API direction were accepted on
-2026-10-30. Existing precision/retention/authorization remain constraints. The plan's
+The original architecture, numeric budgets and additive API direction were accepted
+on 2026-10-30. ADR-0025 and the 2026-10-31 intervention amendment supersede the
+foreground preparation policy, retention, page scale and end-to-end latency limits. Existing precision/retention/authorization remain constraints. The plan's
 first checkpoint produces the exact schema/API diff and resource estimates before
 coding; the detailed wire contract remains subject to that checkpoint's review.
 
@@ -224,3 +253,7 @@ This document does not claim measured capacity.
 - 2026-10-30: Drafted after the maintainer paused feature delivery to prioritize
   backend correctness, predictable latency and reuse of proven processing patterns.
 - 2026-10-30: Accepted by explicit maintainer approval following Crit review.
+
+- 2026-10-31: Accepted the Crit-reviewed intervention: one-year retained SLO history,
+  10/20-row lists at 10/100/1,000 scale, < 500 ms detail/graph actions, no foreground
+  job wait, and OpenTelemetry/VictoriaTraces journey evidence. Implementation remains unverified.

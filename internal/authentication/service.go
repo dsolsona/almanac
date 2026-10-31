@@ -12,6 +12,7 @@ import (
 	"github.com/dsolsona/almanac/internal/identity"
 	"github.com/dsolsona/almanac/internal/secretfile"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 )
 
 var (
@@ -120,6 +121,8 @@ func (s *Service) EnsureInitialOwner(ctx context.Context, login, passwordFile, r
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (SessionResult, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "auth.login")
+	defer span.End()
 	ctx, cancel := bounded(ctx)
 	defer cancel()
 	if !validLogin(input.Login) || !validRequestID(input.RequestID) || !validCandidate(input.Password) || !validSource(input.Source) {
@@ -173,6 +176,8 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (SessionResult, e
 }
 
 func (s *Service) ChangePassword(ctx context.Context, input ChangePasswordInput) (SessionResult, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "auth.change_password")
+	defer span.End()
 	ctx, cancel := bounded(ctx)
 	defer cancel()
 	if !validRequestID(input.RequestID) || !validSource(input.Source) {
@@ -253,6 +258,8 @@ func (s *Service) ChangePassword(ctx context.Context, input ChangePasswordInput)
 }
 
 func (s *Service) Authenticate(ctx context.Context, secret string) (storage.SessionAccess, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "auth.authenticate")
+	defer span.End()
 	ctx, cancel := bounded(ctx)
 	defer cancel()
 	digest, err := identity.SessionSecretVerifier(secret)
@@ -268,6 +275,8 @@ func (s *Service) Authenticate(ctx context.Context, secret string) (storage.Sess
 
 // Inspect validates a session without extending its idle lifetime.
 func (s *Service) Inspect(ctx context.Context, secret string) (storage.SessionAccess, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "auth.session.inspect")
+	defer span.End()
 	ctx, cancel := bounded(ctx)
 	defer cancel()
 	digest, err := identity.SessionSecretVerifier(secret)
@@ -282,6 +291,8 @@ func (s *Service) Inspect(ctx context.Context, secret string) (storage.SessionAc
 }
 
 func (s *Service) Logout(ctx context.Context, secret, requestID string) (bool, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "auth.logout")
+	defer span.End()
 	ctx, cancel := bounded(ctx)
 	defer cancel()
 	if !validRequestID(requestID) {

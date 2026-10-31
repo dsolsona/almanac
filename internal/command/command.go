@@ -20,7 +20,9 @@ import (
 	"github.com/dsolsona/almanac/internal/backendhttp"
 	"github.com/dsolsona/almanac/internal/config"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/dsolsona/almanac/internal/uihttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type BuildInfo struct {
@@ -31,6 +33,21 @@ type BuildInfo struct {
 }
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info BuildInfo) int {
+	if len(args) > 0 && args[0] != "serve" {
+		tracing, err := telemetry.Start(ctx, "almanac-cli")
+		if err != nil {
+			fmt.Fprintln(stderr, "telemetry configuration is invalid")
+			return 2
+		}
+		defer func() {
+			flush, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = tracing.Shutdown(flush)
+		}()
+		var span trace.Span
+		ctx, span = telemetry.Tracer().Start(ctx, "cli.command")
+		defer span.End()
+	}
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		printHelp(stdout)
 		return 0
@@ -179,6 +196,18 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (exitCode int) {
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
+	tracing, err := telemetry.Start(parent, "almanac-backend")
+	if err != nil {
+		logger.Error("backend telemetry configuration is invalid")
+		return 2
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := tracing.Shutdown(flush); err != nil {
+			logger.Warn("backend telemetry flush incomplete")
+		}
+	}()
 	var assets http.Handler
 	if cfg.BackendUI() {
 		var err error

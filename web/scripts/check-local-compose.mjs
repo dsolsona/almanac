@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes, X509Certificate } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { get, request } from 'node:https';
 import { chromium, expect } from '@playwright/test';
+import { checkTelemetryRuntime } from './check-telemetry-runtime.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const fixtureMode = process.argv.length === 3 && process.argv[2] === '--cancellation-fixture';
@@ -37,7 +38,7 @@ const inputContainer = `${project}-input-init`;
 const inputVolume = `${project}-agent-input`;
 const nodeImage = 'node:26.8.1-bookworm-slim@sha256:367679cf9792759492a486e4aa4b421764d71a9546a6dae8aab81a99eb797b3e';
 const env = { ...process.env, COMPOSE_PROJECT_NAME: project, ALMANAC_PORT: '18086',
-  ALMANAC_METRICS_PORT: '0', ALMANAC_TRACES_PORT: '0' };
+  ALMANAC_METRICS_PORT: '0', ALMANAC_TRACES_PORT: '0', ALMANAC_TELEMETRY_DISABLED: 'false' };
 delete env.COMPOSE_FILE;
 const url = 'https://localhost:18086';
 let stage = 'build and bootstrap';
@@ -253,6 +254,52 @@ async function checkPermanentLogin() {
   } finally {
     activeBrowser = undefined;
     await browser.close();
+  }
+}
+
+async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json',precedingFailure=null) {
+  assert.equal(launchers.some(handle=>!handle.exited),false,'comparison requires the completed fixture collectors to be stopped');
+  const objective=JSON.parse(readFileSync(join(artifacts,objectiveArtifact),'utf8'));
+  if(precedingFailure)assert.equal(objective.checkpoint,'operational_detail_verified');
+  assert.match(objective.slo_id,/^[0-9a-f-]{36}$/); assert.match(objective.sli_id,/^[0-9a-f-]{36}$/);
+  const backendSHA=(await compose(['exec','-T','app','sha256sum','/usr/local/bin/almanac'])).trim().split(/\s+/)[0];
+  assert.match(backendSHA,/^[0-9a-f]{64}$/);
+  const tracePort=(await compose(['port','victoriatraces','10428'])).trim();
+  assert.match(tracePort,/^127\.0\.0\.1:\d+$/);
+  const browser=await chromium.launch({args:[`--ignore-certificate-errors-spki-list=${spki}`]});
+  activeBrowser=browser;
+  let enabled=true;
+  const setEnabled=async value=>{
+    if(value===enabled)return;
+    env.ALMANAC_TELEMETRY_DISABLED=value?'false':'true';
+    await compose(['up','-d','--no-deps','app']);
+    await expect.poll(async()=>{try{return (await servedHTML()).includes(sourceMarker);}catch{return false;}},{timeout:15_000}).toBe(true);
+    enabled=value;
+  };
+  const sampleRuntime=async()=>{
+    const appID=(await compose(['ps','-q','app'])).trim();
+    assert.match(appID,/^[0-9a-f]{12,64}$/);
+    const sample=JSON.parse(await command('docker',['stats','--no-stream','--format','{{json .}}',appID],{timeout:5000}));
+    return {cpu_percent:sample.CPUPerc,memory_usage:sample.MemUsage,pids:sample.PIDs};
+  };
+  const snapshotDataset=async()=>JSON.parse((await compose(['exec','-T','postgres','psql','-U','almanac','-d','almanac','-Atc',
+    `SELECT json_build_object('slis',(SELECT count(*) FROM public.almanac_slis),'slos',(SELECT count(*) FROM public.almanac_slos),'observations',(SELECT count(*) FROM public.almanac_sli_coverage),'source_generation',(SELECT max(generation)::text FROM public.almanac_sli_source_generations WHERE sli_id='${objective.sli_id}'),'measurement_revision',(SELECT d.measurement_revision::text FROM public.almanac_slos s JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision WHERE s.id='${objective.slo_id}'))`])).trim());
+  try {
+    const context=await browser.newContext({viewport:{width:1440,height:1000}});
+    const page=await context.newPage();
+    await page.goto(url);
+    await page.getByLabel('Login',{exact:true}).fill('admin');
+    await page.getByLabel('Password',{exact:true}).fill(permanent);
+    await page.getByRole('button',{name:'Sign in',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
+    const storageState=await context.storageState();
+    await context.close();
+    await checkTelemetryRuntime({browser,url,storageState,sliID:objective.sli_id,sloID:objective.slo_id,
+      artifacts,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,precedingFailure});
+  } finally {
+    activeBrowser=undefined;
+    await browser.close();
+    await setEnabled(true);
   }
 }
 async function setCaptureViewport(page, theme, viewport) {
@@ -1383,6 +1430,8 @@ try {
   await checkPermanentLogin();
   stage = 'real Compose browser registration with Local display name';
   await checkLocalAgentRegistration();
+  stage = 'real Compose tracing baseline, time boundary and enabled/disabled overhead';
+  await checkComposeTelemetryRuntime();
   stage = 'logs exclude credentials';
   const logs = await compose(['logs', '--no-color']);
   const agentLogs = launcherLogs;
@@ -1411,6 +1460,19 @@ try {
   failed = true;
   if (cancellation) stage = `cancelled by ${cancellation}`;
   const diagnostics = { stage, failure: { name: redact(error?.name), category: failureCategory(error), message: redact(error?.message) }, launcherOutput: redact(launcherOutput), lastFailure };
+  // Capture the tracing baseline even when a later graph/navigation acceptance
+  // fails. Keep the original failure and nonzero gate result; never turn this
+  // diagnostic measurement into acceptance of the failed product journey.
+  if(!cancellation&&stage==='real Compose first SLO journey'&&existsSync(join(artifacts,'telemetry-objective.json'))){
+    const originalStage=stage,originalFailure=lastFailure;
+    try {
+      if(activeBrowser){await activeBrowser.close();activeBrowser=undefined;}
+      for(const handle of launchers)if(!handle.exited)await stopAgent(handle);
+      await checkComposeTelemetryRuntime('telemetry-objective.json',{stage:originalStage,failure:diagnostics.failure});
+      diagnostics.telemetryBaseline='captured; original journey remains failed';
+    } catch(baselineError){diagnostics.telemetryBaseline={failure:failureCategory(baselineError),message:redact(baselineError?.message)};}
+    finally {stage=originalStage;lastFailure=originalFailure;}
+  }
   if (!cancellation) {
     try { diagnostics.services = redact(await compose(['ps', '-a', '--format', 'json'])); } catch { diagnostics.services = 'unavailable'; }
     try {

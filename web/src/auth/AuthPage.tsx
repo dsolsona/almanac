@@ -3,6 +3,7 @@ import { AuthFailure, createAuthClient, type AuthContext } from './client.ts';
 import { ApplicationShell, Button, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
 import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
+import { telemetrySession } from '../telemetry/client.ts';
 
 const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((module) => ({ default: module.AgentsPage })));
 const LazyDatasourcesPage = lazy(() => import('../datasources/DatasourcesPage.tsx').then((module) => ({ default: module.DatasourcesPage })));
@@ -79,6 +80,8 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const noticeRef = useRef<HTMLDivElement>(null);
   const identityRef = useRef<string | null>(null);
   const requestGeneration = useRef(0);
+
+  useEffect(() => { telemetrySession(context); }, [context]);
 
   useEffect(() => {
     const nextID = context?.session?.user_id ?? null;

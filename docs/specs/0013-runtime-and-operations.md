@@ -12,6 +12,12 @@
 - Implementation: in progress
 - Related ADR: [ADR-0008](../adr/0008-runtime-components-and-packaging.md)
 
+> Accepted amendment, 2026-10-31: Own bounded OpenTelemetry SDK/export lifecycle
+> across backend, browser, agents and CLI; propagate W3C context and export OTLP/HTTP
+> to VictoriaTraces. Keep telemetry secrets private, intake/export bounded and
+> exporter outages independent of application availability. See
+> [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md).
+
 ## Purpose and executable shape
 
 Provide a convenient combined server and independently runnable components without

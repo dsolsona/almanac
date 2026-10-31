@@ -4,6 +4,45 @@ info:
   version: 1.0.0
   description: Anonymous operational endpoints for the independently runnable UI.
 paths:
+  /api/v1/telemetry/traces:
+    post:
+      operationId: postBrowserTraces
+      summary: Submit bounded authenticated browser OTLP traces
+      description: >-
+        Requires the normal unrestricted session, same origin, TLS and CSRF token.
+        Accepts application/json OTLP with one resource/scope and up to 64 spans,
+        at most 128 KiB. The backend validates identifiers/times, strips unknown
+        attributes/events/links, enforces per-session and global bounds, and queues
+        export only to its configured telemetry destination. No arbitrary proxy,
+        destination URL or exporter credential is accepted. This endpoint is not
+        itself traced. Failure does not affect product requests.
+      parameters:
+        - {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceSpans]
+              properties:
+                resourceSpans: {type: array, minItems: 1, maxItems: 1, items: {type: object}}
+      responses:
+        '202': {description: Validated batch admitted for bounded export, content: {application/json: {schema: {type: object}}}}
+        '400':
+          description: Invalid trace batch
+          headers:
+            X-Almanac-Telemetry-Rejection:
+              description: Fixed validation category; contains no submitted values.
+              schema:
+                type: string
+                enum: [batch, span_count, span_id, span_name, span_kind, span_time, span_attributes, span_status]
+        '401': {description: Session unavailable or restricted}
+        '403': {description: Invalid session request or CSRF/origin}
+        '413': {description: Batch exceeds the body limit}
+        '415': {description: Unsupported content type or encoding}
+        '429': {description: Telemetry rate or queue bound reached}
+        '503': {description: Tracing disabled}
   /api/agent/v1/configuration:
     get:
       operationId: getAgentConfiguration

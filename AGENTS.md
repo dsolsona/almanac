@@ -217,6 +217,16 @@ documentation updates do not require a new spec, ADR, or approval cycle.
 
 ## Evidence and scope
 
+- Accuracy and actual page speed are feature acceptance requirements under
+  [ADR-0025](docs/adr/0025-fast-operational-journeys-and-tracing.md) and
+  [SPEC-0019](docs/specs/0019-backend-performance-and-derived-data.md). Verify
+  authenticated navigation through usable rows/rendered graphs, including first
+  visits and cache misses, at the specified scale. UI lists show 10/20 rows and
+  must load in < 1,000 ms; SLO details and range/burn changes require < 500 ms.
+  Normal navigation cannot wait for preparation jobs. Capture full OTEL journey
+  traces in VictoriaTraces and independent expected values; API-only timings,
+  warmed responses and passing test counts cannot substitute. Instrumentation
+  still being implemented must be reported as missing evidence.
 - Keep the edit loop focused and fast; run the integrated-candidate gate before
   accepting combined work and broader checks at the required milestone/risk boundary.
   Do not wrap every focused test in a full build/browser matrix. Separate cached
@@ -323,4 +333,5 @@ documentation updates do not require a new spec, ADR, or approval cycle.
   backend lifecycle and browser authentication checks exist; full product journeys
   remain subsequent work. Documentation checks use
   `python3 scripts/check-docs.py`. Document new commands only after they work here.
-- Do not commit, push, or publish unless requested. Respect unrelated local edits.
+- Keep completed task work committed; do not leave a completed task only in the
+  working tree. Push or publish when requested. Respect unrelated local edits.

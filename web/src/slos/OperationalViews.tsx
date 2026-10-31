@@ -7,6 +7,7 @@ import type { Coverage, TimelineChart } from '../components/charts/timelineModel
 import { sloClient, SloFailure, sameDerivedInputs, type OperationalDetail, type OperationalOverview } from './client.ts';
 import type { CurrentStatus, HistoryLane, HistoryValuePage } from './client.ts';
 import { clearQueryCache } from '../queryCache.ts';
+import { beginJourney, journeyContentReady } from '../telemetry/client.ts';
 import './slos.css';
 import './slo-reference.css';
 
@@ -137,6 +138,9 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   const searchInput=useRef<HTMLInputElement>(null);
   useEffect(()=>{const focusSearch=(event:KeyboardEvent)=>{if(event.key==='/'&&!(event.target instanceof HTMLElement&&event.target.closest('input,textarea,select,[contenteditable="true"]'))){event.preventDefault();searchInput.current?.focus();}};window.addEventListener('keydown',focusSearch);return()=>window.removeEventListener('keydown',focusSearch);},[]);
   const filtersKey=JSON.stringify([query,serviceID,urgency,cursor]);
+  const renderedKey=useRef('');
+  const requestedKey=JSON.stringify([filtersKey,refreshCount]);
+  useEffect(()=>{if(!busy&&renderedKey.current===requestedKey&&(page||error))journeyContentReady('slo.list',!!error);},[page,busy,error,requestedKey]);
   useEffect(()=>setDraftQuery(query),[query]);
   useEffect(()=>{
     const abort=new AbortController();
@@ -154,6 +158,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       try {
         const overview=await sloClient.overview({q:query,service_id:serviceID||undefined,urgency:urgency||undefined,limit:50,cursor:cursor||undefined},abort.signal);
         if(!abort.signal.aborted){
+          renderedKey.current=requestedKey;
           setPage(overview);setError('');
           // Only replace a first page, never a generation-pinned cursor page.
           // Three replacements keep this view within the four-snapshot budget
@@ -163,7 +168,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
             preparationTimer=setTimeout(()=>{void read();},2000);
           }
         }
-      } catch(failure){if(!abort.signal.aborted){if(failure instanceof SloFailure&&(failure.status===401||failure.status===403))setPage(null);setError(failure instanceof Error?failure.message:'The operational overview could not be loaded.');}}
+      } catch(failure){if(!abort.signal.aborted){renderedKey.current=requestedKey;if(failure instanceof SloFailure&&(failure.status===401||failure.status===403))setPage(null);setError(failure instanceof Error?failure.message:'The operational overview could not be loaded.');}}
       finally{if(!abort.signal.aborted)setBusy(false);}
     };
     void read();return()=>{abort.abort();clearTimeout(preparationTimer);};
@@ -191,7 +196,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       <div className="app-slo-group-select" role="group" aria-label="Group by"><Button variant="selected" aria-pressed={true}>Urgency</Button></div>
       <details className="app-slo-filters"><summary>Filters</summary><div><SelectField id="slo-service-filter" label="Service" value={serviceID} onChange={event=>apply({service_id:event.target.value})} options={[{value:'',label:'All services'},...services.map(service=>({value:service.id,label:service.display_name}))]}/><SelectField id="slo-urgency-filter" label="Urgency" value={urgency} onChange={event=>changeUrgency(event.target.value)} options={[{value:'',label:'All urgency groups'},...groups.map(([value,label])=>({value,label}))]}/></div></details>
       {canWrite&&<Button className="app-slo-new" onClick={onCreate}>New SLO</Button>}
-      <button className="app-slo-refresh" aria-label="Refresh" title="Refresh SLOs" disabled={busy} onClick={()=>{if(cursor){onLocationChange(updateQuery(locationKey,{},['cursor','previous_cursor']));return;}setRefreshCount(value=>value+1);}}><RefreshIcon/></button>
+      <button className="app-slo-refresh" aria-label="Refresh" title="Refresh SLOs" disabled={busy} onClick={()=>{beginJourney(locationKey,false,true);if(cursor){onLocationChange(updateQuery(locationKey,{},['cursor','previous_cursor']));return;}setRefreshCount(value=>value+1);}}><RefreshIcon/></button>
     </div></header>
     {servicesError&&<p role="alert">{servicesError}</p>}
     {busy&&<span className="sr-only" role="status">Refreshing operational SLOs</span>}
@@ -270,6 +275,9 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
   const range=rangeOptions.includes(params.get('range')??'')?params.get('range')!:`${windowDays}d`;
   const zone=(params.get('tz')==='local'?'local':'UTC') as 'UTC'|'local';
   const burnWindow=(params.get('burn_window')==='21600'?21600:3600) as 3600|21600;
+  const renderedKey=useRef('');
+  const requestedKey=JSON.stringify([id,range,burnWindow,refreshVersion,refreshCount]);
+  useEffect(()=>{if(!busy&&!statusBusy&&renderedKey.current===requestedKey&&((detail&&currentStatus)||error||statusError))journeyContentReady('slo.detail',!!error||!!statusError);},[detail,currentStatus,busy,statusBusy,error,statusError,requestedKey]);
   const [tablePages,setTablePages]=useState([1,1,1,1]);
   const [tableOpen,setTableOpen]=useState([false,false,false,false]);
   const tableRegion=useRef<HTMLDivElement>(null);
@@ -308,9 +316,10 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
       return sloClient.operational(id,{at:new Date(end).toISOString(),start:new Date(start).toISOString(),end:new Date(end).toISOString(),burn_window_seconds:burnWindow},abort.signal);
     };
     void read().then(value=>{
-      if(!abort.signal.aborted&&!authorityFailed.current&&requestID===generation.current){setDetail(value);setError('');}
+      if(!abort.signal.aborted&&!authorityFailed.current&&requestID===generation.current){renderedKey.current=requestedKey;setDetail(value);setError('');}
     }).catch(failure=>{
       if(!abort.signal.aborted&&requestID===generation.current){
+        renderedKey.current=requestedKey;
         const problem=failure instanceof Error?failure.message:'The operational detail could not be loaded.';
         if(failure instanceof SloFailure&&(failure.status===401||failure.status===403)){authorityFailed.current=true;setDetail(null);setCurrentStatus(null);setError(problem);sessionFailure.current();}
         else setError(problem);
@@ -337,7 +346,7 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
       ]};
   },[detail,definition.target,zone]);
   const plotChart=useMemo<TimelineChart|null>(()=>chart?{...chart,lanes:chart.lanes.map((lane,index)=>({...lane,extra:tableOpen[index]?340:0}))}:null,[chart,tableOpen]);
-  const refresh=()=>{clearQueryCache();setRefreshCount(value=>value+1);};
+  const refresh=()=>{beginJourney(locationKey,false,true);clearQueryCache();setRefreshCount(value=>value+1);};
   const heading=<><a className="app-detail-back" href="/slos" data-app-route>← All SLOs</a><header className="app-detail-heading"><div><h1 className="app-page-heading" aria-label={definition.display_name} tabIndex={-1}>{definition.display_name}{detail&&<ReferenceStatus status={statusFor(detail.current)} title={detail.reasons.map(reason=>reasonLabel(reason.code)).join('; ')}/>}</h1><div className="app-detail-meta"><a href={`/services/${definition.service_id}`} data-app-route>{definition.service_display_name}</a><span>·</span><span>{shift(definition.target,2)}% over {windowDuration(definition.rolling_window_seconds)} rolling</span><span>·</span><span>SLI <a href={`/slis/${definition.sli_id}`} data-app-route>{definition.sli_display_name}</a></span></div></div></header></>;
   const controls=<div className="app-timeline-controls"><div role="group" aria-label="Objective history period">{rangeOptions.map(value=><Button key={value} variant={range===value?'selected':'outline'} aria-pressed={range===value} onClick={()=>changeView({range:value})}>{value==='1y'?'1 y':value.replace('d',' d')}</Button>)}</div><div role="group" aria-label="Timezone">{(['UTC','local'] as const).map(value=><Button key={value} variant={zone===value?'selected':'outline'} aria-pressed={zone===value} onClick={()=>changeView({tz:value})}>{value==='UTC'?'UTC':'Local'}</Button>)}</div><Button variant="outline" aria-label="Refresh objective history" pending={busy} onClick={refresh}><RefreshIcon/></Button></div>;
   const toolbar=<div className="app-timeline-bar"><h2>Timeline</h2><span className="app-timeline-hint">one time axis for every panel</span>{controls}</div>;

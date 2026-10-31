@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { join } from 'node:path';
+import { captureTelemetryDelivery } from './capture-telemetry-delivery.mjs';
 let browser, page, fixture, stage='input';
 const wire=[];
 const wireRequests=new Map();
@@ -27,6 +28,10 @@ try {
   const {chromium,expect}=await import('@playwright/test'); browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${fixture.spki}`]});
   const operationalRequests=new Map();
   const context=await browser.newContext({viewport:{width:1440,height:900},colorScheme:'light'}); page=await context.newPage();
+  const telemetryDeliveries=await captureTelemetryDelivery(page);
+  const journeyTraces=[];
+  await page.exposeFunction('recordAlmanacJourney',value=>{if(journeyTraces.length<256)journeyTraces.push({...value,stage});});
+  await page.addInitScript(()=>addEventListener('almanac:journey',event=>{const value=event.detail;if(value&&/^[0-9a-f]{32}$/.test(value.traceId)&&Number.isFinite(value.duration))void window.recordAlmanacJourney({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration});}));
   page.on('request',request=>{
     const url=new URL(request.url());
     if(request.method()!=='GET'||url.origin!==origin.origin||!/^\/api\/v1\/(slos|services)(\/|$)/.test(url.pathname)||wire.length>=512)return;
@@ -207,8 +212,9 @@ try {
   await page.route('**/api/v1/slos',async route=>{try {const incoming=route.request(); original={body:incoming.postData(),key:incoming.headers()['idempotency-key']}; const response=await forwardMutation(route); assert.equal(response.status,201); committed=JSON.parse(response.body.toString('utf8'));} catch {forwardingFailed=true;} finally {await route.abort('failed');}},{times:1});
   await page.getByRole('button',{name:'Create SLO',exact:true}).click(); await expect(page.getByRole('button',{name:'Retry same SLO request'})).toBeVisible(); assert.equal(forwardingFailed,false,'forwarding the historical create failed'); assert.ok(committed.evaluation_valid_from);
   await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible();
-  await page.evaluate(()=>{const now=Date.now(); Date.now=()=>now+31*86400*1000;}); await page.getByRole('button',{name:'New SLO',exact:true}).click();
+  await page.evaluate(()=>{const original=Date.now;const now=original();globalThis.restoreAlmanacFixtureClock=()=>{Date.now=original;delete globalThis.restoreAlmanacFixtureClock;};Date.now=()=>now+31*86400*1000;}); await page.getByRole('button',{name:'New SLO',exact:true}).click();
   const replay=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/slos'); await page.getByRole('button',{name:'Retry same SLO request'}).click(); const response=await replay; assert.equal(response.status(),201); assert.equal(response.request().postData(),original.body); assert.equal(response.request().headers()['idempotency-key'],original.key); const slo=await response.json(); assert.equal(slo.id,committed.id); assert.equal(slo.target,'0.999'); assert.ok(slo.evaluation_valid_from);
+  await page.evaluate(()=>globalThis.restoreAlmanacFixtureClock());
   stage='overview evidence'; await expect(page.getByRole('heading',{name:'Checkout availability historical',exact:true})).toBeVisible();
   const overview=await readPreparedJSON('/api/v1/slos/overview?limit=50'); assert.equal(overview.status,200); const overviewItem=overview.body.items.find(item=>item.slo.id===slo.id); assert.ok(overviewItem,'created SLO appears in operational overview'); assert.ok(['needs_attention','watch','healthy'].includes(overviewItem.urgency)); assert.ok(overviewItem.leading_reason.code); for(const [burn,quality] of [[overviewItem.burn_1h.performance.burn,overviewItem.burn_1h.quality],[overviewItem.burn_6h.performance.burn,overviewItem.burn_6h.quality]]) { assert.ok(typeof burn==='string'||burn===null); if(burn===null)assert.ok(quality.reason||quality.state!=='complete','unavailable burn has a quality explanation'); }
   stage='current status metadata'; const liveStatus=await readPreparedJSON(`/api/v1/slos/${slo.id}/status`); await writeFile(join(fixture.artifacts,'status-generation.json'),JSON.stringify({generation:liveStatus.body.generation,evaluation_at:liveStatus.body.current.evaluation_at})+'\n',{mode:0o600}); assert.equal(liveStatus.body.generation.evaluated_through,liveStatus.body.current.evaluation_at); assert.match(liveStatus.body.generation.published_at,/Z$/);
@@ -217,6 +223,7 @@ try {
   await capture('slo-detail-early-light-desktop.png',true);
   await captureReference('detail','.app-slo-detail','slo-detail.png');
   await expect(page.locator('.app-detail-rail')).toContainText('collection coverage'); await expect(page.locator(`a[href="/datasources/${result.body.context.datasource_id}"]`)).toHaveText(result.body.context.datasource_display_name);
+  await writeFile(join(fixture.artifacts,'telemetry-objective.json'),JSON.stringify({checkpoint:'operational_detail_verified',slo_id:slo.id,sli_id:slo.sli_id})+'\n',{mode:0o600});
   stage='filtered overview navigation'; await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await expect(page.getByRole('link',{name:'Checkout availability historical',exact:true})).toBeVisible(); await expect(page.getByRole('heading',{name:/Needs attention|Watch|Healthy/}).first()).toBeVisible();
   await captureReference('list','.app-slo-group','slo-needs-attention.png'); await writeReferenceReport();
   const expectedReason=({on_track:'On track',stale_observations:'Observations are stale',no_data:'No evaluable data',expired_history:'History has expired',complete_window_violation:'Complete window is below target',negative_observed_budget:'Observed budget is negative',low_observed_budget:'Less than 20% of budget remains',high_1h_burn:'1 h burn is at least 1×',evaluation_unavailable:'Current evaluation unavailable',not_yet_eligible:'Not yet eligible',zero_traffic:'No traffic',incomplete_coverage:'Coverage is incomplete',short_burn_unavailable:'Short-window burn unavailable',budget_below_half:'Less than half of budget remains'})[overviewItem.leading_reason.code]??overviewItem.leading_reason.code;
@@ -237,6 +244,44 @@ try {
   stage='range-controls'; await page.getByRole('button',{name:'90 d',exact:true}).click(); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('range'))).toBe('90d'); await page.getByRole('group',{name:'Burn window',exact:true}).getByRole('button',{name:'6 h',exact:true}).click(); await expect.poll(()=>page.evaluate(()=>{const q=new URLSearchParams(location.search);return [q.get('range'),q.get('tz'),q.get('burn_window')].join('|');})).toBe('90d|local|21600'); await page.reload(); await expect(page.getByRole('button',{name:'90 d',exact:true})).toHaveAttribute('aria-pressed','true'); await expect(page.getByRole('button',{name:'Local',exact:true})).toHaveAttribute('aria-pressed','true'); await expect(page.getByRole('group',{name:'Burn window',exact:true}).getByRole('button',{name:'6 h',exact:true})).toHaveAttribute('aria-pressed','true'); await page.goBack(); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('burn_window'))).not.toBe('21600'); await expect(page.getByRole('button',{name:'Refresh objective history'})).not.toHaveAttribute('aria-busy','true'); await expect(page.locator('.app-lane-label').nth(2).locator('h3')).toHaveText('Burn rate');
   for(const theme of ['light','dark']) { if(theme==='dark') { await page.setViewportSize({width:1440,height:900}); await page.getByRole('button',{name:'Switch to dark theme'}).click(); } for(const [label,width,height] of [['desktop',1440,900],['intermediate',1024,900],['mobile',360,844]]) {await page.setViewportSize({width,height}); if(width===1024)await checkIntermediatePlotWidth(); if(width===360)await checkMobileLaneCards(); await capture(`slo-${theme}-${label}.png`,true); if(width>700)await checkOperationalLaneAlignment(); } }
   await writeFile(join(fixture.artifacts,'slo-journey.json'),JSON.stringify({slo_id:slo.id,service_id:slo.service_id,sli_id:slo.sli_id,overview:overviewItem,operational:result.body})+'\n',{mode:0o600});
+  if(fixture.trace_control_url!==undefined) {
+  stage='trace exporter outage';
+  const controlURL=new URL(fixture.trace_control_url);
+  assert.equal(controlURL.protocol,'http:'); assert.equal(controlURL.hostname,'127.0.0.1'); assert.match(fixture.trace_control_key,/^[0-9a-f]{48}$/);
+  const control=async(path,method='GET')=>{
+    const response=await fetch(new URL('/control/'+path,controlURL),{method,headers:{'X-Fixture-Control':fixture.trace_control_key},signal:AbortSignal.timeout(2000),redirect:'error'});
+    assert.equal(response.status,method==='POST'?204:200,'isolated trace controller failed');
+    return method==='POST'?null:response.json();
+  };
+  const outageStarted=performance.now();
+  await control('outage','POST');
+  let outageProgress;
+  try {
+    await page.setViewportSize({width:1440,height:900});
+    await page.getByRole('link',{name:'SLIs',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'SLIs',exact:true})).toBeVisible();
+    await expect(page.locator(`a[href="/slis/${fixture.sli_id}"]`).first()).toBeVisible();
+    await openPreparedOverview();
+    await page.locator(`a[href="/slos/${slo.id}"]`).first().click();
+    await expect(page.getByRole('heading',{name:'Checkout availability historical',exact:true})).toBeVisible();
+    await expect(page.locator('.app-lane-label')).toHaveCount(4);
+    await expect(page.locator('.app-budget-hero')).toHaveText('-900%');
+    await expect(page.locator('.app-lane-label').first()).toContainText('99%');
+    await expect.poll(async()=>{
+      outageProgress=await control('progress');
+      assert.equal(outageProgress.invalid_values,0,'collection changed while trace export was unavailable');
+      assert.equal(outageProgress.interval_gaps,0,'collection skipped an interval while trace export was unavailable');
+      return outageProgress.new_observations>0&&outageProgress.sink_failures>0&&outageProgress.backend_export_failures>0&&outageProgress.browser_export_failures>0;
+    },{timeout:20_000,intervals:[250]}).toBe(true);
+  } finally { await control('recover','POST'); }
+  await writeFile(join(fixture.artifacts,'trace-outage.json'),JSON.stringify({elapsed_ms:performance.now()-outageStarted,...outageProgress})+'\n',{mode:0o600});
+  }
+  const telemetryStats=await page.evaluate(()=>new Promise(resolve=>{
+    const timeout=setTimeout(()=>resolve({result:'timeout'}),3000);
+    addEventListener('almanac:telemetry-flushed',event=>{clearTimeout(timeout);resolve(event.detail);},{once:true});
+    dispatchEvent(new Event('almanac:telemetry-flush'));
+  }));
+  await writeFile(join(fixture.artifacts,'telemetry-stats.json'),JSON.stringify(telemetryStats)+'\n',{mode:0o600});
   stage='delayed create after sign-out'; await page.setViewportSize({width:1440,height:900}); await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await page.getByRole('button',{name:'New SLO',exact:true}).click(); await page.getByLabel('Display name',{exact:true}).fill('Delayed objective'); await page.getByLabel('Service',{exact:true}).selectOption(slo.service_id); await page.getByLabel('SLI',{exact:true}).selectOption(fixture.sli_id); await page.getByLabel('Apply this target to earlier SLI measurements').uncheck();
   let release, received=false; const held=new Promise(resolve=>{release=resolve;});
   await page.route('**/api/v1/slos',async route=>{try {const delayed=await forwardMutation(route); assert.equal(delayed.status,201); received=true; await held; await route.fulfill(delayed);} catch {forwardingFailed=true; await route.abort('failed');}},{times:1});
@@ -244,5 +289,9 @@ try {
     await page.getByRole('button',{name:'Create SLO',exact:true}).click(); await expect.poll(()=>received||forwardingFailed).toBe(true); assert.equal(forwardingFailed,false,'forwarding the delayed create failed'); await page.getByRole('button',{name:'Sign out',exact:true}).click(); await expect(page.getByLabel('Login',{exact:true})).toBeVisible(); const signedOutURL=page.url(); const delayedResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/slos'); release(); const delivered=await delayedResponse; assert.equal(await delivered.finished(),null); await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0))); assert.equal(page.url(),signedOutURL); await expect(page.getByLabel('Login',{exact:true})).toBeVisible();
   } finally { release(); }
   await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600});
+  assert.ok(journeyTraces.some(value=>value.journey==='slo.list'&&value.result==='ready'),'missing rendered SLO list trace');
+  assert.ok(journeyTraces.some(value=>value.journey==='slo.detail'&&value.result==='ready'),'missing rendered SLO detail trace');
+  await writeFile(join(fixture.artifacts,'journey-traces.json'),JSON.stringify(journeyTraces)+'\n',{mode:0o600});
+  await writeFile(join(fixture.artifacts,'telemetry-deliveries.json'),JSON.stringify(telemetryDeliveries)+'\n',{mode:0o600});
   await context.close(); await browser.close(); console.log('PASS browser-slo-journey');
 } catch(error) { await page?.screenshot({path:fixture?.artifacts?join(fixture.artifacts,'slo-failure.png'):undefined,fullPage:true}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-stage.txt'),stage+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts&&/^(create$|operational detail|exact-|layout-|range-controls)/.test(stage))await writeFile(join(fixture.artifacts,'failure-reason.txt'),String(error instanceof Error?error.message:error).slice(0,4000),{mode:0o600}).catch(()=>{}); await browser?.close().catch(()=>{}); console.error(`FAIL browser-slo-journey stage=${stage} ${error instanceof Error?error.message:'unknown error'}`); process.exitCode=1; }

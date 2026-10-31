@@ -27,6 +27,7 @@ import (
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/identity"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 )
 
 const (
@@ -614,6 +615,7 @@ func (h *Handler) problem(w http.ResponseWriter, status int, code, message, id, 
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	defer telemetry.ResponseEncoding(w)()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, value)

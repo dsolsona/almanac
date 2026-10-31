@@ -28,6 +28,7 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/cliprofile"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/dsolsona/almanac/internal/testpostgres"
 )
 
@@ -159,8 +160,17 @@ func startObjectiveJourneyFixtureWithMetrics(t *testing.T, internalMetrics bool)
 }
 
 func TestIntegrationExecutableFirstObjectiveJourney(t *testing.T) {
+	// Trace the existing authenticated journey against the local VictoriaTraces
+	// service. It is separate from the operator app and touches no operator data.
+	traceSink := startJourneyTraceSink(t)
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", traceSink.server.URL+"/v1/traces")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_SDK_DISABLED", "false")
+	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_always_on")
+	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
 	started := time.Now()
-	f := startObjectiveJourneyFixture(t)
+	f := startObjectiveJourneyFixtureWithMetrics(t, true)
 	journey := runConnectedSLIAgentJourney(t, f.databaseURL, f.binary, f.dir, f.baseURL, f.certFile, f.password)
 	t.Logf("SLI journey stage=agent_ready elapsed=%s", time.Since(started).Round(time.Millisecond))
 	datasourceID := createSLIJourneyDatasource(t, f.binary, f.dir, journey, f.sourceEndpoint, f.sourceCA)
@@ -170,7 +180,8 @@ func TestIntegrationExecutableFirstObjectiveJourney(t *testing.T) {
 	verifyPersistedSLIJourneyObservation(t, f.databaseURL, sliID, journey.id)
 	verifySLIMalformedBatchIsAtomic(t, f.apiClient, f.baseURL, f.databaseURL, filepath.Join(f.dir, "sli-agent-token"), sliID)
 	runObjectiveCLIJourney(t, f.binary, f.dir, journey.profile, sliID, f.databaseURL, f.baseURL, f.apiClient)
-	runObjectiveBrowserJourney(t, f.baseURL, f.certificate, "sli-owner", f.password, sliID)
+	traceSink.observeCollection(t, f.databaseURL, sliID, journey.id, f.metricsURL)
+	runObjectiveBrowserJourney(t, f.baseURL, f.certificate, "sli-owner", f.password, sliID, traceSink)
 	if strings.Contains(f.logs.String(), "SLI journey initial phrase 473!") || strings.Contains(f.logs.String(), f.password) {
 		t.Fatal("backend logs contained a credential")
 	}
@@ -344,7 +355,7 @@ func sameObjectiveDecimal(value, want string) bool {
 	return ok && a.Cmp(b) == 0
 }
 
-func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []byte, login, password, sliID string) {
+func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []byte, login, password, sliID string, traceSink *journeyTraceSink) {
 	t.Helper()
 	block, rest := pem.Decode(certificatePEM)
 	if block == nil || block.Type != "CERTIFICATE" || len(rest) != 0 || !validCLIUUID(sliID) {
@@ -364,14 +375,16 @@ func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []b
 	}
 	hash := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
 	fixture := struct {
-		URL       string `json:"url"`
-		SPKI      string `json:"spki"`
-		Login     string `json:"login"`
-		Password  string `json:"password"`
-		SliID     string `json:"sli_id"`
-		Artifacts string `json:"artifacts"`
-		CA        string `json:"certificate"`
-	}{baseURL, base64.StdEncoding.EncodeToString(hash[:]), login, password, sliID, artifacts, string(certificatePEM)}
+		URL             string `json:"url"`
+		SPKI            string `json:"spki"`
+		Login           string `json:"login"`
+		Password        string `json:"password"`
+		SliID           string `json:"sli_id"`
+		Artifacts       string `json:"artifacts"`
+		CA              string `json:"certificate"`
+		TraceControlURL string `json:"trace_control_url"`
+		TraceControlKey string `json:"trace_control_key"`
+	}{baseURL, base64.StdEncoding.EncodeToString(hash[:]), login, password, sliID, artifacts, string(certificatePEM), traceSink.server.URL, traceSink.key}
 	input, err := json.Marshal(fixture)
 	if err != nil || len(input) > 16*1024 {
 		t.Fatal("encode objective browser fixture failed")
@@ -391,6 +404,7 @@ func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []b
 	if err != nil || strings.TrimSpace(output.String()) != "PASS browser-slo-journey" {
 		t.Fatalf("objective browser failed; inspect sanitized artifacts in %s", artifacts)
 	}
+	verifyRenderedJourneyTraces(t, artifacts, "slo.list", "slo.detail")
 	manifest, err := os.ReadFile(filepath.Join(artifacts, "slo-journey.json"))
 	var evidence struct {
 		SloID       string                   `json:"slo_id"`
@@ -449,13 +463,42 @@ func verifyObjectiveHTTPBoundaries(t *testing.T, client *http.Client, baseURL, s
 	}
 	serviceBody := `{"name":"invalid-service","display_name":"Invalid service"}`
 	sloBody := `{"name":"invalid-slo","display_name":"Invalid SLO","service_id":"` + serviceID + `","sli_id":"` + sliID + `","target":"0.99","rolling_window_seconds":60}`
-	for _, tc := range []struct{ path, body string }{{"/api/v1/services", serviceBody}, {"/api/v1/slos", sloBody}} {
+	for _, tc := range []struct{ path, body string }{{"/api/v1/services", serviceBody}, {"/api/v1/slos", sloBody}, {"/api/v1/telemetry/traces", "{}"}} {
 		for _, csrf := range []string{"", "incorrect-csrf"} {
 			status, _ = call(http.MethodPost, tc.path, tc.body, csrf, true)
 			if status != http.StatusForbidden {
 				t.Fatalf("%s mutation with missing or wrong CSRF returned %d", tc.path, status)
 			}
 		}
+	}
+	for _, tc := range []struct {
+		body          string
+		authenticated bool
+		want          int
+	}{
+		{"{}", false, http.StatusForbidden},
+		{"{", true, http.StatusBadRequest},
+		{strings.Repeat(" ", telemetry.BrowserBodyLimit+1), true, http.StatusRequestEntityTooLarge},
+	} {
+		status, _ = call(http.MethodPost, "/api/v1/telemetry/traces", tc.body, auth.CsrfToken, tc.authenticated)
+		if status != tc.want {
+			t.Fatalf("telemetry boundary returned %d, want %d", status, tc.want)
+		}
+	}
+	foreign, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/api/v1/telemetry/traces", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal("create cross-origin telemetry probe failed")
+	}
+	foreign.AddCookie(&http.Cookie{Name: "__Host-almanac-session", Value: session})
+	foreign.Header.Set("Origin", "https://other.invalid")
+	foreign.Header.Set("X-CSRF-Token", auth.CsrfToken)
+	foreign.Header.Set("Content-Type", "application/json")
+	foreignResponse, err := client.Do(foreign)
+	if err != nil {
+		t.Fatal("send cross-origin telemetry probe failed")
+	}
+	if err := foreignResponse.Body.Close(); err != nil || foreignResponse.StatusCode != http.StatusForbidden {
+		t.Fatal("cross-origin telemetry was not rejected")
 	}
 	malformed := []struct{ path, body string }{
 		{"/api/v1/services", `{"name":"invalid-service","display_name":"Invalid service","extra":true}`},
