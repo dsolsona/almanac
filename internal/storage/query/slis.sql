@@ -121,22 +121,30 @@ LEFT JOIN LATERAL (
            coverage.interval_end, coverage.outcome, COALESCE(obs.good_count::text, '') AS good_count,
            COALESCE(obs.total_count::text, '') AS total_count, coverage.error_code,
            coverage.missing_components, coverage.recorded_at
-    FROM public.almanac_sli_coverage AS coverage
+    FROM (
+        SELECT c.* FROM public.almanac_sli_coverage AS c
+        WHERE c.sli_id = sli.id AND c.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
+        ORDER BY c.interval_start DESC, c.recorded_at DESC
+        LIMIT 1
+    ) AS coverage
     LEFT JOIN public.almanac_sli_observation_values AS obs
       ON obs.interval_start = coverage.interval_start AND obs.sli_id = coverage.sli_id
      AND obs.measurement_revision = coverage.measurement_revision
-    WHERE coverage.sli_id = sli.id AND coverage.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
     UNION ALL
     SELECT attempt.observation_id, attempt.measurement_revision, attempt.interval_start,
            attempt.interval_end, attempt.outcome, '' AS good_count, '' AS total_count,
            attempt.error_code, attempt.missing_components, attempt.recorded_at
-    FROM public.almanac_sli_execution_attempts AS attempt
-    WHERE attempt.sli_id = sli.id AND attempt.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
-      AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage c WHERE c.sli_id = attempt.sli_id
-        AND c.measurement_revision = attempt.measurement_revision AND c.interval_start = attempt.interval_start)
-      AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts newer WHERE newer.sli_id = attempt.sli_id
-        AND newer.measurement_revision = attempt.measurement_revision AND newer.interval_start = attempt.interval_start
-        AND (newer.recorded_at, newer.execution_id) > (attempt.recorded_at, attempt.execution_id))
+    FROM (
+        SELECT a.* FROM public.almanac_sli_execution_attempts AS a
+        WHERE a.sli_id = sli.id AND a.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
+          AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage c WHERE c.sli_id = a.sli_id
+            AND c.measurement_revision = a.measurement_revision AND c.interval_start = a.interval_start)
+          AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts newer WHERE newer.sli_id = a.sli_id
+            AND newer.measurement_revision = a.measurement_revision AND newer.interval_start = a.interval_start
+            AND (newer.recorded_at, newer.execution_id) > (a.recorded_at, a.execution_id))
+        ORDER BY a.interval_start DESC, a.recorded_at DESC
+        LIMIT 1
+    ) AS attempt
     ORDER BY interval_start DESC, recorded_at DESC
     LIMIT 1
 ) AS latest ON true

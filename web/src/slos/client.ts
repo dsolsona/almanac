@@ -1,5 +1,6 @@
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
+import { clearQueryCache, sharedRead, waitForReadRetry } from '../queryCache.ts';
 
 export type Service = components['schemas']['Service'];
 export type Slo = components['schemas']['Slo'];
@@ -7,8 +8,14 @@ export type Evaluation = components['schemas']['SloEvaluation'];
 export type CreateSlo = components['schemas']['SloCreateRequest'];
 export type OperationalOverview = components['schemas']['SloOperationalOverviewPage'];
 export type OperationalDetail = components['schemas']['SloOperationalDetail'];
+export type CurrentStatus = components['schemas']['SloCurrentStatus'];
+export type HistoryValuePage = components['schemas']['SloHistoryValuePage'];
+export type HistoryLane = HistoryValuePage['lane'];
+export function sameDerivedInputs(first:components['schemas']['DerivedGeneration'],second:components['schemas']['DerivedGeneration']):boolean {
+  return (['source_generation','measurement_revision','definition_revision','exclusion_revision','calculation_version','evaluated_through','retention_start'] as const).every(field=>first[field]===second[field]);
+}
 export class SloFailure extends Error {
-  constructor(message: string, readonly uncertain = false, readonly status = 0) { super(message); }
+  constructor(message: string, readonly uncertain = false, readonly status = 0, readonly code = '') { super(message); }
 }
 const record = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const decimal = (x: unknown) => x === null || typeof x === 'string' && /^-?\d+(?:\.\d+)?$/.test(x) && x.length <= 128;
@@ -125,7 +132,34 @@ function validOperationalDetail(value:unknown,pathID:string):boolean {
     validOperationalSeries(value.attainment_series,'attainment')&&validOperationalSeries(value.budget_series,'rolling_budget')&&validOperationalSeries(value.burn_series,'burn')&&
     validDailyCompliance(value.compliance_series,value.compliance_summary,value.objective as Record<string,unknown>,range.effective_start as string,range.effective_end as string,value.effective_at as string,range.source_cadence_seconds as number);
 }
+function validCurrentStatus(value:unknown,pathID:string):boolean {
+  if(!record(value)||!record(value.generation)||!record(value.slo)||value.slo.id!==pathID)return false;
+  const generation=value.generation;
+  if(generation.retention_start!==undefined&&!utcTimestamp(generation.retention_start))return false;
+  if(typeof generation.generation_id!=='string'||!/^[0-9a-f-]{36}$/.test(generation.generation_id)||
+    !['source_generation','measurement_revision','definition_revision','exclusion_revision'].every(key=>typeof generation[key]==='string'&&/^(0|[1-9][0-9]{0,18})$/.test(generation[key] as string))||
+    generation.definition_revision!==value.slo.definition_revision||!utcTimestamp(generation.evaluated_through)||!utcTimestamp(generation.published_at)||
+    typeof generation.calculation_version!=='string'||typeof generation.calculation_lag_seconds!=='number'||!Number.isFinite(generation.calculation_lag_seconds)||generation.calculation_lag_seconds<0||
+    !record(value.current)||generation.evaluated_through!==value.current.evaluation_at)return false;
+  return validOperationalOverview({snapshot_id:generation.generation_id,items:[{...value,budget_sparkline:[]}],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});
+}
+function validHistoryValues(value:unknown,generationID:string,pathID:string,params:URLSearchParams):boolean {
+  if(!record(value)||!record(value.generation)||value.generation.generation_id!==generationID||value.lane!==params.get('lane')||value.offset!==Number(params.get('offset')??0)||
+    !nonnegativeInteger(value.total_values)||(value.total_values as number)>1500||!nonnegativeInteger(value.offset)||(value.offset as number)>(value.total_values as number)||!Array.isArray(value.samples)||!Array.isArray(value.days))return false;
+  const limit=Number(params.get('limit')??50),offset=value.offset as number,total=value.total_values as number;
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100||value.samples.length+value.days.length!==Math.min(limit,total-offset)||
+    value.next_offset!==(offset+limit<total?offset+limit:null))return false;
+  const stamp=value.generation;
+  if(stamp.retention_start!==undefined&&!utcTimestamp(stamp.retention_start))return false;
+  if(!utcTimestamp(stamp.evaluated_through)||!utcTimestamp(stamp.published_at)||typeof stamp.calculation_version!=='string'||typeof stamp.calculation_lag_seconds!=='number'||!Number.isFinite(stamp.calculation_lag_seconds)||stamp.calculation_lag_seconds<0||
+    !['source_generation','definition_revision','measurement_revision','exclusion_revision'].every(key=>typeof stamp[key]==='string'&&/^(0|[1-9][0-9]{0,18})$/.test(stamp[key] as string)))return false;
+  return value.lane==='compliance'
+    ?value.samples.length===0&&value.days.every(day=>record(day)&&day.slo_id===pathID&&day.definition_revision===stamp.definition_revision&&['met','violated','unknown','not_applicable'].includes(String(day.status))&&utcTimestamp(day.day_end)&&typeof day.explanation==='string'&&validOperationalQuality(day.quality)&&validOperationalPerformance(day.performance))
+    :value.days.length===0&&value.samples.every(sample=>validOperationalSample(sample)&&record(sample)&&sample.revision===stamp.definition_revision);
+}
 const messages: Record<string, string> = {
+  derived_data_pending: 'SLO results are being prepared. Try again shortly.',
+  derived_data_failed: 'Preparation failed. An administrator or editor can retry it.',
   conflict: 'This name or version conflicts with an existing record. Review it and try again.',
   snapshot_expired: 'This SLO list snapshot expired. Restart from the first page.',
   resource_limit: 'The operational result exceeds the server resource limit. Narrow the requested range.',
@@ -142,6 +176,22 @@ const fieldMessages: Record<string, string> = {
   'at:evaluation_time_invalid': 'Choose a valid evaluation time that is not in the future.',
 };
 async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
+  if (mutation) {
+    clearQueryCache();
+    try { return await requestUncached<T>(path, init, mutation, responseLimit); }
+    finally { clearQueryCache(); }
+  }
+  return sharedRead(path, async signal => {
+    for (let attempt = 0; ; attempt++) {
+      try { return await requestUncached<T>(path, { ...init, signal }, false, responseLimit); }
+      catch (error) {
+        if (!(error instanceof SloFailure) || error.code !== 'derived_data_pending' || attempt === 4) throw error;
+        await waitForReadRetry(signal, 2000);
+      }
+    }
+  }, init.signal, path.startsWith('/api/v1/slos/overview')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
+}
+async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch { throw new SloFailure(mutation ? 'The request may have succeeded. Check the list before deliberately retrying the same request.' : 'Almanac could not be reached.', mutation); }
@@ -158,7 +208,8 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
     const code = typeof data === 'object' && data !== null && 'code' in data && typeof data.code === 'string' ? data.code : '';
     const errors = record(data) && Array.isArray(data.field_errors) && data.field_errors.length <= 16 ? data.field_errors : [];
     const guidance = errors.filter(record).map(item => fieldMessages[`${item.field}:${item.code}`]).filter(Boolean).join(' ');
-    throw new SloFailure(guidance || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status);
+    if(response.status===401 || response.status===403)clearQueryCache(false);
+    throw new SloFailure(guidance || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
   }
   const expected = init.method === 'POST' ? 201 : 200;
   if (response.status !== expected) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);
@@ -169,8 +220,10 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
   const pathname = path.split('?')[0]!;
   const isOverview=pathname==='/api/v1/slos/overview';
   const operationalID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/operational$/.exec(pathname)?.[1];
+  const statusID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/status$/.exec(pathname)?.[1];
+  const valuesPath=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/history\/([0-9a-f-]{36})\/values$/.exec(pathname);
   const pathID = /^\/api\/v1\/(?:services|slos)\/([0-9a-f-]{36})(?:\/evaluation)?$/.exec(pathname)?.[1];
-  const isList = !pathID && !operationalID && init.method !== 'POST';
+  const isList = !pathID && !operationalID && !statusID && !valuesPath && init.method !== 'POST';
   const uuid = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
   const version = (v: unknown) => typeof v === 'string' && /^[1-9][0-9]{0,18}$/.test(v) && (v.length < 19 || v <= '9223372036854775807');
   const resource = (item: unknown): item is Record<string, unknown> => typeof item === 'object' && item !== null &&
@@ -182,12 +235,14 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
   const valid = isOverview ? validOperationalOverview(value)
+    : valuesPath ? validHistoryValues(value,valuesPath[2]!,valuesPath[1]!,new URLSearchParams(path.split('?')[1]??''))
+    : statusID ? validCurrentStatus(value,statusID)
     : operationalID ? validOperationalDetail(value,operationalID)
     : isEvaluation ? validEvaluation(value) && record(value.objective) && value.objective.slo_id === pathID
     : isList ? Array.isArray(value.items) && value.items.length <= 200 && typeof value.next_cursor === 'string' && value.next_cursor.length <= 512 && value.items.every(isService ? resource : slo)
       : (isService ? resource(value) : slo(value)) && (!pathID || value.id === pathID);
   if (!valid) throw new SloFailure('The server returned an invalid response.', mutation, response.status);
-  if (!isEvaluation && !isList && !operationalID) {
+  if (!isEvaluation && !isList && !operationalID && !statusID && !valuesPath) {
     const tag = response.headers.get('ETag');
     if (tag !== `"${isService ? 'service' : 'slo'}:${value.id}:${value.version}"`)
       throw new SloFailure(mutation ? 'The request may have succeeded, but its version could not be confirmed. Check the record before retrying.' : 'The record version could not be confirmed.', mutation, response.status);
@@ -199,6 +254,8 @@ function write(context: AuthContext, body: unknown, key?: string, etag?: string)
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
 }
 export const sloClient = {
+  values: (id:string,generation:string,lane:HistoryLane,offset:number,signal?:AbortSignal) => request<HistoryValuePage>(`/api/v1/slos/${id}/history/${generation}/values?${new URLSearchParams({lane,offset:String(offset),limit:'50'})}`,{signal}).then(x=>x.value),
+  current: (id:string,signal?:AbortSignal) => request<CurrentStatus>(`/api/v1/slos/${id}/status`,{signal}).then(x=>x.value),
   services: (cursor = '', signal?: AbortSignal) => request<{items: Service[]; next_cursor: string}>(`/api/v1/services?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),
   service: (id: string, signal?: AbortSignal) => request<Service>(`/api/v1/services/${id}`, {signal}),
   createService: (body: {name:string; display_name:string}, context: AuthContext, key: string) => request<Service>('/api/v1/services', write(context, body, key), true).then(x => x.value),
@@ -206,7 +263,7 @@ export const sloClient = {
   list: (cursor = '', signal?: AbortSignal) => request<{items:Slo[]; next_cursor:string}>(`/api/v1/slos?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),
   get: (id: string, signal?: AbortSignal) => request<Slo>(`/api/v1/slos/${id}`, {signal}),
   serverTime: async (id:string,signal?:AbortSignal) => {
-    const result=await request<Slo>(`/api/v1/slos/${id}`,{signal});
+    const result=await requestUncached<Slo>(`/api/v1/slos/${id}`,{signal});
     const timestamp=Date.parse(result.serverTime??'');
     if(!Number.isFinite(timestamp))throw new SloFailure('The server time could not be confirmed. Refresh to try again.');
     return timestamp;

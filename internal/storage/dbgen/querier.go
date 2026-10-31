@@ -11,8 +11,11 @@ import (
 )
 
 type Querier interface {
+	AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDerivedBatchParams) error
+	AcknowledgeDerivedDirtyRange(ctx context.Context, arg AcknowledgeDerivedDirtyRangeParams) (int64, error)
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
+	AdmitSloHistoryJob(ctx context.Context, arg AdmitSloHistoryJobParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	AgentConfigurationRevisionExists(ctx context.Context, arg AgentConfigurationRevisionExistsParams) (bool, error)
 	AgentHasAssignedDatasources(ctx context.Context, agentID pgtype.UUID) (bool, error)
@@ -22,22 +25,33 @@ type Querier interface {
 	AgentHasUnsettledCurrentLease(ctx context.Context, arg AgentHasUnsettledCurrentLeaseParams) (bool, error)
 	AggregateSloObservations(ctx context.Context, arg AggregateSloObservationsParams) (AggregateSloObservationsRow, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
+	AttachPreparedBudgetSparkline(ctx context.Context, arg AttachPreparedBudgetSparklineParams) (int64, error)
+	BudgetPreparationExhausted(ctx context.Context, arg BudgetPreparationExhaustedParams) (bool, error)
 	BumpDatasourceVersion(ctx context.Context, arg BumpDatasourceVersionParams) (AlmanacDatasource, error)
+	ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDirtyBatchParams) ([]AlmanacDerivedDirtyRange, error)
+	ClaimDerivedDirtyRange(ctx context.Context, arg ClaimDerivedDirtyRangeParams) (AlmanacDerivedDirtyRange, error)
+	ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error)
+	ClearCurrentPreparationFailure(ctx context.Context, sloID pgtype.UUID) error
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
+	CompleteSloHistoryJob(ctx context.Context, arg CompleteSloHistoryJobParams) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountLiveSloOverviewSnapshots(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error)
 	CountLiveSloOverviewSnapshotsForSession(ctx context.Context, arg CountLiveSloOverviewSnapshotsForSessionParams) (int64, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
+	CurrentPreparationExhausted(ctx context.Context, arg CurrentPreparationExhaustedParams) (bool, error)
 	DeleteAcknowledgedAgentHandoffConfiguration(ctx context.Context, arg DeleteAcknowledgedAgentHandoffConfigurationParams) (int64, error)
 	DeleteAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) error
+	DeleteCorruptPreparedSloHistory(ctx context.Context, generationID pgtype.UUID) (int64, error)
 	DeleteDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (int64, error)
 	DeleteExpiredAgentExecutionGrants(ctx context.Context, arg DeleteExpiredAgentExecutionGrantsParams) error
 	DeleteExpiredAgentLifecycleReceipt(ctx context.Context, arg DeleteExpiredAgentLifecycleReceiptParams) (int64, error)
 	DeleteExpiredAgentReceipt(ctx context.Context, arg DeleteExpiredAgentReceiptParams) (int64, error)
 	DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error)
 	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
+	DeleteExpiredDerivedGenerations(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSliCreateReceipt(ctx context.Context, arg DeleteExpiredSliCreateReceiptParams) error
+	DeleteExpiredSloDisplayBlocks(ctx context.Context, updatedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error
 	DeleteExpiredSourceHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) error
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
@@ -47,7 +61,13 @@ type Querier interface {
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
+	// A crash on the last permitted attempt must become an observable failure,
+	// rather than remaining running forever with an unclaimable expired lease.
+	ExhaustExpiredSloHistoryJobs(ctx context.Context, leaseUntil pgtype.Timestamptz) (int64, error)
+	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
+	FailDerivedDirtyRange(ctx context.Context, arg FailDerivedDirtyRangeParams) (int64, error)
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
+	FailSloHistoryJob(ctx context.Context, arg FailSloHistoryJobParams) (int64, error)
 	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
@@ -55,6 +75,8 @@ type Querier interface {
 	FindDatasourceDiagnosticReceipt(ctx context.Context, arg FindDatasourceDiagnosticReceiptParams) (FindDatasourceDiagnosticReceiptRow, error)
 	FindDatasourceReceipt(ctx context.Context, arg FindDatasourceReceiptParams) (FindDatasourceReceiptRow, error)
 	FindObjectiveCreateReceipt(ctx context.Context, arg FindObjectiveCreateReceiptParams) (FindObjectiveCreateReceiptRow, error)
+	FindPreparedSloHistory(ctx context.Context, arg FindPreparedSloHistoryParams) (FindPreparedSloHistoryRow, error)
+	FindReusableSloOverviewSnapshot(ctx context.Context, arg FindReusableSloOverviewSnapshotParams) (pgtype.UUID, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	FindSliCreateReceipt(ctx context.Context, arg FindSliCreateReceiptParams) (FindSliCreateReceiptRow, error)
 	FindSliDeliveryReceipt(ctx context.Context, arg FindSliDeliveryReceiptParams) (FindSliDeliveryReceiptRow, error)
@@ -71,16 +93,19 @@ type Querier interface {
 	GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
 	GetDatasourceAgentCapabilities(ctx context.Context, agentID pgtype.UUID) (GetDatasourceAgentCapabilitiesRow, error)
 	GetDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error)
+	GetDerivedSourceGeneration(ctx context.Context, arg GetDerivedSourceGenerationParams) (int64, error)
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetLatestAgentConfigurationRevision(ctx context.Context, agentID pgtype.UUID) (int64, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
+	GetPublishedCurrentProjection(ctx context.Context, arg GetPublishedCurrentProjectionParams) (GetPublishedCurrentProjectionRow, error)
 	GetService(ctx context.Context, id pgtype.UUID) (AlmanacService, error)
 	GetSli(ctx context.Context, id pgtype.UUID) (GetSliRow, error)
 	GetSliCoverageByCanonicalInterval(ctx context.Context, arg GetSliCoverageByCanonicalIntervalParams) (GetSliCoverageByCanonicalIntervalRow, error)
 	GetSlo(ctx context.Context, id pgtype.UUID) (GetSloRow, error)
 	GetSloOperationalContext(ctx context.Context, arg GetSloOperationalContextParams) (GetSloOperationalContextRow, error)
-	GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (AlmanacSloOverviewSnapshot, error)
+	GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (GetSloOverviewSnapshotRow, error)
 	HasAgentOwnershipProof(ctx context.Context, arg HasAgentOwnershipProofParams) (bool, error)
+	HasExhaustedDerivedSource(ctx context.Context, arg HasExhaustedDerivedSourceParams) (bool, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
@@ -96,12 +121,14 @@ type Querier interface {
 	InsertDatasourceDiagnosticReceipt(ctx context.Context, arg InsertDatasourceDiagnosticReceiptParams) error
 	InsertDatasourceReassignment(ctx context.Context, arg InsertDatasourceReassignmentParams) error
 	InsertDatasourceReceipt(ctx context.Context, arg InsertDatasourceReceiptParams) error
+	InsertDerivedGeneration(ctx context.Context, arg InsertDerivedGenerationParams) (pgtype.UUID, error)
 	InsertInitialOwner(ctx context.Context, arg InsertInitialOwnerParams) (pgtype.UUID, error)
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
 	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
 	InsertObjectiveCreateReceipt(ctx context.Context, arg InsertObjectiveCreateReceiptParams) error
 	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
+	InsertPreparedSloHistory(ctx context.Context, arg InsertPreparedSloHistoryParams) error
 	InsertRotatedAgentCredential(ctx context.Context, arg InsertRotatedAgentCredentialParams) (InsertRotatedAgentCredentialRow, error)
 	InsertService(ctx context.Context, arg InsertServiceParams) (AlmanacService, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
@@ -120,6 +147,7 @@ type Querier interface {
 	InsertSloOverviewSnapshot(ctx context.Context, arg InsertSloOverviewSnapshotParams) error
 	InsertSloOverviewSnapshotItem(ctx context.Context, arg InsertSloOverviewSnapshotItemParams) error
 	LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDatasourceGrantExpiryParams) (pgtype.Timestamptz, error)
+	LatestPreparedBudgetSparkline(ctx context.Context, arg LatestPreparedBudgetSparklineParams) (LatestPreparedBudgetSparklineRow, error)
 	LatestSliAcceptedAt(ctx context.Context, arg LatestSliAcceptedAtParams) (pgtype.Timestamptz, error)
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
 	ListAgentDatasourceDependencies(ctx context.Context, arg ListAgentDatasourceDependenciesParams) ([]AlmanacDatasource, error)
@@ -127,15 +155,19 @@ type Querier interface {
 	ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, arg ListAuthorizedMeasurementGrantsForAgentParams) ([]ListAuthorizedMeasurementGrantsForAgentRow, error)
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
+	ListDerivedHourlyCounts(ctx context.Context, arg ListDerivedHourlyCountsParams) ([]ListDerivedHourlyCountsRow, error)
+	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
 	ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error)
 	ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
+	ListPublishedOperationalProjections(ctx context.Context, arg ListPublishedOperationalProjectionsParams) ([]ListPublishedOperationalProjectionsRow, error)
 	ListReadyDatasourceReassignments(ctx context.Context, authorityExpiresAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
 	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)
 	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
 	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
 	ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloOverviewSnapshotItemsParams) ([]ListSloOverviewSnapshotItemsRow, error)
+	ListSloPreparationJobs(ctx context.Context, arg ListSloPreparationJobsParams) ([]ListSloPreparationJobsRow, error)
 	ListSloTimelineFacts(ctx context.Context, arg ListSloTimelineFactsParams) ([]ListSloTimelineFactsRow, error)
 	ListSlos(ctx context.Context, arg ListSlosParams) ([]ListSlosRow, error)
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
@@ -147,6 +179,7 @@ type Querier interface {
 	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
 	LockDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error)
+	LockHistoryAdmission(ctx context.Context) error
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
 	LockLatestAgentOwnership(ctx context.Context, agentID pgtype.UUID) (AlmanacAgentOwnership, error)
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
@@ -163,12 +196,30 @@ type Querier interface {
 	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
 	MarkDatasourceReassignmentDrained(ctx context.Context, arg MarkDatasourceReassignmentDrainedParams) (int64, error)
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
+	OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
+	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
+	QueueVisibleBudgetHistory(ctx context.Context, arg QueueVisibleBudgetHistoryParams) (int64, error)
+	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
+	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
+	// Exact table pages read only one bounded, immutable prepared generation.
+	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
+	ReadReusableSloBlocks(ctx context.Context, arg ReadReusableSloBlocksParams) ([]ReadReusableSloBlocksRow, error)
+	ReadSloHistoryPreparationState(ctx context.Context, arg ReadSloHistoryPreparationStateParams) (ReadSloHistoryPreparationStateRow, error)
+	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) error
+	RebuildDerivedHours(ctx context.Context, arg RebuildDerivedHoursParams) error
 	RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error)
+	RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	ReleaseDerivedDirtyRange(ctx context.Context, arg ReleaseDerivedDirtyRangeParams) (int64, error)
+	ReleaseSloHistoryForDependencies(ctx context.Context, arg ReleaseSloHistoryForDependenciesParams) (int64, error)
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
+	RenewDerivedDirtyLease(ctx context.Context, arg RenewDerivedDirtyLeaseParams) (int64, error)
 	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
+	RetryCurrentSloPreparation(ctx context.Context, arg RetryCurrentSloPreparationParams) (int64, error)
+	RetryFailedSloHistoryJob(ctx context.Context, arg RetryFailedSloHistoryJobParams) (int64, error)
+	RetrySourceAggregate(ctx context.Context, arg RetrySourceAggregateParams) (int64, error)
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
@@ -177,6 +228,7 @@ type Querier interface {
 	SetAgentHandoffConfiguration(ctx context.Context, arg SetAgentHandoffConfigurationParams) error
 	SetDatasourceEpochConfigurationRevision(ctx context.Context, arg SetDatasourceEpochConfigurationRevisionParams) error
 	SetDatasourceReassignmentUnavailable(ctx context.Context, arg SetDatasourceReassignmentUnavailableParams) (int64, error)
+	SetSloOverviewFingerprint(ctx context.Context, arg SetSloOverviewFingerprintParams) error
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateAgentAppliedConfiguration(ctx context.Context, arg UpdateAgentAppliedConfigurationParams) (int64, error)
 	UpdateAgentDesiredConfigurationRevision(ctx context.Context, arg UpdateAgentDesiredConfigurationRevisionParams) (int64, error)
@@ -190,6 +242,7 @@ type Querier interface {
 	UpdateSourceRemovalRevisions(ctx context.Context, arg UpdateSourceRemovalRevisionsParams) error
 	UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error
 	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
+	UpsertSloDisplayBlock(ctx context.Context, arg UpsertSloDisplayBlockParams) error
 }
 
 var _ Querier = (*Queries)(nil)

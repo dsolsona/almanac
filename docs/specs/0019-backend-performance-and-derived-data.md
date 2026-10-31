@@ -4,7 +4,8 @@
 - Created: 2026-10-30
 - Accepted: 2026-10-30
 - Approval: maintainer explicitly replied "approved" after the combined Crit review of this spec, ADR-0024 and the stabilization plan
-- Implementation: not started
+- Implementation: in progress
+- Verification: acceptance evidence remains outstanding, tracked in [F3-T08](../tasks/F3-T08.md)
 - Related ADRs: [ADR-0024](../adr/0024-precomputed-operational-reads.md), [ADR-0005](../adr/0005-measurement-semantics.md), [ADR-0007](../adr/0007-postgresql-and-storage-boundaries.md), [ADR-0023](../adr/0023-slo-operational-urgency.md)
 - Plan: [Backend stabilization](../plans/0022-backend-stabilization.md)
 - Supersedes / superseded by: amends the existing contracts in the table below
@@ -213,9 +214,10 @@ coding; the detailed wire contract remains subject to that checkpoint's review.
 
 ## Verification evidence
 
-Not implemented or verified. Existing small-fixture successes do not establish
-these workload budgets. Known page latency failures remain open. This document
-defines the replacement acceptance work; it does not claim measured capacity.
+Implementation is in progress in [F3-T08](../tasks/F3-T08.md). Its fast unit and
+compile checks do not establish these workload budgets. Integrated performance
+acceptance remains outstanding, and known page latency failures remain open.
+This document does not claim measured capacity.
 
 ## Change notes
 

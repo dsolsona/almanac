@@ -151,6 +151,65 @@ func TestEnqueueBoundsBytesAndRollsBackCancelledReservation(t *testing.T) {
 	}
 }
 
+func TestDrainBoundsReadySessionWhenPeerDoesNotRead(t *testing.T) {
+	for _, reading := range []bool{true, false} {
+		name := "handler_processing"
+		if reading {
+			name = "handler_reading"
+		}
+		t.Run(name, func(t *testing.T) {
+			registry := NewRegistry()
+			added, handlerDone := make(chan struct{}), make(chan struct{})
+			handler := &Handler{registry: registry}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				upgrade := &upgradeCapture{ResponseWriter: w}
+				conn, err := websocket.Accept(upgrade, r, nil)
+				if err != nil {
+					close(handlerDone)
+					return
+				}
+				ctx, cancel := context.WithCancel(r.Context())
+				defer cancel()
+				control := &sessionControl{conn: conn, transport: upgrade.transport, cancel: cancel, ready: true, shutdown: make(chan struct{}), queue: make(chan outbound, agentprotocol.MaxQueueMessages), done: make(chan struct{})}
+				if !registry.add(control) {
+					conn.CloseNow()
+					close(handlerDone)
+					return
+				}
+				writerDone := make(chan struct{})
+				go func() { defer close(writerDone); handler.writeLoop(ctx, control) }()
+				close(added)
+				if reading {
+					_, _, _ = conn.Read(ctx)
+				} else {
+					<-ctx.Done()
+				}
+				cancel()
+				<-writerDone
+				registry.remove(control)
+				close(handlerDone)
+			}))
+			defer server.Close()
+			client, _, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.CloseNow()
+			<-added
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			if err := registry.Drain(ctx); err != nil {
+				t.Fatalf("ready session consumed the entire shutdown deadline waiting for a non-reading peer: %v", err)
+			}
+			select {
+			case <-handlerDone:
+			case <-ctx.Done():
+				t.Fatal("drain did not join the ready session handler")
+			}
+		})
+	}
+}
+
 func TestDrainClosesPreHelloSessionAndJoinsHandler(t *testing.T) {
 	registry := NewRegistry()
 	added := make(chan struct{})

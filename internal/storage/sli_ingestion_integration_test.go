@@ -694,13 +694,19 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_history_jobs, public.almanac_slo_current_failures, public.almanac_slo_display_blocks`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_derived_cache_usage; DROP FUNCTION public.almanac_account_derived_cache() CASCADE`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version IN (16, 17, 18, 19, 20, 21)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_sli_derived_dirty ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_mark_derived_dirty(); DROP TABLE public.almanac_slo_history_blocks, public.almanac_slo_current_projections, public.almanac_slo_derived_generations, public.almanac_sli_hourly_aggregates, public.almanac_derived_dirty_ranges, public.almanac_sli_source_generations; DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version >= 16`); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 21 {
+	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {

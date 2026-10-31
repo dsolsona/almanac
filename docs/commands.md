@@ -79,6 +79,11 @@ not replace the full required integration gate.
 Fixture credentials above belong only to the isolated local acceptance database.
 Keep real credentials out of commands, logs and published artifacts.
 
+Make suppresses an inherited `GOROOT` so the pinned `.local/bin/go` driver cannot
+select another installation's compiler. The Go gate prints both versions before
+test discovery. This corrected a reproduced 1.27.3-driver/1.27.1-compiler mismatch;
+the subsequent Go and ordinary gates passed without deleting caches.
+
 The focused tooling and SLO checks above have executed successfully. Report and
 handoff commands have also been verified to refuse the active task while required
 evidence or a recorded replan is missing. A deliberate guard refusal runs no tests.

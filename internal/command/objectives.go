@@ -30,13 +30,15 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	operation := kind + " " + action
 	rest := args[1:]
 	jsonOut := requestedJSON(rest)
-	valid := kind == "services" && (action == "list" || action == "get" || action == "create" || action == "update") || kind == "slos" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "evaluate" || action == "overview" || action == "operational")
+	valid := kind == "services" && (action == "list" || action == "get" || action == "create" || action == "update") || kind == "slos" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "evaluate" || action == "overview" || action == "operational" || action == "status" || action == "values")
 	if !valid {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("choose a supported command"))
 	}
 	var profile, id, serviceID, inputFile, etag, key, cursor, output, at, start, end string
 	var query, urgency, operationalStart, operationalEnd string
 	var limit, burnWindowSeconds int
+	var generationID, lane string
+	var offset int
 	var timeout time.Duration
 	fs := flag.NewFlagSet(operation, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -60,6 +62,9 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	fs.StringVar(&operationalStart, "start", "", "operational history range start")
 	fs.StringVar(&operationalEnd, "end", "", "operational history range end")
 	fs.IntVar(&burnWindowSeconds, "burn-window-seconds", 3600, "selected operational burn window")
+	fs.StringVar(&generationID, "generation-id", "", "immutable history generation")
+	fs.StringVar(&lane, "lane", "", "attainment, budget, burn or compliance")
+	fs.IntVar(&offset, "offset", 0, "exact values page offset")
 	// Services already uses service-id as its resource ID.
 	if kind == "services" {
 		_ = serviceID
@@ -96,6 +101,18 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	}
 	if action == "operational" {
 		allowed[idFlag], allowed["at"], allowed["start"], allowed["end"], allowed["burn-window-seconds"] = true, true, true, true, true
+	}
+	if action == "status" || action == "values" {
+		allowed[idFlag] = true
+	}
+	if action == "values" {
+		allowed["generation-id"], allowed["lane"], allowed["offset"], allowed["limit"] = true, true, true, true
+		if !validCLIUUID(id) || !validCLIUUID(generationID) || offset < 0 || offset > 1500 || limit < 1 || limit > 100 || (lane != "attainment" && lane != "budget" && lane != "burn" && lane != "compliance") {
+			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("provide a canonical generation, lane and bounded values page"))
+		}
+	}
+	if action == "status" && !validCLIUUID(id) {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("resource identifier must be a canonical UUID"))
 	}
 	for k := range seen {
 		if !allowed[k] {
@@ -207,7 +224,7 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if !ok {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("objective operations unavailable"))
 	}
-	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
+	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{GenerationID: generationID, Lane: lane, Offset: offset, Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
 	if err != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err)
 	}

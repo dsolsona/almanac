@@ -141,6 +141,27 @@ type AlmanacDatasourceReassignment struct {
 	RequestID           string             `json:"request_id"`
 }
 
+type AlmanacDerivedCacheUsage struct {
+	Singleton    bool  `json:"singleton"`
+	PayloadBytes int64 `json:"payload_bytes"`
+}
+
+type AlmanacDerivedDirtyRange struct {
+	ID                  pgtype.UUID        `json:"id"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	Generation          int64              `json:"generation"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	LeaseEpoch          int64              `json:"lease_epoch"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	Attempts            int32              `json:"attempts"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError           pgtype.Text        `json:"last_error"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AlmanacDiagnostic struct {
 	ID                pgtype.UUID        `json:"id"`
 	ActorID           pgtype.UUID        `json:"actor_id"`
@@ -305,6 +326,23 @@ type AlmanacSliExecutionAttempt struct {
 	RecordedAt          pgtype.Timestamptz `json:"recorded_at"`
 }
 
+type AlmanacSliHourlyAggregate struct {
+	SliID                pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision  int64              `json:"measurement_revision"`
+	HourStart            pgtype.Timestamptz `json:"hour_start"`
+	SourceGeneration     int64              `json:"source_generation"`
+	Good                 pgtype.Numeric     `json:"good"`
+	Total                pgtype.Numeric     `json:"total"`
+	ObservedIntervals    int64              `json:"observed_intervals"`
+	KnownEmptyIntervals  int64              `json:"known_empty_intervals"`
+	ZeroTrafficIntervals int64              `json:"zero_traffic_intervals"`
+	FirstIntervalStart   pgtype.Timestamptz `json:"first_interval_start"`
+	LastIntervalEnd      pgtype.Timestamptz `json:"last_interval_end"`
+	LatestReceiptAt      pgtype.Timestamptz `json:"latest_receipt_at"`
+	FirstObservationAt   pgtype.Timestamptz `json:"first_observation_at"`
+	LastObservationAt    pgtype.Timestamptz `json:"last_observation_at"`
+}
+
 type AlmanacSliMeasurement struct {
 	SliID                    pgtype.UUID        `json:"sli_id"`
 	Revision                 int64              `json:"revision"`
@@ -337,6 +375,13 @@ type AlmanacSliOwnershipEpoch struct {
 	ConfigurationRevision int64              `json:"configuration_revision"`
 }
 
+type AlmanacSliSourceGeneration struct {
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	Generation          int64              `json:"generation"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AlmanacSlo struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Name               string             `json:"name"`
@@ -345,6 +390,27 @@ type AlmanacSlo struct {
 	DefinitionRevision int64              `json:"definition_revision"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacSloCurrentFailure struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	Attempts            int32              `json:"attempts"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError           string             `json:"last_error"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+}
+
+type AlmanacSloCurrentProjection struct {
+	SloID         pgtype.UUID `json:"slo_id"`
+	GenerationID  pgtype.UUID `json:"generation_id"`
+	ServiceID     pgtype.UUID `json:"service_id"`
+	SortName      string      `json:"sort_name"`
+	Urgency       string      `json:"urgency"`
+	Payload       []byte      `json:"payload"`
+	PayloadDigest []byte      `json:"payload_digest"`
 }
 
 type AlmanacSloDefinition struct {
@@ -362,21 +428,87 @@ type AlmanacSloDefinition struct {
 	HistoricalRequestedAt pgtype.Timestamptz `json:"historical_requested_at"`
 }
 
+type AlmanacSloDerivedGeneration struct {
+	ID                  pgtype.UUID        `json:"id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	SourceGeneration    int64              `json:"source_generation"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
+	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+}
+
+type AlmanacSloDisplayBlock struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	Lane                string             `json:"lane"`
+	WindowSeconds       int64              `json:"window_seconds"`
+	FreshnessGraceUs    int64              `json:"freshness_grace_us"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	IncludeStart        bool               `json:"include_start"`
+	SourceGeneration    int64              `json:"source_generation"`
+	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	Payload             []byte             `json:"payload"`
+	PayloadDigest       []byte             `json:"payload_digest"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacSloHistoryBlock struct {
+	GenerationID      pgtype.UUID        `json:"generation_id"`
+	RangeStart        pgtype.Timestamptz `json:"range_start"`
+	RangeEnd          pgtype.Timestamptz `json:"range_end"`
+	BurnWindowSeconds int32              `json:"burn_window_seconds"`
+	Payload           []byte             `json:"payload"`
+	PayloadDigest     []byte             `json:"payload_digest"`
+	Kind              string             `json:"kind"`
+	BudgetSparkline   []byte             `json:"budget_sparkline"`
+}
+
+type AlmanacSloHistoryJob struct {
+	ID                  pgtype.UUID        `json:"id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	SourceGeneration    int64              `json:"source_generation"`
+	CalculationVersion  string             `json:"calculation_version"`
+	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
+	Kind                string             `json:"kind"`
+	State               string             `json:"state"`
+	Attempts            int32              `json:"attempts"`
+	LeaseEpoch          int64              `json:"lease_epoch"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	LastError           pgtype.Text        `json:"last_error"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+}
+
 type AlmanacSloOverviewSnapshot struct {
-	ID              pgtype.UUID        `json:"id"`
-	CursorSecret    []byte             `json:"cursor_secret"`
-	ActorID         pgtype.UUID        `json:"actor_id"`
-	SessionVerifier []byte             `json:"session_verifier"`
-	Role            string             `json:"role"`
-	QueryText       string             `json:"query_text"`
-	ServiceID       pgtype.UUID        `json:"service_id"`
-	Urgency         pgtype.Text        `json:"urgency"`
-	PageLimit       int32              `json:"page_limit"`
-	GroupCounts     []byte             `json:"group_counts"`
-	State           string             `json:"state"`
-	PayloadBytes    int32              `json:"payload_bytes"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	ID                     pgtype.UUID        `json:"id"`
+	CursorSecret           []byte             `json:"cursor_secret"`
+	ActorID                pgtype.UUID        `json:"actor_id"`
+	SessionVerifier        []byte             `json:"session_verifier"`
+	Role                   string             `json:"role"`
+	QueryText              string             `json:"query_text"`
+	ServiceID              pgtype.UUID        `json:"service_id"`
+	Urgency                pgtype.Text        `json:"urgency"`
+	PageLimit              int32              `json:"page_limit"`
+	GroupCounts            []byte             `json:"group_counts"`
+	State                  string             `json:"state"`
+	PayloadBytes           int32              `json:"payload_bytes"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	PublicationFingerprint []byte             `json:"publication_fingerprint"`
 }
 
 type AlmanacSloOverviewSnapshotItem struct {

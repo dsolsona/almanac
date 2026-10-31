@@ -37,6 +37,8 @@ type Client struct {
 func New(ops Operations, editor api.RequestEditorFn) *Client { return &Client{ops, editor} }
 
 type Input struct {
+	GenerationID, Lane                             string
+	Offset                                         int
 	Kind, Action, ID, Cursor, ServiceID, Key, ETag string
 	Query, Urgency                                 string
 	Limit                                          int
@@ -138,6 +140,24 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 			}
 		}
 		response, err = c.ops.GetSloOperationalOverview(ctx, params, editor)
+	case "slos status":
+		ops, ok := c.ops.(preparedOperations)
+		if !ok {
+			return nil, "", failure("invalid_request", 0, false)
+		}
+		response, err = ops.GetSloCurrentStatus(ctx, id, editor)
+	case "slos values":
+		ops, ok := c.ops.(preparedOperations)
+		var generation api.SloId
+		if !ok || json.Unmarshal([]byte(strconv.Quote(in.GenerationID)), &generation) != nil || in.Offset < 0 || in.Offset > 1500 || in.Limit < 1 || in.Limit > 100 {
+			return nil, "", failure("invalid_request", 0, false)
+		}
+		switch in.Lane {
+		case "attainment", "budget", "burn", "compliance":
+		default:
+			return nil, "", failure("invalid_request", 0, false)
+		}
+		response, err = ops.GetSloHistoryValues(ctx, id, generation, &api.GetSloHistoryValuesParams{Lane: api.GetSloHistoryValuesParamsLane(in.Lane), Offset: new(in.Offset), Limit: new(in.Limit)}, editor)
 	case "slos operational":
 		burnWindowSeconds := in.BurnWindowSeconds
 		if burnWindowSeconds == 0 {
@@ -181,7 +201,7 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		_ = json.Unmarshal(data, &problem)
 		code := problem.Code
 		switch code {
-		case "invalid_request", "unauthenticated", "unauthorized", "forbidden", "not_found", "conflict", "request_timeout", "request_canceled", "snapshot_expired", "resource_limit", "range_too_dense":
+		case "invalid_request", "unauthenticated", "unauthorized", "forbidden", "not_found", "conflict", "request_timeout", "request_canceled", "snapshot_expired", "resource_limit", "range_too_dense", "derived_data_pending", "derived_data_failed":
 		default:
 			code = "management_unavailable"
 		}
@@ -200,7 +220,13 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		return nil, "", f
 	}
 	var object map[string]any
-	if json.Unmarshal(data, &object) != nil || object == nil || !validResponse(data, in.Kind, in.Action, id) {
+	valid := validResponse(data, in.Kind, in.Action, id)
+	if in.Action == "status" {
+		valid = validCurrentStatusResponse(data, id)
+	} else if in.Action == "values" {
+		valid = validHistoryValuesResponse(data, in)
+	}
+	if json.Unmarshal(data, &object) != nil || object == nil || !valid {
 		return nil, "", failure("invalid_response", 0, mutation)
 	}
 	if in.Action == "get" || mutation {
@@ -520,6 +546,12 @@ func validResponse(data []byte, kind, action string, expectedID ...api.SloId) bo
 }
 func failure(code string, status int, unknown bool) *datasourceclient.Failure {
 	message := "The request could not be completed."
+	if code == "derived_data_pending" {
+		message = "SLO results are being prepared. Try again shortly."
+	}
+	if code == "derived_data_failed" {
+		message = "SLO preparation failed. Inspect its preparation jobs before retrying."
+	}
 	if unknown {
 		code = "outcome_unknown"
 		message = "The command may have completed. Reconcile the record before retrying the same request."

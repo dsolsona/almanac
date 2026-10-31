@@ -5,11 +5,39 @@ backend stabilization. [ADR-0024](adr/0024-precomputed-operational-reads.md),
 [SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and the
 [delivery plan](plans/0022-backend-stabilization.md) define pooled access,
 exact derived data and background preparation with measurable acceptance gates.
-The maintainer accepted the design and plan after Crit review on 2026-10-30;
-implementation remains outstanding. Existing uncommitted
-performance changes remain a candidate; the latest real journey timed out and the
-reported loading failures remain unresolved. Earlier passing small fixtures do not
-establish performance at the proposed workload.
+The maintainer accepted the design and plan after Crit review on 2026-10-30.
+[F3-T08](tasks/F3-T08.md) is in progress on `perf/backend-stabilization` in
+`.worktrees/backend-performance`, based on merged `aa548fe`. The uncommitted
+candidate implements owned database pools, exact background aggregates/current
+results, reusable history/display blocks, immutable list snapshots, independent
+browser status/history loading and an internal metrics listener. It is not deployed.
+The most recent ordinary checkpoint passed 441 Go and 329 web tests. A subsequent
+fast Go checkpoint passed 442 tests and compiled the integration helpers.
+The corrected focused storage check passes, including snapshot reuse, recovery,
+pool isolation and retained 14/56-day history across runtime restart. Both ordinary
+candidate gates passed at their checkpoints. Broad verification then exposed a
+fixture setup timeout and agent-session shutdown failure; both have focused fixes
+and retained failure evidence. The real agent reconnect/shutdown and SLO browser
+journeys now pass. Screenshot review additionally caught a current-status UTC
+serialization defect; it is corrected and checked through the real API and fresh
+captures. Full combined verification and SPEC-0019's controlled workload budgets
+remain outstanding; focused/storage timings do not establish production capacity.
+The controlled workload harness now includes the 100-SLI fleet, retained-data seed,
+ten-user API sampling, browser measurements, restart/rebuild setup and live-phase
+observation. Accepted-ingestion HTTP timing is measured separately from duplicate
+and unsuccessful batches. The latest focused checkpoint passes 294 cases; the new
+long-workload entry remains unexecuted and has no approved invocation.
+The full storage gate now passes after fixing a cold-partition nested-loop plan
+that rescanned observation values. A later full-gate SLI journey failed a test
+fixture's UTC serialization; the same mixed-batch assertion now passes in the
+focused real journey. That journey also records preparation separately from ready
+rendering and captures both themes/mobile/exact tables. The aggregate integration
+receipt remains failed, with every earlier failure retained. Isolated Compose
+startup, onboarding, repeat bootstrap, restart and cancellation cleanup passed;
+documentation checks also passed. The controlled 56/400-day workload remains unrun because
+its separate performance-tagged entry is outside the approved command catalog.
+The entry now includes an eight-hour cancellation budget and fixed disk admission
+checks. Those checks have compilation/unit evidence, not workload runtime evidence.
 
 F3-T07 visual acceptance is reopened after the maintainer rejected the completion
 claim. The source-port evidence below establishes functional checks, not identical

@@ -462,12 +462,19 @@ func GetSli(ctx context.Context, databaseURL string, proof DatasourceProof, sliI
 	return record, nil
 }
 
-func ListSlis(ctx context.Context, databaseURL string, proof DatasourceProof, limit int, cursor, query, datasourceID string, now func() time.Time) (SliPage, error) {
+func ListSlis(ctx context.Context, databaseURL string, proof DatasourceProof, limit int, cursor, query, datasourceID string, now func() time.Time, runtimes ...*Runtime) (SliPage, error) {
 	bounded, position, filter, normalizedQuery, datasourceFilter, err := validateSliListPage(limit, cursor, query, datasourceID)
 	if err != nil || proof.SessionVerifier == ([32]byte{}) || now == nil {
 		return SliPage{}, ErrSliInvalid
 	}
-	conn, queries, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, proof.SessionVerifier, now, "administrator", "editor", "viewer")
+	var runtime *Runtime
+	if len(runtimes) > 1 {
+		return SliPage{}, ErrSliInvalid
+	}
+	if len(runtimes) == 1 {
+		runtime = runtimes[0]
+	}
+	conn, queries, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, runtime, proof.SessionVerifier, now, pgx.TxOptions{}, "administrator", "editor", "viewer")
 	if err != nil {
 		return SliPage{}, err
 	}

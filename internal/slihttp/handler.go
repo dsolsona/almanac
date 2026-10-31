@@ -34,11 +34,13 @@ const (
 )
 
 type Options struct {
+	Runtime   *storage.Runtime
 	Now       func() time.Time
 	Preflight func(context.Context) error
 }
 
 type Handler struct {
+	runtime     *storage.Runtime
 	databaseURL string
 	secrets     *sourcesecret.Adapter
 	auth        *authhttp.Handler
@@ -51,7 +53,7 @@ func New(databaseURL string, secrets *sourcesecret.Adapter, auth *authhttp.Handl
 	if databaseURL == "" || auth == nil || agents == nil || options.Now == nil {
 		return nil, errors.New("slihttp: invalid options")
 	}
-	return &Handler{databaseURL: databaseURL, secrets: secrets, auth: auth, agents: agents, now: options.Now, preflight: options.Preflight}, nil
+	return &Handler{runtime: options.Runtime, databaseURL: databaseURL, secrets: secrets, auth: auth, agents: agents, now: options.Now, preflight: options.Preflight}, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +126,7 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID s
 			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
 			return
 		}
-		page, err := storage.ListSlis(r.Context(), h.databaseURL, proof, limit, cursor, search, datasourceID, h.now)
+		page, err := storage.ListSlis(r.Context(), h.databaseURL, proof, limit, cursor, search, datasourceID, h.now, h.runtime)
 		if err != nil {
 			h.writeStorageError(w, err, requestID)
 			return
@@ -327,6 +329,9 @@ func (h *Handler) history(w http.ResponseWriter, r *http.Request, requestID stri
 }
 
 func (h *Handler) ingest(w http.ResponseWriter, r *http.Request, requestID string) {
+	started := time.Now()
+	accepted, duplicateOnly := false, false
+	defer func() { h.runtime.ObserveIngestionBatch(time.Since(started), accepted, duplicateOnly) }()
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
@@ -388,6 +393,13 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request, requestID strin
 		}
 		results = append(results, ingestResultDTO(result))
 	}
+	allSuccessful, anyAccepted := true, false
+	for _, result := range results {
+		allSuccessful = allSuccessful && (result.Status == api.Accepted || result.Status == api.Duplicate)
+		anyAccepted = anyAccepted || result.Status == api.Accepted
+	}
+	accepted = allSuccessful && anyAccepted
+	duplicateOnly = allSuccessful && !anyAccepted
 	h.writeJSON(w, http.StatusOK, api.ObservationBatchResponse{Items: results})
 }
 

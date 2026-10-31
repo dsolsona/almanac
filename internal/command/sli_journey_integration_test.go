@@ -207,9 +207,9 @@ func verifySLIMalformedBatchIsAtomic(t *testing.T, client *http.Client, baseURL,
 		t.Fatal("read SLI batch fixture failed")
 	}
 	delivery := uuid.NewString()
-	item := map[string]any{"delivery_id": delivery, "execution_id": uuid.NewString(), "created_at": created, "lease_id": lease,
+	item := map[string]any{"delivery_id": delivery, "execution_id": uuid.NewString(), "created_at": created.UTC(), "lease_id": lease,
 		"configuration_revision": fmt.Sprint(revision), "session_generation": fmt.Sprint(generation), "sli_id": sliID,
-		"measurement_revision": fmt.Sprint(measurement), "interval_start": start, "interval_end": end,
+		"measurement_revision": fmt.Sprint(measurement), "interval_start": start.UTC(), "interval_end": end.UTC(),
 		"outcome": map[string]any{"state": "observed", "good_count": "99", "total_count": "100"}}
 	body, err := json.Marshal(map[string]any{"items": []any{item, "malformed"}})
 	if err != nil {
@@ -263,7 +263,15 @@ func verifySLIMalformedBatchIsAtomic(t *testing.T, client *http.Client, baseURL,
 	response.Body.Close()
 	var mixed api.ObservationBatchResponse
 	if readErr != nil || response.StatusCode != http.StatusOK || json.Unmarshal(data, &mixed) != nil || len(mixed.Items) != 2 || mixed.Items[0].DeliveryId.String() != delivery || mixed.Items[0].Status != api.Duplicate || mixed.Items[1].DeliveryId.String() != invalidID || mixed.Items[1].Status != api.Rejected {
-		t.Fatal("mixed SLI batch did not return explicit durable outcomes")
+		outcomes := make([]string, 0, len(mixed.Items))
+		for _, item := range mixed.Items {
+			code := ""
+			if item.ErrorCode != nil {
+				code = *item.ErrorCode
+			}
+			outcomes = append(outcomes, string(item.Status)+"/"+code)
+		}
+		t.Fatalf("mixed SLI batch did not return explicit durable outcomes: HTTP=%d items=%v", response.StatusCode, outcomes)
 	}
 	var committedInvalid int
 	if err := db.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE delivery_id=$1), count(*) FILTER (WHERE delivery_id=$2) FROM public.almanac_sli_delivery_receipts`, delivery, invalidID).Scan(&count, &committedInvalid); err != nil || count != 1 || committedInvalid != 0 {
@@ -272,6 +280,11 @@ func verifySLIMalformedBatchIsAtomic(t *testing.T, client *http.Client, baseURL,
 }
 
 func runConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, baseURL, certFile, password string) connectedAgentJourney {
+	t.Helper()
+	return runNamedConnectedSLIAgentJourney(t, databaseURL, binary, dir, baseURL, certFile, password, "sli-journey-agent")
+}
+
+func runNamedConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, baseURL, certFile, password, name string) connectedAgentJourney {
 	t.Helper()
 	profileDir := filepath.Join(dir, "sli-agent-profile")
 	if err := os.Mkdir(profileDir, 0o700); err != nil {
@@ -288,7 +301,7 @@ func runConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, baseURL
 		t.Fatal("authenticate SLI agent registration failed")
 	}
 	tokenPath := filepath.Join(dir, "sli-agent-token")
-	create := exec.CommandContext(t.Context(), binary, "agents", "create", "--profile-file="+profile, "--name=sli-journey-agent", "--display-name=SLI Journey Agent", "--idempotency-key=sli-journey-agent-create", "--token-file="+tokenPath, "--output=json")
+	create := exec.CommandContext(t.Context(), binary, "agents", "create", "--profile-file="+profile, "--name="+name, "--display-name=SLI Journey Agent", "--idempotency-key="+name+"-create", "--token-file="+tokenPath, "--output=json")
 	create.Stderr = io.Discard
 	output, err := create.Output()
 	var created agentCLICreateDocument
@@ -343,10 +356,20 @@ func runConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, baseURL
 
 func createSLIJourneyDatasource(t *testing.T, binary, dir string, journey connectedAgentJourney, endpoint string, caPEM []byte) string {
 	t.Helper()
-	input := map[string]any{"name": "sli-journey-metrics", "display_name": "SLI Journey Metrics", "provider": "prometheus",
+	return createNamedSLIJourneyDatasource(t, binary, dir, journey, endpoint, caPEM, "sli-journey-metrics")
+}
+
+func createNamedSLIJourneyDatasource(t *testing.T, binary, dir string, journey connectedAgentJourney, endpoint string, caPEM []byte, name string) string {
+	t.Helper()
+	return createSLIJourneyDatasourceWithCadence(t, binary, dir, journey, endpoint, caPEM, name, 15)
+}
+
+func createSLIJourneyDatasourceWithCadence(t *testing.T, binary, dir string, journey connectedAgentJourney, endpoint string, caPEM []byte, name string, cadence int) string {
+	t.Helper()
+	input := map[string]any{"name": name, "display_name": "SLI Journey Metrics", "provider": "prometheus",
 		"configuration_format": "prometheus-http-v1", "endpoint": endpoint, "tls": map[string]any{"insecure_skip_verify": false, "ca_pem": string(caPEM)},
 		"authentication":           map[string]any{"mode": "none", "username": nil, "password_secret": map[string]any{"action": "clear"}, "token_secret": map[string]any{"action": "clear"}},
-		"polling_interval_seconds": 15, "agent_id": journey.id}
+		"polling_interval_seconds": cadence, "agent_id": journey.id}
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		t.Fatal("encode SLI journey datasource failed")
@@ -355,13 +378,13 @@ func createSLIJourneyDatasource(t *testing.T, binary, dir string, journey connec
 	if err := os.WriteFile(path, encoded, 0o600); err != nil {
 		t.Fatal("write protected SLI journey datasource failed")
 	}
-	command := exec.CommandContext(t.Context(), binary, "datasources", "create", "--profile-file="+journey.profile, "--input-file="+path, "--idempotency-key=sli-journey-datasource-create", "--output=json")
+	command := exec.CommandContext(t.Context(), binary, "datasources", "create", "--profile-file="+journey.profile, "--input-file="+path, "--idempotency-key="+name+"-create", "--output=json")
 	output, err := command.Output()
 	var document struct {
 		Result api.Datasource `json:"result"`
 	}
-	if err != nil || json.Unmarshal(output, &document) != nil || !validCLIUUID(datasourceUUID(document.Result.Id)) || document.Result.PollingIntervalSeconds != 15 {
-		t.Fatal("create bounded 15-second SLI journey datasource failed")
+	if err != nil || json.Unmarshal(output, &document) != nil || !validCLIUUID(datasourceUUID(document.Result.Id)) || document.Result.PollingIntervalSeconds != cadence {
+		t.Fatal("create bounded SLI journey datasource failed")
 	}
 	return datasourceUUID(document.Result.Id)
 }

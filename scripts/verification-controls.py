@@ -407,6 +407,7 @@ def execute(mode: str) -> int:
             discovery = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-tags=integration", "-list", test_pattern, package], cwd=ROOT, env=env, text=True, capture_output=True)
             found = {line.strip() for line in discovery.stdout.splitlines() if line.strip().startswith("Test")}
             if discovery.returncode or found != expected:
+                artifact.write_text(discovery.stdout + discovery.stderr)
                 missing, extra = sorted(expected - found), sorted(found - expected)
                 raise ValueError(f"expected exactly fixed tests {sorted(expected)}; discovery failed, missing={missing}, extra={extra}")
             selected = len(expected)
@@ -687,6 +688,9 @@ def timing_receipt_directories() -> list[Path]:
     if worktrees.is_dir():
         bases.extend(checkout / ".local/verification" for checkout in worktrees.iterdir() if checkout.is_dir() and not checkout.is_symlink())
     directories = {RECEIPTS.resolve()} if RECEIPTS.is_dir() else set()
+    # Before a task is initialized, automatic receipts live directly in this
+    # base. Keep collecting them after initialization selects a receipts/ child.
+    directories.update(base.resolve() for base in bases if base.is_dir())
     for base in bases:
         if not base.is_dir():
             continue

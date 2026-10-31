@@ -25,9 +25,16 @@ type Principal struct {
 }
 
 type Service struct {
+	runtime       *storage.Runtime
 	databaseURL   string
 	now           func() time.Time
 	sourceSecrets *sourcesecret.Adapter
+}
+
+func NewWithRuntime(databaseURL string, now func() time.Time, runtime *storage.Runtime, adapters ...*sourcesecret.Adapter) *Service {
+	service := New(databaseURL, now, adapters...)
+	service.runtime = runtime
+	return service
 }
 
 func New(databaseURL string, now func() time.Time, adapters ...*sourcesecret.Adapter) *Service {
@@ -49,7 +56,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Principal, er
 	if err != nil {
 		return Principal{}, ErrInvalidCredential
 	}
-	result, err := storage.AuthenticateAgentCredential(ctx, s.databaseURL, credentialID, verifier, s.now)
+	result, err := storage.AuthenticateAgentCredential(ctx, s.databaseURL, credentialID, verifier, s.now, s.runtime)
 	if errors.Is(err, storage.ErrInvalidAgentCredential) {
 		return Principal{}, ErrInvalidCredential
 	}
@@ -73,7 +80,7 @@ func (s *Service) Configuration(ctx context.Context, token string) (storage.Agen
 	if err != nil {
 		return storage.AgentConfigurationSnapshot{}, ErrInvalidCredential
 	}
-	result, err := storage.ReadCurrentAgentConfiguration(ctx, s.databaseURL, credentialID, verifier, s.now, s.sourceSecrets)
+	result, err := storage.ReadCurrentAgentConfigurationWithRuntime(ctx, s.databaseURL, credentialID, verifier, s.now, s.runtime, s.sourceSecrets)
 	if errors.Is(err, storage.ErrInvalidAgentCredential) {
 		return storage.AgentConfigurationSnapshot{}, ErrInvalidCredential
 	}
@@ -100,7 +107,7 @@ func (s *Service) CompleteDiagnostic(ctx context.Context, token string, generati
 	if err != nil {
 		return ErrInvalidCredential
 	}
-	err = storage.CompleteDatasourceDiagnostic(ctx, s.databaseURL, credentialID, verifier, generation, result, s.now())
+	err = storage.CompleteDatasourceDiagnostic(ctx, s.databaseURL, credentialID, verifier, generation, result, s.now(), s.runtime)
 	switch {
 	case errors.Is(err, storage.ErrInvalidAgentCredential):
 		return ErrInvalidCredential
@@ -126,7 +133,7 @@ func (s *Service) IngestObservation(ctx context.Context, token string, item sli.
 	if err != nil {
 		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected", ErrorCode: "invalid_credential"}, ErrInvalidCredential
 	}
-	result, err := storage.IngestAgentObservation(ctx, s.databaseURL, credentialID, verifier, item, s.now)
+	result, err := storage.IngestAgentObservation(ctx, s.databaseURL, credentialID, verifier, item, s.now, s.runtime)
 	switch {
 	case errors.Is(err, storage.ErrInvalidAgentCredential):
 		return storage.SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected", ErrorCode: "invalid_credential"}, ErrInvalidCredential

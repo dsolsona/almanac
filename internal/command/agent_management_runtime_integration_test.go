@@ -430,7 +430,7 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 				}
 				lastEvidence = fmt.Sprintf("status=%d reachability=%s desired=%s applied=%s scheduler=%s progress=%s grants=%d heartbeat=%t", response.StatusCode,
 					safeDiagnosticToken(string(detail.Runtime.Reachability)), safeDiagnosticToken(detail.Runtime.DesiredConfigurationRevision), safeDiagnosticToken(detail.Runtime.AppliedConfigurationRevision), safeDiagnosticToken(string(detail.Runtime.SchedulerHealth)), safeDiagnosticToken(string(detail.Runtime.CollectionProgress)), grants, detail.Runtime.LastHeartbeatAt != nil)
-				if grants >= 3 && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil && detail.Runtime.SchedulerHealth == api.Ready && detail.Runtime.CollectionProgress == api.AgentRuntimeStatusCollectionProgressNotStarted {
+				if grants >= 3 && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil && detail.Runtime.SchedulerHealth == api.AgentRuntimeStatusSchedulerHealthReady && detail.Runtime.CollectionProgress == api.AgentRuntimeStatusCollectionProgressNotStarted {
 					certificate, err := os.ReadFile(certFile)
 					if err != nil {
 						t.Fatal("read public backend certificate for browser check failed")

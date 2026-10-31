@@ -24,6 +24,8 @@ sql:
       - internal/storage/migrations/0018_sli_lease_indexes.sql
       - internal/storage/migrations/0019_first_objective.sql
       - internal/storage/migrations/0020_slo_operational_snapshots.sql
+      - internal/storage/migrations/0021_sli_latest_accepted_receipt_index.sql
+      - internal/storage/migrations/0022_derived_operational_data.sql
     gen:
       go:
         package: dbgen

@@ -36,6 +36,12 @@ func CalculateOccurrences(goodText, totalText, targetText string, provisional bo
 	if total.Sign() == 0 {
 		return OccurrenceResult{}, ErrNoTraffic
 	}
+	return calculateOccurrences(good, total, target, provisional), nil
+}
+
+// Inputs have already been validated. Window sweeps can use their exact totals
+// directly instead of formatting and reparsing them for every history point.
+func calculateOccurrences(good, total, target *big.Rat, provisional bool) OccurrenceResult {
 	one := big.NewRat(1, 1)
 	bad := new(big.Rat).Sub(total, good)
 	allowed := new(big.Rat).Mul(new(big.Rat).Sub(one, target), total)
@@ -56,7 +62,7 @@ func CalculateOccurrences(goodText, totalText, targetText string, provisional bo
 	if provisional {
 		result.State = "unknown"
 	}
-	return result, nil
+	return result
 }
 
 func decimal(text string, target bool) (*big.Rat, bool) {
@@ -70,6 +76,13 @@ func decimal(text string, target bool) (*big.Rat, bool) {
 	for _, r := range whole + fraction {
 		if r < '0' || r > '9' {
 			return nil, false
+		}
+	}
+	if hasFraction {
+		fraction = strings.TrimRight(fraction, "0")
+		text = whole
+		if fraction != "" {
+			text += "." + fraction
 		}
 	}
 	r, ok := new(big.Rat).SetString(text)

@@ -20,6 +20,14 @@ type WindowInput struct {
 	Observations                                     []Observation
 }
 
+// WindowTotals carries exact sufficient statistics over the retained eligible
+// portion of one window. It does not stand in for individual observations.
+type WindowTotals struct {
+	Good, Total                                      *big.Rat
+	Observed, KnownEmpty, ZeroTraffic                int64
+	FirstObservation, LastObservation, LatestReceipt *time.Time
+}
+
 type WindowResult struct {
 	RequestedStart, EffectiveStart, EligibleStart, RetentionStart, End time.Time
 	State, Freshness, Performance, ObservedPerformance, Reason         string
@@ -29,9 +37,39 @@ type WindowResult struct {
 	ExactBad, ExactRemaining, ExactRemainingFraction, ExactBurn        *big.Rat
 	Provisional                                                        bool
 	FirstObservation, LastObservation, LatestReceipt                   *time.Time
+	values                                                             *windowValues
+}
+
+type windowValues struct{ good, total, target *big.Rat }
+
+// WithValues projects an exact window summary to the public decimal strings.
+// Reducers call this only for retained points, after selecting their extrema.
+func (result WindowResult) WithValues() WindowResult {
+	if result.Expected > 0 {
+		value := FormatFraction(result.Observed+result.KnownEmpty, result.Expected)
+		result.Coverage = &value
+	}
+	values := result.values
+	if values == nil {
+		return result
+	}
+	result.values = nil
+	if values.total.Sign() == 0 {
+		zero := "0.000000000000"
+		result.Good, result.Total = &zero, &zero
+		return result
+	}
+	good, total := rationalDecimal(values.good), rationalDecimal(values.total)
+	calc := calculateOccurrences(values.good, values.total, values.target, result.Provisional)
+	result.Performance, result.ObservedPerformance = calc.State, calc.ObservedState
+	result.Good, result.Total, result.Bad = &good, &total, &calc.Bad
+	result.Attainment, result.Allowed, result.Remaining = &calc.Attainment, &calc.Allowed, &calc.Remaining
+	result.Consumed, result.RemainingFraction, result.Burn = &calc.Consumed, &calc.RemainingFraction, &calc.Burn
+	return result
 }
 
 type WindowSweep struct {
+	totals                                 *WindowTotals
 	input                                  WindowInput
 	next                                   int
 	active                                 []int
@@ -41,6 +79,7 @@ type WindowSweep struct {
 	receipts                               []int
 	receiptHead                            int
 	good, total                            big.Rat
+	target                                 *big.Rat
 	observedCount, emptyCount, zeroTraffic int64
 	lastAt                                 time.Time
 }
@@ -75,7 +114,11 @@ func NewWindowSweepContext(ctx context.Context, input WindowInput) (*WindowSweep
 			return nil, ErrOperationalFacts
 		}
 	}
-	return &WindowSweep{input: input}, nil
+	target, ok := decimal(input.Target, true)
+	if !ok || target.Cmp(big.NewRat(1, 1)) >= 0 {
+		target = nil
+	}
+	return &WindowSweep{input: input, target: target}, nil
 }
 
 // At advances the exact rolling-window aggregation to an aligned evaluation time.
@@ -84,6 +127,16 @@ func (s *WindowSweep) At(at time.Time) (WindowResult, error) {
 }
 
 func (s *WindowSweep) AtContext(ctx context.Context, at time.Time) (WindowResult, error) {
+	result, err := s.AtSummaryContext(ctx, at)
+	if err != nil {
+		return WindowResult{}, err
+	}
+	return result.WithValues(), nil
+}
+
+// AtSummaryContext advances exact arithmetic and quality without formatting
+// decimal strings. The returned snapshot stays valid as the sweep advances.
+func (s *WindowSweep) AtSummaryContext(ctx context.Context, at time.Time) (WindowResult, error) {
 	if err := ctx.Err(); err != nil {
 		return WindowResult{}, err
 	}
@@ -240,15 +293,19 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 		v := s.input.Observations[s.receipts[s.receiptHead]].Received.UTC()
 		receipt = &v
 	}
-	coverage := (*string)(nil)
-	if expected > 0 {
-		v := FormatFraction(s.observedCount+s.emptyCount, expected)
-		coverage = &v
+	if s.totals != nil {
+		first, last, receipt = s.totals.FirstObservation, s.totals.LastObservation, s.totals.LatestReceipt
+		if last != nil {
+			freshness = "fresh"
+			if at.After(last.Add(s.input.FreshnessGrace)) {
+				freshness = "stale"
+			}
+		}
 	}
 	result := WindowResult{RequestedStart: windowStart, EffectiveStart: windowStart, EligibleStart: eligible,
 		RetentionStart: retention, End: at, State: quality, Freshness: freshness, Expected: expected,
 		Observed: s.observedCount, KnownEmpty: s.emptyCount, Missing: missing, Expired: expired,
-		ZeroTraffic: s.zeroTraffic, Coverage: coverage, FirstObservation: first, LastObservation: last,
+		ZeroTraffic: s.zeroTraffic, FirstObservation: first, LastObservation: last,
 		LatestReceipt: receipt, Provisional: missing > 0 || expired > 0 || s.emptyCount > 0}
 	if expected == 0 {
 		result.Performance, result.Reason = "not_applicable", "not_applicable"
@@ -258,33 +315,37 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 		result.Performance, result.Reason = "unknown", "no_measurements"
 		return result, nil
 	}
-	goodText, totalText := rationalDecimal(&s.good), rationalDecimal(&s.total)
-	calc, err := CalculateOccurrences(goodText, totalText, s.input.Target, result.Provisional)
-	if errors.Is(err, ErrNoTraffic) {
+	if s.target == nil {
+		return WindowResult{}, ErrInvalidCalculation
+	}
+	result.values = &windowValues{good: new(big.Rat).Set(&s.good), total: new(big.Rat).Set(&s.total), target: s.target}
+	if s.total.Sign() == 0 {
 		result.Performance = "unknown"
 		if result.Provisional {
 			result.Reason = "incomplete_measurements"
 		} else {
 			result.Reason = "zero_traffic"
 		}
-		zero := "0.000000000000"
-		result.Good, result.Total = &zero, &zero
 		return result, nil
 	}
-	if err != nil {
-		return WindowResult{}, err
+	one := big.NewRat(1, 1)
+	bad := new(big.Rat).Sub(&s.total, &s.good)
+	allowed := new(big.Rat).Mul(new(big.Rat).Sub(one, s.target), &s.total)
+	remaining := new(big.Rat).Sub(allowed, bad)
+	consumed := new(big.Rat).Quo(bad, allowed)
+	result.Performance = "violated"
+	if bad.Cmp(allowed) <= 0 {
+		result.Performance = "met"
 	}
-	result.Performance, result.ObservedPerformance = calc.State, calc.ObservedState
+	result.ObservedPerformance = result.Performance
 	if result.Provisional {
+		result.Performance = "unknown"
 		result.Reason = "incomplete_measurements"
 	}
-	result.Good, result.Total, result.Bad = &goodText, &totalText, &calc.Bad
-	result.Attainment, result.Allowed, result.Remaining = &calc.Attainment, &calc.Allowed, &calc.Remaining
-	result.Consumed, result.RemainingFraction, result.Burn = &calc.Consumed, &calc.RemainingFraction, &calc.Burn
-	result.ExactBad = new(big.Rat).Set(calc.ExactBad)
-	result.ExactRemaining = new(big.Rat).Set(calc.ExactRemaining)
-	result.ExactRemainingFraction = new(big.Rat).Set(calc.ExactRemainingFraction)
-	result.ExactBurn = new(big.Rat).Set(calc.ExactConsumed)
+	result.ExactBad = bad
+	result.ExactRemaining = remaining
+	result.ExactRemainingFraction = new(big.Rat).Sub(one, consumed)
+	result.ExactBurn = consumed
 	return result, nil
 }
 

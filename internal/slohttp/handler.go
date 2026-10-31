@@ -22,17 +22,25 @@ import (
 )
 
 type Handler struct {
+	runtime     *storage.Runtime
 	databaseURL string
 	auth        *authhttp.Handler
 	now         func() time.Time
 	preflight   func(context.Context) error
 }
 
-func New(databaseURL string, auth *authhttp.Handler, now func() time.Time, preflight func(context.Context) error) (*Handler, error) {
+func New(databaseURL string, auth *authhttp.Handler, now func() time.Time, preflight func(context.Context) error, runtimes ...*storage.Runtime) (*Handler, error) {
 	if databaseURL == "" || auth == nil || now == nil {
 		return nil, errors.New("slohttp: invalid options")
 	}
-	return &Handler{databaseURL, auth, now, preflight}, nil
+	if len(runtimes) > 1 {
+		return nil, errors.New("slohttp: invalid runtime options")
+	}
+	var runtime *storage.Runtime
+	if len(runtimes) == 1 {
+		runtime = runtimes[0]
+	}
+	return &Handler{runtime: runtime, databaseURL: databaseURL, auth: auth, now: now, preflight: preflight}, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -98,8 +106,100 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.evaluate(w, r, reqID, proof, parts[1], query)
 		return
 	}
+	if len(parts) == 3 && isSlo && parts[2] == "status" {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			problem(w, 405, "method_not_allowed", reqID)
+			return
+		}
+		if len(query) != 0 || hasBody(r) || hasConditional(r) {
+			problem(w, 400, "invalid_request", reqID)
+			return
+		}
+		value, err := storage.ReadCurrentSloStatus(r.Context(), h.databaseURL, storage.CurrentSloInput{Runtime: h.runtime, Proof: proof, ID: parts[1], Now: h.now})
+		if err != nil {
+			storageError(w, err, reqID, parts[1])
+			return
+		}
+		write(w, 200, value)
+		return
+	}
+	if len(parts) == 3 && isSlo && parts[2] == "preparation" {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			problem(w, 405, "method_not_allowed", reqID)
+			return
+		}
+		if len(query) != 0 || hasBody(r) || hasConditional(r) {
+			problem(w, 400, "invalid_request", reqID)
+			return
+		}
+		value, err := storage.ReadSloPreparation(r.Context(), h.databaseURL, storage.CurrentSloInput{Runtime: h.runtime, Proof: proof, ID: parts[1], Now: h.now})
+		if err != nil {
+			storageError(w, err, reqID)
+			return
+		}
+		write(w, 200, value)
+		return
+	}
 	if len(parts) == 3 && isSlo && parts[2] == "operational" {
 		h.operationalDetail(w, r, reqID, proof, parts[1], query)
+		return
+	}
+	if len(parts) == 5 && isSlo && parts[2] == "history" && parts[4] == "values" {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			problem(w, 405, "method_not_allowed", reqID)
+			return
+		}
+		if hasBody(r) || hasConditional(r) {
+			problem(w, 400, "invalid_request", reqID)
+			return
+		}
+		for key, values := range query {
+			if (key != "lane" && key != "offset" && key != "limit") || len(values) != 1 {
+				problem(w, 400, "invalid_request", reqID)
+				return
+			}
+		}
+		offset, limit := 0, 50
+		for key, target := range map[string]*int{"offset": &offset, "limit": &limit} {
+			if query.Has(key) {
+				value, err := strconv.Atoi(query.Get(key))
+				if err != nil {
+					problem(w, 400, "invalid_request", reqID)
+					return
+				}
+				*target = value
+			}
+		}
+		page, err := storage.ReadSloHistoryValues(r.Context(), h.databaseURL, storage.SloHistoryValuesInput{Runtime: h.runtime,
+			Proof: proof, ID: parts[1], GenerationID: parts[3], Lane: query.Get("lane"), Offset: offset, Limit: limit, Now: h.now})
+		if err != nil {
+			storageError(w, err, reqID)
+			return
+		}
+		write(w, 200, page)
+		return
+	}
+	if len(parts) == 5 && isSlo && parts[2] == "preparation" && parts[4] == "retry" {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			problem(w, 405, "method_not_allowed", reqID)
+			return
+		}
+		if len(query) != 0 || hasBody(r) || hasConditional(r) {
+			problem(w, 400, "invalid_request", reqID)
+			return
+		}
+		err := storage.RetrySloPreparation(r.Context(), h.databaseURL, storage.RetrySloPreparationInput{
+			Runtime: h.runtime, Proof: proof, SloID: parts[1], JobID: parts[3], RequestID: reqID, Now: h.now,
+		})
+		if err != nil {
+			storageError(w, err, reqID)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 	if len(parts) != 2 {
@@ -119,7 +219,7 @@ func (h *Handler) operationalOverview(w http.ResponseWriter, r *http.Request, re
 		problem(w, 400, "invalid_request", requestID)
 		return
 	}
-	input := storage.OperationalOverviewInput{Proof: proof, Now: h.now}
+	input := storage.OperationalOverviewInput{Runtime: h.runtime, Proof: proof, Now: h.now}
 	for key, values := range q {
 		if len(values) != 1 {
 			problem(w, 400, "invalid_request", requestID)
@@ -173,7 +273,7 @@ func (h *Handler) operationalDetail(w http.ResponseWriter, r *http.Request, requ
 		problem(w, 400, "invalid_request", requestID)
 		return
 	}
-	input := storage.OperationalDetailInput{Proof: proof, ID: id, Now: h.now, BurnWindow: 3600}
+	input := storage.OperationalDetailInput{Runtime: h.runtime, Proof: proof, ID: id, Now: h.now, BurnWindow: 3600}
 	seen := make(map[string]bool, len(q))
 	for key, values := range q {
 		if len(values) != 1 || values[0] == "" || seen[key] {
@@ -211,7 +311,7 @@ func (h *Handler) operationalDetail(w http.ResponseWriter, r *http.Request, requ
 	}
 	result, err := storage.ReadSloOperationalDetail(r.Context(), h.databaseURL, input)
 	if err != nil {
-		storageError(w, err, requestID)
+		storageError(w, err, requestID, id)
 		return
 	}
 	write(w, 200, result)
@@ -515,7 +615,29 @@ func fieldProblem(w http.ResponseWriter, requestID, field, code, message string)
 		Message string `json:"message"`
 	}{{Code: code, Field: field, Message: message}}})
 }
-func storageError(w http.ResponseWriter, err error, id string) {
+func storageError(w http.ResponseWriter, err error, id string, objectiveIDs ...string) {
+	if errors.Is(err, storage.ErrDerivedPending) || errors.Is(err, storage.ErrDerivedFailed) {
+		state, code, message := "pending", "derived_data_pending", "SLO results are being prepared."
+		retry := 2
+		if errors.Is(err, storage.ErrDerivedFailed) {
+			state, code, message, retry = "failed", "derived_data_failed", "SLO preparation failed. An administrator or editor can retry the preparation.", 0
+		} else {
+			w.Header().Set("Retry-After", "2")
+		}
+		preparation := api.DerivedPreparation{State: api.DerivedPreparationState(state), RetryAfterSeconds: retry}
+		if len(objectiveIDs) == 1 {
+			path := "/api/v1/slos/" + objectiveIDs[0] + "/preparation"
+			preparation.DetailsUrl = &path
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(503)
+		_ = json.MarshalWrite(w, api.Problem{Code: code, Message: message, RequestId: id, Preparation: &preparation, FieldErrors: []struct {
+			Code    string `json:"code"`
+			Field   string `json:"field"`
+			Message string `json:"message"`
+		}{}})
+		return
+	}
 	switch {
 	case errors.Is(err, storage.ErrOperationalSnapshot):
 		problem(w, 400, "invalid_request", id)
