@@ -1,326 +1,125 @@
 # Working on Almanac
 
-Almanac is an open source Go application for collecting SLIs from disparate
-sources, measuring SLOs, error budgets and burn rates, reporting, and alerting.
+Almanac is an open source Go application for collecting SLIs, measuring SLOs,
+error budgets and burn rates, reporting, and alerting.
 
 ## Start here
 
-Read this file before making changes. It is the living source of project-wide
-guidelines for agents and contributors. Read any additional `AGENTS.md` in the
-directories you change, then the relevant specs and ADRs.
+- Before changes, read applicable directory `AGENTS.md` files and inspect git state.
+  Preserve unrelated edits. For delivery, read [status](docs/status.md), find the
+  active plan/task and inspect its branch and evidence before resuming. Do not
+  assume previous processes, worktrees or test results remain valid.
+- Read relevant accepted specs and ADRs. Drafts are proposals. Resolve conflicting
+  instructions or contracts with the maintainer before the affected change;
+  continue independent authorized work.
+- Keep this file limited to durable rules and required reading. Update affected
+  guidance alongside changes and explain meaningful policy changes. Put behavior
+  in specs, decisions in ADRs and progress in status/task records. Keep temporary
+  investigation material and private conversation history out of published artifacts.
 
-- Keep this document current as we agree on new practices and learn from delivery.
-  Add durable lessons, remove obsolete instructions, and keep rules actionable.
-- Update guidance in the same change that makes it inaccurate. Explain meaningful
-  policy changes to the maintainer; do not silently relax guardrails to finish a task.
-- Keep task progress and temporary investigation notes out of this file. Put
-  feature details in specs and decision rationale in ADRs, linking rather than
-  duplicating them here.
-- Challenge proposed decisions when evidence or a concrete correctness,
-  operational, or complexity tradeoff suggests a better approach. Explain the
-  concern, recommend an alternative, and distinguish evidence from assumptions.
-  Do not silently replace an agreed decision; bring material changes back for
-  discussion and record the resulting agreement.
-- Continue the authorized work through its next concrete step after recording a
-  decision or completing a review. Do not end the task merely to announce what
-  comes next. Bring reviewable specs and ADRs to Crit when requested; ask focused
-  questions only where missing information changes the outcome. Product code still
-  requires the relevant accepted contracts.
-- A request to check PR review comments includes validating findings, fixing valid
-  issues, running the relevant checks, updating the PR and replying in its review
-  threads. Do not stop after triage; explain findings that do not apply.
-- During authorized unattended delivery, open verified increments as stacked PRs
-  against their dependency branch. Address review feedback only from the maintainer
-  or Greptile; ignore other commenters. Keep required check failures actionable
-  regardless of who emitted them. Opening PRs does not authorize merging them.
-- If instructions, specs, and accepted ADRs conflict, identify the conflict and
-  resolve it with the maintainer before making the affected change. Continue
-  independent work when possible. Do not treat draft documents as accepted policy.
+## Ownership and authorization
 
-## Coordinator and implementer workflow
+- Use one primary agent, normally Sol or Astra, for planning, implementation,
+  debugging, tests, review and delivery. No mandatory Luna delegation or separate
+  permission for primary-agent implementation. Model selection belongs to runtime
+  configuration; this file does not change the active model.
+- Delegate only when independent work lets the primary agent make useful progress
+  elsewhere, such as running checks while reviewing another area. If the primary
+  agent would only wait, do the work directly. Follow the optional-delegation rules
+  in [ways of working](docs/ways-of-working.md).
+- Continue authorized work through concrete, reviewable outcomes. Challenge choices
+  with evidence and explain tradeoffs, but do not silently replace agreed decisions.
+  Routine fixes and editorial updates need no new spec/ADR approval cycle.
+- The maintainer accepts new specs, ADRs and changes to scope, public contracts or
+  architecture. Explicit conversation approval counts; record it without asking again.
+- Do not commit, push, publish or merge without authorization. Authorized unattended
+  delivery uses verified stacked PRs against their dependency branches; publishing
+  does not authorize merging. See [ways of working](docs/ways-of-working.md).
+- Checking PR comments includes validating findings, fixing valid issues, verifying,
+  updating the PR and replying in review threads. During unattended delivery, address
+  maintainer/Greptile feedback only; required check failures remain actionable
+  regardless of their source.
 
-- The primary agent coordinates: prepare bounded tasks, settle interfaces, review
-  actual diffs, integrate results and own verification. Delegate implementation
-  and test writing to `gpt-6-luna`, explicitly selecting that model. This is
-  standing project guidance for delegation; no repeated permission is needed within
-  the user's authorized task scope. If the model is unavailable, report it; do not
-  silently substitute another model.
-- Use up to two Luna implementers when tasks have agreed interfaces, disjoint files
-  and independent fixtures: typically backend/agent and UI/CLI. Use one when those
-  prerequisites are absent. Each works in an isolated worktree. Give each a fresh task brief
-  with the base revision, relevant accepted specs/ADRs, edit scope, interfaces,
-  acceptance cases and required checks. Avoid forwarding unrelated chat history.
-  Give Luna complete bounded features, not just small supporting pieces while the
-  coordinator writes most of the feature. Security or complexity requires clearer
-  constraints and review, not automatic coordinator implementation. Substantial
-  coordinator coding requires the maintainer's explicit agreement first.
-- Prefer complete usable increments over separate tasks/PRs for every internal
-  layer. Run one actual user journey early, inspect real UI before broad matrices,
-  and reserve the full gate for the integrated candidate. Keep current milestone
-  outcomes ahead of optional polish. See [ways of working](docs/ways-of-working.md).
-- Command approval is for the actual invocation, not a similar-looking command.
-  Reuse the exact verified commands in [command discipline](docs/commands.md) and
-  current approval rules. Do not vary wrappers, arguments, environment assignments,
-  redirections or working-directory tricks to obtain execution. Never request a
-  new command approval during unattended work; leave that operation pending and
-  continue independent work. Pass this restriction and exact commands to workers.
-  The maintainer-approved closed focused-verification catalog in
-  [command discipline](docs/commands.md) is reusable within its validated selectors,
-  isolated fixture and local task metadata; do not request that approval again.
-- The implementer submits code and evidence for review; it cannot accept its own
-  task, relax checks, change product contracts or start later milestones. After
-  two unsuccessful handoffs across an increment, change the delivery approach
-  before another handoff. A different error or renamed correction brief does not
-  reset that count. Keep one owner through a working real journey; do not turn
-  unit-only handoffs into a coordinator-owned runtime debugging loop. Reframing
-  preserves the failure history and still requires agreement before the coordinator
-  takes over substantial implementation. Prefer one consolidated coordinator
-  review; repeat review only for changed code or unresolved findings.
-- Start a new task turn when assigning corrections to a completed implementer.
-  A message to an idle agent does not restart it. Check its state after dispatch
-  before reporting that implementation is running.
-- On a new session, read [delivery status](docs/status.md), inspect git state and
-  find the active plan/task before dispatch. Do not assume prior processes,
-  worktrees or verification results are still valid.
-- During stacked delivery, also inspect open PR bases/heads and existing worktree
-  branches. The default branch's status document can lag verified, unmerged work;
-  read the active branch's task and evidence before redispatching anything.
-- Follow [ways of working](docs/ways-of-working.md), the
-  [task format](docs/tasks/README.md) and [testing strategy](docs/testing.md).
-  Only the coordinator marks integrated, verified tasks done. Parallel work needs
-  independent interfaces, files, databases, ports and artifacts.
+## Required reading by task
 
-## Guiding principles
+These documents govern applicable work; read them before that work begins.
 
-- Almanac is a single-tenant application supporting multiple users, services,
-  and datasource connections.
-- External metric collection and datasource diagnostics execute on remote
-  `almanac-agent` instances, never in the backend. The backend accepts observations
-  from agents and custom producers through an ingestion API and stores measurements
-  in PostgreSQL.
-- Agents fetch versioned configuration from the backend, advertise capabilities,
-  and send heartbeats. Each datasource has one assigned agent. Keep reachability,
-  collection progress, and observation freshness distinct.
-- Preserve live collection schedules and resources when implementing historical
-  work. Backfill and automatic repair are best effort and use separate operations
-  and processing channels; they must not consume the live result buffer.
-- Treat UI and CLI management, local users and Google SSO, first-run administrator
-  onboarding, and OpenSLO import compatibility as product requirements. Local users
-  ship first; Google SSO is a later increment, not a first-release gate. Define
-  their detailed contracts in specs before implementation.
-- Preserve the Almanac visual design: shared tokens and controls, typography,
-  light and dark themes, accessible interactions, and consistent charts and tables.
-  Establish a shared component catalogue before building screens. Keep reusable
-  UI components in `web/src/components/ui/`, chart components in
-  `web/src/components/charts/`, and design guidance in `web/DESIGN_SYSTEM.md`.
-  The catalogue should demonstrate those actual components and their states;
-  feature screens should reuse them. Shared controls, timeline charts, exact-value
-  tables and their catalogue examples exist.
-  Backend architecture remains subject to explicit decisions.
-- SLI and SLO screen composition follows the retained
-  [slo-tracker visual references](docs/design/slo-visual-reference.md), with the
-  current left navigation. Preserve dense lists, explained measurement choices,
-  objective presets, urgency groups and the timeline/status-rail detail layout.
-  Copy the existing slo-tracker list/detail markup, layout rules and chart geometry
-  directly; do not reinterpret, redesign or approximate those pages.
-  Matching colors/fonts or rendering a simplified chart is not visual acceptance;
-  compare actual pages side by side and record any undelivered data/interaction gaps.
-- Keep maintenance exclusions, notification silences and graph annotations distinct.
-  Maintenance omits eligible measurements without deleting them; silences affect
-  delivery only; annotations supply context without changing calculations or alerts.
-  Follow the scoped permissions and revision contracts in
-  [SPEC-0016](docs/specs/0016-maintenance-exclusions.md) and
-  [SPEC-0017](docs/specs/0017-slo-timeline-annotations.md).
-- Work from specifications. Define observable behavior and acceptance criteria
-  before implementation; keep specifications current as behavior changes.
-- Record consequential decisions in ADRs before implementing them. Existing code
-  is evidence to evaluate, not automatic approval of its design.
-- Prefer the smallest complete feature that users can exercise. Reuse suitable
-  code and tests after reviewing their behavior, dependencies, and assumptions.
-- Keep repository content focused on Almanac's behavior, contracts, and decisions.
-  Keep internal conversation history and temporary investigation notes out of
-  published artifacts. Preserve required third-party license notices.
-
-## Specifications and decisions
-
-| Location | Responsibility |
+| Work | Required guidance |
 | --- | --- |
-| [docs/README.md](docs/README.md) | Documentation map and reading order |
-| [docs/specs/](docs/specs/README.md) | Behavior, scope, contracts, and acceptance criteria |
-| [docs/adr/](docs/adr/README.md) | Consequential architectural and technical decisions |
-| `docs/plans/` | Milestone task dependency plans; create when needed |
-| [docs/tasks/](docs/tasks/README.md) | Bounded implementer briefs and coordinator acceptance |
-| [docs/testing.md](docs/testing.md) | Fast feedback, boundary checks and integration/release gates |
-| [docs/status.md](docs/status.md) | Delivery progress and verification evidence |
-| [docs/review-guide.md](docs/review-guide.md) | Accepted choices, pending amendments and deferred decisions |
-| `web/DESIGN_SYSTEM.md` | Visual rules and shared asset references; establish with the UI |
+| Delivery, implementation, delegation or PRs | [Ways of working](docs/ways-of-working.md); [task format](docs/tasks/README.md) for task records |
+| Build, setup, verification or command approval | [Command discipline](docs/commands.md) and [testing strategy](docs/testing.md) |
+| New or changed behavior | Relevant [specs](docs/specs/README.md), [ADRs](docs/adr/README.md) and active plan; [documentation map](docs/README.md) and [review guide](docs/review-guide.md) locate them |
+| UI | [Design system](web/DESIGN_SYSTEM.md); SLI/SLO work also requires the [retained visual reference](docs/design/slo-visual-reference.md) |
 
-Use the templates and naming conventions in the spec and ADR directories. Specs
-and ADRs have independent four-digit sequences and descriptive kebab-case names.
-Refer to them as `SPEC-0001` and `ADR-0001` and include relative Markdown links.
-Plans reference their governing spec; they do not redefine its requirements.
+## Product constraints
 
-The coordinator/implementer workflow in [docs/ways-of-working.md](docs/ways-of-working.md)
-and verification gates in [docs/testing.md](docs/testing.md) govern current delivery.
-Product scope and milestone order remain defined by accepted specs and ADRs.
+- Almanac is single-tenant with multiple users, services and datasource connections.
+  UI/CLI management, local users, first-run onboarding, later Google SSO and OpenSLO
+  compatibility are requirements; accepted specs define scope and sequencing.
+- External collection and datasource diagnostics run on remote `almanac-agent`
+  instances, never in the backend. The backend ingests agent/custom-producer
+  observations and stores measurements in PostgreSQL.
+- Agents fetch versioned configuration, advertise capabilities and send heartbeats.
+  Each datasource has one assigned agent. Distinguish reachability, collection
+  progress and observation freshness.
+- Historical backfill/repair is best effort. Preserve live collection schedules and
+  resources; use separate operations/channels, never the live result buffer.
+- Maintenance exclusions, notification silences and graph annotations are distinct:
+  exclusions omit eligible measurements without deletion, silences affect delivery,
+  annotations provide context. Follow [SPEC-0016](docs/specs/0016-maintenance-exclusions.md)
+  and [SPEC-0017](docs/specs/0017-slo-timeline-annotations.md).
+- Reuse shared UI controls in `web/src/components/ui/` and charts in
+  `web/src/components/charts/`; demonstrate their actual states in the catalogue.
+  Preserve tokens, typography, both themes and accessible interactions.
+- SLI/SLO pages must copy retained slo-tracker markup, layout and chart geometry
+  with the current left navigation. Do not approximate or redesign them. Compare
+  actual pages side by side and record missing data/interaction requirements.
 
-## Working loop
+## Implementation and decisions
 
-1. Inspect relevant code, documentation, and local changes before editing.
-2. Define or update the spec and acceptance criteria for new behavior.
-3. Identify applicable ADRs and resolve consequential decisions before code.
-4. Break substantial work into small, reviewable tasks linked to the spec.
-5. Implement the agreed scope, reusing suitable reviewed components and tests.
-6. Verify acceptance criteria and report actual evidence and remaining gaps.
-7. Reconcile affected docs, contracts, and guidance in the same change.
+- Define observable behavior and acceptance criteria before implementation. Record
+  consequential decisions in ADRs first; existing code is evidence, not approval.
+  Proceed with routine choices inside accepted contracts. Update affected specs,
+  contracts and guidance in the same change.
+- Use spec/ADR templates and independent four-digit sequences. Plans link governing
+  specs rather than redefining them. Supersede changed accepted ADRs with a new
+  linked ADR; keep delivery progress outside decision status.
+- Prefer small complete user outcomes, idiomatic Go and interfaces justified by
+  consumers. Review reused code/tests against Almanac's contracts. Explain added
+  dependencies; architectural dependencies require an ADR. Preserve license notices.
+- Before Go edits, read the complete applicable Modern Go guideline list for the
+  version in `go.mod` and relevant explanations. Use the installed
+  `.local/bin/go-modern-guidelines` CLI; setup and command details are in the linked
+  guides. Report unavailable tooling rather than assuming another version.
+- Keep calculations deterministic with explicit time inputs. Define units,
+  precision, boundaries and aggregation; distinguish missing, stale, partial and
+  zero-traffic data. Missing observations must never appear successful.
+- Propagate cancellation through I/O; bound concurrency/retries and make shutdown
+  and errors explicit. Protect credentials in storage, logs, responses and artifacts.
+  Regenerate generated code from source contracts; never hand-edit output.
 
-The maintainer accepts new specs and ADRs; explicit approval in the working
-conversation counts and should be summarized in the record. Do not request the
-same approval again. Routine fixes that restore specified behavior and editorial
-documentation updates do not require a new spec, ADR, or approval cycle.
+## Commands and evidence
 
-## Decision discipline
-
-- Distinguish proposed, accepted, and implemented work. Do not mark a proposal
-  accepted on behalf of the maintainer or infer completion from documentation.
-- Each feature spec identifies scope, non-goals, acceptance criteria, failure
-  behavior, and relevant ADRs. Resolve consequential open questions before code.
-- ADRs explain context, decision, alternatives, and consequences. One ADR can
-  govern many changes; do not create one per function, file, or routine fix.
-- Keep accepted decision rationale stable. Supersede a changed decision with a
-  new ADR and link both records. Keep implementation progress outside ADR status.
-- When a task fits an accepted spec and ADRs, proceed with routine implementation
-  choices. Escalate changes to product scope, public contracts, or architecture.
-- Update affected specs, contracts, and documentation in the same change as code.
-
-## Go and implementation discipline
-
-- Before writing or modifying Go, use the Modern Go Guidelines CLI for the
-  version declared in `go.mod`. Read its complete applicable guideline list;
-  consult explanations for relevant rules. Do not assume a toolchain version
-  from another project. If tooling is unavailable, report the limitation.
-  `make setup SETUP_MODE=go` installs `.local/bin/go-modern-guidelines`; use that
-  installed CLI for read-only guideline queries rather than rerunning a global-cache
-  installer that may be unavailable inside the sandbox.
-- Prefer clear, idiomatic Go and small interfaces justified by actual consumers.
-  Avoid speculative frameworks and abstractions. Explain added dependencies;
-  architectural dependencies require an ADR.
-- Keep calculations deterministic and independently testable. Make time an
-  explicit input where it affects windows, scheduling, or results.
-- Propagate cancellation through I/O; bound concurrency and retries; make worker
-  shutdown and error handling explicit. Never silently swallow failures.
-- Specify missing, stale, partial, and zero-traffic data distinctly. Never turn
-  missing observations into apparent success. Define units, precision, time
-  boundaries, and aggregation rules before implementing calculations.
-- Protect credentials in storage, logs, API responses, fixtures, and screenshots.
-- Regenerate generated code from its source contracts; do not hand-edit output.
-
-## Evidence and scope
-
-- Keep the edit loop focused and fast; run the integrated-candidate gate before
-  accepting combined work and broader checks at the required milestone/risk boundary.
-  Do not wrap every focused test in a full build/browser matrix. Separate cached
-  setup from execution, and verify the stack matches the candidate revision.
-- Reserve Compose end-to-end, the catalogue browser matrix and the database/API
-  integration suite for a completed, integrated task candidate and PR verification.
-  Use focused unit/component tests and static checks during implementation. Early
-  inspection of a running page or one user journey does not authorize those broad
-  suites. A worker handoff or small edit does not trigger them. Reuse passing task
-  evidence for the PR when relevant inputs match. After a gate failure, diagnose
-  and correct with focused checks; rerun the affected gate when the corrected
-  candidate is ready, retaining evidence for unaffected gates and all failures.
-- Keep the maintainer's preview available during verification. Browser checks own
-  a separate port and server; never stop the preview to free their port. If a
-  preview must restart after integration, restore it and verify the URL before
-  handing back the page. Lazy-loaded sections must fail visibly without blanking
-  unrelated controls.
-- Prefer established, narrowly scoped command families for setup, builds, checks,
-  previews and Git operations. Reuse existing approvals; do not introduce generic
-  shell execution targets or bypass permission controls. If an operation requires
-  new approval while the maintainer is unavailable, leave it pending and continue
-  independent authorized work.
-- Reuse exact approved command invocations, including arguments, environment
-  assignments and shell wrappers. A familiar command name or Make target is not
-  evidence that a variation is approved. Do not request approval for a variation
-  after a sandbox failure: use an already-approved full check or leave the check
-  pending. Carry this restriction into every worker brief.
-- Check the saved approval for the actual invocation before submitting a command.
-  Do not assume a command-family approval covers a new argument combination or
-  shell form. Reuse known approved invocations unchanged where possible; leave
-  uncertain operations pending instead of requesting approval. Do not add wrappers
-  or broaden targets to evade this restriction.
-- The coordinator must carry this command restriction into every implementer
-  brief and enforce it during review. Do not request new command approvals for
-  direct formatter, compiler or helper-script invocations. Route them through
-  fixed-purpose operations under the approved `make setup`, `make build`,
-  `make verify` or `make generate` families. Never add arbitrary command execution
-  or unchecked passthrough arguments to those targets. Leave actions that cannot
-  fit an approved family pending instead of interrupting the maintainer.
-- If an implementer cannot reuse an existing command approval, hand the exact
-  bounded operation and verification evidence back to the coordinator. Do not
-  retry approval requests. The coordinator can perform approved Git staging and
-  commits after checking file ownership and the submitted evidence.
-- Never replace real API/database/agent acceptance evidence with mocked UI checks.
-  Preserve first-attempt failures; do not rerun-to-green, skip expected tests, weaken
-  assertions, disable auth, or increase timeouts to manufacture a passing gate.
-- Compile integration-tagged tests in the full Go gate even when the database
-  fixture is unavailable to the implementer. Compilation catches tagged-code errors
-  early; it never substitutes for coordinator-owned real integration execution.
-- Verify changed behavior against the spec. Use focused calculation tests,
-  integration tests for persistence and collection, and browser checks for user
-  flows as applicable. Reused tests must be reviewed against Almanac's contract.
-- For UI changes, inspect real pages in both themes and at mobile widths, including
-  keyboard use, focus, empty states, errors, and exact data representations.
-- Start feature briefs with a user acceptance checklist: ordinary user-entered
-  values, expected visible results, correction of errors and navigation between
-  screens. For reported defects, reproduce the reported steps and inputs before
-  changing code; a related passing fixture does not close the report.
-- Evaluate UI structure and interactions against the accepted visual reference,
-  side by side. Record concrete differences in navigation, hierarchy, density,
-  typography and controls; a screenshot that merely renders is not visual acceptance.
-- Verify affected user journeys through the normal container deployment as well as
-  isolated API fixtures. Use the existing isolated Compose check to preserve operator
-  data and credentials. Verify the built revision and default deployment settings.
-- The coordinator independently exercises the integrated user journey before
-  delivery. Worker reports and suite counts support that review; they do not replace
-  it. Keep navigation, form entry, submission, error recovery and resulting records
-  in the acceptance path rather than checking each screen only in isolation.
-- Use precise status: implemented, verified with named evidence, or unresolved.
-  Do not describe a feature as done while a reported acceptance failure is open.
-  A later passing run does not establish a fix for an unexplained earlier failure;
-  retain it as an open investigation with the evidence needed for diagnosis.
-- Report checks actually run, their results, and any gaps. Do not claim that
-  tests passed based on an earlier codebase or a different revision.
-- Keep a persistent test-run ledger: command/mode, start/end, elapsed time,
-  result and rerun count. Report cumulative invocation time and wall time occupied
-  by tests separately so parallel runs are not double-counted. Retain failures,
-  distinguish nested checks from their parent gate, and mark missing timings
-  unknown. Include the current totals in delivery updates.
-- Keep changes reviewable and confined to the current feature. Do not begin
-  later milestones merely because related code is available.
-- Use `make bootstrap` for the container-only local app, `make run` (or `make start`)
-  for daily startup, and `make stop` to preserve its data while stopping services.
-  Host prerequisites are Docker with Compose, Make and curl. Startup must verify
-  the host HTTPS endpoint before announcing readiness; container health alone is
-  insufficient when a VM supplies Docker port forwarding.
-  Bootstrap/run/stop never reset volumes or credentials. Keep this Compose project
-  separate from the catalogue and acceptance fixtures; disclose the initial password
-  only through the explicit `make credentials` action.
-- Use `make setup` for pinned Go/web tools and Chromium, `make build` for the
-  embedded UI binary, `make verify` for unit/type/build/generated/HTTP checks, and
-  `make verify VERIFY_MODE=browser` for catalogue browser checks. Focused component
-  checks use `make verify VERIFY_MODE=unit TEST_FILE=tests/ui.test.tsx`.
-  Go checks use `VERIFY_MODE=go` with an optional validated `GO_PACKAGE`;
-  `VERIFY_MODE=go-race` checks concurrency and `VERIFY_MODE=smoke` runs the binary.
-  `make generate` regenerates API contracts; `GENERATE_MODE=sqlc` regenerates storage
-  queries; `GENERATE_MODE=format` formats Go
-  with the pinned toolchain. `make preview` serves the local catalogue. Database
-  checks use `make setup SETUP_MODE=database` for the isolated PostgreSQL18 fixture
-  and `make verify VERIFY_MODE=integration` with its explicit
-  `ALMANAC_TEST_DATABASE_URL`; storage, authentication and agent management services,
-  authentication
-  HTTP and executable backend suites run serially by default. Real TLS/API/database,
-  backend lifecycle and browser authentication checks exist; full product journeys
-  remain subsequent work. Documentation checks use
-  `python3 scripts/check-docs.py`. Document new commands only after they work here.
-- Do not commit, push, or publish unless requested. Respect unrelated local edits.
+- Follow [command discipline](docs/commands.md): approval applies to the actual
+  invocation. Reuse exact approved commands or the approved closed verification
+  catalog within its validated scope. Never bypass restrictions with wrappers,
+  passthrough targets or another tool. Do not request new approvals during unattended
+  work; leave unavailable operations pending. Pass these restrictions to subagents.
+- Follow [testing](docs/testing.md): focused checks while editing, one real journey
+  early, required broad gates on the completed integrated candidate. Reuse evidence
+  only for matching inputs; diagnose failures before rerunning affected gates.
+- Reproduce reported steps/values before fixes. Exercise the integrated user journey
+  and normal isolated container deployment; mocks, screenshots and suite counts
+  cannot replace real API/database/agent or usability evidence. UI acceptance includes
+  both themes, mobile, keyboard/focus, errors, exact values and reference comparison.
+- Preserve failures and unresolved investigations. Never weaken checks, disable
+  auth, increase timeouts or rerun to manufacture green. Only mark integrated,
+  verified work done; report checks actually run and unverified gaps.
+- Keep the persistent timing ledger required by the command/testing guides. Report
+  cumulative invocation time and occupied wall time separately, retaining failures
+  and unknown timings. Keep the maintainer's data, credentials and preview available;
+  verification owns separate fixtures, ports and artifacts.
+- Use `make bootstrap` for initial local setup, `make run`/`make start` for daily
+  startup and `make stop` to preserve data. Verify host HTTPS readiness before
+  announcing availability. Disclose the initial password only via `make credentials`.
+  Exact setup/build/generation/verification commands live in the linked guides.
