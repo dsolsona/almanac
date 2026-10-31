@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -44,6 +45,7 @@ type outbound struct {
 type sessionControl struct {
 	supportsOwnerReplaced bool
 	conn                  *websocket.Conn
+	transport             net.Conn
 	cancel                context.CancelFunc
 	shutdown              chan struct{}
 	queue                 chan outbound
@@ -93,7 +95,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+	upgrade := &upgradeCapture{ResponseWriter: w}
+	conn, err := websocket.Accept(upgrade, r, &websocket.AcceptOptions{
 		Subprotocols:    []string{agentprotocol.ProtocolV2, agentprotocol.ProtocolV1},
 		CompressionMode: websocket.CompressionDisabled,
 	})
@@ -103,7 +106,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(agentprotocol.MaxMessageBytes)
 	ctx, cancel := context.WithCancel(r.Context())
 	control := &sessionControl{
-		conn: conn, cancel: cancel, shutdown: make(chan struct{}),
+		conn: conn, transport: upgrade.transport, cancel: cancel, shutdown: make(chan struct{}),
 		queue: make(chan outbound, agentprotocol.MaxQueueMessages), done: make(chan struct{}),
 	}
 	if !h.registry.add(control) {

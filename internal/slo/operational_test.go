@@ -6,6 +6,37 @@ import (
 	"time"
 )
 
+func TestWindowSummaryDefersFormattingAndRetainsExactSnapshot(t *testing.T) {
+	end := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	facts := []Observation{
+		{Start: end.Add(-2 * time.Minute), End: end.Add(-time.Minute), Received: end.Add(-time.Minute), Outcome: "observed", Good: "9.999999999999", Total: "10"},
+		{Start: end.Add(-time.Minute), End: end, Received: end, Outcome: "observed", Good: "0", Total: "10"},
+	}
+	input := WindowInput{Now: end, ValidFrom: facts[0].Start, SliValidFrom: facts[0].Start, RetentionStart: facts[0].Start, Duration: 2 * time.Minute, Cadence: time.Minute, FreshnessGrace: 3 * time.Minute, Target: "0.999999999999", Observations: facts}
+	sweep, err := NewWindowSweepContext(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := sweep.AtSummaryContext(t.Context(), facts[0].End)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Good != nil || summary.Burn != nil || summary.Coverage != nil || summary.ExactBurn == nil {
+		t.Fatal("summary formatted output or lost its exact metric")
+	}
+	want, err := CalculateOccurrences(facts[0].Good, facts[0].Total, input.Target, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sweep.AtSummaryContext(t.Context(), end); err != nil {
+		t.Fatal(err)
+	}
+	value := summary.WithValues()
+	if value.Good == nil || *value.Good != "9.999999999999" || value.Total == nil || *value.Total != "10.000000000000" || value.Burn == nil || *value.Burn != want.Burn || value.RemainingFraction == nil || *value.RemainingFraction != want.RemainingFraction {
+		t.Fatalf("deferred projection changed the retained exact snapshot: %+v", value)
+	}
+}
+
 func TestOperationalBurnWindowsUseIndependentExactWindows(t *testing.T) {
 	cadence := time.Minute
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)

@@ -18,8 +18,8 @@ needs a concrete size/behavior review before addition.
 
 Governing contracts: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md)
 and [ADR-0024](../adr/0024-precomputed-operational-reads.md). The maintainer approved
-both documents and this plan after Crit review on 2026-10-30. Implementation and
-verification remain outstanding.
+both documents and this plan after Crit review on 2026-10-30. Implementation is
+in progress in [F3-T08](../tasks/F3-T08.md); integrated verification remains outstanding.
 
 ## Global constraints
 
@@ -246,6 +246,13 @@ Exit: all required correctness, latency/currentness, isolation and lifecycle gat
 pass on the same candidate. A small successful fixture is not sufficient acceptance.
 
 ## Current state
+
+Fresh execution worktree: `.worktrees/backend-performance`, branch
+`perf/backend-stabilization`, based on merged main `aa548fe`. Earlier uncommitted
+investigation is preserved separately in local commit `a299a50`; it is not applied
+to this candidate. The initial runtime pool owner and real-database regression
+fixtures are written; backend adapter wiring and verification remain outstanding.
+No database or end-to-end suite has run during this fresh execution.
 
 Execution started on 2026-10-30 after the maintainer requested completing PR47
 review corrections first. Those review threads have replies; the final urgency

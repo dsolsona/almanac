@@ -23,6 +23,31 @@ func TestLoadPrecedenceAndValidation(t *testing.T) {
 	}
 }
 
+func TestInternalMetricsConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metrics.json")
+	if err := os.WriteFile(path, []byte(`{"components":"backend","database_url_file":"/db","public_origin":"https://example.test","trusted_proxy_cidrs":["127.0.0.1/32"],"metrics_listen":"127.0.0.1:9091"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path, []string{"ALMANAC_METRICS_LISTEN=127.0.0.1:9092"}, map[string]string{"metrics-listen": "[::1]:9093"})
+	if err != nil || cfg.MetricsListen != "[::1]:9093" {
+		t.Fatalf("metrics precedence: %+v, %v", cfg, err)
+	}
+	for _, address := range []string{"127.0.0.1", "127.0.0.1:65536", "localhost:9091", cfg.Listen} {
+		cfg.MetricsListen = address
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("invalid metrics listener accepted: %s", address)
+		}
+	}
+	cfg.Components = "ui"
+	cfg.MetricsListen = "127.0.0.1:9091"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("UI-only mode accepted backend metrics")
+	}
+	if Defaults().MetricsListen != "" {
+		t.Fatal("default configuration opens a metrics listener")
+	}
+}
+
 func TestLoadRejectsInvalidFiles(t *testing.T) {
 	cases := []struct{ name, body string }{
 		{"unknown", `{"secret":"do-not-print"}`},

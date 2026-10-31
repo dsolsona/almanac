@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { join } from 'node:path';
 let browser, page, fixture, stage='input';
+const wire=[];
+const wireRequests=new Map();
 try {
   let input=''; for await (const chunk of process.stdin) { input+=chunk; if(Buffer.byteLength(input)>16384) throw new Error('input too large'); }
   fixture=JSON.parse(input); input=''; const origin=new URL(fixture.url);
@@ -25,9 +27,68 @@ try {
   const {chromium,expect}=await import('@playwright/test'); browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${fixture.spki}`]});
   const operationalRequests=new Map();
   const context=await browser.newContext({viewport:{width:1440,height:900},colorScheme:'light'}); page=await context.newPage();
+  page.on('request',request=>{
+    const url=new URL(request.url());
+    if(request.method()!=='GET'||url.origin!==origin.origin||!/^\/api\/v1\/(slos|services)(\/|$)/.test(url.pathname)||wire.length>=512)return;
+    const entry={path:url.pathname,stage,started_ms:Date.now()};wire.push(entry);wireRequests.set(request,entry);
+  });
+  page.on('response',response=>{
+    const entry=wireRequests.get(response.request());if(!entry)return;
+    Object.assign(entry,{status:response.status(),elapsed_ms:Date.now()-entry.started_ms,retry_after:response.headers()['retry-after']??null,date:response.headers().date??null});
+    if(response.status()>=400)void response.json().then(body=>{entry.code=body.code??null;entry.preparation=body.preparation?.state??null;}).catch(()=>{entry.problem_unreadable=true;});
+  });
+  page.on('requestfailed',request=>{const entry=wireRequests.get(request);if(entry)entry.failed=true;});
+  const preparationReads=[];
+  const openPreparedOverview=async()=>{
+    const isOverview=response=>response.request().method()==='GET'&&new URL(response.url()).pathname==='/api/v1/slos/overview';
+    const first=page.waitForResponse(isOverview);
+    const started=Date.now();
+    await page.getByRole('link',{name:'SLOs',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible();
+    let response=await first,pending=0;
+    // This fixture has just created objectives. Preparation has a ten-second
+    // currentness contract; ready rendering is checked separately below.
+    const deadline=started+10000;
+    while(response.status()===503){
+      const problem=await response.json();
+      assert.equal(problem.code,'derived_data_pending');
+      assert.equal(response.headers()['retry-after'],'2');
+      assert.equal(problem.preparation?.state,'pending');
+      assert.equal(problem.preparation?.retry_after_seconds,2);
+      pending++;
+      await expect(page.getByLabel('Search SLOs')).toBeEditable();
+      await expect(page.getByRole('button',{name:'New SLO',exact:true})).toBeEnabled();
+      const remaining=deadline-Date.now();assert.ok(remaining>0,'initial current preparation exceeded ten seconds');
+      response=await page.waitForResponse(isOverview,{timeout:remaining});
+    }
+    assert.equal(response.status(),200);
+    const ready=Date.now();
+    await expect(page.getByRole('table').first()).toBeVisible({timeout:1000});
+    await writeFile(join(fixture.artifacts,'slo-initial-preparation.json'),JSON.stringify({pending_responses:pending,preparation_ms:ready-started,ready_render_ms:Date.now()-ready})+'\n',{mode:0o600});
+  };
+  const readPreparedJSON=async path=>{
+    let confirmed;
+    await expect.poll(async()=>{
+      const result=await page.evaluate(async path=>{
+        const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});
+        return {status:response.status,retryAfter:response.headers.get('Retry-After'),body:await response.json()};
+      },path);
+      preparationReads.push({path:new URL(path,origin).pathname,status:result.status,code:result.body?.code??null,retry_after:result.retryAfter});
+      await writeFile(join(fixture.artifacts,'preparation-observations.json'),JSON.stringify(preparationReads)+'\n',{mode:0o600});
+      if(result.status===503){
+        assert.equal(result.body.code,'derived_data_pending');
+        assert.equal(result.retryAfter,'2');
+        assert.equal(result.body.preparation?.state,'pending');
+        assert.equal(result.body.preparation?.retry_after_seconds,2);
+      } else {assert.equal(result.status,200);confirmed=result;}
+      return result.status;
+    },{intervals:[2000]}).toBe(200);
+    return confirmed;
+  };
   page.on('request',request=>{const url=new URL(request.url());if(/^\/api\/v1\/slos\/[0-9a-f-]+\/operational$/.test(url.pathname))operationalRequests.set(url.pathname.split('/')[4],url.href);});
   const capture = async (name, chart = false) => {
     await page.evaluate(()=>window.scrollTo(0,0));
+    if(chart)await expect(page.getByText('Current status could not refresh. Showing the last confirmed evaluation.',{exact:true})).toHaveCount(0);
     if(name.startsWith('slo-list-')&&page.viewportSize().width<=680){
       await expect.poll(()=>page.locator('.app-slo-row').first().evaluate(row=>{
         const objective=row.querySelector('.app-slo-name').getBoundingClientRect();
@@ -114,7 +175,7 @@ try {
     })).toBeLessThanOrEqual(1);
   };
   stage='login'; await page.goto(fixture.url); await page.getByLabel('Login',{exact:true}).fill(fixture.login); await page.getByLabel('Password',{exact:true}).fill(fixture.password); await page.getByLabel('Password',{exact:true}).press('Enter'); fixture.password=''; await expect(page.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
-  stage='create'; await page.getByRole('link',{name:'SLOs',exact:true}).click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await expect(page.getByRole('table').first()).toBeVisible(); await page.getByLabel('Search SLOs').fill('no-objective-matches-this-query'); await page.getByLabel('Search SLOs').press('Enter'); await expect(page.getByText('No SLOs match these filters.',{exact:true})).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0); await expect(page.getByRole('navigation',{name:'SLO result pages'})).toHaveCount(0); await page.getByLabel('Search SLOs').fill(''); await page.getByLabel('Search SLOs').press('Enter'); const createStarted=performance.now(); await page.getByRole('button',{name:'New SLO',exact:true}).click(); await expect(page.getByLabel('Display name',{exact:true})).toBeEditable(); const formReadyMs=performance.now()-createStarted;
+  stage='create'; await openPreparedOverview(); await page.getByLabel('Search SLOs').fill('no-objective-matches-this-query'); await page.getByLabel('Search SLOs').press('Enter'); await expect(page.getByText('No SLOs match these filters.',{exact:true})).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0); await expect(page.getByRole('navigation',{name:'SLO result pages'})).toHaveCount(0); await page.getByLabel('Search SLOs').fill(''); await page.getByLabel('Search SLOs').press('Enter'); const createStarted=performance.now(); await page.getByRole('button',{name:'New SLO',exact:true}).click(); await expect(page.getByLabel('Display name',{exact:true})).toBeEditable(); const formReadyMs=performance.now()-createStarted;
   await page.getByRole('button',{name:'Create service',exact:true}).click(); const choicesReadyMs=performance.now()-createStarted; await writeFile(join(fixture.artifacts,'slo-create-timing.json'),JSON.stringify({form_ready_ms:formReadyMs,choices_ready_ms:choicesReadyMs})+'\n',{mode:0o600}); await page.getByLabel('Service display name').fill('Checkout'); await page.getByRole('button',{name:'Create service',exact:true}).click();
   await page.getByLabel('Display name',{exact:true}).fill('Checkout availability'); await page.getByLabel('SLI',{exact:true}).selectOption(fixture.sli_id); await expect(page.getByText('Uses measurements already collected for this SLI. Missing intervals remain unknown.',{exact:true})).toBeVisible(); await expect(page.getByRole('button',{name:'Retry loading history',exact:true})).toHaveCount(0); await expect(page.getByText(/A day is 24 hours/)).toHaveCount(0);
   stage='presets'; for(const value of ['99','99.5','99.9','99.95','99.99']) {const preset=page.getByRole('button',{name:`${value}%`,exact:true}); await preset.click(); await expect(preset).toHaveAttribute('aria-pressed','true'); await expect(page.getByLabel('Target (%)')).toHaveValue(value);} for(const value of ['7d','28d','30d','90d']) {const preset=page.getByRole('button',{name:value,exact:true}); await preset.click(); await expect(preset).toHaveAttribute('aria-pressed','true');} await page.getByRole('button',{name:'99.9%',exact:true}).click(); await page.getByRole('button',{name:'30d',exact:true}).click();
@@ -138,7 +199,7 @@ try {
   await page.getByLabel('Target (%)').fill('100'); await page.getByLabel('Target (%)').press('Enter'); await expect(page.getByRole('alert')).toContainText('not including 100%'); await expect(page.getByLabel('Display name',{exact:true})).toHaveValue('Checkout availability');
   await page.getByLabel('Target (%)').fill('99.9');
   stage='normal create without retrospective history'; const normalPost=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/slos'); await page.getByRole('button',{name:'Create SLO',exact:true}).click(); const normalResponse=await normalPost; assert.equal(normalResponse.status(),201); const normalSlo=await normalResponse.json(); assert.ok(normalSlo.evaluation_valid_from); assert.equal(normalSlo.historical_requested_by,null);
-  const normalDetail=await page.evaluate(async id=>{const r=await fetch(`/api/v1/slos/${id}/operational`,{credentials:'same-origin',cache:'no-store'});return {status:r.status,body:await r.json()};},normalSlo.id); assert.equal(normalDetail.status,200,'new non-retrospective objective should open operational detail without failing on pre-validity measurements'); assert.ok(normalDetail.body.current.quality); await expect(page.getByText('This evaluation does not apply to the selected range.',{exact:true})).toHaveCount(0); if(normalDetail.body.current.quality.state==='not_applicable'&&Date.parse(normalDetail.body.current.window.end)<Date.parse(normalDetail.body.current.window.evaluation_valid_from))await expect(page.getByText('Waiting for the first SLO evaluation.',{exact:true})).toBeVisible(); if(normalDetail.body.current.performance.remaining_fraction===null)await expect(page.locator('.app-budget-hero')).toHaveText('—');
+  await expect.poll(()=>operationalRequests.get(normalSlo.id)).toBeTruthy(); const normalDetail=await readPreparedJSON(operationalRequests.get(normalSlo.id)); assert.equal(normalDetail.status,200,'new non-retrospective objective should open operational detail without failing on pre-validity measurements'); assert.ok(normalDetail.body.current.quality); await expect(page.getByText('This evaluation does not apply to the selected range.',{exact:true})).toHaveCount(0); if(normalDetail.body.current.quality.state==='not_applicable'&&Date.parse(normalDetail.body.current.window.end)<Date.parse(normalDetail.body.current.window.evaluation_valid_from))await expect(page.getByText('Waiting for the first SLO evaluation.',{exact:true})).toBeVisible(); if(normalDetail.body.current.performance.remaining_fraction===null)await expect(page.locator('.app-budget-hero')).toHaveText('—');
   await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await page.getByRole('button',{name:'New SLO',exact:true}).click();
   await page.getByLabel('Display name',{exact:true}).fill('Checkout availability historical'); await page.getByLabel('Service',{exact:true}).selectOption(normalSlo.service_id);
   await page.getByLabel('SLI',{exact:true}).selectOption(normalSlo.sli_id); await page.getByLabel('Target (%)').fill('99.9'); await page.getByRole('button',{name:'30d',exact:true}).click(); await page.getByLabel('Apply this target to earlier SLI measurements').check();
@@ -149,8 +210,9 @@ try {
   await page.evaluate(()=>{const now=Date.now(); Date.now=()=>now+31*86400*1000;}); await page.getByRole('button',{name:'New SLO',exact:true}).click();
   const replay=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/slos'); await page.getByRole('button',{name:'Retry same SLO request'}).click(); const response=await replay; assert.equal(response.status(),201); assert.equal(response.request().postData(),original.body); assert.equal(response.request().headers()['idempotency-key'],original.key); const slo=await response.json(); assert.equal(slo.id,committed.id); assert.equal(slo.target,'0.999'); assert.ok(slo.evaluation_valid_from);
   stage='overview evidence'; await expect(page.getByRole('heading',{name:'Checkout availability historical',exact:true})).toBeVisible();
-  const overview=await page.evaluate(async()=>{const r=await fetch('/api/v1/slos/overview?limit=50',{credentials:'same-origin',cache:'no-store'});return {status:r.status,body:await r.json()};}); assert.equal(overview.status,200); const overviewItem=overview.body.items.find(item=>item.slo.id===slo.id); assert.ok(overviewItem,'created SLO appears in operational overview'); assert.ok(['needs_attention','watch','healthy'].includes(overviewItem.urgency)); assert.ok(overviewItem.leading_reason.code); for(const [burn,quality] of [[overviewItem.burn_1h.performance.burn,overviewItem.burn_1h.quality],[overviewItem.burn_6h.performance.burn,overviewItem.burn_6h.quality]]) { assert.ok(typeof burn==='string'||burn===null); if(burn===null)assert.ok(quality.reason||quality.state!=='complete','unavailable burn has a quality explanation'); }
-  stage='operational detail'; const visibleDays=Math.max(1,Math.min(365,Math.round(slo.rolling_window_seconds/86400))); await expect.poll(()=>{const request=operationalRequests.get(slo.id);if(!request)return 0;const bounds=new URL(request).searchParams;return bounds.has('start')?Math.round((Date.parse(bounds.get('end'))-Date.parse(bounds.get('start')))/86400000):7;}).toBe(visibleDays); await expect(page.locator('.app-lane-label')).toHaveCount(4); const result=await page.evaluate(async url=>{const response=await fetch(url,{credentials:'same-origin',cache:'no-store'});return {status:response.status,body:await response.json()};},operationalRequests.get(slo.id)); assert.equal(result.status,200); const compliance=result.body.compliance_series.days,complianceSummary=result.body.compliance_summary; await writeFile(join(fixture.artifacts,'compliance-wire.json'),JSON.stringify({objective:{id:result.body.objective.id,definition_revision:result.body.objective.definition_revision,target:result.body.objective.target},range:result.body.range,effective_at:result.body.effective_at,compliance_series:result.body.compliance_series,compliance_summary:result.body.compliance_summary})+'\n',{mode:0o600}); assert.ok(result.body.evaluation_id); assert.ok(result.body.current.performance.attainment!==null); assert.ok(BigInt(result.body.current.performance.total.split('.')[0])>0n); assert.ok(result.body.attainment_series.samples.length>0); assert.ok(result.body.budget_series.samples.length>0); assert.ok(result.body.burn_series.samples.length>0); assert.equal(result.body.burn_1h.window_seconds,3600); assert.equal(result.body.burn_6h.window_seconds,21600); assert.ok(Array.isArray(compliance)&&compliance.length>0); assert.equal(compliance.length,complianceSummary.met_days+complianceSummary.violated_days+complianceSummary.unknown_days+complianceSummary.not_applicable_days); assert.equal(complianceSummary.evaluable_days,complianceSummary.met_days+complianceSummary.violated_days); for(const day of compliance){assert.equal(day.requested_at,day.day_end); assert.ok(Date.parse(day.effective_at)<=Date.parse(day.requested_at)); assert.ok(day.day_end.endsWith('T00:00:00.000Z')||day.day_end.endsWith('T00:00:00Z'));}
+  const overview=await readPreparedJSON('/api/v1/slos/overview?limit=50'); assert.equal(overview.status,200); const overviewItem=overview.body.items.find(item=>item.slo.id===slo.id); assert.ok(overviewItem,'created SLO appears in operational overview'); assert.ok(['needs_attention','watch','healthy'].includes(overviewItem.urgency)); assert.ok(overviewItem.leading_reason.code); for(const [burn,quality] of [[overviewItem.burn_1h.performance.burn,overviewItem.burn_1h.quality],[overviewItem.burn_6h.performance.burn,overviewItem.burn_6h.quality]]) { assert.ok(typeof burn==='string'||burn===null); if(burn===null)assert.ok(quality.reason||quality.state!=='complete','unavailable burn has a quality explanation'); }
+  stage='current status metadata'; const liveStatus=await readPreparedJSON(`/api/v1/slos/${slo.id}/status`); await writeFile(join(fixture.artifacts,'status-generation.json'),JSON.stringify({generation:liveStatus.body.generation,evaluation_at:liveStatus.body.current.evaluation_at})+'\n',{mode:0o600}); assert.equal(liveStatus.body.generation.evaluated_through,liveStatus.body.current.evaluation_at); assert.match(liveStatus.body.generation.published_at,/Z$/);
+  stage='operational detail'; const visibleDays=Math.max(1,Math.min(365,Math.round(slo.rolling_window_seconds/86400))); await expect.poll(()=>{const request=operationalRequests.get(slo.id);if(!request)return 0;const bounds=new URL(request).searchParams;return bounds.has('start')?Math.round((Date.parse(bounds.get('end'))-Date.parse(bounds.get('start')))/86400000):7;}).toBe(visibleDays); await expect(page.locator('.app-lane-label')).toHaveCount(4); const result=await readPreparedJSON(operationalRequests.get(slo.id)); assert.equal(result.status,200); const compliance=result.body.compliance_series.days,complianceSummary=result.body.compliance_summary; await writeFile(join(fixture.artifacts,'compliance-wire.json'),JSON.stringify({objective:{id:result.body.objective.id,definition_revision:result.body.objective.definition_revision,target:result.body.objective.target},range:result.body.range,effective_at:result.body.effective_at,compliance_series:result.body.compliance_series,compliance_summary:result.body.compliance_summary})+'\n',{mode:0o600}); assert.ok(result.body.evaluation_id); assert.ok(result.body.current.performance.attainment!==null); assert.ok(BigInt(result.body.current.performance.total.split('.')[0])>0n); assert.ok(result.body.attainment_series.samples.length>0); assert.ok(result.body.budget_series.samples.length>0); assert.ok(result.body.burn_series.samples.length>0); assert.equal(result.body.burn_1h.window_seconds,3600); assert.equal(result.body.burn_6h.window_seconds,21600); assert.ok(Array.isArray(compliance)&&compliance.length>0); assert.equal(compliance.length,complianceSummary.met_days+complianceSummary.violated_days+complianceSummary.unknown_days+complianceSummary.not_applicable_days); assert.equal(complianceSummary.evaluable_days,complianceSummary.met_days+complianceSummary.violated_days); for(const day of compliance){assert.equal(day.requested_at,day.day_end); assert.ok(Date.parse(day.effective_at)<=Date.parse(day.requested_at)); assert.ok(day.day_end.endsWith('T00:00:00.000Z')||day.day_end.endsWith('T00:00:00Z'));}
   await expect(page.getByRole('heading',{name:'Timeline',exact:true})).toBeVisible(); await expect(page.getByText('Burn 1 h',{exact:true})).toBeVisible(); await expect(page.getByText('Burn 6 h',{exact:true})).toBeVisible(); await expect(page.locator('.app-detail-meta a[href="/services/'+slo.service_id+'"]')).toHaveCount(1); await expect(page.locator('.app-detail-meta a[href="/slis/'+fixture.sli_id+'"]')).toHaveCount(1); await expect(page.locator('.app-detail-meta a[href^="/services/"]')).toHaveCount(1); await expect(page.getByText('View calculation details').locator('..')).not.toHaveAttribute('open','');
   await capture('slo-detail-early-light-desktop.png',true);
   await captureReference('detail','.app-slo-detail','slo-detail.png');
@@ -181,5 +243,6 @@ try {
   try {
     await page.getByRole('button',{name:'Create SLO',exact:true}).click(); await expect.poll(()=>received||forwardingFailed).toBe(true); assert.equal(forwardingFailed,false,'forwarding the delayed create failed'); await page.getByRole('button',{name:'Sign out',exact:true}).click(); await expect(page.getByLabel('Login',{exact:true})).toBeVisible(); const signedOutURL=page.url(); const delayedResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/slos'); release(); const delivered=await delayedResponse; assert.equal(await delivered.finished(),null); await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0))); assert.equal(page.url(),signedOutURL); await expect(page.getByLabel('Login',{exact:true})).toBeVisible();
   } finally { release(); }
+  await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600});
   await context.close(); await browser.close(); console.log('PASS browser-slo-journey');
-} catch(error) { await page?.screenshot({path:fixture?.artifacts?join(fixture.artifacts,'slo-failure.png'):undefined,fullPage:true}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-stage.txt'),stage+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts&&/^(operational detail|exact-|layout-|range-controls)/.test(stage))await writeFile(join(fixture.artifacts,'failure-reason.txt'),String(error instanceof Error?error.message:error).slice(0,4000),{mode:0o600}).catch(()=>{}); await browser?.close().catch(()=>{}); console.error(`FAIL browser-slo-journey stage=${stage} ${error instanceof Error?error.message:'unknown error'}`); process.exitCode=1; }
+} catch(error) { await page?.screenshot({path:fixture?.artifacts?join(fixture.artifacts,'slo-failure.png'):undefined,fullPage:true}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-stage.txt'),stage+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts&&/^(create$|operational detail|exact-|layout-|range-controls)/.test(stage))await writeFile(join(fixture.artifacts,'failure-reason.txt'),String(error instanceof Error?error.message:error).slice(0,4000),{mode:0o600}).catch(()=>{}); await browser?.close().catch(()=>{}); console.error(`FAIL browser-slo-journey stage=${stage} ${error instanceof Error?error.message:'unknown error'}`); process.exitCode=1; }

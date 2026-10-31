@@ -66,7 +66,7 @@ const agentGrantRetention = 7 * 24 * time.Hour
 const agentMinimumRenewalInterval = 10 * time.Second
 
 type agentOwnershipTransaction struct {
-	conn         *pgx.Conn
+	conn         *readConnection
 	tx           pgx.Tx
 	queries      *dbgen.Queries
 	agentID      pgtype.UUID
@@ -75,16 +75,16 @@ type agentOwnershipTransaction struct {
 	credential   dbgen.AlmanacAgentCredential
 }
 
-func AcquireAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, clock func() time.Time) (result AgentOwnershipResult, retErr error) {
-	return AcquireAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, nil, clock)
+func AcquireAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, clock func() time.Time, runtimes ...*Runtime) (result AgentOwnershipResult, retErr error) {
+	return AcquireAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, nil, clock, runtimes...)
 }
 
-func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, hello *AgentRuntimeHello, clock func() time.Time) (result AgentOwnershipResult, retErr error) {
+func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, hello *AgentRuntimeHello, clock func() time.Time, runtimes ...*Runtime) (result AgentOwnershipResult, retErr error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtimes...)
 	if err != nil {
 		return AgentOwnershipResult{}, err
 	}
@@ -172,12 +172,12 @@ func AcquireAgentOwnershipWithHello(ctx context.Context, databaseURL, credential
 // RecordAgentIncompatibleAttempt records only a safe timestamp for a well-formed
 // hello that cannot negotiate a supported protocol. It never creates ownership
 // or execution authority.
-func RecordAgentIncompatibleAttempt(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time) (int64, error) {
+func RecordAgentIncompatibleAttempt(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time, runtimes ...*Runtime) (int64, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || generation < 0 || clock == nil {
 		return 0, ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtimes...)
 	if err != nil {
 		return 0, err
 	}
@@ -222,16 +222,16 @@ func RecordAgentIncompatibleAttempt(ctx context.Context, databaseURL, credential
 	return configuration.Revision, nil
 }
 
-func ResumeAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time) (AgentOwnershipResult, error) {
-	return ResumeAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, nil, clock)
+func ResumeAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, clock func() time.Time, runtimes ...*Runtime) (AgentOwnershipResult, error) {
+	return ResumeAgentOwnershipWithHello(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, nil, clock, runtimes...)
 }
 
-func ResumeAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, hello *AgentRuntimeHello, clock func() time.Time) (AgentOwnershipResult, error) {
+func ResumeAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation int64, hello *AgentRuntimeHello, clock func() time.Time, runtimes ...*Runtime) (AgentOwnershipResult, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil || generation <= 0 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtimes...)
 	if err != nil {
 		return AgentOwnershipResult{}, err
 	}
@@ -272,17 +272,17 @@ func ResumeAgentOwnershipWithHello(ctx context.Context, databaseURL, credentialI
 	return result, nil
 }
 
-func RenewAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, expectedSequence int64, nonce [32]byte, clock func() time.Time) (AgentOwnershipResult, error) {
+func RenewAgentOwnership(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, expectedSequence int64, nonce [32]byte, clock func() time.Time, runtimes ...*Runtime) (AgentOwnershipResult, error) {
 	return RenewAgentOwnershipWithHeartbeat(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier,
-		generation, expectedSequence, nonce, nil, clock)
+		generation, expectedSequence, nonce, nil, clock, runtimes...)
 }
 
-func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, expectedSequence int64, nonce [32]byte, heartbeat *AgentRuntimeHeartbeat, clock func() time.Time) (AgentOwnershipResult, error) {
+func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, expectedSequence int64, nonce [32]byte, heartbeat *AgentRuntimeHeartbeat, clock func() time.Time, runtimes ...*Runtime) (AgentOwnershipResult, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil || generation <= 0 || expectedSequence < 0 {
 		return AgentOwnershipResult{}, ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtimes...)
 	if err != nil {
 		return AgentOwnershipResult{}, err
 	}
@@ -401,8 +401,12 @@ func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credenti
 	return result, nil
 }
 
-func beginAgentOwnershipTransaction(ctx context.Context, databaseURL string, credentialUUID pgtype.UUID, verifier [32]byte) (*agentOwnershipTransaction, error) {
-	conn, err := connectCurrentSchema(ctx, databaseURL)
+func beginAgentOwnershipTransaction(ctx context.Context, databaseURL string, credentialUUID pgtype.UUID, verifier [32]byte, runtimes ...*Runtime) (*agentOwnershipTransaction, error) {
+	runtime, err := runtimeOption(runtimes)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := acquireConnection(ctx, databaseURL, runtime, LiveTraffic)
 	if err != nil {
 		return nil, err
 	}
@@ -431,6 +435,11 @@ func beginAgentOwnershipTransaction(ctx context.Context, databaseURL string, cre
 	}
 	if err := setTransactionBounds(ctx, tx); err != nil {
 		return fail("storage: agent ownership transaction setup failed", err)
+	}
+	if conn.release != nil {
+		if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout='250ms'; SET LOCAL statement_timeout='5s'"); err != nil {
+			return fail("storage: agent ownership transaction setup failed", err)
+		}
 	}
 	locked := dbgen.New(tx)
 	installation, err := locked.LockSessionInstallation(ctx)
@@ -704,16 +713,16 @@ func optionalTimestamp(value *time.Time) pgtype.Timestamptz {
 	return timestamp(value.UTC())
 }
 
-func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, clock func() time.Time) error {
-	return RecordAgentConfigurationAppliedProtocol(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, revision, agentprotocol.ProtocolV1, clock)
+func RecordAgentConfigurationApplied(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, clock func() time.Time, runtimes ...*Runtime) error {
+	return RecordAgentConfigurationAppliedProtocol(ctx, databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, revision, agentprotocol.ProtocolV1, clock, runtimes...)
 }
 
-func RecordAgentConfigurationAppliedProtocol(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, protocol string, clock func() time.Time) error {
+func RecordAgentConfigurationAppliedProtocol(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, protocol string, clock func() time.Time, runtimes ...*Runtime) error {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || generation <= 0 || revision <= 0 || clock == nil || (protocol != agentprotocol.ProtocolV1 && protocol != agentprotocol.ProtocolV2) {
 		return ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtimes...)
 	if err != nil {
 		return err
 	}
@@ -773,13 +782,13 @@ func RecordAgentConfigurationAppliedProtocol(ctx context.Context, databaseURL, c
 	return nil
 }
 
-func RecordAgentConfigurationFailed(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, failureCode string, clock func() time.Time) error {
+func RecordAgentConfigurationFailed(ctx context.Context, databaseURL, credentialID string, credentialVerifier, resumeVerifier [32]byte, generation, revision int64, failureCode string, clock func() time.Time, runtimes ...*Runtime) error {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || generation <= 0 || revision <= 0 || clock == nil ||
 		(failureCode != "invalid_snapshot" && failureCode != "incompatible" && failureCode != "apply_failed") {
 		return ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtimes...)
 	if err != nil {
 		return err
 	}
@@ -823,11 +832,15 @@ type AgentConfigurationSnapshot struct {
 }
 
 func ReadCurrentAgentConfiguration(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, clock func() time.Time, adapters ...*sourcesecret.Adapter) (AgentConfigurationSnapshot, error) {
+	return ReadCurrentAgentConfigurationWithRuntime(ctx, databaseURL, credentialID, credentialVerifier, clock, nil, adapters...)
+}
+
+func ReadCurrentAgentConfigurationWithRuntime(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, clock func() time.Time, runtime *Runtime, adapters ...*sourcesecret.Adapter) (AgentConfigurationSnapshot, error) {
 	credentialUUID, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil {
 		return AgentConfigurationSnapshot{}, ErrAgentOwnershipInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credentialUUID, credentialVerifier, runtime)
 	if err != nil {
 		return AgentConfigurationSnapshot{}, err
 	}

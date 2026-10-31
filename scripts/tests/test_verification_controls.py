@@ -118,6 +118,21 @@ class VerificationControlsTest(unittest.TestCase):
         self.assertEqual(summary["totals"]["unknown_duration_runs"], 1)
         self.assertEqual(summary["ledger"][0]["command"], "python3 scripts/check-docs.py")
 
+    def test_timing_keeps_pre_task_receipts_and_deduplicates_their_annotations(self):
+        record = {"id": "before-task", "mode": "go", "result": "failed", "started_unix": 100, "ended_unix": 103, "elapsed_seconds": 3}
+        base = self.root / ".local/verification"
+        base.mkdir(parents=True)
+        (base / "before-task.json").write_text(json.dumps(record))
+        (self.receipts / "same-receipt.json").write_text(json.dumps(record))
+        (base / "manual-runs.jsonl").write_text(json.dumps({**record, "command": "make verify VERIFY_MODE=go"}) + "\n")
+        records, unreadable = vc.timing_receipt_records()
+        summary = vc.timing_ledger(records, 140, unreadable)
+        self.assertIn(base, vc.timing_receipt_directories())
+        self.assertEqual(summary["totals"]["runs"], 1)
+        self.assertEqual(summary["totals"]["failed"], 1)
+        self.assertEqual(summary["totals"]["cumulative_invocation_seconds"], 3)
+        self.assertEqual(summary["totals"]["top_level_wall_interval_union_seconds"], 3)
+
     def test_asset_preflight_failure_is_returned_and_saved_to_receipt_artifact(self):
         artifact = self.receipts / "preflight.log"
         result = SimpleNamespace(returncode=7, stdout=b"asset build failed\n")

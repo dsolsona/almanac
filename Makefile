@@ -1,5 +1,9 @@
 .PHONY: setup build verify preview generate bootstrap run start stop logs credentials agent verification-init verification-report verification-handoff _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
 
+# The project selects Go through .local/bin. An inherited GOROOT can make that
+# driver execute a different installation's compiler, despite GOTOOLCHAIN=local.
+unexport GOROOT
+
 verification-init:
 	@test -n "$${VERIFICATION_PLAN:-}" || { echo 'VERIFICATION_PLAN must name the task budget JSON' >&2; exit 2; }
 	@python3 scripts/verification-controls.py init
@@ -134,6 +138,8 @@ _verify_go:
 	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
 	  target="$${GO_PACKAGE:-./...}"; \
 	  case "$$target" in ./...|./internal/command|./internal/uihttp) $(MAKE) _ensure_web_assets ;; esac; \
+	  .local/bin/go version; \
+	  .local/bin/go tool compile -V; \
 	  test_list=$$(mktemp .local/go-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
 	  if ! .local/bin/go test -list . "$$target" > "$$test_list"; then echo 'Go test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
 	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \

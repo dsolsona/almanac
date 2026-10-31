@@ -21,6 +21,7 @@ const maxConfigBytes = 64 << 10
 
 type Config struct {
 	Listen                   string         `json:"listen"`
+	MetricsListen            string         `json:"metrics_listen"`
 	Components               string         `json:"components"`
 	BackendURL               string         `json:"backend_url"`
 	DatabaseURLFile          string         `json:"database_url_file"`
@@ -37,6 +38,7 @@ type Config struct {
 
 type fileConfig struct {
 	Listen                   *string   `json:"listen"`
+	MetricsListen            *string   `json:"metrics_listen"`
 	Components               *string   `json:"components"`
 	BackendURL               *string   `json:"backend_url"`
 	DatabaseURLFile          *string   `json:"database_url_file"`
@@ -80,6 +82,9 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 		}
 		if file.Listen != nil {
 			cfg.Listen = *file.Listen
+		}
+		if file.MetricsListen != nil {
+			cfg.MetricsListen = *file.MetricsListen
 		}
 		if file.Components != nil {
 			cfg.Components = *file.Components
@@ -131,6 +136,8 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 		switch key {
 		case "ALMANAC_LISTEN":
 			cfg.Listen = value
+		case "ALMANAC_METRICS_LISTEN":
+			cfg.MetricsListen = value
 		case "ALMANAC_COMPONENTS":
 			cfg.Components = value
 		case "ALMANAC_BACKEND_URL":
@@ -167,6 +174,8 @@ func Load(path string, environ []string, explicit map[string]string) (Config, er
 		switch key {
 		case "listen":
 			cfg.Listen = value
+		case "metrics-listen":
+			cfg.MetricsListen = value
 		case "components":
 			cfg.Components = value
 		case "backend-url":
@@ -236,6 +245,24 @@ func (c Config) Validate() error {
 	}
 	if c.ShutdownTimeout <= 0 || c.ShutdownTimeout > 2*time.Minute {
 		return errors.New("config: shutdown_timeout must be positive and at most 2m")
+	}
+	if c.MetricsListen != "" {
+		if c.Components != "backend" && !c.BackendUI() {
+			return errors.New("config: metrics_listen requires the backend")
+		}
+		host, port, err := net.SplitHostPort(c.MetricsListen)
+		if err != nil {
+			return errors.New("config: metrics_listen must be a numeric host:port address")
+		}
+		if _, err := netip.ParseAddr(host); err != nil {
+			return errors.New("config: metrics_listen must use a numeric IP address")
+		}
+		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+			return errors.New("config: metrics_listen port must be between 0 and 65535")
+		}
+		if c.MetricsListen == c.Listen && port != "0" {
+			return errors.New("config: metrics_listen must be separate from the public listener")
+		}
 	}
 	if c.Components == "backend" || c.BackendUI() {
 		if strings.TrimSpace(c.DatabaseURLFile) == "" {

@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	operationalCalculationVersion  = "occurrences-operational-v1"
 	sloOverviewTTL                 = 2 * time.Minute
 	sloOverviewSessionLimit        = 4
 	sloOverviewInstallationLimit   = 64
@@ -72,6 +73,7 @@ func retryOperationalRead(ctx context.Context, attempt func() error) error {
 }
 
 type OperationalOverviewInput struct {
+	Runtime          *Runtime
 	Proof            DatasourceProof
 	Query, ServiceID string
 	Urgency, Cursor  string
@@ -81,6 +83,10 @@ type OperationalOverviewInput struct {
 }
 
 type OperationalDetailInput struct {
+	displayCache   *sloDisplayCache
+	currentOnly    bool
+	overviewOnly   bool
+	Runtime        *Runtime
 	Proof          DatasourceProof
 	ID             string
 	At, Start, End *time.Time
@@ -111,7 +117,7 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 		return api.SloOperationalDetail{}, ErrOperationalRange
 	}
 	id, _ := canonicalUUID(input.ID)
-	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
+	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
@@ -131,125 +137,25 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	if contextRow.PollingIntervalSeconds != row.CadenceSeconds || contextRow.MeasurementRevision != row.MeasurementRevision {
 		return api.SloOperationalDetail{}, ErrObjectiveInvalid
 	}
-	now := normalizedAgentNow(input.Now)
-	requestedAt := now
-	if input.At != nil {
-		_, offset := input.At.Zone()
-		requestedAt = input.At.UTC()
-		if offset != 0 || requestedAt.IsZero() || requestedAt.Nanosecond()%1000 != 0 || requestedAt.After(now) {
-			return api.SloOperationalDetail{}, ErrObjectiveEvaluationTime
+	var result api.SloOperationalDetail
+	prepared := true
+	if input.Runtime != nil {
+		result, prepared, err = loadOrQueueSloHistory(ctx, q, row, input)
+		if err == nil && prepared {
+			result.Context.SliDisplayName = contextRow.SliDisplayName
+			result.Context.DatasourceDisplayName = contextRow.DatasourceDisplayName
 		}
-	}
-	cadence := time.Duration(row.CadenceSeconds) * time.Second
-	effectiveAt := floorSliBoundary(requestedAt, cadence)
-	var rangeStart, rangeEnd time.Time
-	if input.Start == nil {
-		rangeEnd = effectiveAt
-		rangeStart = floorSliBoundary(rangeEnd.Add(-7*24*time.Hour), cadence)
 	} else {
-		_, startOffset := input.Start.Zone()
-		_, endOffset := input.End.Zone()
-		rangeStart, rangeEnd = input.Start.UTC(), input.End.UTC()
-		if startOffset != 0 || endOffset != 0 || rangeStart.IsZero() || rangeEnd.IsZero() || rangeStart.Nanosecond()%1000 != 0 || rangeEnd.Nanosecond()%1000 != 0 ||
-			!floorSliBoundary(rangeStart, cadence).Equal(rangeStart) || !floorSliBoundary(rangeEnd, cadence).Equal(rangeEnd) || !rangeEnd.After(rangeStart) || rangeEnd.After(effectiveAt) || rangeEnd.Sub(rangeStart) > 365*24*time.Hour {
-			return api.SloOperationalDetail{}, ErrOperationalRange
-		}
+		result, err = buildSloOperationalDetail(ctx, q, row, contextRow, input)
 	}
-	if !rangeEnd.After(rangeStart) {
-		return api.SloOperationalDetail{}, ErrOperationalRange
-	}
-	retentionStart := ceilSliBoundary(now.Add(-sli.ObservationRetention), cadence)
-	window := time.Duration(row.RollingWindowSeconds) * time.Second
-	factStart := operationalFactsStart(effectiveAt, window, 6*time.Hour,
-		rangeStart, window, time.Duration(input.BurnWindow)*time.Second, row.EvaluationValidFrom.Time.UTC(), row.SliValidFrom.Time.UTC(), retentionStart, cadence)
-	rows, factsCount, err := loadOperationalFacts(ctx, q, operationalStreamKey(row.SliID.String(), row.MeasurementRevision), operationalStream{cadence: row.CadenceSeconds}, factStart, effectiveAt, sloOperationalFactsLimit+1)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
-	if factsCount > sloOperationalFactsLimit {
-		return api.SloOperationalDetail{}, ErrOperationalResource
-	}
-	base := slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
-		RetentionStart: now.Add(-sli.ObservationRetention), Cadence: cadence,
-		FreshnessGrace: cadence + time.Duration(contextRow.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds)),
-		Target:         sli.NormalizeDecimal(row.Target), Observations: rows}
-	currentResult, err := evaluateOperationalAt(ctx, base, effectiveAt, time.Duration(row.RollingWindowSeconds)*time.Second)
-	if err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	burn1h := unavailableBurn(3600, effectiveAt, "cadence_mismatch")
-	var burn1hResult *slo.WindowResult
-	if time.Hour%cadence == 0 {
-		result, evalErr := evaluateOperationalAt(ctx, base, effectiveAt, time.Hour)
-		if evalErr != nil {
-			return api.SloOperationalDetail{}, evalErr
-		}
-		burn1h = burnValue(result, 3600)
-		burn1hResult = &result
-	}
-	burn6h := unavailableBurn(21600, effectiveAt, "cadence_mismatch")
-	if 6*time.Hour%cadence == 0 {
-		result, evalErr := evaluateOperationalAt(ctx, base, effectiveAt, 6*time.Hour)
-		if evalErr != nil {
-			return api.SloOperationalDetail{}, evalErr
-		}
-		burn6h = burnValue(result, 21600)
-	}
-	current := operationalValue(currentResult)
-	current.Window.RequestedStart = requestedAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
-	applyOperationalDefinitionWindow(&current, row.ActivatedAt.Time.UTC(), row.EvaluationValidFrom.Time.UTC(), row.HistoricalRequestedBy, row.HistoricalRequestedAt)
-	urgency := slo.ClassifyOperational(slo.OperationalState{QualityState: currentResult.State, Freshness: currentResult.Freshness, PerformanceState: currentResult.Performance,
-		Provisional: currentResult.Provisional, ShortenedEligibility: currentResult.EligibleStart.After(currentResult.EffectiveStart), RemainingBudget: currentResult.Remaining,
-		RemainingFraction: currentResult.RemainingFraction, Burn1h: burn1h.Performance.Burn, Burn1hAvailable: burn1h.Performance.Burn != nil,
-		Burn1hQualityState: string(burn1h.Quality.State), Burn1hFreshness: string(burn1h.Quality.Freshness), Burn1hProvisional: burn1h.Performance.Provisional,
-		Burn1hShortenedEligibility: burn1hResult != nil && burn1hResult.EligibleStart.After(burn1hResult.EffectiveStart),
-		RemainingExact:             currentResult.ExactRemaining, RemainingFractionExact: currentResult.ExactRemainingFraction,
-		Burn1hExact: exactBurn(burn1hResult)})
-	reasons, leading := operationalReasons(urgency.Reasons)
-	budgetSamples, err := buildOperationalSamples(ctx, base, rangeStart, rangeEnd, time.Duration(row.RollingWindowSeconds)*time.Second, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", sampleBucketLimit(rangeStart, rangeEnd, cadence))
-	if err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	selectedBurn := time.Duration(input.BurnWindow) * time.Second
-	var burnSamples []api.SloOperationalSample
-	if selectedBurn%cadence != 0 {
-		burnSamples = unavailableOperationalSamples(rangeStart, rangeEnd, cadence, strconv.FormatInt(row.DefinitionRevision, 10), sampleBucketLimit(rangeStart, rangeEnd, cadence), "cadence_mismatch")
-	} else {
-		burnSamples, err = buildOperationalSamples(ctx, base, rangeStart, rangeEnd, selectedBurn, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "burn", sampleBucketLimit(rangeStart, rangeEnd, cadence))
-		if err != nil {
-			return api.SloOperationalDetail{}, err
-		}
-	}
-	attainmentSamples, resolution, reduced, err := buildAttainmentSamples(ctx, base, rangeStart, rangeEnd, cadence, strconv.FormatInt(row.DefinitionRevision, 10))
-	if err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	complianceSeries, complianceSummary, err := buildDailyCompliance(ctx, base, rangeStart, rangeEnd, effectiveAt,
-		uuid.UUID(row.ID.Bytes), strconv.FormatInt(row.DefinitionRevision, 10), sli.NormalizeDecimal(row.Target), window, cadence)
-	if err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	evaluationID, err := uuid.NewRandom()
-	if err != nil {
-		return api.SloOperationalDetail{}, errors.New("storage: operational evaluation identifier unavailable")
-	}
-	result := api.SloOperationalDetail{RequestedAt: requestedAt, EffectiveAt: effectiveAt, EvaluationId: evaluationID,
-		CalculationVersion: "occurrences-operational-v1", SnapshotKind: "current_operational_read", Objective: sloRecordDTO(sloRecord(row)),
-		Context: api.SloOperationalContext{SliId: uuid.UUID(contextRow.SliID.Bytes), SliName: contextRow.SliName, SliDisplayName: contextRow.SliDisplayName,
-			DatasourceId: uuid.UUID(contextRow.DatasourceID.Bytes), DatasourceDisplayName: contextRow.DatasourceDisplayName,
-			MeasurementRevision: strconv.FormatInt(contextRow.MeasurementRevision, 10), PollingIntervalSeconds: int(contextRow.PollingIntervalSeconds),
-			SettlingDelaySeconds: int(contextRow.SettlingDelaySeconds), GoodQuery: contextRow.GoodQuery, TotalQuery: contextRow.TotalQuery},
-		Current: current, Urgency: api.SloOperationalDetailUrgency(urgency.Group), LeadingReason: leading, Reasons: reasons,
-		Burn1h: burn1h, Burn6h: burn6h, Exhaustion: exhaustionValue(currentResult, burn1h, burn1hResult),
-		Range: api.SloOperationalRange{RequestedStart: rangeStart, RequestedEnd: rangeEnd, EffectiveStart: rangeStart, EffectiveEnd: rangeEnd,
-			SourceCadenceSeconds: int(row.CadenceSeconds), ResolutionSeconds: int(resolution / time.Second), Reduced: reduced,
-			MaxSamplesPerSeries: 1500, BucketBounds: "half_open"},
-		AttainmentSeries: api.SloOperationalSeries{Kind: "attainment", Samples: attainmentSamples},
-		BudgetSeries:     api.SloOperationalSeries{Kind: "rolling_budget", Samples: budgetSamples},
-		BurnSeries:       api.SloOperationalSeries{Kind: "burn", BurnWindowSeconds: new(api.SloOperationalSeriesBurnWindowSeconds(input.BurnWindow)), Samples: burnSamples},
-		ComplianceSeries: complianceSeries, ComplianceSummary: complianceSummary}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalDetail{}, err
+	}
+	if !prepared {
+		return api.SloOperationalDetail{}, ErrDerivedPending
 	}
 	return result, nil
 }
@@ -406,17 +312,23 @@ func sloRecordDTO(value SloRecord) api.Slo {
 	return result
 }
 
-func buildAttainmentSamples(ctx context.Context, base slo.WindowInput, start, end time.Time, cadence time.Duration, revision string) ([]api.SloOperationalSample, time.Duration, bool, error) {
+func buildAttainmentSamples(ctx context.Context, base slo.WindowInput, start, end time.Time, cadence time.Duration, revision string, explicitBounds ...[]time.Time) ([]api.SloOperationalSample, time.Duration, bool, error) {
 	ticks := int(end.Sub(start) / cadence)
 	if ticks <= 0 {
 		return []api.SloOperationalSample{}, cadence, false, nil
 	}
 	buckets := sampleBucketLimit(start, end, cadence)
+	if len(explicitBounds) == 1 {
+		buckets = len(explicitBounds[0]) - 1
+	}
 	resolutionTicks := (ticks + buckets - 1) / buckets
 	resolution := time.Duration(resolutionTicks) * cadence
 	samples := make([]api.SloOperationalSample, 0, buckets)
 	factIndex := 0
 	boundaries := bucketBoundaries(start, end, ticks, buckets, cadence)
+	if len(explicitBounds) == 1 {
+		boundaries = explicitBounds[0]
+	}
 	for bucket := range buckets {
 		if bucket&127 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -628,20 +540,23 @@ func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input O
 	if input.Cursor == "" && input.snapshotID == "" {
 		var id uuid.UUID
 		var role string
+		var reused bool
 		var err error
 		err = retryOperationalRead(ctx, func() error {
-			id, role, err = reserveSloOverviewSnapshot(ctx, databaseURL, input)
+			id, role, reused, err = reserveSloOverviewSnapshot(ctx, databaseURL, input)
 			return err
 		})
 		if err != nil {
 			return api.SloOperationalOverviewPage{}, err
 		}
-		reservedID = id
-		err = retryOperationalRead(ctx, func() error {
-			return materializeSloOverviewSnapshot(ctx, databaseURL, input, id, role)
-		})
-		if err != nil {
-			return api.SloOperationalOverviewPage{}, cleanupFailedRead(err)
+		if !reused {
+			reservedID = id
+			err = retryOperationalRead(ctx, func() error {
+				return materializeSloOverviewSnapshot(ctx, databaseURL, input, id, role)
+			})
+			if err != nil {
+				return api.SloOperationalOverviewPage{}, cleanupFailedRead(err)
+			}
 		}
 		input.snapshotID = id.String()
 	}
@@ -657,47 +572,65 @@ func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input O
 	return result, nil
 }
 
-func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput) (uuid.UUID, string, error) {
-	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{}, "administrator", "editor", "viewer")
+func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput) (uuid.UUID, string, bool, error) {
+	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{}, "administrator", "editor", "viewer")
 	if err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil, "", false, err
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
 	now := normalizedAgentNow(input.Now)
+	// Ready reads do not consume admission. Check before the global admission
+	// lock so ten independent users are not serialized behind each other's reads.
+	if id, reused, err := findReusableOverview(ctx, q, input, now, user.ID, user.Role); err != nil {
+		return uuid.Nil, "", false, err
+	} else if reused {
+		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+			return uuid.Nil, "", false, err
+		}
+		return uuid.UUID(id.Bytes), user.Role, true, nil
+	}
 	// Filter changes may overlap briefly while the preceding HTTP request is
 	// being cancelled. Serialize admission without mistaking that overlap for
 	// an exhausted snapshot budget; keep the wait bounded and cancellable.
-	if _, err = tx.Exec(ctx, "SET LOCAL lock_timeout = '1s'"); err != nil {
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview admission timeout setup failed", err)
+	if _, err = tx.Exec(ctx, "SET LOCAL lock_timeout = '250ms'"); err != nil {
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview admission timeout setup failed", err)
 	}
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission', 0))"); err != nil {
 		if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "55P03" {
-			return uuid.Nil, "", ErrOperationalResource
+			return uuid.Nil, "", false, ErrOperationalResource
 		}
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview admission lock failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview admission lock failed", err)
 	}
 	if err = q.DeleteExpiredSloOverviewSnapshots(ctx, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview snapshot cleanup failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview snapshot cleanup failed", err)
+	}
+	if id, reused, err := findReusableOverview(ctx, q, input, now, user.ID, user.Role); err != nil {
+		return uuid.Nil, "", false, err
+	} else if reused {
+		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+			return uuid.Nil, "", false, err
+		}
+		return uuid.UUID(id.Bytes), user.Role, true, nil
 	}
 	sessionCount, err := q.CountLiveSloOverviewSnapshotsForSession(ctx, dbgen.CountLiveSloOverviewSnapshotsForSessionParams{ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], ExpiresAt: timestamp(now)})
 	if err != nil {
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview session admission failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview session admission failed", err)
 	}
 	installationCount, err := q.CountLiveSloOverviewSnapshots(ctx, timestamp(now))
 	if err != nil {
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview installation admission failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview installation admission failed", err)
 	}
 	if sessionCount >= sloOverviewSessionLimit || installationCount >= sloOverviewInstallationLimit {
-		return uuid.Nil, "", ErrOperationalResource
+		return uuid.Nil, "", false, ErrOperationalResource
 	}
 	id, err := uuid.NewRandom()
 	if err != nil {
-		return uuid.Nil, "", errors.New("storage: overview snapshot identifier unavailable")
+		return uuid.Nil, "", false, errors.New("storage: overview snapshot identifier unavailable")
 	}
 	cursorSecret := make([]byte, 32)
 	if _, err = rand.Read(cursorSecret); err != nil {
-		return uuid.Nil, "", errors.New("storage: overview cursor secret unavailable")
+		return uuid.Nil, "", false, errors.New("storage: overview cursor secret unavailable")
 	}
 	var serviceID pgtype.UUID
 	if input.ServiceID != "" {
@@ -714,16 +647,16 @@ func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input O
 		QueryText: strings.TrimSpace(input.Query), ServiceID: serviceID, Urgency: urgency, PageLimit: int32(input.Limit),
 		GroupCounts: counts, CreatedAt: timestamp(now), ExpiresAt: timestamp(now.Add(sloOverviewTTL)),
 	}); err != nil {
-		return uuid.Nil, "", readTransactionError(ctx, "storage: overview snapshot reservation failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview snapshot reservation failed", err)
 	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil, "", false, err
 	}
-	return id, user.Role, nil
+	return id, user.Role, false, nil
 }
 
 func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput, snapshotID uuid.UUID, expectedRole string) error {
-	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
+	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
 	if err != nil {
 		return err
 	}
@@ -733,41 +666,14 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 		return ErrAgentForbidden
 	}
 	now := normalizedAgentNow(input.Now)
-	defs, streams, err := loadOperationalDefinitions(ctx, q, input, now)
+	candidates, err := loadOverviewCandidates(ctx, q, input, now)
 	if err != nil {
 		return err
 	}
-	if len(defs) > sloOverviewDefinitionLimit {
-		return ErrOperationalResource
-	}
-	factsCount := 0
-	for key, stream := range streams {
-		remaining := sloOperationalFactsLimit - factsCount
-		rows, count, readErr := loadOperationalFacts(ctx, q, key, stream, stream.factStart, floorSliBoundary(now, time.Duration(stream.cadence)*time.Second), remaining+1)
-		if readErr != nil {
-			return readErr
-		}
-		factsCount += count
-		if factsCount > sloOperationalFactsLimit {
-			return ErrOperationalResource
-		}
-		streams[key] = operationalStream{cadence: stream.cadence, factStart: stream.factStart, facts: rows}
-	}
-	items := make([]api.SloOperationalOverviewItem, 0, len(defs))
+	items := make([]api.SloOperationalOverviewItem, 0, len(candidates))
 	counts := api.SloUrgencyCounts{}
 	selectedBytes := 0
-	for definitionIndex, definition := range defs {
-		streamKey := operationalStreamKey(definition.row.SliID.String(), definition.row.MeasurementRevision)
-		definition.facts = streams[streamKey].facts
-		if definitionIndex&127 == 0 {
-			if err := ctx.Err(); err != nil {
-				return operationError(ctx, "storage: overview projection cancelled", err)
-			}
-		}
-		item, buildErr := buildOverviewItem(ctx, definition, now, sli.ObservationRetention)
-		if buildErr != nil {
-			return buildErr
-		}
+	for _, item := range candidates {
 		switch item.Urgency {
 		case "needs_attention":
 			counts.NeedsAttention++
@@ -831,6 +737,18 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 	if _, err = tx.Exec(ctx, "UPDATE public.almanac_slo_overview_snapshots SET group_counts=$2 WHERE id=$1", uuidToPG(snapshotID), countsJSON); err != nil {
 		return readTransactionError(ctx, "storage: overview counts persistence failed", err)
 	}
+	if input.Runtime != nil && len(items) > input.Limit {
+		fingerprint, err := overviewScopeFingerprint(ctx, q, input, now)
+		if err != nil {
+			return err
+		}
+		if !fingerprint.Current {
+			return ErrDerivedPending
+		}
+		if err := q.SetSloOverviewFingerprint(ctx, dbgen.SetSloOverviewFingerprintParams{ID: uuidToPG(snapshotID), PublicationFingerprint: fingerprint.Fingerprint}); err != nil {
+			return readTransactionError(ctx, "storage: overview fingerprint persistence failed", err)
+		}
+	}
 	return finishAgentRead(ctx, tx, input.Now, started, user, installation, session)
 }
 
@@ -850,7 +768,7 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 	if !valid {
 		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
 	}
-	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
+	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
 	if err != nil {
 		return api.SloOperationalOverviewPage{}, err
 	}
@@ -902,6 +820,11 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 		}
 		items = append(items, item)
 	}
+	if input.Runtime != nil {
+		if err := queueVisibleBudgetHistory(ctx, q, items, now); err != nil {
+			return api.SloOperationalOverviewPage{}, err
+		}
+	}
 	next := ""
 	previous := ""
 	if cursor.Offset > 0 {
@@ -911,7 +834,8 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 	if more {
 		next = encodeOverviewCursor(snapshotRow.CursorSecret, overviewCursor{SnapshotID: id.String(), Offset: cursor.Offset + len(items)})
 	} else if input.Cursor == "" {
-		// A first page with no continuation needs no persisted cross-request state.
+		// A single page has no continuation to pin. Release it so ordinary
+		// filter changes cannot exhaust the cursor-snapshot admission budget.
 		if err = q.DeleteSloOverviewSnapshot(ctx, id); err != nil {
 			return api.SloOperationalOverviewPage{}, readTransactionError(ctx, "storage: single-page overview snapshot cleanup failed", err)
 		}
@@ -923,7 +847,7 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 }
 
 func deleteSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput, id uuid.UUID) error {
-	conn, queries, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{}, "administrator", "editor", "viewer")
+	conn, queries, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{}, "administrator", "editor", "viewer")
 	if err != nil {
 		return err
 	}
@@ -1072,6 +996,9 @@ func buildOverviewItem(ctx context.Context, def operationalDefinition, now time.
 	effective := floorSliBoundary(now, cadence)
 	freshnessGrace := cadence + time.Duration(row.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds))
 	base := slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(), RetentionStart: now.Add(-retention), Cadence: cadence, Target: row.Target, Observations: def.facts, FreshnessGrace: freshnessGrace}
+	// Shared SLI streams are loaded for the earliest objective. Each objective
+	// must discard pre-validity facts before building its own history.
+	base.Observations = clipOperationalFacts(base.Observations, maxTime(base.ValidFrom, base.SliValidFrom, base.RetentionStart))
 	current, err := evaluateOperationalAt(ctx, base, effective, time.Duration(row.RollingWindowSeconds)*time.Second)
 	if err != nil {
 		return api.SloOperationalOverviewItem{}, err
@@ -1107,6 +1034,9 @@ func buildOverviewItem(ctx context.Context, def operationalDefinition, now time.
 
 func evaluateOperationalAt(ctx context.Context, base slo.WindowInput, at time.Time, duration time.Duration) (slo.WindowResult, error) {
 	base.At, base.Duration = at, duration
+	// Short burn windows must not validate and walk months of history loaded
+	// for the budget chart. Eligibility and missing counts remain arithmetic.
+	base.Observations = clipOperationalFacts(base.Observations, maxTime(at.Add(-duration), base.ValidFrom, base.SliValidFrom, base.RetentionStart))
 	return slo.EvaluateOperationalWindowContext(ctx, base)
 }
 
@@ -1285,8 +1215,7 @@ type sampleBucket struct {
 }
 
 type sampleCandidate struct {
-	value  api.SloOperationalSample
-	labels map[api.SloOperationalSampleRetainedExtrema]bool
+	value slo.WindowResult
 }
 
 func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, end time.Time, duration, cadence time.Duration, revision, metric string, maxBuckets int) ([]api.SloOperationalSample, error) {
@@ -1294,13 +1223,24 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 	if ticks <= 0 {
 		return []api.SloOperationalSample{}, nil
 	}
-	base.Observations = clipOperationalFacts(base.Observations, maxTime(start.Add(-duration), base.RetentionStart))
 	buckets := min(ticks, maxBuckets)
 	if buckets <= 0 {
 		return nil, ErrOperationalRangeDense
 	}
 	sampleLimit := min(sloOperationalSeriesLimit, buckets*4)
 	boundaries := bucketBoundaries(start, end, ticks, buckets, cadence)
+	return buildRollingBuckets(ctx, base, boundaries, duration, cadence, revision, metric, true, sampleLimit)
+}
+
+// Explicit boundaries let a worker rebuild contiguous invalid blocks without
+// changing their original grid or rounding their exact extrema.
+func buildRollingBuckets(ctx context.Context, base slo.WindowInput, boundaries []time.Time, duration, cadence time.Duration, revision, metric string, includeStart bool, sampleLimit int) ([]api.SloOperationalSample, error) {
+	buckets := len(boundaries) - 1
+	if buckets <= 0 {
+		return []api.SloOperationalSample{}, nil
+	}
+	start, end := boundaries[0], boundaries[len(boundaries)-1]
+	base.Observations = clipOperationalFacts(base.Observations, maxTime(start.Add(-duration), base.RetentionStart))
 	events := make([]int64, 0, 2*len(base.Observations)+len(boundaries)+4)
 	for _, boundary := range boundaries {
 		events = append(events, boundary.UnixMicro())
@@ -1385,7 +1325,7 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 		if bucketIndex == len(collected) {
 			bucketIndex--
 		}
-		result, evalErr := sweep.AtContext(ctx, at)
+		result, evalErr := sweep.AtSummaryContext(ctx, at)
 		if evalErr != nil {
 			return nil, evalErr
 		}
@@ -1393,6 +1333,10 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 		key := at.UnixMicro()
 		bucket := &collected[bucketIndex]
 		stateKey := string(sample.State) + ":" + string(sample.Quality.State) + ":" + string(sample.Quality.Freshness)
+		if !includeStart && at.Equal(start) {
+			previousState = stateKey
+			continue
+		}
 		if previousState != "" && stateKey != previousState {
 			bucket.critical[key] = true
 		}
@@ -1429,13 +1373,13 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 				delete(bucket.byTime, existingKey)
 			}
 		}
-		candidate := sampleCandidate{value: sample, labels: make(map[api.SloOperationalSampleRetainedExtrema]bool, 4)}
+		candidate := sampleCandidate{value: result}
 		if keys[key] {
 			bucket.byTime[key] = candidate
 		}
 		for candidateKey := range keys {
 			if _, exists := bucket.byTime[candidateKey]; !exists {
-				bucket.byTime[candidateKey] = sampleCandidate{value: sampleAtKey(bucket, candidateKey, key, sample), labels: make(map[api.SloOperationalSampleRetainedExtrema]bool, 4)}
+				bucket.byTime[candidateKey] = sampleCandidate{value: sampleAtKey(bucket, candidateKey, key, result)}
 			}
 		}
 	}
@@ -1466,8 +1410,9 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 			if bucket.hasMax && key == bucket.maxKey {
 				labels = append(labels, "maximum")
 			}
-			candidate.value.RetainedExtrema = labels
-			result = append(result, candidate.value)
+			value := operationalSample(candidate.value.WithValues(), bucket.start, bucket.end, revision)
+			value.RetainedExtrema = labels
+			result = append(result, value)
 		}
 	}
 	if len(result) > sampleLimit {
@@ -1476,16 +1421,14 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 	return result, nil
 }
 
-func sampleAtKey(bucket *sampleBucket, wanted, current int64, currentSample api.SloOperationalSample) api.SloOperationalSample {
+func sampleAtKey(bucket *sampleBucket, wanted, current int64, currentSample slo.WindowResult) slo.WindowResult {
 	if wanted == current {
 		return currentSample
 	}
 	if existing, ok := bucket.byTime[wanted]; ok {
 		return existing.value
 	}
-	return api.SloOperationalSample{BucketStart: bucket.start, BucketEnd: bucket.end, EvaluationAt: time.UnixMicro(wanted).UTC(),
-		State: "missing", Quality: api.SloOperationalQuality{State: "unavailable", Freshness: "unknown"},
-		RetainedExtrema: []api.SloOperationalSampleRetainedExtrema{}}
+	return slo.WindowResult{End: time.UnixMicro(wanted).UTC(), State: "unavailable", Freshness: "unknown"}
 }
 
 func sampleMetric(result slo.WindowResult, metric string) *big.Rat {
@@ -1501,6 +1444,8 @@ func sampleMetric(result slo.WindowResult, metric string) *big.Rat {
 func operationalSample(result slo.WindowResult, bucketStart, bucketEnd time.Time, revision string) api.SloOperationalSample {
 	state := api.SloOperationalSampleState("observed")
 	switch result.State {
+	case "unavailable":
+		state = "missing"
 	case "zero_traffic":
 		state = "zero_traffic"
 	case "complete":
@@ -1530,4 +1475,175 @@ func operationalSample(result slo.WindowResult, bucketStart, bucketEnd time.Time
 		Attainment: result.Attainment, AllowedBudget: result.Allowed, RemainingBudget: result.Remaining,
 		RemainingFraction: result.RemainingFraction, Burn: result.Burn, ReceivedAt: result.LatestReceipt,
 		RetainedExtrema: []api.SloOperationalSampleRetainedExtrema{}}
+}
+func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, contextRow dbgen.GetSloOperationalContextRow, input OperationalDetailInput) (api.SloOperationalDetail, error) {
+	now := normalizedAgentNow(input.Now)
+	cadence := time.Duration(row.CadenceSeconds) * time.Second
+	bound, err := resolveOperationalBounds(input, cadence)
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	requestedAt, effectiveAt, rangeStart, rangeEnd := bound.requestedAt, bound.effectiveAt, bound.start, bound.end
+	retentionStart := ceilSliBoundary(now.Add(-sli.ObservationRetention), cadence)
+	window := time.Duration(row.RollingWindowSeconds) * time.Second
+	factStart := operationalFactsStart(effectiveAt, window, 6*time.Hour,
+		rangeStart, window, time.Duration(input.BurnWindow)*time.Second, row.EvaluationValidFrom.Time.UTC(), row.SliValidFrom.Time.UTC(), retentionStart, cadence)
+	var rows []slo.Observation
+	if !input.currentOnly && input.displayCache == nil {
+		loaded, factsCount, loadErr := loadOperationalFacts(ctx, q, operationalStreamKey(row.SliID.String(), row.MeasurementRevision), operationalStream{cadence: row.CadenceSeconds}, factStart, effectiveAt, sloOperationalFactsLimit+1)
+		if loadErr != nil {
+			return api.SloOperationalDetail{}, loadErr
+		}
+		rows = loaded
+		if factsCount > sloOperationalFactsLimit {
+			return api.SloOperationalDetail{}, ErrOperationalResource
+		}
+	}
+	base := slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
+		RetentionStart: now.Add(-sli.ObservationRetention), Cadence: cadence,
+		FreshnessGrace: cadence + time.Duration(contextRow.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds)),
+		Target:         sli.NormalizeDecimal(row.Target), Observations: rows}
+	rolling, attainment, daily := buildOperationalSamples, buildAttainmentSamples, buildDailyCompliance
+	if input.displayCache != nil {
+		rolling, attainment, daily = input.displayCache.rolling, input.displayCache.attainment, input.displayCache.daily
+	}
+	if input.overviewOnly {
+		samples, err := rolling(ctx, base, rangeStart, rangeEnd, window, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", 30)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
+			BudgetSeries: api.SloOperationalSeries{Kind: "rolling_budget", Samples: samples}}, nil
+	}
+	evaluate := func(at time.Time, duration time.Duration) (slo.WindowResult, error) {
+		if !input.currentOnly && input.displayCache == nil {
+			return evaluateOperationalAt(ctx, base, at, duration)
+		}
+		value := base
+		value.At, value.Duration = at, duration
+		return evaluateDerivedWindow(ctx, q, row.SliID, row.MeasurementRevision, value)
+	}
+	currentResult, err := evaluate(effectiveAt, time.Duration(row.RollingWindowSeconds)*time.Second)
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	burn1h := unavailableBurn(3600, effectiveAt, "cadence_mismatch")
+	var burn1hResult *slo.WindowResult
+	if time.Hour%cadence == 0 {
+		result, evalErr := evaluate(effectiveAt, time.Hour)
+		if evalErr != nil {
+			return api.SloOperationalDetail{}, evalErr
+		}
+		burn1h = burnValue(result, 3600)
+		burn1hResult = &result
+	}
+	burn6h := unavailableBurn(21600, effectiveAt, "cadence_mismatch")
+	if 6*time.Hour%cadence == 0 {
+		result, evalErr := evaluate(effectiveAt, 6*time.Hour)
+		if evalErr != nil {
+			return api.SloOperationalDetail{}, evalErr
+		}
+		burn6h = burnValue(result, 21600)
+	}
+	current := operationalValue(currentResult)
+	current.Window.RequestedStart = requestedAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
+	applyOperationalDefinitionWindow(&current, row.ActivatedAt.Time.UTC(), row.EvaluationValidFrom.Time.UTC(), row.HistoricalRequestedBy, row.HistoricalRequestedAt)
+	urgency := slo.ClassifyOperational(slo.OperationalState{QualityState: currentResult.State, Freshness: currentResult.Freshness, PerformanceState: currentResult.Performance,
+		Provisional: currentResult.Provisional, ShortenedEligibility: currentResult.EligibleStart.After(currentResult.EffectiveStart), RemainingBudget: currentResult.Remaining,
+		RemainingFraction: currentResult.RemainingFraction, Burn1h: burn1h.Performance.Burn, Burn1hAvailable: burn1h.Performance.Burn != nil,
+		Burn1hQualityState: string(burn1h.Quality.State), Burn1hFreshness: string(burn1h.Quality.Freshness), Burn1hProvisional: burn1h.Performance.Provisional,
+		Burn1hShortenedEligibility: burn1hResult != nil && burn1hResult.EligibleStart.After(burn1hResult.EffectiveStart),
+		RemainingExact:             currentResult.ExactRemaining, RemainingFractionExact: currentResult.ExactRemainingFraction,
+		Burn1hExact: exactBurn(burn1hResult)})
+	reasons, leading := operationalReasons(urgency.Reasons)
+	if input.currentOnly {
+		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), RequestedAt: requestedAt, EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
+			Current: current, Urgency: api.SloOperationalDetailUrgency(urgency.Group), LeadingReason: leading, Reasons: reasons,
+			Burn1h: burn1h, Burn6h: burn6h, Exhaustion: exhaustionValue(currentResult, burn1h, burn1hResult)}, nil
+	}
+	budgetSamples, err := rolling(ctx, base, rangeStart, rangeEnd, time.Duration(row.RollingWindowSeconds)*time.Second, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", sampleBucketLimit(rangeStart, rangeEnd, cadence))
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	selectedBurn := time.Duration(input.BurnWindow) * time.Second
+	var burnSamples []api.SloOperationalSample
+	if selectedBurn%cadence != 0 {
+		burnSamples = unavailableOperationalSamples(rangeStart, rangeEnd, cadence, strconv.FormatInt(row.DefinitionRevision, 10), sampleBucketLimit(rangeStart, rangeEnd, cadence), "cadence_mismatch")
+	} else {
+		burnSamples, err = rolling(ctx, base, rangeStart, rangeEnd, selectedBurn, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "burn", sampleBucketLimit(rangeStart, rangeEnd, cadence))
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+	}
+	attainmentSamples, resolution, reduced, err := attainment(ctx, base, rangeStart, rangeEnd, cadence, strconv.FormatInt(row.DefinitionRevision, 10))
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	complianceSeries, complianceSummary, err := daily(ctx, base, rangeStart, rangeEnd, effectiveAt,
+		uuid.UUID(row.ID.Bytes), strconv.FormatInt(row.DefinitionRevision, 10), sli.NormalizeDecimal(row.Target), window, cadence)
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	evaluationID, err := uuid.NewRandom()
+	if err != nil {
+		return api.SloOperationalDetail{}, errors.New("storage: operational evaluation identifier unavailable")
+	}
+	result := api.SloOperationalDetail{RequestedAt: requestedAt, EffectiveAt: effectiveAt, EvaluationId: evaluationID,
+		CalculationVersion: operationalCalculationVersion, SnapshotKind: "current_operational_read", Objective: sloRecordDTO(sloRecord(row)),
+		Context: api.SloOperationalContext{SliId: uuid.UUID(contextRow.SliID.Bytes), SliName: contextRow.SliName, SliDisplayName: contextRow.SliDisplayName,
+			DatasourceId: uuid.UUID(contextRow.DatasourceID.Bytes), DatasourceDisplayName: contextRow.DatasourceDisplayName,
+			MeasurementRevision: strconv.FormatInt(contextRow.MeasurementRevision, 10), PollingIntervalSeconds: int(contextRow.PollingIntervalSeconds),
+			SettlingDelaySeconds: int(contextRow.SettlingDelaySeconds), GoodQuery: contextRow.GoodQuery, TotalQuery: contextRow.TotalQuery},
+		Current: current, Urgency: api.SloOperationalDetailUrgency(urgency.Group), LeadingReason: leading, Reasons: reasons,
+		Burn1h: burn1h, Burn6h: burn6h, Exhaustion: exhaustionValue(currentResult, burn1h, burn1hResult),
+		Range: api.SloOperationalRange{RequestedStart: rangeStart, RequestedEnd: rangeEnd, EffectiveStart: rangeStart, EffectiveEnd: rangeEnd,
+			SourceCadenceSeconds: int(row.CadenceSeconds), ResolutionSeconds: int(resolution / time.Second), Reduced: reduced,
+			MaxSamplesPerSeries: 1500, BucketBounds: "half_open"},
+		AttainmentSeries: api.SloOperationalSeries{Kind: "attainment", Samples: attainmentSamples},
+		BudgetSeries:     api.SloOperationalSeries{Kind: "rolling_budget", Samples: budgetSamples},
+		BurnSeries:       api.SloOperationalSeries{Kind: "burn", BurnWindowSeconds: new(api.SloOperationalSeriesBurnWindowSeconds(input.BurnWindow)), Samples: burnSamples},
+		ComplianceSeries: complianceSeries, ComplianceSummary: complianceSummary}
+	return result, nil
+}
+
+func loadOverviewCandidates(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) ([]api.SloOperationalOverviewItem, error) {
+	if input.Runtime != nil {
+		return loadPublishedOverview(ctx, q, input, now)
+	}
+	defs, streams, err := loadOperationalDefinitions(ctx, q, input, now)
+	if err != nil {
+		return nil, err
+	}
+	if len(defs) > sloOverviewDefinitionLimit {
+		return nil, ErrOperationalResource
+	}
+	factsCount := 0
+	for key, stream := range streams {
+		remaining := sloOperationalFactsLimit - factsCount
+		rows, count, readErr := loadOperationalFacts(ctx, q, key, stream, stream.factStart, floorSliBoundary(now, time.Duration(stream.cadence)*time.Second), remaining+1)
+		if readErr != nil {
+			return nil, readErr
+		}
+		factsCount += count
+		if factsCount > sloOperationalFactsLimit {
+			return nil, ErrOperationalResource
+		}
+		streams[key] = operationalStream{cadence: stream.cadence, factStart: stream.factStart, facts: rows}
+	}
+	items := make([]api.SloOperationalOverviewItem, 0, len(defs))
+	for definitionIndex, definition := range defs {
+		streamKey := operationalStreamKey(definition.row.SliID.String(), definition.row.MeasurementRevision)
+		definition.facts = streams[streamKey].facts
+		if definitionIndex&127 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, operationError(ctx, "storage: overview projection cancelled", err)
+			}
+		}
+		item, buildErr := buildOverviewItem(ctx, definition, now, sli.ObservationRetention)
+		if buildErr != nil {
+			return nil, buildErr
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }

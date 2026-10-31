@@ -158,10 +158,6 @@ func safeSQLState(code string) bool {
 }
 
 func CheckCompatibility(ctx context.Context, databaseURL string) (Compatibility, error) {
-	migrations, err := LoadMigrations(embeddedMigrations)
-	if err != nil {
-		return CompatibilityInconsistent, err
-	}
 	config, err := ParseDatabaseURL(databaseURL)
 	if err != nil {
 		return CompatibilityMissing, err
@@ -177,6 +173,14 @@ func CheckCompatibility(ctx context.Context, databaseURL string) (Compatibility,
 	}()
 	if err := setSessionBounds(ctx, conn); err != nil {
 		return CompatibilityMissing, operationError(ctx, "storage: database setup failed", err)
+	}
+	return checkConnectionCompatibility(ctx, conn)
+}
+
+func checkConnectionCompatibility(ctx context.Context, conn *pgx.Conn) (Compatibility, error) {
+	migrations, err := LoadMigrations(embeddedMigrations)
+	if err != nil {
+		return CompatibilityInconsistent, err
 	}
 	var tableName *string
 	if err := conn.QueryRow(ctx, "SELECT to_regclass('public.almanac_schema_migrations')::text").Scan(&tableName); err != nil {

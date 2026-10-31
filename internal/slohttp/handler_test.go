@@ -16,6 +16,34 @@ import (
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
+func TestPreparationProblemsExposeBoundedRecoveryMetadata(t *testing.T) {
+	id := "11111111-1111-1111-1111-111111111111"
+	for _, test := range []struct {
+		err                 error
+		code, state, header string
+		delay               int
+	}{
+		{storage.ErrDerivedPending, "derived_data_pending", "pending", "2", 2},
+		{storage.ErrDerivedFailed, "derived_data_failed", "failed", "", 0},
+	} {
+		w := httptest.NewRecorder()
+		storageError(w, test.err, "request-id", id)
+		var problem api.Problem
+		if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != 503 || problem.Code != test.code || problem.Preparation == nil || string(problem.Preparation.State) != test.state || problem.Preparation.RetryAfterSeconds != test.delay || problem.Preparation.DetailsUrl == nil || *problem.Preparation.DetailsUrl != "/api/v1/slos/"+id+"/preparation" || w.Header().Get("Retry-After") != test.header {
+			t.Fatalf("wrong preparation response: %d %s", w.Code, w.Body.String())
+		}
+	}
+	w := httptest.NewRecorder()
+	storageError(w, storage.ErrInvalidSession, "request-id", id)
+	var problem api.Problem
+	if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil || w.Code != 401 || problem.Preparation != nil {
+		t.Fatalf("unauthorized response exposed preparation: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestObjectiveRoutesRequireSessionAndCSRF(t *testing.T) {
 	auth, err := authhttp.New(&authentication.Service{}, authhttp.Options{PublicOrigin: "https://example.test", Now: time.Now})
 	if err != nil {

@@ -623,6 +623,94 @@ paths:
         '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '409': {description: Snapshot expired; restart pagination, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '503': {description: Resource limit or storage unavailable; no partial overview is returned, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/status:
+    get:
+      operationId: getSloCurrentStatus
+      summary: Read the published current SLO result independently of history
+      description: >-
+        Reads an exact prepared projection with source and definition generation
+        evidence. No historical computation runs in this handler. Unprepared or
+        invalidated data returns 503 derived_data_pending and Retry-After 2.
+        Source-observation freshness remains separate from calculation lag.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+      responses:
+        '200': {description: Published current SLO status, content: {application/json: {schema: {$ref: '#/components/schemas/SloCurrentStatus'}}}}
+        '400': {description: Invalid request, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: SLO not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Preparation pending or storage unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/history/{generation_id}/values:
+    get:
+      operationId: getSloHistoryValues
+      summary: Page exact represented values from one immutable history generation
+      description: >-
+        Reads only the named prepared generation, with fresh authorization on
+        every page. A generation is retained for five minutes after publication;
+        unavailable or expired generations return 409 snapshot_expired. The
+        endpoint never silently moves to a newer generation. Decimal values are
+        returned unchanged. Choose another bounded operational range to inspect
+        finer resolution. Samples contains numeric-lane rows; days contains daily
+        compliance rows. The other array is empty. Null next_offset ends paging.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {name: generation_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: lane, in: query, required: true, schema: {type: string, enum: [attainment, budget, burn, compliance]}}
+        - {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 1500, default: 0}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200': {description: Exact generation-pinned page, content: {application/json: {schema: {$ref: '#/components/schemas/SloHistoryValuePage'}}}}
+        '400': {description: Invalid lane or pagination, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: Objective not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Generation missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Derived values unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/preparation:
+    get:
+      operationId: getSloPreparation
+      summary: Read bounded preparation progress and exhausted-job diagnostics
+      description: >-
+        Returns at most 100 current/history jobs and exhausted source aggregate
+        keys affecting this objective. Error codes are stable and contain no SQL,
+        query text or credentials. An item's id addresses its single retry target.
+        Retrying a shared source aggregate preserves all unrelated dirty keys.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+      responses:
+        '200': {description: Bounded preparation diagnostics, content: {application/json: {schema: {$ref: '#/components/schemas/SloPreparationPage'}}}}
+        '400': {description: Invalid request, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: Objective not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Storage unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/preparation/{job_id}/retry:
+    post:
+      operationId: retrySloPreparation
+      summary: Give one exhausted preparation job another bounded attempt budget
+      description: >-
+        Administrator/editor only, with the normal session CSRF requirements.
+        Retries only the addressed failed current, history or aggregate job,
+        identified by the preparation diagnostics, with five automatic attempts and
+        at most one manual retry per minute. Admission remains bounded to 64
+        retained history jobs globally and eight per objective. The retry
+        and its audit record commit together; unrelated work is unchanged.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {name: job_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '202': {description: Bounded retry admitted}
+        '400': {description: Invalid request, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '403': {description: Session role or CSRF validation rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '404': {description: Objective not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '409': {description: Job is not failed, is outside this objective, is rate limited or cannot be admitted, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Storage unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slos/{slo_id}/operational:
     get:
       operationId: getSloOperationalDetail
@@ -916,10 +1004,56 @@ components:
         needs_attention: {type: integer, format: int64, minimum: 0}
         watch: {type: integer, format: int64, minimum: 0}
         healthy: {type: integer, format: int64, minimum: 0}
+    SloPreparationJob:
+      type: object
+      required: [id, stage, state, attempts, next_attempt_at, error_code]
+      properties:
+        id: {type: string, format: uuid}
+        stage: {type: string, enum: [current, history, aggregate]}
+        state: {type: string, enum: [pending, running, failed]}
+        attempts: {type: integer, minimum: 0, maximum: 5}
+        next_attempt_at: {type: string, format: date-time}
+        error_code: {type: string, maxLength: 64}
+    SloPreparationPage:
+      type: object
+      required: [items, truncated]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SloPreparationJob'}}
+        truncated: {type: boolean}
+    DerivedGeneration:
+      type: object
+      required: [generation_id, source_generation, measurement_revision, definition_revision, exclusion_revision, calculation_version, evaluated_through, published_at, calculation_lag_seconds]
+      properties:
+        generation_id: {type: string, format: uuid}
+        source_generation: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        measurement_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        definition_revision: {type: string, pattern: '^[1-9][0-9]*$'}
+        exclusion_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        calculation_version: {type: string}
+        evaluated_through: {type: string, format: date-time}
+        published_at: {type: string, format: date-time}
+        calculation_lag_seconds: {type: number, minimum: 0}
+        retention_start: {type: string, format: date-time, description: Cadence-aligned retained-input boundary used by this generation; present on runtime-prepared results}
+    SloCurrentStatus:
+      type: object
+      required: [generation, slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion]
+      properties:
+        generation: {$ref: '#/components/schemas/DerivedGeneration'}
+        slo: {$ref: '#/components/schemas/Slo'}
+        urgency: {type: string, enum: [needs_attention, watch, healthy]}
+        leading_reason: {$ref: '#/components/schemas/SloUrgencyReason'}
+        reasons: {type: array, items: {$ref: '#/components/schemas/SloUrgencyReason'}}
+        current: {$ref: '#/components/schemas/SloOperationalValue'}
+        burn_1h: {$ref: '#/components/schemas/SloBurnValue'}
+        burn_6h: {$ref: '#/components/schemas/SloBurnValue'}
+        exhaustion: {$ref: '#/components/schemas/SloExhaustionEstimate'}
     SloOperationalOverviewItem:
       type: object
       required: [slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion, budget_sparkline]
       properties:
+        generation: {$ref: '#/components/schemas/DerivedGeneration'}
+        budget_history_generation: {$ref: '#/components/schemas/DerivedGeneration'}
+        budget_history_state: {type: string, enum: [ready, preparing, unavailable], description: Retained budget history is labelled preparing until it matches the current published generation.}
         slo: {$ref: '#/components/schemas/Slo'}
         urgency: {type: string, enum: [needs_attention, watch, healthy]}
         leading_reason: {$ref: '#/components/schemas/SloUrgencyReason'}
@@ -985,6 +1119,7 @@ components:
       type: object
       required: [evaluation_id, requested_at, effective_at, calculation_version, snapshot_kind, objective, context, current, urgency, leading_reason, reasons, burn_1h, burn_6h, exhaustion, range, attainment_series, budget_series, burn_series, compliance_series, compliance_summary]
       properties:
+        generation: {$ref: '#/components/schemas/DerivedGeneration'}
         evaluation_id: {type: string, format: uuid}
         requested_at: {type: string, format: date-time}
         effective_at: {type: string, format: date-time}
@@ -1063,6 +1198,17 @@ components:
         reduced: {type: boolean}
         max_samples_per_series: {type: integer, enum: [1500]}
         bucket_bounds: {type: string, enum: [half_open]}
+    SloHistoryValuePage:
+      type: object
+      required: [generation, lane, offset, next_offset, total_values, samples, days]
+      properties:
+        generation: {$ref: '#/components/schemas/DerivedGeneration'}
+        lane: {type: string, enum: [attainment, budget, burn, compliance]}
+        offset: {type: integer, minimum: 0, maximum: 1500}
+        next_offset: {type: integer, minimum: 0, maximum: 1500, nullable: true}
+        total_values: {type: integer, minimum: 0, maximum: 1500}
+        samples: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SloOperationalSample'}}
+        days: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SloDailyComplianceDay'}}
     SloOperationalSeries:
       type: object
       required: [kind, burn_window_seconds, samples]
@@ -1775,12 +1921,20 @@ components:
         session:
           allOf: [{$ref: '#/components/schemas/SafeIdentity'}]
           nullable: true
+    DerivedPreparation:
+      type: object
+      required: [state, retry_after_seconds]
+      properties:
+        state: {type: string, enum: [pending, failed]}
+        retry_after_seconds: {type: integer, minimum: 0, maximum: 2}
+        details_url: {type: string, maxLength: 128, description: Relative authorized URL for bounded job diagnostics, when one objective is addressed}
     Problem:
       type: object
       required: [code, message, request_id, field_errors]
       properties:
         code: {type: string}
         message: {type: string}
+        preparation: {$ref: '#/components/schemas/DerivedPreparation'}
         request_id: {type: string, pattern: '^[0-9a-f]{32}$'}
         field_errors:
           type: array
