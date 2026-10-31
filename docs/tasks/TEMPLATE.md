@@ -1,13 +1,13 @@
 # FN-TNN: Concrete outcome
 
 - State: draft
-- Coordinator: primary agent
-- Implementer: gpt-6-luna (confirm runtime availability; no silent substitution)
+- Owner: primary agent (normally configured Sol/Astra)
+- Optional delegation: bounded scope, subagent and useful concurrent primary-agent work; otherwise none
 - Governing spec/criteria: relative links and specific AC identifiers
 - Applicable ADRs: relative links
 - Depends on: task IDs and accepted integrated revisions, or none
 - Base revision: exact commit
-- Worktree/branch: assigned by coordinator before dispatch
+- Worktree/branch: current task branch; isolated worktree for delegated edits
 - Integration/commit authorization: state current scope; no push by default
 
 ## Outcome and non-goals
@@ -23,7 +23,7 @@ Supply enough context for a fresh session; omit unrelated conversation history.
 
 Exact consumed/produced signatures, data contracts, error behavior and allowed paths.
 Name generated sources and required regeneration. A missing consequential decision
-is a readiness blocker, not permission for the worker to invent a contract.
+is a readiness blocker, not permission to invent a contract.
 
 ## Acceptance and expected cases
 
@@ -45,23 +45,25 @@ Write a short user acceptance checklist before implementation:
 - [ ] Confirm base revision, clean owned worktree and isolated test resources.
 - [ ] Read version-specific Modern Go guidance before any Go edit.
 - [ ] Add relevant behavior/regression tests and implement the scoped result.
-- [ ] Run the exact focused checks listed here by the coordinator.
+- [ ] Run the exact focused checks listed here by the primary agent.
 - [ ] Run required boundary checks from docs/testing.md and record their selection.
 - [ ] Inspect changes for scope drift, secrets and generated-source consistency.
-- [ ] Submit evidence and unresolved concerns; do not mark the task done.
-- [ ] Freeze the submitted checkpoint; wait for a scoped correction before editing it again.
+- [ ] Record evidence and unresolved concerns; only the primary agent marks verified work done.
+- [ ] Freeze product and verification inputs during candidate checks; isolate concurrent work.
+- [ ] If delegated, submit for primary-agent review before further edits.
 
 Replace this checklist's generic verification entries with existing, runnable commands
 before marking ready. If the task creates a harness, specify its entry-point contract
-and expected passing/failing checks; verify and record the commands in its handoff.
+and expected passing/failing checks; verify and record the commands in the evidence.
 
 ## Escalation conditions
 
 Specific ambiguity, contract/dependency changes, failing invariants or missing
-infrastructure that requires coordinator input. Stop the affected change and provide
-evidence; continue independent authorized steps where possible.
+infrastructure that requires a maintainer decision (or primary-agent input for
+delegated work). Stop the affected change and provide evidence; continue independent
+authorized steps where possible.
 
-## Worker handoff
+## Implementation evidence (subagent handoff if delegated)
 
 - Candidate revision/diff and changed files:
 - Criterion → executed check → result:
@@ -71,7 +73,7 @@ evidence; continue independent authorized steps where possible.
 - Original reported case after correction (not just related passing cases):
 - Limitations, unverified behavior and decisions needed:
 
-## Coordinator acceptance
+## Primary-agent acceptance
 
 - Diff and contract review:
 - Independently checked expectations and relevant negative cases:

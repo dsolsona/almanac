@@ -53,7 +53,7 @@ request new approvals or improvise invocation variations to obtain a focused run
   browser/project.
 - **Task review:** once implementation is complete, verify the boundaries the task changes. API/storage
   changes need real integration evidence; UI flows need the real stack, and agent
-  changes need real agent/backend execution. The coordinator records why a check is
+  changes need real agent/backend execution. The primary agent records why a check is
   inapplicable. An uncertain dependency scope expands verification, not shrinks it.
 - **Integrated candidate:** full Go/UI unit suites, static/contract/generated checks,
   PostgreSQL integration, required race checks and a compact real-stack smoke set.
@@ -116,7 +116,7 @@ These are starting budgets, not justification to omit cases. F1 records repeated
 runs, fixture/build/startup/test/cleanup timings, hardware, versions and cache state.
 Later gates publish total duration, slowest cases, test counts and first-attempt
 failures. Investigate an exceeded budget; move genuinely expensive coverage into a
-named deeper lane only when its mandatory trigger remains explicit. The coordinator
+named deeper lane only when its mandatory trigger remains explicit. The primary agent
 cannot silently raise targets, skip tests or claim the suite is fast without evidence.
 
 ## What the first real-stack smoke set must demonstrate
@@ -169,9 +169,10 @@ requires a named issue/owner, scope, expiry and explicit maintainer approval. Cr
 acceptance coverage needs an alternative passing check before it can be quarantined.
 Do not delete assertions, change expected values or weaken fixtures just to pass.
 
-Every worker handoff identifies the base/candidate revision or working-tree diff,
+Every task's verification evidence (including any subagent handoff) identifies the
+base/candidate revision or working-tree diff,
 commands, selected tests/counts, results, timing, fixture/artifact identity and known
-gaps. The coordinator inspects the diff, reviews test strength and runs checks on the
+gaps. The primary agent inspects the diff, reviews test strength and verifies the
 integrated candidate. Attach bounded redacted logs, failure traces/screenshots and
 provider/DB diagnostics when relevant; keep generated artifacts out of git.
 
