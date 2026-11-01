@@ -35,7 +35,11 @@ type performanceAccuracyCase struct {
 }
 
 func checkPerformanceOracleQuality(q api.SloOperationalQuality, want performanceOracleCounts, duration time.Duration) error {
-	if q.ObservedIntervals != want.Observed || q.KnownEmptyIntervals != want.Empty || q.ZeroTrafficIntervals != want.Zero || q.MissingIntervals != want.Missing || q.ExpectedIntervals != int64(duration/time.Minute) || q.ExpiredIntervals != 0 {
+	return checkPerformanceOracleQualityWithExpiry(q, want, duration, 0)
+}
+
+func checkPerformanceOracleQualityWithExpiry(q api.SloOperationalQuality, want performanceOracleCounts, duration time.Duration, expired int64) error {
+	if q.ObservedIntervals != want.Observed || q.KnownEmptyIntervals != want.Empty || q.ZeroTrafficIntervals != want.Zero || q.MissingIntervals != want.Missing || q.ExpectedIntervals != int64(duration/time.Minute) || q.ExpiredIntervals != expired {
 		return errors.New("oracle interval qualification mismatch")
 	}
 	if !performanceOracleRounded(q.Coverage, big.NewRat(want.Observed+want.Empty, int64(duration/time.Minute))) {

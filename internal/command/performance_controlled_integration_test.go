@@ -194,6 +194,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("retention-expiry", expiry, err) {
 		return
 	}
+	stage("populated-retention-cleanup")
+	cleanup, err := performanceRetentionCleanup(t, ctx, fleet)
+	if !record("populated-retention-cleanup", cleanup, err) {
+		return
+	}
 	stage("completed")
 	t.Logf("controlled performance evidence: %s", artifacts)
 }

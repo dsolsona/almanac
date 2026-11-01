@@ -29,6 +29,32 @@ func performanceRetentionExpiry(ctx context.Context, fleet performanceFleet) (pe
 			len(detail.AttainmentSeries.Samples) > 1500 || len(detail.BudgetSeries.Samples) > 1500 || len(detail.BurnSeries.Samples) > 1500 {
 			return errors.New("365-day boundary did not disclose expired input coverage")
 		}
+		class := (target + 1) % 10
+		window := performanceOracleRollingWindow(class)
+		eligible := end.Add(-window)
+		seedStart := fleet.historyEnd.Add(-365 * 24 * time.Hour)
+		if seedStart.After(eligible) {
+			eligible = seedStart
+		}
+		retained := *detail.Generation.RetentionStart
+		if !retained.After(eligible) || !retained.Before(end) || retained.Unix()%60 != 0 || retained.Nanosecond() != 0 {
+			return errors.New("365-day boundary has invalid aligned retained interval")
+		}
+		want, err := performanceOracleWindow(class, retained, end)
+		if err != nil {
+			return err
+		}
+		q := detail.Current.Quality
+		if err := checkPerformanceOracleQualityWithExpiry(q, want, end.Sub(eligible), int64(retained.Sub(eligible)/time.Minute)); err != nil {
+			return err
+		}
+		p := detail.Current.Performance
+		if q.State != "expired_history" || !p.Provisional || p.State != "unknown" {
+			return errors.New("365-day boundary treated expired history as qualified performance")
+		}
+		if err := checkPerformanceOracleMetrics(p.Good, p.Total, p.Attainment, p.AllowedBudget, p.RemainingBudget, p.RemainingFraction, p.Burn, want, "budget"); err != nil {
+			return err
+		}
 		return nil
 	}
 	prepared, err := preparePerformanceOperation(ctx, fleet.readers, operation)
