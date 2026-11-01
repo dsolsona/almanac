@@ -80,6 +80,15 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 		if err != nil {
 			return true, err
 		}
+		if work.ResolutionSeconds == 86400 && len(points) > 0 {
+			last := points[len(points)-1].Current
+			cadence := time.Duration(definition.CadenceSeconds) * time.Second
+			if last.EvaluationAt.Equal(floorSliBoundary(work.RangeEnd.Time, cadence)) {
+				day := operationalComplianceDay(retainedOperationalResult(last), work.RangeEnd.Time.UTC(), definition.EvaluationValidFrom.Time.UTC(),
+					definition.ID.Bytes, strconv.FormatInt(definition.DefinitionRevision, 10), definition.Target, time.Duration(definition.RollingWindowSeconds)*time.Second, cadence)
+				tile.Compliance = &day
+			}
+		}
 		payload, err := json.Marshal(tile)
 		if err != nil {
 			return true, err

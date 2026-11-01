@@ -8,6 +8,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/slo"
+	"github.com/google/uuid"
 )
 
 func TestRetainedTileKeepsUnroundedExtremaAndExactSelectedCounts(t *testing.T) {
@@ -35,6 +36,51 @@ func TestRetainedTileKeepsUnroundedExtremaAndExactSelectedCounts(t *testing.T) {
 		if !reflect.DeepEqual(got[1].RetainedExtrema, []api.SloOperationalSampleRetainedExtrema{mark}) {
 			t.Fatalf("%s wrong exact extremum mark: %v", metric, got[1].RetainedExtrema)
 		}
+	}
+}
+
+func TestRetainedDailyComplianceMatchesCanonicalQuality(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+	id := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	for _, state := range []string{"met", "violated", "partial", "zero", "empty", "missing", "shortened", "expired", "before_validity"} {
+		t.Run(state, func(t *testing.T) {
+			input := slo.WindowInput{At: end, Now: end, ValidFrom: start, SliValidFrom: start,
+				RetentionStart: start, Duration: 24 * time.Hour, Cadence: 12 * time.Hour, FreshnessGrace: 24 * time.Hour, Target: "0.99"}
+			for index := range 2 {
+				input.Observations = append(input.Observations, slo.Observation{Start: start.Add(time.Duration(index) * 12 * time.Hour),
+					End: start.Add(time.Duration(index+1) * 12 * time.Hour), Received: end, Outcome: "observed", Good: "100", Total: "100"})
+			}
+			switch state {
+			case "violated":
+				input.Observations[0].Good = "90"
+			case "partial":
+				input.Observations = input.Observations[:1]
+			case "zero":
+				for index := range input.Observations {
+					input.Observations[index].Good, input.Observations[index].Total = "0", "0"
+				}
+			case "empty":
+				input.Observations[0].Outcome = "complete_empty"
+			case "missing":
+				input.Observations = nil
+			case "shortened":
+				input.ValidFrom = start.Add(12 * time.Hour)
+			case "expired":
+				input.RetentionStart = start.Add(12 * time.Hour)
+			case "before_validity":
+				input.ValidFrom = end
+			}
+			result, err := slo.EvaluateOperationalWindowContext(t.Context(), input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := operationalComplianceDay(result, end, input.ValidFrom, id, "1", input.Target, input.Duration, input.Cadence)
+			got := operationalComplianceDay(retainedOperationalResult(operationalValue(result)), end, input.ValidFrom, id, "1", input.Target, input.Duration, input.Cadence)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("retained compliance changed canonical %s result: got %+v, want %+v", state, got, want)
+			}
+		})
 	}
 }
 

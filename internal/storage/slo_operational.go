@@ -214,23 +214,8 @@ func buildDailyCompliance(ctx context.Context, base slo.WindowInput, rangeStart,
 		if evalErr != nil {
 			return api.SloDailyComplianceSeries{}, api.SloDailyComplianceSummary{}, evalErr
 		}
-		status, explanation := dailyComplianceStatus(result, evaluationAt, base.ValidFrom, window, cadence)
-		quality, performance := operationalQuality(result), operationalPerformance(result)
-		if status == api.SloDailyComplianceDayStatusUnknown {
-			if performance.ObservedState == nil && (performance.State == "met" || performance.State == "violated") {
-				observed := api.SloEvaluationPerformanceObservedState(performance.State)
-				performance.ObservedState = &observed
-			}
-			performance.State = "unknown"
-			performance.Provisional = true
-			reason := explanation
-			performance.Reason, quality.Reason = &reason, &reason
-		}
-		series.Days[index] = api.SloDailyComplianceDay{UtcDate: openapi_types.Date{Time: end.Add(-24 * time.Hour)},
-			DayStart: end.Add(-24 * time.Hour), DayEnd: end, RequestedAt: end, EffectiveAt: result.End, SloId: sloID,
-			DefinitionRevision: definitionRevision, Target: target, Quality: quality, Performance: performance,
-			Status: status, Explanation: explanation}
-		switch status {
+		series.Days[index] = operationalComplianceDay(result, end, base.ValidFrom, sloID, definitionRevision, target, window, cadence)
+		switch series.Days[index].Status {
 		case api.SloDailyComplianceDayStatusMet:
 			summary.MetDays++
 		case api.SloDailyComplianceDayStatusViolated:
@@ -243,6 +228,23 @@ func buildDailyCompliance(ctx context.Context, base slo.WindowInput, rangeStart,
 	}
 	summary.EvaluableDays = summary.MetDays + summary.ViolatedDays
 	return series, summary, nil
+}
+
+func operationalComplianceDay(result slo.WindowResult, end, validFrom time.Time, sloID uuid.UUID, revision, target string, window, cadence time.Duration) api.SloDailyComplianceDay {
+	status, explanation := dailyComplianceStatus(result, result.End, validFrom, window, cadence)
+	quality, performance := operationalQuality(result), operationalPerformance(result)
+	if status == api.SloDailyComplianceDayStatusUnknown {
+		if performance.ObservedState == nil && (performance.State == "met" || performance.State == "violated") {
+			observed := api.SloEvaluationPerformanceObservedState(performance.State)
+			performance.ObservedState = &observed
+		}
+		performance.State, performance.Provisional = "unknown", true
+		performance.Reason, quality.Reason = &explanation, &explanation
+	}
+	return api.SloDailyComplianceDay{UtcDate: openapi_types.Date{Time: end.Add(-24 * time.Hour)},
+		DayStart: end.Add(-24 * time.Hour), DayEnd: end, RequestedAt: end, EffectiveAt: result.End, SloId: sloID,
+		DefinitionRevision: revision, Target: target, Quality: quality, Performance: performance,
+		Status: status, Explanation: explanation}
 }
 
 func utcDayStart(value time.Time) time.Time {

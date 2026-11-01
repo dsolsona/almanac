@@ -14,6 +14,25 @@ type retainedSloTile struct {
 	Budget     []api.SloOperationalSample `json:"budget"`
 	Burn1h     []api.SloOperationalSample `json:"burn_1h"`
 	Burn6h     []api.SloOperationalSample `json:"burn_6h"`
+	Compliance *api.SloDailyComplianceDay `json:"compliance,omitempty"`
+}
+
+func retainedOperationalResult(value api.SloOperationalValue) slo.WindowResult {
+	q, p, w := value.Quality, value.Performance, value.Window
+	result := slo.WindowResult{End: value.EvaluationAt, RequestedStart: w.RequestedStart, EffectiveStart: w.EffectiveStart,
+		EligibleStart: w.EligibleStart, RetentionStart: w.RetentionStart, State: string(q.State), Freshness: string(q.Freshness),
+		Performance: string(p.State), Provisional: p.Provisional, Expected: q.ExpectedIntervals, Observed: q.ObservedIntervals,
+		KnownEmpty: q.KnownEmptyIntervals, Missing: q.MissingIntervals, Expired: q.ExpiredIntervals, ZeroTraffic: q.ZeroTrafficIntervals,
+		Coverage: q.Coverage, FirstObservation: q.FirstObservationAt, LastObservation: q.LastObservationAt, LatestReceipt: q.LatestReceiptAt,
+		Good: p.Good, Total: p.Total, Bad: p.Bad, Attainment: p.Attainment, Allowed: p.AllowedBudget, Remaining: p.RemainingBudget,
+		Consumed: p.ConsumedFraction, RemainingFraction: p.RemainingFraction, Burn: p.Burn}
+	if p.ObservedState != nil {
+		result.ObservedPerformance = string(*p.ObservedState)
+	}
+	if p.Reason != nil {
+		result.Reason = *p.Reason
+	}
+	return result
 }
 
 func retainedWindowSample(at time.Time, quality api.SloOperationalQuality, performance api.SloEvaluationPerformance, revision string) api.SloOperationalSample {
