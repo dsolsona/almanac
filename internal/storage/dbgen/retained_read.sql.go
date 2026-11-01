@@ -18,8 +18,21 @@ WITH requested AS (
            unnest($6::timestamptz[]) AS range_end,
            unnest($7::integer[]) AS resolution
 )
-SELECT r.ordinal,r.range_start,r.range_end,r.resolution,coalesce(t.payload,'{}'::jsonb)::jsonb AS payload,
+SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
+       r.resolution::integer AS resolution,coalesce(t.payload,'{}'::jsonb)::jsonb AS payload,
        t.source_generation,t.published_at,
+       (EXISTS (
+           SELECT 1 FROM public.almanac_slo_series_tile_work w
+           WHERE w.slo_id=$1 AND w.definition_revision=$2
+             AND w.measurement_revision=$3 AND w.exclusion_revision=0
+             AND w.calculation_version=$4 AND w.resolution_seconds=r.resolution
+             AND w.range_start=r.range_start AND w.attempts>=5
+       ) OR EXISTS (
+           SELECT 1 FROM public.almanac_slo_series_repair w
+           WHERE w.slo_id=$1 AND w.definition_revision=$2
+             AND w.measurement_revision=$3 AND w.calculation_version=$4
+             AND w.cursor_at<r.range_end AND w.end_at>r.range_start AND w.attempts>=5
+       ))::boolean AS exhausted,
        (t.slo_id IS NOT NULL AND NOT EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=t.slo_id AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision
@@ -50,12 +63,13 @@ type ReadRetainedPartsParams struct {
 
 type ReadRetainedPartsRow struct {
 	Ordinal          int32              `json:"ordinal"`
-	RangeStart       interface{}        `json:"range_start"`
-	RangeEnd         interface{}        `json:"range_end"`
-	Resolution       interface{}        `json:"resolution"`
+	RangeStart       pgtype.Timestamptz `json:"range_start"`
+	RangeEnd         pgtype.Timestamptz `json:"range_end"`
+	Resolution       int32              `json:"resolution"`
 	Payload          []byte             `json:"payload"`
 	SourceGeneration pgtype.Int8        `json:"source_generation"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
+	Exhausted        bool               `json:"exhausted"`
 	Ready            bool               `json:"ready"`
 }
 
@@ -86,6 +100,7 @@ func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsPa
 			&i.Payload,
 			&i.SourceGeneration,
 			&i.PublishedAt,
+			&i.Exhausted,
 			&i.Ready,
 		); err != nil {
 			return nil, err

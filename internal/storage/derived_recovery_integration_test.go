@@ -5,9 +5,11 @@ package storage
 import (
 	"errors"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -50,38 +52,62 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatal("current generation metadata must use UTC independently of the database driver's host timezone")
 	}
 	verifyRetainedCurrentPoint(t, runtime, databaseURL, proof, id, clock, oracle)
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	var jobsBefore int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsBefore); err != nil {
+		t.Fatal(err)
+	}
 	input.Runtime = runtime
 	if _, err := ReadSloOperationalDetail(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedPending) {
-		t.Fatalf("cold history did not admit durable preparation: %v", err)
+		t.Fatalf("explicit retained-history bootstrap was not distinguished: %v", err)
 	}
-	if err := runtime.prepareNextHistory(t.Context(), clock); err != nil {
-		t.Fatalf("prepare first detail history: %v", err)
+	var jobsAfter int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
+		t.Fatalf("navigation admitted graph work during bootstrap: before=%d,after=%d,%v", jobsBefore, jobsAfter, err)
+	}
+	for attempt := range 1000 {
+		worked, err := runtime.repairRetainedSeries(t.Context(), clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !worked {
+			break
+		}
+		if attempt == 999 {
+			t.Fatal("retained bootstrap did not drain its bounded fixture")
+		}
+	}
+	for attempt := range 1000 {
+		worked, err := runtime.prepareRetainedTile(t.Context(), clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !worked {
+			break
+		}
+		if attempt == 999 {
+			t.Fatal("retained tiles did not drain their bounded fixture")
+		}
 	}
 	prepared, err := ReadSloOperationalDetail(t.Context(), databaseURL, input)
 	if err != nil || prepared.Generation == nil {
 		t.Fatalf("history was not published: %v", err)
 	}
-	verifyDerivedBlockFences(t, runtime, databaseURL, id, clock)
-	for name, pair := range map[string][2]any{
-		"attainment": {prepared.AttainmentSeries, oracle.AttainmentSeries},
-		"budget":     {prepared.BudgetSeries, oracle.BudgetSeries},
-		"burn":       {prepared.BurnSeries, oracle.BurnSeries},
-		"compliance": {prepared.ComplianceSeries, oracle.ComplianceSeries},
-	} {
-		if !reflect.DeepEqual(pair[0], pair[1]) {
-			t.Fatalf("prepared %s differs from canonical result", name)
-		}
+	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)
+	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
+		t.Fatal("retained completed-day compliance differs from canonical evaluation")
 	}
 	valuesInput := SloHistoryValuesInput{Runtime: runtime, Proof: proof, ID: id,
 		GenerationID: prepared.Generation.GenerationId.String(), Lane: "budget", Limit: 3, Now: clock}
 	first, err := ReadSloHistoryValues(t.Context(), databaseURL, valuesInput)
-	if err != nil || !reflect.DeepEqual(first.Samples, oracle.BudgetSeries.Samples[:min(3, len(oracle.BudgetSeries.Samples))]) || first.Generation.GenerationId != prepared.Generation.GenerationId {
+	if err != nil || !reflect.DeepEqual(first.Samples, prepared.BudgetSeries.Samples[:min(3, len(prepared.BudgetSeries.Samples))]) || first.Generation.GenerationId != prepared.Generation.GenerationId {
 		t.Fatalf("exact values did not preserve the prepared generation: %+v, %v", first, err)
 	}
 	if first.NextOffset != nil {
 		valuesInput.Offset = *first.NextOffset
 		second, err := ReadSloHistoryValues(t.Context(), databaseURL, valuesInput)
-		if err != nil || second.Generation.GenerationId != first.Generation.GenerationId || !reflect.DeepEqual(second.Samples, oracle.BudgetSeries.Samples[valuesInput.Offset:min(valuesInput.Offset+3, len(oracle.BudgetSeries.Samples))]) {
+		if err != nil || second.Generation.GenerationId != first.Generation.GenerationId || !reflect.DeepEqual(second.Samples, prepared.BudgetSeries.Samples[valuesInput.Offset:min(valuesInput.Offset+3, len(prepared.BudgetSeries.Samples))]) {
 			t.Fatalf("exact pagination mixed generations or changed values: %v", err)
 		}
 	}
@@ -89,13 +115,32 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if _, err := ReadSloHistoryValues(t.Context(), databaseURL, valuesInput); !errors.Is(err, ErrOperationalSnapshotOld) {
 		t.Fatalf("expired values silently moved to another generation: %v", err)
 	}
-	conn := integrationConnect(t, databaseURL)
-	defer closeIntegrationConn(conn)
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_history_blocks SET payload='{}' WHERE generation_id=$1`, pgtype.UUID{Bytes: prepared.Generation.GenerationId, Valid: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadSloOperationalDetail(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedPending) {
-		t.Fatalf("corrupt history was not replaced by durable preparation: %v", err)
+	repaired, err := ReadSloOperationalDetail(t.Context(), databaseURL, input)
+	if err != nil || repaired.Generation == nil || repaired.Generation.GenerationId == prepared.Generation.GenerationId {
+		t.Fatalf("corrupt response cache was not replaced directly from retained series: %v", err)
+	}
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
+		t.Fatalf("cold response-cache navigation queued graph work: %v", err)
+	}
+	// Explicit background jobs retain their own durable failure/retry contract;
+	// their failure cannot block reads of independently maintained series.
+	q := dbgen.New(conn)
+	sourceGeneration, err := strconv.ParseInt(repaired.Generation.SourceGeneration, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.LockHistoryAdmission(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.AdmitSloHistoryJob(t.Context(), dbgen.AdmitSloHistoryJobParams{SloID: pgID,
+		DefinitionRevision: 1, MeasurementRevision: 1, SourceGeneration: sourceGeneration,
+		CalculationVersion: operationalCalculationVersion, Kind: "detail", RetentionStart: timestamp(*repaired.Generation.RetentionStart),
+		EvaluatedThrough: timestamp(repaired.EffectiveAt), RangeStart: timestamp(repaired.Range.RequestedStart),
+		RangeEnd: timestamp(repaired.Range.RequestedEnd), BurnWindowSeconds: 3600, NextAttemptAt: timestamp(clock())}); err != nil {
+		t.Fatal(err)
 	}
 	var jobID pgtype.UUID
 	if err := conn.QueryRow(t.Context(), `UPDATE public.almanac_slo_history_jobs SET state='running',attempts=5,lease_until=$2 WHERE slo_id=$1 RETURNING id`, pgID, clock().Add(-time.Second)).Scan(&jobID); err != nil {
@@ -104,8 +149,12 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if err := runtime.prepareNextHistory(t.Context(), clock); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadSloOperationalDetail(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedFailed) {
-		t.Fatalf("last-attempt crash did not become an exhausted error: %v", err)
+	state, err := ReadSloPreparation(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: proof, ID: id, Now: clock})
+	if err != nil || len(state.Items) == 0 || state.Items[0].State != "failed" {
+		t.Fatalf("last-attempt crash did not remain an explicit exhausted job: %v", err)
+	}
+	if _, err := ReadSloOperationalDetail(t.Context(), databaseURL, input); err != nil {
+		t.Fatalf("failed explicit background job blocked maintained history: %v", err)
 	}
 	retry := RetrySloPreparationInput{Runtime: runtime, Proof: proof, SloID: id, JobID: jobID.String(), RequestID: "derived-manual-retry", Now: clock}
 	if err := RetrySloPreparation(t.Context(), databaseURL, retry); err != nil {
@@ -121,9 +170,10 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if err := runtime.prepareNextHistory(t.Context(), clock); err != nil {
 		t.Fatal(err)
 	}
-	repaired, err := ReadSloOperationalDetail(t.Context(), databaseURL, input)
-	if err != nil || repaired.Generation == nil || repaired.Generation.GenerationId == prepared.Generation.GenerationId {
-		t.Fatalf("corrupt history was not replaced by a new complete generation: %v", err)
+	verifyDerivedBlockFences(t, runtime, databaseURL, id, clock)
+	repaired, err = ReadSloOperationalDetail(t.Context(), databaseURL, input)
+	if err != nil || repaired.Generation == nil {
+		t.Fatalf("history was unavailable after explicit job recovery: %v", err)
 	}
 	// A refreshed display name is not a new measurement/definition revision.
 	if _, _, err := UpdateObjectiveMetadata(t.Context(), databaseURL, proof, id, "Renamed objective", "derived-rename", 1, clock, true); err != nil {
@@ -139,7 +189,6 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatalf("cached history hid mutable display metadata: %v", err)
 	}
 	// Ensure failures cannot be retried forever merely because ingestion advances.
-	q := dbgen.New(conn)
 	for range 5 {
 		if err := q.RecordCurrentPreparationFailure(t.Context(), dbgen.RecordCurrentPreparationFailureParams{SloID: pgID,
 			DefinitionRevision: 1, MeasurementRevision: 1, CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock())}); err != nil {
@@ -154,6 +203,55 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatal(err)
 	}
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
+}
+
+func verifyRetainedSelectedValues(t *testing.T, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, value api.SloOperationalDetail) {
+	t.Helper()
+	canonical := make(map[time.Time]api.SloOperationalDetail)
+	cadence := time.Duration(value.Objective.CadenceSeconds) * time.Second
+	for name, samples := range map[string][]api.SloOperationalSample{
+		"attainment": value.AttainmentSeries.Samples, "budget": value.BudgetSeries.Samples, "burn": value.BurnSeries.Samples,
+	} {
+		if len(samples) == 0 || len(samples) > sloOperationalSeriesLimit {
+			t.Fatalf("%s history is empty or exceeds its bound", name)
+		}
+		for index, sample := range samples {
+			at := sample.EvaluationAt
+			if at.Before(value.Range.RequestedStart) || at.After(value.Range.RequestedEnd) || index > 0 && !samples[index-1].EvaluationAt.Before(at) ||
+				sample.BucketStart.Before(value.Range.RequestedStart) || sample.BucketEnd.After(value.Range.RequestedEnd) ||
+				at.Before(sample.BucketStart) || at.After(sample.BucketEnd) {
+				t.Fatalf("%s selected point lost its requested bounds or ordering", name)
+			}
+			oracle, exists := canonical[at]
+			if !exists {
+				from := at.Add(-cadence)
+				var err error
+				oracle, err = ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
+					Now: clock, At: &at, Start: &from, End: &at, BurnWindow: 3600})
+				if err != nil || len(oracle.AttainmentSeries.Samples) != 1 {
+					t.Fatalf("canonical selected-point evaluation: %v", err)
+				}
+				canonical[at] = oracle
+			}
+			var want api.SloOperationalSample
+			switch name {
+			case "attainment":
+				want = oracle.AttainmentSeries.Samples[0]
+			case "budget":
+				want = retainedWindowSample(at, oracle.Current.Quality, oracle.Current.Performance, value.Objective.DefinitionRevision)
+			case "burn":
+				burn := oracle.Burn1h
+				if value.BurnSeries.BurnWindowSeconds != nil && *value.BurnSeries.BurnWindowSeconds == 21600 {
+					burn = oracle.Burn6h
+				}
+				want = retainedWindowSample(at, burn.Quality, burn.Performance, value.Objective.DefinitionRevision)
+			}
+			want.BucketStart, want.BucketEnd, want.RetainedExtrema = sample.BucketStart, sample.BucketEnd, sample.RetainedExtrema
+			if !reflect.DeepEqual(sample, want) {
+				t.Fatalf("%s exact selected point differs from canonical at %s", name, at)
+			}
+		}
+	}
 }
 
 func verifyReadinessAdmission(t *testing.T, runtime *Runtime) {

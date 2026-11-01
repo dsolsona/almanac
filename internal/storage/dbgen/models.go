@@ -303,14 +303,6 @@ type AlmanacSliDeliveryReceipt struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
-type AlmanacSliDirtyInterval struct {
-	SliID               pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	IntervalStart       pgtype.Timestamptz `json:"interval_start"`
-	IntervalEnd         pgtype.Timestamptz `json:"interval_end"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-}
-
 type AlmanacSliExecutionAttempt struct {
 	AgentID             pgtype.UUID        `json:"agent_id"`
 	ExecutionID         pgtype.UUID        `json:"execution_id"`

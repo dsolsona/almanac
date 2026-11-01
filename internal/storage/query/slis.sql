@@ -374,11 +374,6 @@ INSERT INTO public.almanac_sli_observation_values(
     interval_start, sli_id, measurement_revision, good_count, total_count
 ) VALUES ($1, $2, $3, sqlc.arg(good_count)::text::numeric(38,12), sqlc.arg(total_count)::text::numeric(38,12));
 
--- name: InsertSliDirtyInterval :exec
-INSERT INTO public.almanac_sli_dirty_intervals(sli_id, measurement_revision, interval_start, interval_end, created_at)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (sli_id, measurement_revision, interval_start) DO NOTHING;
-
 -- name: InsertSliDeliveryReceipt :exec
 INSERT INTO public.almanac_sli_delivery_receipts(
     delivery_id, payload_digest, sli_id, measurement_revision, interval_start,

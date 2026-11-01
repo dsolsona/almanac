@@ -287,10 +287,11 @@ func derivedFailureCode(err error) string {
 	return "history_preparation_failed"
 }
 
-// loadOrQueueSloHistory never evaluates observations. The caller commits admitted
-// preparation before returning pending, preserving per-request authorization.
-func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, input OperationalDetailInput) (result api.SloOperationalDetail, found bool, resultErr error) {
+// Response generations pin exact tables. A cache miss composes maintained series
+// and bounded edges synchronously; normal navigation never admits graph jobs.
+func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, input OperationalDetailInput) (result api.SloOperationalDetail, resultErr error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "slo.history.read")
+	found := false
 	defer func() {
 		state := "not_cached"
 		if found {
@@ -299,20 +300,20 @@ func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 		span.SetAttributes(attribute.Bool("almanac.cache.hit", found))
 		finishDerivedTrace(ctx, span, resultErr, state)
 	}()
-	kind := "detail"
+	kind := "retained_detail"
 	if input.overviewOnly {
 		kind = "overview"
 	}
 	bound, err := resolveOperationalBounds(input, time.Duration(row.CadenceSeconds)*time.Second)
 	if err != nil {
-		return api.SloOperationalDetail{}, false, err
+		return api.SloOperationalDetail{}, err
 	}
 	span.SetAttributes(attribute.Int64("almanac.range.seconds", int64(bound.end.Sub(bound.start)/time.Second)), attribute.Int("almanac.burn.window_seconds", input.BurnWindow))
 	sourceGeneration, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
 	if errors.Is(err, pgx.ErrNoRows) {
 		sourceGeneration = 0
 	} else if err != nil {
-		return api.SloOperationalDetail{}, false, err
+		return api.SloOperationalDetail{}, err
 	}
 	retention := timestamp(ceilSliBoundary(normalizedAgentNow(input.Now).Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
 	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(normalizedAgentNow(input.Now)), RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
@@ -326,49 +327,42 @@ func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 			result.Objective = sloRecordDTO(sloRecord(row))
 			result.RequestedAt = bound.requestedAt
 			result.Current.Window.RequestedStart = bound.requestedAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
-			return result, true, nil
+			found = true
+			return result, nil
 		}
 		if _, err := q.DeleteCorruptPreparedSloHistory(ctx, cached.GenerationID); err != nil {
-			return api.SloOperationalDetail{}, false, err
+			return api.SloOperationalDetail{}, err
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return api.SloOperationalDetail{}, false, err
+		return api.SloOperationalDetail{}, err
 	}
 	input.Runtime.metrics.historyMisses.Add(1)
-	failed, err := hasFailedSourceAt(ctx, q, row, normalizedAgentNow(input.Now), bound.effectiveAt)
+	now := normalizedAgentNow(input.Now)
+	input.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
+	result, err = buildSloOperationalDetail(ctx, q, row, source, input)
 	if err != nil {
-		return api.SloOperationalDetail{}, false, err
+		return api.SloOperationalDetail{}, err
 	}
-	if failed {
-		return api.SloOperationalDetail{}, false, ErrDerivedSourceFailed
-	}
-	if err := q.LockHistoryAdmission(ctx); err != nil {
-		return api.SloOperationalDetail{}, false, err
-	}
-	admissionContext, admission := telemetry.Tracer().Start(ctx, "derived.history.admit")
-	if admission.IsRecording() {
-		admission.SetAttributes(attribute.String("almanac.work.key", historyTraceKey(key)))
-	}
-	admitted, err := q.AdmitSloHistoryJob(admissionContext, dbgen.AdmitSloHistoryJobParams{RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
-		EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), NextAttemptAt: timestamp(normalizedAgentNow(input.Now))})
-	admissionResult := "not_inserted"
-	if admitted == 1 {
-		admissionResult = "admitted"
-	}
-	finishDerivedTrace(ctx, admission, err, admissionResult)
+	generationID, err := q.InsertDerivedGeneration(ctx, dbgen.InsertDerivedGenerationParams{SloID: row.ID,
+		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
+		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(now)})
 	if err != nil {
-		return api.SloOperationalDetail{}, false, err
+		return api.SloOperationalDetail{}, err
 	}
-	state, err := q.ReadSloHistoryPreparationState(ctx, dbgen.ReadSloHistoryPreparationStateParams{RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
-		SourceGeneration: sourceGeneration, EvaluatedThrough: key.EvaluatedThrough, RangeStart: key.RangeStart, RangeEnd: key.RangeEnd, BurnWindowSeconds: key.BurnWindowSeconds})
+	stamp := generationStamp(generationID, sourceGeneration, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion,
+		bound.effectiveAt, now, retention.Time)
+	result.Generation = &stamp
+	payload, err := json.Marshal(result)
 	if err != nil {
-		return api.SloOperationalDetail{}, false, err
+		return api.SloOperationalDetail{}, err
 	}
-	if state.Exhausted {
-		return api.SloOperationalDetail{}, false, ErrDerivedFailed
+	if len(payload) > 20<<20 {
+		return api.SloOperationalDetail{}, ErrOperationalResource
 	}
-	if !state.Queued {
-		return api.SloOperationalDetail{}, false, ErrOperationalResource
+	if err := q.InsertPreparedSloHistory(ctx, dbgen.InsertPreparedSloHistoryParams{GenerationID: generationID,
+		RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow),
+		Payload: payload, Kind: kind}); err != nil {
+		return api.SloOperationalDetail{}, err
 	}
-	return api.SloOperationalDetail{}, false, nil
+	return result, nil
 }

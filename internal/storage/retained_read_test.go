@@ -1,18 +1,24 @@
 package storage
 
 import (
+	"errors"
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/api"
+	"github.com/dsolsona/almanac/internal/slo"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
 
 func TestRetainedYearReadBoundsCoverageAndEdgeWork(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, offset := range []time.Duration{0, time.Second, 15*time.Minute + 15*time.Second, 23*time.Hour + 59*time.Minute} {
-		for _, duration := range []time.Duration{time.Minute, time.Hour, 7*24*time.Hour + 15*time.Minute, 365 * 24 * time.Hour} {
+		for _, duration := range []time.Duration{time.Minute, time.Hour, 7*24*time.Hour + 15*time.Minute, 28 * 24 * time.Hour, 90 * 24 * time.Hour, 365 * 24 * time.Hour} {
 			start := base.Add(offset)
 			end := start.Add(duration)
 			parts, err := retainedReadParts(start, end)
-			if err != nil || len(parts) > 413 || len(parts) == 0 {
+			if err != nil || len(parts) > 674 || len(parts) == 0 || duration == 365*24*time.Hour && len(parts) > 413 {
 				t.Fatalf("unbounded retained range: %d parts, %v", len(parts), err)
 			}
 			next, edges := start, 0
@@ -32,6 +38,65 @@ func TestRetainedYearReadBoundsCoverageAndEdgeWork(t *testing.T) {
 			}
 			if !next.Equal(end) || edges > 2 {
 				t.Fatal("retained read loses its end or requires unbounded raw edges")
+			}
+		}
+	}
+}
+
+func TestRetainedTileCannotHideCorruptionAsEmptyHistory(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := decodeRetainedTile([]byte(`{}`), retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600}, "1"); !errors.Is(err, ErrDerivedFailed) {
+		t.Fatal("corrupt empty tile was displayed as absent history")
+	}
+}
+
+func TestRetainedDisplayPreservesExtremaGapsAndYearBounds(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 17, 0, 0, time.UTC)
+	end := start.Add(365 * 24 * time.Hour)
+	var samples []api.SloOperationalSample
+	for index, offset := range []time.Duration{0, 10 * time.Minute, 20 * time.Minute, 40 * time.Minute, 60 * time.Minute, end.Sub(start)} {
+		value := api.SloOperationalSample{EvaluationAt: start.Add(offset), Revision: "1", State: "observed", Good: new("99"), Total: new("100"),
+			Quality: api.SloOperationalQuality{State: "complete", Freshness: "fresh"}}
+		if index == 1 {
+			value.Good = new("50")
+		}
+		if index == 2 {
+			value.State, value.Quality.State, value.Good, value.Total = "missing", "no_data", nil, nil
+		}
+		samples = append(samples, value)
+	}
+	before := append([]api.SloOperationalSample(nil), samples...)
+	selected, err := reduceRetainedDisplay(samples, start, end, "0.99", "budget", 375)
+	if err != nil || len(selected) != len(samples) {
+		t.Fatalf("display lost first/last, exact extremum or gap boundaries: %d, %v", len(selected), err)
+	}
+	for index, point := range selected {
+		if !point.EvaluationAt.Equal(samples[index].EvaluationAt) || point.BucketStart.Before(start) || point.BucketEnd.After(end) ||
+			point.EvaluationAt.Before(point.BucketStart) || point.EvaluationAt.After(point.BucketEnd) || !reflect.DeepEqual(point.Good, samples[index].Good) {
+			t.Fatal("display changed exact selected values or overflowed the year range")
+		}
+	}
+	if !reflect.DeepEqual(samples, before) {
+		t.Fatal("display reducer mutated retained tiles")
+	}
+}
+
+func TestRetainedBeforeValidityDoesNotBecomeMissingMeasurements(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	reader := retainedSeriesReader{row: dbgen.GetSloRow{Target: "0.99", DefinitionRevision: 1, RollingWindowSeconds: 86400}}
+	base := slo.WindowInput{Now: start.Add(48 * time.Hour), ValidFrom: start.Add(24 * time.Hour), SliValidFrom: start.Add(-24 * time.Hour),
+		RetentionStart: start.Add(-365 * 24 * time.Hour), Cadence: time.Minute, Target: "0.99", FreshnessGrace: 2 * time.Minute}
+	tile, err := reader.beforeValidity(t.Context(), base, retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lane := range [][]api.SloOperationalSample{tile.Attainment, tile.Budget, tile.Burn1h, tile.Burn6h} {
+		if len(lane) == 0 {
+			t.Fatal("before-validity region is invisible")
+		}
+		for _, point := range lane {
+			if point.Quality.State != "not_applicable" || point.Quality.ExpectedIntervals != 0 || point.Quality.MissingIntervals != 0 || point.Good != nil {
+				t.Fatal("before-validity region invented missing or successful measurements")
 			}
 		}
 	}

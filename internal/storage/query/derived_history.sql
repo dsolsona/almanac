@@ -28,7 +28,7 @@ SELECT g.id,g.source_generation,g.definition_revision,g.measurement_revision,
        ),'[]'::jsonb)::jsonb AS page_values
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
-WHERE g.slo_id=sqlc.arg(slo_id) AND g.id=sqlc.arg(generation_id) AND b.kind='detail'
+WHERE g.slo_id=sqlc.arg(slo_id) AND g.id=sqlc.arg(generation_id) AND b.kind IN ('detail','retained_detail')
   AND g.published_at>=sqlc.arg(now)::timestamptz-interval '5 minutes'
   AND b.payload_digest=sha256(convert_to(b.payload::text,'UTF8'))
   AND g.calculation_version=sqlc.arg(calculation_version);

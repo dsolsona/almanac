@@ -12,7 +12,6 @@ import (
 
 type Querier interface {
 	AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDerivedBatchParams) error
-	AcknowledgeDerivedDirtyRange(ctx context.Context, arg AcknowledgeDerivedDirtyRangeParams) (int64, error)
 	AcknowledgeRetainedTileWork(ctx context.Context, arg AcknowledgeRetainedTileWorkParams) (int64, error)
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
@@ -32,7 +31,6 @@ type Querier interface {
 	BudgetPreparationExhausted(ctx context.Context, arg BudgetPreparationExhaustedParams) (bool, error)
 	BumpDatasourceVersion(ctx context.Context, arg BumpDatasourceVersionParams) (AlmanacDatasource, error)
 	ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDirtyBatchParams) ([]AlmanacDerivedDirtyRange, error)
-	ClaimDerivedDirtyRange(ctx context.Context, arg ClaimDerivedDirtyRangeParams) (AlmanacDerivedDirtyRange, error)
 	ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetainedSeriesRepairParams) (AlmanacSloSeriesRepair, error)
 	ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTileWorkParams) (AlmanacSloSeriesTileWork, error)
 	ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error)
@@ -76,7 +74,6 @@ type Querier interface {
 	ExhaustExpiredSloHistoryJobs(ctx context.Context, leaseUntil pgtype.Timestamptz) (int64, error)
 	ExtendRetainedSeriesRepair(ctx context.Context, arg ExtendRetainedSeriesRepairParams) error
 	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
-	FailDerivedDirtyRange(ctx context.Context, arg FailDerivedDirtyRangeParams) (int64, error)
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
 	FailRetainedSeriesRepair(ctx context.Context, arg FailRetainedSeriesRepairParams) error
 	FailRetainedTileWork(ctx context.Context, arg FailRetainedTileWorkParams) error
@@ -150,7 +147,6 @@ type Querier interface {
 	InsertSliCoverage(ctx context.Context, arg InsertSliCoverageParams) error
 	InsertSliCreateReceipt(ctx context.Context, arg InsertSliCreateReceiptParams) error
 	InsertSliDeliveryReceipt(ctx context.Context, arg InsertSliDeliveryReceiptParams) error
-	InsertSliDirtyInterval(ctx context.Context, arg InsertSliDirtyIntervalParams) error
 	InsertSliExecutionAttempt(ctx context.Context, arg InsertSliExecutionAttemptParams) error
 	InsertSliMeasurement(ctx context.Context, arg InsertSliMeasurementParams) error
 	InsertSliObservationValue(ctx context.Context, arg InsertSliObservationValueParams) error
@@ -171,7 +167,6 @@ type Querier interface {
 	ListCurrentPreparationStates(ctx context.Context, arg ListCurrentPreparationStatesParams) ([]ListCurrentPreparationStatesRow, error)
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
-	ListDerivedHourlyCounts(ctx context.Context, arg ListDerivedHourlyCountsParams) ([]ListDerivedHourlyCountsRow, error)
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
 	ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error)
 	ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error)
@@ -236,15 +231,12 @@ type Querier interface {
 	ReadReusableSloBlocks(ctx context.Context, arg ReadReusableSloBlocksParams) ([]ReadReusableSloBlocksRow, error)
 	ReadSloHistoryPreparationState(ctx context.Context, arg ReadSloHistoryPreparationStateParams) (ReadSloHistoryPreparationStateRow, error)
 	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) error
-	RebuildDerivedHours(ctx context.Context, arg RebuildDerivedHoursParams) error
 	RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error)
 	RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
-	ReleaseDerivedDirtyRange(ctx context.Context, arg ReleaseDerivedDirtyRangeParams) (int64, error)
 	ReleaseRetainedTileWork(ctx context.Context, arg ReleaseRetainedTileWorkParams) error
 	ReleaseSloHistoryForDependencies(ctx context.Context, arg ReleaseSloHistoryForDependenciesParams) (int64, error)
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
-	RenewDerivedDirtyLease(ctx context.Context, arg RenewDerivedDirtyLeaseParams) (int64, error)
 	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
 	RetryCurrentSloPreparation(ctx context.Context, arg RetryCurrentSloPreparationParams) (int64, error)
 	RetryFailedSloHistoryJob(ctx context.Context, arg RetryFailedSloHistoryJobParams) (int64, error)

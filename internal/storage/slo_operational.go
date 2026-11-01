@@ -88,6 +88,7 @@ type OperationalOverviewInput struct {
 
 type OperationalDetailInput struct {
 	displayCache   *sloDisplayCache
+	retainedReader *retainedSeriesReader
 	currentOnly    bool
 	overviewOnly   bool
 	Runtime        *Runtime
@@ -142,10 +143,9 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 		return api.SloOperationalDetail{}, ErrObjectiveInvalid
 	}
 	var result api.SloOperationalDetail
-	prepared := true
 	if input.Runtime != nil {
-		result, prepared, err = loadOrQueueSloHistory(ctx, q, row, input)
-		if err == nil && prepared {
+		result, err = loadRetainedSloHistory(ctx, q, row, contextRow, input)
+		if err == nil {
 			result.Context.SliDisplayName = contextRow.SliDisplayName
 			result.Context.DatasourceDisplayName = contextRow.DatasourceDisplayName
 		}
@@ -157,9 +157,6 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalDetail{}, err
-	}
-	if !prepared {
-		return api.SloOperationalDetail{}, ErrDerivedPending
 	}
 	return result, nil
 }
@@ -1503,7 +1500,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	factStart := operationalFactsStart(effectiveAt, window, 6*time.Hour,
 		rangeStart, window, time.Duration(input.BurnWindow)*time.Second, row.EvaluationValidFrom.Time.UTC(), row.SliValidFrom.Time.UTC(), retentionStart, cadence)
 	var rows []slo.Observation
-	if !input.currentOnly && input.displayCache == nil {
+	if !input.currentOnly && input.displayCache == nil && input.retainedReader == nil {
 		loaded, factsCount, loadErr := loadOperationalFacts(ctx, q, operationalStreamKey(row.SliID.String(), row.MeasurementRevision), operationalStream{cadence: row.CadenceSeconds}, factStart, effectiveAt, sloOperationalFactsLimit+1)
 		if loadErr != nil {
 			return api.SloOperationalDetail{}, loadErr
@@ -1521,6 +1518,9 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	if input.displayCache != nil {
 		rolling, attainment, daily = input.displayCache.rolling, input.displayCache.attainment, input.displayCache.daily
 	}
+	if input.retainedReader != nil {
+		rolling, attainment, daily = input.retainedReader.rolling, input.retainedReader.attainment, input.retainedReader.daily
+	}
 	if input.overviewOnly {
 		samples, err := rolling(ctx, base, rangeStart, rangeEnd, window, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", 30)
 		if err != nil {
@@ -1530,7 +1530,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 			BudgetSeries: api.SloOperationalSeries{Kind: "rolling_budget", Samples: samples}}, nil
 	}
 	evaluate := func(at time.Time, duration time.Duration) (slo.WindowResult, error) {
-		if !input.currentOnly && input.displayCache == nil {
+		if !input.currentOnly && input.displayCache == nil && input.retainedReader == nil {
 			return evaluateOperationalAt(ctx, base, at, duration)
 		}
 		value := base

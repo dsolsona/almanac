@@ -226,12 +226,6 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 				return result, operationError(ctx, "storage: SLI values insert failed", err)
 			}
 		}
-		if err := state.queries.InsertSliDirtyInterval(ctx, dbgen.InsertSliDirtyIntervalParams{
-			SliID: sliID, MeasurementRevision: measurementRevision, IntervalStart: timestamp(item.IntervalStart),
-			IntervalEnd: intervalEnd, CreatedAt: timestamp(now),
-		}); err != nil {
-			return result, operationError(ctx, "storage: SLI dirty interval insert failed", err)
-		}
 	}
 	if err := state.queries.InsertSliDeliveryReceipt(ctx, dbgen.InsertSliDeliveryReceiptParams{
 		DeliveryID: deliveryID, PayloadDigest: payloadDigest[:], SliID: sliID, MeasurementRevision: measurementRevision,
