@@ -13,6 +13,7 @@ import (
 type Querier interface {
 	AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDerivedBatchParams) error
 	AcknowledgeDerivedDirtyRange(ctx context.Context, arg AcknowledgeDerivedDirtyRangeParams) (int64, error)
+	AcknowledgeRetainedTileWork(ctx context.Context, arg AcknowledgeRetainedTileWorkParams) (int64, error)
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
 	AdmitSloHistoryJob(ctx context.Context, arg AdmitSloHistoryJobParams) (int64, error)
@@ -31,6 +32,7 @@ type Querier interface {
 	BumpDatasourceVersion(ctx context.Context, arg BumpDatasourceVersionParams) (AlmanacDatasource, error)
 	ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDirtyBatchParams) ([]AlmanacDerivedDirtyRange, error)
 	ClaimDerivedDirtyRange(ctx context.Context, arg ClaimDerivedDirtyRangeParams) (AlmanacDerivedDirtyRange, error)
+	ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTileWorkParams) (AlmanacSloSeriesTileWork, error)
 	ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error)
 	ClearCurrentPreparationFailure(ctx context.Context, sloID pgtype.UUID) error
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)
@@ -44,6 +46,7 @@ type Querier interface {
 	// Waiting on source work is schedulable state, not a failed calculation attempt.
 	// Preserve an existing failure budget for this revision instead of resetting it.
 	DeferCurrentPreparation(ctx context.Context, arg DeferCurrentPreparationParams) error
+	DeferRetainedTileWork(ctx context.Context, arg DeferRetainedTileWorkParams) error
 	DeleteAcknowledgedAgentHandoffConfiguration(ctx context.Context, arg DeleteAcknowledgedAgentHandoffConfigurationParams) (int64, error)
 	DeleteAgentIncompatibleAttempt(ctx context.Context, agentID pgtype.UUID) error
 	DeleteCorruptPreparedSloHistory(ctx context.Context, generationID pgtype.UUID) (int64, error)
@@ -71,6 +74,7 @@ type Querier interface {
 	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
 	FailDerivedDirtyRange(ctx context.Context, arg FailDerivedDirtyRangeParams) (int64, error)
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
+	FailRetainedTileWork(ctx context.Context, arg FailRetainedTileWorkParams) error
 	FailSloHistoryJob(ctx context.Context, arg FailSloHistoryJobParams) (int64, error)
 	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
@@ -207,13 +211,16 @@ type Querier interface {
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishRetainedSloPoint(ctx context.Context, arg PublishRetainedSloPointParams) (int64, error)
+	PublishRetainedTile(ctx context.Context, arg PublishRetainedTileParams) (int64, error)
 	QueueVisibleBudgetHistory(ctx context.Context, arg QueueVisibleBudgetHistoryParams) (int64, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
+	ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error)
 	ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloPointParams) (ReadRetainedSloPointRow, error)
+	ReadRetainedTilePoints(ctx context.Context, arg ReadRetainedTilePointsParams) ([]ReadRetainedTilePointsRow, error)
 	ReadReusableSloBlocks(ctx context.Context, arg ReadReusableSloBlocksParams) ([]ReadReusableSloBlocksRow, error)
 	ReadSloHistoryPreparationState(ctx context.Context, arg ReadSloHistoryPreparationStateParams) (ReadSloHistoryPreparationStateRow, error)
 	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) error
@@ -222,6 +229,7 @@ type Querier interface {
 	RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
 	ReleaseDerivedDirtyRange(ctx context.Context, arg ReleaseDerivedDirtyRangeParams) (int64, error)
+	ReleaseRetainedTileWork(ctx context.Context, arg ReleaseRetainedTileWorkParams) error
 	ReleaseSloHistoryForDependencies(ctx context.Context, arg ReleaseSloHistoryForDependenciesParams) (int64, error)
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
 	RenewDerivedDirtyLease(ctx context.Context, arg RenewDerivedDirtyLeaseParams) (int64, error)

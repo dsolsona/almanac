@@ -78,6 +78,15 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 	ticks := time.NewTicker(time.Second)
 	defer ticks.Stop()
 	for {
+		seriesWorked, seriesErr := r.prepareRetainedTile(ctx, time.Now)
+		if seriesErr != nil && ctx.Err() == nil {
+			r.metrics.preparationErrors[1].Add(1)
+			logger.ErrorContext(ctx, "retained SLO tile preparation failed")
+		}
+		if seriesWorked && seriesErr == nil && ctx.Err() == nil {
+			r.metrics.historyJobs.Add(1)
+			continue
+		}
 		worked := false
 		err := r.prepareHistory(ctx, time.Now, &worked)
 		if err != nil && !errors.Is(err, ErrDerivedPending) && ctx.Err() == nil {

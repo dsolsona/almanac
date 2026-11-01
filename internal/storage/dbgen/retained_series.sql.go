@@ -11,7 +11,108 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acknowledgeRetainedTileWork = `-- name: AcknowledgeRetainedTileWork :execrows
+DELETE FROM public.almanac_slo_series_tile_work WHERE id=$1 AND version=$2 AND lease_epoch=$3
+`
+
+type AcknowledgeRetainedTileWorkParams struct {
+	ID         pgtype.UUID `json:"id"`
+	Version    int64       `json:"version"`
+	LeaseEpoch int64       `json:"lease_epoch"`
+}
+
+func (q *Queries) AcknowledgeRetainedTileWork(ctx context.Context, arg AcknowledgeRetainedTileWorkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, acknowledgeRetainedTileWork, arg.ID, arg.Version, arg.LeaseEpoch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const claimRetainedTileWork = `-- name: ClaimRetainedTileWork :one
+WITH candidate AS (
+    SELECT id FROM public.almanac_slo_series_tile_work
+    WHERE attempts<5 AND next_attempt_at<=$2::timestamptz
+      AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
+    ORDER BY next_attempt_at,resolution_seconds,range_start DESC,id
+    LIMIT 1 FOR UPDATE SKIP LOCKED
+)
+UPDATE public.almanac_slo_series_tile_work w
+SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
+FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.exclusion_revision, w.calculation_version, w.resolution_seconds, w.range_start, w.range_end, w.version, w.source_generation, w.next_attempt_at, w.attempts, w.lease_epoch, w.lease_until, w.last_error, w.manual_retried_at
+`
+
+type ClaimRetainedTileWorkParams struct {
+	LeaseUntil pgtype.Timestamptz `json:"lease_until"`
+	Now        pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTileWorkParams) (AlmanacSloSeriesTileWork, error) {
+	row := q.db.QueryRow(ctx, claimRetainedTileWork, arg.LeaseUntil, arg.Now)
+	var i AlmanacSloSeriesTileWork
+	err := row.Scan(
+		&i.ID,
+		&i.SloID,
+		&i.DefinitionRevision,
+		&i.MeasurementRevision,
+		&i.ExclusionRevision,
+		&i.CalculationVersion,
+		&i.ResolutionSeconds,
+		&i.RangeStart,
+		&i.RangeEnd,
+		&i.Version,
+		&i.SourceGeneration,
+		&i.NextAttemptAt,
+		&i.Attempts,
+		&i.LeaseEpoch,
+		&i.LeaseUntil,
+		&i.LastError,
+		&i.ManualRetriedAt,
+	)
+	return i, err
+}
+
+const deferRetainedTileWork = `-- name: DeferRetainedTileWork :exec
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$3
+WHERE id=$1 AND lease_epoch=$2
+`
+
+type DeferRetainedTileWorkParams struct {
+	ID            pgtype.UUID        `json:"id"`
+	LeaseEpoch    int64              `json:"lease_epoch"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+}
+
+func (q *Queries) DeferRetainedTileWork(ctx context.Context, arg DeferRetainedTileWorkParams) error {
+	_, err := q.db.Exec(ctx, deferRetainedTileWork, arg.ID, arg.LeaseEpoch, arg.NextAttemptAt)
+	return err
+}
+
+const failRetainedTileWork = `-- name: FailRetainedTileWork :exec
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,
+    next_attempt_at=$3::timestamptz+power(2,LEAST(attempts,5))*interval '1 second',last_error=$4
+WHERE id=$1 AND lease_epoch=$2
+`
+
+type FailRetainedTileWorkParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	LeaseEpoch int64              `json:"lease_epoch"`
+	Column3    pgtype.Timestamptz `json:"column_3"`
+	LastError  pgtype.Text        `json:"last_error"`
+}
+
+func (q *Queries) FailRetainedTileWork(ctx context.Context, arg FailRetainedTileWorkParams) error {
+	_, err := q.db.Exec(ctx, failRetainedTileWork,
+		arg.ID,
+		arg.LeaseEpoch,
+		arg.Column3,
+		arg.LastError,
+	)
+	return err
+}
+
 const publishRetainedSloPoint = `-- name: PublishRetainedSloPoint :execrows
+WITH accepted AS (
 INSERT INTO public.almanac_slo_series_points
     (slo_id,definition_revision,measurement_revision,calculation_version,evaluation_at,
      source_generation,published_at,payload)
@@ -19,6 +120,23 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,evaluation_at)
 DO UPDATE SET source_generation=EXCLUDED.source_generation,published_at=EXCLUDED.published_at,payload=EXCLUDED.payload
 WHERE almanac_slo_series_points.source_generation<EXCLUDED.source_generation
+RETURNING slo_id,definition_revision,measurement_revision,calculation_version,evaluation_at,source_generation,published_at
+), resolutions AS (
+    SELECT 3600::integer AS seconds UNION ALL SELECT 86400::integer
+), wanted AS (
+    SELECT a.slo_id, a.definition_revision, a.measurement_revision, a.calculation_version, a.evaluation_at, a.source_generation, a.published_at,r.seconds,
+           to_timestamp(floor((extract(epoch FROM a.evaluation_at)-0.000001)/r.seconds)*r.seconds) AS start_at
+    FROM accepted a CROSS JOIN resolutions r
+)
+INSERT INTO public.almanac_slo_series_tile_work
+    (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at)
+SELECT slo_id,definition_revision,measurement_revision,calculation_version,seconds,start_at,start_at+seconds*interval '1 second',source_generation,
+       CASE WHEN seconds=86400 THEN GREATEST(published_at,start_at+interval '1 day') ELSE published_at END
+FROM wanted
+ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
+DO UPDATE SET version=almanac_slo_series_tile_work.version+1,
+              source_generation=GREATEST(almanac_slo_series_tile_work.source_generation,EXCLUDED.source_generation),
+              next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at)
 `
 
 type PublishRetainedSloPointParams struct {
@@ -47,6 +165,105 @@ func (q *Queries) PublishRetainedSloPoint(ctx context.Context, arg PublishRetain
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const publishRetainedTile = `-- name: PublishRetainedTile :execrows
+INSERT INTO public.almanac_slo_series_tiles
+    (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at)
+SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,w.resolution_seconds,w.range_start,w.range_end,w.source_generation,
+       $1::integer,$2::jsonb,$3::timestamptz
+FROM public.almanac_slo_series_tile_work w
+WHERE w.id=$4 AND w.version=$5 AND w.lease_epoch=$6
+ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
+DO UPDATE SET source_generation=EXCLUDED.source_generation,point_count=EXCLUDED.point_count,
+              payload=EXCLUDED.payload,published_at=EXCLUDED.published_at
+WHERE almanac_slo_series_tiles.published_at<=EXCLUDED.published_at
+`
+
+type PublishRetainedTileParams struct {
+	PointCount  int32              `json:"point_count"`
+	Payload     []byte             `json:"payload"`
+	PublishedAt pgtype.Timestamptz `json:"published_at"`
+	ID          pgtype.UUID        `json:"id"`
+	Version     int64              `json:"version"`
+	LeaseEpoch  int64              `json:"lease_epoch"`
+}
+
+func (q *Queries) PublishRetainedTile(ctx context.Context, arg PublishRetainedTileParams) (int64, error) {
+	result, err := q.db.Exec(ctx, publishRetainedTile,
+		arg.PointCount,
+		arg.Payload,
+		arg.PublishedAt,
+		arg.ID,
+		arg.Version,
+		arg.LeaseEpoch,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const readRetainedSeriesTiles = `-- name: ReadRetainedSeriesTiles :many
+SELECT range_start,range_end,source_generation,point_count,payload,published_at
+FROM public.almanac_slo_series_tiles
+WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND exclusion_revision=0
+  AND calculation_version=$4 AND resolution_seconds=$5 AND range_start >= $6 AND range_end <= $7
+ORDER BY range_start LIMIT 1000
+`
+
+type ReadRetainedSeriesTilesParams struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	ResolutionSeconds   int32              `json:"resolution_seconds"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+}
+
+type ReadRetainedSeriesTilesRow struct {
+	RangeStart       pgtype.Timestamptz `json:"range_start"`
+	RangeEnd         pgtype.Timestamptz `json:"range_end"`
+	SourceGeneration int64              `json:"source_generation"`
+	PointCount       int32              `json:"point_count"`
+	Payload          []byte             `json:"payload"`
+	PublishedAt      pgtype.Timestamptz `json:"published_at"`
+}
+
+func (q *Queries) ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error) {
+	rows, err := q.db.Query(ctx, readRetainedSeriesTiles,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+		arg.ResolutionSeconds,
+		arg.RangeStart,
+		arg.RangeEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadRetainedSeriesTilesRow{}
+	for rows.Next() {
+		var i ReadRetainedSeriesTilesRow
+		if err := rows.Scan(
+			&i.RangeStart,
+			&i.RangeEnd,
+			&i.SourceGeneration,
+			&i.PointCount,
+			&i.Payload,
+			&i.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const readRetainedSloPoint = `-- name: ReadRetainedSloPoint :one
@@ -81,4 +298,69 @@ func (q *Queries) ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloP
 	var i ReadRetainedSloPointRow
 	err := row.Scan(&i.SourceGeneration, &i.PublishedAt, &i.Payload)
 	return i, err
+}
+
+const readRetainedTilePoints = `-- name: ReadRetainedTilePoints :many
+SELECT evaluation_at,source_generation,payload
+FROM public.almanac_slo_series_points
+WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3
+  AND exclusion_revision=0 AND calculation_version=$4 AND evaluation_at>$5 AND evaluation_at<=$6
+ORDER BY evaluation_at LIMIT 5761
+`
+
+type ReadRetainedTilePointsParams struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	EvaluationAt        pgtype.Timestamptz `json:"evaluation_at"`
+	EvaluationAt_2      pgtype.Timestamptz `json:"evaluation_at_2"`
+}
+
+type ReadRetainedTilePointsRow struct {
+	EvaluationAt     pgtype.Timestamptz `json:"evaluation_at"`
+	SourceGeneration int64              `json:"source_generation"`
+	Payload          []byte             `json:"payload"`
+}
+
+func (q *Queries) ReadRetainedTilePoints(ctx context.Context, arg ReadRetainedTilePointsParams) ([]ReadRetainedTilePointsRow, error) {
+	rows, err := q.db.Query(ctx, readRetainedTilePoints,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+		arg.EvaluationAt,
+		arg.EvaluationAt_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadRetainedTilePointsRow{}
+	for rows.Next() {
+		var i ReadRetainedTilePointsRow
+		if err := rows.Scan(&i.EvaluationAt, &i.SourceGeneration, &i.Payload); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const releaseRetainedTileWork = `-- name: ReleaseRetainedTileWork :exec
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=0,last_error=NULL
+WHERE id=$1 AND lease_epoch=$2
+`
+
+type ReleaseRetainedTileWorkParams struct {
+	ID         pgtype.UUID `json:"id"`
+	LeaseEpoch int64       `json:"lease_epoch"`
+}
+
+func (q *Queries) ReleaseRetainedTileWork(ctx context.Context, arg ReleaseRetainedTileWorkParams) error {
+	_, err := q.db.Exec(ctx, releaseRetainedTileWork, arg.ID, arg.LeaseEpoch)
+	return err
 }

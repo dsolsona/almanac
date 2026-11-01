@@ -28,6 +28,7 @@ sql:
       - internal/storage/migrations/0022_derived_operational_data.sql
       - internal/storage/migrations/0023_history_admission_fence.sql
       - internal/storage/migrations/0024_retained_slo_points.sql
+      - internal/storage/migrations/0025_retained_slo_tiles.sql
     gen:
       go:
         package: dbgen
