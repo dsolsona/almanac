@@ -11,9 +11,11 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type CurrentSloInput struct {
@@ -147,7 +149,9 @@ func overviewPreparationError(ctx context.Context, q *dbgen.Queries, ids []pgtyp
 	return ErrDerivedPending
 }
 
-func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() time.Time) error {
+func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() time.Time) (resultErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "derived.current.scan")
+	defer func() { finishDerivedTrace(ctx, span, resultErr, "scanned") }()
 	conn, err := r.Acquire(ctx, DerivedTraffic)
 	if err != nil {
 		return err
@@ -157,6 +161,7 @@ func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() ti
 	if err != nil {
 		return err
 	}
+	span.SetAttributes(attribute.Int("almanac.batch.count", len(ids)))
 	var failures []error
 	for _, id := range ids {
 		if ctx.Err() != nil {
@@ -170,6 +175,8 @@ func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() ti
 }
 
 func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, clock func() time.Time) (resultErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "derived.current.evaluate")
+	defer func() { finishDerivedTrace(ctx, span, resultErr, "published") }()
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, err := r.Acquire(bounded, DerivedTraffic)

@@ -23,6 +23,12 @@ Prometheus SLIs while deferring direct external submission for further resource-
 review. F2 remains incomplete; this sequencing exception does not accept a change
 from the existing external-SLI contract. Backfill and repair remain in F4.
 
+> Accepted amendment, 2026-10-31: Every feature preserves exact calculations and
+> the action-specific journey limits in [SPEC-0019](0019-backend-performance-and-derived-data.md).
+> Capture real rendered journeys with OTEL/VictoriaTraces before claiming acceptance;
+> suite counts cannot substitute. Use focused risk-based checks during edits and
+> relevant broad database/Compose gates at completed candidates, reusing matching passes.
+
 ## Purpose
 
 Reach a working application through complete demonstrable increments. Specifications

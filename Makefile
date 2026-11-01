@@ -105,6 +105,10 @@ _verify_all:
 	$(MAKE) _verify_go
 
 _verify_web:
+	cd web && node --check scripts/check-telemetry-runtime.mjs
+	cd web && node --check scripts/check-local-compose.mjs
+	cd web && node --check scripts/check-slo-browser.mjs
+	cd web && node --check scripts/capture-telemetry-delivery.mjs
 	cd web && npm run typecheck
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts
 	cd web && npm run build

@@ -1,5 +1,42 @@
 # Delivery status
 
+The 2026-10-31 [performance and tracing intervention](plans/0023-performance-and-tracing-intervention.md)
+was accepted in Crit and takes priority over the previous
+execution order. The maintainer requires accurate calculations, < 1,000 ms
+SLI/SLO lists and < 500 ms detail/range actions at 10/100/1,000 SLOs, without normal navigation
+waiting for background jobs, plus OpenTelemetry journey traces in VictoriaTraces.
+Earlier checkpoints below do not establish those requirements. PR #48 remains
+under review; its four Greptile findings are included in the intervention plan.
+
+[ADR-0025](adr/0025-fast-operational-journeys-and-tracing.md) records the accepted
+decision. [F3-T09](tasks/F3-T09.md) is complete: tracing implementation, runtime
+acceptance and the evidence record are verified. Standard SDKs instrument
+browser/HTTP/auth/pool/query/calculation/background/agent/CLI paths, with bounded
+authenticated intake, private metadata, sampling and loss/error accounting.
+
+Final isolated Compose receipt `1793484914-6ddd827447044e8fa8c9aa9fa54d1579` passed
+in 576.381 seconds, including normal SLI/SLO journeys, collection, handoff, restart
+and cancellation cleanup. It captured 72 enabled/disabled document loads plus one
+post-minute detail load, unchanged canonical data, and three complete container
+traces. Observed detail p95 tracing delta is +1.67%; all measured journey deltas
+are within 5%. The large negative SLO-list delta reflects a retained preparation
+wait in the disabled sample, not evidence that instrumentation makes pages faster.
+Real exporter-outage evidence separately preserves correct visible values and a
+new canonical observation, with zero invalid values or sequence gaps.
+
+**Page-speed acceptance still fails.** At 4× CPU slowdown, 10 Mbps and 100 ms RTT,
+actual first-visit browser trace roots take 1,285.1 ms for SLIs, 1,617.9 ms for SLOs
+and 4,580.7 ms for details. The detail trace exposes about two seconds of foreground
+polling while individual server responses remain short. These are baseline
+measurements, not a 10/100/1,000-SLO/year-history capacity claim. Retention,
+pagination, retained series/read correction, scale acceptance and the four PR #48
+findings remain [F3-T08](tasks/F3-T08.md) work.
+
+Latest ordinary verification passes 335 web and 452 Go cases, types/build/generated
+checks and smoke. Earlier failed runtime attempts and all timing records are
+retained in F3-T09's evidence. Container verification used only its separate
+`18086` project; the operator preview's `18088/readyz` remains healthy.
+
 Feature implementation is paused by maintainer direction on 2026-10-30 pending
 backend stabilization. [ADR-0024](adr/0024-precomputed-operational-reads.md),
 [SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and the

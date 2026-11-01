@@ -7,8 +7,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // TrafficClass keeps interactive and background work out of live connection slots.
@@ -61,7 +64,7 @@ func OpenRuntime(ctx context.Context, databaseURL string) (*Runtime, error) {
 			runtime.Close()
 			return nil, err
 		}
-		config.ConnConfig.Tracer = runtimeQueryTracer{metrics: &runtime.metrics.queries[class]}
+		config.ConnConfig.Tracer = runtimeQueryTracer{metrics: &runtime.metrics.queries[class], class: trafficClassName(class)}
 		pool, err := pgxpool.NewWithConfig(ctx, config)
 		if err != nil {
 			runtime.Close()
@@ -131,6 +134,9 @@ func acquireConnection(ctx context.Context, databaseURL string, runtime *Runtime
 
 // Acquire has a finite admission wait even when the caller has no deadline.
 func (r *Runtime) Acquire(ctx context.Context, class TrafficClass) (*pgxpool.Conn, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "db.pool.acquire")
+	defer span.End()
+	span.SetAttributes(attribute.String("almanac.traffic.class", trafficClassName(class)))
 	if !r.compatible.Load() {
 		return nil, errors.New("storage: runtime schema is unavailable")
 	}
@@ -141,9 +147,17 @@ func (r *Runtime) Acquire(ctx context.Context, class TrafficClass) (*pgxpool.Con
 	defer cancel()
 	conn, err := r.pools[class].Acquire(bounded)
 	if err != nil {
+		span.SetStatus(codes.Error, "database admission failed")
 		return nil, operationError(bounded, "storage: database admission failed", err)
 	}
 	return conn, nil
+}
+
+func trafficClassName(class TrafficClass) string {
+	if class > DerivedTraffic {
+		return "invalid"
+	}
+	return [...]string{"live", "interactive", "derived"}[class]
 }
 
 // CheckReady refreshes the schema gate on health checks, rather than every read.

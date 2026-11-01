@@ -9,6 +9,7 @@ import { validateTimeline, type TimelineChart as TimelineChartData } from './tim
 import { TimelineChartHeader } from './TimelineChartHeader.tsx';
 import { buildTimelineOption, type TimelinePalette } from './timelineOption.ts';
 import './charts.css';
+import { traceChartRender } from '../../telemetry/client.ts';
 
 use([BarChart, LineChart, ScatterChart, AriaComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
@@ -41,7 +42,7 @@ export function TimelineChartView({ chart, showHeader = true }: { chart: Timelin
     instanceRef.current = instance;
     const update = () => {
       const latest = latestRef.current;
-      if (latest.model) instance.setOption(buildTimelineOption(latest.chart, latest.model, readTimelinePalette(),host.clientHeight), true);
+      if (latest.model) traceChartRender(() => instance.setOption(buildTimelineOption(latest.chart, latest.model!, readTimelinePalette(),host.clientHeight), true));
     };
     applyRef.current = update;
     update();

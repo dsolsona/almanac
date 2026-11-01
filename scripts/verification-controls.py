@@ -301,6 +301,7 @@ def execute(mode: str) -> int:
         raise ValueError("unknown fixed verification mode")
     kind, sources = MODES[mode]
     started = time.time()
+    started_monotonic = time.monotonic()
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(started))
     run_id = f"{stamp}-{uuid.uuid4().hex}"
     RECEIPTS.mkdir(parents=True, exist_ok=True)
@@ -457,6 +458,7 @@ def execute(mode: str) -> int:
     artifacts = [p.name for p in artifact_paths if p.is_file()]
     selected_items = list(WEB_TESTS) + list(GO_PACKAGES) if kind == "web" else (["scripts/tests/test_verification_controls.py"] if kind == "tools" else list(DB_TESTS[mode]))
     record = {"id": run_id, "mode": mode, "origin": str(ROOT), "fingerprint": before, "fingerprint_at_end": after, "started_unix": started, "ended_unix": ended, "elapsed_seconds": ended-started, "exit_code": status, "result": "passed" if status == 0 else "failed", "selected_count": selected, "executed_count": executed, "selected_count_kind": "test-cases", "selected": selected_items, "artifacts": artifacts, "receipt": receipt.name, "limitations": "Local filesystem evidence; not tamper-proof."}
+    record.update(elapsed_evidence(started, ended, started_monotonic, time.monotonic()))
     # Immutable receipt creation; UUID collision is practically impossible and
     # O_EXCL makes the immutability guarantee explicit.
     atomic_json(receipt, record, immutable=True)
@@ -464,6 +466,15 @@ def execute(mode: str) -> int:
     refresh_timing_ledger_safely()
     print(json.dumps(record, sort_keys=True))
     return status
+
+
+def elapsed_evidence(started: float, ended: float, started_monotonic: float, ended_monotonic: float) -> dict:
+    """Keep UTC boundaries for correlation, monotonic time for actual duration."""
+    elapsed = ended_monotonic - started_monotonic
+    return {"started_monotonic": started_monotonic, "ended_monotonic": ended_monotonic,
+            "elapsed_seconds": elapsed, "elapsed_clock": "monotonic",
+            "wall_elapsed_seconds": ended - started,
+            "clock_adjustment_seconds": ended - started - elapsed}
 
 
 @contextmanager
@@ -522,6 +533,10 @@ def guard(action: str, args: argparse.Namespace | None = None) -> int:
             status = 1
         ended = time.time()
         pending.update({"ended_unix": ended, "elapsed_seconds": ended - pending["started_unix"], "fingerprint_at_end": end_fingerprint, "exit_code": status, "result": "passed" if status == 0 else "failed"})
+        if isinstance(pending.get("started_monotonic"), (int, float)):
+            pending.update(elapsed_evidence(pending["started_unix"], ended, pending["started_monotonic"], time.monotonic()))
+        else:
+            pending["elapsed_clock"] = "wall-legacy"
         atomic_json(RECEIPTS / f"{args.run_id}.json", pending, immutable=True)
         pending_file.unlink()
         refresh_timing_ledger_safely()
@@ -560,6 +575,7 @@ def guard(action: str, args: argparse.Namespace | None = None) -> int:
             run_id = f"{int(time.time())}-{uuid.uuid4().hex}"
         selectors, full_scope = effective_scope(gate)
         record = {"id": run_id, "mode": gate, "origin": str(ROOT), "fingerprint": broad_fingerprint(gate), "started_unix": time.time(), "exit_code": None, "result": "running", "selectors": selectors, "full_scope": full_scope, "artifacts": [f"{run_id}.log"]}
+        record["started_monotonic"] = time.monotonic()
         RECEIPTS.mkdir(parents=True, exist_ok=True)
         atomic_json(RECEIPTS / f"{run_id}.pending.json", record)
         print(run_id)
@@ -802,6 +818,9 @@ def timing_ledger(records: list[dict], generated_unix: float, unreadable_receipt
             "started_unix": start, "ended_unix": end, "result": result,
             "exit_code": record.get("exit_code"), "duration_status": "recorded" if duration_known else ("ongoing" if result == "running" else "unknown"),
             "elapsed_seconds": float(elapsed) if duration_known else None,
+            "elapsed_clock": record.get("elapsed_clock", "wall-legacy"),
+            "wall_elapsed_seconds": record.get("wall_elapsed_seconds"),
+            "clock_adjustment_seconds": record.get("clock_adjustment_seconds"),
             "observed_ongoing_seconds": observed if result == "running" else None,
             "selected_count": record.get("selected_count"), "executed_count": record.get("executed_count"),
             "selected": record.get("selected"), "selectors": record.get("selectors"),
@@ -830,7 +849,7 @@ def timing_ledger(records: list[dict], generated_unix: float, unreadable_receipt
         },
         "modes": {mode: {key: (round(value, 3) if key.endswith("seconds") else value) for key, value in sorted(stats.items())} for mode, stats in sorted(modes.items())},
         "ledger": ledger,
-        "timing_note": "Recorded elapsed is top-level verification invocation wall time, including preflight, startup/build, and cleanup. Nested commands are included in their parent invocation and are not added separately. Wall interval union counts overlapping top-level runs once; it is not test-only CPU time. Checks without receipts cannot be backfilled, and missing durations are unknown.",
+        "timing_note": "New receipts measure elapsed with a monotonic clock, including preflight, startup/build and cleanup; wall-legacy receipts retain their original UTC-based duration. UTC boundaries and clock adjustment are retained separately. Nested commands are included in their parent invocation and are not added separately. Wall interval union counts overlapping UTC intervals once, but clock steps can distort it; it is not reliable occupied time across a detected clock discontinuity, nor test-only CPU time. Checks without receipts cannot be backfilled, and missing durations are unknown.",
     }
 
 
@@ -843,7 +862,7 @@ def write_timing_ledger() -> tuple[dict, Path, Path]:
     lines = [
         "# Verification timing ledger", "",
         f"Generated: {summary['generated_utc']}", "",
-        "Recorded elapsed is top-level invocation wall time, including preflight/startup/build/cleanup. Nested commands count only in their parent. The wall interval union counts overlap once; it is not test-only CPU time. Checks without receipts and missing durations remain unknown.", "",
+        summary["timing_note"], "",
         f"Totals: {summary['totals']['runs']} runs; {summary['totals']['passed']} passed; {summary['totals']['failed']} failed; {summary['totals']['ongoing']} ongoing; {summary['totals']['unknown_duration_runs']} unknown duration.",
         f"Cumulative invocation elapsed: {summary['totals']['cumulative_invocation_seconds']:.2f}s; ongoing observed: {summary['totals']['ongoing_observed_seconds']:.2f}s; top-level wall interval union: {summary['totals']['top_level_wall_interval_union_seconds']:.2f}s.", "",
         "| Mode | Runs | Passed | Failed | Ongoing | Unknown duration | Invocation elapsed |",

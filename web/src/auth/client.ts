@@ -1,4 +1,5 @@
 import type { components } from '../api/generated.ts';
+import { traceJSON } from '../telemetry/client.ts';
 import { clearQueryCache } from '../queryCache.ts';
 
 export type AuthContext = components['schemas']['AuthResponse'];
@@ -113,7 +114,7 @@ async function readBytes(response: Response, signal: AbortSignal, maxBytes = MAX
 async function readBody(response: Response, signal: AbortSignal): Promise<unknown> {
   if (!response.body) throw new Error('invalid body');
   const bytes = await readBytes(response, signal);
-  return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  return traceJSON(response, new TextDecoder().decode(bytes));
 }
 
 function safeProblem(value: unknown): value is components['schemas']['Problem'] {

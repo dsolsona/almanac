@@ -92,6 +92,51 @@ an experimental Tempo-compatible API using **TraceQL**, including metrics querie
 its trace explorer is at `http://localhost:19428/select/vmui`. Availability of these
 containers does not yet provide a native trace provider.
 
+### Application tracing
+
+The Compose app exports OpenTelemetry spans to the local VictoriaTraces service
+at `http://victoriatraces:10428/insert/opentelemetry/v1/traces`. Browser spans use
+the authenticated same-origin `/api/v1/telemetry/traces` endpoint; they receive no
+exporter credentials. Intake limits and bounded queues protect ordinary requests
+when the trace backend is unavailable. Set `ALMANAC_TELEMETRY_DISABLED=true` in
+the Compose environment to disable application export. This source configuration
+requires rebuilding the app; an already-running image is not changed by editing it.
+
+Pending browser routing/timing/build spans can survive a document reload in a
+tab-session buffer: at most 128 spans and 128 KiB, expiring after five minutes.
+Replay uses the current authenticated session and CSRF token; no credentials are
+stored in the buffer. Sign-out or a different user clears it. Export and replay
+run in the background, with bounded requests; page navigation never waits for them.
+
+For independently launched backend, agent and CLI processes, configure
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` with the complete OTLP/HTTP trace URL. Without
+an endpoint, tracing stays disabled. `OTEL_SDK_DISABLED=true` disables it explicitly.
+`ALMANAC_ENVIRONMENT` labels the deployment. Traces include service name, executable
+SHA-256 and the source revision when available; dirty builds are identified.
+
+Protected collectors can use `OTEL_EXPORTER_OTLP_HEADERS` (comma-separated
+`key=value` pairs with percent-encoded values), `OTEL_EXPORTER_OTLP_CERTIFICATE`
+for a trusted CA PEM file, and `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` plus
+`OTEL_EXPORTER_OTLP_CLIENT_KEY` for mutual TLS. The corresponding
+`OTEL_EXPORTER_OTLP_TRACES_*` settings take precedence. Backend spans and relayed
+browser spans share these server-side settings; credentials stay off the browser.
+
+Go root sampling defaults to `parentbased_always_on`. Supported
+`OTEL_TRACES_SAMPLER` values also include `parentbased_always_off` and
+`parentbased_traceidratio`; the latter requires `OTEL_TRACES_SAMPLER_ARG` between
+zero and one. Browser builds use `VITE_OTEL_TRACES_SAMPLER_ARG` in the same range,
+defaulting to one for local acceptance. Parent sampling decisions propagate across
+HTTP calls. Disclose both settings when comparing performance; sampling cannot
+establish that missing journeys are fast.
+
+The internal metrics listener reports trace queue size/capacity, dropped spans and
+export failures, plus browser-intake drops/export failures. Queue metrics come from
+the pinned Go SDK's self-observation feature, enabled by the application. Export
+uses bounded batches and a two-second network timeout; application requests never
+wait for a successful export. Spans exclude credentials, raw queries, SQL arguments
+and response bodies. Runtime journey and overhead acceptance is tracked in
+[F3-T09](docs/tasks/F3-T09.md).
+
 After developer tooling setup, `make verify VERIFY_MODE=providers` starts an isolated
 provider project, inserts synthetic metrics and spans, checks exact query results
 before and after restart, and removes only its test-owned containers and volumes.

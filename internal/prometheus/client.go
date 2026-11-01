@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/telemetry"
 )
 
 const (
@@ -96,7 +98,7 @@ func NewClient(config Config) (*Client, error) {
 			return safeDialContext(ctx, network, address, allowed)
 		},
 	}
-	client := &http.Client{Transport: transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
+	client := &http.Client{Transport: telemetry.ClientTransport(transport, "provider.prometheus.request"), Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
 	return &Client{endpoint: u, authMode: config.AuthMode, username: config.Username, password: config.Password, token: config.BearerToken, http: client, allowed: allowed}, nil

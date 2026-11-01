@@ -1,5 +1,6 @@
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
+import { traceJSON } from '../telemetry/client.ts';
 
 export type Provider = components['schemas']['ProviderDescriptor'];
 export type Datasource = components['schemas']['Datasource'];
@@ -153,7 +154,7 @@ async function json(response: Response, maxBytes = 512 * 1024): Promise<unknown>
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch { throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.'); }
+  try { return traceJSON(response, new TextDecoder().decode(bytes)); } catch { throw new DatasourceFailure('invalid_response', 'The server returned an invalid response.'); }
 }
 
 async function request<T>(path: string, init: RequestInit, expected: number, validate: (value: unknown) => value is T, maxBytes = 512 * 1024): Promise<{ value: T; response: Response }> {

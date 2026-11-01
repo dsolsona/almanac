@@ -20,6 +20,7 @@ import (
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -514,6 +515,8 @@ type overviewSnapshot struct {
 
 // ReadSloOperationalOverview returns a fixed-expiry, actor/session-bound page.
 func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input OperationalOverviewInput) (api.SloOperationalOverviewPage, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "slo.overview.read")
+	defer span.End()
 	if input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) || input.Limit < 0 || input.Limit > 200 || !validOperationalQuery(input.Query) || len(input.Cursor) > 512 {
 		return api.SloOperationalOverviewPage{}, ErrOperationalRange
 	}
@@ -958,6 +961,8 @@ func operationalFactsStart(currentAt time.Time, currentWindow, currentBurn time.
 }
 
 func loadOperationalFacts(ctx context.Context, q *dbgen.Queries, key string, stream operationalStream, start, end time.Time, rowLimit int) ([]slo.Observation, int, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "slo.source.facts")
+	defer span.End()
 	sliIDText, revisionText, ok := strings.Cut(key, ":")
 	if !ok {
 		return nil, 0, errors.New("storage: invalid SLO stream identity")
@@ -1238,6 +1243,8 @@ func buildOperationalSamples(ctx context.Context, base slo.WindowInput, start, e
 // Explicit boundaries let a worker rebuild contiguous invalid blocks without
 // changing their original grid or rounding their exact extrema.
 func buildRollingBuckets(ctx context.Context, base slo.WindowInput, boundaries []time.Time, duration, cadence time.Duration, revision, metric string, includeStart bool, sampleLimit int) ([]api.SloOperationalSample, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "slo.rolling.buckets")
+	defer span.End()
 	buckets := len(boundaries) - 1
 	if buckets <= 0 {
 		return []api.SloOperationalSample{}, nil
@@ -1480,6 +1487,8 @@ func operationalSample(result slo.WindowResult, bucketStart, bucketEnd time.Time
 		RetainedExtrema: []api.SloOperationalSampleRetainedExtrema{}}
 }
 func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, contextRow dbgen.GetSloOperationalContextRow, input OperationalDetailInput) (api.SloOperationalDetail, error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "slo.operational.assemble")
+	defer span.End()
 	now := normalizedAgentNow(input.Now)
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	bound, err := resolveOperationalBounds(input, cadence)

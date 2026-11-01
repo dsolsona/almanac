@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/telemetry/traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit bounded authenticated browser OTLP traces
+         * @description Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+         */
+        post: operations["postBrowserTraces"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/configuration": {
         parameters: {
             query?: never;
@@ -1916,6 +1936,85 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    postBrowserTraces: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    resourceSpans: Record<string, never>[];
+                };
+            };
+        };
+        responses: {
+            /** @description Validated batch admitted for bounded export */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Invalid trace batch */
+            400: {
+                headers: {
+                    /** @description Fixed validation category; contains no submitted values. */
+                    "X-Almanac-Telemetry-Rejection"?: "batch" | "span_count" | "span_id" | "span_name" | "span_kind" | "span_time" | "span_attributes" | "span_status";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session unavailable or restricted */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid session request or CSRF/origin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Batch exceeds the body limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported content type or encoding */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Telemetry rate or queue bound reached */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Tracing disabled */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getAgentConfiguration: {
         parameters: {
             query?: never;

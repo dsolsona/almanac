@@ -3616,6 +3616,16 @@ type GetSloOperationalDetailParams struct {
 // GetSloOperationalDetailParamsBurnWindowSeconds defines parameters for GetSloOperationalDetail.
 type GetSloOperationalDetailParamsBurnWindowSeconds int
 
+// PostBrowserTracesJSONBody defines parameters for PostBrowserTraces.
+type PostBrowserTracesJSONBody struct {
+	ResourceSpans []map[string]interface{} `json:"resourceSpans"`
+}
+
+// PostBrowserTracesParams defines parameters for PostBrowserTraces.
+type PostBrowserTracesParams struct {
+	XCSRFToken string `json:"X-CSRF-Token"`
+}
+
 // PostAgentDiagnosticResultJSONRequestBody defines body for PostAgentDiagnosticResult for application/json ContentType.
 type PostAgentDiagnosticResultJSONRequestBody = DiagnosticResultPayload
 
@@ -3684,6 +3694,9 @@ type CreateSloJSONRequestBody = SloCreateRequest
 
 // PatchSloMetadataJSONRequestBody defines body for PatchSloMetadata for application/json ContentType.
 type PatchSloMetadataJSONRequestBody = ResourceMetadataWrite
+
+// PostBrowserTracesJSONRequestBody defines body for PostBrowserTraces for application/json ContentType.
+type PostBrowserTracesJSONRequestBody PostBrowserTracesJSONBody
 
 // AsObservedOutcome returns the union data inside the ObservationExecutionOutcome as a ObservedOutcome
 func (t ObservationExecutionOutcome) AsObservedOutcome() (ObservedOutcome, error) {
@@ -4524,6 +4537,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 	GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostBrowserTracesWithBody Submit bounded authenticated browser OTLP traces
+	//
+	// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+	PostBrowserTracesWithBody(ctx context.Context, params *PostBrowserTracesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostBrowserTraces Submit bounded authenticated browser OTLP traces
+	//
+	// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+	PostBrowserTraces(ctx context.Context, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLiveness Report whether the UI process is alive
 	//
@@ -5747,6 +5778,44 @@ func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId ope
 // Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 func (c *Client) GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSloCurrentStatusRequest(c.Server, sloId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostBrowserTracesWithBody Submit bounded authenticated browser OTLP traces
+//
+// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+func (c *Client) PostBrowserTracesWithBody(ctx context.Context, params *PostBrowserTracesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostBrowserTracesRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PostBrowserTraces Submit bounded authenticated browser OTLP traces
+//
+// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+func (c *Client) PostBrowserTraces(ctx context.Context, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostBrowserTracesRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8404,6 +8473,59 @@ func NewGetSloCurrentStatusRequest(server string, sloId SloId) (*http.Request, e
 	return req, nil
 }
 
+// NewPostBrowserTracesRequest calls the generic PostBrowserTraces builder with application/json body
+func NewPostBrowserTracesRequest(server string, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostBrowserTracesRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostBrowserTracesRequestWithBody constructs an http.Request for the PostBrowserTraces method, with any body, and a specified content type
+func NewPostBrowserTracesRequestWithBody(server string, params *PostBrowserTracesParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/telemetry/traces")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-CSRF-Token", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewGetLivenessRequest constructs an http.Request for the GetLiveness method
 func NewGetLivenessRequest(server string) (*http.Request, error) {
 	var err error
@@ -9078,6 +9200,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 	GetSloCurrentStatusWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloCurrentStatusResponse, error)
+
+	// PostBrowserTracesWithBodyWithResponse Submit bounded authenticated browser OTLP traces
+	//
+	// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+	PostBrowserTracesWithBodyWithResponse(ctx context.Context, params *PostBrowserTracesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostBrowserTracesResponse, error)
+
+	// PostBrowserTracesWithResponse Submit bounded authenticated browser OTLP traces
+	//
+	// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+	PostBrowserTracesWithResponse(ctx context.Context, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBrowserTracesResponse, error)
 
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
@@ -12023,6 +12163,54 @@ func (r GetSloCurrentStatusResponse) ContentType() string {
 	return ""
 }
 
+// PostBrowserTracesResponse400Headers the declared response headers of an HTTP 400 response for PostBrowserTraces
+type PostBrowserTracesResponse400Headers struct {
+	XAlmanacTelemetryRejection *string
+}
+
+type PostBrowserTracesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *map[string]interface{}
+	// Headers400 the parsed response headers for an HTTP 400 response
+	Headers400 *PostBrowserTracesResponse400Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PostBrowserTracesResponse) GetJSON202() *map[string]interface{} {
+	return r.JSON202
+}
+
+// GetBody returns the raw response body bytes
+func (r PostBrowserTracesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PostBrowserTracesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostBrowserTracesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostBrowserTracesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetLivenessResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -13101,6 +13289,36 @@ func (c *ClientWithResponses) GetSloCurrentStatusWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseGetSloCurrentStatusResponse(rsp)
+}
+
+// PostBrowserTracesWithBodyWithResponse Submit bounded authenticated browser OTLP traces
+//
+// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+func (c *ClientWithResponses) PostBrowserTracesWithBodyWithResponse(ctx context.Context, params *PostBrowserTracesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostBrowserTracesResponse, error) {
+	rsp, err := c.PostBrowserTracesWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostBrowserTracesResponse(rsp)
+}
+
+// PostBrowserTracesWithResponse Submit bounded authenticated browser OTLP traces
+//
+// Requires the normal unrestricted session, same origin, TLS and CSRF token. Accepts application/json OTLP with one resource/scope and up to 64 spans, at most 128 KiB. The backend validates identifiers/times, strips unknown attributes/events/links, enforces per-session and global bounds, and queues export only to its configured telemetry destination. No arbitrary proxy, destination URL or exporter credential is accepted. This endpoint is not itself traced. Failure does not affect product requests.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
+func (c *ClientWithResponses) PostBrowserTracesWithResponse(ctx context.Context, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBrowserTracesResponse, error) {
+	rsp, err := c.PostBrowserTraces(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostBrowserTracesResponse(rsp)
 }
 
 // GetLivenessWithResponse Report whether the UI process is alive
@@ -15515,6 +15733,66 @@ func ParseGetSloCurrentStatusResponse(rsp *http.Response) (*GetSloCurrentStatusR
 	return response, nil
 }
 
+// ParsePostBrowserTracesResponse parses an HTTP response from a PostBrowserTracesWithResponse call
+func ParsePostBrowserTracesResponse(rsp *http.Response) (*PostBrowserTracesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostBrowserTracesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case rsp.StatusCode == 400:
+		break // No content-type
+
+	case rsp.StatusCode == 401:
+		break // No content-type
+
+	case rsp.StatusCode == 403:
+		break // No content-type
+
+	case rsp.StatusCode == 413:
+		break // No content-type
+
+	case rsp.StatusCode == 415:
+		break // No content-type
+
+	case rsp.StatusCode == 429:
+		break // No content-type
+
+	case rsp.StatusCode == 503:
+		break // No content-type
+
+	}
+
+	switch {
+	case rsp.StatusCode == 400:
+		var headers PostBrowserTracesResponse400Headers
+		if values := rsp.Header.Values("X-Almanac-Telemetry-Rejection"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Almanac-Telemetry-Rejection", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XAlmanacTelemetryRejection = &value
+		}
+		response.Headers400 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
 func ParseGetLivenessResponse(rsp *http.Response) (*GetLivenessResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -15720,6 +15998,9 @@ type ServerInterface interface {
 	// GetSloCurrentStatus Read the published current SLO result independently of history
 	// (GET /api/v1/slos/{slo_id}/status)
 	GetSloCurrentStatus(w http.ResponseWriter, r *http.Request, sloId SloId)
+	// PostBrowserTraces Submit bounded authenticated browser OTLP traces
+	// (POST /api/v1/telemetry/traces)
+	PostBrowserTraces(w http.ResponseWriter, r *http.Request, params PostBrowserTracesParams)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -17824,6 +18105,51 @@ func (siw *ServerInterfaceWrapper) GetSloCurrentStatus(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// PostBrowserTraces operation middleware
+func (siw *ServerInterfaceWrapper) PostBrowserTraces(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostBrowserTracesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostBrowserTraces(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
 
@@ -17972,6 +18298,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/telemetry/traces", wrapper.PostBrowserTraces)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/agent/v1/configuration", wrapper.GetAgentConfiguration)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/agent/v1/observations", wrapper.PostAgentObservations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/agent/v1/diagnostics/{diagnostic_id}/result", wrapper.PostAgentDiagnosticResult)

@@ -23,6 +23,7 @@ import (
 	"github.com/dsolsona/almanac/internal/identity"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/google/uuid"
 	"github.com/oapi-codegen/runtime/types"
 )
@@ -767,6 +768,7 @@ func (h *Handler) writeAuthError(w http.ResponseWriter, err error, requestID str
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
+	defer telemetry.ResponseEncoding(w)()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, value)

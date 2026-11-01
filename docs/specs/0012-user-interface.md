@@ -269,15 +269,19 @@ Accepted initial budgets; implementation measurement remains required:
 | --- | --- |
 | JavaScript needed for sign-in/app shell | At most 300 KiB gzip, excluding lazy chart routes |
 | Additional JavaScript for first chart route | At most 500 KiB gzip, including chart library; shared modules counted once |
-| Cold SLO-detail load to primary content/chart | At most 2.5 seconds at p75 in the controlled fixture below |
+| SLI/SLO list to usable rows/counts | < 1,000 ms for every measured sample; preferred <= 500 ms |
+| SLO-detail load to usable content/rendered charts | < 500 ms for every measured sample, including first visits/cache misses |
+| Graph range/burn-window change | < 500 ms for every measured sample |
 | Filter/click feedback | At most 200 ms at p95; show pending state while an API request runs |
 | Four visible chart updates after response parsing | At most 200 ms at p95; loading must not freeze navigation |
 
-For these checks use a production build, a deterministic fixture of 100 SLOs, a
-50-row list page, and an SLO-detail view with four charts of two series each, capped
+For these checks use a production build, deterministic fixtures of 10/100/1,000 SLOs with a year of history, a
+10- or 20-row list page, and an SLO-detail view with four charts of two series each, capped
 at 1,500 points per series. Record the machine, browser, viewport and build; use
-Chrome with 4x CPU slowdown, 10 Mbit/s download and 100 ms RTT. Fixture API handler
-time is capped at 500 ms and reported separately from transport/rendering. Collect
+Chrome with 4x CPU slowdown, 10 Mbit/s download and 100 ms RTT. API latency is reported separately from transport/rendering; meeting it alone
+cannot satisfy the stricter full-journey budget. Capture complete OpenTelemetry
+journeys in VictoriaTraces under [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md).
+No ordinary page load may wait for graph preparation jobs. Collect
 at least 20 cold loads and 50 interaction/update samples with a repeatable script.
 Also inspect mobile and Firefox/Safari manually for responsiveness and correctness.
 This is a reproducible frontend gate, not a claim about arbitrary network or backend

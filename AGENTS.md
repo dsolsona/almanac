@@ -100,6 +100,16 @@ These documents govern applicable work; read them before that work begins.
 
 ## Commands and evidence
 
+- Accuracy and actual page speed are feature acceptance requirements under
+  [ADR-0025](docs/adr/0025-fast-operational-journeys-and-tracing.md) and
+  [SPEC-0019](docs/specs/0019-backend-performance-and-derived-data.md). Verify
+  authenticated navigation through usable rows/rendered graphs, including first
+  visits and cache misses, at the specified scale. UI lists show 10/20 rows and
+  must load in < 1,000 ms; SLO details and range/burn changes require < 500 ms.
+  Normal navigation cannot wait for preparation jobs. Capture full OTEL journey
+  traces in VictoriaTraces and independent expected values; API-only timings,
+  warmed responses and passing test counts cannot substitute. Instrumentation
+  still being implemented must be reported as missing evidence.
 - Follow [command discipline](docs/commands.md): approval applies to the actual
   invocation. Reuse exact approved commands or the approved closed verification
   catalog within its validated scope. Never bypass restrictions with wrappers,

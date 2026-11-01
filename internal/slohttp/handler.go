@@ -18,6 +18,7 @@ import (
 	"github.com/dsolsona/almanac/internal/authhttp"
 	"github.com/dsolsona/almanac/internal/identity"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/google/uuid"
 )
 
@@ -593,6 +594,7 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, int) {
 	return body, 0
 }
 func write(w http.ResponseWriter, status int, value any) {
+	defer telemetry.ResponseEncoding(w)()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, value)

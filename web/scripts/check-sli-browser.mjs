@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { captureTelemetryDelivery } from './capture-telemetry-delivery.mjs';
 
 let stage = 'fixture input';
 let fixture;
 let origin;
 let browser;
 let page;
+let telemetryDeliveries=[];
 let latestAPI = { status: 'none', code: 'none', requestID: 'none' };
 let effectiveTimeEvidence = null;
 const startedAt = Date.now();
@@ -52,6 +54,10 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
   context.setDefaultTimeout(10_000);
   page = await context.newPage();
+  telemetryDeliveries=await captureTelemetryDelivery(page);
+  const journeyTraces=[];
+  await page.exposeFunction('recordAlmanacJourney',value=>{if(journeyTraces.length<256)journeyTraces.push({...value,stage});});
+  await page.addInitScript(()=>addEventListener('almanac:journey',event=>{const value=event.detail;if(value&&/^[0-9a-f]{32}$/.test(value.traceId)&&Number.isFinite(value.duration))void window.recordAlmanacJourney({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration});}));
   const sliListTimings=[];
   page.on('response', async (response) => {
     let url;
@@ -186,20 +192,22 @@ try {
 
   stage = 'wait for agent ACK and first interval';
   await writeProgress();
-  const deadline = Date.now() + 110_000;
+  const waitStarted = performance.now();
+  const wallStarted = Date.now();
+  const deadline = waitStarted + 110_000;
   let observed = false;
   let activationState = created.activation_state;
   let lastProgress = 0;
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    if (Date.now() - lastProgress >= 5000) {
+    if (performance.now() - lastProgress >= 5000) {
       const state = {};
       for (const label of ['Activation', 'Agent reachability', 'Freshness']) {
         const value = await page.locator('.sli-state').filter({ hasText: label }).locator('strong').textContent();
         state[label === 'Activation' ? 'activation' : label === 'Freshness' ? 'freshness' : 'reachability'] = value?.trim().replaceAll(' ', '_');
       }
       await writeProgress(state);
-      lastProgress = Date.now();
+      lastProgress = performance.now();
     }
     const counts = page.locator('.sli-counts strong');
     if (await counts.count() === 2 && await counts.nth(0).textContent() === '99' && await counts.nth(1).textContent() === '100') {
@@ -209,6 +217,7 @@ try {
     }
     await page.waitForTimeout(1000);
   }
+  await writeFile(join(screenshotDir,'observation-wait-clock.json'),JSON.stringify({monotonic_ms:performance.now()-waitStarted,wall_ms:Date.now()-wallStarted})+'\n',{mode:0o600});
   assert.equal(observed, true, `first 99/100 interval was not visible before deadline; latest_api_status=${latestAPI.status} latest_api_code=${latestAPI.code}`);
   assert.equal(activationState, 'active', `unexpected activation state ${safePart(activationState)}`);
   const elapsedToObservation = performance.now() - creationStarted;
@@ -407,7 +416,17 @@ try {
     activation_state: activationState, outcome: 'observed', good_count: '99', total_count: '100',
     datasource_id: fixture.datasource_id, agent_id: fixture.agent_id, create_status: createResponse.status(), elapsed_to_observation_ms: Math.round(elapsedToObservation),
   }, null, 2) + '\n', { mode: 0o600 });
+  if (await page.evaluate(() => document.querySelector('script[type="module"]') !== null)) {
+    const stats=await page.evaluate(()=>new Promise(resolve=>{
+      const timeout=setTimeout(()=>resolve({result:'timeout'}),3000);
+      addEventListener('almanac:telemetry-flushed',event=>{clearTimeout(timeout);resolve(event.detail);},{once:true});
+      dispatchEvent(new Event('almanac:telemetry-flush'));
+    }));
+    await writeFile(join(screenshotDir,'telemetry-stats.json'),JSON.stringify(stats)+'\n',{mode:0o600});
+  }
   await context.close();
+  await writeFile(join(screenshotDir,'telemetry-deliveries.json'),JSON.stringify(telemetryDeliveries)+'\n',{mode:0o600});
+  await writeFile(join(screenshotDir,'journey-traces.json'),JSON.stringify(journeyTraces)+'\n',{mode:0o600});
   await browser.close();
   console.log('PASS browser-sli-journey');
 } catch (error) {

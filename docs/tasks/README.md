@@ -163,3 +163,8 @@ current app delivery without changing product contracts or waiving required gate
 
 [F3-T07](F3-T07.md) corrects the maintainer's reported SLO creation, table,
 empty-state, wording and visual acceptance failures under the existing contracts.
+
+[F3-T09](F3-T09.md) provides application tracing and the measured initial baseline
+under the [performance and tracing intervention](../plans/0023-performance-and-tracing-intervention.md).
+[F3-T08](F3-T08.md) remains responsible for correcting operational reads and meeting
+the accepted page-speed, accuracy and scale requirements.

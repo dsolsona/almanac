@@ -50,3 +50,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0022](0022-restartable-agent-ownership.md) | Replace agent processes without an ownership-expiry wait | accepted |
 | [ADR-0023](0023-slo-operational-urgency.md) | Separate SLO operational urgency from performance | accepted |
 | [ADR-0024](0024-precomputed-operational-reads.md) | Precompute operational reads with exact derived data | accepted |
+| [ADR-0025](0025-fast-operational-journeys-and-tracing.md) | Serve fast operational journeys from retained time series | accepted |

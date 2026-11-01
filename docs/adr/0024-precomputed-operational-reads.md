@@ -3,6 +3,7 @@
 - Status: accepted
 - Created: 2026-10-30
 - Accepted: 2026-10-30
+- Partial supersession, 2026-10-31: [ADR-0025](0025-fast-operational-journeys-and-tracing.md) replaces foreground job/polling and provisional retention assumptions; the original rationale below remains historical.
 - Approval: maintainer explicitly replied "approved" after the combined Crit review of this ADR, SPEC-0019 and the stabilization plan
 - Related specs: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md)
 - Supersedes / superseded by: replaces ADR-0007's optional acceleration policy only; other storage and measurement decisions remain in force

@@ -451,6 +451,9 @@ func checkSLIBrowserJourney(t *testing.T, baseURL string, certificatePEM []byte,
 	if !hasSLIBrowserPassMarker(output.String()) {
 		t.Fatalf("SLI browser acceptance did not produce its exact completion marker; inspect sanitized artifacts in %s", artifacts)
 	}
+	if os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" && os.Getenv("OTEL_SDK_DISABLED") != "true" {
+		verifyRenderedJourneyTraces(t, artifacts, "sli.list")
+	}
 	manifest, err := os.ReadFile(filepath.Join(artifacts, "sli-journey.json"))
 	if err != nil {
 		t.Fatalf("read SLI browser journey evidence failed; inspect artifacts in %s", artifacts)

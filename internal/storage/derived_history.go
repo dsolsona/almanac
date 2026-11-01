@@ -11,9 +11,11 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var ErrDerivedFailed = errors.New("storage: derived preparation exhausted")
@@ -99,6 +101,9 @@ func (r *Runtime) prepareNextHistory(ctx context.Context, clock func() time.Time
 }
 
 func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, worked *bool) (resultErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "derived.history.prepare")
+	outcome := "idle"
+	defer func() { finishDerivedTrace(ctx, span, resultErr, outcome) }()
 	conn, err := r.Acquire(ctx, DerivedTraffic)
 	if err != nil {
 		return err
@@ -120,6 +125,19 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	conn.Release()
 	if err != nil {
 		return err
+	}
+	outcome = "executing"
+	if span.IsRecording() {
+		span.SetAttributes(attribute.String("almanac.work.key", historyTraceKey(dbgen.FindPreparedSloHistoryParams{SloID: job.SloID, DefinitionRevision: job.DefinitionRevision, MeasurementRevision: job.MeasurementRevision,
+			SourceGeneration: job.SourceGeneration, EvaluatedThrough: job.EvaluatedThrough, RangeStart: job.RangeStart, RangeEnd: job.RangeEnd, BurnWindowSeconds: job.BurnWindowSeconds, Kind: job.Kind, CalculationVersion: job.CalculationVersion, RetentionStart: job.RetentionStart})), attribute.Int("almanac.work.attempt", int(job.Attempts)))
+		if wait := clock().Sub(job.NextAttemptAt.Time).Milliseconds(); wait >= 0 {
+			span.SetAttributes(attribute.Int64("almanac.queue.wait_ms", wait))
+		} else {
+			span.SetAttributes(attribute.Bool("almanac.queue.clock_skew", true))
+		}
+		if age := clock().Sub(job.CreatedAt.Time).Milliseconds(); age >= 0 {
+			span.SetAttributes(attribute.Int64("almanac.queue.age_ms", age))
+		}
 	}
 	if worked != nil {
 		*worked = true
@@ -172,6 +190,7 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 		return err
 	}
 	if row.DefinitionRevision != job.DefinitionRevision || row.MeasurementRevision != job.MeasurementRevision || sourceGeneration != job.SourceGeneration || job.CalculationVersion != operationalCalculationVersion {
+		outcome = "obsolete"
 		if _, err := q.CompleteSloHistoryJob(bounded, dbgen.CompleteSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch}); err != nil {
 			return err
 		}
@@ -235,7 +254,11 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	if _, err := q.DeleteExpiredSloDisplayBlocks(bounded, timestamp(clock().Add(-5*time.Minute))); err != nil {
 		return err
 	}
-	return tx.Commit(bounded)
+	resultErr = tx.Commit(bounded)
+	if resultErr == nil {
+		outcome = "published"
+	}
+	return resultErr
 }
 
 func derivedFailureCode(err error) string {
@@ -253,7 +276,16 @@ func derivedFailureCode(err error) string {
 
 // loadOrQueueSloHistory never evaluates observations. The caller commits admitted
 // preparation before returning pending, preserving per-request authorization.
-func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, input OperationalDetailInput) (api.SloOperationalDetail, bool, error) {
+func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, input OperationalDetailInput) (result api.SloOperationalDetail, found bool, resultErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "slo.history.read")
+	defer func() {
+		state := "not_cached"
+		if found {
+			state = "cache_hit"
+		}
+		span.SetAttributes(attribute.Bool("almanac.cache.hit", found))
+		finishDerivedTrace(ctx, span, resultErr, state)
+	}()
 	kind := "detail"
 	if input.overviewOnly {
 		kind = "overview"
@@ -262,6 +294,7 @@ func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 	if err != nil {
 		return api.SloOperationalDetail{}, false, err
 	}
+	span.SetAttributes(attribute.Int64("almanac.range.seconds", int64(bound.end.Sub(bound.start)/time.Second)), attribute.Int("almanac.burn.window_seconds", input.BurnWindow))
 	sourceGeneration, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
 	if errors.Is(err, pgx.ErrNoRows) {
 		sourceGeneration = 0
@@ -299,8 +332,17 @@ func loadOrQueueSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 	if err := q.LockHistoryAdmission(ctx); err != nil {
 		return api.SloOperationalDetail{}, false, err
 	}
-	_, err = q.AdmitSloHistoryJob(ctx, dbgen.AdmitSloHistoryJobParams{RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
+	admissionContext, admission := telemetry.Tracer().Start(ctx, "derived.history.admit")
+	if admission.IsRecording() {
+		admission.SetAttributes(attribute.String("almanac.work.key", historyTraceKey(key)))
+	}
+	admitted, err := q.AdmitSloHistoryJob(admissionContext, dbgen.AdmitSloHistoryJobParams{RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
 		EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), NextAttemptAt: timestamp(normalizedAgentNow(input.Now))})
+	admissionResult := "not_inserted"
+	if admitted == 1 {
+		admissionResult = "admitted"
+	}
+	finishDerivedTrace(ctx, admission, err, admissionResult)
 	if err != nil {
 		return api.SloOperationalDetail{}, false, err
 	}

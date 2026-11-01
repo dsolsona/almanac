@@ -6,6 +6,7 @@ import { AgentLifecycleControls } from './AgentLifecycleControls.tsx';
 import { DurationControl, describeDuration } from './DurationControl.tsx';
 import { Button, Dialog, Panel, TextField } from '../components/ui/index.ts';
 import './agents.css';
+import { journeyContentReady } from '../telemetry/client.ts';
 
 export type AgentSafeDraft = { name: string; displayName: string; lifetime: string; nameEdited?: boolean };
 export type AgentRecoveryCause = 'connection' | 'service' | 'timeout' | 'response';
@@ -160,6 +161,9 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     } finally { if (!controller.signal.aborted && generation === readGeneration.current) setLoading(false); }
   }, [isAdmin, suspended, locationState.agent, locationState.agents_cursor, locationState.credentials_cursor]);
   useEffect(() => { void load(); return () => readController.current?.abort(); }, [load]);
+  useEffect(() => {
+    if (!loading && !suspended) journeyContentReady('management', !!error);
+  }, [loading, suspended, error, locationState]);
 
   function resetSafeDraft() { onDraftChange(emptyDraft); setNameError(''); }
   function openRegister() { setError(''); setNameError(''); setRegisterOpen(true); }

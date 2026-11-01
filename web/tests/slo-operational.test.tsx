@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { OperationalDetailView, OperationalOverviewView } from '../src/slos/OperationalViews.tsx';
 import { sloClient, SloFailure, type OperationalDetail, type OperationalOverview } from '../src/slos/client.ts';
 import type { components } from '../src/api/generated.ts';
+import * as telemetry from '../src/telemetry/client.ts';
 
 afterEach(()=>{cleanup();history.replaceState({},'','/');vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();});
 beforeEach(()=>{
@@ -12,6 +13,22 @@ beforeEach(()=>{
 
 const sloID='22222222-2222-2222-2222-222222222222';
 const definition:components['schemas']['Slo']={id:sloID,name:'checkout',display_name:'Checkout',version:'1',definition_revision:'1',service_id:'11111111-1111-1111-1111-111111111111',service_display_name:'Checkout service',sli_id:'33333333-3333-3333-3333-333333333333',sli_display_name:'Request success',target:'0.99',rolling_window_seconds:86400,cadence_seconds:60,activated_at:'2026-10-01T00:00:00Z',evaluation_valid_from:'2026-10-01T00:00:00Z',historical_requested_by:null,historical_requested_at:null,created_at:'2026-10-01T00:00:00Z',updated_at:'2026-10-01T00:00:00Z'};
+it('signals timezone-only readiness without refetching history or waiting for a status poll',async()=>{
+ const detail=operationalDetail();
+ const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};
+ detail.generation=generation;
+ const ready=vi.spyOn(telemetry,'journeyContentReady');
+ const historyRead=vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
+ const currentRead=vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation});
+ const view=render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ await waitFor(()=>expect(ready).toHaveBeenCalledWith('slo.detail',false));
+ ready.mockClear();
+ const historyCalls=historyRead.mock.calls.length,currentCalls=currentRead.mock.calls.length;
+ view.rerender(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}?tz=local`} onLocationChange={()=>undefined}/>);
+ await waitFor(()=>expect(ready).toHaveBeenCalledWith('slo.detail',false));
+ expect(historyRead).toHaveBeenCalledTimes(historyCalls);
+ expect(currentRead).toHaveBeenCalledTimes(currentCalls);
+});
 function operationalDetail(requestedStart='2026-10-01T00:00:00Z',requestedEnd='2026-10-08T00:00:00Z'):OperationalDetail {
  const start='2026-10-01T00:00:00Z',end='2026-10-08T00:00:00Z';
  const quality={state:'complete',freshness:'fresh',expected_intervals:1,observed_intervals:1,known_empty_intervals:0,missing_intervals:0,expired_intervals:0,zero_traffic_intervals:0,coverage:'1',first_observation_at:start,last_observation_at:end,latest_receipt_at:end,reason:null};

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlisPage } from '../src/slis/SlisPage.tsx';
 import type { AuthContext } from '../src/auth/client.ts';
+import * as telemetry from '../src/telemetry/client.ts';
 
 const admin: AuthContext = { csrf_token: 'csrf-admin', session: { user_id: 'admin-1', login: 'owner', role: 'administrator', restricted: false } };
 const editor: AuthContext = { csrf_token: 'csrf-editor', session: { user_id: 'user-1', login: 'editor', role: 'editor', restricted: false } };
@@ -27,6 +28,29 @@ function deferredResponse() {
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); });
 
 describe('SLI page', () => {
+  it('signals detail readiness after history renders and reports a history failure explicitly', async () => {
+    const ready = vi.spyOn(telemetry, 'journeyContentReady');
+    try {
+      history.replaceState({}, '', `/slis/${sliID}`);
+      const pending = deferredResponse();
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes('/observations')) return pending.promise;
+        if (String(input).includes('/datasources')) return response({ items: [source()], next_cursor: '' });
+        return response(sli(), 200, { ETag: `"sli:${sliID}:2"` });
+      }));
+      render(<SlisPage context={editor} />);
+      await screen.findByRole('heading', { name: 'Request success' });
+      expect(ready).not.toHaveBeenCalledWith('sli.detail', false);
+      await act(async () => pending.resolve(response(historyPage([]))));
+      await waitFor(() => expect(ready).toHaveBeenCalledWith('sli.detail', false));
+      cleanup(); ready.mockClear();
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/observations')
+        ? response({}, 503) : String(input).includes('/datasources') ? response({ items: [source()], next_cursor: '' }) : response(sli(), 200, { ETag: `"sli:${sliID}:2"` })));
+      render(<SlisPage context={editor} />);
+      await waitFor(() => expect(ready).toHaveBeenCalledWith('sli.detail', true));
+      expect(ready).not.toHaveBeenCalledWith('sli.detail', false);
+    } finally { ready.mockRestore(); }
+  });
   it.each([['/slis', admin], ['/slis/new', admin], ['/slis', editor], ['/slis/new', editor]] as const)('shows the datasource prerequisite at %s for %s', async (path, context) => {
     history.replaceState({}, '', path);
     vi.stubGlobal('fetch', vi.fn(async () => response({ items: [], next_cursor: '' })));

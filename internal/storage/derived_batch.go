@@ -6,14 +6,25 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // rebuildDerivedBatch commits exact aggregates before acknowledging work. Dirty
 // rows are never locked for the duration of the calculation. A newer generation
 // survives the separate conditional acknowledgment, including after a crash.
 func (r *Runtime) rebuildDerivedBatch(ctx context.Context, clock func() time.Time) (count int, resultErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "derived.source.batch")
+	defer func() {
+		state := "published"
+		if count == 0 {
+			state = "idle"
+		}
+		span.SetAttributes(attribute.Int("almanac.batch.count", count))
+		finishDerivedTrace(ctx, span, resultErr, state)
+	}()
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, err := r.Acquire(bounded, DerivedTraffic)

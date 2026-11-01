@@ -1,5 +1,10 @@
 # Backend stabilization implementation plan
 
+> Execution order is suspended by the higher-priority
+> [performance and tracing intervention](0023-performance-and-tracing-intervention.md),
+> proposed for review on 2026-10-31. Its explicit subsecond/no-job-wait requirements
+> replace earlier acceptance assumptions; contract amendments remain to be reviewed.
+
 > Execution: primary agent implements and reviews changes in this session. Only a
 > test-execution worker may be used, as explicitly requested by the maintainer.
 > Follow the executing-plans workflow after acceptance. No implementation delegation,

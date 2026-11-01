@@ -23,7 +23,10 @@ import (
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/prometheus"
 	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -81,6 +84,7 @@ type activeCollection struct {
 }
 
 type pendingLiveResult struct {
+	traceContext  trace.SpanContext
 	deliveryID    string
 	raw           []byte
 	size          int
@@ -92,6 +96,7 @@ type pendingLiveResult struct {
 }
 
 type collectionDefinition struct {
+	traceContext  trace.SpanContext
 	sli           agentprotocol.SLICollection
 	assignment    agentprotocol.DatasourceAssignment
 	lease         agentprotocol.Lease
@@ -447,6 +452,9 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 }
 
 func (r *collectionRunner) collect(parent context.Context, definition collectionDefinition) {
+	parent, span := telemetry.Tracer().Start(parent, "agent.collection")
+	defer span.End()
+	definition.traceContext = span.SpanContext()
 	finished := false
 	complete := func(outcome *sli.ExecutionOutcome, successfulQueryAt *time.Time) {
 		r.finishCollection(definition, outcome, successfulQueryAt)
@@ -610,7 +618,7 @@ func (r *collectionRunner) finishCollection(definition collectionDefinition, out
 		r.recordDrop("encoding", intervalStart)
 		return
 	}
-	r.enqueue(deliveryID, raw, intervalStart)
+	r.enqueue(deliveryID, raw, intervalStart, definition.traceContext)
 }
 
 func collectedOutcome(good prometheus.QueryResult, goodOK, goodIncomplete bool, total prometheus.QueryResult, totalOK, totalIncomplete bool) *sli.ExecutionOutcome {
@@ -696,12 +704,15 @@ func collectionErrorCode(err error) string {
 	return "network"
 }
 
-func (r *collectionRunner) enqueue(deliveryID string, raw []byte, intervalStart time.Time) {
+func (r *collectionRunner) enqueue(deliveryID string, raw []byte, intervalStart time.Time, contexts ...trace.SpanContext) {
 	if len(raw) > 1<<20 {
 		r.recordDrop("encoding", intervalStart)
 		return
 	}
 	entry := &pendingLiveResult{deliveryID: deliveryID, raw: bytes.Clone(raw), size: len(raw)*2 + 512, nextRetry: time.Now(), intervalStart: intervalStart}
+	if len(contexts) > 0 {
+		entry.traceContext = contexts[0]
+	}
 	r.mu.Lock()
 	if _, exists := r.pending[deliveryID]; exists || entry.size > maxLiveResultBytes {
 		r.recordDropLocked("buffer", intervalStart)
@@ -856,6 +867,18 @@ func (r *collectionRunner) takeBatch() []*pendingLiveResult {
 }
 
 func (r *collectionRunner) submit(ctx context.Context, batch []*pendingLiveResult) {
+	links := make([]trace.Link, 0, len(batch))
+	for _, entry := range batch {
+		if entry.traceContext.IsValid() {
+			links = append(links, trace.Link{SpanContext: entry.traceContext})
+		}
+	}
+	if len(links) > 0 {
+		ctx = trace.ContextWithSpanContext(ctx, links[0].SpanContext)
+	}
+	ctx, span := telemetry.Tracer().Start(ctx, "agent.ingestion.batch", trace.WithLinks(links...))
+	defer span.End()
+	span.SetAttributes(attribute.Int("almanac.batch.count", len(batch)))
 	size := len(`{"items":[]}`) + len(batch)
 	for _, entry := range batch {
 		size += len(entry.raw)

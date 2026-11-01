@@ -24,6 +24,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/secretfile"
+	"github.com/dsolsona/almanac/internal/telemetry"
 )
 
 const maxTokenBytes = 2048
@@ -71,6 +72,15 @@ type serverClockEstimate struct {
 }
 
 func Run(ctx context.Context, args []string) error {
+	tracing, traceErr := telemetry.Start(ctx, "almanac-agent")
+	if traceErr != nil {
+		return traceErr
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = tracing.Shutdown(flush)
+	}()
 	if len(args) == 0 || args[0] != "run" {
 		return errors.New("invalid command")
 	}
@@ -135,7 +145,7 @@ func newClient(opts options, token string) (*client, error) {
 		return nil, errors.New("secure random source unavailable")
 	}
 	return &client{opts: opts, token: token, resume: base64.RawURLEncoding.EncodeToString(proof[:]), revision: "0", serverClock: &serverClockEstimate{}, clockSafe: true, diagnosticUploads: make(chan diagnosticUpload, maxActiveDiagnostics),
-		http: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		http: &http.Client{Transport: telemetry.ClientTransport(transport, "agent.backend.request"), Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}}}, nil
 }
@@ -414,6 +424,8 @@ func (c *client) runSession(ctx context.Context) error {
 }
 
 func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
+	ctx, span := telemetry.Tracer().Start(ctx, "agent.configuration.reconcile")
+	defer span.End()
 	u, _ := url.Parse(c.opts.backendURL)
 	u.Path = "/api/agent/v1/configuration"
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -595,6 +607,8 @@ func (c *client) prepareHeartbeat() error {
 }
 
 func (c *client) writeHeartbeat(ctx context.Context, conn *websocket.Conn) error {
+	ctx, span := telemetry.Tracer().Start(ctx, "agent.heartbeat.send")
+	defer span.End()
 	if c.pending == nil {
 		return errors.New("heartbeat state is missing")
 	}

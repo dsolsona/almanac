@@ -3,6 +3,7 @@ import { AuthFailure, createAuthClient, type AuthContext } from './client.ts';
 import { ApplicationShell, Button, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
 import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
+import { journeyContentReady, routeName, telemetrySession } from '../telemetry/client.ts';
 
 const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((module) => ({ default: module.AgentsPage })));
 const LazyDatasourcesPage = lazy(() => import('../datasources/DatasourcesPage.tsx').then((module) => ({ default: module.DatasourcesPage })));
@@ -13,7 +14,7 @@ const emptyAgentDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '
 class ScreenBoundary extends Component<{ screen: string; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(_error: Error, _info: ErrorInfo) { /* Failure details may include user data. */ }
+  componentDidCatch(_error: Error, _info: ErrorInfo) { journeyContentReady(routeName(location.pathname), true); }
   render() { return this.state.failed ? <Panel heading={`${this.props.screen} screen unavailable`}><p>{this.props.screen} could not be loaded.</p><Button variant="outline" onClick={() => location.reload()}>Reload page</Button></Panel> : this.props.children; }
 }
 
@@ -80,6 +81,8 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const identityRef = useRef<string | null>(null);
   const requestGeneration = useRef(0);
 
+  useEffect(() => { telemetrySession(context); }, [context]);
+
   useEffect(() => {
     const nextID = context?.session?.user_id ?? null;
     if (nextID !== null && identityRef.current !== null && nextID !== identityRef.current) {
@@ -123,6 +126,11 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   }, [context, unavailable, checking, pathname]);
 
   const operational = !checking && !unavailable && Boolean(context?.session && !context.session.restricted);
+  useEffect(() => {
+    if (!checking && (!operational || (pathname.startsWith('/agents') && context?.session?.role !== 'administrator'))) {
+      journeyContentReady(routeName(pathname), unavailable);
+    }
+  }, [checking, operational, pathname, context?.session?.role, unavailable]);
   useEffect(() => {
     if (!operational || pathname !== '/') return;
     const next = `/agents${location.search}${location.hash}`;

@@ -52,6 +52,9 @@ services:
     command: ["/usr/local/bin/almanac", "serve", "--components=backend,ui"]
     environment:
       ALMANAC_LISTEN: 0.0.0.0:8080
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://victoriatraces:10428/insert/opentelemetry/v1/traces
+      OTEL_SDK_DISABLED: ${ALMANAC_TELEMETRY_DISABLED:-false}
+      ALMANAC_ENVIRONMENT: local
       ALMANAC_COMPONENTS: backend,ui
       ALMANAC_DATABASE_URL_FILE: /run/almanac-secrets/database-url
       ALMANAC_INITIAL_ADMIN_LOGIN: admin

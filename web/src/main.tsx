@@ -1,3 +1,4 @@
+import './telemetry/client.ts';
 import { createRoot } from 'react-dom/client';
 import { AuthPage } from './auth/AuthPage.tsx';
 import './styles/global.css';

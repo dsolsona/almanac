@@ -30,6 +30,7 @@ import (
 	"github.com/dsolsona/almanac/internal/slohttp"
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
+	"github.com/dsolsona/almanac/internal/telemetry"
 )
 
 type Server struct {
@@ -144,6 +145,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 		return nil, errors.New("backendhttp: invalid objective handler configuration")
 	}
 	mux := http.NewServeMux()
+	mux.Handle("/api/v1/telemetry/traces", browserTelemetry(auth, service))
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
 	for _, path := range []string{"/api/v1/auth/context", "/api/v1/auth/login", "/api/v1/auth/password", "/api/v1/auth/logout"} {
@@ -180,7 +182,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 			next.ServeHTTP(w, r.WithContext(runtime.Bind(r.Context())))
 		})
 	}
-	s.http = &http.Server{Handler: handler, TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ConnState: s.connectionState, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	s.http = &http.Server{Handler: telemetry.HTTP(handler), TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ConnState: s.connectionState, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	return s, nil
 }
 

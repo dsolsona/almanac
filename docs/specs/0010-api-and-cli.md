@@ -1,6 +1,6 @@
 # SPEC-0010: API and CLI
 
-> Accepted amendment, 2026-10-30: Operational responses disclose coherent generations, preparation and currentness. Pending derived data uses the specified derived_data_pending problem; exact-value pages pin a generation and recheck authorization. UI and CLI preserve these outcomes. The precise additive wire diff is reviewed at the first stabilization checkpoint.
+> Accepted amendment, 2026-10-31: Normal operational reads return bounded maintained time-series results without graph job/polling waits. Explicit import/repair/recovery retains honest preparation/failure outcomes. Exact-value pages pin a generation and recheck authorization. Preserve compatible existing CLI/API limits while UI lists request 10/20 rows. [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md) governs this amendment.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the
 > maintainer after Crit review. Implementation remains outstanding.
