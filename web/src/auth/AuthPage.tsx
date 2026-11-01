@@ -7,8 +7,15 @@ import { journeyContentReady, routeName, telemetrySession } from '../telemetry/c
 
 const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((module) => ({ default: module.AgentsPage })));
 const LazyDatasourcesPage = lazy(() => import('../datasources/DatasourcesPage.tsx').then((module) => ({ default: module.DatasourcesPage })));
-const LazySlisPage = lazy(() => import('../slis/SlisPage.tsx').then((module) => ({ default: module.SlisPage })));
-const LazySlosPage = lazy(() => import('../slos/SlosPage.tsx').then((module) => ({ default: module.SlosPage })));
+const loadSlisPage = () => import('../slis/SlisPage.tsx').then((module) => ({ default: module.SlisPage }));
+const loadSlosPage = () => import('../slos/SlosPage.tsx').then((module) => ({ default: module.SlosPage }));
+const LazySlisPage = lazy(loadSlisPage);
+const LazySlosPage = lazy(loadSlosPage);
+
+// Fetch public route code while checking the session; protected data still waits
+// for authorization, and the screen boundary handles an actual module failure.
+if (location.pathname.startsWith('/slis')) void loadSlisPage().catch(() => {});
+else if (location.pathname.startsWith('/slos') || location.pathname.startsWith('/services/')) void loadSlosPage().catch(() => {});
 const emptyAgentDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '' };
 
 class ScreenBoundary extends Component<{ screen: string; children: ReactNode }, { failed: boolean }> {

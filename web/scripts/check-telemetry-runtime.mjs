@@ -113,9 +113,9 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       }
       await page.evaluate(async()=>{await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
       const elapsed=performance.now()-started;
-      const rendered=await page.evaluate(()=>({events:window.almanacRuntimeJourneys,resources:performance.getEntriesByType('resource').filter(entry=>/\/assets\/[^/]+\.js$/.test(new URL(entry.name).pathname)).map(entry=>({encoded_bytes:entry.encodedBodySize,decoded_bytes:entry.decodedBodySize}))}));
+      const rendered=await page.evaluate(()=>({events:window.almanacRuntimeJourneys,resources:performance.getEntriesByType('resource').filter(entry=>/\/assets\/[^/]+\.js$/.test(new URL(entry.name).pathname)).map(entry=>({path:new URL(entry.name).pathname,start_ms:entry.startTime,duration_ms:entry.duration,response_start_ms:entry.responseStart,response_end_ms:entry.responseEnd,transfer_bytes:entry.transferSize,encoded_bytes:entry.encodedBodySize,decoded_bytes:entry.decodedBodySize}))}));
       const wallElapsed=Date.now()-wallStarted;
-      Object.assign(sample,{result:'ready',elapsed_ms:elapsed,wall_elapsed_ms:wallElapsed,clock_adjustment_ms:wallElapsed-elapsed,server_date_ms:latestDate,pending_responses:pending,script_encoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.encoded_bytes,0),script_decoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.decoded_bytes,0)});
+      Object.assign(sample,{result:'ready',elapsed_ms:elapsed,wall_elapsed_ms:wallElapsed,clock_adjustment_ms:wallElapsed-elapsed,server_date_ms:latestDate,pending_responses:pending,script_resources:rendered.resources,script_encoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.encoded_bytes,0),script_decoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.decoded_bytes,0)});
       assert.ok(Math.abs(wallElapsed-elapsed)<250,'clock discontinuity invalidates the runtime sample');
       assert.deepEqual([...capabilities],[mode==='enabled'?'1':'0'],'runtime tracing configuration was not applied');
       if(mode==='enabled')events.push(...rendered.events);
