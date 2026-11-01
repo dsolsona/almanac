@@ -1566,22 +1566,48 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
 			BudgetSeries: api.SloOperationalSeries{Kind: "rolling_budget", Samples: samples}}, nil
 	}
-	evaluate := func(at time.Time, duration time.Duration) (slo.WindowResult, error) {
-		if !input.currentOnly && input.displayCache == nil && input.retainedReader == nil {
-			return evaluateOperationalAt(ctx, base, at, duration)
+	var currentWindows map[time.Duration]slo.WindowResult
+	if input.currentOnly || input.displayCache != nil || input.retainedReader != nil {
+		currentWindows = make(map[time.Duration]slo.WindowResult)
+		durations := []time.Duration{window}
+		if time.Hour%cadence == 0 {
+			durations = append(durations, time.Hour)
 		}
-		value := base
-		value.At, value.Duration = at, duration
-		return evaluateDerivedWindow(ctx, q, row.SliID, row.MeasurementRevision, value)
+		if 6*time.Hour%cadence == 0 {
+			durations = append(durations, 6*time.Hour)
+		}
+		var inputs []slo.WindowInput
+		for _, duration := range durations {
+			if _, exists := currentWindows[duration]; exists {
+				continue
+			}
+			value := base
+			value.At, value.Duration = effectiveAt, duration
+			inputs = append(inputs, value)
+			currentWindows[duration] = slo.WindowResult{}
+		}
+		values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		for index, value := range values {
+			currentWindows[inputs[index].Duration] = value
+		}
 	}
-	currentResult, err := evaluate(effectiveAt, time.Duration(row.RollingWindowSeconds)*time.Second)
+	evaluate := func(duration time.Duration) (slo.WindowResult, error) {
+		if currentWindows != nil {
+			return currentWindows[duration], nil
+		}
+		return evaluateOperationalAt(ctx, base, effectiveAt, duration)
+	}
+	currentResult, err := evaluate(window)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	burn1h := unavailableBurn(3600, effectiveAt, "cadence_mismatch")
 	var burn1hResult *slo.WindowResult
 	if time.Hour%cadence == 0 {
-		result, evalErr := evaluate(effectiveAt, time.Hour)
+		result, evalErr := evaluate(time.Hour)
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
@@ -1590,7 +1616,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	}
 	burn6h := unavailableBurn(21600, effectiveAt, "cadence_mismatch")
 	if 6*time.Hour%cadence == 0 {
-		result, evalErr := evaluate(effectiveAt, 6*time.Hour)
+		result, evalErr := evaluate(6 * time.Hour)
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}

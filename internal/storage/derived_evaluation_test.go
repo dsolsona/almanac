@@ -1,9 +1,69 @@
 package storage
 
 import (
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/slo"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+func TestCurrentWindowBatchPreservesEachExactBoundary(t *testing.T) {
+	end := time.Date(2026, 11, 1, 12, 34, 0, 0, time.UTC)
+	now := end.Add(10 * time.Second)
+	id := pgtype.UUID{Bytes: [16]byte{1}, Valid: true}
+	inputs := []slo.WindowInput{}
+	for _, duration := range []time.Duration{28 * 24 * time.Hour, time.Hour, 6 * time.Hour} {
+		inputs = append(inputs, slo.WindowInput{At: end, Now: now, Duration: duration, Cadence: time.Minute})
+	}
+	params, err := derivedWindowBatchParams(id, 3, inputs)
+	if err != nil || params.SliID != id || params.MeasurementRevision != 3 || !params.Now.Time.Equal(now) || len(params.WindowEnds) != 3 {
+		t.Fatalf("current window batch lost its source/clock scope: %v", err)
+	}
+	starts := []time.Time{time.Date(2026, 10, 4, 12, 34, 0, 0, time.UTC), end.Add(-time.Hour), end.Add(-6 * time.Hour)}
+	for index, start := range starts {
+		fullStart := start.Truncate(time.Hour).Add(time.Hour)
+		fullEnd := end.Truncate(time.Hour)
+		if !params.WindowEnds[index].Time.Equal(end) || !params.FullStarts[index].Time.Equal(fullStart) || !params.FullEnds[index].Time.Equal(fullEnd) ||
+			!params.EdgeAStarts[index].Time.Equal(start) || !params.EdgeAEnds[index].Time.Equal(fullStart) || !params.EdgeBStarts[index].Time.Equal(fullEnd) || !params.EdgeBEnds[index].Time.Equal(end) {
+			t.Fatalf("current/burn window %d changed exact source boundaries", index)
+		}
+	}
+	for index := range inputs {
+		inputs[index].At = end.Truncate(time.Hour)
+	}
+	params, err = derivedWindowBatchParams(id, 3, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range inputs {
+		at := inputs[index].At
+		if !params.EdgeAStarts[index].Time.Equal(at) || !params.EdgeAEnds[index].Time.Equal(at) || !params.EdgeBStarts[index].Time.Equal(at) || !params.EdgeBEnds[index].Time.Equal(at) {
+			t.Fatal("aligned windows gained a spurious raw edge")
+		}
+	}
+}
+
+func TestCurrentWindowBatchRejectsMixedClockAndUnboundedInput(t *testing.T) {
+	at := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	base := slo.WindowInput{At: at, Now: at, Duration: time.Hour, Cadence: time.Minute}
+	for _, mutate := range []func(*slo.WindowInput){
+		func(value *slo.WindowInput) { value.Now = at.Add(time.Second) },
+		func(value *slo.WindowInput) { value.Cadence = 17 * time.Second },
+		func(value *slo.WindowInput) { value.Cadence = 0 },
+		func(value *slo.WindowInput) { value.Duration = time.Second },
+	} {
+		inputs := []slo.WindowInput{base, base}
+		mutate(&inputs[1])
+		if _, err := derivedWindowBatchParams(pgtype.UUID{}, 1, inputs); !errors.Is(err, slo.ErrInvalidCalculation) {
+			t.Fatalf("incoherent window batch accepted: %v", err)
+		}
+	}
+	if _, err := derivedWindowBatchParams(pgtype.UUID{}, 1, make([]slo.WindowInput, 961)); !errors.Is(err, ErrOperationalResource) {
+		t.Fatalf("oversized window batch accepted: %v", err)
+	}
+}
 
 func TestDerivedHourEdgesStayExactForIrregularAndLongCadences(t *testing.T) {
 	for _, seconds := range []int{15, 17, 60, 90, 420, 3600, 3601, 86399, 86400} {

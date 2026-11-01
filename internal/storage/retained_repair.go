@@ -131,7 +131,6 @@ func buildRetainedRepairPoints(ctx context.Context, q *dbgen.Queries, row dbgen.
 		RetentionStart: now.Add(-sli.ObservationRetention), Target: sli.NormalizeDecimal(row.Target),
 		FreshnessGrace: cadence + time.Duration(source.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds))}
 	var inputs []slo.WindowInput
-	params := dbgen.ReadRetainedWindowBatchParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, Now: timestamp(now)}
 	durations := []time.Duration{time.Duration(row.RollingWindowSeconds) * time.Second, cadence}
 	if time.Hour%cadence == 0 {
 		durations = append(durations, time.Hour)
@@ -147,43 +146,19 @@ func buildRetainedRepairPoints(ctx context.Context, q *dbgen.Queries, row dbgen.
 			input := base
 			input.At, input.Duration = at, duration
 			inputs = append(inputs, input)
-			p := derivedWindowParams(row.SliID, row.MeasurementRevision, input)
-			params.WindowEnds = append(params.WindowEnds, p.WindowEnd)
-			params.FullStarts, params.FullEnds = append(params.FullStarts, p.FullStart), append(params.FullEnds, p.FullEnd)
-			a, b, c, d := p.WindowEnd, p.WindowEnd, p.WindowEnd, p.WindowEnd
-			if len(p.EdgeStarts) > 0 {
-				a, b = p.EdgeStarts[0], p.EdgeEnds[0]
-			}
-			if len(p.EdgeStarts) > 1 {
-				c, d = p.EdgeStarts[1], p.EdgeEnds[1]
-			}
-			params.EdgeAStarts, params.EdgeAEnds = append(params.EdgeAStarts, a), append(params.EdgeAEnds, b)
-			params.EdgeBStarts, params.EdgeBEnds = append(params.EdgeBStarts, c), append(params.EdgeBEnds, d)
 		}
 	}
 	if len(inputs) == 0 {
 		return []retainedSloPoint{}, nil
 	}
-	counts, err := q.ReadRetainedWindowBatch(ctx, params)
+	values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
 	if err != nil {
 		return nil, err
 	}
-	if len(counts) != len(inputs) {
-		return nil, slo.ErrOperationalFacts
-	}
 	points := make([]retainedSloPoint, len(inputs)/len(durations))
 	revision := strconv.FormatInt(row.DefinitionRevision, 10)
-	for index, count := range counts {
-		if count.Ordinal != int32(index+1) {
-			return nil, slo.ErrOperationalFacts
-		}
+	for index, value := range values {
 		input := inputs[index]
-		value, err := evaluateDerivedCounts(ctx, input, dbgen.ReadDerivedWindowTotalsRow{Good: count.Good, Total: count.Total, Observed: count.Observed,
-			KnownEmpty: count.KnownEmpty, ZeroTraffic: count.ZeroTraffic, FirstObservation: count.FirstObservation,
-			LastObservation: count.LastObservation, LatestReceipt: count.LatestReceipt, Prepared: count.Prepared, Exhausted: count.Exhausted})
-		if err != nil {
-			return nil, err
-		}
 		point := &points[index/len(durations)]
 		switch index % len(durations) {
 		case 0:
