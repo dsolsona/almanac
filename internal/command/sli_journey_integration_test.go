@@ -308,7 +308,7 @@ func runNamedConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, ba
 	if err != nil || json.Unmarshal(output, &created) != nil || !validCLIUUID(created.Result.Agent.ID) {
 		t.Fatal("register SLI journey agent failed")
 	}
-	agentBinary, err := filepath.Abs(filepath.Join("..", "..", "bin", "almanac-agent"))
+	agentBinary, err := filepath.Abs(filepath.Join(filepath.Dir(binary), "almanac-agent"))
 	if err != nil {
 		t.Fatal("resolve candidate agent executable failed")
 	}

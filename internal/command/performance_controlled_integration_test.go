@@ -206,6 +206,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("supplemental-shared-source", shared, err) {
 		return
 	}
+	stage("clock-only-current-and-global-urgency")
+	clock, err := performanceClockOnly(t, ctx, fleet, shared, late)
+	if !record("clock-only-current-and-global-urgency", clock, err) {
+		return
+	}
 	stage("completed")
 	t.Logf("controlled performance evidence: %s", artifacts)
 }
