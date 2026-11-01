@@ -11,7 +11,7 @@ let output;
 let stage = 'fixture';
 const report = {
   schema_version: 1,
-  environment: { cpu_slowdown: 4, download_bits_per_second: 10_000_000, latency_ms: 100, viewport: { width: 1440, height: 900 } },
+  environment: { cpu_slowdown: 1, download_bits_per_second: null, latency_ms: null, viewport: { width: 1440, height: 900 } },
   cold_loads: [], warm_loads: [], lifecycle_loads: [], interactions: [], list_actions: [], list_coverage: {}, failures: [],
   trace_evidence: [],
 };
@@ -182,8 +182,8 @@ async function measuredPage(context, fixture) {
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 100, downloadThroughput: 1_250_000, uploadThroughput: 1_250_000 });
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: fixture.network_latency_ms, downloadThroughput: -1, uploadThroughput: -1 });
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   return page;
 }
 
@@ -248,7 +248,9 @@ try {
   assert.ok([10, 100, 1000].includes(fixture.fleet_size));
   assert.equal(fixture.cache_setup.result,'restarted-with-retained-data');
   assert.equal(fixture.cache_setup.target_slo_id,fixture.slo_id);
-  assert.equal(fixture.cache_setup.never_visited_detail,true);
+  assert.ok([0,100].includes(fixture.network_latency_ms));
+  assert.equal(fixture.cache_setup.never_visited_detail,fixture.network_latency_ms===0);
+  report.environment.latency_ms=fixture.network_latency_ms;
   assert.ok(fixture.cache_setup.preserved_target_points>0&&fixture.cache_setup.preserved_target_tiles>0);
   assert.equal(fixture.cache_setup.preserved_current_summaries,fixture.fleet_size);
   assert.equal(fixture.datasource_ids.length,10);
@@ -279,7 +281,7 @@ try {
   await loginContext.close();
 
   const load=async(page,view,budget,cohort,index,navigate)=>{
-    const sample={view,index,budget_ms:budget,browser_cache:cohort==='cold'?'fresh-disabled':'warm-enabled',server_response_cache:cohort==='cold'&&index===0?'evicted-before-restart; no prior visit to this route':'reuse eligible; actual hit/miss requires trace evidence'};
+    const sample={view,index,budget_ms:budget,browser_cache:cohort==='cold'?'fresh-disabled':'warm-enabled',server_response_cache:cohort==='cold'&&index===0?(fixture.cache_setup.never_visited_detail?'evicted-before-restart; reserved first visit':'evicted-before-restart; previously exercised objective'):'reuse eligible; actual hit/miss requires trace evidence'};
     try {
       await navigate();
       await page.waitForFunction(()=>Number.isFinite(window.__almanacPerformance?.primary_ms),{},{timeout:10_000});

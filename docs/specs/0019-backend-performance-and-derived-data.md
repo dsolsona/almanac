@@ -115,6 +115,12 @@ or versioned during the API contract review; do not silently alter generated typ
 
 ### Browser behavior
 
+On 2026-11-01 the maintainer clarified that the acceptance device is reasonably
+capable, without artificial CPU slowdown. Record real hardware and measure the
+complete journey with separate normal-network and added-100-ms-latency cohorts,
+without an artificial bandwidth cap. The <500 ms detail/graph and <1,000 ms list limits and the
+10/100/1,000-objective year-history requirements remain unchanged.
+
 Share identical in-flight reads; cache definitions and confirmed history for up to
 30 seconds with at most 100 retained query entries and five minutes of inactivity.
 Mutations invalidate affected entries immediately; sign-out/authorization failure

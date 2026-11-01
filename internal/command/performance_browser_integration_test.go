@@ -25,13 +25,13 @@ import (
 	"time"
 )
 
-func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceFleet, restart performanceBrowserRestartReport) (string, error) {
+func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceFleet, restart performanceBrowserRestartReport, networkLatency int) (string, error) {
 	t.Helper()
 	f := fleet.fixture
 	if len(fleet.objectives) != 10 && len(fleet.objectives) != 100 && len(fleet.objectives) != 1000 {
 		return "", errors.New("browser performance requires the complete controlled fleet")
 	}
-	if !restart.NeverVisited || restart.Target != fleet.objectives[len(fleet.objectives)-1] {
+	if networkLatency != 0 && networkLatency != 100 || restart.NeverVisited != (networkLatency == 0) || restart.Target != fleet.objectives[len(fleet.objectives)-1] {
 		return "", errors.New("browser acceptance requires its reserved never-visited detail target")
 	}
 	block, rest := pem.Decode(f.certificate)
@@ -82,7 +82,8 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		CacheSetup  performanceBrowserRestartReport `json:"cache_setup"`
 		TraceURL    string                          `json:"trace_url"`
 		Deployment  performanceDeploymentEvidence   `json:"deployment"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, restart.Target, artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment})
+		Latency     int                             `json:"network_latency_ms"`
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, restart.Target, artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment, networkLatency})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}
@@ -136,6 +137,11 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		Artifact   string  `json:"artifact"`
 	}
 	var report struct {
+		Environment struct {
+			CPU      int    `json:"cpu_slowdown"`
+			Latency  int    `json:"latency_ms"`
+			Download *int64 `json:"download_bits_per_second"`
+		} `json:"environment"`
 		Result         string                          `json:"result"`
 		Candidate      string                          `json:"candidate_binary_sha256"`
 		ColdLoads      []measuredLoad                  `json:"cold_loads"`
@@ -160,6 +166,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	}
 	if readErr != nil || reportCloseErr != nil || len(reportBody) > 8<<20 || json.Unmarshal(reportBody, &report) != nil ||
 		report.Result != "passed" || report.Candidate != hex.EncodeToString(digest.Sum(nil)) || report.Deployment != deployment ||
+		report.Environment.CPU != 1 || report.Environment.Latency != networkLatency || report.Environment.Download != nil ||
 		len(report.ColdLoads) != 60 || len(report.WarmLoads) != 60 || len(report.LifecycleLoads) != 1 || len(report.Interactions) != 50 || len(report.Failures) != 0 || len(report.Traces) != 171 {
 		return artifacts, errors.New("browser performance report is incomplete, failed or from another executable")
 	}
@@ -192,7 +199,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		usedTraces[id] = true
 		return true
 	}
-	if report.CacheSetup.Result != restart.Result || report.CacheSetup.Target != restart.Target || report.CacheSetup.PreservedPoints != restart.PreservedPoints || report.CacheSetup.PreservedTiles != restart.PreservedTiles || report.CacheSetup.PreservedCurrent != int64(len(fleet.objectives)) {
+	if report.CacheSetup.NeverVisited != restart.NeverVisited || report.CacheSetup.Result != restart.Result || report.CacheSetup.Target != restart.Target || report.CacheSetup.PreservedPoints != restart.PreservedPoints || report.CacheSetup.PreservedTiles != restart.PreservedTiles || report.CacheSetup.PreservedCurrent != int64(len(fleet.objectives)) {
 		return artifacts, errors.New("browser report omitted retained-restart/cache-eviction provenance")
 	}
 	validDetail := func(sample measuredLoad) bool {

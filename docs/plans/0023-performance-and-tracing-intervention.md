@@ -10,6 +10,12 @@
 
 ## Required outcome
 
+Hardware clarification, 2026-11-01: the maintainer requires a reasonably capable
+device without artificial CPU throttling. Measure normal networking and an added
+100 ms latency separately, without an artificial bandwidth cap. Use the updated
+SPEC-0012 fixture and record the actual machine. This replaces the earlier weak-device assumption;
+page-speed, accuracy and year/scale requirements remain unchanged.
+
 An accurate SLO application that feels fast when people use it, with a year of
 history and 10, 100 or 1,000 SLOs in the installation. Retention is one year; the
 proposed precise duration is 365 days, matching the existing `1y` graph range.

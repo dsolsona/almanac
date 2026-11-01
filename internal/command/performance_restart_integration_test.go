@@ -37,7 +37,7 @@ type performanceBrowserRestartReport struct {
 
 // This deliberately evicts response caches, not maintained source/history data.
 // No application read or preparation wait is allowed between restart and browser.
-func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet) performanceBrowserRestartReport {
+func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet, requireNeverVisited bool) performanceBrowserRestartReport {
 	t.Helper()
 	f := fleet.fixture
 	report := performanceBrowserRestartReport{Target: fleet.objectives[len(fleet.objectives)-1]}
@@ -77,10 +77,10 @@ func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet) performa
 		t.Fatal("browser cache fixture omitted maintained history/current state")
 	}
 	var priorDetails int64
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='retained_detail'`, report.Target).Scan(&priorDetails); err != nil || priorDetails != 0 || !fleet.reserveDetail {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='retained_detail'`, report.Target).Scan(&priorDetails); err != nil || requireNeverVisited && priorDetails != 0 || !fleet.reserveDetail {
 		t.Fatal("first browser detail target was visited before response eviction")
 	}
-	report.NeverVisited = true
+	report.NeverVisited = requireNeverVisited
 	if _, err := tx.Exec(ctx, `DELETE FROM public.almanac_slo_overview_snapshot_items`); err != nil {
 		t.Fatal("evict fixture overview references failed")
 	}

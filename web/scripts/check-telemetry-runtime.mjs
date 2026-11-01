@@ -78,22 +78,23 @@ export async function captureTraces(traceURL,events,artifacts,backendSHA,contain
 
 // Called only by the existing isolated Compose acceptance gate. The application,
 // PostgreSQL, authentication and collector are real; no product route is mocked.
-export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloID,artifacts,backendSHA,traceURL,setEnabled,containsSecret,sampleRuntime,snapshotDataset,precedingFailure=null}) {
+export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloID,artifacts,backendSHA,traceURL,setEnabled,containsSecret,sampleRuntime,snapshotDataset,precedingFailure=null,networkLatency=0}) {
+  assert.ok(networkLatency===0||networkLatency===100,'unsupported network comparison');
   const dependencies=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).dependencies;
   const cases=[['sli.list','/slis'],['slo.list','/slos'],['slo.detail','/slos/'+sloID]];
   const samples=[],events=[];
   const report={hardware:{host_cpu:cpus()[0]?.model,host_memory_bytes:totalmem(),platform:platform(),architecture:arch()},
     software:{node:process.version,chromium:browser.version(),otel_api:dependencies['@opentelemetry/api'],otel_sdk:dependencies['@opentelemetry/sdk-trace'],otel_http_exporter:dependencies['@opentelemetry/exporter-trace-otlp-http']},
-    fixture:{viewport:[1440,1000],cpu_slowdown:4,download_mbit:10,upload_mbit:10,rtt_ms:100,root_sampling:1,order:['enabled','disabled','disabled','enabled'],warm_samples_per_page_and_mode:10,matrix_collection_bound_ms:180_000,disabled_mode:'Same production bundle; OTEL_SDK_DISABLED and browser capability disable tracing. Common SDK loading remains in both modes.'},
+    fixture:{viewport:[1440,1000],cpu_slowdown:1,bandwidth_cap:null,rtt_ms:networkLatency,root_sampling:1,order:['enabled','disabled','disabled','enabled'],warm_samples_per_page_and_mode:10,matrix_collection_bound_ms:180_000,disabled_mode:'Same production bundle; OTEL_SDK_DISABLED and browser capability disable tracing. Common SDK loading remains in both modes.'},
     backend_sha256:backendSHA,preceding_gate_failure:precedingFailure,samples,overhead:[],process_samples:[],speed_failures:[],minute_boundary:null,tracing_checks_passed:false,page_speed_passed:false};
   let latestDate=0;
   const visit=async(context,journey,path,mode,block,phase)=>{
     report.current={journey,mode,block,phase};
     const page=await context.newPage(); page.setDefaultTimeout(10_000);
     const cdp=await context.newCDPSession(page);
-    await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
+    await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
     await cdp.send('Network.enable');
-    await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:100,downloadThroughput:10_000_000/8,uploadThroughput:10_000_000/8});
+    await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:networkLatency,downloadThroughput:-1,uploadThroughput:-1});
     await page.addInitScript(()=>{
       window.almanacRuntimeJourneys=[];
       addEventListener('almanac:journey',event=>{const value=event.detail;if(/^[0-9a-f]{32}$/.test(value?.traceId)&&Number.isFinite(value.duration))window.almanacRuntimeJourneys.push({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration});});
@@ -201,9 +202,9 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       const diagnostic=await browser.newContext({storageState,viewport:{width:1440,height:1000},colorScheme:'light'});
       try{
         const page=await diagnostic.newPage(),cdp=await diagnostic.newCDPSession(page);
-        await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
+        await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
         await cdp.send('Network.enable');
-        await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:100,downloadThroughput:10_000_000/8,uploadThroughput:10_000_000/8});
+        await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:networkLatency,downloadThroughput:-1,uploadThroughput:-1});
         await cdp.send('Profiler.enable');
         await cdp.send('Profiler.setSamplingInterval',{interval:1000});
         await cdp.send('Profiler.start');
@@ -214,7 +215,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
         const {profile}=await cdp.send('Profiler.stop');
         assert.ok(Array.isArray(profile.nodes)&&profile.nodes.length>0&&profile.endTime>profile.startTime,'browser CPU profile is incomplete');
         const resources=await page.evaluate(()=>performance.getEntriesByType('resource').filter(entry=>new URL(entry.name).pathname.startsWith('/assets/')).map(entry=>({path:new URL(entry.name).pathname,protocol:entry.nextHopProtocol,start_ms:entry.startTime,end_ms:entry.responseEnd,encoded_bytes:entry.encodedBodySize})));
-        const encoded=JSON.stringify({acceptance_sample:false,backend_sha256:backendSHA,profile,resources});
+        const encoded=JSON.stringify({acceptance_sample:false,backend_sha256:backendSHA,cpu_slowdown:1,added_latency_ms:networkLatency,bandwidth_cap:null,profile,resources});
         assert.ok(Buffer.byteLength(encoded)<=8*1024*1024&&!containsSecret(encoded),'unsafe or oversized browser CPU profile');
         await writeFile(join(artifacts,'browser-cpu-slo.detail.json'),encoded,{mode:0o600});
         report.diagnostic_profile='browser-cpu-slo.detail.json';

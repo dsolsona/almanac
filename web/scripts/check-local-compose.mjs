@@ -294,8 +294,22 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     await expect(page.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
     const storageState=await context.storageState();
     await context.close();
-    await checkTelemetryRuntime({browser,url,storageState,sliID:objective.sli_id,sloID:objective.slo_id,
-      artifacts,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,precedingFailure});
+    const comparisons=[];
+    let firstFailure;
+    for(const networkLatency of [0,100]){
+      const directory=join(artifacts,`network-${networkLatency}ms`);
+      mkdirSync(directory,{mode:0o700});
+      try{
+        await checkTelemetryRuntime({browser,url,storageState,sliID:objective.sli_id,sloID:objective.slo_id,
+          artifacts:directory,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,precedingFailure,networkLatency});
+        comparisons.push({added_latency_ms:networkLatency,result:'passed',artifacts:directory});
+      }catch(error){
+        firstFailure??=error;
+        comparisons.push({added_latency_ms:networkLatency,result:'failed',artifacts:directory});
+      }
+    }
+    writeFileSync(join(artifacts,'network-comparison.json'),JSON.stringify({cpu_slowdown:1,bandwidth_cap:null,comparisons}),{mode:0o600});
+    if(firstFailure)throw firstFailure;
   } finally {
     activeBrowser=undefined;
     await browser.close();

@@ -278,7 +278,10 @@ Accepted initial budgets; implementation measurement remains required:
 For these checks use a production build, deterministic fixtures of 10/100/1,000 SLOs with a year of history, a
 10- or 20-row list page, and an SLO-detail view with four charts of two series each, capped
 at 1,500 points per series. Record the machine, browser, viewport and build; use
-Chrome with 4x CPU slowdown, 10 Mbit/s download and 100 ms RTT. API latency is reported separately from transport/rendering; meeting it alone
+Chrome on a reasonably capable device with no artificial CPU slowdown or bandwidth
+cap. Measure separate normal-network and added-100-ms-latency cohorts. The
+maintainer explicitly clarified both conditions on 2026-11-01; record the actual
+CPU, RAM and browser and report each cohort separately. API latency is reported separately from transport/rendering; meeting it alone
 cannot satisfy the stricter full-journey budget. Capture complete OpenTelemetry
 journeys in VictoriaTraces under [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md).
 No ordinary page load may wait for graph preparation jobs. Collect

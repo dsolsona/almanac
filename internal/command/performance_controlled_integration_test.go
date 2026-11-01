@@ -182,14 +182,21 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("independent-concurrent-current-365-days", current, err) {
 		return
 	}
-	stage("response-cache-eviction-and-retained-restart")
-	browserRestart := restartPerformanceForBrowser(t, fleet)
-	record("response-cache-eviction-and-retained-restart", browserRestart, nil)
-	stage("production-browser-365-days")
-	browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
-	browserArtifacts, err := runPerformanceBrowser(t, browserContext, fleet, browserRestart)
-	stopBrowser()
-	if !record("production-browser-365-days", struct{ Artifacts string }{browserArtifacts}, err) {
+	browserFailed := false
+	for _, latency := range []int{0, 100} {
+		label := fmt.Sprintf("production-browser-365-days-%dms", latency)
+		stage(label + "-response-eviction")
+		browserRestart := restartPerformanceForBrowser(t, fleet, latency == 0)
+		record(label+"-response-eviction", browserRestart, nil)
+		stage(label)
+		browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
+		browserArtifacts, browserErr := runPerformanceBrowser(t, browserContext, fleet, browserRestart, latency)
+		stopBrowser()
+		if !record(label, struct{ Artifacts string }{browserArtifacts}, browserErr) {
+			browserFailed = true
+		}
+	}
+	if browserFailed {
 		return
 	}
 	fleet.reserveDetail = false
