@@ -13,6 +13,7 @@ import (
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Repair one bounded hour, publishing its exact points and moving its cursor in
@@ -43,9 +44,13 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		defer stop()
 		conflict, serialization := errors.AsType[*pgconn.PgError](resultErr)
 		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) || serialization && conflict.Code == "40001" {
+			var reason pgtype.Text
+			if errors.Is(resultErr, ErrDerivedSourceFailed) {
+				reason = pgtype.Text{String: "source_aggregate_failed", Valid: true}
+			}
 			err := dbgen.New(conn).DeferRetainedSeriesRepair(cleanup, dbgen.DeferRetainedSeriesRepairParams{SloID: work.SloID,
 				DefinitionRevision: work.DefinitionRevision, MeasurementRevision: work.MeasurementRevision,
-				CalculationVersion: work.CalculationVersion, LeaseEpoch: work.LeaseEpoch, NextAttemptAt: timestamp(clock().Add(time.Second))})
+				CalculationVersion: work.CalculationVersion, LeaseEpoch: work.LeaseEpoch, NextAttemptAt: timestamp(clock().Add(time.Second)), LastError: reason})
 			resultErr = errors.Join(resultErr, err)
 			return
 		}

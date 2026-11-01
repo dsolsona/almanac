@@ -51,6 +51,16 @@ func RetrySloPreparation(ctx context.Context, databaseURL string, input RetrySlo
 	} else {
 		changed, err = q.RetryFailedSloHistoryJob(ctx, dbgen.RetryFailedSloHistoryJobParams{ID: jobID, SloID: id, NextAttemptAt: now})
 		if err == nil && changed == 0 {
+			changed, err = q.RetryRetainedTile(ctx, dbgen.RetryRetainedTileParams{JobID: jobID, SloID: id,
+				DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+				CalculationVersion: operationalCalculationVersion, Now: now})
+		}
+		if err == nil && changed == 0 {
+			changed, err = q.RetryRetainedRepair(ctx, dbgen.RetryRetainedRepairParams{JobID: jobID, SloID: id,
+				DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+				CalculationVersion: operationalCalculationVersion, Now: now})
+		}
+		if err == nil && changed == 0 {
 			action = "sli.aggregate.retry"
 			changed, err = q.RetrySourceAggregate(ctx, dbgen.RetrySourceAggregateParams{JobID: jobID, SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, Now: now})
 		}

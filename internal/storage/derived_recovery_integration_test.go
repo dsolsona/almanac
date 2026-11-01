@@ -203,6 +203,71 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatal(err)
 	}
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
+	verifyRetainedWorkRecovery(t, runtime, databaseURL, proof, id, clock)
+}
+
+func verifyRetainedWorkRecovery(t *testing.T, runtime *Runtime, databaseURL string, proof DatasourceProof, id string, clock func() time.Time) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	pgID, _ := canonicalUUID(id)
+	start := clock().UTC().Truncate(time.Hour).Add(-72 * time.Hour)
+	var tileID, repairID pgtype.UUID
+	if err := conn.QueryRow(t.Context(), `INSERT INTO public.almanac_slo_series_tile_work
+        (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at,attempts,lease_until)
+        VALUES ($1,1,1,$2,3600,$3,$3::timestamptz+interval '1 hour',0,$4,5,$4::timestamptz+interval '30 seconds') RETURNING id`, pgID, operationalCalculationVersion, start, clock()).Scan(&tileID); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_slo_series_tile_work WHERE id=$1`, tileID); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := conn.QueryRow(t.Context(), `UPDATE public.almanac_slo_series_repair SET cursor_at=end_at-interval '1 minute',attempts=5,lease_until=NULL
+        WHERE slo_id=$1 AND definition_revision=1 AND measurement_revision=1 AND calculation_version=$2 RETURNING id`, pgID, operationalCalculationVersion).Scan(&repairID); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET cursor_at=end_at,attempts=0,lease_until=NULL,last_error=NULL WHERE id=$1`, repairID); err != nil {
+			t.Error(err)
+		}
+	}()
+	retry := RetrySloPreparationInput{Runtime: runtime, Proof: proof, SloID: id, JobID: tileID.String(), RequestID: "retained-tile-retry", Now: clock}
+	if err := RetrySloPreparation(t.Context(), databaseURL, retry); !errors.Is(err, ErrObjectiveConflict) {
+		t.Fatalf("manual retry stole an active tile lease: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_tile_work SET lease_until=$2 WHERE id=$1`, tileID, clock().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	page, err := ReadSloPreparation(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: proof, ID: id, Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, item := range page.Items {
+		if item.Id == tileID.Bytes || item.Id == repairID.Bytes {
+			if item.Stage != "history" || item.State != "failed" || item.Attempts != 5 {
+				t.Fatalf("retained exhaustion was hidden: %+v", item)
+			}
+			found++
+		}
+	}
+	if found != 2 {
+		t.Fatalf("retained work missing from preparation diagnostics: %d", found)
+	}
+	for _, job := range []pgtype.UUID{tileID, repairID} {
+		retry.JobID = job.String()
+		if err := RetrySloPreparation(t.Context(), databaseURL, retry); err != nil {
+			t.Fatal(err)
+		}
+		if err := RetrySloPreparation(t.Context(), databaseURL, retry); !errors.Is(err, ErrObjectiveConflict) {
+			t.Fatalf("retry replay replenished a running budget: %v", err)
+		}
+		var count int
+		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_audit_events WHERE subject_id=$1 AND action='slo.history.retry' AND request_id=$2`, job, retry.RequestID).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("retained retry did not commit one audit: %d, %v", count, err)
+		}
+	}
 }
 
 func verifyRetainedSelectedValues(t *testing.T, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, value api.SloOperationalDetail) {

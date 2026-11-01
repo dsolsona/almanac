@@ -58,7 +58,7 @@ UPDATE public.almanac_slo_series_repair w
 SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
 FROM candidate c WHERE (w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version)
     =(c.slo_id,c.definition_revision,c.measurement_revision,c.calculation_version)
-RETURNING w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.cursor_at, w.end_at, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error
+RETURNING w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.cursor_at, w.end_at, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.id, w.manual_retried_at
 `
 
 type ClaimRetainedSeriesRepairParams struct {
@@ -82,12 +82,15 @@ func (q *Queries) ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetain
 		&i.LeaseUntil,
 		&i.NextAttemptAt,
 		&i.LastError,
+		&i.ID,
+		&i.ManualRetriedAt,
 	)
 	return i, err
 }
 
 const deferRetainedSeriesRepair = `-- name: DeferRetainedSeriesRepair :exec
-UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6
+UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6,
+    last_error=$7::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5
 `
 
@@ -98,6 +101,7 @@ type DeferRetainedSeriesRepairParams struct {
 	CalculationVersion  string             `json:"calculation_version"`
 	LeaseEpoch          int64              `json:"lease_epoch"`
 	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError           pgtype.Text        `json:"last_error"`
 }
 
 func (q *Queries) DeferRetainedSeriesRepair(ctx context.Context, arg DeferRetainedSeriesRepairParams) error {
@@ -108,6 +112,7 @@ func (q *Queries) DeferRetainedSeriesRepair(ctx context.Context, arg DeferRetain
 		arg.CalculationVersion,
 		arg.LeaseEpoch,
 		arg.NextAttemptAt,
+		arg.LastError,
 	)
 	return err
 }

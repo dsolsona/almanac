@@ -6,9 +6,10 @@ WITH requested AS (
            unnest(sqlc.arg(starts)::timestamptz[]) AS range_start,
            unnest(sqlc.arg(ends)::timestamptz[]) AS range_end,
            unnest(sqlc.arg(resolutions)::integer[]) AS resolution
-)
+), selected AS (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
        r.resolution::integer AS resolution,coalesce(t.payload,'{}'::jsonb)::jsonb AS payload,
+       coalesce(sum(octet_length(t.payload::text)) OVER (),0)::bigint AS payload_bytes,
        t.source_generation,t.published_at,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
@@ -37,4 +38,32 @@ FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
  AND t.measurement_revision=sqlc.arg(measurement_revision) AND t.exclusion_revision=0
  AND t.calculation_version=sqlc.arg(calculation_version) AND t.resolution_seconds=r.resolution
  AND t.range_start=r.range_start AND t.range_end=r.range_end
-ORDER BY r.ordinal;
+)
+SELECT ordinal,range_start,range_end,resolution,
+       CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::jsonb END::jsonb AS payload,
+       payload_bytes,source_generation,published_at,exhausted,ready
+FROM selected ORDER BY ordinal;
+
+-- name: ReadRetainedEdgePoints :many
+WITH selected AS (
+    SELECT p.evaluation_at,p.payload,
+           sum(octet_length(p.payload::text)) OVER ()::bigint AS payload_bytes,
+           EXISTS (
+               SELECT 1 FROM public.almanac_slo_series_repair w
+               WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
+                 AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
+                 AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at
+           ) AS repairing,
+           EXISTS (
+               SELECT 1 FROM public.almanac_slo_series_repair w
+               WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
+                 AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
+                 AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at AND w.attempts>=5
+           ) AS exhausted
+    FROM public.almanac_slo_series_points p
+    WHERE p.slo_id=$1 AND p.definition_revision=$2 AND p.measurement_revision=$3
+      AND p.exclusion_revision=0 AND p.calculation_version=$4 AND p.evaluation_at>$5 AND p.evaluation_at<=$6
+    ORDER BY p.evaluation_at LIMIT 961
+)
+SELECT evaluation_at,CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::jsonb END::jsonb AS payload,
+       payload_bytes,repairing,exhausted FROM selected ORDER BY evaluation_at;

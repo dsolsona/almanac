@@ -101,3 +101,23 @@ func TestRetainedBeforeValidityDoesNotBecomeMissingMeasurements(t *testing.T) {
 		}
 	}
 }
+
+func TestRetainedExpiredRegionDoesNotWaitForDeletedTiles(t *testing.T) {
+	start := time.Date(2025, 10, 1, 0, 0, 0, 0, time.UTC)
+	reader := retainedSeriesReader{row: dbgen.GetSloRow{Target: "0.99", DefinitionRevision: 1, RollingWindowSeconds: 86400}}
+	base := slo.WindowInput{Now: start.Add(366 * 24 * time.Hour), ValidFrom: start.Add(-24 * time.Hour), SliValidFrom: start.Add(-24 * time.Hour),
+		RetentionStart: start.Add(24 * time.Hour), Cadence: time.Minute, Target: "0.99", FreshnessGrace: 2 * time.Minute}
+	tile, err := reader.loadPart(t.Context(), base, retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600}, dbgen.ReadRetainedPartsRow{})
+	if err != nil || len(tile.Budget) == 0 {
+		t.Fatalf("expired history waited for unavailable tiles: %v", err)
+	}
+	for _, point := range tile.Budget {
+		if point.Good != nil || point.Total != nil || point.Quality.ExpiredIntervals == 0 {
+			t.Fatal("expired history invented retained observations")
+		}
+	}
+	points, err := reader.points(t.Context(), base, start.Add(-time.Minute), start)
+	if err != nil || len(points) != 1 || points[0].Current.Quality.ExpiredIntervals == 0 {
+		t.Fatalf("exact starting endpoint waited for an expired point: %v", err)
+	}
+}

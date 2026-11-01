@@ -11,26 +11,102 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const readRetainedEdgePoints = `-- name: ReadRetainedEdgePoints :many
+WITH selected AS (
+    SELECT p.evaluation_at,p.payload,
+           sum(octet_length(p.payload::text)) OVER ()::bigint AS payload_bytes,
+           EXISTS (
+               SELECT 1 FROM public.almanac_slo_series_repair w
+               WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
+                 AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
+                 AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at
+           ) AS repairing,
+           EXISTS (
+               SELECT 1 FROM public.almanac_slo_series_repair w
+               WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
+                 AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
+                 AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at AND w.attempts>=5
+           ) AS exhausted
+    FROM public.almanac_slo_series_points p
+    WHERE p.slo_id=$1 AND p.definition_revision=$2 AND p.measurement_revision=$3
+      AND p.exclusion_revision=0 AND p.calculation_version=$4 AND p.evaluation_at>$5 AND p.evaluation_at<=$6
+    ORDER BY p.evaluation_at LIMIT 961
+)
+SELECT evaluation_at,CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::jsonb END::jsonb AS payload,
+       payload_bytes,repairing,exhausted FROM selected ORDER BY evaluation_at
+`
+
+type ReadRetainedEdgePointsParams struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	EvaluationAt        pgtype.Timestamptz `json:"evaluation_at"`
+	EvaluationAt_2      pgtype.Timestamptz `json:"evaluation_at_2"`
+}
+
+type ReadRetainedEdgePointsRow struct {
+	EvaluationAt pgtype.Timestamptz `json:"evaluation_at"`
+	Payload      []byte             `json:"payload"`
+	PayloadBytes int64              `json:"payload_bytes"`
+	Repairing    bool               `json:"repairing"`
+	Exhausted    bool               `json:"exhausted"`
+}
+
+func (q *Queries) ReadRetainedEdgePoints(ctx context.Context, arg ReadRetainedEdgePointsParams) ([]ReadRetainedEdgePointsRow, error) {
+	rows, err := q.db.Query(ctx, readRetainedEdgePoints,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+		arg.EvaluationAt,
+		arg.EvaluationAt_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadRetainedEdgePointsRow{}
+	for rows.Next() {
+		var i ReadRetainedEdgePointsRow
+		if err := rows.Scan(
+			&i.EvaluationAt,
+			&i.Payload,
+			&i.PayloadBytes,
+			&i.Repairing,
+			&i.Exhausted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const readRetainedParts = `-- name: ReadRetainedParts :many
 WITH requested AS (
-    SELECT generate_series(1,cardinality($5::timestamptz[]))::integer AS ordinal,
-           unnest($5::timestamptz[]) AS range_start,
-           unnest($6::timestamptz[]) AS range_end,
-           unnest($7::integer[]) AS resolution
-)
+    SELECT generate_series(1,cardinality($1::timestamptz[]))::integer AS ordinal,
+           unnest($1::timestamptz[]) AS range_start,
+           unnest($2::timestamptz[]) AS range_end,
+           unnest($3::integer[]) AS resolution
+), selected AS (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
        r.resolution::integer AS resolution,coalesce(t.payload,'{}'::jsonb)::jsonb AS payload,
+       coalesce(sum(octet_length(t.payload::text)) OVER (),0)::bigint AS payload_bytes,
        t.source_generation,t.published_at,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
-           WHERE w.slo_id=$1 AND w.definition_revision=$2
-             AND w.measurement_revision=$3 AND w.exclusion_revision=0
-             AND w.calculation_version=$4 AND w.resolution_seconds=r.resolution
+           WHERE w.slo_id=$4 AND w.definition_revision=$5
+             AND w.measurement_revision=$6 AND w.exclusion_revision=0
+             AND w.calculation_version=$7 AND w.resolution_seconds=r.resolution
              AND w.range_start=r.range_start AND w.attempts>=5
        ) OR EXISTS (
            SELECT 1 FROM public.almanac_slo_series_repair w
-           WHERE w.slo_id=$1 AND w.definition_revision=$2
-             AND w.measurement_revision=$3 AND w.calculation_version=$4
+           WHERE w.slo_id=$4 AND w.definition_revision=$5
+             AND w.measurement_revision=$6 AND w.calculation_version=$7
              AND w.cursor_at<r.range_end AND w.end_at>r.range_start AND w.attempts>=5
        ))::boolean AS exhausted,
        (t.slo_id IS NOT NULL AND NOT EXISTS (
@@ -44,21 +120,25 @@ SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestam
              AND w.calculation_version=t.calculation_version AND w.cursor_at<t.range_end AND w.end_at>t.range_start
        ))::boolean AS ready
 FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
-  ON t.slo_id=$1 AND t.definition_revision=$2
- AND t.measurement_revision=$3 AND t.exclusion_revision=0
- AND t.calculation_version=$4 AND t.resolution_seconds=r.resolution
+  ON t.slo_id=$4 AND t.definition_revision=$5
+ AND t.measurement_revision=$6 AND t.exclusion_revision=0
+ AND t.calculation_version=$7 AND t.resolution_seconds=r.resolution
  AND t.range_start=r.range_start AND t.range_end=r.range_end
-ORDER BY r.ordinal
+)
+SELECT ordinal,range_start,range_end,resolution,
+       CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::jsonb END::jsonb AS payload,
+       payload_bytes,source_generation,published_at,exhausted,ready
+FROM selected ORDER BY ordinal
 `
 
 type ReadRetainedPartsParams struct {
+	Starts              []pgtype.Timestamptz `json:"starts"`
+	Ends                []pgtype.Timestamptz `json:"ends"`
+	Resolutions         []int32              `json:"resolutions"`
 	SloID               pgtype.UUID          `json:"slo_id"`
 	DefinitionRevision  int64                `json:"definition_revision"`
 	MeasurementRevision int64                `json:"measurement_revision"`
 	CalculationVersion  string               `json:"calculation_version"`
-	Starts              []pgtype.Timestamptz `json:"starts"`
-	Ends                []pgtype.Timestamptz `json:"ends"`
-	Resolutions         []int32              `json:"resolutions"`
 }
 
 type ReadRetainedPartsRow struct {
@@ -67,6 +147,7 @@ type ReadRetainedPartsRow struct {
 	RangeEnd         pgtype.Timestamptz `json:"range_end"`
 	Resolution       int32              `json:"resolution"`
 	Payload          []byte             `json:"payload"`
+	PayloadBytes     int64              `json:"payload_bytes"`
 	SourceGeneration pgtype.Int8        `json:"source_generation"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
 	Exhausted        bool               `json:"exhausted"`
@@ -77,13 +158,13 @@ type ReadRetainedPartsRow struct {
 // rather than silently serving values from before a late observation arrived.
 func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error) {
 	rows, err := q.db.Query(ctx, readRetainedParts,
+		arg.Starts,
+		arg.Ends,
+		arg.Resolutions,
 		arg.SloID,
 		arg.DefinitionRevision,
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
-		arg.Starts,
-		arg.Ends,
-		arg.Resolutions,
 	)
 	if err != nil {
 		return nil, err
@@ -98,6 +179,7 @@ func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsPa
 			&i.RangeEnd,
 			&i.Resolution,
 			&i.Payload,
+			&i.PayloadBytes,
 			&i.SourceGeneration,
 			&i.PublishedAt,
 			&i.Exhausted,

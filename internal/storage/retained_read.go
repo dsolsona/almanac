@@ -48,6 +48,7 @@ type retainedSeriesReader struct {
 	now    time.Time
 	series *retainedSloTile
 	first  *retainedSloPoint
+	bytes  int64
 }
 
 func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedReadPart) ([]dbgen.ReadRetainedPartsRow, error) {
@@ -68,6 +69,13 @@ func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedRe
 		return nil, slo.ErrOperationalFacts
 	}
 	for index, row := range rows {
+		if row.PayloadBytes > 20<<20 {
+			return nil, ErrOperationalResource
+		}
+		c.bytes += int64(len(row.Payload))
+		if c.bytes > 20<<20 {
+			return nil, ErrOperationalResource
+		}
 		part := parts[index]
 		if row.Ordinal != int32(index+1) || !row.RangeStart.Time.Equal(part.start) || !row.RangeEnd.Time.Equal(part.end) || row.Resolution != part.resolution {
 			return nil, slo.ErrOperationalFacts
@@ -112,11 +120,69 @@ func (c *retainedSeriesReader) edge(ctx context.Context, base slo.WindowInput, p
 	if !start.Before(end) {
 		return retainedSloTile{}, nil
 	}
-	points, err := buildRetainedRepairPoints(ctx, c.q, c.row, c.source, start, end, c.now)
+	points, err := c.points(ctx, base, start, end)
 	if err != nil {
 		return retainedSloTile{}, err
 	}
 	return compactRetainedPoints(points, part.start, part.end, c.row.Target, strconv.FormatInt(c.row.DefinitionRevision, 10))
+}
+
+// Historical edges use the same durable endpoints as complete tiles. Rebuilding
+// them from today's raw retention boundary would change previously known totals.
+func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput, start, end time.Time) ([]retainedSloPoint, error) {
+	first := start.Add(base.Cadence)
+	eligible := maxTime(base.ValidFrom, base.SliValidFrom, base.RetentionStart)
+	var prefix []retainedSloPoint
+	for !first.After(end) && !first.After(eligible) {
+		point, err := c.unobservedPoint(ctx, base, first)
+		if err != nil {
+			return nil, err
+		}
+		prefix = append(prefix, point)
+		start, first = first, first.Add(base.Cadence)
+	}
+	if !start.Before(end) {
+		return prefix, nil
+	}
+	if end.After(c.now.Truncate(time.Hour).Add(-time.Hour)) {
+		points, err := buildRetainedRepairPoints(ctx, c.q, c.row, c.source, start, end, c.now)
+		return append(prefix, points...), err
+	}
+	rows, err := c.q.ReadRetainedEdgePoints(ctx, dbgen.ReadRetainedEdgePointsParams{SloID: c.row.ID,
+		DefinitionRevision: c.row.DefinitionRevision, MeasurementRevision: c.row.MeasurementRevision,
+		CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(start), EvaluationAt_2: timestamp(end)})
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > 960 {
+		return nil, ErrOperationalResource
+	}
+	expected := int(end.Sub(start) / base.Cadence)
+	if len(rows) != expected {
+		return nil, ErrDerivedPending
+	}
+	points := make([]retainedSloPoint, len(rows))
+	for index, row := range rows {
+		if row.PayloadBytes > 20<<20 {
+			return nil, ErrOperationalResource
+		}
+		c.bytes += int64(len(row.Payload))
+		if c.bytes > 20<<20 {
+			return nil, ErrOperationalResource
+		}
+		if row.Exhausted {
+			return nil, ErrDerivedFailed
+		}
+		if row.Repairing {
+			return nil, ErrDerivedPending
+		}
+		if err := json.Unmarshal(row.Payload, &points[index]); err != nil ||
+			!row.EvaluationAt.Time.Equal(start.Add(time.Duration(index+1)*base.Cadence)) ||
+			!points[index].Current.EvaluationAt.Equal(row.EvaluationAt.Time) {
+			return nil, ErrDerivedFailed
+		}
+	}
+	return append(prefix, points...), nil
 }
 
 func (c *retainedSeriesReader) beforeValidity(ctx context.Context, base slo.WindowInput, part retainedReadPart) (retainedSloTile, error) {
@@ -124,29 +190,9 @@ func (c *retainedSeriesReader) beforeValidity(ctx context.Context, base slo.Wind
 	points := []retainedSloPoint{}
 	first, last := floorSliBoundary(part.start, base.Cadence).Add(base.Cadence), floorSliBoundary(part.end, base.Cadence)
 	for at := first; !at.After(last); at = last {
-		rolling, err := evaluateOperationalAt(ctx, base, at, time.Duration(c.row.RollingWindowSeconds)*time.Second)
+		point, err := c.unobservedPoint(ctx, base, at)
 		if err != nil {
 			return retainedSloTile{}, err
-		}
-		interval, err := evaluateOperationalAt(ctx, base, at, base.Cadence)
-		if err != nil {
-			return retainedSloTile{}, err
-		}
-		point := retainedSloPoint{Current: operationalValue(rolling), Attainment: operationalSample(interval, at.Add(-base.Cadence), at, revision),
-			Burn1h: unavailableBurn(3600, at, "cadence_mismatch"), Burn6h: unavailableBurn(21600, at, "cadence_mismatch")}
-		if time.Hour%base.Cadence == 0 {
-			burn, err := evaluateOperationalAt(ctx, base, at, time.Hour)
-			if err != nil {
-				return retainedSloTile{}, err
-			}
-			point.Burn1h = burnValue(burn, 3600)
-		}
-		if 6*time.Hour%base.Cadence == 0 {
-			burn, err := evaluateOperationalAt(ctx, base, at, 6*time.Hour)
-			if err != nil {
-				return retainedSloTile{}, err
-			}
-			point.Burn6h = burnValue(burn, 21600)
 		}
 		points = append(points, point)
 		if at.Equal(last) {
@@ -154,6 +200,35 @@ func (c *retainedSeriesReader) beforeValidity(ctx context.Context, base slo.Wind
 		}
 	}
 	return compactRetainedPoints(points, part.start, part.end, c.row.Target, revision)
+}
+
+func (c *retainedSeriesReader) unobservedPoint(ctx context.Context, base slo.WindowInput, at time.Time) (retainedSloPoint, error) {
+	rolling, err := evaluateOperationalAt(ctx, base, at, time.Duration(c.row.RollingWindowSeconds)*time.Second)
+	if err != nil {
+		return retainedSloPoint{}, err
+	}
+	interval, err := evaluateOperationalAt(ctx, base, at, base.Cadence)
+	if err != nil {
+		return retainedSloPoint{}, err
+	}
+	point := retainedSloPoint{Current: operationalValue(rolling),
+		Attainment: operationalSample(interval, at.Add(-base.Cadence), at, strconv.FormatInt(c.row.DefinitionRevision, 10)),
+		Burn1h:     unavailableBurn(3600, at, "cadence_mismatch"), Burn6h: unavailableBurn(21600, at, "cadence_mismatch")}
+	for _, duration := range []time.Duration{time.Hour, 6 * time.Hour} {
+		if duration%base.Cadence != 0 {
+			continue
+		}
+		burn, err := evaluateOperationalAt(ctx, base, at, duration)
+		if err != nil {
+			return retainedSloPoint{}, err
+		}
+		if duration == time.Hour {
+			point.Burn1h = burnValue(burn, 3600)
+		} else {
+			point.Burn6h = burnValue(burn, 21600)
+		}
+	}
+	return point, nil
 }
 
 func (c *retainedSeriesReader) load(ctx context.Context, base slo.WindowInput, start, end time.Time) (retainedSloTile, error) {
@@ -187,7 +262,7 @@ func (c *retainedSeriesReader) loadPart(ctx context.Context, base slo.WindowInpu
 	switch {
 	case !floorSliBoundary(part.end, base.Cadence).After(floorSliBoundary(part.start, base.Cadence)):
 		return retainedSloTile{}, nil
-	case !part.end.After(maxTime(base.ValidFrom, base.SliValidFrom)):
+	case !part.end.After(maxTime(base.ValidFrom, base.SliValidFrom, base.RetentionStart)):
 		return c.beforeValidity(ctx, base, part)
 	case stored.Exhausted:
 		return retainedSloTile{}, ErrDerivedFailed
@@ -286,7 +361,7 @@ func (c *retainedSeriesReader) rolling(ctx context.Context, base slo.WindowInput
 	}
 	// Budget/burn include the exact requested starting endpoint as well.
 	if c.first == nil {
-		points, err := buildRetainedRepairPoints(ctx, c.q, c.row, c.source, start.Add(-cadence), start, c.now)
+		points, err := c.points(ctx, base, start.Add(-cadence), start)
 		if err != nil || len(points) != 1 {
 			if err == nil {
 				err = slo.ErrOperationalFacts
@@ -350,7 +425,7 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 			day = *tile.Compliance
 		} else if part.end.Equal(utcDayStart(c.now)) {
 			at := floorSliBoundary(part.end, cadence)
-			points, err := buildRetainedRepairPoints(ctx, c.q, c.row, c.source, at.Add(-cadence), at, c.now)
+			points, err := c.points(ctx, base, at.Add(-cadence), at)
 			if err != nil || len(points) != 1 {
 				if err == nil {
 					err = slo.ErrOperationalFacts

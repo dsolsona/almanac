@@ -27,7 +27,8 @@ WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calcu
   AND version=$5 AND lease_epoch=$6;
 
 -- name: DeferRetainedSeriesRepair :exec
-UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6
+UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6,
+    last_error=sqlc.narg(last_error)::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5;
 
 -- name: FailRetainedSeriesRepair :exec

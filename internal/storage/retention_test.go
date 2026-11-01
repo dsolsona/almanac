@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -32,5 +33,29 @@ func TestRetentionPreviewUsesActualCompleteUTCBounds(t *testing.T) {
 	impact, err = canonicalRetentionImpact([]dbgen.ListCanonicalRetentionPartitionsRow{coverage}, boundary)
 	if err != nil || len(impact.Partitions) != 1 {
 		t.Fatal("partition ending exactly at the 365-day cutoff was excluded")
+	}
+}
+
+func TestRetentionScopePinsRelationsAndBoundsButNotEstimates(t *testing.T) {
+	start := time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC)
+	parts := []retentionPartition{{RelationID: 42, Parent: "almanac_sli_coverage", Name: "almanac_sli_coverage_202509", Start: start, End: start.AddDate(0, 1, 0), Bytes: 1024}}
+	before, err := retentionScopeDigest(parts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts[0].Bytes, parts[0].EstimatedRows = 2048, new(int64(30))
+	after, err := retentionScopeDigest(parts)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("changing size estimates invalidated an otherwise identical preview")
+	}
+	for _, changed := range []retentionPartition{
+		{RelationID: 43, Parent: parts[0].Parent, Name: parts[0].Name, Start: start, End: parts[0].End},
+		{RelationID: 42, Parent: parts[0].Parent, Name: parts[0].Name + "_replacement", Start: start, End: parts[0].End},
+		{RelationID: 42, Parent: parts[0].Parent, Name: parts[0].Name, Start: start, End: parts[0].End.Add(time.Hour)},
+	} {
+		digest, err := retentionScopeDigest([]retentionPartition{changed})
+		if err != nil || bytes.Equal(before, digest) {
+			t.Fatal("a replaced or redefined partition reused its previous deletion preview")
+		}
 	}
 }

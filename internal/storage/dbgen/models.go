@@ -221,6 +221,23 @@ type AlmanacObjectiveCreateReceipt struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 }
 
+type AlmanacRetentionWork struct {
+	ID            pgtype.UUID        `json:"id"`
+	ScopeDigest   []byte             `json:"scope_digest"`
+	RangeStart    pgtype.Timestamptz `json:"range_start"`
+	RangeEnd      pgtype.Timestamptz `json:"range_end"`
+	Cutoff        pgtype.Timestamptz `json:"cutoff"`
+	Preview       []byte             `json:"preview"`
+	State         string             `json:"state"`
+	Attempts      int32              `json:"attempts"`
+	LeaseEpoch    int64              `json:"lease_epoch"`
+	LeaseUntil    pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	PreviewedAt   pgtype.Timestamptz `json:"previewed_at"`
+	AppliedAt     pgtype.Timestamptz `json:"applied_at"`
+}
+
 type AlmanacSchemaMigration struct {
 	Version   int64              `json:"version"`
 	Filename  string             `json:"filename"`
@@ -551,6 +568,8 @@ type AlmanacSloSeriesRepair struct {
 	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
 	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
 	LastError           pgtype.Text        `json:"last_error"`
+	ID                  pgtype.UUID        `json:"id"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
 }
 
 type AlmanacSloSeriesTile struct {
