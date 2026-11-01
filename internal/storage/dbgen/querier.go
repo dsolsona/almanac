@@ -244,6 +244,7 @@ type Querier interface {
 	ReadRetainedLateTotals(ctx context.Context, arg ReadRetainedLateTotalsParams) ([]ReadRetainedLateTotalsRow, error)
 	// A dirty tile or a cursor that has not repaired its endpoints is unavailable,
 	// rather than silently serving values from before a late observation arrived.
+	// Materialize UTF-8 once for both the byte budget and binary wire payload.
 	ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error)
 	ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error)
 	ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloPointParams) (ReadRetainedSloPointRow, error)

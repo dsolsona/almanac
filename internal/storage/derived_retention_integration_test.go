@@ -178,6 +178,7 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 					t.Fatal("retained tile reduction exceeded the fixture's hour/day bound")
 				}
 			}
+			verifyRetainedTileWire(t, conn, pgID, end.Truncate(time.Hour).Add(-time.Hour))
 			if err := runtime.refreshCurrentProjection(t.Context(), pgID, clock); err != nil {
 				t.Fatal(err)
 			}

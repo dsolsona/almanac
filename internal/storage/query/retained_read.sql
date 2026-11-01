@@ -1,15 +1,15 @@
 -- A dirty tile or a cursor that has not repaired its endpoints is unavailable,
 -- rather than silently serving values from before a late observation arrived.
+-- Materialize UTF-8 once for both the byte budget and binary wire payload.
 -- name: ReadRetainedParts :many
 WITH requested AS (
     SELECT generate_series(1,cardinality(sqlc.arg(starts)::timestamptz[]))::integer AS ordinal,
            unnest(sqlc.arg(starts)::timestamptz[]) AS range_start,
            unnest(sqlc.arg(ends)::timestamptz[]) AS range_end,
            unnest(sqlc.arg(resolutions)::integer[]) AS resolution
-), selected AS (
+), selected AS MATERIALIZED (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
-       r.resolution::integer AS resolution,coalesce(t.payload,'{}'::jsonb)::jsonb AS payload,
-       coalesce(sum(octet_length(t.payload::text)) OVER (),0)::bigint AS payload_bytes,
+       r.resolution::integer AS resolution,convert_to(t.payload::text,'UTF8') AS payload,
        t.source_generation,t.published_at,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
@@ -38,11 +38,13 @@ FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
  AND t.measurement_revision=sqlc.arg(measurement_revision) AND t.exclusion_revision=0
  AND t.calculation_version=sqlc.arg(calculation_version) AND t.resolution_seconds=r.resolution
  AND t.range_start=r.range_start AND t.range_end=r.range_end
+), bounded AS (
+SELECT *,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM selected
 )
 SELECT ordinal,range_start,range_end,resolution,
-       CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::jsonb END::jsonb AS payload,
+       CASE WHEN payload_bytes<=20971520 THEN coalesce(payload,'{}'::bytea) ELSE '{}'::bytea END::bytea AS payload,
        payload_bytes,source_generation,published_at,exhausted,ready
-FROM selected ORDER BY ordinal;
+FROM bounded ORDER BY ordinal;
 
 -- name: ReadRetainedEdgePoints :many
 WITH selected AS (
