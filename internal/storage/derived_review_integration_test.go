@@ -79,7 +79,7 @@ func verifyHistoryAdmissionSnapshotFences(t *testing.T, databaseURL, template st
 			admit := func(q *dbgen.Queries, id pgtype.UUID, offset int) (int64, error) {
 				at := clock().Add(-time.Duration(offset) * time.Minute)
 				return q.AdmitSloHistoryJob(t.Context(), dbgen.AdmitSloHistoryJobParams{SloID: id, DefinitionRevision: 1, MeasurementRevision: 1,
-					CalculationVersion: operationalCalculationVersion, RetentionStart: timestamp(clock().Add(-400 * 24 * time.Hour)), Kind: "detail",
+					CalculationVersion: operationalCalculationVersion, RetentionStart: timestamp(clock().Add(-365 * 24 * time.Hour)), Kind: "detail",
 					EvaluatedThrough: timestamp(at), RangeStart: timestamp(at.Add(-time.Hour)), RangeEnd: timestamp(at), BurnWindowSeconds: 3600, NextAttemptAt: timestamp(clock())})
 			}
 			for i := range seed {

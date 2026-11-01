@@ -89,7 +89,7 @@ WITH scope AS (
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
              AND g.calculation_version=$2
              AND g.source_generation=coalesce(source.generation,0)
-             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)
+             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS current
     FROM public.almanac_slos s
@@ -141,7 +141,7 @@ WITH wanted AS (
     SELECT s.id, d.revision, d.measurement_revision, coalesce(source.generation,0) AS source_generation,
            to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at,
            to_timestamp(floor((floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds-604800)/d.cadence_seconds)*d.cadence_seconds) AS start
-           ,to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds) AS retention_start
+           ,to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds) AS retention_start
     FROM public.almanac_slos s
     JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision

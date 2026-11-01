@@ -36,7 +36,7 @@ WITH scope AS MATERIALIZED (
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
              AND g.calculation_version=$1 AND a.digest IS NOT NULL
              AND g.source_generation=coalesce(source.generation,0)
-             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)
+             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current,
            jsonb_build_object('slo',jsonb_build_object(
                'id',s.id,'name',s.name,'display_name',s.display_name,'version',s.version::text,'definition_revision',d.revision::text,
@@ -69,7 +69,7 @@ WITH scope AS MATERIALIZED (
     CROSS JOIN LATERAL (
         SELECT to_timestamp(ceil(extract(epoch FROM greatest(
                    boundary.at-greatest(d.rolling_window_seconds,CASE WHEN 21600%d.cadence_seconds=0 THEN 21600 ELSE 0 END)*interval '1 second',
-                   d.evaluation_valid_from,m.effective_from,$2::timestamptz-interval '400 days'))/boundary.grid)*boundary.grid) AS full_start,
+                   d.evaluation_valid_from,m.effective_from,$2::timestamptz-interval '365 days'))/boundary.grid)*boundary.grid) AS full_start,
                to_timestamp(floor(extract(epoch FROM boundary.at)/boundary.grid)*boundary.grid) AS full_end
     ) dependency
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id

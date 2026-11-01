@@ -25,7 +25,7 @@ WITH dirty AS (
  count(*) FILTER(WHERE g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
  OR g.calculation_version<>$2 OR g.source_generation<>coalesce(source.generation,0)
  OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
- OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)) AS pending
+ OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)) AS pending
  FROM public.almanac_slos s
  JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
  LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id

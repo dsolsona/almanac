@@ -32,7 +32,7 @@ func DispatchPhase(id string, cadenceSeconds int) time.Duration {
 
 const (
 	ObservationReplayWindow = 7 * 24 * time.Hour
-	ObservationRetention    = 400 * 24 * time.Hour
+	ObservationRetention    = 365 * 24 * time.Hour
 )
 
 var (

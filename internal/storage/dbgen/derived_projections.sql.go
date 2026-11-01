@@ -11,40 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const anyExhaustedDerivedSources = `-- name: AnyExhaustedDerivedSources :one
-WITH windows AS (
-    SELECT unnest($2::uuid[]) AS sli_id,unnest($3::bigint[]) AS revision,
-           unnest($4::timestamptz[]) AS start_at,unnest($5::timestamptz[]) AS end_at
-)
-SELECT EXISTS (
-    SELECT 1 FROM windows w
-    JOIN public.almanac_derived_dirty_ranges d ON d.sli_id=w.sli_id AND d.measurement_revision=w.revision
-    WHERE w.start_at<w.end_at AND d.range_start<w.end_at AND d.range_end>w.start_at
-      AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$1::timestamptz)
-)
-`
-
-type AnyExhaustedDerivedSourcesParams struct {
-	Now       pgtype.Timestamptz   `json:"now"`
-	SliIds    []pgtype.UUID        `json:"sli_ids"`
-	Revisions []int64              `json:"revisions"`
-	Starts    []pgtype.Timestamptz `json:"starts"`
-	Ends      []pgtype.Timestamptz `json:"ends"`
-}
-
-func (q *Queries) AnyExhaustedDerivedSources(ctx context.Context, arg AnyExhaustedDerivedSourcesParams) (bool, error) {
-	row := q.db.QueryRow(ctx, anyExhaustedDerivedSources,
-		arg.Now,
-		arg.SliIds,
-		arg.Revisions,
-		arg.Starts,
-		arg.Ends,
-	)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const clearCurrentPreparationFailure = `-- name: ClearCurrentPreparationFailure :exec
 DELETE FROM public.almanac_slo_current_failures WHERE slo_id=$1
 `
@@ -121,7 +87,7 @@ SELECT ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_histor
        coalesce((g.definition_revision=s.definition_revision
          AND g.measurement_revision=d.measurement_revision
          AND g.calculation_version=$1
-         AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)
+         AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
          AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
          AND g.source_generation=coalesce(source.generation,0)
          AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)),false)::boolean AS current
@@ -210,66 +176,6 @@ func (q *Queries) InsertDerivedGeneration(ctx context.Context, arg InsertDerived
 	return id, err
 }
 
-const listCurrentPreparationStates = `-- name: ListCurrentPreparationStates :many
-SELECT s.id,d.sli_id,d.measurement_revision,d.cadence_seconds,d.rolling_window_seconds,
-       d.evaluation_valid_from,m.effective_from AS sli_valid_from,
-       EXISTS(SELECT 1 FROM public.almanac_slo_current_failures f
-           WHERE f.slo_id=s.id AND f.definition_revision=d.revision
-             AND f.measurement_revision=d.measurement_revision
-             AND f.calculation_version=$1 AND f.attempts>=5) AS exhausted
-FROM unnest($2::uuid[]) requested(id)
-JOIN public.almanac_slos s ON s.id=requested.id
-JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
-`
-
-type ListCurrentPreparationStatesParams struct {
-	CalculationVersion string        `json:"calculation_version"`
-	SloIds             []pgtype.UUID `json:"slo_ids"`
-}
-
-type ListCurrentPreparationStatesRow struct {
-	ID                   pgtype.UUID        `json:"id"`
-	SliID                pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision  int64              `json:"measurement_revision"`
-	CadenceSeconds       int32              `json:"cadence_seconds"`
-	RollingWindowSeconds int64              `json:"rolling_window_seconds"`
-	EvaluationValidFrom  pgtype.Timestamptz `json:"evaluation_valid_from"`
-	SliValidFrom         pgtype.Timestamptz `json:"sli_valid_from"`
-	Exhausted            bool               `json:"exhausted"`
-}
-
-// Fetch preparation metadata once for the non-current filtered set, not once
-// per objective. Source-window bounds are calculated by the shared exact helper.
-func (q *Queries) ListCurrentPreparationStates(ctx context.Context, arg ListCurrentPreparationStatesParams) ([]ListCurrentPreparationStatesRow, error) {
-	rows, err := q.db.Query(ctx, listCurrentPreparationStates, arg.CalculationVersion, arg.SloIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListCurrentPreparationStatesRow{}
-	for rows.Next() {
-		var i ListCurrentPreparationStatesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.SliID,
-			&i.MeasurementRevision,
-			&i.CadenceSeconds,
-			&i.RollingWindowSeconds,
-			&i.EvaluationValidFrom,
-			&i.SliValidFrom,
-			&i.Exhausted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listDueDerivedObjectives = `-- name: ListDueDerivedObjectives :many
 SELECT s.id FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
@@ -283,7 +189,7 @@ LEFT JOIN public.almanac_slo_current_failures f
 WHERE (f.slo_id IS NULL OR (f.attempts<5 AND f.next_attempt_at<=$2::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.calculation_version<>$1
-   OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)
+   OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
    OR p.payload_digest IS DISTINCT FROM sha256(convert_to(p.payload::text,'UTF8'))
    OR g.source_generation<>coalesce(source.generation,0)
    OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds))
@@ -309,88 +215,6 @@ func (q *Queries) ListDueDerivedObjectives(ctx context.Context, arg ListDueDeriv
 			return nil, err
 		}
 		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listPublishedOperationalProjections = `-- name: ListPublishedOperationalProjections :many
-SELECT s.id,(p.payload||CASE WHEN EXISTS(SELECT 1 FROM public.almanac_slo_history_jobs j
-           WHERE j.slo_id=s.id AND j.definition_revision=d.revision AND j.measurement_revision=d.measurement_revision
-             AND j.calculation_version=$1 AND j.kind='overview' AND j.state='failed')
-           THEN jsonb_build_object('budget_history_state','unavailable') ELSE '{}'::jsonb END
-           ||jsonb_build_object('slo',(p.payload->'slo')||jsonb_build_object(
-           'display_name',s.display_name,'version',s.version::text,'updated_at',s.updated_at,
-           'service_display_name',service.display_name,'sli_display_name',measurement.display_name)))::jsonb AS payload,
-       g.id AS generation_id, g.source_generation,
-       g.evaluated_through, g.published_at,
-       coalesce((g.definition_revision=s.definition_revision
-         AND g.measurement_revision=d.measurement_revision
-         AND g.calculation_version=$1
-         AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)
-         AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
-         AND g.source_generation=coalesce(source.generation,0)
-         AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)),false)::boolean AS current
-FROM public.almanac_slos s
-JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-JOIN public.almanac_services service ON service.id=d.service_id
-JOIN public.almanac_slis measurement ON measurement.id=d.sli_id
-LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
-LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
-LEFT JOIN public.almanac_sli_source_generations source
-    ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
-WHERE ($3::text IS NULL OR strpos(lower(s.name || ' ' || s.display_name),lower($3::text))>0)
-  AND ($4::uuid IS NULL OR d.service_id=$4::uuid)
-ORDER BY lower(s.name), s.id LIMIT $5
-`
-
-type ListPublishedOperationalProjectionsParams struct {
-	CalculationVersion string             `json:"calculation_version"`
-	Now                pgtype.Timestamptz `json:"now"`
-	QueryText          pgtype.Text        `json:"query_text"`
-	ServiceID          pgtype.UUID        `json:"service_id"`
-	RowLimit           int32              `json:"row_limit"`
-}
-
-type ListPublishedOperationalProjectionsRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Payload          []byte             `json:"payload"`
-	GenerationID     pgtype.UUID        `json:"generation_id"`
-	SourceGeneration pgtype.Int8        `json:"source_generation"`
-	EvaluatedThrough pgtype.Timestamptz `json:"evaluated_through"`
-	PublishedAt      pgtype.Timestamptz `json:"published_at"`
-	Current          bool               `json:"current"`
-}
-
-func (q *Queries) ListPublishedOperationalProjections(ctx context.Context, arg ListPublishedOperationalProjectionsParams) ([]ListPublishedOperationalProjectionsRow, error) {
-	rows, err := q.db.Query(ctx, listPublishedOperationalProjections,
-		arg.CalculationVersion,
-		arg.Now,
-		arg.QueryText,
-		arg.ServiceID,
-		arg.RowLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListPublishedOperationalProjectionsRow{}
-	for rows.Next() {
-		var i ListPublishedOperationalProjectionsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Payload,
-			&i.GenerationID,
-			&i.SourceGeneration,
-			&i.EvaluatedThrough,
-			&i.PublishedAt,
-			&i.Current,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

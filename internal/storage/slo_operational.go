@@ -1658,9 +1658,6 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 }
 
 func loadOverviewCandidates(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) ([]api.SloOperationalOverviewItem, error) {
-	if input.Runtime != nil {
-		return loadPublishedOverview(ctx, q, input, now)
-	}
 	defs, streams, err := loadOperationalDefinitions(ctx, q, input, now)
 	if err != nil {
 		return nil, err

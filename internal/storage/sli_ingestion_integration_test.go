@@ -675,7 +675,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("known-empty refreshed numerical observation: %+v %v", staleEvaluation.Quality, err)
 	}
 	longStart := record.EffectiveFrom
-	longInput := CreateObjectiveInput{Proof: proof, Name: "retention-window", DisplayName: "Retention window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 401 * 86400, EvaluationValidFrom: &longStart, IdempotencyKey: "retention-window", RequestID: "retention-window", Now: clock}
+	longInput := CreateObjectiveInput{Proof: proof, Name: "retention-window", DisplayName: "Retention window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 366 * 86400, EvaluationValidFrom: &longStart, IdempotencyKey: "retention-window", RequestID: "retention-window", Now: clock}
 	_, longSlo, err := CreateObjective(t.Context(), f.databaseURL, longInput, true)
 	if err != nil {
 		t.Fatalf("create retention SLO: %v", err)
@@ -797,7 +797,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("month boundary preparation count=%d err=%v", partitions, err)
 	}
 	// Keep durable grant evidence beyond the delivery window to isolate replay
-	// expiry from the independent 400-day observation cutoff.
+	// expiry from the independent 365-day observation cutoff.
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_agent_execution_grants SET retain_until=$1 WHERE lease_id=$2`, now.Add(10*24*time.Hour), grant.LeaseID); err != nil {
 		t.Fatal(err)
 	}
