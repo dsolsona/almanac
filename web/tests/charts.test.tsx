@@ -24,6 +24,18 @@ const chart: TimelineChart = {
 const palette = { axis: '#111111', labelText: '#444444', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
 
 describe('timeline model and options', () => {
+  it('preserves reference and catalogue tick labels in UTC and local time',()=>{
+    const value=Date.parse('2026-01-01T12:34:00Z'),date=new Date(value);
+    for(const reference of [false,true])for(const local of [false,true])for(const short of [false,true]){
+      const fixture:TimelineChart={...chart,end:short?chart.end:'2026-01-08T00:00:00Z',timeZone:local?'local':'UTC',lanes:[{...chart.lanes[0]!,...(reference?{height:162}:{})}]};
+      const option=buildTimelineOption(fixture,validateTimeline(fixture),palette);
+      const formatter=(option.xAxis as Array<{axisLabel:{formatter:(value:number)=>string}}>)[0]!.axisLabel.formatter;
+      const expected=reference?date.toLocaleString('en-US',{month:'short',day:'numeric',...(short?{hour:'2-digit',minute:'2-digit',hour12:false}:{}),...(local?{}:{timeZone:'UTC'})})
+        : local?(short?date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):date.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'}))
+          : short?'12:34 UTC':'2026-01-01 UTC';
+      expect(formatter(value)).toBe(expected);
+    }
+  });
   it('keeps range and sampling metadata in the collapsed chart details',()=>{
     render(<TimelineChartHeader chart={{...chart,fillExpectedGaps:false}}/>);
     expect(screen.getByRole('heading',{name:'Synthetic'})).toBeVisible();

@@ -227,10 +227,11 @@ try {
   stage='filtered overview navigation'; await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await expect(page.getByRole('link',{name:'Checkout availability historical',exact:true})).toBeVisible(); await expect(page.getByRole('heading',{name:/Needs attention|Watch|Healthy/}).first()).toBeVisible();
   await captureReference('list','.app-slo-group','slo-needs-attention.png'); await writeReferenceReport();
   // Compare the row with its own response: publication can advance while checking detail.
-  const refreshedOverview=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/v1/slos/overview');
+  const refreshedOverview=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/v1/slos/overview')
+    .then(async response=>({status:response.status(),body:await response.json()}));
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  const renderedOverviewResponse=await refreshedOverview; assert.equal(renderedOverviewResponse.status(),200);
-  const renderedOverviewItem=(await renderedOverviewResponse.json()).items.find(item=>item.slo.id===slo.id);
+  const renderedOverviewResponse=await refreshedOverview; assert.equal(renderedOverviewResponse.status,200);
+  const renderedOverviewItem=renderedOverviewResponse.body.items.find(item=>item.slo.id===slo.id);
   assert.ok(renderedOverviewItem,'created SLO appears in refreshed operational overview');
   overviewItem=renderedOverviewItem;
   const expectedReason=({on_track:'On track',stale_observations:'Observations are stale',no_data:'No evaluable data',expired_history:'History has expired',complete_window_violation:'Complete window is below target',negative_observed_budget:'Observed budget is negative',low_observed_budget:'Less than 20% of budget remains',high_1h_burn:'1 h burn is at least 1×',evaluation_unavailable:'Current evaluation unavailable',not_yet_eligible:'Not yet eligible',zero_traffic:'No traffic',incomplete_coverage:'Coverage is incomplete',short_burn_unavailable:'Short-window burn unavailable',budget_below_half:'Less than half of budget remains'})[renderedOverviewItem.leading_reason.code]??renderedOverviewItem.leading_reason.code;
