@@ -14,7 +14,7 @@ For the complete design package, begin with the
 | `plans/` (when needed) | Implementation tasks linked to accepted specifications |
 | [status.md](status.md) | Delivery progress, evidence, and known gaps |
 | [review-guide.md](review-guide.md) | Reading order, accepted choices, and deferred decisions |
-| [ways-of-working.md](ways-of-working.md) | Coordinator/Luna implementation and review workflow |
+| [ways-of-working.md](ways-of-working.md) | Primary-agent delivery and optional parallel delegation |
 | [tasks/](tasks/README.md) | Task briefs, handoffs and acceptance evidence |
 | [testing.md](testing.md) | Fast local feedback and integrated/release verification gates |
 

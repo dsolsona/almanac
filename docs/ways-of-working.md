@@ -1,213 +1,139 @@
 # Ways of working
 
-Status: active project workflow. The maintainer agreed to a coordinator with
-`gpt-6-luna` implementers and fast, evidence-based verification on 2026-10-24.
-This workflow does not alter accepted product contracts or authorize publishing.
+Status: active project workflow. On 2026-10-31 the maintainer replaced mandatory
+coordinator/Luna delivery with a single primary agent, normally Sol or Astra.
+Delegation is optional and justified only by useful concurrent progress. This
+supersedes the earlier role restrictions; accepted product contracts and command,
+verification and publication requirements still apply.
 
-On 2026-10-27 the maintainer approved larger usable increments, up to two independent
-Luna implementers, early real-journey and visual checks, consolidated review and
-strict reuse of approved command invocations to reduce delivery time and rework.
+## Ownership and optional delegation
 
-## Roles
+The primary agent owns planning, implementation, debugging, tests, review,
+integration and truthful delivery status. It can implement directly without a
+separate maintainer approval. Use the configured Sol/Astra model; documentation
+does not select or switch the runtime model. There is no required subagent model.
 
-The primary agent is the coordinator. It owns task decomposition, architectural
-consistency, independent review, integration and truthful delivery status. It
-continues through ready tasks within the user's authorized scope, rather than
-asking the maintainer to supervise each handoff.
+Delegate a bounded task only when the primary agent has independent useful work
+to do concurrently. For example, a subagent may run a stable candidate's checks
+while the primary agent reviews documentation or another independent area. If the
+primary agent would simply wait for the result, run the task directly. Do not create
+handoffs merely to separate planning from implementation or obtain a second agent.
 
-Use `gpt-6-luna` for bounded implementation tasks. The implementer reads the task,
-relevant project instructions and cited spec sections, implements only its scope,
-runs required checks and submits evidence. It cannot accept its own work, change
-product contracts, relax checks, or start a later milestone on its own.
+For delegated work:
 
-The coordinator resolves interfaces and reviews security/calculation/concurrency
-risks; Luna owns implementation and test writing for complete bounded features.
-Do not delegate only supporting pieces while the coordinator writes the main
-feature. Risk is a reason for precise constraints and review, not automatic
-coordinator implementation. Substantial coordinator coding requires explicit
-maintainer agreement. Prefer one consolidated review, repeating only for changed
-code or unresolved findings. Do not
-silently switch the requested implementer model. If unavailable, report the limitation
-and agree on a replacement. Runtime configuration must request the model explicitly;
-documenting its name does not configure the tool automatically.
+- Supply a fresh brief: base/candidate revision, relevant instructions and accepted
+  contracts, bounded scope, acceptance cases, exact approved commands and evidence
+  paths. Omit unrelated conversation history. No further delegation without an
+  explicit primary-agent assignment.
+- Isolate code changes in a worktree. Allocate independent databases, ports and
+  artifacts; do not mutate a shared checkout or fixture. A shared schema/contract
+  change precedes consumers. The primary agent integrates results.
+- Assign verification resources and their owner explicitly. The owner may continue
+  approved checks after diagnosed corrections until releasing the lane. Inspect
+  an existing process before restarting a check after an observation failure.
+- Freeze product and verification inputs for a candidate under test. Concurrent
+  work must not invalidate that candidate. Reports identify the tested revision or
+  source fingerprint; another revision's result is not integrated acceptance.
+- A subagent returns its diff, exact commands, results, timings, fixture identity
+  and gaps. It cannot accept its own work, relax checks, alter product contracts or
+  start later milestones. The primary agent inspects the actual evidence and diff.
+- Start a new task turn for corrections to a completed subagent and confirm its
+  state. After two unsuccessful handoffs across an increment, change the approach;
+  keep the failure history even when errors, briefs or checkouts change. The primary
+  agent may take over directly. Do not repeat a failing handoff loop.
 
-For a full vertical increment, Luna owns implementation, debugging, test writing and
-task evidence through a review-ready diff. The coordinator settles interfaces and
-provides one concrete brief, then reviews the consolidated result. Avoid incremental
-coordinator reviews or status-only turns while the implementer is progressing; report
-only material conflicts or blockers.
+Historical records may call the primary agent the coordinator and delegated agents
+implementers/workers. Those terms do not require separate agents for new work.
 
-## Start or resume a session
+## Start or resume
 
-1. Read [AGENTS.md](../AGENTS.md), directory instructions and [status.md](status.md).
-2. Inspect the branch, working tree and recent commits. Preserve unrelated edits.
-3. Read the current milestone plan and assigned [task](tasks/README.md), then only
-   the relevant accepted spec/ADR sections. Find active plans through delivery status
-   and the task index; completed plans remain as evidence.
-4. Identify the next ready task and its dependency revision. Do not infer that an
-   earlier session's agent, worktree, service or test result still exists or is valid.
-5. Restore task ownership and verification context before resuming. A new session
-   can follow this workflow without chat history; uncertain acceptance evidence is
-   a reason to inspect the record, not to mark work done.
+1. Read [AGENTS.md](../AGENTS.md), applicable directory instructions and
+   [status](status.md). Inspect git state and preserve unrelated edits.
+2. Find the active plan/task and relevant accepted specs/ADRs. Inspect recent commits,
+   worktrees and, during stacked delivery, open PR bases/heads. Main's status may lag
+   verified unmerged work; inspect the active branch's task/evidence before repeating it.
+3. Confirm the next dependency revision, ownership and verification context. Do not
+   assume previous processes, services, checkouts or results remain valid.
 
-## Task preparation and dispatch
+## Prepare and implement
 
-Use `docs/plans/NNNN-topic.md` for a milestone dependency plan and
-`docs/tasks/FN-TNN.md` for individual briefs. Use the [task template](tasks/TEMPLATE.md).
-A task is ready only when it has a concrete outcome, accepted contracts, exact
-interfaces or a designated interface-design prerequisite, bounded edit scope,
-acceptance checks and no unresolved consequential decision in its implementation path.
-Do not create speculative briefs for the entire product in advance.
+Size work around a usable outcome, such as a connected agent or datasource query
+test, rather than a PR per internal layer. Finish the authorized milestone before
+optional polish or unrelated refactors. Accepted contracts remain prerequisites.
 
-Give the implementer a fresh task context: repository/worktree, base revision, task
-path, required reading, scope and reporting rules. Do not forward the full project
-conversation or private investigation notes. For reusable components, the coordinator
-reviews suitability and provides the relevant constraints; existing code never
-overrides Almanac's contract.
+Use `docs/plans/NNNN-topic.md` for dependency plans and [task records](tasks/README.md)
+for substantial bounded work. Follow the [template](tasks/TEMPLATE.md). Do not create
+speculative inventories or task records merely to support agent handoffs. Readiness
+requires an outcome, accepted contracts, edit scope, interfaces, ordinary and boundary
+acceptance cases, required checks and no unresolved consequential decision.
 
-Use up to two active Luna implementers when interfaces are agreed and edits and
-fixtures are independent. A useful split is backend/agent and UI/CLI, not two
-workers guessing the same contract. Otherwise use one. Use isolated worktrees, with
-unique ports, test databases and artifact directories. The shared baseline must
-contain the task's approved dependencies. Never have workers edit the same checkout
-or mutate a shared test database. Only the coordinator integrates results.
+Write the user acceptance checklist before implementation: starting state, ordinary
+inputs, expected visible/persisted results, navigation and error correction. For a
+reported defect, reproduce the exact steps and values first; distinguish confirmed
+causes from hypotheses and related passing fixtures.
 
-Assign each shared verification port or database lane explicitly. Its owner may
-continue checks after diagnosed corrections using approved commands until releasing
-the lane or receiving a reassignment; do not request the same reservation before
-every invocation. Coordinate handoffs directly between active implementers and
-report live handles and terminal results to the coordinator. An observation failure
-alone does not authorize restarting a gate: inspect its existing process first.
+Review reused code/tests against Almanac's contracts. Apply version-specific Modern
+Go guidance before Go edits. Define independent expected outcomes for calculations,
+security and concurrency rather than copying implementation assertions into tests.
 
-Assign the real database and application journey lane when implementation starts,
-not only after a unit-test handoff. The implementer keeps ownership through a
-working ordinary user journey and the relevant persistence checks. The coordinator
-then independently reviews that result; it does not repeatedly take over runtime
-debugging for an increment that has only passed mocked checks or compilation.
+Readiness also includes exact permitted focused commands, required final gates and
+evidence paths. Follow [command discipline](commands.md); a missing approval must not
+interrupt unattended work. New fixed-purpose entry points need their actual invocation's
+authorization and cannot introduce arbitrary passthrough execution.
 
-Readiness includes a verification plan naming the permitted focused commands,
-required final gates, owners and evidence paths. Resolve a missing focused entry
-point before dispatching work that would otherwise require a full suite for each
-edit. New entry points are fixed-purpose, reject unsupported selectors and require
-the actual invocation's authorization under [command discipline](commands.md).
+## Verify and review
 
-Increase concurrency only for tasks with stable interfaces, disjoint edits and
-independent fixtures. A shared contract/schema change precedes its consumers; it
-cannot be delegated as conflicting parallel guesses. No worker may delegate further
-without a coordinator-assigned need and explicit scope.
+Follow [testing](testing.md) for gate selection and evidence. Inspect one running
+real page/journey early; use focused checks while editing. Reserve Compose end-to-end,
+the catalogue matrix and the database/API integration suite for the completed integrated
+candidate and PR verification. A handoff, small edit or status request does not trigger
+them. Reuse passing evidence for unchanged relevant inputs, including PR publication.
 
-## Implement, review, integrate
+After a failure, preserve diagnostics, investigate with focused checks and rerun the
+affected gate when the corrected candidate is ready. Keep unaffected evidence. Never
+waive a required gate because a narrow check passed. Retain unexplained failures as
+open investigations; a later passing run alone does not establish a fix.
 
-Size tasks around a usable outcome, such as a connected agent or a datasource query
-test. Keep internal service/storage/HTTP steps within that bounded outcome where
-practical; do not require a PR per layer. Publish reviewable vertical increments,
-not arbitrary file-count batches. Accepted contracts remain prerequisites.
+Review the actual diff for correctness, contract fit, test strength, secrets, generated
+sources and scope. The primary agent exercises the integrated user checklist itself,
+including the normal deployment through the isolated Compose check when applicable.
+Keep default origin/authentication/configuration and persisted records in that path.
+Preserve operator data, credentials and the maintainer's preview. Isolated API fixtures
+and subagent summaries support acceptance but do not replace the user journey.
 
-Inspect a running real page or one user journey early, without launching broad
-acceptance suites. Use focused unit/component checks while editing. Reserve Compose
-end-to-end, the catalogue browser matrix and the database/API integration suite for
-the completed integrated task candidate and PR verification. Worker handoffs do not
-trigger those suites. Reuse matching completion evidence for the PR. Review
-corrected areas and unresolved findings without restarting the
-whole review. Do not repeat a passing gate without changed inputs or a specific
-unresolved concern. Keep required boundary evidence; this changes sequencing, not
-acceptance standards. Finish the current milestone's usable outcomes before optional
-polish or unrelated refactors.
+For UI work, compare actual reference and candidate pages side by side in both themes
+and at mobile widths. Assess navigation, hierarchy, density, typography, controls,
+keyboard/focus, errors and exact values. Exercise continuous navigation/history and
+ordinary form entry, submission and correction. Screenshots alone are not acceptance.
+Lazy-loaded failures must remain visible without blanking unrelated controls.
 
-Use focused checks during correction. A changed file by itself is not a reason to
-repeat every gate: name the affected boundary and retain still-valid evidence for
-unaffected paths. Reserve broad gates for the stable integrated candidate. Check
-receipts identify their actual inputs and result; a worker's summary is not a
-replacement for those receipts. Preserve failures even when a later run passes.
+Compile integration-tagged tests in the full Go gate even when the real fixture is
+unavailable; compilation does not replace required real integration execution.
+Record candidate identity, commands, selected tests/counts, results, artifacts and
+gaps. Maintain timing receipts as specified in [command discipline](commands.md),
+reporting invocation time and occupied wall time separately. Avoid process reporting
+that does not help assess the outcome or next action.
 
-Count unsuccessful handoffs across the entire increment. After two, stop the
-handoff-and-patch loop and record a changed delivery approach with one owner of the
-complete failing path. Finding a different error, creating another brief or moving
-to a different checkout does not erase the counter or earlier evidence. This does
-not waive required checks or authorize substantial coordinator implementation.
+## Progress and publication
 
-Follow [command discipline](commands.md). A new test selector or Make mode does not
-inherit approval merely because a similar command worked. Exact command availability
-is part of task readiness; a missing approval must not interrupt unattended work.
+Task states are `draft`, `ready`, `in_progress`, `review`, `done` and `blocked`.
+The primary agent owns readiness and completion. Delegated completion requests review;
+only integrated verified work is done. Blocked records name a dependency and next action.
+Keep decisions in ADRs, behavior in specs, task evidence in tasks and milestone status
+in [status](status.md). Keep proposed, implemented, verified and unresolved work distinct.
 
-1. The implementer confirms scope, reads applicable Modern Go guidance before Go
-   edits, writes relevant behavior checks and implements the task.
-2. It runs the task's focused verification and required boundary checks from
-   [testing.md](testing.md). A narrow passing test is not full acceptance evidence.
-3. It hands off file/diff details, criterion-to-check mapping, exact commands,
-   exit status, timings, test selection/counts, fixture identity, and remaining gaps.
-4. The coordinator reads the actual diff and independently evaluates correctness,
-   contract fit and test adequacy. For math/security/concurrency, establish expected
-   outcomes independently of the worker's implementation and test assertions.
-5. The coordinator runs the relevant checks on the integrated candidate. Worker
-   results from another revision do not prove the combined application works.
-   Freeze that candidate's product and verification sources while the gate runs.
-   Submitted workers make no further edits without a new scoped correction; work
-   on a later correction stays isolated until the current result is recorded.
-6. Update task and delivery status only after that evidence exists. Keep known gaps
-   explicit. Commit or publish only within the user's current authorization.
+Escalate conflicts, consequential contract/architecture changes, security/data-loss
+risks and missing required environment with evidence and the smallest decision needed.
+Continue independent authorized work. Routine implementation within accepted contracts
+needs no repeated approval. Follow [SPEC-0014](specs/0014-delivery-and-verification.md)
+for release sequencing; this workflow does not relax its gates.
 
-When publishing stacked pull requests, set each base to the preceding branch and
-add the pull request to GitHub's native stack. Branch ancestry and a description
-link alone do not establish stack membership. Verify the returned stack identifier,
-position and size after creation or extension before reporting it as stacked.
+Commit, push, publish and merge only when authorized. During authorized unattended
+delivery, publish verified increments against their dependency branches. Add stacked
+PRs to GitHub's native stack and verify returned membership/position before calling
+them stacked. Publishing does not authorize merging.
 
-Use focused correction requests referencing observed failures and expected behavior.
-After two unsuccessful correction rounds on the same issue, the coordinator
-splits/reframes the task or asks before taking over substantial implementation.
-Do not burn cycles by repeating the same prompt.
-Escalate immediately for conflicting specs, changes to public contracts or dependencies,
-security boundaries, data loss, missing required environment, or suspected bad tests.
-Report the attempted action, evidence and smallest decision needed. Continue independent
-work where possible; do not use escalation to stop routine authorized work.
-
-## Evidence and progress
-
-Task states are `draft`, `ready`, `in_progress`, `review`, `done`, and `blocked`.
-The coordinator sets `ready` and `done`; worker completion only moves a task to
-`review`. A task marked done identifies its integrated revision and evidence.
-A blocked task records the concrete dependency and next action, not just “blocked”.
-
-Keep decisions in ADRs, observable behavior in specs, tasks in task records, and
-milestone progress/evidence in [status.md](status.md). Do not duplicate product
-requirements across these documents. Record durable workflow lessons in AGENTS.md;
-keep transient logs and private investigation material out of repository content.
-
-Record meaningful elapsed time, correction rounds and repeated failure causes in
-task evidence. Compare accepted usable outcomes and rework, not activity or number
-of PRs. Avoid exhaustive process reporting that does not change the next action.
-
-## Delivery and acceptance
-
-Before dispatch, write the task's user acceptance checklist in observable terms:
-what the user enters, what they see, how they move to the next screen, and how they
-correct an error. Choose ordinary inputs as well as contract boundaries. For a bug
-report, record and reproduce its exact steps and values before implementing a fix;
-distinguish confirmed causes from hypotheses and related cases.
-
-The coordinator's final acceptance is a separate user pass over the integrated
-application, not a summary of the implementer's tests. Exercise the affected flow
-through the normal container deployment using the isolated Compose check, with its
-default origin, authentication, configuration and persisted records. Preserve the
-maintainer's data, account and running preview. Custom API/process fixtures remain
-necessary boundary checks, but cannot substitute for deployment-path evidence.
-
-For visual changes, inspect reference and candidate side by side. Assess menu
-organization, page hierarchy, content density, typography, controls and states in
-both themes and at mobile widths. Exercise continuous navigation and browser history,
-not just independent page loads. Verify input text both as a value and as rendered
-text when punctuation or technical data matters. Record specific evidence for these
-criteria; screenshot existence and passing suite counts do not prove usability.
-
-Keep implementation, verification and unresolved findings distinct in handoffs and
-delivery status. An unexplained failed run stays an open investigation even if a
-later run passes; do not list it among corrected defects without causal evidence.
-Close a reported defect only when the original acceptance case works and its
-regression protects that case. These checks strengthen existing acceptance rather
-than adding a new maintainer approval round for routine fixes.
-
-Follow [SPEC-0014](specs/0014-delivery-and-verification.md) for release sequencing.
-The maintainer accepts new product specs and ADRs; routine work within accepted
-contracts needs no repeated approval. Test or documentation edits do not authorize
-relaxing an accepted behavior. UI work includes real browser checks and the shared
-component catalogue; copied or mocked screenshots cannot establish working behavior.
+Checking PR comments includes validating findings, fixing valid issues, verifying,
+updating the PR and replying in its review threads; explain findings that do not apply.
+During unattended delivery, address feedback only from the maintainer or Greptile.
+Required check failures remain actionable regardless of their source.

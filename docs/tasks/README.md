@@ -2,16 +2,17 @@
 
 Use `FN-TNN.md` for a bounded task within a delivery slice, for example `F1-T01.md`.
 Copy [TEMPLATE.md](TEMPLATE.md). These identifiers are independent of spec/ADR numbers.
-The coordinator owns readiness, dependencies, assignments, review and completion.
+The primary agent owns readiness, implementation, dependencies, review and completion.
 Follow [ways of working](../ways-of-working.md) and [testing](../testing.md).
 
 A milestone plan belongs in `docs/plans/NNNN-topic.md`; create one when work is ready
 for decomposition. It links tasks and dependencies, without redefining product policy.
-Do not create empty future task inventories or hand unresolved design to an implementer.
+Do not create empty future task inventories or hand unresolved design to a subagent.
 
 States: `draft` → `ready` → `in_progress` → `review` → `done`; any active task can become
-`blocked` with a concrete reason and resumption condition. Worker completion is a
-request for coordinator review. Only integrated, verified work is `done`.
+`blocked` with a concrete reason and resumption condition. If work is delegated,
+subagent completion requests primary-agent review. Only integrated, verified work is
+`done`; task records do not require delegation.
 
 The [visual foundation plan](../plans/0001-visual-foundation.md) is complete.
 [F1-T01](F1-T01.md) establishes the shared controls, local catalogue and focused
