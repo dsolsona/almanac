@@ -36,6 +36,71 @@ type performanceDeploymentEvidence struct {
 	ReadOnly          bool   `json:"app_read_only"`
 }
 
+type performanceSamplingTransition struct {
+	Before, After     performanceDeploymentEvidence
+	Shutdown, Startup time.Duration
+	RootSampling      float64   `json:"root_sampling"`
+	ReadyAt           time.Time `json:"ready_at"`
+}
+
+func enablePerformanceFullTracing(t *testing.T, f objectiveJourneyFixture) performanceSamplingTransition {
+	t.Helper()
+	r := f.backend.deployment
+	if r == nil {
+		t.Fatal("full capture requires owned normal deployment")
+	}
+	report := performanceSamplingTransition{Before: r.evidence(t)}
+	body, err := os.ReadFile(r.override)
+	var override map[string]any
+	if err != nil || json.Unmarshal(body, &override) != nil {
+		t.Fatal("read owned sampling override failed")
+	}
+	services, ok := override["services"].(map[string]any)
+	if !ok {
+		t.Fatal("owned sampling override has no services")
+	}
+	app, ok := services["app"].(map[string]any)
+	if !ok {
+		t.Fatal("owned sampling override has no backend")
+	}
+	environment, ok := app["environment"].(map[string]any)
+	if !ok || environment["OTEL_TRACES_SAMPLER_ARG"] != "0.01" {
+		t.Fatal("owned backend sampling did not match bulk setup")
+	}
+	environment["OTEL_TRACES_SAMPLER_ARG"] = "1"
+	body, err = json.Marshal(override)
+	if err != nil {
+		t.Fatal("encode owned full capture override failed")
+	}
+	report.Shutdown = r.stop(t)
+	if err := os.WriteFile(r.override, body, 0o600); err != nil {
+		t.Fatal("write owned full capture override failed")
+	}
+	r.appID = "" // Compose replaces only this stopped, owned backend for changed env.
+	report.Startup = r.start(t)
+	report.After = r.evidence(t)
+	if report.After.AppContainer == report.Before.AppContainer || report.After.PostgresContainer != report.Before.PostgresContainer || report.After.Image != report.Before.Image || report.After.BackendSHA != report.Before.BackendSHA {
+		t.Fatal("sampling transition changed data/image ownership or did not replace backend")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "docker", "inspect", "--format", `{{range .Config.Env}}{{if eq . "OTEL_TRACES_SAMPLER_ARG=1"}}full{{end}}{{end}}`, r.appID).Output()
+	if err != nil || strings.TrimSpace(string(output)) != "full" {
+		t.Fatal("normal acceptance backend is not fully sampled")
+	}
+	response, err := f.apiClient.Get(f.baseURL + "/readyz")
+	if err != nil {
+		t.Fatal("full capture backend host HTTPS unavailable")
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatal("full capture backend host HTTPS not ready")
+	}
+	report.RootSampling = 1
+	report.ReadyAt = time.Now().UTC()
+	return report
+}
+
 func performancePorts(t *testing.T) ([]string, func()) {
 	t.Helper()
 	var listeners []net.Listener

@@ -232,5 +232,9 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	if err := q.ClearCurrentPreparationFailure(bounded, id); err != nil {
 		return err
 	}
-	return tx.Commit(bounded)
+	if err := tx.Commit(bounded); err != nil {
+		return err
+	}
+	recordCurrentPublication(span, generationID.String(), sourceGeneration, detail.EffectiveAt)
+	return nil
 }

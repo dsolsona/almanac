@@ -40,6 +40,7 @@ type performanceClockCase struct {
 	SloID                                  string `json:"slo_id"`
 	ExpectedGood, ExpectedTotal            string
 	Actual                                 api.SloOperationalValue `json:"actual_current"`
+	Generation                             api.DerivedGeneration   `json:"generation"`
 	ExpectedUrgency, ExpectedLeadingReason string
 }
 
@@ -249,7 +250,7 @@ func performanceClockSnapshot(ctx context.Context, db *pgx.Conn, fleet performan
 			return report, errors.New("clock-only urgency differs from independent exact triage")
 		}
 		if slices.Contains(fleet.objectives[:10], item.Slo.Id.String()) || !slices.Contains(fleet.objectives, item.Slo.Id.String()) {
-			report.Cases = append(report.Cases, performanceClockCase{SloID: item.Slo.Id.String(), ExpectedGood: views[index*3].Counts.Good.RatString(), ExpectedTotal: views[index*3].Counts.Total.RatString(), Actual: item.Current, ExpectedUrgency: group, ExpectedLeadingReason: reason})
+			report.Cases = append(report.Cases, performanceClockCase{SloID: item.Slo.Id.String(), ExpectedGood: views[index*3].Counts.Good.RatString(), ExpectedTotal: views[index*3].Counts.Total.RatString(), Actual: item.Current, Generation: *item.Generation, ExpectedUrgency: group, ExpectedLeadingReason: reason})
 		}
 		switch group {
 		case "needs_attention":

@@ -51,10 +51,10 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
 	t.Setenv("OTEL_SDK_DISABLED", "false")
-	// Browser parents remain fully sampled; bound unrelated long-seed background
-	// roots rather than exporting every operation in hundreds of millions of rows.
+	// Capture agent/CLI parents fully. The backend separately samples bulk-seed
+	// background roots until the measured acceptance stages enable full capture.
 	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
-	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.01")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "1")
 	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
 	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL, reserveDetail: true}
 	for index := range 10 {

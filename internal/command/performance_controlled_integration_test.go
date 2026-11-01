@@ -141,6 +141,9 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("automatic-maintenance-365-days", maintenance, err) {
 		return
 	}
+	stage("full-acceptance-tracing")
+	sampling := enablePerformanceFullTracing(t, fleet.fixture)
+	record("full-acceptance-tracing", sampling, nil)
 	stage("query-plans-365-days")
 	record("query-plans-365-days", performanceQueryPlans(t, fleet), nil)
 	stage("persisted-restart-365-days")
@@ -209,6 +212,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	stage("clock-only-current-and-global-urgency")
 	clock, err := performanceClockOnly(t, ctx, fleet, shared, late)
 	if !record("clock-only-current-and-global-urgency", clock, err) {
+		return
+	}
+	stage("matched-background-work-traces")
+	workTraces, err := capturePerformanceWork(t, ctx, fleet, clock, sampling)
+	if !record("matched-background-work-traces", workTraces, err) {
 		return
 	}
 	stage("completed")

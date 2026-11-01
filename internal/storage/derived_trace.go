@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,6 +23,16 @@ func historyTraceKey(key dbgen.FindPreparedSloHistoryParams) string {
 		key.EvaluatedThrough.Time.UnixMicro(), key.RangeStart.Time.UnixMicro(), key.RangeEnd.Time.UnixMicro(), key.BurnWindowSeconds, key.Kind, key.CalculationVersion, key.RetentionStart.Time.UnixMicro())
 	hash := sha256.Sum256(value)
 	return hex.EncodeToString(hash[:])
+}
+
+func recordCurrentPublication(span trace.Span, generationID string, source int64, at time.Time) {
+	if !span.IsRecording() {
+		return
+	}
+	key := sha256.Sum256([]byte(generationID))
+	span.SetAttributes(attribute.String("almanac.publication.key", hex.EncodeToString(key[:])),
+		attribute.String("almanac.source.generation", strconv.FormatInt(source, 10)),
+		attribute.String("almanac.evaluated.through", at.UTC().Format(time.RFC3339Nano)))
 }
 
 func finishDerivedTrace(ctx context.Context, span trace.Span, err error, success string) {
