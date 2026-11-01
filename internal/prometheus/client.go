@@ -92,8 +92,10 @@ func NewClient(config Config) (*Client, error) {
 	}
 	allowed := append([]string(nil), config.AllowedDestinations...)
 	transport := &http.Transport{
-		TLSClientConfig:   tlsConfig,
-		DisableKeepAlives: true,
+		TLSClientConfig:     tlsConfig,
+		MaxIdleConns:        4,
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     90 * time.Second,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			return safeDialContext(ctx, network, address, allowed)
 		},
@@ -102,6 +104,12 @@ func NewClient(config Config) (*Client, error) {
 		return http.ErrUseLastResponse
 	}}
 	return &Client{endpoint: u, authMode: config.AuthMode, username: config.Username, password: config.Password, token: config.BearerToken, http: client, allowed: allowed}, nil
+}
+
+// CloseIdleConnections releases pooled connections when this client is retired.
+// Requests already in flight are unaffected and remain governed by their contexts.
+func (c *Client) CloseIdleConnections() {
+	c.http.CloseIdleConnections()
 }
 
 func (c *Client) Query(ctx context.Context, query string) (QueryResult, error) {

@@ -44,6 +44,7 @@ type collectionRunner struct {
 
 	mu                sync.Mutex
 	assignments       map[string]agentprotocol.DatasourceAssignment
+	sources           map[string]*prometheus.Client
 	slis              []agentprotocol.SLICollection
 	lease             agentprotocol.Lease
 	leaseDeadline     time.Time
@@ -109,7 +110,7 @@ type collectionDefinition struct {
 }
 
 func newCollectionRunner(agent *client) *collectionRunner {
-	return &collectionRunner{client: agent, assignments: make(map[string]agentprotocol.DatasourceAssignment),
+	return &collectionRunner{client: agent, assignments: make(map[string]agentprotocol.DatasourceAssignment), sources: make(map[string]*prometheus.Client),
 		nextIntervalEnd: make(map[string]time.Time), initialPending: make(map[string]bool), active: make(map[string]activeCollection), activeSources: make(map[string]int),
 		pending: make(map[string]*pendingLiveResult), losses: make(map[string]uint64), lossLogger: slog.Default(), notify: make(chan struct{}, 1), scheduleNotify: make(chan struct{}, 1), clockSafe: true}
 }
@@ -196,9 +197,16 @@ func (r *collectionRunner) setConfiguration(snapshot agentprotocol.Configuration
 	}
 	for key, active := range r.active {
 		_, exists := allowedNext[key]
-		if !exists || (allowed != nil && !allowed[key]) {
+		if !exists || assignments[active.datasource] != r.assignments[active.datasource] || (allowed != nil && !allowed[key]) {
 			active.cancel()
 			removed = append(removed, active.done)
+		}
+	}
+	for id, source := range r.sources {
+		assignment, exists := assignments[id]
+		if !exists || assignment != r.assignments[id] {
+			source.CloseIdleConnections()
+			delete(r.sources, id)
 		}
 	}
 	for key := range r.nextIntervalEnd {
@@ -481,31 +489,15 @@ func (r *collectionRunner) collect(parent context.Context, definition collection
 		return
 	}
 	r.mu.Lock()
-	if active, exists := r.active[definition.key]; !exists || active.reservation != definition.reservation {
+	if active, exists := r.active[definition.key]; !exists || active.reservation != definition.reservation ||
+		r.assignments[definition.assignment.DatasourceID] != definition.assignment || ctx.Err() != nil {
 		r.mu.Unlock()
 		return
 	}
 	attemptedAt := r.client.currentServerTime().UTC().Truncate(time.Microsecond)
 	r.lastAttempt = &attemptedAt
+	source, err := r.collectionClientLocked(definition)
 	r.mu.Unlock()
-
-	settings := datasource.Settings{Name: definition.assignment.Name, DisplayName: definition.assignment.Name,
-		Provider: definition.assignment.Provider, ConfigurationFormat: definition.assignment.ConfigurationFormat,
-		Endpoint:           definition.assignment.Endpoint,
-		TLS:                datasource.TLSSettings{InsecureSkipVerify: definition.assignment.TLS.InsecureSkipVerify, CAPEM: definition.assignment.TLS.CAPEM},
-		AuthenticationMode: definition.assignment.AuthenticationMode, AuthenticationUser: definition.assignment.Username,
-		PollingIntervalSeconds: definition.assignment.PollingIntervalSeconds,
-		SettlingDelaySeconds:   definition.assignment.SettlingDelaySeconds, AgentID: definition.agentID}
-	tlsConfig, err := settings.ClientTLSConfig()
-	if err != nil {
-		complete(failedCollectionOutcome("unsupported"), nil)
-		return
-	}
-	endpoint, _ := url.Parse(definition.assignment.Endpoint)
-	source, err := prometheus.NewClient(prometheus.Config{Endpoint: definition.assignment.Endpoint,
-		AuthMode: definition.assignment.AuthenticationMode, Username: definition.assignment.Username,
-		Password: definition.assignment.Password, BearerToken: definition.assignment.BearerToken,
-		TLSConfig: tlsConfig, Timeout: queryTimeout, AllowedDestinations: []string{endpoint.Hostname()}})
 	if err != nil {
 		complete(failedCollectionOutcome("unsupported"), nil)
 		return
@@ -523,6 +515,44 @@ func (r *collectionRunner) collect(parent context.Context, definition collection
 	successAt := r.client.currentServerTime().UTC().Truncate(time.Microsecond)
 	outcome := collectedOutcomeAt(good, true, good.Class == "incomplete", total, true, total.Class == "incomplete", definition.intervalEnd)
 	complete(outcome, &successAt)
+}
+
+// The runner lock serializes construction with configuration replacement.
+func (r *collectionRunner) collectionClientLocked(definition collectionDefinition) (*prometheus.Client, error) {
+	if source := r.sources[definition.assignment.DatasourceID]; source != nil {
+		return source, nil
+	}
+	settings := datasource.Settings{Name: definition.assignment.Name, DisplayName: definition.assignment.Name,
+		Provider: definition.assignment.Provider, ConfigurationFormat: definition.assignment.ConfigurationFormat,
+		Endpoint:           definition.assignment.Endpoint,
+		TLS:                datasource.TLSSettings{InsecureSkipVerify: definition.assignment.TLS.InsecureSkipVerify, CAPEM: definition.assignment.TLS.CAPEM},
+		AuthenticationMode: definition.assignment.AuthenticationMode, AuthenticationUser: definition.assignment.Username,
+		PollingIntervalSeconds: definition.assignment.PollingIntervalSeconds,
+		SettlingDelaySeconds:   definition.assignment.SettlingDelaySeconds, AgentID: definition.agentID}
+	tlsConfig, err := settings.ClientTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+	endpoint, _ := url.Parse(definition.assignment.Endpoint)
+	// Each collection's context carries its current lease deadline, not the pool.
+	source, err := prometheus.NewClient(prometheus.Config{Endpoint: definition.assignment.Endpoint,
+		AuthMode: definition.assignment.AuthenticationMode, Username: definition.assignment.Username,
+		Password: definition.assignment.Password, BearerToken: definition.assignment.BearerToken,
+		TLSConfig: tlsConfig, Timeout: maxCollectionQueryTime, AllowedDestinations: []string{endpoint.Hostname()}})
+	if err != nil {
+		return nil, err
+	}
+	r.sources[definition.assignment.DatasourceID] = source
+	return source, nil
+}
+
+func (r *collectionRunner) closeSources() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, source := range r.sources {
+		source.CloseIdleConnections()
+	}
+	clear(r.sources)
 }
 
 func (r *collectionRunner) releaseCollection(definition collectionDefinition) {
