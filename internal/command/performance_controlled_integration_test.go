@@ -174,9 +174,12 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		return
 	}
 	record("live-isolation-gate", struct{ Result string }{"passed"}, nil)
+	stage("response-cache-eviction-and-retained-restart")
+	browserRestart := restartPerformanceForBrowser(t, fleet)
+	record("response-cache-eviction-and-retained-restart", browserRestart, nil)
 	stage("production-browser-365-days")
 	browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
-	browserArtifacts, err := runPerformanceBrowser(t, browserContext, fleet)
+	browserArtifacts, err := runPerformanceBrowser(t, browserContext, fleet, browserRestart)
 	stopBrowser()
 	if !record("production-browser-365-days", struct{ Artifacts string }{browserArtifacts}, err) {
 		return

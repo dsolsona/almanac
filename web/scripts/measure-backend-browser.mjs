@@ -11,7 +11,7 @@ let stage = 'fixture';
 const report = {
   schema_version: 1,
   environment: { cpu_slowdown: 4, download_bits_per_second: 10_000_000, latency_ms: 100, viewport: { width: 1440, height: 900 } },
-  cold_loads: [], interactions: [], list_actions: [], list_coverage: {}, failures: [],
+  cold_loads: [], warm_loads: [], lifecycle_loads: [], interactions: [], list_actions: [], list_coverage: {}, failures: [],
 };
 
 function distribution(samples, key) {
@@ -35,7 +35,7 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     const started = performance.now();
     const response = await originalFetch.apply(this, args);
     if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return response;
-    const sample = { path: url.pathname, started_ms: started, headers_ms: performance.now(), status: response.status };
+    const sample = { path: url.pathname, started_ms: started, headers_ms: performance.now(), wall_received_ms:Date.now(),status: response.status, server_date_ms:Date.parse(response.headers.get('Date')) };
     state.fetches.push(sample);
     const json = response.json.bind(response);
     response.json = async () => {
@@ -99,7 +99,9 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     const history = documents.get(`/api/v1/slos/${id}/operational`);
     const burn = params.get('burn_window') === '21600' ? 21600 : 3600;
     const statusReady = status?.slo.id === id && validGeneration(status.generation) && visible(document.querySelector('.app-status-facts')) && document.querySelector('[aria-label="Refresh objective status"]')?.getAttribute('aria-busy') !== 'true' && document.querySelector('.app-budget-hero')?.textContent === percent(status.current.performance.remaining_fraction);
-    return statusReady && history?.value.objective.id === id && validGeneration(history.value.generation) && history.value.burn_series.burn_window_seconds === burn && history.query.get('burn_window_seconds') === String(burn) && visible(document.querySelector('.app-timeline-plot .timeline-chart__plot svg')) && document.querySelectorAll('.app-lane-label').length === 4;
+    const complete=statusReady && history?.value.objective.id === id && validGeneration(history.value.generation) && history.value.burn_series.burn_window_seconds === burn && history.query.get('burn_window_seconds') === String(burn) && visible(document.querySelector('.app-timeline-plot .timeline-chart__plot svg')) && document.querySelectorAll('.app-lane-label').length === 4;
+    if(complete)state.detailEvidence={history_generation:history.value.generation.generation_id,history_evaluated_through:history.value.generation.evaluated_through,status_generation:status.generation.generation_id,status_evaluated_through:status.generation.evaluated_through};
+    return complete;
   };
   let primaryScheduled = false;
   let primaryGeneration=0;
@@ -151,6 +153,7 @@ async function measuredPage(context, fixture) {
 async function browserTimings(page) {
   return page.evaluate(() => ({
     primary_ms: window.__almanacPerformance.primary_ms,
+    detail:window.__almanacPerformance.detailEvidence,
     fetches: window.__almanacPerformance.fetches,
     resources: performance.getEntriesByType('resource').map(entry => ({
       path: new URL(entry.name).pathname, initiator: entry.initiatorType,
@@ -183,6 +186,10 @@ try {
   assert.match(fixture.slo_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.match(fixture.candidate_binary_sha256, /^[0-9a-f]{64}$/);
   assert.ok([10, 100, 1000].includes(fixture.fleet_size));
+  assert.equal(fixture.cache_setup.result,'restarted-with-retained-data');
+  assert.equal(fixture.cache_setup.target_slo_id,fixture.slo_id);
+  assert.ok(fixture.cache_setup.preserved_target_points>0&&fixture.cache_setup.preserved_target_tiles>0);
+  assert.equal(fixture.cache_setup.preserved_current_summaries,fixture.fleet_size);
   assert.equal(fixture.datasource_ids.length,10);
   for(const id of [...fixture.datasource_ids,fixture.service_id])assert.match(id,/^[0-9a-f-]{36}$/);
   assert.ok(typeof fixture.login === 'string' && typeof fixture.password === 'string' && fixture.login && fixture.password);
@@ -190,9 +197,10 @@ try {
   assert.ok(output.startsWith(resolve('..', '.local') + sep));
   await mkdir(output, { recursive: true, mode: 0o700 });
   report.candidate_binary_sha256 = fixture.candidate_binary_sha256;
+  report.cache_setup={result:fixture.cache_setup.result,target_slo_id:fixture.cache_setup.target_slo_id,preserved_target_points:fixture.cache_setup.preserved_target_points,preserved_target_tiles:fixture.cache_setup.preserved_target_tiles,preserved_current_summaries:fixture.cache_setup.preserved_current_summaries,evicted_history_responses:fixture.cache_setup.evicted_history_responses,evicted_overview_snapshots:fixture.cache_setup.evicted_overview_snapshots};
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
   report.environment.browser = browser.version();
-  report.environment.cache = 'fresh browser context and disabled HTTP cache; backend preparation measured separately';
+  report.environment.cache = 'cold: fresh context/disabled HTTP cache; warm: same-context reload with HTTP cache enabled; response eviction precedes backend restart; OS/PostgreSQL buffers are not claimed cold';
   stage = 'authenticate';
   const loginContext = await browser.newContext({ viewport: report.environment.viewport });
   const loginPage = await loginContext.newPage();
@@ -205,28 +213,50 @@ try {
   fixture.password = '';
   await loginContext.close();
 
+  const load=async(page,view,budget,cohort,index,navigate)=>{
+    const sample={view,index,budget_ms:budget,browser_cache:cohort==='cold'?'fresh-disabled':'warm-enabled',server_response_cache:cohort==='cold'&&index===0?'evicted-before-restart; no prior visit to this route':'reuse eligible; actual hit/miss requires trace evidence'};
+    try {
+      await navigate();
+      await page.waitForFunction(()=>Number.isFinite(window.__almanacPerformance?.primary_ms),{},{timeout:10_000});
+      Object.assign(sample,await browserTimings(page));
+      if(sample.fetches.some(fetch=>fetch.status>=400)){sample.failure='normal_navigation_unavailable';report.failures.push(stage);}
+    } catch {
+      sample.failure='primary_content_unavailable';sample.primary_ms=await page.evaluate(()=>performance.now()).catch(()=>10_000);report.failures.push(stage);
+    }
+    if(!Number.isFinite(sample.primary_ms)||sample.primary_ms>=budget)report.failures.push(`${stage}-load-budget`);
+    report[`${cohort}_loads`].push(sample);
+    await writeFile(join(output,'browser-performance.json'),JSON.stringify(report)+'\n',{mode:0o600});
+    return sample;
+  };
+
   for (const [view, path, budget] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 500]]) {
     for (let index = 0; index < 20; index++) {
       stage = `${view}-cold-${index}`;
       const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
       const page = await measuredPage(context, fixture);
-      const sample = { view, index, budget_ms: budget };
       try {
-        await page.goto(new URL(path, origin).href, { waitUntil: 'domcontentloaded', timeout: 10_000 });
-        await page.waitForFunction(() => Number.isFinite(window.__almanacPerformance?.primary_ms), { }, { timeout: 10_000 });
-        Object.assign(sample, await browserTimings(page));
-        if (sample.fetches.some(fetch=>fetch.status===503)) {
-          sample.failure='normal_navigation_unavailable';
-          report.failures.push(stage);
+        const sample=await load(page,view,budget,'cold',index,()=>page.goto(new URL(path,origin).href,{waitUntil:'domcontentloaded',timeout:10_000}));
+        if(index===19&&!sample.failure){
+          const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:false});
+          for(let repeat=0;repeat<20;repeat++){
+            stage=`${view}-warm-${repeat}`;
+            await load(page,view,budget,'warm',repeat,()=>page.reload({waitUntil:'domcontentloaded',timeout:10_000}));
+          }
+          if(view==='slo-detail'){
+            stage='slo-detail-real-minute-boundary';
+            const before=await browserTimings(page);
+            const clock=before.fetches.filter(fetch=>Number.isFinite(fetch.server_date_ms)).at(-1);
+            assert.ok(clock&&Math.abs(clock.wall_received_ms-clock.server_date_ms)<2500,'browser/backend clock mismatch');
+            const nextMinute=Math.floor(Date.now()/60_000)*60_000+60_000;
+            while(Date.now()<nextMinute+250)await page.waitForTimeout(Math.max(0,Math.min(1000,nextMinute+250-Date.now())));
+            const after=await load(page,view,budget,'lifecycle',0,()=>page.reload({waitUntil:'domcontentloaded',timeout:10_000}));
+            after.before_evaluated_through=before.detail.history_evaluated_through;
+            assert.ok(!after.failure&&Date.parse(after.detail.history_evaluated_through)>Date.parse(before.detail.history_evaluated_through),'minute-boundary visit did not render a newer requested evaluation');
+            await writeFile(join(output,'browser-performance.json'),JSON.stringify(report)+'\n',{mode:0o600});
+          }
         }
-      } catch {
-        sample.failure = 'primary_content_unavailable';
-        sample.primary_ms = await page.evaluate(() => performance.now()).catch(() => 10_000);
-        report.failures.push(stage);
       } finally {
-        report.cold_loads.push(sample);
         await context.close();
-        await writeFile(join(output, 'browser-performance.json'), JSON.stringify(report) + '\n', { mode: 0o600 });
       }
     }
   }
@@ -353,11 +383,14 @@ try {
   if (report.interaction_resources.fetches.some(fetch=>fetch.status===503)) report.failures.push('interaction-preparation-wait');
   await context.close();
   report.distributions = Object.fromEntries(['sli-list', 'slo-list', 'slo-detail'].map(view => [view, distribution(report.cold_loads.filter(sample => sample.view === view), 'primary_ms')]));
+  report.warm_distributions=Object.fromEntries(['sli-list','slo-list','slo-detail'].map(view=>[view,distribution(report.warm_loads.filter(sample=>sample.view===view),'primary_ms')]));
   report.distributions.feedback = distribution(report.interactions, 'feedback_ms');
   report.distributions.chart = distribution(report.interactions, 'chart_ms');
   for (const [view, budget] of [['sli-list', 1000], ['slo-list', 1000], ['slo-detail', 500]]) {
     if (report.distributions[view].count !== 20 || report.distributions[view].max_ms >= budget) report.failures.push(`${view}-load-budget`);
+    if(report.warm_distributions[view].count!==20||report.warm_distributions[view].max_ms>=budget)report.failures.push(`${view}-warm-load-budget`);
   }
+  if(report.lifecycle_loads.length!==1)report.failures.push('minute-boundary-cohort-missing');
   if (report.interactions.some(sample=>!Number.isFinite(sample.total_ms)||sample.total_ms>=500)) report.failures.push('interaction-total-budget');
   for (const name of ['feedback', 'chart']) {
     if (report.distributions[name].count !== 50 || report.distributions[name].p95_ms > 200) report.failures.push(`${name}-p95-budget`);

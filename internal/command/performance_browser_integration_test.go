@@ -20,9 +20,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
-func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceFleet) (string, error) {
+func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceFleet, restart performanceBrowserRestartReport) (string, error) {
 	t.Helper()
 	f := fleet.fixture
 	if len(fleet.objectives) != 10 && len(fleet.objectives) != 100 && len(fleet.objectives) != 1000 {
@@ -56,17 +57,18 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	}
 	spki := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
 	input, err := json.Marshal(struct {
-		URL         string   `json:"url"`
-		SPKI        string   `json:"spki"`
-		Login       string   `json:"login"`
-		Password    string   `json:"password"`
-		SloID       string   `json:"slo_id"`
-		Artifacts   string   `json:"artifacts"`
-		Candidate   string   `json:"candidate_binary_sha256"`
-		FleetSize   int      `json:"fleet_size"`
-		Datasources []string `json:"datasource_ids"`
-		ServiceID   string   `json:"service_id"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID})
+		URL         string                          `json:"url"`
+		SPKI        string                          `json:"spki"`
+		Login       string                          `json:"login"`
+		Password    string                          `json:"password"`
+		SloID       string                          `json:"slo_id"`
+		Artifacts   string                          `json:"artifacts"`
+		Candidate   string                          `json:"candidate_binary_sha256"`
+		FleetSize   int                             `json:"fleet_size"`
+		Datasources []string                        `json:"datasource_ids"`
+		ServiceID   string                          `json:"service_id"`
+		CacheSetup  performanceBrowserRestartReport `json:"cache_setup"`
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}
@@ -91,12 +93,24 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	}
 	reportBody, readErr := io.ReadAll(io.LimitReader(reportFile, (8<<20)+1))
 	reportCloseErr := reportFile.Close()
+	type measuredLoad struct {
+		View    string    `json:"view"`
+		Elapsed float64   `json:"primary_ms"`
+		Failure string    `json:"failure"`
+		Before  time.Time `json:"before_evaluated_through"`
+		Detail  struct {
+			Through time.Time `json:"history_evaluated_through"`
+		} `json:"detail"`
+	}
 	var report struct {
-		Result       string           `json:"result"`
-		Candidate    string           `json:"candidate_binary_sha256"`
-		ColdLoads    []jsontext.Value `json:"cold_loads"`
-		Interactions []jsontext.Value `json:"interactions"`
-		ListCoverage struct {
+		Result         string                          `json:"result"`
+		Candidate      string                          `json:"candidate_binary_sha256"`
+		ColdLoads      []measuredLoad                  `json:"cold_loads"`
+		WarmLoads      []measuredLoad                  `json:"warm_loads"`
+		LifecycleLoads []measuredLoad                  `json:"lifecycle_loads"`
+		CacheSetup     performanceBrowserRestartReport `json:"cache_setup"`
+		Interactions   []jsontext.Value                `json:"interactions"`
+		ListCoverage   struct {
 			Slis []string `json:"slis"`
 			Slos []string `json:"slos"`
 		} `json:"list_coverage"`
@@ -111,8 +125,35 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	}
 	if readErr != nil || reportCloseErr != nil || len(reportBody) > 8<<20 || json.Unmarshal(reportBody, &report) != nil ||
 		report.Result != "passed" || report.Candidate != hex.EncodeToString(digest.Sum(nil)) ||
-		len(report.ColdLoads) != 60 || len(report.Interactions) != 50 || len(report.Failures) != 0 {
+		len(report.ColdLoads) != 60 || len(report.WarmLoads) != 60 || len(report.LifecycleLoads) != 1 || len(report.Interactions) != 50 || len(report.Failures) != 0 {
 		return artifacts, errors.New("browser performance report is incomplete, failed or from another executable")
+	}
+	if report.CacheSetup.Result != restart.Result || report.CacheSetup.Target != restart.Target || report.CacheSetup.PreservedPoints != restart.PreservedPoints || report.CacheSetup.PreservedTiles != restart.PreservedTiles || report.CacheSetup.PreservedCurrent != int64(len(fleet.objectives)) {
+		return artifacts, errors.New("browser report omitted retained-restart/cache-eviction provenance")
+	}
+	for _, cohort := range [][]measuredLoad{report.ColdLoads, report.WarmLoads} {
+		counts := make(map[string]int)
+		for _, sample := range cohort {
+			budget := 1000.0
+			if sample.View == "slo-detail" {
+				budget = 500
+			} else if sample.View != "sli-list" && sample.View != "slo-list" {
+				return artifacts, errors.New("browser load has unknown journey identity")
+			}
+			if sample.Failure != "" || sample.Elapsed <= 0 || sample.Elapsed >= budget {
+				return artifacts, errors.New("cold/warm browser load exceeded usable-content budget")
+			}
+			counts[sample.View]++
+		}
+		for _, view := range []string{"sli-list", "slo-list", "slo-detail"} {
+			if counts[view] != 20 {
+				return artifacts, errors.New("browser omitted a cold/warm journey cohort")
+			}
+		}
+	}
+	minute := report.LifecycleLoads[0]
+	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 500 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) {
+		return artifacts, errors.New("browser minute-boundary visit omitted newer rendered evaluation or violated latency")
 	}
 	for _, coverage := range []struct{ actual, expected []string }{{report.ListCoverage.Slis, fleet.slis}, {report.ListCoverage.Slos, fleet.objectives}} {
 		actual, expected := slices.Clone(coverage.actual), slices.Clone(coverage.expected)
