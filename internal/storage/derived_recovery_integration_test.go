@@ -52,6 +52,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if status.Generation.EvaluatedThrough.Location() != time.UTC || status.Generation.PublishedAt.Location() != time.UTC {
 		t.Fatal("current generation metadata must use UTC independently of the database driver's host timezone")
 	}
+	verifyCurrentStatusBoundaryRead(t, databaseURL, runtime, proof, id, clock(), status)
 	verifyRetainedCurrentPoint(t, runtime, databaseURL, proof, id, clock, oracle)
 	conn := integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)
@@ -213,6 +214,41 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	}
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
 	verifyRetainedWorkRecovery(t, runtime, databaseURL, proof, id, clock)
+}
+
+func verifyCurrentStatusBoundaryRead(t *testing.T, databaseURL string, runtime *Runtime, proof DatasourceProof, id string, now time.Time, published api.SloCurrentStatus) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	pgID, _ := canonicalUUID(id)
+	var before, after string
+	// Read-side fallback must not publish a replacement, enqueue history or advance
+	// retained repair; the regular ingestion/boundary publisher still owns those.
+	const state = `SELECT jsonb_build_array(
+ (SELECT generation_id FROM public.almanac_slo_current_projections WHERE slo_id=$1),
+ (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$1),
+ (SELECT to_jsonb(r) FROM public.almanac_slo_series_repair r WHERE slo_id=$1))::text`
+	if err := conn.QueryRow(t.Context(), state, pgID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	for _, advance := range []time.Duration{time.Duration(published.Slo.CadenceSeconds) * time.Second, 2 * time.Hour} {
+		at := now.Add(advance)
+		clock := func() time.Time { return at }
+		oracle, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id, Now: clock, BurnWindow: 3600})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := ReadCurrentSloStatus(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: proof, ID: id, Now: clock})
+		if err != nil || !reflect.DeepEqual(got.Current, oracle.Current) || !reflect.DeepEqual(got.Burn1h, oracle.Burn1h) || !reflect.DeepEqual(got.Burn6h, oracle.Burn6h) || !reflect.DeepEqual(got.Exhaustion, oracle.Exhaustion) || string(got.Urgency) != string(oracle.Urgency) {
+			t.Fatalf("current boundary read after %s differs from canonical values: %v", advance, err)
+		}
+		if got.Generation.GenerationId == published.Generation.GenerationId || !got.Generation.EvaluatedThrough.Equal(oracle.EffectiveAt) || !got.Generation.PublishedAt.Equal(at) || got.Generation.SourceGeneration != published.Generation.SourceGeneration {
+			t.Fatalf("current boundary read reused invalidated provenance after %s: %+v", advance, got.Generation)
+		}
+	}
+	if err := conn.QueryRow(t.Context(), state, pgID).Scan(&after); err != nil || before != after {
+		t.Fatalf("current boundary read mutated maintenance state: before=%s after=%s, %v", before, after, err)
+	}
 }
 
 func verifyRetainedWorkRecovery(t *testing.T, runtime *Runtime, databaseURL string, proof DatasourceProof, id string, clock func() time.Time) {

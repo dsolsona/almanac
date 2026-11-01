@@ -12,6 +12,7 @@ import (
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -36,7 +37,8 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	row, err := q.GetPublishedCurrentProjection(ctx, dbgen.GetPublishedCurrentProjectionParams{SloID: id, Now: timestamp(normalizedAgentNow(input.Now)), CalculationVersion: operationalCalculationVersion})
+	now := normalizedAgentNow(input.Now)
+	row, err := q.GetPublishedCurrentProjection(ctx, dbgen.GetPublishedCurrentProjectionParams{SloID: id, Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.SloCurrentStatus{}, ErrObjectiveNotFound
 	}
@@ -55,7 +57,6 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		if err != nil {
 			return api.SloCurrentStatus{}, err
 		}
-		now := normalizedAgentNow(input.Now)
 		failed, err := hasFailedSourceAt(ctx, q, definition, now, floorSliBoundary(now, time.Duration(definition.CadenceSeconds)*time.Second))
 		if err != nil {
 			return api.SloCurrentStatus{}, err
@@ -63,7 +64,15 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		if failed {
 			return api.SloCurrentStatus{}, ErrDerivedSourceFailed
 		}
-		return api.SloCurrentStatus{}, ErrDerivedPending
+		// A clock boundary must not turn a bounded current read into a job wait.
+		result, err := readCurrentSloFromAggregates(ctx, q, definition, now)
+		if err != nil {
+			return api.SloCurrentStatus{}, err
+		}
+		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+			return api.SloCurrentStatus{}, err
+		}
+		return result, nil
 	}
 	var item api.SloOperationalOverviewItem
 	if err := json.Unmarshal(row.Payload, &item); err != nil {
@@ -80,6 +89,31 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		return api.SloCurrentStatus{}, err
 	}
 	return result, nil
+}
+
+func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time) (api.SloCurrentStatus, error) {
+	source, err := q.GetSloOperationalContext(ctx, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+	if err != nil {
+		return api.SloCurrentStatus{}, err
+	}
+	detail, err := buildSloOperationalDetail(ctx, q, row, source, OperationalDetailInput{currentOnly: true, Now: func() time.Time { return now }, BurnWindow: 3600})
+	if err != nil {
+		return api.SloCurrentStatus{}, err
+	}
+	generation, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
+	if errors.Is(err, pgx.ErrNoRows) {
+		generation = 0
+	} else if err != nil {
+		return api.SloCurrentStatus{}, err
+	}
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return api.SloCurrentStatus{}, err
+	}
+	stamp := generationStamp(pgtype.UUID{Bytes: id, Valid: true}, generation, row.DefinitionRevision, row.MeasurementRevision,
+		detail.CalculationVersion, detail.EffectiveAt, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
+	return api.SloCurrentStatus{Slo: detail.Objective, Current: detail.Current, Urgency: api.SloCurrentStatusUrgency(detail.Urgency),
+		LeadingReason: detail.LeadingReason, Reasons: detail.Reasons, Burn1h: detail.Burn1h, Burn6h: detail.Burn6h, Exhaustion: detail.Exhaustion, Generation: stamp}, nil
 }
 
 func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() time.Time) (resultErr error) {
