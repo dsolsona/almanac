@@ -90,7 +90,7 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 		var objective api.Slo
 		performanceCreateCLI(t, f, profile, "slos", name, map[string]any{
 			"name": name, "display_name": name, "service_id": service.Id.String(), "sli_id": sliID,
-			"target": "0.995", "rolling_window_seconds": 28 * 86400,
+			"target": "0.995", "rolling_window_seconds": int(performanceOracleRollingWindow((index+1)%10) / time.Second),
 		}, &objective, "slo")
 		if !validCLIUUID(objective.Id.String()) {
 			t.Fatal("performance fleet SLO response has no identity")
@@ -254,6 +254,8 @@ ORDER BY sli_id,point ON CONFLICT DO NOTHING`, hour)
 SELECT c.interval_start,c.sli_id,c.measurement_revision,
  CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=0 THEN 0
       WHEN p.ordinal%10=4 THEN 99999999999999999999999999.999999999998
+      WHEN p.ordinal%10=5 AND extract(hour FROM c.interval_start AT TIME ZONE 'UTC')=0
+        AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=31 THEN 0
       WHEN extract(hour FROM c.interval_start AT TIME ZONE 'UTC') IN (3,4) THEN 97.125 ELSE 99.999 END,
  CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=0 THEN 0
       WHEN p.ordinal%10=4 THEN 99999999999999999999999999.999999999999 ELSE 100.125 END

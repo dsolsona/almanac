@@ -34,21 +34,6 @@ type performanceAccuracyCase struct {
 	ActualCurrent api.SloOperationalValue `json:"actual_current"`
 }
 
-func checkPerformanceOracleCounts(good, total *string, want performanceOracleCounts) error {
-	if good == nil && total == nil && want.Total.Sign() == 0 {
-		return nil
-	}
-	if good == nil || total == nil {
-		return errors.New("oracle found missing known counts")
-	}
-	g, gok := new(big.Rat).SetString(*good)
-	t, tok := new(big.Rat).SetString(*total)
-	if !gok || !tok || g.Cmp(want.Good) != 0 || t.Cmp(want.Total) != 0 {
-		return errors.New("oracle exact good/total mismatch")
-	}
-	return nil
-}
-
 func checkPerformanceOracleQuality(q api.SloOperationalQuality, want performanceOracleCounts, duration time.Duration) error {
 	if q.ObservedIntervals != want.Observed || q.KnownEmptyIntervals != want.Empty || q.ZeroTrafficIntervals != want.Zero || q.MissingIntervals != want.Missing || q.ExpectedIntervals != int64(duration/time.Minute) || q.ExpiredIntervals != 0 {
 		return errors.New("oracle interval qualification mismatch")
@@ -111,6 +96,7 @@ func checkPerformanceOracleSample(sample api.SloOperationalSample, class int, du
 }
 
 func checkPerformanceAccuracyDetail(value api.SloOperationalDetail, id string, class int, start, end time.Time, burn time.Duration) error {
+	window := performanceOracleRollingWindow(class)
 	if value.Objective.Id.String() != id || value.Objective.Target != "0.995" || value.Generation == nil || checkPerformanceGeneration(*value.Generation) != nil || !value.Generation.EvaluatedThrough.Equal(end) || value.BurnSeries.BurnWindowSeconds == nil || int(*value.BurnSeries.BurnWindowSeconds) != int(burn/time.Second) {
 		return errors.New("oracle history identity/generation/target mismatch")
 	}
@@ -118,7 +104,7 @@ func checkPerformanceAccuracyDetail(value api.SloOperationalDetail, id string, c
 		samples  []api.SloOperationalSample
 		duration time.Duration
 		metric   string
-	}{{value.AttainmentSeries.Samples, time.Minute, "attainment"}, {value.BudgetSeries.Samples, 28 * 24 * time.Hour, "budget"}, {value.BurnSeries.Samples, burn, "burn"}} {
+	}{{value.AttainmentSeries.Samples, time.Minute, "attainment"}, {value.BudgetSeries.Samples, window, "budget"}, {value.BurnSeries.Samples, burn, "burn"}} {
 		if len(lane.samples) < 2 || lane.samples[0].EvaluationAt.After(start.Add(time.Hour)) || !lane.samples[len(lane.samples)-1].EvaluationAt.Equal(end) {
 			return errors.New("oracle expected populated history across the complete requested range")
 		}
@@ -155,6 +141,14 @@ func checkPerformanceAccuracyDetail(value api.SloOperationalDetail, id string, c
 		}
 	}
 	minimum, _ := performanceOracleWindow(class, start.Add(3*time.Hour+time.Minute), start.Add(3*time.Hour+2*time.Minute))
+	if class == 5 {
+		minimum, _ = performanceOracleWindow(class, start.Add(31*time.Minute), start.Add(32*time.Minute))
+		for day := start; day.Before(end); day = day.Add(24 * time.Hour) {
+			if !points[day.Add(32*time.Minute)] {
+				return errors.New("oracle graph omitted a one-minute outage")
+			}
+		}
+	}
 	maximum, _ := performanceOracleWindow(class, start.Add(12*time.Hour+time.Minute), start.Add(12*time.Hour+2*time.Minute))
 	if low == nil || high == nil || low.Cmp(new(big.Rat).Quo(minimum.Good, minimum.Total)) != 0 || high.Cmp(new(big.Rat).Quo(maximum.Good, maximum.Total)) != 0 {
 		return errors.New("oracle graph omitted exact attainment extrema")
@@ -172,7 +166,7 @@ func checkPerformanceAccuracyDetail(value api.SloOperationalDetail, id string, c
 			}
 		}
 	}
-	want, err := performanceOracleWindow(class, end.Add(-28*24*time.Hour), end)
+	want, err := performanceOracleWindow(class, end.Add(-window), end)
 	if err != nil {
 		return err
 	}
@@ -180,7 +174,7 @@ func checkPerformanceAccuracyDetail(value api.SloOperationalDetail, id string, c
 	if err := checkPerformanceOracleMetrics(p.Good, p.Total, p.Attainment, p.AllowedBudget, p.RemainingBudget, p.RemainingFraction, p.Burn, want, "budget"); err != nil {
 		return err
 	}
-	if err := checkPerformanceOracleQuality(value.Current.Quality, want, 28*24*time.Hour); err != nil {
+	if err := checkPerformanceOracleQuality(value.Current.Quality, want, window); err != nil {
 		return err
 	}
 	provisional := class == 1 || class == 2
@@ -219,7 +213,7 @@ func checkPerformanceAccuracyDetail(value api.SloOperationalDetail, id string, c
 		if day.SloId.String() != id || !day.EffectiveAt.Equal(expectedEnd) || !day.RequestedAt.Equal(expectedEnd) || !day.DayEnd.Equal(expectedEnd) || !day.DayStart.Equal(expectedEnd.Add(-24*time.Hour)) {
 			return errors.New("oracle daily boundary/identity mismatch")
 		}
-		counts, err := performanceOracleWindow(class, day.EffectiveAt.Add(-28*24*time.Hour), day.EffectiveAt)
+		counts, err := performanceOracleWindow(class, day.EffectiveAt.Add(-window), day.EffectiveAt)
 		if err != nil {
 			return err
 		}
@@ -265,7 +259,7 @@ func runPerformanceAccuracy(ctx context.Context, fleet performanceFleet) (perfor
 				return err
 			}
 			class := (index + 1) % 10
-			expected, err := performanceOracleWindow(class, end.Add(-28*24*time.Hour), end)
+			expected, err := performanceOracleWindow(class, end.Add(-performanceOracleRollingWindow(class)), end)
 			if err != nil {
 				return err
 			}
@@ -296,7 +290,7 @@ func runPerformanceAccuracy(ctx context.Context, fleet performanceFleet) (perfor
 					if !point.EvaluationAt.Equal(detail.BudgetSeries.Samples[i].EvaluationAt) {
 						return errors.New("oracle exact table differs from graph evaluation times")
 					}
-					if err := checkPerformanceOracleSample(point, (index+1)%10, 28*24*time.Hour, "budget"); err != nil {
+					if err := checkPerformanceOracleSample(point, (index+1)%10, performanceOracleRollingWindow((index+1)%10), "budget"); err != nil {
 						return err
 					}
 				}

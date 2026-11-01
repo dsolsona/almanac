@@ -43,11 +43,20 @@ backend stabilization. [ADR-0024](adr/0024-precomputed-operational-reads.md),
 [delivery plan](plans/0022-backend-stabilization.md) define pooled access,
 exact derived data and background preparation with measurable acceptance gates.
 The maintainer accepted the design and plan after Crit review on 2026-10-30.
-[F3-T08](tasks/F3-T08.md) is in progress on `perf/backend-stabilization` in
-`.worktrees/backend-performance`, based on merged `aa548fe`. The uncommitted
-candidate implements owned database pools, exact background aggregates/current
-results, reusable history/display blocks, immutable list snapshots, independent
-browser status/history loading and an internal metrics listener. It is not deployed.
+[F3-T08](tasks/F3-T08.md) is in progress on `perf/f3-t08-retained-series` in
+`.worktrees/backend-performance`, integrated with merged main `6d7403d`.
+Committed work adds exact retained points/tiles, bounded operational reads,
+immutable paged lists, selective asset preloads and connected browser measurement.
+The capacity harness now uses isolated normal Compose deployments and private
+VictoriaTraces endpoints for independent 10/100/1,000-SLO fleets with 365-day seeds.
+Its independent oracle covers deliberate gaps, empty/zero-traffic observations,
+large decimals, one-minute outages and a non-hour rolling window. Harness wiring
+is implemented/compiled; the scale workload is unexecuted. Actual latency
+acceptance still fails in the last controlled container run. Subsequent cold-path
+and loading changes have fast checks but have not been remeasured under that
+fixture. The task record lists remaining accuracy, recovery and runtime gaps.
+
+Earlier checkpoints, preserved as historical evidence:
 The most recent ordinary checkpoint passed 441 Go and 329 web tests. A subsequent
 fast Go checkpoint passed 442 tests and compiled the integration helpers.
 The corrected focused storage check passes, including snapshot reuse, recovery,

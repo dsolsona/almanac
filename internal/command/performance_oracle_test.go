@@ -15,6 +15,52 @@ type performanceOracleCounts struct {
 	Observed, Empty, Zero, Missing int64
 }
 
+func performanceOracleRollingWindow(class int) time.Duration {
+	window := 28 * 24 * time.Hour
+	if class == 6 {
+		window += 17 * time.Minute
+	}
+	return window
+}
+
+func checkPerformanceOracleCounts(good, total *string, want performanceOracleCounts) error {
+	if good == nil && total == nil && want.Observed == 0 && want.Total.Sign() == 0 {
+		return nil
+	}
+	if good == nil || total == nil {
+		return errors.New("oracle found missing known counts")
+	}
+	g, gok := new(big.Rat).SetString(*good)
+	t, tok := new(big.Rat).SetString(*total)
+	if !gok || !tok || g.Cmp(want.Good) != 0 || t.Cmp(want.Total) != 0 {
+		return errors.New("oracle exact good/total mismatch")
+	}
+	return nil
+}
+
+func TestPerformanceOracleDistinguishesMissingAndKnownZeroCounts(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		good, total *string
+		observed    int64
+		valid       bool
+	}{
+		{"unobserved", nil, nil, 0, true},
+		{"known-zero", new("0.000000000000"), new("0.000000000000"), 1, true},
+		{"lost-known-zero", nil, nil, 1, false},
+		{"lost-total", new("0"), nil, 1, false},
+		{"nonzero-good", new("1"), new("0"), 1, false},
+		{"invalid-count", new("invalid"), new("0"), 1, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			want := performanceOracleCounts{Good: new(big.Rat), Total: new(big.Rat), Observed: test.observed}
+			if err := checkPerformanceOracleCounts(test.good, test.total, want); (err == nil) != test.valid {
+				t.Fatalf("independent zero/missing count validation: %v", err)
+			}
+		})
+	}
+}
+
 func performanceOracleWindow(class int, start, end time.Time) (performanceOracleCounts, error) {
 	if class < 0 || class > 9 || !start.Before(end) || start.Unix()%60 != 0 || end.Unix()%60 != 0 || start.Nanosecond() != 0 || end.Nanosecond() != 0 {
 		return performanceOracleCounts{}, errors.New("oracle requires a fixture class and minute-aligned interval")
@@ -59,6 +105,9 @@ func performanceOracleWindow(class int, start, end time.Time) (performanceOracle
 		return counts, nil
 	}
 	counts.Good = big.NewRat((values-bad)*99999+bad*97125, 1000)
+	if class == 5 {
+		counts.Good.Sub(counts.Good, big.NewRat(positions(1440, 31)*99999, 1000))
+	}
 	counts.Total = big.NewRat(values*100125, 1000)
 	return counts, nil
 }
@@ -97,6 +146,7 @@ func TestPerformanceOracleCountsAndRounding(t *testing.T) {
 		{2, "141259.452", "141777", 1416, 24, 0, 0},
 		{3, "141259.452", "141777", 1440, 0, 24, 0},
 		{4, "143999999999999999999999999999.999999997120", "143999999999999999999999999999.999999998560", 1440, 0, 0, 0},
+		{5, "143553.681", "144180", 1440, 0, 0, 0},
 	} {
 		got, err := performanceOracleWindow(test.class, start, start.Add(24*time.Hour))
 		good, _ := new(big.Rat).SetString(test.good)
@@ -133,6 +183,9 @@ func TestPerformanceOracleMinuteBoundaries(t *testing.T) {
 		{2, 180 * time.Minute, 182 * time.Minute, "97.125", "100.125", 1, 1, 0, 0},
 		{3, 180 * time.Minute, 182 * time.Minute, "97.125", "100.125", 2, 0, 1, 0},
 		{0, 1439 * time.Minute, 1441 * time.Minute, "199.998", "200.25", 2, 0, 0, 0},
+		{5, 30 * time.Minute, 33 * time.Minute, "199.998", "300.375", 3, 0, 0, 0},
+		{5, 31 * time.Minute, 32 * time.Minute, "0", "100.125", 1, 0, 0, 0},
+		{6, -28*24*time.Hour - 17*time.Minute, 0, "4024003.023", "4038742.125", 40337, 0, 0, 0},
 	} {
 		got, err := performanceOracleWindow(test.class, day.Add(test.start), day.Add(test.end))
 		good, _ := new(big.Rat).SetString(test.good)
