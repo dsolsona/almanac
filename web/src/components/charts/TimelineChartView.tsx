@@ -45,8 +45,13 @@ export function TimelineChartView({ chart, showHeader = true }: { chart: Timelin
       if (latest.model) traceChartRender(() => instance.setOption(buildTimelineOption(latest.chart, latest.model!, readTimelinePalette(),host.clientHeight), true));
     };
     applyRef.current = update;
-    update();
-    const resize = new ResizeObserver(() => {instance.resize();update();});
+    let width=host.clientWidth,height=host.clientHeight;
+    const resize = new ResizeObserver(() => {
+      const nextWidth=host.clientWidth,nextHeight=host.clientHeight;
+      if(nextWidth===width&&nextHeight===height)return;
+      width=nextWidth;height=nextHeight;
+      instance.resize();update();
+    });
     resize.observe(host);
     const theme = new MutationObserver(update);
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
