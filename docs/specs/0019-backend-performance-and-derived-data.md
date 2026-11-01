@@ -118,8 +118,12 @@ or versioned during the API contract review; do not silently alter generated typ
 On 2026-11-01 the maintainer clarified that the acceptance device is reasonably
 capable, without artificial CPU slowdown. Record real hardware and measure the
 complete journey with separate normal-network and added-100-ms-latency cohorts,
-without an artificial bandwidth cap. The <500 ms detail/graph and <1,000 ms list limits and the
-10/100/1,000-objective year-history requirements remain unchanged.
+without an artificial bandwidth cap. In the same conversation the maintainer
+accepted complete journeys under 1,000 ms in both conditions, retaining <=500 ms
+as the optimization target. This replaces the earlier 500-ms detail/graph hard
+limit; API budgets, accuracy and the 10/100/1,000-objective year-history
+requirements remain unchanged. Keep the existing renderer while investigating
+smaller improvements; no rendering-architecture change was approved.
 
 Share identical in-flight reads; cache definitions and confirmed history for up to
 30 seconds with at most 100 retained query entries and five minutes of inactivity.
@@ -193,7 +197,7 @@ without charging preparation as an ordinary ready-data latency or hiding it.
 For the production browser fixture, record at least 20 first/cold and repeat
 loads per critical page and 50 interactions. Every SLI/SLO list sample must become
 usable in < 1,000 ms, preferably <= 500 ms; every SLO-detail and range/burn change
-must complete in < 500 ms. Include rendered graphs, not just API completion or a
+must complete in < 1,000 ms, preferably <=500 ms. Include rendered graphs, not just API completion or a
 loading shell. Keep the existing <= 200 ms feedback/chart-update budgets and
 SPEC-0012's CPU/network settings. Report p50/p95/max and retain every failure;
 percentiles do not exempt samples exceeding the action-specific limit.
@@ -216,7 +220,7 @@ Do not increase pool sizes, timeouts or retry counts to hide unbounded query wor
 ## Acceptance criteria
 
 - AC-01: Actual SLI/SLO lists load in < 1,000 ms and detail/range/burn actions in
-  < 500 ms at 10/100/1,000 SLOs with one year of history; first visits, response-cache
+  < 1,000 ms, preferably <=500 ms, at 10/100/1,000 SLOs with one year of history; first visits, response-cache
   misses and ordinary restart/time-boundary loads are included. API budgets also apply.
 - AC-02: Canonical versus aggregate/cached output matches exactly for fractional
   and maximum counts, equality thresholds, negative budgets, partial/empty/gapped

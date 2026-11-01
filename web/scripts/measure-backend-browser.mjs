@@ -304,7 +304,7 @@ try {
     return sample;
   };
 
-  for (const [view, path, budget] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 500]]) {
+  for (const [view, path, budget] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 1000]]) {
     for (let index = 0; index < 20; index++) {
       stage = `${view}-cold-${index}`;
       const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
@@ -453,7 +453,7 @@ try {
       assert.ok(sample.network_backed||origin,'cached graph has no traced producer');
       if(sample.network_backed)generationOrigins.set(generation,event.trace_id);
       traceEvents.push({...event,history_generation:generation,cache_source_trace_id:origin,sample:`interaction-${index}`});
-      assert.ok(Math.abs(event.duration_ms-sample.total_ms)<=100&&event.duration_ms<500,'interaction trace does not match the rendered journey budget');
+      assert.ok(Math.abs(event.duration_ms-sample.total_ms)<=100&&event.duration_ms<1000,'interaction trace does not match the rendered journey budget');
     } catch {
       sample.failure = 'interaction_or_chart_unavailable';
       sample.feedback_ms ??= 15_000;sample.chart_ms ??= 15_000;
@@ -484,12 +484,12 @@ try {
   report.warm_distributions=Object.fromEntries(['sli-list','slo-list','slo-detail'].map(view=>[view,distribution(report.warm_loads.filter(sample=>sample.view===view),'primary_ms')]));
   report.distributions.feedback = distribution(report.interactions, 'feedback_ms');
   report.distributions.chart = distribution(report.interactions, 'chart_ms');
-  for (const [view, budget] of [['sli-list', 1000], ['slo-list', 1000], ['slo-detail', 500]]) {
+  for (const [view, budget] of [['sli-list', 1000], ['slo-list', 1000], ['slo-detail', 1000]]) {
     if (report.distributions[view].count !== 20 || report.distributions[view].max_ms >= budget) report.failures.push(`${view}-load-budget`);
     if(report.warm_distributions[view].count!==20||report.warm_distributions[view].max_ms>=budget)report.failures.push(`${view}-warm-load-budget`);
   }
   if(report.lifecycle_loads.length!==1)report.failures.push('minute-boundary-cohort-missing');
-  if (report.interactions.some(sample=>!Number.isFinite(sample.total_ms)||sample.total_ms>=500)) report.failures.push('interaction-total-budget');
+  if (report.interactions.some(sample=>!Number.isFinite(sample.total_ms)||sample.total_ms>=1000)) report.failures.push('interaction-total-budget');
   for (const name of ['feedback', 'chart']) {
     if (report.distributions[name].count !== 50 || report.distributions[name].p95_ms > 200) report.failures.push(`${name}-p95-budget`);
   }

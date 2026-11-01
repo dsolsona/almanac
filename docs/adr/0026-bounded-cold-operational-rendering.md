@@ -1,7 +1,7 @@
 # ADR-0026: Bound cold operational rendering and start reads before React
 
 - Status: proposed
-- Review: on hold pending measurements on normal hardware; the maintainer rejected artificial CPU slowdown on 2026-11-01
+- Review: on hold; on 2026-11-01 the maintainer accepted sub-second journeys and requested smaller improvements with the existing renderer
 - Created: 2026-11-01
 - Accepted: pending
 - Approval: pending
@@ -9,6 +9,15 @@
 - Supersedes / superseded by: proposes partially superseding [ADR-0011](0011-ui-design-and-tooling.md)'s ECharts implementation choice for operational timeline charts and budget sparklines; retains React, TypeScript, Vite and static serving
 
 ## Context
+
+Updated evidence on normal CPU/no bandwidth cap: first enabled details measured
+248.108 ms on the normal network and 660.749/606.910 ms with 100 ms added latency.
+The latter cohort's repeat p95 is 612.336 ms. The maintainer accepted results under
+one second and retained 500 ms as an optimization target, explicitly preferring
+smaller improvements before this proposal. Keep the existing renderer; this ADR
+does not authorize implementation. The list-readiness failure and the unexecuted
+year/scale workload still prevent final acceptance. The discussion below records
+the earlier proposal and its original, stricter budget.
 
 The detail-page budget is <500 ms for every measured cold or repeat visit. The
 earlier benchmark added 4x CPU slowdown; the maintainer clarified on 2026-11-01

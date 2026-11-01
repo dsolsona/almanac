@@ -212,7 +212,6 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		for _, sample := range cohort {
 			budget := 1000.0
 			if sample.View == "slo-detail" {
-				budget = 500
 				if !validDetail(sample) {
 					return artifacts, errors.New("browser omitted the rendered generation, current status or requested graph bounds")
 				}
@@ -232,7 +231,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		}
 	}
 	minute := report.LifecycleLoads[0]
-	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 500 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) || !validDetail(minute) || !validTrace("lifecycle-slo-detail-0", minute.TraceID, minute.Elapsed, minute.TraceMS, 500) {
+	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 1000 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) || !validDetail(minute) || !validTrace("lifecycle-slo-detail-0", minute.TraceID, minute.Elapsed, minute.TraceMS, 1000) {
 		return artifacts, errors.New("browser minute-boundary visit omitted newer rendered evaluation or violated latency")
 	}
 	for index, body := range report.Interactions {
@@ -243,7 +242,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 			TraceMS float64 `json:"trace_duration_ms"`
 			Failure string  `json:"failure"`
 		}
-		if json.Unmarshal(body, &sample) != nil || sample.Index != index || sample.Failure != "" || sample.Elapsed <= 0 || sample.Elapsed >= 500 || !validTrace(fmt.Sprintf("interaction-%d", index), sample.TraceID, sample.Elapsed, sample.TraceMS, 500) {
+		if json.Unmarshal(body, &sample) != nil || sample.Index != index || sample.Failure != "" || sample.Elapsed <= 0 || sample.Elapsed >= 1000 || !validTrace(fmt.Sprintf("interaction-%d", index), sample.TraceID, sample.Elapsed, sample.TraceMS, 1000) {
 			return artifacts, errors.New("browser graph interaction lacks matching rendered trace evidence")
 		}
 	}

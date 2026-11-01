@@ -100,11 +100,12 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       addEventListener('almanac:journey',event=>{const value=event.detail;if(/^[0-9a-f]{32}$/.test(value?.traceId)&&Number.isFinite(value.duration))window.almanacRuntimeJourneys.push({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration});});
     });
     const capabilities=new Set(); let pending=0;
-    const unavailable=[];
+    const unavailable=[],httpFailures=[];
     page.on('response',response=>{
       if(new URL(response.url()).pathname.startsWith('/api/')){
         const headers=response.headers();if(headers['x-almanac-tracing'])capabilities.add(headers['x-almanac-tracing']);
         const date=Date.parse(headers.date);if(Number.isFinite(date))latestDate=date;
+        if(response.status()>=400)httpFailures.push({path:new URL(response.url()).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g,'{id}'),status:response.status()});
         if(response.status()===503){
           pending++;
           const trace=response.request().headers().traceparent;
@@ -153,7 +154,11 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       }
     } catch(error) {
       if(sample.result==='ready')sample.evidence_error_type=error.name;
-      else Object.assign(sample,{result:'failed',elapsed_ms:performance.now()-started,wall_elapsed_ms:Date.now()-wallStarted,error_type:error.name,pending_responses:pending});
+      else {
+        const alerts=await page.getByRole('alert').allTextContents().catch(()=>[]);
+        Object.assign(sample,{result:'failed',elapsed_ms:performance.now()-started,wall_elapsed_ms:Date.now()-wallStarted,error_type:error.name,pending_responses:pending,http_failures:httpFailures,alerts:alerts.map(value=>containsSecret(value)?'[fixture credential redacted]':value.slice(0,1000))});
+        await page.screenshot({path:join(artifacts,'failed-navigation.png'),fullPage:true}).catch(()=>{});
+      }
       throw error;
     } finally {await page.close();}
   };
@@ -193,7 +198,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       const enabled=summary(values('enabled')),disabled=summary(values('disabled'));
       report.overhead.push({journey,enabled,disabled,p95_fraction:enabled.p95_ms/disabled.p95_ms-1});
     }
-    report.speed_failures=samples.filter(value=>value.elapsed_ms>=(value.journey==='slo.detail'?500:1000));
+    report.speed_failures=samples.filter(value=>value.elapsed_ms>=1000);
     report.page_speed_passed=report.speed_failures.length===0;
     await writeFile(join(artifacts,'telemetry-runtime.json'),JSON.stringify(report,null,2),{mode:0o600});
     await captureTraces(traceURL,events,artifacts,backendSHA,containsSecret);

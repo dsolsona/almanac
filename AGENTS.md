@@ -105,7 +105,8 @@ These documents govern applicable work; read them before that work begins.
   [SPEC-0019](docs/specs/0019-backend-performance-and-derived-data.md). Verify
   authenticated navigation through usable rows/rendered graphs, including first
   visits and cache misses, at the specified scale. UI lists show 10/20 rows and
-  must load in < 1,000 ms; SLO details and range/burn changes require < 500 ms.
+  must load in < 1,000 ms, including SLO details and range/burn changes; <= 500 ms
+  remains the preferred target under the maintainer's 2026-11-01 clarification.
   Normal navigation cannot wait for preparation jobs. Capture full OTEL journey
   traces in VictoriaTraces and independent expected values; API-only timings,
   warmed responses and passing test counts cannot substitute. Instrumentation

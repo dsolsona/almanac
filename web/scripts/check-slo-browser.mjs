@@ -227,7 +227,9 @@ try {
   stage='filtered overview navigation'; await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await expect(page.getByRole('link',{name:'Checkout availability historical',exact:true})).toBeVisible(); await expect(page.getByRole('heading',{name:/Needs attention|Watch|Healthy/}).first()).toBeVisible();
   await captureReference('list','.app-slo-group','slo-needs-attention.png'); await writeReferenceReport();
   // Compare the row with its own response: publication can advance while checking detail.
-  const refreshedOverview=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/v1/slos/overview')
+  // Refresh cancels the preceding overview; do not consume that request's headers.
+  const precedingRequests=new Set(wireRequests.keys());
+  const refreshedOverview=page.waitForResponse(r=>!precedingRequests.has(r.request())&&r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/v1/slos/overview')
     .then(async response=>({status:response.status(),body:await response.json()}));
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   const renderedOverviewResponse=await refreshedOverview; assert.equal(renderedOverviewResponse.status,200);

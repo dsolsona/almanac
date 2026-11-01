@@ -3,7 +3,7 @@
 The 2026-10-31 [performance and tracing intervention](plans/0023-performance-and-tracing-intervention.md)
 was accepted in Crit and takes priority over the previous
 execution order. The maintainer requires accurate calculations, < 1,000 ms
-SLI/SLO lists and < 500 ms detail/range actions at 10/100/1,000 SLOs, without normal navigation
+SLI/SLO lists and detail/range actions (preferred <=500 ms after the 2026-11-01 clarification) at 10/100/1,000 SLOs, without normal navigation
 waiting for background jobs, plus OpenTelemetry journey traces in VictoriaTraces.
 Earlier checkpoints below do not establish those requirements. PR #48 remains
 under review; its four Greptile findings are included in the intervention plan.

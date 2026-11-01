@@ -270,8 +270,8 @@ Accepted initial budgets; implementation measurement remains required:
 | JavaScript needed for sign-in/app shell | At most 300 KiB gzip, excluding lazy chart routes |
 | Additional JavaScript for first chart route | At most 500 KiB gzip, including chart library; shared modules counted once |
 | SLI/SLO list to usable rows/counts | < 1,000 ms for every measured sample; preferred <= 500 ms |
-| SLO-detail load to usable content/rendered charts | < 500 ms for every measured sample, including first visits/cache misses |
-| Graph range/burn-window change | < 500 ms for every measured sample |
+| SLO-detail load to usable content/rendered charts | < 1,000 ms for every measured sample, including first visits/cache misses; preferred <= 500 ms |
+| Graph range/burn-window change | < 1,000 ms for every measured sample; preferred <= 500 ms |
 | Filter/click feedback | At most 200 ms at p95; show pending state while an API request runs |
 | Four visible chart updates after response parsing | At most 200 ms at p95; loading must not freeze navigation |
 
@@ -280,7 +280,10 @@ For these checks use a production build, deterministic fixtures of 10/100/1,000 
 at 1,500 points per series. Record the machine, browser, viewport and build; use
 Chrome on a reasonably capable device with no artificial CPU slowdown or bandwidth
 cap. Measure separate normal-network and added-100-ms-latency cohorts. The
-maintainer explicitly clarified both conditions on 2026-11-01; record the actual
+maintainer explicitly clarified both conditions on 2026-11-01 and accepted any
+complete journey under one second, with 500 ms retained as the optimization target.
+This changes the browser acceptance limit, not the separate API budgets, accuracy,
+year-history or fleet-size requirements. Record the actual
 CPU, RAM and browser and report each cohort separately. API latency is reported separately from transport/rendering; meeting it alone
 cannot satisfy the stricter full-journey budget. Capture complete OpenTelemetry
 journeys in VictoriaTraces under [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md).

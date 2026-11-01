@@ -19,6 +19,13 @@ year of data. UI lists display 10 or 20 rows, not every installed objective.
 Lists must become usable in < 1,000 ms, preferably <= 500 ms. Detail and graph
 range/burn changes must complete in < 500 ms, including rendered graphs.
 
+The paragraph above records the original acceptance context. On 2026-11-01 the
+maintainer accepted complete browser journeys under one second, with 500 ms as
+the optimization target, on normal hardware in normal/added-100-ms network
+conditions. Current thresholds are recorded in SPEC-0012 and SPEC-0019. This
+clarification changes neither this tracing/read-path decision nor the API budgets,
+accuracy, year-history and fleet-size requirements.
+
 ## Decision
 
 Treat SLI observations and calculated SLO values as time series. Retain exact
