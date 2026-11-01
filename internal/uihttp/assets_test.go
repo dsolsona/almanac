@@ -2,6 +2,7 @@ package uihttp
 
 import (
 	"compress/gzip"
+	"encoding/json/v2"
 	"io"
 	"io/fs"
 	"net/http"
@@ -12,6 +13,61 @@ import (
 
 	webassets "github.com/dsolsona/almanac/web"
 )
+
+func TestColdNavigationPreloadsOnlyItsPublicRouteDependencies(t *testing.T) {
+	handler, err := NewAssetHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := webassets.Assets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := fs.ReadFile(files, "manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]assetChunk
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"/slos", "/slos/new", "/slos/00000000-0000-0000-0000-000000000001", "/slis", "/agents"} {
+		for _, compressed := range []bool{false, true} {
+			request := httptest.NewRequest(http.MethodGet, route, nil)
+			if compressed {
+				request.Header.Set("Accept-Encoding", "gzip")
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			var reader io.Reader = response.Body
+			if compressed {
+				gzipReader, err := gzip.NewReader(response.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer gzipReader.Close()
+				reader = gzipReader
+			}
+			body, err := io.ReadAll(reader)
+			if err != nil || response.Code != 200 || response.Header().Get("Cache-Control") != "no-cache" {
+				t.Fatalf("document %s: status %d, %v", route, response.Code, err)
+			}
+			for module, want := range map[string]bool{
+				"src/slos/SlosPage.tsx":                       strings.HasPrefix(route, "/slos"),
+				"src/slis/SlisPage.tsx":                       route == "/slis",
+				"src/components/charts/TimelineChartView.tsx": sloDetailPath.MatchString(route),
+			} {
+				link := `<link rel="modulepreload" crossorigin href="/` + manifest[module].File + `">`
+				if strings.Contains(string(body), link) != want {
+					t.Fatalf("%s preload on %s: want %v", module, route, want)
+				}
+			}
+			if strings.Contains(string(body), "/api/") {
+				t.Fatal("public code preload must not introduce protected-data requests")
+			}
+		}
+	}
+}
 
 func TestEmbeddedAssetsNegotiateCachedGzipAndPreserveByteRanges(t *testing.T) {
 	handler, err := NewAssetHandler()

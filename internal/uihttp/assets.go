@@ -35,6 +35,10 @@ var embeddedAssetHandler = sync.OnceValues(func() (http.Handler, error) {
 })
 
 func staticHandler(assets fs.FS) (http.Handler, error) {
+	documents, err := routeDocuments(assets)
+	if err != nil {
+		return nil, err
+	}
 	// Immutable text assets are compressed once, never on the request path.
 	compressed := make(map[string][]byte)
 	if err := fs.WalkDir(assets, ".", func(name string, entry fs.DirEntry, err error) error {
@@ -62,6 +66,17 @@ func staticHandler(assets fs.FS) (http.Handler, error) {
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+	for key, body := range documents {
+		var buffer bytes.Buffer
+		writer := gzip.NewWriter(&buffer)
+		if _, err := writer.Write(body); err != nil {
+			return nil, err
+		}
+		if err := writer.Close(); err != nil {
+			return nil, err
+		}
+		compressed["document-"+key] = buffer.Bytes()
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -93,7 +108,14 @@ func staticHandler(assets fs.FS) (http.Handler, error) {
 			http.NotFound(w, r)
 			return
 		}
-		if body, exists := compressed[name]; exists {
+		representation := name
+		if name == "index.html" {
+			if key := routeDocumentKey(r.URL.Path); key != "" {
+				reader = bytes.NewReader(documents[key])
+				representation = "document-" + key
+			}
+		}
+		if body, exists := compressed[representation]; exists {
 			w.Header().Add("Vary", "Accept-Encoding")
 			if r.Header.Get("Range") == "" && httpgzip.Accepted(strings.Join(r.Header.Values("Accept-Encoding"), ",")) {
 				w.Header().Set("Content-Encoding", "gzip")
