@@ -51,10 +51,12 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function sliListPath(search: string, datasourceID: string): string {
+function sliListPath(search: string, datasourceID: string, pageSize = 20, cursor = ''): string {
   const query = new URLSearchParams();
   if (search) query.set('q', search);
   if (datasourceID) query.set('datasource_id', datasourceID);
+  if (pageSize === 10) query.set('page_size', '10');
+  if (cursor) query.set('cursor', cursor);
   return `/slis${query.size ? `?${query}` : ''}`;
 }
 
@@ -113,6 +115,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [earliest, setEarliest] = useState('');
   const [nextCursor, setNextCursor] = useState('');
   const [listNextCursor, setListNextCursor] = useState('');
+  const [listCursor, setListCursor] = useState(() => new URL(window.location.href).searchParams.get('cursor') ?? '');
+  const [listPageSize, setListPageSize] = useState(() => new URL(window.location.href).searchParams.get('page_size') === '10' ? 10 : 20);
+  const [listPreviousCursors, setListPreviousCursors] = useState<string[]>([]);
   const [listSearch, setListSearch] = useState(() => new URL(window.location.href).searchParams.get('q') ?? '');
   const [listDatasourceID, setListDatasourceID] = useState(() => new URL(window.location.href).searchParams.get('datasource_id') ?? '');
   const [draft, setDraft] = useState<CreateDraft>(emptyDraft);
@@ -191,12 +196,18 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const load = async () => {
       try {
         if (route.kind === 'list') {
-          const filters = new URLSearchParams(new URL(locationKey, window.location.origin).search);
+          const filters = new URL(window.location.href).searchParams;
           const search = filters.get('q') ?? '';
           const datasourceID = filters.get('datasource_id') ?? '';
           setListSearch(search);
           setListDatasourceID(datasourceID);
-          const page = await slis.list(50, '', request.signal, search, datasourceID);
+          const pageSize = filters.get('page_size') === '10' ? 10 : 20;
+          const cursor = filters.get('cursor') ?? '';
+          const previous: unknown = window.history.state?.sliPreviousCursors;
+          setListPageSize(pageSize);
+          setListCursor(cursor);
+          setListPreviousCursors(Array.isArray(previous) ? previous.slice(0, 1000).filter((value): value is string => typeof value === 'string' && value.length <= 512) : []);
+          const page = await slis.list(pageSize, cursor, request.signal, search, datasourceID);
           if (!current()) return;
           setItems(page.items);
           setListNextCursor(page.next_cursor);
@@ -338,31 +349,16 @@ export function SlisPage({ context }: { context: AuthContext }) {
     await fetchHistory(route.id, historyID, generation, nextCursor);
   }
 
-  async function loadMoreSLIs() {
-    if (!listNextCursor) return;
-    const generation = routeGeneration.current;
-    const requestID = ++listRequest.current;
-    const controller = new AbortController();
-    listAbort.current?.abort();
-    listAbort.current = controller;
-    setListBusy(true);
-    try {
-      const page = await slis.list(50, listNextCursor, controller.signal, listSearch, listDatasourceID);
-      if (generation !== routeGeneration.current || requestID !== listRequest.current) return;
-      setItems((current) => [...current, ...page.items]);
-      setListNextCursor(page.next_cursor);
-    } catch (failure) { if (generation === routeGeneration.current && requestID === listRequest.current && !controller.signal.aborted) setError(safeError(failure)); }
-    finally { if (generation === routeGeneration.current && requestID === listRequest.current) setListBusy(false); }
-  }
-
-  async function updateListFilters(search: string, datasourceID: string) {
+  async function updateListPage(search: string, datasourceID: string, pageSize: number, cursor: string, previous: string[], push = false) {
     setListSearch(search);
     setListDatasourceID(datasourceID);
-    const query = new URLSearchParams();
-    if (search) query.set('q', search);
-    if (datasourceID) query.set('datasource_id', datasourceID);
-    const path = `/slis${query.size ? `?${query}` : ''}`;
-    window.history.replaceState({}, '', path);
+    setListPageSize(pageSize);
+    setListCursor(cursor);
+    setListPreviousCursors(previous);
+    const path = sliListPath(search, datasourceID, pageSize, cursor);
+    const state = { ...window.history.state, sliPreviousCursors: previous };
+    if (push) window.history.pushState(state, '', path);
+    else window.history.replaceState(state, '', path);
     currentLocation.current = path;
     const generation = routeGeneration.current;
     const requestID = ++listRequest.current;
@@ -372,7 +368,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setListBusy(true);
     setError('');
     try {
-      const page = await slis.list(50, '', controller.signal, search, datasourceID);
+      const page = await slis.list(pageSize, cursor, controller.signal, search, datasourceID);
       if (generation !== routeGeneration.current || requestID !== listRequest.current) return;
       setItems(page.items);
       setListNextCursor(page.next_cursor);
@@ -381,6 +377,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
     } finally {
       if (generation === routeGeneration.current && requestID === listRequest.current) setListBusy(false);
     }
+  }
+
+  async function updateListFilters(search: string, datasourceID: string) {
+    await updateListPage(search, datasourceID, listPageSize, '', []);
   }
 
   async function saveMetadata(event: FormEvent<HTMLFormElement>) {
@@ -406,7 +406,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   if (route.kind === 'create') {
     const options = [{ value: '', label: 'Select a datasource', disabled: true }, ...sources.map((source) => ({ value: source.id, label: `${source.display_name} · ${source.polling_interval_seconds}s cadence` }))];
     return <>
-      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID)} />
+      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID, listPageSize, listCursor)} />
       {error && <p className="sli-error" role="alert">{error}</p>}
       {!canWrite ? <Panel heading="Access required"><p>Editor or administrator access is required to create SLIs.</p></Panel>
         : sourceError ? <div className="sli-empty"><p role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></div>
@@ -424,7 +424,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
               </div>
               <p className="sli-form-note">Each query must return one aggregate count for an interval. Create saves a result from recent data already in your datasource, then continues at the datasource’s frequency. The first interval can precede creation.</p>
               {formError && <p className="sli-error" role="alert">{formError}</p>}
-              <div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID))}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
+              <div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID, listPageSize, listCursor))}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
             </Panel>
           </form>}
     </>;
@@ -435,7 +435,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const latest = sli.latest_observation;
     const activatedAt = sli.activated_at;
     return <>
-      <div className="sli-detail-heading"><PageTitle title={sli.display_name} subtitle={sli.name} headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID)} /><div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID))}>Back to SLIs</Button><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button></div></div>
+      <div className="sli-detail-heading"><PageTitle title={sli.display_name} subtitle={sli.name} headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID, listPageSize, listCursor)} /><div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID, listPageSize, listCursor))}>Back to SLIs</Button><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button></div></div>
       {error && <p className="sli-error" role="alert">{error}</p>}
       {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
       {agentError && <p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
@@ -503,6 +503,12 @@ export function SlisPage({ context }: { context: AuthContext }) {
           <td data-label="SLOs">{linked.length ? <><div className="sli-list-links">{linked.map((objective) => <a key={objective.id} href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a>)}</div>{item.linked_slos && item.linked_slos.total_count > linked.length && <small>Showing {linked.length} of {item.linked_slos.total_count}</small>}</> : <span>No linked SLOs</span>}</td>
         </tr>;
       })}</tbody></table></div>}
-    {listNextCursor && <div className="sli-actions"><Button variant="outline" onClick={() => void loadMoreSLIs()} pending={listBusy}>Load more SLIs</Button></div>}
+    {(items.length > 0 || listCursor || listNextCursor) && <nav className="sli-page-controls" aria-label="SLI result pages">
+      <SelectField id="sli-page-size" label="SLIs per page" value={String(listPageSize)} options={[{value:'10',label:'10'},{value:'20',label:'20'}]} onChange={event => void updateListPage(listSearch, listDatasourceID, event.target.value === '10' ? 10 : 20, '', [])} />
+      {(listCursor || listNextCursor) && <>
+        <Button variant="outline" disabled={!listCursor || listBusy} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)}>{listCursor && listPreviousCursors.length === 0 ? 'First page' : 'Previous page'}</Button>
+        <Button variant="outline" disabled={!listNextCursor || listBusy} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)}>Next page</Button>
+      </>}
+    </nav>}
   </>;
 }

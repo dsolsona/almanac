@@ -131,15 +131,8 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	}
 	job, err := q.ClaimSloHistoryJob(ctx, dbgen.ClaimSloHistoryJobParams{Now: timestamp(clock()), LeaseUntil: timestamp(clock().Add(45 * time.Second))})
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, cleanupErr := q.DeleteExpiredDerivedGenerations(ctx, timestamp(clock().Add(-5*time.Minute)))
-		if cleanupErr == nil {
-			_, cleanupErr = q.DeleteExpiredSloDisplayBlocks(ctx, timestamp(clock().Add(-5*time.Minute)))
-		}
-		if cleanupErr == nil {
-			_, cleanupErr = q.DeleteExpiredSloProjectionPayloads(ctx, timestamp(clock().Add(-5*time.Minute)))
-		}
 		conn.Release()
-		return cleanupErr
+		return nil
 	}
 	conn.Release()
 	if err != nil {
