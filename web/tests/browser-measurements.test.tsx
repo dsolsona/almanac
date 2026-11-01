@@ -79,3 +79,25 @@ it('rejects an old drawn generation and timezone until the requested graph is co
   await waitFor(()=>expect(Number.isFinite(state().primary_ms)).toBe(true));
   expect(state().detailEvidence).toMatchObject({rendered_generation:generation,time_zone:'local',burn_window_seconds:21600});
 });
+
+it('requires matching build, timing and descended backend/database/chart spans for trace evidence',()=>{
+  const runtime=(globalThis as unknown as {process:{getBuiltinModule:(name:string)=>unknown}}).process;
+  const fs=runtime.getBuiltinModule('node:fs') as {readFileSync:(path:string,encoding:string)=>string};
+  const source=fs.readFileSync('scripts/check-telemetry-runtime.mjs','utf8');
+  const start=source.indexOf('function connected('),end=source.indexOf('\nexport async function captureTraces(',start);
+  expect(start).toBeGreaterThan(0);expect(end).toBeGreaterThan(start);
+  const connected=new Function(`return (${source.slice(start,end)});`)() as (document:unknown,event:unknown,hash:string,environment:string)=>boolean;
+  const trace='a'.repeat(32),hash='b'.repeat(64),event={trace_id:trace,journey:'slo.detail',duration_ms:120};
+  const tags=()=>[{key:'almanac.build.sha256',value:hash},{key:'deployment.environment.name',value:'acceptance'}];
+  const span=(id:string,parent:string,name:string,process:string,duration=1000)=>({traceID:trace,spanID:id,processID:process,operationName:name,duration,references:parent?[{traceID:trace,spanID:parent}]:[]});
+  const makeDocument=()=>({data:[{traceID:trace,processes:{web:{serviceName:'almanac-web',tags:tags()},backend:{serviceName:'almanac-backend',tags:tags()}},spans:[span('root','','ui.slo.detail','web',120000),span('http','root','GET /api/v1/slos/{id}/operational','backend'),span('db','http','db.slo.read','backend'),span('chart','root','ui.chart.render','web')]}]});
+  expect(connected(makeDocument(),event,hash,'acceptance')).toBe(true);
+  const wrongDuration=makeDocument();wrongDuration.data[0]!.spans[0]!.duration=130000;
+  expect(connected(wrongDuration,event,hash,'acceptance')).toBe(false);
+  expect(connected(makeDocument(),event,'c'.repeat(64),'acceptance')).toBe(false);
+  expect(connected(makeDocument(),event,hash,'local')).toBe(false);
+  const orphan=makeDocument();orphan.data[0]!.spans[2]!.references=[];
+  expect(connected(orphan,event,hash,'acceptance')).toBe(false);
+  const missingChart=makeDocument();missingChart.data[0]!.spans.pop();
+  expect(connected(missingChart,event,hash,'acceptance')).toBe(false);
+});

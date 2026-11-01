@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, sep, join } from 'node:path';
 import { chromium } from '@playwright/test';
+import { captureTraces } from './check-telemetry-runtime.mjs';
 
 // This executable belongs to the controlled performance fixture. It is not
 // invoked by the ordinary browser catalogue or the two-minute journey gate.
@@ -12,6 +13,7 @@ const report = {
   schema_version: 1,
   environment: { cpu_slowdown: 4, download_bits_per_second: 10_000_000, latency_ms: 100, viewport: { width: 1440, height: 900 } },
   cold_loads: [], warm_loads: [], lifecycle_loads: [], interactions: [], list_actions: [], list_coverage: {}, failures: [],
+  trace_evidence: [],
 };
 
 function distribution(samples, key) {
@@ -29,6 +31,13 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   let observedBodyReady=()=>{};
   const requestKey=(path,query)=>{const copy=new URLSearchParams(query);copy.sort();return `${path}?${copy}`;};
   const state = window.__almanacPerformance = { fetches: [], primary_ms: null, interaction: null, listOffset: 0, listEvidence: null };
+  state.traces=[];
+  addEventListener('almanac:journey',event=>{
+    const value=event.detail;
+    if(!['sli.list','slo.list','slo.detail'].includes(value?.journey)||!/^[0-9a-f]{32}$/.test(value.traceId)||!Number.isFinite(value.duration))return;
+    if(state.traces.length>=256)state.traces.shift();
+    state.traces.push({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration,recording:value.recording,completed_ms:performance.now()});
+  });
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
     const input = args[0];
@@ -194,6 +203,20 @@ async function browserTimings(page) {
   }));
 }
 
+// Flush only after the measured UI outcome, and before closing/reloading its tab.
+async function renderedTrace(page,journey,started=0) {
+  await page.waitForFunction(({journey,started})=>window.__almanacPerformance.traces.some(event=>event.journey===journey&&event.result==='ready'&&event.completed_ms>=started),{journey,started},{timeout:2500});
+  const event=await page.evaluate(({journey,started})=>window.__almanacPerformance.traces.filter(event=>event.journey===journey&&event.result==='ready'&&event.completed_ms>=started).at(-1),{journey,started});
+  assert.equal(event.recording,true,'browser journey was not sampled');
+  const flushed=await page.evaluate(()=>new Promise(resolve=>{
+    const timeout=setTimeout(()=>resolve({result:'timeout'}),2100);
+    addEventListener('almanac:telemetry-flushed',event=>{clearTimeout(timeout);resolve(event.detail);},{once:true});
+    dispatchEvent(new Event('almanac:telemetry-flush'));
+  }));
+  assert.equal(flushed.result,'ready','browser trace export did not finish');
+  return event;
+}
+
 try {
   let input = '';
   for await (const chunk of process.stdin) {
@@ -212,6 +235,7 @@ try {
   assert.match(fixture.spki, /^[A-Za-z0-9+/]{43}=$/);
   assert.match(fixture.slo_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.match(fixture.candidate_binary_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(fixture.trace_url,'http://127.0.0.1:19428');
   assert.ok([10, 100, 1000].includes(fixture.fleet_size));
   assert.equal(fixture.cache_setup.result,'restarted-with-retained-data');
   assert.equal(fixture.cache_setup.target_slo_id,fixture.slo_id);
@@ -220,6 +244,9 @@ try {
   assert.equal(fixture.datasource_ids.length,10);
   for(const id of [...fixture.datasource_ids,fixture.service_id])assert.match(id,/^[0-9a-f-]{36}$/);
   assert.ok(typeof fixture.login === 'string' && typeof fixture.password === 'string' && fixture.login && fixture.password);
+  const fixturePassword=fixture.password;
+  const traceEvents=[];
+  const generationOrigins=new Map();
   output = resolve(fixture.artifacts);
   assert.ok(output.startsWith(resolve('..', '.local') + sep));
   await mkdir(output, { recursive: true, mode: 0o700 });
@@ -247,8 +274,16 @@ try {
       await page.waitForFunction(()=>Number.isFinite(window.__almanacPerformance?.primary_ms),{},{timeout:10_000});
       Object.assign(sample,await browserTimings(page));
       if(sample.fetches.some(fetch=>fetch.status>=400)){sample.failure='normal_navigation_unavailable';report.failures.push(stage);}
+      const journey={'sli-list':'sli.list','slo-list':'slo.list','slo-detail':'slo.detail'}[view];
+      const event=await renderedTrace(page,journey);
+      Object.assign(sample,{trace_id:event.trace_id,trace_duration_ms:event.duration_ms});
+      const generation=sample.detail?.history_generation;
+      if(generation)generationOrigins.set(generation,event.trace_id);
+      traceEvents.push({...event,history_generation:generation,sample:`${cohort}-${view}-${index}`});
+      assert.ok(Math.abs(event.duration_ms-sample.primary_ms)<=100,'trace and usable-content timing disagree');
+      if(event.duration_ms>=budget){sample.failure='trace_load_budget';report.failures.push(stage);}
     } catch {
-      sample.failure='primary_content_unavailable';sample.primary_ms=await page.evaluate(()=>performance.now()).catch(()=>10_000);report.failures.push(stage);
+      sample.failure=sample.trace_id?'trace_timing_rejected':Number.isFinite(sample.primary_ms)?'trace_evidence_unavailable':'primary_content_unavailable';sample.primary_ms??=await page.evaluate(()=>performance.now()).catch(()=>10_000);report.failures.push(stage);
     }
     if(!Number.isFinite(sample.primary_ms)||sample.primary_ms>=budget)report.failures.push(`${stage}-load-budget`);
     report[`${cohort}_loads`].push(sample);
@@ -396,11 +431,19 @@ try {
       }, { }, { timeout: 15_000 });
       Object.assign(sample, await page.evaluate(() => {
         const value = window.__almanacPerformance.interaction;
-        return { feedback_ms: value.feedback_ms, chart_ms: value.chart_ms, chart_timing_origin:value.chart_timing_origin,total_ms: value.finished_ms - value.started_ms, network_backed: value.network_backed,detail:window.__almanacPerformance.detailEvidence };
+        return { started_ms:value.started_ms,feedback_ms: value.feedback_ms, chart_ms: value.chart_ms, chart_timing_origin:value.chart_timing_origin,total_ms: value.finished_ms - value.started_ms, network_backed: value.network_backed,detail:window.__almanacPerformance.detailEvidence };
       }));
+      const event=await renderedTrace(page,'slo.detail',sample.started_ms);
+      Object.assign(sample,{trace_id:event.trace_id,trace_duration_ms:event.duration_ms});
+      const generation=sample.detail.history_generation;
+      const origin=sample.network_backed?'':generationOrigins.get(generation);
+      assert.ok(sample.network_backed||origin,'cached graph has no traced producer');
+      if(sample.network_backed)generationOrigins.set(generation,event.trace_id);
+      traceEvents.push({...event,history_generation:generation,cache_source_trace_id:origin,sample:`interaction-${index}`});
+      assert.ok(Math.abs(event.duration_ms-sample.total_ms)<=100&&event.duration_ms<500,'interaction trace does not match the rendered journey budget');
     } catch {
       sample.failure = 'interaction_or_chart_unavailable';
-      sample.feedback_ms = sample.chart_ms = 15_000;
+      sample.feedback_ms ??= 15_000;sample.chart_ms ??= 15_000;
       report.failures.push(stage);
     }
     report.interactions.push(sample);
@@ -409,6 +452,21 @@ try {
   report.interaction_resources = await browserTimings(page);
   if (report.interaction_resources.fetches.some(fetch=>fetch.status===503)) report.failures.push('interaction-preparation-wait');
   await context.close();
+  stage='capture-victoriatraces';
+  for(let offset=0;offset<traceEvents.length;offset+=9){
+    const batch=traceEvents.slice(offset,offset+9),directory=`traces-${String(offset/9).padStart(2,'0')}`;
+    const target=join(output,directory);await mkdir(target,{mode:0o700});
+    const evidence=await captureTraces(fixture.trace_url,[],target,fixture.candidate_binary_sha256,text=>text.includes(fixturePassword),'acceptance',batch);
+    report.trace_evidence.push(...evidence.map((value,index)=>({...value,sample:batch[index].sample,artifact:directory+'/'+value.artifact})));
+    await writeFile(join(output,'browser-performance.json'),JSON.stringify(report)+'\n',{mode:0o600});
+  }
+  assert.equal(traceEvents.length,171,'a cold/warm/minute/interaction trace is missing');
+  assert.equal(new Set(traceEvents.map(event=>event.trace_id)).size,171,'browser samples reused a journey trace');
+  const captured=new Map(report.trace_evidence.map(event=>[event.trace_id,event]));
+  for(const event of report.trace_evidence)if(event.cache_source_trace_id){
+    const producer=captured.get(event.cache_source_trace_id);
+    assert.ok(producer?.connected&&!producer.cache_source_trace_id&&producer.history_generation===event.history_generation,'cached trace is not joined to the captured generation producer');
+  }
   report.distributions = Object.fromEntries(['sli-list', 'slo-list', 'slo-detail'].map(view => [view, distribution(report.cold_loads.filter(sample => sample.view === view), 'primary_ms')]));
   report.warm_distributions=Object.fromEntries(['sli-list','slo-list','slo-detail'].map(view=>[view,distribution(report.warm_loads.filter(sample=>sample.view===view),'primary_ms')]));
   report.distributions.feedback = distribution(report.interactions, 'feedback_ms');

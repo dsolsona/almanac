@@ -7,15 +7,15 @@ import { expect } from '@playwright/test';
 const percentile=(values,fraction)=>[...values].sort((a,b)=>a-b)[Math.ceil(values.length*fraction)-1];
 const summary=values=>({samples:values.length,p50_ms:percentile(values,.5),p95_ms:percentile(values,.95),max_ms:Math.max(...values)});
 
-function connected(document,event,backendSHA) {
+function connected(document,event,backendSHA,expectedEnvironment) {
   return document.data?.some(data=>{
     if(data.traceID!==event.trace_id)return false;
     const spans=new Map(data.spans.map(span=>[span.spanID,span]));
     const service=span=>data.processes[span.processID]?.serviceName;
     const build=span=>data.processes[span.processID]?.tags?.find(tag=>tag.key==='almanac.build.sha256')?.value;
-    const root=[...spans.values()].find(span=>service(span)==='almanac-web'&&span.operationName==='ui.'+event.journey&&span.duration/1000>=event.duration_ms-2);
+    const root=[...spans.values()].find(span=>service(span)==='almanac-web'&&span.operationName==='ui.'+event.journey&&Math.abs(span.duration/1000-event.duration_ms)<=2);
     const environment=span=>data.processes[span.processID]?.tags?.find(tag=>tag.key==='deployment.environment.name')?.value;
-    if(!root||build(root)!==backendSHA||environment(root)!=='local')return false;
+    if(!root||build(root)!==backendSHA||environment(root)!==expectedEnvironment)return false;
     const descends=(id,seen=new Set())=>{
       if(id===root.spanID)return true;
       if(seen.has(id))return false;
@@ -23,21 +23,28 @@ function connected(document,event,backendSHA) {
       return spans.get(id)?.references?.some(reference=>reference.traceID===event.trace_id&&descends(reference.spanID,seen))??false;
     };
     const children=[...spans.values()].filter(span=>descends(span.spanID));
-    return children.some(span=>service(span)==='almanac-backend'&&build(span)===backendSHA&&environment(span)==='local'&&/^(GET|POST) /.test(span.operationName))
+    const chart=event.journey!=='slo.detail'||children.some(span=>service(span)==='almanac-web'&&span.operationName==='ui.chart.render');
+    // A browser-cache hit has no new history query. Its caller must join the
+    // rendered generation to an independently captured network-backed producer.
+    if(event.cache_source_trace_id)return event.journey==='slo.detail'&&chart&&/^[0-9a-f]{32}$/.test(event.cache_source_trace_id)&&event.cache_source_trace_id!==event.trace_id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(event.history_generation);
+    return children.some(span=>service(span)==='almanac-backend'&&build(span)===backendSHA&&environment(span)===expectedEnvironment&&/^(GET|POST) /.test(span.operationName))
       &&children.some(span=>service(span)==='almanac-backend'&&span.operationName.startsWith('db.'))
-      &&(event.journey!=='slo.detail'||children.some(span=>service(span)==='almanac-web'&&span.operationName==='ui.chart.render'));
+      &&chart;
   })??false;
 }
 
-async function captureTraces(traceURL,events,artifacts,backendSHA,containsSecret) {
+export async function captureTraces(traceURL,events,artifacts,backendSHA,containsSecret,expectedEnvironment='local',requiredEvents=null) {
   const endpoint=new URL(traceURL);
   assert.equal(endpoint.protocol,'http:'); assert.equal(endpoint.hostname,'127.0.0.1');
-  const required=['sli.list','slo.list','slo.detail'].map(journey=>{
+  assert.ok(['local','acceptance'].includes(expectedEnvironment));
+  const required=requiredEvents??['sli.list','slo.list','slo.detail'].map(journey=>{
     const event=events.find(value=>value.journey===journey&&value.result==='ready');
     assert.ok(event&&/^[0-9a-f]{32}$/.test(event.trace_id)&&Number.isFinite(event.duration_ms),'missing rendered container journey '+journey);
     return event;
   });
-  const pending=new Map(required.map(event=>[event.journey,{event,lookups:[],document:null,connected:false}]));
+  assert.ok(required.length>0&&required.length<=9,'trace lookup batch is outside its bound');
+  for(const event of required)assert.ok(['sli.list','slo.list','slo.detail'].includes(event.journey)&&event.result==='ready'&&/^[0-9a-f]{32}$/.test(event.trace_id)&&Number.isFinite(event.duration_ms)&&event.duration_ms>=0,'missing rendered journey identity');
+  const pending=new Map(required.map((event,index)=>[requiredEvents?`${event.journey}-${index}`:event.journey,{event,lookups:[],document:null,connected:false}]));
   for(const event of events.filter(value=>value.diagnostic).slice(0,6))pending.set(`${event.journey}-failure-${event.trace_id}`,{event,lookups:[],document:null,connected:false});
   const started=performance.now();
   // The pinned sink deliberately hides traces for 30s and flushes indexes at
@@ -55,7 +62,7 @@ async function captureTraces(traceURL,events,artifacts,backendSHA,containsSecret
           if(containsSecret(text)){value.unsafe=true;throw new Error('trace contains fixture credentials');}
           const document=JSON.parse(text);
           for(const data of document.data??[])for(const span of data.spans)for(const tag of span.tags??[])if(/password|cookie|authorization|(?:^|[._])token(?:[._]|$)|^db\.(?:statement|query\.text|connection_string)$|^url\.(?:full|query)$/i.test(tag.key)){value.unsafe=true;throw new Error('trace contains forbidden metadata');}
-          value.document=document;spans=document.data?.reduce((sum,data)=>sum+data.spans.length,0)??0;value.connected=connected(document,value.event,backendSHA);
+          value.document=document;spans=document.data?.reduce((sum,data)=>sum+data.spans.length,0)??0;value.connected=connected(document,value.event,backendSHA,expectedEnvironment);
         }
       } catch(error) { if(value.unsafe)throw error; /* The bounded lookup history retains incomplete capture. */ }
       value.lookups.push({elapsed_ms:performance.now()-started,status,spans,connected:value.connected});
@@ -66,6 +73,7 @@ async function captureTraces(traceURL,events,artifacts,backendSHA,containsSecret
     await writeFile(join(artifacts,`container-trace-${journey}.json`),JSON.stringify(value),{mode:0o600});
     assert.equal(value.connected,true,'container trace is incomplete for '+journey);
   }
+  return [...pending.entries()].map(([key,value])=>({journey:value.event.journey,trace_id:value.event.trace_id,duration_ms:value.event.duration_ms,connected:value.connected,history_generation:value.event.history_generation??'',cache_source_trace_id:value.event.cache_source_trace_id??'',artifact:`container-trace-${key}.json`}));
 }
 
 // Called only by the existing isolated Compose acceptance gate. The application,

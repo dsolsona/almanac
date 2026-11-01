@@ -13,7 +13,9 @@ import (
 	"encoding/json/v2"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,7 +70,8 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		Datasources []string                        `json:"datasource_ids"`
 		ServiceID   string                          `json:"service_id"`
 		CacheSetup  performanceBrowserRestartReport `json:"cache_setup"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart})
+		TraceURL    string                          `json:"trace_url"`
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}
@@ -94,10 +97,13 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	reportBody, readErr := io.ReadAll(io.LimitReader(reportFile, (8<<20)+1))
 	reportCloseErr := reportFile.Close()
 	type measuredLoad struct {
+		Index   int       `json:"index"`
 		View    string    `json:"view"`
 		Elapsed float64   `json:"primary_ms"`
 		Failure string    `json:"failure"`
 		Before  time.Time `json:"before_evaluated_through"`
+		TraceID string    `json:"trace_id"`
+		TraceMS float64   `json:"trace_duration_ms"`
 		Detail  struct {
 			Through    time.Time `json:"history_evaluated_through"`
 			History    string    `json:"history_generation"`
@@ -108,6 +114,15 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 			Burn       int       `json:"burn_window_seconds"`
 			Zone       string    `json:"time_zone"`
 		} `json:"detail"`
+	}
+	type traceEvidence struct {
+		Sample     string  `json:"sample"`
+		TraceID    string  `json:"trace_id"`
+		Duration   float64 `json:"duration_ms"`
+		Connected  bool    `json:"connected"`
+		Generation string  `json:"history_generation"`
+		Origin     string  `json:"cache_source_trace_id"`
+		Artifact   string  `json:"artifact"`
 	}
 	var report struct {
 		Result         string                          `json:"result"`
@@ -128,12 +143,42 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 			Elapsed  float64  `json:"elapsed_ms"`
 			IDs      []string `json:"ids"`
 		} `json:"list_actions"`
-		Failures []string `json:"failures"`
+		Failures []string        `json:"failures"`
+		Traces   []traceEvidence `json:"trace_evidence"`
 	}
 	if readErr != nil || reportCloseErr != nil || len(reportBody) > 8<<20 || json.Unmarshal(reportBody, &report) != nil ||
 		report.Result != "passed" || report.Candidate != hex.EncodeToString(digest.Sum(nil)) ||
-		len(report.ColdLoads) != 60 || len(report.WarmLoads) != 60 || len(report.LifecycleLoads) != 1 || len(report.Interactions) != 50 || len(report.Failures) != 0 {
+		len(report.ColdLoads) != 60 || len(report.WarmLoads) != 60 || len(report.LifecycleLoads) != 1 || len(report.Interactions) != 50 || len(report.Failures) != 0 || len(report.Traces) != 171 {
 		return artifacts, errors.New("browser performance report is incomplete, failed or from another executable")
+	}
+	traceByID, traceBySample := make(map[string]traceEvidence), make(map[string]traceEvidence)
+	for _, evidence := range report.Traces {
+		if !evidence.Connected || len(evidence.TraceID) != 32 || strings.Trim(evidence.TraceID, "0123456789abcdef") != "" || evidence.Sample == "" ||
+			traceByID[evidence.TraceID].TraceID != "" || traceBySample[evidence.Sample].TraceID != "" || !filepath.IsLocal(evidence.Artifact) {
+			return artifacts, errors.New("browser trace evidence is missing, duplicated or disconnected")
+		}
+		info, err := os.Lstat(filepath.Join(artifacts, evidence.Artifact))
+		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 5<<20 {
+			return artifacts, errors.New("browser trace omitted its bounded captured document")
+		}
+		traceByID[evidence.TraceID], traceBySample[evidence.Sample] = evidence, evidence
+	}
+	for _, evidence := range report.Traces {
+		if evidence.Origin != "" {
+			producer, found := traceByID[evidence.Origin]
+			if !found || producer.Origin != "" || producer.TraceID == evidence.TraceID || !validCLIUUID(evidence.Generation) || producer.Generation != evidence.Generation {
+				return artifacts, errors.New("cached browser graph is not joined to its captured network-backed generation")
+			}
+		}
+	}
+	usedTraces := make(map[string]bool)
+	validTrace := func(label, id string, elapsed, duration, budget float64) bool {
+		evidence, found := traceBySample[label]
+		if !found || evidence.TraceID != id || usedTraces[id] || duration <= 0 || duration >= budget || math.Abs(evidence.Duration-duration) > 0.002 || math.Abs(elapsed-duration) > 100 {
+			return false
+		}
+		usedTraces[id] = true
+		return true
 	}
 	if report.CacheSetup.Result != restart.Result || report.CacheSetup.Target != restart.Target || report.CacheSetup.PreservedPoints != restart.PreservedPoints || report.CacheSetup.PreservedTiles != restart.PreservedTiles || report.CacheSetup.PreservedCurrent != int64(len(fleet.objectives)) {
 		return artifacts, errors.New("browser report omitted retained-restart/cache-eviction provenance")
@@ -143,7 +188,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		return validCLIUUID(value.History) && value.Rendered == value.History && validCLIUUID(value.Status) &&
 			!value.Through.IsZero() && value.RangeEnd.Equal(value.Through) && value.RangeEnd.Sub(value.RangeStart) == 28*24*time.Hour && value.Burn == 3600 && value.Zone == "UTC"
 	}
-	for _, cohort := range [][]measuredLoad{report.ColdLoads, report.WarmLoads} {
+	for cohortIndex, cohort := range [][]measuredLoad{report.ColdLoads, report.WarmLoads} {
 		counts := make(map[string]int)
 		for _, sample := range cohort {
 			budget := 1000.0
@@ -155,7 +200,8 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 			} else if sample.View != "sli-list" && sample.View != "slo-list" {
 				return artifacts, errors.New("browser load has unknown journey identity")
 			}
-			if sample.Failure != "" || sample.Elapsed <= 0 || sample.Elapsed >= budget {
+			label := fmt.Sprintf("%s-%s-%d", []string{"cold", "warm"}[cohortIndex], sample.View, sample.Index)
+			if sample.Failure != "" || sample.Elapsed <= 0 || sample.Elapsed >= budget || !validTrace(label, sample.TraceID, sample.Elapsed, sample.TraceMS, budget) {
 				return artifacts, errors.New("cold/warm browser load exceeded usable-content budget")
 			}
 			counts[sample.View]++
@@ -167,8 +213,20 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		}
 	}
 	minute := report.LifecycleLoads[0]
-	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 500 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) || !validDetail(minute) {
+	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 500 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) || !validDetail(minute) || !validTrace("lifecycle-slo-detail-0", minute.TraceID, minute.Elapsed, minute.TraceMS, 500) {
 		return artifacts, errors.New("browser minute-boundary visit omitted newer rendered evaluation or violated latency")
+	}
+	for index, body := range report.Interactions {
+		var sample struct {
+			Index   int     `json:"index"`
+			Elapsed float64 `json:"total_ms"`
+			TraceID string  `json:"trace_id"`
+			TraceMS float64 `json:"trace_duration_ms"`
+			Failure string  `json:"failure"`
+		}
+		if json.Unmarshal(body, &sample) != nil || sample.Index != index || sample.Failure != "" || sample.Elapsed <= 0 || sample.Elapsed >= 500 || !validTrace(fmt.Sprintf("interaction-%d", index), sample.TraceID, sample.Elapsed, sample.TraceMS, 500) {
+			return artifacts, errors.New("browser graph interaction lacks matching rendered trace evidence")
+		}
 	}
 	for _, coverage := range []struct{ actual, expected []string }{{report.ListCoverage.Slis, fleet.slis}, {report.ListCoverage.Slos, fleet.objectives}} {
 		actual, expected := slices.Clone(coverage.actual), slices.Clone(coverage.expected)

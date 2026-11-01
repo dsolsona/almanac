@@ -35,6 +35,7 @@ type performanceFleet struct {
 	serviceID   string
 	setup       time.Duration
 	historyEnd  time.Time
+	traceURL    string
 }
 
 func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {
@@ -43,8 +44,18 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 		t.Fatal("controlled performance requires 10,100 or1000 independent measurements/objectives")
 	}
 	started := time.Now()
+	sink := startJourneyTraceSink(t)
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", sink.server.URL+"/v1/traces")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_SDK_DISABLED", "false")
+	// Browser parents remain fully sampled; bound unrelated long-seed background
+	// roots rather than exporting every operation in hundreds of millions of rows.
+	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.01")
+	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
 	f := startObjectiveJourneyFixtureWithMetrics(t, true)
-	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour)}
+	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: "http://127.0.0.1:19428"}
 	for index := range 10 {
 		if ctx.Err() != nil {
 			t.Fatal("controlled performance fleet setup cancelled")
