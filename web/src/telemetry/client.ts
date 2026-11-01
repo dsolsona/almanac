@@ -14,6 +14,7 @@ let current: Journey | undefined;
 let provider: TracerProvider | undefined;
 let csrf = '';
 let authenticated = false;
+let awaitingAuthentication = false;
 let enabled = true;
 let installed = false;
 let exportFailures = 0;
@@ -63,6 +64,17 @@ export function telemetrySession(value: { csrf_token: string; session: unknown }
   if (value?.session && typeof value.session === 'object' && 'user_id' in value.session && typeof value.session.user_id === 'string') {
     outbox?.authenticate(value.session.user_id);
     replayPending?.();
+  }
+  if (!value) return;
+  const restricted = !!value.session && typeof value.session === 'object' && 'restricted' in value.session && value.session.restricted === true;
+  if (value.session === null || restricted) {
+    awaitingAuthentication = true;
+    if (current && !current.ended) endJourney(current, 'cancelled');
+  } else if (awaitingAuthentication) {
+    // Human sign-in/password entry is outside the authenticated page journey.
+    awaitingAuthentication = false;
+    if (current && !current.ended) endJourney(current, 'cancelled');
+    beginJourney();
   }
 }
 
@@ -298,6 +310,7 @@ export function installTelemetry() {
     provider = undefined;
     current = undefined;
     authenticated = false;
+    awaitingAuthentication = false;
     csrf = '';
     installed = false;
     enabled = true;

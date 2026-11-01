@@ -6,7 +6,7 @@ import { AgentsPage } from '../src/agents/AgentsPage.tsx';
 import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BrowserTraceOutbox } from '../src/telemetry/outbox.ts';
-import { installTelemetry, telemetrySession, journeyContentReady, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
+import { installTelemetry, telemetrySession, journeyContentReady, traceChartRender, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
 
 const exported = vi.hoisted(() => ({ bodies: [] as string[], failures: [] as unknown[] }));
 vi.mock('@opentelemetry/exporter-trace-otlp-http', async () => {
@@ -61,6 +61,35 @@ it.each(['agents', 'datasources'] as const)('ends a successful %s page journey a
     expect(await screen.findByText(page === 'agents' ? 'No agents have been registered.' : 'No datasources are available to your account.')).toBeVisible();
     await flushTelemetry();
     expect(exported.bodies.some(body => body.includes('ui.management') && body.includes('ready'))).toBe(true);
+  } finally { window.removeEventListener('almanac:journey', completed); }
+});
+
+it.each([null, { restricted: true }])('starts a fresh authenticated detail trace after sign-in or password entry (%j)', async session => {
+  history.replaceState({}, '', '/slos/12345678-1234-1234-1234-123456789abc');
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));
+  const completed = vi.fn();
+  window.addEventListener('almanac:journey', completed);
+  try {
+    stop = installTelemetry();
+    telemetrySession({ csrf_token: 'fixture-csrf', session });
+    expect(completed).toHaveBeenCalledTimes(1);
+    expect(completed.mock.calls[0][0].detail.result).toBe('cancelled');
+    const cancelledTrace = completed.mock.calls[0][0].detail.traceId;
+    journeyContentReady('slo.detail');
+    traceChartRender(() => {});
+    expect(completed).toHaveBeenCalledTimes(1);
+    telemetrySession({ csrf_token: 'fixture-csrf', session: { restricted: false } });
+    const response = await fetch('/api/v1/slos/12345678-1234-1234-1234-123456789abc/status');
+    traceJSON(response, await response.text());
+    await expectReadyJourney(() => { journeyContentReady('slo.detail'); traceChartRender(() => {}); });
+    expect(completed).toHaveBeenCalledTimes(2);
+    expect(completed.mock.calls[1][0].detail.traceId).not.toBe(cancelledTrace);
+    await flushTelemetry();
+    const spans = exported.bodies.flatMap(body => JSON.parse(body).resourceSpans.flatMap((resource: { scopeSpans: { spans: { name: string; traceId: string }[] }[] }) => resource.scopeSpans.flatMap(scope => scope.spans)));
+    const readyRoot = spans.find(span => span.name === 'ui.slo.detail' && span.traceId !== cancelledTrace)!;
+    expect(readyRoot).toBeDefined();
+    expect(spans.find(span => span.name.endsWith('/status'))?.traceId).toBe(readyRoot.traceId);
   } finally { window.removeEventListener('almanac:journey', completed); }
 });
 

@@ -65,7 +65,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [agentCrumb, setAgentCrumb] = useState<{ id: string; name: string } | null>(null);
   const [agentDetailRoute, setAgentDetailRoute] = useState(() => Boolean(new URLSearchParams(window.location.search).get('agent')));
-  const [context, setContext] = useState<AuthContext | null>(null);
+  const [context, setContextState] = useState<AuthContext | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [checking, setChecking] = useState(true);
   const [pending, setPending] = useState(false);
@@ -87,7 +87,10 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const identityRef = useRef<string | null>(null);
   const requestGeneration = useRef(0);
 
-  useEffect(() => { telemetrySession(context); }, [context]);
+  function setContext(value: AuthContext | null) {
+    telemetrySession(value);
+    setContextState(value);
+  }
 
   useEffect(() => {
     const nextID = context?.session?.user_id ?? null;
