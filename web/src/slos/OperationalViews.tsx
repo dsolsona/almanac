@@ -34,6 +34,8 @@ const reasonText:Record<string,string>={
   high_1h_burn:'1 h burn is at least 1×',evaluation_unavailable:'Current evaluation unavailable',not_yet_eligible:'Not yet eligible',zero_traffic:'No traffic',
   incomplete_coverage:'Coverage is incomplete',short_burn_unavailable:'Short-window burn unavailable',budget_below_half:'Less than half of budget remains',
   incomplete_or_stale_inputs:'Input coverage is incomplete or stale',cadence_mismatch:'Measurement cadence does not match the SLI',
+  current_calculation_pending:'Current results are updating.',current_calculation_failed:'Current results could not be calculated.',
+  source_aggregate_failed:'Measurements could not be processed. Current results are unavailable.',
 };
 function reasonLabel(code:string):string {return reasonText[code]??code.replaceAll('_',' ').replace(/^./,letter=>letter.toUpperCase());}
 function decimal(value:string|null|undefined):string {

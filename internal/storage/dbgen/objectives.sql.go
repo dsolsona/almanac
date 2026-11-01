@@ -758,8 +758,14 @@ func (q *Queries) ListServices(ctx context.Context, arg ListServicesParams) ([]A
 }
 
 const listSloOverviewSnapshotItems = `-- name: ListSloOverviewSnapshotItems :many
-SELECT ordinal, payload FROM public.almanac_slo_overview_snapshot_items
-WHERE snapshot_id=$1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3
+SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
+       (i.projection_current AND (i.projection_digest IS NULL OR
+           a.digest=sha256(convert_to(a.payload::text,'UTF8'))))::boolean AS projection_current,
+       coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
+       coalesce((i.payload->>'_source_failed')::boolean,false)::boolean AS source_failed
+FROM public.almanac_slo_overview_snapshot_items i
+LEFT JOIN public.almanac_slo_projection_payloads a ON a.digest=i.projection_digest
+WHERE i.snapshot_id=$1 AND i.ordinal >= $2 ORDER BY i.ordinal LIMIT $3
 `
 
 type ListSloOverviewSnapshotItemsParams struct {
@@ -769,8 +775,11 @@ type ListSloOverviewSnapshotItemsParams struct {
 }
 
 type ListSloOverviewSnapshotItemsRow struct {
-	Ordinal int32  `json:"ordinal"`
-	Payload []byte `json:"payload"`
+	Ordinal           int32  `json:"ordinal"`
+	Payload           []byte `json:"payload"`
+	ProjectionCurrent bool   `json:"projection_current"`
+	PreparationFailed bool   `json:"preparation_failed"`
+	SourceFailed      bool   `json:"source_failed"`
 }
 
 func (q *Queries) ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloOverviewSnapshotItemsParams) ([]ListSloOverviewSnapshotItemsRow, error) {
@@ -782,7 +791,13 @@ func (q *Queries) ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloO
 	items := []ListSloOverviewSnapshotItemsRow{}
 	for rows.Next() {
 		var i ListSloOverviewSnapshotItemsRow
-		if err := rows.Scan(&i.Ordinal, &i.Payload); err != nil {
+		if err := rows.Scan(
+			&i.Ordinal,
+			&i.Payload,
+			&i.ProjectionCurrent,
+			&i.PreparationFailed,
+			&i.SourceFailed,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

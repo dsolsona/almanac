@@ -196,9 +196,50 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 		t.Fatalf("source waits spent calculation attempts or were not deferred: %d, %v", deferred, err)
 	}
 	input := OperationalOverviewInput{Runtime: runtime, Proof: proof, Query: "review-", Limit: 50, Now: schedulerClock}
-	if _, err := ReadSloOperationalOverview(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedSourceFailed) {
-		t.Fatalf("overview hid exhausted source work as pending: %v", err)
+	checkIsolatedFailures := func(currentFailed bool) {
+		t.Helper()
+		pageInput := input
+		sourceFailures, calculationFailures, ready := 0, 0, 0
+		for pageIndex := range 3 {
+			page, err := ReadSloOperationalOverview(t.Context(), databaseURL, pageInput)
+			if err != nil || page.GroupCounts.Watch != 100 || page.GroupCounts.Healthy != 1 {
+				t.Fatalf("unavailable rows blocked the list or changed pinned counts: %+v, %v", page.GroupCounts, err)
+			}
+			for _, item := range page.Items {
+				if item.Urgency == "healthy" {
+					ready++
+					continue
+				}
+				if item.Current.Quality.State != "unavailable" || item.Current.Quality.Reason == nil || item.Current.Performance.State != "unknown" ||
+					item.Current.Performance.Good != nil || item.Current.Performance.RemainingFraction != nil || item.Generation != nil {
+					t.Fatal("unavailable projection retained current success or numerical values")
+				}
+				switch *item.Current.Quality.Reason {
+				case "source_aggregate_failed":
+					sourceFailures++
+				case "current_calculation_failed":
+					calculationFailures++
+				default:
+					t.Fatalf("exhausted row was hidden as pending: %s", *item.Current.Quality.Reason)
+				}
+			}
+			if page.NextCursor == "" {
+				break
+			}
+			if pageIndex == 2 {
+				t.Fatal("bounded fixture pagination did not terminate")
+			}
+			pageInput.Cursor = page.NextCursor
+		}
+		wantSource, wantCalculation := 100, 0
+		if currentFailed {
+			wantSource, wantCalculation = 99, 1
+		}
+		if sourceFailures != wantSource || calculationFailures != wantCalculation || ready != 1 {
+			t.Fatalf("row isolation lost failure identity or the healthy tail: source=%d,current=%d,ready=%d", sourceFailures, calculationFailures, ready)
+		}
 	}
+	checkIsolatedFailures(false)
 	q := dbgen.New(conn)
 	params := dbgen.RecordCurrentPreparationFailureParams{SloID: ids[99], DefinitionRevision: 1, MeasurementRevision: 1, CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock())}
 	if err := q.RecordCurrentPreparationFailure(t.Context(), params); err != nil {
@@ -216,9 +257,7 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 			t.Fatal(err)
 		}
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedFailed) || errors.Is(err, ErrDerivedSourceFailed) {
-		t.Fatalf("overview hid a later exhausted current calculation: %v", err)
-	}
+	checkIsolatedFailures(true)
 	input.Query = "review-healthy"
 	if page, err := ReadSloOperationalOverview(t.Context(), databaseURL, input); err != nil || len(page.Items) != 1 {
 		t.Fatalf("unrelated healthy filtered rows were unavailable: %v", err)

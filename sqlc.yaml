@@ -32,6 +32,7 @@ sql:
       - internal/storage/migrations/0026_retained_series_repair.sql
       - internal/storage/migrations/0027_retained_history_response_kind.sql
       - internal/storage/migrations/0028_remove_unused_interval_work.sql
+      - internal/storage/migrations/0029_slo_list_projection_references.sql
     gen:
       go:
         package: dbgen

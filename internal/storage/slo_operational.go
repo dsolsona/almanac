@@ -671,6 +671,38 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 		return ErrAgentForbidden
 	}
 	now := normalizedAgentNow(input.Now)
+	if input.Runtime != nil {
+		reservation, err := q.GetSloOverviewSnapshot(ctx, uuidToPG(snapshotID))
+		if err != nil {
+			return readTransactionError(ctx, "storage: overview reservation read failed", err)
+		}
+		if reservation.ActorID != user.ID || !slices.Equal(reservation.SessionVerifier, input.Proof.SessionVerifier[:]) || reservation.Role != user.Role || !now.Before(reservation.ExpiresAt.Time) || reservation.State != "preparing" {
+			return ErrOperationalSnapshotOld
+		}
+		serviceID, urgency := overviewScopeFilters(input)
+		stats, err := q.MaterializeSloOverviewReferences(ctx, dbgen.MaterializeSloOverviewReferencesParams{SnapshotID: uuidToPG(snapshotID),
+			CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ServiceID: serviceID,
+			QueryText: pgtype.Text{String: input.Query, Valid: input.Query != ""}, Urgency: urgency})
+		if err != nil {
+			if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "23503" && failure.ConstraintName == "almanac_slo_overview_snapshot_items_projection_digest_fkey" {
+				return errReadSerialization
+			}
+			return readTransactionError(ctx, "storage: overview reference publication failed", err)
+		}
+		if stats.Definitions > sloOverviewDefinitionLimit || stats.PayloadBytes > sloOverviewProjectionByteLimit || stats.Finished != 1 {
+			return ErrOperationalResource
+		}
+		if stats.SelectedCount > int64(input.Limit) {
+			fingerprint, err := overviewScopeFingerprint(ctx, q, input, now)
+			if err != nil {
+				return err
+			}
+			if err := q.SetSloOverviewFingerprint(ctx, dbgen.SetSloOverviewFingerprintParams{ID: uuidToPG(snapshotID), PublicationFingerprint: fingerprint.Fingerprint}); err != nil {
+				return readTransactionError(ctx, "storage: overview fingerprint persistence failed", err)
+			}
+		}
+		return finishAgentRead(ctx, tx, input.Now, started, user, installation, session)
+	}
 	candidates, err := loadOverviewCandidates(ctx, q, input, now)
 	if err != nil {
 		return err
@@ -823,12 +855,17 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 		if json.Unmarshal(row.Payload, &item) != nil || !item.Urgency.Valid() {
 			return api.SloOperationalOverviewPage{}, errors.New("storage: invalid overview snapshot item")
 		}
-		items = append(items, item)
-	}
-	if input.Runtime != nil {
-		if err := queueVisibleBudgetHistory(ctx, q, items, now); err != nil {
-			return api.SloOperationalOverviewPage{}, err
+		item.Slo.Target = sli.NormalizeDecimal(item.Slo.Target)
+		if !row.ProjectionCurrent {
+			reason := "current_calculation_pending"
+			if row.PreparationFailed {
+				reason = "current_calculation_failed"
+			} else if row.SourceFailed {
+				reason = "source_aggregate_failed"
+			}
+			item = unavailableOverviewItem(item.Slo, snapshotRow.CreatedAt.Time.UTC(), reason)
 		}
+		items = append(items, item)
 	}
 	next := ""
 	previous := ""

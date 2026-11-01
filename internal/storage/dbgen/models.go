@@ -396,13 +396,14 @@ type AlmanacSloCurrentFailure struct {
 }
 
 type AlmanacSloCurrentProjection struct {
-	SloID         pgtype.UUID `json:"slo_id"`
-	GenerationID  pgtype.UUID `json:"generation_id"`
-	ServiceID     pgtype.UUID `json:"service_id"`
-	SortName      string      `json:"sort_name"`
-	Urgency       string      `json:"urgency"`
-	Payload       []byte      `json:"payload"`
-	PayloadDigest []byte      `json:"payload_digest"`
+	SloID              pgtype.UUID `json:"slo_id"`
+	GenerationID       pgtype.UUID `json:"generation_id"`
+	ServiceID          pgtype.UUID `json:"service_id"`
+	SortName           string      `json:"sort_name"`
+	Urgency            string      `json:"urgency"`
+	Payload            []byte      `json:"payload"`
+	PayloadDigest      []byte      `json:"payload_digest"`
+	BudgetHistoryState pgtype.Text `json:"budget_history_state"`
 }
 
 type AlmanacSloDefinition struct {
@@ -508,11 +509,21 @@ type AlmanacSloOverviewSnapshot struct {
 }
 
 type AlmanacSloOverviewSnapshotItem struct {
-	SnapshotID   pgtype.UUID `json:"snapshot_id"`
-	Ordinal      int32       `json:"ordinal"`
-	Urgency      string      `json:"urgency"`
-	Payload      []byte      `json:"payload"`
-	PayloadBytes int32       `json:"payload_bytes"`
+	SnapshotID        pgtype.UUID `json:"snapshot_id"`
+	Ordinal           int32       `json:"ordinal"`
+	Urgency           string      `json:"urgency"`
+	Payload           []byte      `json:"payload"`
+	PayloadBytes      int32       `json:"payload_bytes"`
+	ProjectionDigest  []byte      `json:"projection_digest"`
+	ProjectionCurrent bool        `json:"projection_current"`
+}
+
+type AlmanacSloProjectionPayload struct {
+	Digest       []byte             `json:"digest"`
+	Payload      []byte             `json:"payload"`
+	Urgency      string             `json:"urgency"`
+	PayloadBytes int32              `json:"payload_bytes"`
+	PublishedAt  pgtype.Timestamptz `json:"published_at"`
 }
 
 type AlmanacSloSeriesPoint struct {

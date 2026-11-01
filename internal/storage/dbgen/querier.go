@@ -61,6 +61,7 @@ type Querier interface {
 	DeleteExpiredSliCreateReceipt(ctx context.Context, arg DeleteExpiredSliCreateReceiptParams) error
 	DeleteExpiredSloDisplayBlocks(ctx context.Context, updatedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error
+	DeleteExpiredSloProjectionPayloads(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSourceHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) error
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteObjectiveCreateReceipt(ctx context.Context, arg DeleteObjectiveCreateReceiptParams) error
@@ -207,13 +208,14 @@ type Querier interface {
 	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
 	MarkDatasourceReassignmentDrained(ctx context.Context, arg MarkDatasourceReassignmentDrainedParams) (int64, error)
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
+	MaterializeSloOverviewReferences(ctx context.Context, arg MaterializeSloOverviewReferencesParams) (MaterializeSloOverviewReferencesRow, error)
 	OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishRetainedSloPoint(ctx context.Context, arg PublishRetainedSloPointParams) (int64, error)
 	PublishRetainedSloPointBatch(ctx context.Context, arg PublishRetainedSloPointBatchParams) error
 	PublishRetainedTile(ctx context.Context, arg PublishRetainedTileParams) (int64, error)
-	QueueVisibleBudgetHistory(ctx context.Context, arg QueueVisibleBudgetHistoryParams) (int64, error)
+	QueueDueBudgetHistory(ctx context.Context, arg QueueDueBudgetHistoryParams) (int64, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)

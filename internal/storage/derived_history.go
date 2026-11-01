@@ -91,6 +91,9 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 		if seriesWorked && seriesErr == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
 		}
+		if err := r.queueDueBudgetHistory(ctx, time.Now()); err != nil && ctx.Err() == nil {
+			logger.ErrorContext(ctx, "SLO overview history admission failed")
+		}
 		worked := false
 		err := r.prepareHistory(ctx, time.Now, &worked)
 		if err != nil && !errors.Is(err, ErrDerivedPending) && ctx.Err() == nil {
@@ -131,6 +134,9 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 		_, cleanupErr := q.DeleteExpiredDerivedGenerations(ctx, timestamp(clock().Add(-5*time.Minute)))
 		if cleanupErr == nil {
 			_, cleanupErr = q.DeleteExpiredSloDisplayBlocks(ctx, timestamp(clock().Add(-5*time.Minute)))
+		}
+		if cleanupErr == nil {
+			_, cleanupErr = q.DeleteExpiredSloProjectionPayloads(ctx, timestamp(clock().Add(-5*time.Minute)))
 		}
 		conn.Release()
 		return cleanupErr
@@ -216,7 +222,12 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	at, start, end := job.EvaluatedThrough.Time.UTC(), job.RangeStart.Time.UTC(), job.RangeEnd.Time.UTC()
 	now := clock().UTC()
 	cache := &sloDisplayCache{q: q, row: row, sourceGeneration: sourceGeneration, now: now}
-	value, err := buildSloOperationalDetail(bounded, q, row, contextRow, OperationalDetailInput{displayCache: cache, overviewOnly: job.Kind == "overview", Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)})
+	input := OperationalDetailInput{displayCache: cache, overviewOnly: job.Kind == "overview", Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)}
+	if input.overviewOnly {
+		input.displayCache = nil
+		input.retainedReader = &retainedSeriesReader{q: q, row: row, source: contextRow, now: now}
+	}
+	value, err := buildSloOperationalDetail(bounded, q, row, contextRow, input)
 	if err != nil {
 		return err
 	}

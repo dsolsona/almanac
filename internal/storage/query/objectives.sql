@@ -168,8 +168,14 @@ SELECT sqlc.arg(snapshot_id)::uuid,ordinal,urgency,payload::jsonb,payload_bytes 
 UPDATE public.almanac_slo_overview_snapshots SET state='ready',payload_bytes=$2 WHERE id=$1 AND state='preparing';
 
 -- name: ListSloOverviewSnapshotItems :many
-SELECT ordinal, payload FROM public.almanac_slo_overview_snapshot_items
-WHERE snapshot_id=$1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3;
+SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
+       (i.projection_current AND (i.projection_digest IS NULL OR
+           a.digest=sha256(convert_to(a.payload::text,'UTF8'))))::boolean AS projection_current,
+       coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
+       coalesce((i.payload->>'_source_failed')::boolean,false)::boolean AS source_failed
+FROM public.almanac_slo_overview_snapshot_items i
+LEFT JOIN public.almanac_slo_projection_payloads a ON a.digest=i.projection_digest
+WHERE i.snapshot_id=$1 AND i.ordinal >= $2 ORDER BY i.ordinal LIMIT $3;
 
 -- name: DeleteSloOverviewSnapshot :exec
 DELETE FROM public.almanac_slo_overview_snapshots WHERE id=$1;

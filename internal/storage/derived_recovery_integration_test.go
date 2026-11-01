@@ -405,6 +405,15 @@ func verifyReadyOverviewReuse(t *testing.T, runtime *Runtime, databaseURL string
 	if err := conn.QueryRow(t.Context(), `SELECT expires_at FROM public.almanac_slo_overview_snapshots WHERE id=$1`, first.SnapshotId.String()).Scan(&originalExpiry); err != nil {
 		t.Fatal(err)
 	}
+	var referenceRows, copiedRows int
+	var referenceBytes, calculationBytes int64
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE i.projection_digest IS NOT NULL),
+        count(*) FILTER (WHERE i.payload ? 'current'),sum(i.payload_bytes),sum(a.payload_bytes)
+        FROM public.almanac_slo_overview_snapshot_items i
+        JOIN public.almanac_slo_projection_payloads a ON a.digest=i.projection_digest WHERE i.snapshot_id=$1`,
+		first.SnapshotId.String()).Scan(&referenceRows, &copiedRows, &referenceBytes, &calculationBytes); err != nil || referenceRows != 3 || copiedRows != 0 || referenceBytes >= calculationBytes {
+		t.Fatalf("cursor copied calculations instead of pinning bounded references: rows=%d,copied=%d,bytes=%d/%d,%v", referenceRows, copiedRows, referenceBytes, calculationBytes, err)
+	}
 	admission, err := conn.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -440,6 +449,18 @@ func verifyReadyOverviewReuse(t *testing.T, runtime *Runtime, databaseURL string
 	var originalState string
 	if err := conn.QueryRow(t.Context(), `SELECT state FROM public.almanac_slo_overview_snapshots WHERE id=$1`, first.SnapshotId.String()).Scan(&originalState); err != nil || originalState != "ready" {
 		t.Fatalf("refresh removed or mutated the preceding snapshot: %v", err)
+	}
+	oldSecond := input
+	oldSecond.Cursor = first.NextCursor
+	oldPage, err := ReadSloOperationalOverview(t.Context(), databaseURL, oldSecond)
+	if err != nil || oldPage.PreviousCursor == "" {
+		t.Fatalf("original reference cursor was lost after publication: %v", err)
+	}
+	oldFirst := input
+	oldFirst.Cursor = oldPage.PreviousCursor
+	pinnedFirst, err := ReadSloOperationalOverview(t.Context(), databaseURL, oldFirst)
+	if err != nil || !reflect.DeepEqual(pinnedFirst.Items, first.Items) || pinnedFirst.GroupCounts != first.GroupCounts {
+		t.Fatalf("new publication mutated an archived projection pinned by the old cursor: %v", err)
 	}
 	for _, query := range []string{"operational", "operational-a", "operational-h", "operational-w", "-attention", "-watch", "-healthy"} {
 		single := input
