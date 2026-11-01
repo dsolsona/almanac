@@ -523,6 +523,18 @@ type AlmanacSloOverviewSnapshotItem struct {
 	PayloadBytes int32       `json:"payload_bytes"`
 }
 
+type AlmanacSloSeriesPoint struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	EvaluationAt        pgtype.Timestamptz `json:"evaluation_at"`
+	SourceGeneration    int64              `json:"source_generation"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	Payload             []byte             `json:"payload"`
+}
+
 type AlmanacUser struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Login              string             `json:"login"`

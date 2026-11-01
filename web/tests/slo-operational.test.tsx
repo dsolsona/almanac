@@ -52,11 +52,15 @@ it('shows server group counts and sends submitted filters through the operationa
  const updateLocation=vi.fn();
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={updateLocation}/>);
  expect(await screen.findByRole('heading',{name:'Needs attention, 2 SLOs'})).toBeVisible();
+ expect(String(fetcher.mock.calls.find(call=>String(call[0]).includes('/slos/overview'))?.[0])).toContain('limit=20');
+ expect(screen.getByLabelText('SLOs per page')).toHaveValue('20');
  expect(screen.getByRole('heading',{name:'Watch, 3 SLOs'})).toBeVisible();
  expect(screen.getByRole('heading',{name:'Healthy, 4 SLOs'})).toBeVisible();
  fireEvent.change(screen.getByLabelText('Search SLOs'),{target:{value:'checkout'}});
  fireEvent.submit(screen.getByRole('search'));
  await waitFor(()=>expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('q=checkout')));
+ fireEvent.change(screen.getByLabelText('SLOs per page'),{target:{value:'10'}});
+ expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('page_size=10'));
 });
 
 it('bounds first-page preparation refreshes and leaves cursor pages pinned',async()=>{

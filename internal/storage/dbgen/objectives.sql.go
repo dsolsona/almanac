@@ -517,26 +517,30 @@ func (q *Queries) InsertSloOverviewSnapshot(ctx context.Context, arg InsertSloOv
 	return err
 }
 
-const insertSloOverviewSnapshotItem = `-- name: InsertSloOverviewSnapshotItem :exec
+const insertSloOverviewSnapshotItems = `-- name: InsertSloOverviewSnapshotItems :exec
+WITH items AS (
+    SELECT unnest($2::text[]) AS urgency,
+           unnest($3::text[]) AS payload,
+           unnest($4::integer[]) AS payload_bytes,
+           generate_series(0,cardinality($2::text[])-1) AS ordinal
+)
 INSERT INTO public.almanac_slo_overview_snapshot_items(snapshot_id,ordinal,urgency,payload,payload_bytes)
-VALUES ($1,$2,$3,$4,$5)
+SELECT $1::uuid,ordinal,urgency,payload::jsonb,payload_bytes FROM items
 `
 
-type InsertSloOverviewSnapshotItemParams struct {
+type InsertSloOverviewSnapshotItemsParams struct {
 	SnapshotID   pgtype.UUID `json:"snapshot_id"`
-	Ordinal      int32       `json:"ordinal"`
-	Urgency      string      `json:"urgency"`
-	Payload      []byte      `json:"payload"`
-	PayloadBytes int32       `json:"payload_bytes"`
+	Urgencies    []string    `json:"urgencies"`
+	Payloads     []string    `json:"payloads"`
+	PayloadSizes []int32     `json:"payload_sizes"`
 }
 
-func (q *Queries) InsertSloOverviewSnapshotItem(ctx context.Context, arg InsertSloOverviewSnapshotItemParams) error {
-	_, err := q.db.Exec(ctx, insertSloOverviewSnapshotItem,
+func (q *Queries) InsertSloOverviewSnapshotItems(ctx context.Context, arg InsertSloOverviewSnapshotItemsParams) error {
+	_, err := q.db.Exec(ctx, insertSloOverviewSnapshotItems,
 		arg.SnapshotID,
-		arg.Ordinal,
-		arg.Urgency,
-		arg.Payload,
-		arg.PayloadBytes,
+		arg.Urgencies,
+		arg.Payloads,
+		arg.PayloadSizes,
 	)
 	return err
 }

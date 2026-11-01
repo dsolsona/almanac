@@ -678,7 +678,6 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 	}
 	items := make([]api.SloOperationalOverviewItem, 0, len(candidates))
 	counts := api.SloUrgencyCounts{}
-	selectedBytes := 0
 	for _, item := range candidates {
 		switch item.Urgency {
 		case "needs_attention":
@@ -692,14 +691,6 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 		}
 		if input.Urgency != "" && string(item.Urgency) != input.Urgency {
 			continue
-		}
-		encoded, marshalErr := json.Marshal(item)
-		if marshalErr != nil {
-			return errors.New("storage: overview projection serialization failed")
-		}
-		selectedBytes, err = addProjectionPayloadBytes(selectedBytes, len(encoded))
-		if err != nil {
-			return err
 		}
 		items = append(items, item)
 	}
@@ -728,14 +719,23 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 	if err != nil {
 		return errors.New("storage: overview counts serialization failed")
 	}
-	for ordinal, item := range items {
+	batch := dbgen.InsertSloOverviewSnapshotItemsParams{SnapshotID: uuidToPG(snapshotID)}
+	selectedBytes := 0
+	for _, item := range items {
 		encoded, marshalErr := json.Marshal(item)
 		if marshalErr != nil {
 			return errors.New("storage: overview projection serialization failed")
 		}
-		if err = q.InsertSloOverviewSnapshotItem(ctx, dbgen.InsertSloOverviewSnapshotItemParams{SnapshotID: uuidToPG(snapshotID), Ordinal: int32(ordinal), Urgency: string(item.Urgency), Payload: encoded, PayloadBytes: int32(len(encoded))}); err != nil {
-			return readTransactionError(ctx, "storage: overview projection persistence failed", err)
+		selectedBytes, err = addProjectionPayloadBytes(selectedBytes, len(encoded))
+		if err != nil {
+			return err
 		}
+		batch.Urgencies = append(batch.Urgencies, string(item.Urgency))
+		batch.Payloads = append(batch.Payloads, string(encoded))
+		batch.PayloadSizes = append(batch.PayloadSizes, int32(len(encoded)))
+	}
+	if err := q.InsertSloOverviewSnapshotItems(ctx, batch); err != nil {
+		return readTransactionError(ctx, "storage: overview projection persistence failed", err)
 	}
 	if err = q.FinishSloOverviewSnapshot(ctx, dbgen.FinishSloOverviewSnapshotParams{ID: uuidToPG(snapshotID), PayloadBytes: int32(selectedBytes)}); err != nil {
 		return readTransactionError(ctx, "storage: overview snapshot finalization failed", err)

@@ -49,6 +49,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if status.Generation.EvaluatedThrough.Location() != time.UTC || status.Generation.PublishedAt.Location() != time.UTC {
 		t.Fatal("current generation metadata must use UTC independently of the database driver's host timezone")
 	}
+	verifyRetainedCurrentPoint(t, databaseURL, proof, id, clock, oracle)
 	input.Runtime = runtime
 	if _, err := ReadSloOperationalDetail(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedPending) {
 		t.Fatalf("cold history did not admit durable preparation: %v", err)

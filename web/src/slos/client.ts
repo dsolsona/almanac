@@ -12,6 +12,7 @@ export type OperationalDetail = components['schemas']['SloOperationalDetail'];
 export type CurrentStatus = components['schemas']['SloCurrentStatus'];
 export type HistoryValuePage = components['schemas']['SloHistoryValuePage'];
 export type HistoryLane = HistoryValuePage['lane'];
+export type ServerClock = { time: number; receivedAt: number };
 export function sameDerivedInputs(first:components['schemas']['DerivedGeneration'],second:components['schemas']['DerivedGeneration']):boolean {
   return (['source_generation','measurement_revision','definition_revision','exclusion_revision','calculation_version','evaluated_through','retention_start'] as const).every(field=>first[field]===second[field]);
 }
@@ -176,7 +177,7 @@ const fieldMessages: Record<string, string> = {
   'timeline_start:timeline_range_invalid': 'Choose both aligned timeline bounds within the objective window, with at most 1,500 intervals.',
   'at:evaluation_time_invalid': 'Choose a valid evaluation time that is not in the future.',
 };
-async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
+async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   if (mutation) {
     clearQueryCache();
     try { return await requestUncached<T>(path, init, mutation, responseLimit); }
@@ -192,10 +193,11 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
     }
   }, init.signal, path.startsWith('/api/v1/slos/overview')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
-async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
+async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch { throw new SloFailure(mutation ? 'The request may have succeeded. Check the list before deliberately retrying the same request.' : 'Almanac could not be reached.', mutation); }
+  const receivedAt=performance.now();
   let data: unknown;
   try {
     if (!response.body || Number(response.headers.get('Content-Length')) > responseLimit) throw new Error('large response');
@@ -249,7 +251,8 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
       throw new SloFailure(mutation ? 'The request may have succeeded, but its version could not be confirmed. Check the record before retrying.' : 'The record version could not be confirmed.', mutation, response.status);
   }
   const serverTime=response.headers.get('Date');
-  return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}) };
+  const time=Date.parse(serverTime??'');
+  return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}),...(Number.isFinite(time)?{serverClock:{time,receivedAt}}:{}) };
 }
 function write(context: AuthContext, body: unknown, key?: string, etag?: string): RequestInit {
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
@@ -263,7 +266,10 @@ export const sloClient = {
   updateService: (id: string, name: string, etag: string, context: AuthContext) => request<Service>(`/api/v1/services/${id}`, write(context, {display_name:name}, undefined, etag), true),
   list: (cursor = '', signal?: AbortSignal) => request<{items:Slo[]; next_cursor:string}>(`/api/v1/slos?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),
   get: (id: string, signal?: AbortSignal) => request<Slo>(`/api/v1/slos/${id}`, {signal}),
-  serverTime: async (id:string,signal?:AbortSignal) => {
+  serverTime: async (id:string,signal?:AbortSignal,clock?:ServerClock) => {
+    if(signal?.aborted)throw new DOMException('The read was cancelled.','AbortError');
+    const elapsed=clock?performance.now()-clock.receivedAt:-1;
+    if(clock&&Number.isFinite(clock.time)&&elapsed>=0&&elapsed<30_000)return clock.time+elapsed;
     const result=await requestUncached<Slo>(`/api/v1/slos/${id}`,{signal});
     const timestamp=Date.parse(result.serverTime??'');
     if(!Number.isFinite(timestamp))throw new SloFailure('The server time could not be confirmed. Refresh to try again.');

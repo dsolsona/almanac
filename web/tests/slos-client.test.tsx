@@ -54,6 +54,25 @@ it('uses the lightweight definition response Date for server-anchored history bo
  expect(fetcher.mock.calls).toHaveLength(1);
  expect(String(fetcher.mock.calls[0]?.[0])).toBe(`/api/v1/slos/${id}`);
 });
+it('reuses the definition response clock and advances it without trusting the browser wall clock',async()=>{
+ clearQueryCache();
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify(operationalDetail().objective),{headers:{ETag:`"slo:${id}:1"`,Date:'Thu, 29 Oct 2026 12:00:00 GMT'}}));
+ vi.stubGlobal('fetch',fetcher);
+ const monotonic=vi.spyOn(performance,'now').mockReturnValue(1000);
+ const wall=vi.spyOn(Date,'now').mockReturnValue(0);
+ try{
+  const definition=await sloClient.get(id);
+  monotonic.mockReturnValue(2500);
+  expect(await sloClient.serverTime(id,undefined,definition.serverClock)).toBe(Date.parse(instant)+1500);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  monotonic.mockReturnValue(31_000);
+  expect(await sloClient.serverTime(id,undefined,definition.serverClock)).toBe(Date.parse(instant));
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const abort=new AbortController();abort.abort();
+  await expect(sloClient.serverTime(id,abort.signal,definition.serverClock)).rejects.toThrow('cancelled');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+ }finally{monotonic.mockRestore();wall.mockRestore();clearQueryCache();}
+});
 it('rejects malformed list and evaluation responses rather than treating them as empty',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({items:'not a page'}),{status:200}))); await expect(sloClient.list()).rejects.toThrow('invalid response');
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({window:{},quality:{},performance:{},timeline:{items:[]}}),{status:200}))); await expect(sloClient.evaluation(id)).rejects.toThrow('invalid response');

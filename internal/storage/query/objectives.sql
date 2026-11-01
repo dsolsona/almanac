@@ -154,9 +154,15 @@ SELECT id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urg
        group_counts,state,payload_bytes,created_at,expires_at
 FROM public.almanac_slo_overview_snapshots WHERE id=$1 FOR UPDATE;
 
--- name: InsertSloOverviewSnapshotItem :exec
+-- name: InsertSloOverviewSnapshotItems :exec
+WITH items AS (
+    SELECT unnest(sqlc.arg(urgencies)::text[]) AS urgency,
+           unnest(sqlc.arg(payloads)::text[]) AS payload,
+           unnest(sqlc.arg(payload_sizes)::integer[]) AS payload_bytes,
+           generate_series(0,cardinality(sqlc.arg(urgencies)::text[])-1) AS ordinal
+)
 INSERT INTO public.almanac_slo_overview_snapshot_items(snapshot_id,ordinal,urgency,payload,payload_bytes)
-VALUES ($1,$2,$3,$4,$5);
+SELECT sqlc.arg(snapshot_id)::uuid,ordinal,urgency,payload::jsonb,payload_bytes FROM items;
 
 -- name: FinishSloOverviewSnapshot :exec
 UPDATE public.almanac_slo_overview_snapshots SET state='ready',payload_bytes=$2 WHERE id=$1 AND state='preparing';

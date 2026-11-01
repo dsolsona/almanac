@@ -5,7 +5,7 @@ import { SloExactValuesTable, type SloExactRow } from '../components/charts/SloE
 import { SloBudgetSparkline } from '../components/charts/SloBudgetSparkline.tsx';
 import type { Coverage, TimelineChart } from '../components/charts/timelineModel.ts';
 import { sloClient, SloFailure, sameDerivedInputs, type OperationalDetail, type OperationalOverview } from './client.ts';
-import type { CurrentStatus, HistoryLane, HistoryValuePage } from './client.ts';
+import type { CurrentStatus, HistoryLane, HistoryValuePage, ServerClock } from './client.ts';
 import { clearQueryCache } from '../queryCache.ts';
 import { beginJourney, journeyContentReady } from '../telemetry/client.ts';
 import './slos.css';
@@ -132,12 +132,13 @@ function OverviewRow({item}:{item:OverviewItem}) {
 export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocationChange}:{locationKey:string;canWrite:boolean;onCreate:()=>void;onLocationChange:(path:string,state?:unknown)=>void}) {
   const params=queryFrom(locationKey),query=params.get('q')??'',serviceID=params.get('service_id')??'',urgency=(params.get('urgency')??'') as ''|Urgency;
   const cursor=params.get('cursor')??'';
+  const pageSize=params.get('page_size')==='10'?10:20;
   const [draftQuery,setDraftQuery]=useState(query),[page,setPage]=useState<OperationalOverview|null>(null),[services,setServices]=useState<Awaited<ReturnType<typeof sloClient.services>>['items']>([]);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[refreshCount,setRefreshCount]=useState(0),[servicesError,setServicesError]=useState('');
   const lastKey=useRef('');
   const searchInput=useRef<HTMLInputElement>(null);
   useEffect(()=>{const focusSearch=(event:KeyboardEvent)=>{if(event.key==='/'&&!(event.target instanceof HTMLElement&&event.target.closest('input,textarea,select,[contenteditable="true"]'))){event.preventDefault();searchInput.current?.focus();}};window.addEventListener('keydown',focusSearch);return()=>window.removeEventListener('keydown',focusSearch);},[]);
-  const filtersKey=JSON.stringify([query,serviceID,urgency,cursor]);
+  const filtersKey=JSON.stringify([query,serviceID,urgency,cursor,pageSize]);
   const renderedKey=useRef('');
   const requestedKey=JSON.stringify([filtersKey,refreshCount]);
   useEffect(()=>{if(!busy&&renderedKey.current===requestedKey&&(page||error))journeyContentReady('slo.list',!!error);},[page,busy,error,requestedKey]);
@@ -156,7 +157,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
     lastKey.current=filtersKey;setBusy(true);
     const read=async()=>{
       try {
-        const overview=await sloClient.overview({q:query,service_id:serviceID||undefined,urgency:urgency||undefined,limit:50,cursor:cursor||undefined},abort.signal);
+        const overview=await sloClient.overview({q:query,service_id:serviceID||undefined,urgency:urgency||undefined,limit:pageSize,cursor:cursor||undefined},abort.signal);
         if(!abort.signal.aborted){
           renderedKey.current=requestedKey;
           setPage(overview);setError('');
@@ -211,7 +212,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       </section>;
     })}</div>}
     {page&&!page.items.length&&<div className="slo-empty">{!query&&!serviceID&&!urgency&&matchingCount===0?<><h2>No SLOs yet</h2><p>Create an SLO from an existing SLI to start tracking its target.</p></>:<p>{matchingCount===0?'No SLOs match these filters.':'No SLOs are on this page.'}</p>}</div>}
-    {page&&(hasPrevious||page.next_cursor)&&<nav className="slo-page-controls" aria-label="SLO result pages"><Button variant="outline" disabled={!hasPrevious||busy} onClick={previousPage}>Previous page</Button><Button variant="outline" disabled={!page.next_cursor||busy} onClick={nextPage}>Next page</Button></nav>}
+    {page&&(matchingCount>0||hasPrevious||page.next_cursor)&&<nav className="slo-page-controls" aria-label="SLO result pages"><SelectField id="slo-page-size" label="SLOs per page" value={String(pageSize)} onChange={event=>apply({page_size:event.target.value})} options={[{value:'10',label:'10'},{value:'20',label:'20'}]}/>{(hasPrevious||page.next_cursor)&&<><Button variant="outline" disabled={!hasPrevious||busy} onClick={previousPage}>Previous page</Button><Button variant="outline" disabled={!page.next_cursor||busy} onClick={nextPage}>Next page</Button></>}</nav>}
     {!page&&!error&&<span className="sr-only" role="status">Loading operational SLOs</span>}
   </section>;
 }
@@ -261,7 +262,7 @@ function CurrentStatusCard({value,target,busy,onRefresh}:{value:Pick<Operational
   return <section className="app-rail-card"><header><h2>Status</h2><Button variant="outline" aria-label="Refresh objective status" pending={busy} onClick={refresh}><RefreshIcon/></Button></header><div className="app-rail-card-body"><div className="app-budget-hero" style={{color:`var(--status-${statusFor(current)})`}}>{budgetPercent(p.remaining_fraction)}</div><p className="app-budget-caption">error budget remaining</p><div className="app-budget-meter"><span className="slo-reference-meter"><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${statusFor(current)})`}}/></span></div><dl className="app-status-facts">{[['Attainment',budgetPercent(p.attainment)],['Target',`${shift(target,2)}%`],['Burn 1 h',burnValue(value.burn_1h),value.burn_1h.performance.burn===null?undefined:`${decimal(value.burn_1h.performance.burn)}×`],['Burn 6 h',burnValue(value.burn_6h),value.burn_6h.performance.burn===null?undefined:`${decimal(value.burn_6h.performance.burn)}×`],['Bad events left',p.remaining_budget===null?'—':decimal(p.remaining_budget)],['Exhaustion',shortExhaustion(value.exhaustion)]].map(([label,value,exact])=><div key={label}><dt>{label}</dt><dd title={exact}>{value}</dd></div>)}</dl>{p.provisional&&<p className="app-coverage-note">Observed only · {coveragePercent(q.coverage)} collection coverage</p>}</div></section>;
 }
 
-export function OperationalDetailView({id,definition,locationKey,onLocationChange,refreshVersion=0,onSessionFailure=()=>{}}:{id:string;definition:Slo;locationKey:string;onLocationChange:(path:string)=>void;refreshVersion?:number;onSessionFailure?:()=>void}) {
+export function OperationalDetailView({id,definition,serverClock,locationKey,onLocationChange,refreshVersion=0,onSessionFailure=()=>{}}:{id:string;definition:Slo;serverClock?:ServerClock;locationKey:string;onLocationChange:(path:string)=>void;refreshVersion?:number;onSessionFailure?:()=>void}) {
   const [detailValue,setDetail]=useState<OperationalDetail|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const detail=detailValue?.objective.id===id?detailValue:null;
   const [currentStatusValue,setCurrentStatus]=useState<CurrentStatus|null>(null),[statusBusy,setStatusBusy]=useState(false),[statusError,setStatusError]=useState('');
@@ -307,7 +308,7 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
     const abort=new AbortController(),requestID=++generation.current;setBusy(true);
     setError('');
     const read=async()=>{
-      const serverTime=await sloClient.serverTime(id,abort.signal);
+      const serverTime=await sloClient.serverTime(id,abort.signal,serverClock);
       const cadence=definition.cadence_seconds*1000,rangeMs=(range==='1y'?365:Number.parseInt(range,10))*86_400_000;
       const end=Math.floor(serverTime/cadence)*cadence;
       const start=Math.ceil((end-rangeMs)/cadence)*cadence;
@@ -326,7 +327,7 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
       }
     }).finally(()=>{if(!abort.signal.aborted&&requestID===generation.current)setBusy(false);});
     return()=>abort.abort();
-  },[id,range,burnWindow,refreshVersion,refreshCount]);
+  },[id,range,burnWindow,refreshVersion,refreshCount,serverClock]);
 
   const activeBurnWindow=detail?.burn_series.burn_window_seconds??3600;
   const activeBurnLabel=activeBurnWindow===3600?'1 h':'6 h';
