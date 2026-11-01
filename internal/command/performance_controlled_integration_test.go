@@ -140,6 +140,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("automatic-maintenance-365-days", maintenance, err) {
 		return
 	}
+	stage("independent-accuracy-365-days")
+	accuracy, err := runPerformanceAccuracy(ctx, fleet)
+	if !record("independent-accuracy-365-days", accuracy, err) {
+		return
+	}
 	stage("ready-365-days")
 	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-365-days", time.Now().UTC().Truncate(time.Minute))
 	if !record("ready-365-days", retained, err) {

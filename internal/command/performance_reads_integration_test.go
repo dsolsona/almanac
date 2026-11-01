@@ -89,7 +89,8 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 					checkPerformanceGeneration(*value.Generation) != nil || !value.Generation.EvaluatedThrough.Equal(end) ||
 					value.BurnSeries.BurnWindowSeconds == nil || int(*value.BurnSeries.BurnWindowSeconds) != burnWindow ||
 					len(value.AttainmentSeries.Samples) > 1500 || len(value.BudgetSeries.Samples) > 1500 || len(value.BurnSeries.Samples) > 1500 ||
-					len(value.ComplianceSeries.Days) > days {
+					len(value.AttainmentSeries.Samples) == 0 || len(value.BudgetSeries.Samples) == 0 || len(value.BurnSeries.Samples) == 0 ||
+					len(value.ComplianceSeries.Days) == 0 || len(value.ComplianceSeries.Days) > days {
 					return errors.New("history identity, provenance or point bound mismatch")
 				}
 				return nil
@@ -118,7 +119,7 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 				var page api.SloHistoryValuePage
 				if json.Unmarshal(body, &page) != nil || checkPerformanceGeneration(page.Generation) != nil ||
 					page.Generation.GenerationId.String() != generations[target] || page.Lane != api.SloHistoryValuePageLane("budget") ||
-					page.Offset != 0 || len(page.Samples) != min(100, page.TotalValues) || len(page.Days) != 0 {
+					page.Offset != 0 || page.TotalValues <= 0 || len(page.Samples) != min(100, page.TotalValues) || len(page.Days) != 0 {
 					return errors.New("exact-value page changed the pinned history generation or bounds")
 				}
 				return nil

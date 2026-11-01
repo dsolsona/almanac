@@ -169,7 +169,7 @@ func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) perf
 		}
 	}
 	if _, err := db.Exec(t.Context(), `CREATE TEMP TABLE performance_proofs AS
-SELECT row_number() OVER(ORDER BY sli_id) AS ordinal, proof.* FROM (
+SELECT array_position($1::uuid[],sli_id)::bigint AS ordinal, proof.* FROM (
  SELECT DISTINCT ON (sli_id) sli_id,measurement_revision,agent_id,session_generation,configuration_revision,lease_id
  FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND outcome='observed'
  ORDER BY sli_id,interval_start DESC
@@ -222,20 +222,20 @@ SELECT row_number() OVER(ORDER BY sli_id) AS ordinal, proof.* FROM (
 (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,
  execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
 SELECT point,sli_id,measurement_revision,point+interval '1 minute',
- CASE WHEN ordinal%10=2 AND extract(minute FROM point)=0 THEN 'complete_empty' ELSE 'observed' END,
+ CASE WHEN ordinal%10=2 AND extract(minute FROM point AT TIME ZONE 'UTC')=0 THEN 'complete_empty' ELSE 'observed' END,
  decode(repeat('ab',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),agent_id,
  session_generation,configuration_revision,lease_id,point,point+interval '1 minute'
 FROM performance_proofs CROSS JOIN generate_series($1::timestamptz,$1::timestamptz+interval '59 minutes',interval '1 minute') point
-WHERE NOT (ordinal%10=1 AND extract(minute FROM point)=17)
+WHERE NOT (ordinal%10=1 AND extract(minute FROM point AT TIME ZONE 'UTC')=17)
 ORDER BY sli_id,point ON CONFLICT DO NOTHING`, hour)
 		if err == nil {
 			_, err = tx.Exec(ctx, `INSERT INTO public.almanac_sli_observation_values
 (interval_start,sli_id,measurement_revision,good_count,total_count)
 SELECT c.interval_start,c.sli_id,c.measurement_revision,
- CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start)=0 THEN 0
+ CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=0 THEN 0
       WHEN p.ordinal%10=4 THEN 99999999999999999999999999.999999999998
-      WHEN extract(hour FROM c.interval_start) IN (3,4) THEN 97.125 ELSE 99.999 END,
- CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start)=0 THEN 0
+      WHEN extract(hour FROM c.interval_start AT TIME ZONE 'UTC') IN (3,4) THEN 97.125 ELSE 99.999 END,
+ CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=0 THEN 0
       WHEN p.ordinal%10=4 THEN 99999999999999999999999999.999999999999 ELSE 100.125 END
 FROM public.almanac_sli_coverage c JOIN performance_proofs p USING(sli_id,measurement_revision)
 WHERE c.interval_start >= $1 AND c.interval_start < $1::timestamptz+interval '1 hour' AND c.outcome='observed'
