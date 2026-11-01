@@ -45,6 +45,9 @@ exact derived data and background preparation with measurable acceptance gates.
 The maintainer accepted the design and plan after Crit review on 2026-10-30.
 [F3-T08](tasks/F3-T08.md) is in progress on `perf/f3-t08-retained-series` in
 `.worktrees/backend-performance`, integrated with merged main `6d7403d`.
+The work is published in [draft PR #53](https://github.com/dsolsona/almanac/pull/53).
+The approved server-selected period contract now starts definition, current status
+and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,
 immutable paged lists, selective asset preloads and connected browser measurement.
 The capacity harness now uses isolated normal Compose deployments and private
