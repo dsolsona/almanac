@@ -17,6 +17,7 @@ type Querier interface {
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
 	AdmitSloHistoryJob(ctx context.Context, arg AdmitSloHistoryJobParams) (int64, error)
 	AdvanceRetainedSeriesRepair(ctx context.Context, arg AdvanceRetainedSeriesRepairParams) (int64, error)
+	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	AgentConfigurationRevisionExists(ctx context.Context, arg AgentConfigurationRevisionExistsParams) (bool, error)
 	AgentHasAssignedDatasources(ctx context.Context, agentID pgtype.UUID) (bool, error)
@@ -60,6 +61,11 @@ type Querier interface {
 	DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error)
 	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
 	DeleteExpiredDerivedGenerations(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error)
+	DeleteExpiredRetainedPoints(ctx context.Context, arg DeleteExpiredRetainedPointsParams) (int64, error)
+	DeleteExpiredRetainedSourceHours(ctx context.Context, arg DeleteExpiredRetainedSourceHoursParams) (int64, error)
+	DeleteExpiredRetainedSourceWork(ctx context.Context, arg DeleteExpiredRetainedSourceWorkParams) (int64, error)
+	DeleteExpiredRetainedTileWork(ctx context.Context, arg DeleteExpiredRetainedTileWorkParams) (int64, error)
+	DeleteExpiredRetainedTiles(ctx context.Context, arg DeleteExpiredRetainedTilesParams) (int64, error)
 	DeleteExpiredSliCreateReceipt(ctx context.Context, arg DeleteExpiredSliCreateReceiptParams) error
 	DeleteExpiredSloDisplayBlocks(ctx context.Context, updatedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error
@@ -76,6 +82,10 @@ type Querier interface {
 	// rather than remaining running forever with an unclaimable expired lease.
 	ExhaustExpiredSloHistoryJobs(ctx context.Context, leaseUntil pgtype.Timestamptz) (int64, error)
 	ExhaustRetentionWork(ctx context.Context, nextAttemptAt pgtype.Timestamptz) error
+	// Expired leases are fenced before removing their facts. Retained failure rows
+	// remain inspectable and cannot be manually retried against deleted inputs.
+	ExpireRetentionHistoryJobs(ctx context.Context, arg ExpireRetentionHistoryJobsParams) (int64, error)
+	ExpireRetentionSourceWork(ctx context.Context, arg ExpireRetentionSourceWorkParams) (int64, error)
 	ExtendRetainedSeriesRepair(ctx context.Context, arg ExtendRetainedSeriesRepairParams) error
 	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
@@ -120,6 +130,7 @@ type Querier interface {
 	GetSloOperationalContext(ctx context.Context, arg GetSloOperationalContextParams) (GetSloOperationalContextRow, error)
 	GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (GetSloOverviewSnapshotRow, error)
 	HasAgentOwnershipProof(ctx context.Context, arg HasAgentOwnershipProofParams) (bool, error)
+	HasCalculatedRetentionRows(ctx context.Context, arg HasCalculatedRetentionRowsParams) (bool, error)
 	HasExhaustedDerivedSource(ctx context.Context, arg HasExhaustedDerivedSourceParams) (bool, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
@@ -214,6 +225,8 @@ type Querier interface {
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
 	MaterializeSloOverviewReferences(ctx context.Context, arg MaterializeSloOverviewReferencesParams) (MaterializeSloOverviewReferencesRow, error)
 	OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error)
+	// Preview counts stop at 1001; the report labels these as lower bounds.
+	PreviewCalculatedRetention(ctx context.Context, arg PreviewCalculatedRetentionParams) (PreviewCalculatedRetentionRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishRetainedSloPoint(ctx context.Context, arg PublishRetainedSloPointParams) (int64, error)
@@ -263,6 +276,9 @@ type Querier interface {
 	SetDatasourceEpochConfigurationRevision(ctx context.Context, arg SetDatasourceEpochConfigurationRevisionParams) error
 	SetDatasourceReassignmentUnavailable(ctx context.Context, arg SetDatasourceReassignmentUnavailableParams) (int64, error)
 	SetSloOverviewFingerprint(ctx context.Context, arg SetSloOverviewFingerprintParams) error
+	// A repair cursor's expired prefix can be skipped, but its retained tail stays
+	// admitted. Bumping both fences prevents an old lease from moving it backwards.
+	SkipExpiredRetainedRepairs(ctx context.Context, arg SkipExpiredRetainedRepairsParams) (int64, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateAgentAppliedConfiguration(ctx context.Context, arg UpdateAgentAppliedConfigurationParams) (int64, error)
 	UpdateAgentDesiredConfigurationRevision(ctx context.Context, arg UpdateAgentDesiredConfigurationRevisionParams) (int64, error)

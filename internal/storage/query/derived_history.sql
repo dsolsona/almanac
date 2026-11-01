@@ -82,6 +82,7 @@ UPDATE public.almanac_slo_history_jobs target
 SET state='pending',attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,
     next_attempt_at=$3,manual_retried_at=$3,last_error=NULL
 WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
+  AND target.last_error IS DISTINCT FROM 'retention_expired'
   AND (target.manual_retried_at IS NULL OR target.manual_retried_at<=$3::timestamptz-interval '1 minute')
   AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE state<>'failed')<64
   AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$2 AND state<>'failed')<8;

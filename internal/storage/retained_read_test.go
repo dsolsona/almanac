@@ -120,4 +120,9 @@ func TestRetainedExpiredRegionDoesNotWaitForDeletedTiles(t *testing.T) {
 	if err != nil || len(points) != 1 || points[0].Current.Quality.ExpiredIntervals == 0 {
 		t.Fatalf("exact starting endpoint waited for an expired point: %v", err)
 	}
+	base.RetentionStart = start.Add(30 * time.Second)
+	points, err = reader.points(t.Context(), base, start, start.Add(time.Minute))
+	if err != nil || len(points) != 1 || points[0].Current.Quality.ExpiredIntervals == 0 || points[0].Current.Performance.Good != nil {
+		t.Fatalf("partially expired cadence boundary waited for an unretained endpoint: %v", err)
+	}
 }

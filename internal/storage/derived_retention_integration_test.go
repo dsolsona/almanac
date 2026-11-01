@@ -135,10 +135,41 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 				t.Fatal(err)
 			}
 			input := OperationalDetailInput{Runtime: runtime, Proof: proof, ID: objective.ID, Start: &start, End: &end, At: &end, BurnWindow: 3600, Now: clock}
-			if _, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input); !errors.Is(err, ErrDerivedPending) {
-				t.Fatalf("cold retained read did not queue history: %v", err)
+			var jobsBefore, jobsAfter int
+			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsBefore); err != nil {
+				t.Fatal(err)
 			}
-			if err := runtime.prepareNextHistory(t.Context(), clock); err != nil {
+			if _, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input); !errors.Is(err, ErrDerivedPending) {
+				t.Fatalf("explicit retained bootstrap was not disclosed: %v", err)
+			}
+			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
+				t.Fatalf("navigation admitted graph jobs during retained bootstrap: %d -> %d, %v", jobsBefore, jobsAfter, err)
+			}
+			for attempt := range fixture.days*24 + 2 {
+				worked, err := runtime.repairRetainedSeries(t.Context(), clock)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !worked {
+					break
+				}
+				if attempt == fixture.days*24+1 {
+					t.Fatal("retained repair exceeded the fixture's hourly bound")
+				}
+			}
+			for attempt := range fixture.days*25 + 2 {
+				worked, err := runtime.prepareRetainedTile(t.Context(), clock)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !worked {
+					break
+				}
+				if attempt == fixture.days*25+1 {
+					t.Fatal("retained tile reduction exceeded the fixture's hour/day bound")
+				}
+			}
+			if err := runtime.refreshCurrentProjection(t.Context(), pgID, clock); err != nil {
 				t.Fatal(err)
 			}
 			prepared, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input)
@@ -158,6 +189,9 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 			replayed, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input)
 			if err != nil || !reflect.DeepEqual(replayed, prepared) {
 				t.Fatalf("restart changed ready retained history: %v", err)
+			}
+			if fixture.days == 56 {
+				verifyAuditedRetentionCleanup(t, restarted, f.databaseURL, objective.ID, clock())
 			}
 		})
 	}

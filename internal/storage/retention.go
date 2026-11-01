@@ -26,6 +26,8 @@ type retentionImpact struct {
 	Partitions            []retentionPartition `json:"partitions"`
 	UnsupportedPartitions []string             `json:"unsupported_partitions"`
 	Bytes                 int64                `json:"bytes"`
+	CalculatedRowsAtLeast map[string]int64     `json:"calculated_rows_at_least"`
+	PreviewRowLimit       int                  `json:"preview_row_limit"`
 }
 
 // Preview reads catalog bounds and physical bytes without touching observations.

@@ -197,6 +197,7 @@ SET attempts=0,lease_until=NULL,lease_epoch=d.lease_epoch+1,next_attempt_at=$1::
     manual_retried_at=$1::timestamptz,last_error=NULL
 WHERE d.id=$2 AND d.sli_id=$3 AND d.measurement_revision=$4
   AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$1::timestamptz)
+  AND d.last_error IS DISTINCT FROM 'retention_expired'
   AND (d.manual_retried_at IS NULL OR d.manual_retried_at<=$1::timestamptz-interval '1 minute')
 `
 

@@ -222,20 +222,22 @@ type AlmanacObjectiveCreateReceipt struct {
 }
 
 type AlmanacRetentionWork struct {
-	ID            pgtype.UUID        `json:"id"`
-	ScopeDigest   []byte             `json:"scope_digest"`
-	RangeStart    pgtype.Timestamptz `json:"range_start"`
-	RangeEnd      pgtype.Timestamptz `json:"range_end"`
-	Cutoff        pgtype.Timestamptz `json:"cutoff"`
-	Preview       []byte             `json:"preview"`
-	State         string             `json:"state"`
-	Attempts      int32              `json:"attempts"`
-	LeaseEpoch    int64              `json:"lease_epoch"`
-	LeaseUntil    pgtype.Timestamptz `json:"lease_until"`
-	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	LastError     pgtype.Text        `json:"last_error"`
-	PreviewedAt   pgtype.Timestamptz `json:"previewed_at"`
-	AppliedAt     pgtype.Timestamptz `json:"applied_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	ScopeDigest        []byte             `json:"scope_digest"`
+	RangeStart         pgtype.Timestamptz `json:"range_start"`
+	RangeEnd           pgtype.Timestamptz `json:"range_end"`
+	Cutoff             pgtype.Timestamptz `json:"cutoff"`
+	Preview            []byte             `json:"preview"`
+	State              string             `json:"state"`
+	Attempts           int32              `json:"attempts"`
+	LeaseEpoch         int64              `json:"lease_epoch"`
+	LeaseUntil         pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt      pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError          pgtype.Text        `json:"last_error"`
+	PreviewedAt        pgtype.Timestamptz `json:"previewed_at"`
+	AppliedAt          pgtype.Timestamptz `json:"applied_at"`
+	CanonicalAppliedAt pgtype.Timestamptz `json:"canonical_applied_at"`
+	CleanupCounts      []byte             `json:"cleanup_counts"`
 }
 
 type AlmanacSchemaMigration struct {

@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"errors"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
@@ -19,13 +21,9 @@ var (
 	errRetentionScope   = errors.New("storage: retention preview scope changed")
 )
 
-// Application uses previously committed previews. Discovery continues past known
-// blocked scopes so one active old job cannot prevent previewing other months.
-func (r *Runtime) maintainRetention(ctx context.Context, now time.Time) error {
-	_, err := r.applyRetentionPreview(ctx, now)
-	if err != nil && !errors.Is(err, errRetentionBlocked) {
-		return err
-	}
+// Discovery continues past known blocked scopes so one active old job cannot
+// prevent previewing other months. Applying a plan is a separate transaction.
+func (r *Runtime) discoverRetention(ctx context.Context, now time.Time) error {
 	impact, err := r.previewRetention(ctx, now)
 	if err != nil || len(impact.Partitions) == 0 {
 		return err
@@ -77,6 +75,13 @@ func (r *Runtime) maintainRetention(ctx context.Context, now time.Time) error {
 	for _, part := range impact.Partitions {
 		impact.Bytes += part.Bytes
 	}
+	counts, err := q.PreviewCalculatedRetention(bounded, dbgen.PreviewCalculatedRetentionParams{
+		RangeStart: timestamp(impact.Partitions[0].Start), RangeEnd: timestamp(impact.Partitions[0].End)})
+	if err != nil {
+		return err
+	}
+	impact.PreviewRowLimit = 1000
+	impact.CalculatedRowsAtLeast = map[string]int64{"points": counts.Points, "tiles": counts.Tiles, "tile_work": counts.TileWork, "source_hours": counts.SourceHours}
 	payload, err := json.Marshal(impact)
 	if err != nil {
 		return err
@@ -171,6 +176,25 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 	if _, err := locked.LockRetentionWork(bounded, dbgen.LockRetentionWorkParams{ID: work.ID, LeaseEpoch: work.LeaseEpoch}); err != nil {
 		return true, err
 	}
+	counts := make(map[string]int64)
+	if !work.CanonicalAppliedAt.Valid {
+		counts["expired_history_jobs"], err = locked.ExpireRetentionHistoryJobs(bounded, dbgen.ExpireRetentionHistoryJobsParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Now: timestamp(now)})
+		if err != nil {
+			return true, err
+		}
+		counts["expired_source_work"], err = locked.ExpireRetentionSourceWork(bounded, dbgen.ExpireRetentionSourceWorkParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Cutoff: work.Cutoff, Now: timestamp(now)})
+		if err != nil {
+			return true, err
+		}
+		if counts["expired_history_jobs"]+counts["expired_source_work"] > 0 {
+			if err := retentionProgress(bounded, locked, work, now, counts, false); err != nil {
+				return true, err
+			}
+			return true, tx.Commit(bounded)
+		}
+	} else {
+		return true, finishRetentionCleanup(bounded, tx, locked, work, now)
+	}
 	// Match ingestion's coverage-before-values order. ONLY avoids locking all
 	// child partitions while dependencies and catalog identities are rechecked.
 	if _, err := tx.Exec(bounded, "LOCK TABLE ONLY public.almanac_sli_coverage, ONLY public.almanac_sli_observation_values IN ACCESS EXCLUSIVE MODE"); err != nil {
@@ -214,16 +238,104 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 			return true, err
 		}
 	}
-	completed, err := locked.CompleteRetentionWork(bounded, dbgen.CompleteRetentionWorkParams{ID: work.ID, LeaseEpoch: work.LeaseEpoch, AppliedAt: timestamp(now)})
-	if err != nil || completed != 1 {
-		if err == nil {
-			err = errRetentionScope
-		}
-		return true, err
-	}
-	if err := locked.InsertAgentAudit(bounded, dbgen.InsertAgentAuditParams{Actor: "system:retention", SubjectID: work.ID,
-		Action: "retention.apply", OccurredAt: timestamp(now), RequestID: "retention-apply:" + work.ID.String()}); err != nil {
+	if err := retentionProgress(bounded, locked, work, now, counts, true); err != nil {
 		return true, err
 	}
 	return true, tx.Commit(bounded)
+}
+
+func retentionProgress(ctx context.Context, q *dbgen.Queries, work dbgen.AlmanacRetentionWork, now time.Time, added map[string]int64, canonicalApplied bool) error {
+	var counts map[string]int64
+	if err := json.Unmarshal(work.CleanupCounts, &counts); err != nil || counts == nil {
+		return errRetentionScope
+	}
+	for key, count := range added {
+		if count < 0 || counts[key] < 0 || counts[key] > math.MaxInt64-count {
+			return ErrOperationalResource
+		}
+		counts[key] += count
+	}
+	payload, err := json.Marshal(counts)
+	if err != nil {
+		return err
+	}
+	changed, err := q.AdvanceRetentionCleanup(ctx, dbgen.AdvanceRetentionCleanupParams{ID: work.ID, LeaseEpoch: work.LeaseEpoch,
+		CanonicalApplied: canonicalApplied, Now: timestamp(now), CleanupCounts: payload})
+	if err != nil {
+		return err
+	}
+	if changed != 1 {
+		return errRetentionScope
+	}
+	return q.InsertAgentAudit(ctx, dbgen.InsertAgentAuditParams{Actor: "system:retention", SubjectID: work.ID,
+		Action: "retention.progress", OccurredAt: timestamp(now), RequestID: "retention-progress:" + work.ID.String() + ":" + strconv.FormatInt(work.LeaseEpoch, 10)})
+}
+
+func finishRetentionCleanup(ctx context.Context, tx pgx.Tx, q *dbgen.Queries, work dbgen.AlmanacRetentionWork, now time.Time) error {
+	counts := make(map[string]int64)
+	blocked, err := q.RetentionHasDependencies(ctx, dbgen.RetentionHasDependenciesParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Now: timestamp(now)})
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return errRetentionBlocked
+	}
+	counts["skipped_repair_prefixes"], err = q.SkipExpiredRetainedRepairs(ctx, dbgen.SkipExpiredRetainedRepairsParams{RangeEnd: work.RangeEnd, Cutoff: work.RangeEnd, Now: timestamp(now)})
+	if err != nil {
+		return err
+	}
+	counts["tile_work"], err = q.DeleteExpiredRetainedTileWork(ctx, dbgen.DeleteExpiredRetainedTileWorkParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Now: timestamp(now)})
+	if err != nil {
+		return err
+	}
+	if counts["skipped_repair_prefixes"] == 1000 || counts["tile_work"] == 1000 {
+		if err := retentionProgress(ctx, q, work, now, counts, true); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+	counts["points"], err = q.DeleteExpiredRetainedPoints(ctx, dbgen.DeleteExpiredRetainedPointsParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
+	if err != nil {
+		return err
+	}
+	counts["tiles"], err = q.DeleteExpiredRetainedTiles(ctx, dbgen.DeleteExpiredRetainedTilesParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
+	if err != nil {
+		return err
+	}
+	counts["source_hours"], err = q.DeleteExpiredRetainedSourceHours(ctx, dbgen.DeleteExpiredRetainedSourceHoursParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
+	if err != nil {
+		return err
+	}
+	counts["source_work"], err = q.DeleteExpiredRetainedSourceWork(ctx, dbgen.DeleteExpiredRetainedSourceWorkParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Now: timestamp(now)})
+	if err != nil {
+		return err
+	}
+	progress := int64(0)
+	for _, count := range counts {
+		progress += count
+	}
+	remaining, err := q.HasCalculatedRetentionRows(ctx, dbgen.HasCalculatedRetentionRowsParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
+	if err != nil {
+		return err
+	}
+	if remaining && progress == 0 {
+		return errRetentionBlocked
+	}
+	if err := retentionProgress(ctx, q, work, now, counts, true); err != nil {
+		return err
+	}
+	if !remaining {
+		changed, err := q.CompleteRetentionWork(ctx, dbgen.CompleteRetentionWorkParams{ID: work.ID, LeaseEpoch: work.LeaseEpoch, AppliedAt: timestamp(now)})
+		if err != nil {
+			return err
+		}
+		if changed != 1 {
+			return errRetentionScope
+		}
+		if err := q.InsertAgentAudit(ctx, dbgen.InsertAgentAuditParams{Actor: "system:retention", SubjectID: work.ID,
+			Action: "retention.apply", OccurredAt: timestamp(now), RequestID: "retention-apply:" + work.ID.String()}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

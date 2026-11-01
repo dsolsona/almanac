@@ -27,7 +27,7 @@ WHERE id=$1 AND lease_epoch=$2 AND state IN ('previewed','blocked') FOR UPDATE;
 -- name: RetentionHasDependencies :one
 SELECT coalesce(EXISTS (
     SELECT 1 FROM public.almanac_derived_dirty_ranges d WHERE d.range_start<sqlc.arg(range_end)::timestamptz
-      AND d.range_end>sqlc.arg(range_start)::timestamptz
+      AND d.range_end>sqlc.arg(range_start)::timestamptz AND d.last_error IS DISTINCT FROM 'retention_expired'
 ) OR EXISTS (
     SELECT 1 FROM public.almanac_slo_history_jobs j WHERE j.state<>'failed'
       AND j.retention_start<sqlc.arg(range_end)::timestamptz
@@ -36,6 +36,10 @@ SELECT coalesce(EXISTS (
     SELECT 1 FROM public.almanac_slo_series_repair r
     WHERE r.cursor_at<sqlc.arg(range_end)::timestamptz AND r.end_at>sqlc.arg(range_start)::timestamptz
       AND r.lease_until>sqlc.arg(now)::timestamptz
+ ) OR EXISTS (
+    SELECT 1 FROM public.almanac_slo_series_tile_work w
+    WHERE w.range_end>sqlc.arg(range_start)::timestamptz AND w.range_start<sqlc.arg(range_end)::timestamptz
+      AND w.lease_until>sqlc.arg(now)::timestamptz
 ),false)::boolean AS blocked;
 
 -- name: ListRetentionScopes :many

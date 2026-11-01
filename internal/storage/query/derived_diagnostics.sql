@@ -48,6 +48,7 @@ SET attempts=0,lease_until=NULL,lease_epoch=d.lease_epoch+1,next_attempt_at=sqlc
     manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL
 WHERE d.id=sqlc.arg(job_id) AND d.sli_id=sqlc.arg(sli_id) AND d.measurement_revision=sqlc.arg(measurement_revision)
   AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=sqlc.arg(now)::timestamptz)
+  AND d.last_error IS DISTINCT FROM 'retention_expired'
   AND (d.manual_retried_at IS NULL OR d.manual_retried_at<=sqlc.arg(now)::timestamptz-interval '1 minute');
 
 -- name: RetryRetainedTile :execrows

@@ -131,7 +131,7 @@ func (c *retainedSeriesReader) edge(ctx context.Context, base slo.WindowInput, p
 // them from today's raw retention boundary would change previously known totals.
 func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput, start, end time.Time) ([]retainedSloPoint, error) {
 	first := start.Add(base.Cadence)
-	eligible := maxTime(base.ValidFrom, base.SliValidFrom, base.RetentionStart)
+	eligible := maxTime(base.ValidFrom, base.SliValidFrom, ceilSliBoundary(base.RetentionStart, base.Cadence))
 	var prefix []retainedSloPoint
 	for !first.After(end) && !first.After(eligible) {
 		point, err := c.unobservedPoint(ctx, base, first)
@@ -262,7 +262,7 @@ func (c *retainedSeriesReader) loadPart(ctx context.Context, base slo.WindowInpu
 	switch {
 	case !floorSliBoundary(part.end, base.Cadence).After(floorSliBoundary(part.start, base.Cadence)):
 		return retainedSloTile{}, nil
-	case !part.end.After(maxTime(base.ValidFrom, base.SliValidFrom, base.RetentionStart)):
+	case !part.end.After(maxTime(base.ValidFrom, base.SliValidFrom, ceilSliBoundary(base.RetentionStart, base.Cadence))):
 		return c.beforeValidity(ctx, base, part)
 	case stored.Exhausted:
 		return retainedSloTile{}, ErrDerivedFailed

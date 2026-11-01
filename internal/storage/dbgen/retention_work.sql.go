@@ -20,7 +20,7 @@ WITH candidate AS (
 )
 UPDATE public.almanac_retention_work w
 SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
-FROM candidate c WHERE w.id=c.id RETURNING w.id, w.scope_digest, w.range_start, w.range_end, w.cutoff, w.preview, w.state, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.previewed_at, w.applied_at
+FROM candidate c WHERE w.id=c.id RETURNING w.id, w.scope_digest, w.range_start, w.range_end, w.cutoff, w.preview, w.state, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.previewed_at, w.applied_at, w.canonical_applied_at, w.cleanup_counts
 `
 
 type ClaimRetentionWorkParams struct {
@@ -46,6 +46,8 @@ func (q *Queries) ClaimRetentionWork(ctx context.Context, arg ClaimRetentionWork
 		&i.LastError,
 		&i.PreviewedAt,
 		&i.AppliedAt,
+		&i.CanonicalAppliedAt,
+		&i.CleanupCounts,
 	)
 	return i, err
 }
@@ -199,7 +201,7 @@ func (q *Queries) LockRetentionWork(ctx context.Context, arg LockRetentionWorkPa
 const retentionHasDependencies = `-- name: RetentionHasDependencies :one
 SELECT coalesce(EXISTS (
     SELECT 1 FROM public.almanac_derived_dirty_ranges d WHERE d.range_start<$1::timestamptz
-      AND d.range_end>$2::timestamptz
+      AND d.range_end>$2::timestamptz AND d.last_error IS DISTINCT FROM 'retention_expired'
 ) OR EXISTS (
     SELECT 1 FROM public.almanac_slo_history_jobs j WHERE j.state<>'failed'
       AND j.retention_start<$1::timestamptz
@@ -208,6 +210,10 @@ SELECT coalesce(EXISTS (
     SELECT 1 FROM public.almanac_slo_series_repair r
     WHERE r.cursor_at<$1::timestamptz AND r.end_at>$2::timestamptz
       AND r.lease_until>$3::timestamptz
+ ) OR EXISTS (
+    SELECT 1 FROM public.almanac_slo_series_tile_work w
+    WHERE w.range_end>$2::timestamptz AND w.range_start<$1::timestamptz
+      AND w.lease_until>$3::timestamptz
 ),false)::boolean AS blocked
 `
 
