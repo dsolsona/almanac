@@ -78,10 +78,10 @@ func verifyDerivedRetainedHistoryRegression(t *testing.T) {
 			if err := tx.Commit(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			// Keep real canonical triggers enabled. Hour-sized transactions avoid
-			// an 80,640-update chain on one source-generation row during setup.
-			for chunkStart := start; chunkStart.Before(end); chunkStart = chunkStart.Add(time.Hour) {
-				chunkEnd := chunkStart.Add(time.Hour)
+			// Keep real triggers and every interval; report setup separately.
+			const seedBatch = time.Hour
+			for chunkStart := start; chunkStart.Before(end); chunkStart = chunkStart.Add(seedBatch) {
+				chunkEnd := chunkStart.Add(seedBatch)
 				if chunkEnd.After(end) {
 					chunkEnd = end
 				}
@@ -145,6 +145,8 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
 				t.Fatalf("navigation admitted graph jobs during retained bootstrap: %d -> %d, %v", jobsBefore, jobsAfter, err)
 			}
+			logRetainedRepairPlan(t, conn, objective.ID, end.Add(-time.Hour), end, clock())
+			repairStarted := time.Now()
 			for attempt := range fixture.days*24 + 2 {
 				worked, err := runtime.repairRetainedSeries(t.Context(), clock)
 				if err != nil {
@@ -153,10 +155,14 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 				if !worked {
 					break
 				}
+				if attempt%24 == 0 {
+					t.Logf("retained repair cadence=%ds chunks=%d elapsed=%s", fixture.cadence, attempt+1, time.Since(repairStarted))
+				}
 				if attempt == fixture.days*24+1 {
 					t.Fatal("retained repair exceeded the fixture's hourly bound")
 				}
 			}
+			tileStarted := time.Now()
 			for attempt := range fixture.days*25 + 2 {
 				worked, err := runtime.prepareRetainedTile(t.Context(), clock)
 				if err != nil {
@@ -164,6 +170,9 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 				}
 				if !worked {
 					break
+				}
+				if attempt%24 == 0 {
+					t.Logf("retained tiles cadence=%ds chunks=%d elapsed=%s", fixture.cadence, attempt+1, time.Since(tileStarted))
 				}
 				if attempt == fixture.days*25+1 {
 					t.Fatal("retained tile reduction exceeded the fixture's hour/day bound")

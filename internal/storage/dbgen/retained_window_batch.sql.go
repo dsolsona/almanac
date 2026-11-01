@@ -13,23 +13,23 @@ import (
 
 const readRetainedWindowBatch = `-- name: ReadRetainedWindowBatch :many
 WITH requested AS MATERIALIZED (
-    SELECT generate_series(1,cardinality($3::timestamptz[]))::integer AS ordinal,
-           unnest($3::timestamptz[]) AS window_end,
-           unnest($4::timestamptz[]) AS full_start,
-           unnest($5::timestamptz[]) AS full_end,
-           unnest($6::timestamptz[]) AS edge_a_start,
-           unnest($7::timestamptz[]) AS edge_a_end,
-           unnest($8::timestamptz[]) AS edge_b_start,
-           unnest($9::timestamptz[]) AS edge_b_end
+    SELECT generate_series(1,cardinality($1::timestamptz[]))::integer AS ordinal,
+           unnest($1::timestamptz[]) AS window_end,
+           unnest($2::timestamptz[]) AS full_start,
+           unnest($3::timestamptz[]) AS full_end,
+           unnest($4::timestamptz[]) AS edge_a_start,
+           unnest($5::timestamptz[]) AS edge_a_end,
+           unnest($6::timestamptz[]) AS edge_b_start,
+           unnest($7::timestamptz[]) AS edge_b_end
 ), interiors AS MATERIALIZED (
     SELECT DISTINCT full_start,full_end FROM requested
 ), totals AS MATERIALIZED (
     SELECT i.full_start,i.full_end,a.good, a.total, a.observed, a.known_empty, a.zero_traffic, a.first_observation, a.last_observation, a.latest_receipt,
            NOT EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges d
-               WHERE d.sli_id=$1 AND d.measurement_revision=$2
+               WHERE d.sli_id=$8 AND d.measurement_revision=$9
                  AND i.full_start<i.full_end AND d.range_start<i.full_end AND d.range_end>i.full_start) AS prepared,
            EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges d
-               WHERE d.sli_id=$1 AND d.measurement_revision=$2
+               WHERE d.sli_id=$8 AND d.measurement_revision=$9
                  AND i.full_start<i.full_end AND d.range_start<i.full_end AND d.range_end>i.full_start
                  AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$10::timestamptz)) AS exhausted
     FROM interiors i CROSS JOIN LATERAL (
@@ -41,42 +41,72 @@ WITH requested AS MATERIALIZED (
                max(h.last_observation_at)::timestamptz AS last_observation,
                max(h.latest_receipt_at)::timestamptz AS latest_receipt
         FROM public.almanac_sli_hourly_aggregates h
-        WHERE h.sli_id=$1 AND h.measurement_revision=$2
+        WHERE h.sli_id=$8 AND h.measurement_revision=$9
           AND h.hour_start>=i.full_start AND h.hour_start<i.full_end
     ) a
+), edges AS MATERIALIZED (
+    SELECT DISTINCT 'a'::text AS lane,edge_a_start AS start_at,edge_a_end AS end_at FROM requested WHERE edge_a_start<edge_a_end
+    UNION
+    SELECT DISTINCT 'b'::text,edge_b_start,edge_b_end FROM requested WHERE edge_b_start<edge_b_end
+), anchors AS MATERIALIZED (
+    SELECT lane,min(start_at)::timestamptz AS start_at,end_at FROM edges WHERE lane='a' GROUP BY lane,end_at
+    UNION ALL
+    SELECT lane,start_at,max(end_at)::timestamptz FROM edges WHERE lane='b' GROUP BY lane,start_at
+), edge_input AS (
+    SELECT a.lane,a.start_at AS anchor_start,a.end_at AS anchor_end,
+           CASE WHEN a.lane='a' THEN -extract(epoch FROM c.interval_start) ELSE extract(epoch FROM c.interval_end) END AS sort_at,
+           0 AS kind,NULL::timestamptz AS start_at,NULL::timestamptz AS end_at,
+           coalesce(c.good_count,0)::numeric AS good,coalesce(c.total_count,0)::numeric AS total,
+           CASE WHEN c.outcome='observed' THEN 1 ELSE 0 END::bigint AS observed,
+           CASE WHEN c.outcome='complete_empty' THEN 1 ELSE 0 END::bigint AS known_empty,
+           CASE WHEN c.outcome='observed' AND c.total_count=0 THEN 1 ELSE 0 END::bigint AS zero_traffic,
+           CASE WHEN c.outcome='observed' THEN c.interval_start END AS first_observation,
+           CASE WHEN c.outcome='observed' THEN c.interval_end END AS last_observation,c.recorded_at AS latest_receipt
+    FROM anchors a
+    -- Preserve a parameterized range scan for each anchor, not a year-wide join.
+    CROSS JOIN LATERAL (
+        SELECT c.interval_start,c.interval_end,c.outcome,c.recorded_at,v.good_count,v.total_count
+        FROM public.almanac_sli_coverage c
+        LEFT JOIN LATERAL (
+            SELECT v.good_count,v.total_count FROM public.almanac_sli_observation_values v
+            WHERE v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision AND v.interval_start=c.interval_start
+              AND v.interval_start>=a.start_at AND v.interval_start<a.end_at LIMIT 1
+        ) v ON true
+        WHERE c.sli_id=$8 AND c.measurement_revision=$9
+          AND c.interval_start>=a.start_at AND c.interval_start<a.end_at AND c.interval_end<=a.end_at
+        OFFSET 0
+    ) c
+    UNION ALL
+    SELECT a.lane,a.start_at,a.end_at,
+           CASE WHEN a.lane='a' THEN -extract(epoch FROM e.start_at) ELSE extract(epoch FROM e.end_at) END,
+           1,e.start_at,e.end_at,0::numeric,0::numeric,0::bigint,0::bigint,0::bigint,NULL::timestamptz,NULL::timestamptz,NULL::timestamptz
+    FROM anchors a JOIN edges e ON e.lane=a.lane
+      AND ((a.lane='a' AND e.end_at=a.end_at) OR (a.lane='b' AND e.start_at=a.start_at))
+), edge_prefix AS MATERIALIZED (
+    SELECT lane,start_at,end_at,kind,
+           sum(good) OVER w AS good,sum(total) OVER w AS total,
+           sum(observed) OVER w AS observed,sum(known_empty) OVER w AS known_empty,sum(zero_traffic) OVER w AS zero_traffic,
+           min(first_observation) OVER w AS first_observation,max(last_observation) OVER w AS last_observation,max(latest_receipt) OVER w AS latest_receipt
+    FROM edge_input
+    WINDOW w AS (PARTITION BY lane,anchor_start,anchor_end ORDER BY sort_at,kind ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+), edge_totals AS (
+    SELECT lane, start_at, end_at, kind, good, total, observed, known_empty, zero_traffic, first_observation, last_observation, latest_receipt FROM edge_prefix WHERE kind=1
 )
-SELECT r.ordinal,(t.good+e.good)::numeric::text AS good,(t.total+e.total)::numeric::text AS total,
-       (t.observed+e.observed)::bigint AS observed,(t.known_empty+e.known_empty)::bigint AS known_empty,
-       (t.zero_traffic+e.zero_traffic)::bigint AS zero_traffic,
-       LEAST(t.first_observation,e.first_observation)::timestamptz AS first_observation,
-       GREATEST(t.last_observation,e.last_observation)::timestamptz AS last_observation,
-       GREATEST(t.latest_receipt,e.latest_receipt)::timestamptz AS latest_receipt,t.prepared,t.exhausted
+SELECT r.ordinal,(t.good+coalesce(a.good,0)+coalesce(b.good,0))::numeric::text AS good,
+       (t.total+coalesce(a.total,0)+coalesce(b.total,0))::numeric::text AS total,
+       (t.observed+coalesce(a.observed,0)+coalesce(b.observed,0))::bigint AS observed,
+       (t.known_empty+coalesce(a.known_empty,0)+coalesce(b.known_empty,0))::bigint AS known_empty,
+       (t.zero_traffic+coalesce(a.zero_traffic,0)+coalesce(b.zero_traffic,0))::bigint AS zero_traffic,
+       LEAST(t.first_observation,a.first_observation,b.first_observation)::timestamptz AS first_observation,
+       GREATEST(t.last_observation,a.last_observation,b.last_observation)::timestamptz AS last_observation,
+       GREATEST(t.latest_receipt,a.latest_receipt,b.latest_receipt)::timestamptz AS latest_receipt,t.prepared,t.exhausted
 FROM requested r JOIN totals t ON t.full_start=r.full_start AND t.full_end=r.full_end
-CROSS JOIN LATERAL (
-    SELECT coalesce(sum(v.good_count),0)::numeric AS good,coalesce(sum(v.total_count),0)::numeric AS total,
-           count(*) FILTER (WHERE c.outcome='observed') AS observed,
-           count(*) FILTER (WHERE c.outcome='complete_empty') AS known_empty,
-           count(*) FILTER (WHERE c.outcome='observed' AND v.total_count=0) AS zero_traffic,
-           min(c.interval_start) FILTER (WHERE c.outcome='observed') AS first_observation,
-           max(c.interval_end) FILTER (WHERE c.outcome='observed') AS last_observation,max(c.recorded_at) AS latest_receipt
-    FROM public.almanac_sli_coverage c
-    LEFT JOIN LATERAL (
-        SELECT value.good_count,value.total_count FROM public.almanac_sli_observation_values value
-        WHERE value.interval_start=c.interval_start AND value.sli_id=$1
-          AND value.measurement_revision=$2
-          AND value.interval_start>=LEAST(r.edge_a_start,r.edge_b_start) AND value.interval_start<r.window_end
-        LIMIT 1
-    ) v ON true
-    WHERE c.sli_id=$1 AND c.measurement_revision=$2
-      AND ((c.interval_start>=r.edge_a_start AND c.interval_start<r.edge_a_end)
-        OR (c.interval_start>=r.edge_b_start AND c.interval_start<r.edge_b_end))
-      AND c.interval_end<=r.window_end
-) e ORDER BY r.ordinal
+LEFT JOIN edge_totals a ON a.lane='a' AND a.start_at=r.edge_a_start AND a.end_at=r.edge_a_end
+LEFT JOIN edge_totals b ON b.lane='b' AND b.start_at=r.edge_b_start AND b.end_at=r.edge_b_end
+ORDER BY r.ordinal
 `
 
 type ReadRetainedWindowBatchParams struct {
-	SliID               pgtype.UUID          `json:"sli_id"`
-	MeasurementRevision int64                `json:"measurement_revision"`
 	WindowEnds          []pgtype.Timestamptz `json:"window_ends"`
 	FullStarts          []pgtype.Timestamptz `json:"full_starts"`
 	FullEnds            []pgtype.Timestamptz `json:"full_ends"`
@@ -84,6 +114,8 @@ type ReadRetainedWindowBatchParams struct {
 	EdgeAEnds           []pgtype.Timestamptz `json:"edge_a_ends"`
 	EdgeBStarts         []pgtype.Timestamptz `json:"edge_b_starts"`
 	EdgeBEnds           []pgtype.Timestamptz `json:"edge_b_ends"`
+	SliID               pgtype.UUID          `json:"sli_id"`
+	MeasurementRevision int64                `json:"measurement_revision"`
 	Now                 pgtype.Timestamptz   `json:"now"`
 }
 
@@ -105,8 +137,6 @@ type ReadRetainedWindowBatchRow struct {
 // interior once; only cadence-aligned boundary fragments use canonical rows.
 func (q *Queries) ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedWindowBatchParams) ([]ReadRetainedWindowBatchRow, error) {
 	rows, err := q.db.Query(ctx, readRetainedWindowBatch,
-		arg.SliID,
-		arg.MeasurementRevision,
 		arg.WindowEnds,
 		arg.FullStarts,
 		arg.FullEnds,
@@ -114,6 +144,8 @@ func (q *Queries) ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedW
 		arg.EdgeAEnds,
 		arg.EdgeBStarts,
 		arg.EdgeBEnds,
+		arg.SliID,
+		arg.MeasurementRevision,
 		arg.Now,
 	)
 	if err != nil {

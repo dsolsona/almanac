@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +25,82 @@ type factsQueryCapture struct {
 	dbgen.DBTX
 	statement string
 	arguments []any
+}
+
+func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, now time.Time) {
+	t.Helper()
+	q := dbgen.New(conn)
+	row, err := q.GetSlo(t.Context(), mustPGUUID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture := &factsQueryCapture{}
+	_, err = buildRetainedRepairPoints(t.Context(), dbgen.New(capture), row, source, start, end, now)
+	if !errors.Is(err, errFactsQueryCaptured) || capture.statement == "" {
+		t.Fatal("capture retained repair query failed", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off`); err != nil {
+		t.Fatal(err)
+	}
+	var plan []byte
+	if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) "+capture.statement, capture.arguments...).Scan(&plan); err != nil {
+		t.Fatal("retained repair plan failed", err)
+	}
+	path := filepath.Join("..", "..", ".local", "retained-repair-plan-"+id+".json")
+	if err := os.WriteFile(path, plan, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var decoded []struct {
+		Plan      map[string]any `json:"Plan"`
+		Planning  float64        `json:"Planning Time"`
+		Execution float64        `json:"Execution Time"`
+	}
+	if err := json.Unmarshal(plan, &decoded); err != nil || len(decoded) != 1 {
+		t.Fatal("invalid retained repair plan", err)
+	}
+	type work struct {
+		Node, Relation               string
+		Rows, Loops, Removed, Visits float64
+	}
+	var expensive []work
+	var inspect func(map[string]any)
+	inspect = func(node map[string]any) {
+		name, _ := node["Node Type"].(string)
+		relation, _ := node["Relation Name"].(string)
+		rows, _ := node["Actual Rows"].(float64)
+		loops, _ := node["Actual Loops"].(float64)
+		removed, _ := node["Rows Removed by Join Filter"].(float64)
+		expensive = append(expensive, work{name, relation, rows, loops, removed, (rows + removed) * loops})
+		if children, ok := node["Plans"].([]any); ok {
+			for _, child := range children {
+				if next, ok := child.(map[string]any); ok {
+					inspect(next)
+				}
+			}
+		}
+	}
+	inspect(decoded[0].Plan)
+	slices.SortFunc(expensive, func(a, b work) int {
+		if a.Visits > b.Visits {
+			return -1
+		}
+		if a.Visits < b.Visits {
+			return 1
+		}
+		return 0
+	})
+	t.Logf("retained repair plan planning=%.3fms execution=%.3fms expensive=%+v artifact=%s", decoded[0].Planning, decoded[0].Execution, expensive[:min(8, len(expensive))], path)
 }
 
 func (c *factsQueryCapture) Query(_ context.Context, statement string, arguments ...any) (pgx.Rows, error) {

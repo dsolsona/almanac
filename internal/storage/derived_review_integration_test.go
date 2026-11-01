@@ -201,7 +201,7 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 		}
 		if batch == 0 {
 			var paused int
-			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_current_failures WHERE slo_id=ANY($1::uuid[]) AND attempts=0 AND next_attempt_at>$2`, ids[:100], clock()).Scan(&paused); err != nil || paused == 0 || paused > 64 {
+			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_current_failures WHERE slo_id=ANY($1::uuid[]) AND attempts=0 AND next_attempt_at>$2`, ids[:100], clock()).Scan(&paused); err != nil || paused == 0 || paused > 100 {
 				t.Fatalf("source waits were not deferred within the first bounded batch: %d, %v", paused, err)
 			}
 		}

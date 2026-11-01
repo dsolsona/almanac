@@ -240,7 +240,7 @@ func operationalComplianceDay(result slo.WindowResult, end, validFrom time.Time,
 	}
 	return api.SloDailyComplianceDay{UtcDate: openapi_types.Date{Time: end.Add(-24 * time.Hour)},
 		DayStart: end.Add(-24 * time.Hour), DayEnd: end, RequestedAt: end, EffectiveAt: result.End, SloId: sloID,
-		DefinitionRevision: revision, Target: target, Quality: quality, Performance: performance,
+		DefinitionRevision: revision, Target: sli.NormalizeDecimal(target), Quality: quality, Performance: performance,
 		Status: status, Explanation: explanation}
 }
 

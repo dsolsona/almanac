@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"reflect"
 	"strconv"
@@ -96,6 +97,14 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	}
 	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)
 	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
+		for index := range min(len(prepared.ComplianceSeries.Days), len(oracle.ComplianceSeries.Days)) {
+			if !reflect.DeepEqual(prepared.ComplianceSeries.Days[index], oracle.ComplianceSeries.Days[index]) {
+				actual, _ := json.Marshal(prepared.ComplianceSeries.Days[index])
+				want, _ := json.Marshal(oracle.ComplianceSeries.Days[index])
+				t.Logf("first differing retained/canonical compliance day: %s / %s", actual, want)
+				break
+			}
+		}
 		t.Fatal("retained completed-day compliance differs from canonical evaluation")
 	}
 	valuesInput := SloHistoryValuesInput{Runtime: runtime, Proof: proof, ID: id,
