@@ -19,27 +19,33 @@ type performanceClockWindow struct {
 	Class      int
 	Start, End time.Time
 	Corrected  bool
+	Source     int64
 }
 
 // Read only the short live tail. The much larger imported historical prefix is
 // independently counted analytically, without using application derived tables.
-func performanceClockCounts(ctx context.Context, db *pgx.Conn, windows []performanceClockWindow, historyEnd, late time.Time) ([]performanceOracleWindowView, error) {
+func performanceClockCounts(ctx context.Context, db *pgx.Conn, windows []performanceClockWindow, analyticalEnd, late time.Time) ([]performanceOracleWindowView, error) {
 	slis := make([]string, len(windows))
 	starts := make([]time.Time, len(windows))
 	ends := make([]time.Time, len(windows))
+	generations := make([]int64, len(windows))
 	views := make([]performanceOracleWindowView, len(windows))
 	for index, window := range windows {
+		if window.Source <= 0 {
+			return nil, errors.New("independent current oracle requires a committed source watermark")
+		}
+		generations[index] = window.Source
 		slis[index], starts[index], ends[index] = window.SliID, window.Start, window.End
-		if starts[index].Before(historyEnd) {
-			starts[index] = historyEnd
+		if starts[index].Before(analyticalEnd) {
+			starts[index] = analyticalEnd
 		}
 		if starts[index].After(window.End) {
 			starts[index] = window.End
 		}
 		counts := performanceOracleCounts{Good: new(big.Rat), Total: new(big.Rat)}
 		boundary := window.End
-		if historyEnd.Before(boundary) {
-			boundary = historyEnd
+		if analyticalEnd.Before(boundary) {
+			boundary = analyticalEnd
 		}
 		if window.Start.Before(boundary) {
 			var err error
@@ -75,7 +81,7 @@ func performanceClockCounts(ctx context.Context, db *pgx.Conn, windows []perform
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	rows, err := db.Query(bounded, `WITH requested AS (
- SELECT * FROM unnest($1::uuid[],$2::timestamptz[],$3::timestamptz[]) WITH ORDINALITY AS w(sli_id,start_at,end_at,ordinal)
+ SELECT * FROM unnest($1::uuid[],$2::timestamptz[],$3::timestamptz[],$4::bigint[]) WITH ORDINALITY AS w(sli_id,start_at,end_at,source_generation,ordinal)
 )
 SELECT r.ordinal,
  coalesce(sum(v.good_count) FILTER(WHERE c.outcome='observed'),0)::text,
@@ -83,11 +89,14 @@ SELECT r.ordinal,
  count(*) FILTER(WHERE c.outcome='observed'),count(*) FILTER(WHERE c.outcome='complete_empty'),
  count(*) FILTER(WHERE c.outcome='observed' AND v.total_count=0),
  max(c.interval_end) FILTER(WHERE c.outcome='observed'),
- count(*) FILTER(WHERE c.outcome='observed' AND (v.good_count IS NULL OR v.total_count IS NULL))
-FROM requested r LEFT JOIN public.almanac_sli_coverage c ON c.sli_id=r.sli_id AND c.measurement_revision=1
+ count(*) FILTER(WHERE c.outcome='observed' AND (v.good_count IS NULL OR v.total_count IS NULL)),
+ coalesce(max(source.generation)>=min(r.source_generation),false)
+FROM requested r LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=r.sli_id AND source.measurement_revision=1
+LEFT JOIN public.almanac_sli_coverage c ON c.sli_id=r.sli_id AND c.measurement_revision=1
  AND c.interval_start>=r.start_at AND c.interval_start<r.end_at AND c.interval_end<=r.end_at
+ AND c.ingestion_generation<=r.source_generation
 LEFT JOIN public.almanac_sli_observation_values v ON v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision AND v.interval_start=c.interval_start
-GROUP BY r.ordinal ORDER BY r.ordinal`, slis, starts, ends)
+GROUP BY r.ordinal ORDER BY r.ordinal`, slis, starts, ends, generations)
 	if err != nil {
 		return nil, errors.New("read independent live-tail counts failed")
 	}
@@ -97,7 +106,8 @@ GROUP BY r.ordinal ORDER BY r.ordinal`, slis, starts, ends)
 		var ordinal, observed, empty, zero, invalid int64
 		var good, total string
 		var last pgtype.Timestamptz
-		if err := rows.Scan(&ordinal, &good, &total, &observed, &empty, &zero, &last, &invalid); err != nil || ordinal != int64(seen+1) || seen >= len(windows) || invalid != 0 {
+		var committed bool
+		if err := rows.Scan(&ordinal, &good, &total, &observed, &empty, &zero, &last, &invalid, &committed); err != nil || ordinal != int64(seen+1) || seen >= len(windows) || invalid != 0 || !committed {
 			return nil, errors.New("independent live-tail counts incomplete or invalid")
 		}
 		g, gok := new(big.Rat).SetString(good)

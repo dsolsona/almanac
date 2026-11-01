@@ -33,6 +33,7 @@ type performanceClockPhase struct {
 	API               []performancePreparationSample `json:"list_reads"`
 	Oracle            time.Duration                  `json:"independent_oracle_ns"`
 	GenerationsStable bool                           `json:"canonical_generations_unchanged"`
+	ActiveCollectors  int                            `json:"active_collectors,omitempty"`
 	Cases             []performanceClockCase         `json:"representative_exact_cases"`
 }
 
@@ -48,6 +49,67 @@ type performanceClockObjective struct {
 	sli, target string
 	class       int
 	window      time.Duration
+}
+
+func performancePrimaryCurrentObjectives(fleet performanceFleet) map[string]performanceClockObjective {
+	objectives := make(map[string]performanceClockObjective, len(fleet.objectives))
+	for index, id := range fleet.objectives {
+		class := (index + 1) % 10
+		objectives[id] = performanceClockObjective{sli: fleet.slis[index], target: "0.995", class: class, window: performanceOracleRollingWindow(class)}
+	}
+	return objectives
+}
+
+func performanceSourceVersions(ctx context.Context, db *pgx.Conn, slis []string) (map[string]int64, error) {
+	bounded, stop := context.WithTimeout(ctx, 5*time.Second)
+	defer stop()
+	rows, err := db.Query(bounded, `SELECT sli_id::text,generation FROM public.almanac_sli_source_generations WHERE sli_id=ANY($1::uuid[]) AND measurement_revision=1`, slis)
+	if err != nil {
+		return nil, errors.New("read source generation evidence failed")
+	}
+	defer rows.Close()
+	result := make(map[string]int64, len(slis))
+	for rows.Next() {
+		var id string
+		var generation int64
+		if rows.Scan(&id, &generation) != nil || generation <= 0 {
+			return nil, errors.New("invalid source generation evidence")
+		}
+		result[id] = generation
+	}
+	if rows.Err() != nil || len(result) != len(slis) {
+		return nil, errors.New("source generation evidence omitted measurements")
+	}
+	return result, nil
+}
+
+func performanceConcurrentCurrent(t *testing.T, parent context.Context, fleet performanceFleet) (performanceClockPhase, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+	defer cancel()
+	if len(fleet.seedSources) != len(fleet.slis) {
+		return performanceClockPhase{}, errors.New("concurrent oracle lacks complete imported-prefix source floors")
+	}
+	for _, agent := range fleet.agents {
+		select {
+		case <-agent.done:
+			return performanceClockPhase{}, errors.New("concurrent oracle collector exited")
+		default:
+		}
+	}
+	started := time.Now().UTC()
+	db := testpostgres.Connect(t, fleet.fixture.databaseURL)
+	defer closePerformanceObserver(db)
+	phase, err := performanceClockSnapshot(ctx, db, fleet, performancePrimaryCurrentObjectives(fleet), nil, time.Time{}, started.Add(-10*time.Second).Truncate(time.Minute))
+	if err != nil {
+		return phase, err
+	}
+	bounded, stop := context.WithTimeout(ctx, 5*time.Second)
+	defer stop()
+	if err := db.QueryRow(bounded, `SELECT count(DISTINCT agent_id) FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND interval_start>=$2 AND recorded_at>=$3`, fleet.slis, started.Add(-5*time.Minute), started.Add(-2*time.Minute)).Scan(&phase.ActiveCollectors); err != nil || phase.ActiveCollectors != len(fleet.agents) {
+		return phase, errors.New("concurrent oracle lacks recent accepted observations from every collector")
+	}
+	return phase, nil
 }
 
 func performanceClockOnly(t *testing.T, parent context.Context, fleet performanceFleet, shared performanceSharedReport, late performanceLateReport) (performanceClockReport, error) {
@@ -75,39 +137,13 @@ func performanceClockOnly(t *testing.T, parent context.Context, fleet performanc
 		report.AgentsDisabled++
 	}
 	report.DisabledAt = time.Now().UTC()
-	objectives := make(map[string]performanceClockObjective, len(fleet.objectives)+len(shared.Added))
-	for index, id := range fleet.objectives {
-		class := (index + 1) % 10
-		objectives[id] = performanceClockObjective{sli: fleet.slis[index], target: "0.995", class: class, window: performanceOracleRollingWindow(class)}
-	}
+	objectives := performancePrimaryCurrentObjectives(fleet)
 	for _, objective := range shared.Added {
 		objectives[objective.Id.String()] = performanceClockObjective{sli: shared.SharedSLI, target: objective.Target, class: 0, window: time.Duration(objective.RollingWindowSeconds) * time.Second}
 	}
 	db := testpostgres.Connect(t, fleet.fixture.databaseURL)
 	defer closePerformanceObserver(db)
-	readSources := func() (map[string]int64, error) {
-		bounded, stop := context.WithTimeout(ctx, 5*time.Second)
-		defer stop()
-		rows, err := db.Query(bounded, `SELECT sli_id::text,generation FROM public.almanac_sli_source_generations WHERE sli_id=ANY($1::uuid[]) AND measurement_revision=1`, fleet.slis)
-		if err != nil {
-			return nil, errors.New("read quiescent source generations failed")
-		}
-		defer rows.Close()
-		result := make(map[string]int64, len(fleet.slis))
-		for rows.Next() {
-			var id string
-			var generation int64
-			if rows.Scan(&id, &generation) != nil || generation <= 0 {
-				return nil, errors.New("invalid quiescent source generation")
-			}
-			result[id] = generation
-		}
-		if rows.Err() != nil || len(result) != len(fleet.slis) {
-			return nil, errors.New("quiescent source generations omitted measurements")
-		}
-		return result, nil
-	}
-	sources, err := readSources()
+	sources, err := performanceSourceVersions(ctx, db, fleet.slis)
 	if err != nil {
 		return report, err
 	}
@@ -127,7 +163,7 @@ func performanceClockOnly(t *testing.T, parent context.Context, fleet performanc
 		if err != nil {
 			return report, err
 		}
-		current, err := readSources()
+		current, err := performanceSourceVersions(ctx, db, fleet.slis)
 		if err != nil {
 			return report, err
 		}
@@ -173,7 +209,7 @@ func performanceClockSnapshot(ctx context.Context, db *pgx.Conn, fleet performan
 					return errors.New("clock-only overview changed objective identity/definition")
 				}
 				source, err := strconv.ParseInt(item.Generation.SourceGeneration, 10, 64)
-				if err != nil || source != sources[expected.sli] || item.Generation.EvaluatedThrough.Before(notBefore) || !item.Current.EvaluationAt.Equal(item.Generation.EvaluatedThrough) {
+				if err != nil || source < fleet.seedSources[expected.sli] || sources != nil && source != sources[expected.sli] || item.Generation.EvaluatedThrough.Before(notBefore) || !item.Current.EvaluationAt.Equal(item.Generation.EvaluatedThrough) {
 					return errors.New("clock-only overview did not publish the required clock/source generation")
 				}
 				seen[id] = true
@@ -194,12 +230,15 @@ func performanceClockSnapshot(ctx context.Context, db *pgx.Conn, fleet performan
 	windows := make([]performanceClockWindow, 0, len(items)*3)
 	for _, item := range items {
 		expected := objectives[item.Slo.Id.String()]
+		source, _ := strconv.ParseInt(item.Generation.SourceGeneration, 10, 64)
 		for _, duration := range []time.Duration{expected.window, time.Hour, 6 * time.Hour} {
-			windows = append(windows, performanceClockWindow{SliID: expected.sli, Class: expected.class, Start: item.Current.EvaluationAt.Add(-duration), End: item.Current.EvaluationAt, Corrected: item.Slo.Id.String() == fleet.objectives[0]})
+			windows = append(windows, performanceClockWindow{SliID: expected.sli, Class: expected.class, Start: item.Current.EvaluationAt.Add(-duration), End: item.Current.EvaluationAt, Corrected: item.Slo.Id.String() == fleet.objectives[0], Source: source})
 		}
 	}
 	started := time.Now()
-	views, err := performanceClockCounts(ctx, db, windows, fleet.historyEnd, late)
+	// Initial real collection can overlap the last synthetic hour. Read that
+	// boundary canonically, including its per-interval ingestion generation.
+	views, err := performanceClockCounts(ctx, db, windows, fleet.historyEnd.Add(-time.Hour), late)
 	report.Oracle = time.Since(started)
 	if err != nil {
 		return report, err

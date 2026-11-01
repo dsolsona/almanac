@@ -37,6 +37,7 @@ type performanceFleet struct {
 	historyEnd    time.Time
 	traceURL      string
 	reserveDetail bool
+	seedSources   map[string]int64
 }
 
 func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {

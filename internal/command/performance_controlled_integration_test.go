@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/testpostgres"
 )
 
 type performanceControlledReport struct {
@@ -141,6 +143,13 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("automatic-maintenance-365-days", maintenance, err) {
 		return
 	}
+	stage("imported-prefix-source-watermarks")
+	observer := testpostgres.Connect(t, fleet.fixture.databaseURL)
+	fleet.seedSources, err = performanceSourceVersions(ctx, observer, fleet.slis)
+	closePerformanceObserver(observer)
+	if !record("imported-prefix-source-watermarks", fleet.seedSources, err) {
+		return
+	}
 	stage("full-acceptance-tracing")
 	sampling := enablePerformanceFullTracing(t, fleet.fixture)
 	record("full-acceptance-tracing", sampling, nil)
@@ -168,6 +177,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		return
 	}
 	record("live-isolation-gate", struct{ Result string }{"passed"}, nil)
+	stage("independent-concurrent-current-365-days")
+	current, err := performanceConcurrentCurrent(t, ctx, fleet)
+	if !record("independent-concurrent-current-365-days", current, err) {
+		return
+	}
 	stage("response-cache-eviction-and-retained-restart")
 	browserRestart := restartPerformanceForBrowser(t, fleet)
 	record("response-cache-eviction-and-retained-restart", browserRestart, nil)
