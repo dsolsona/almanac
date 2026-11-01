@@ -903,7 +903,7 @@ LEFT JOIN LATERAL (
            COALESCE(obs.total_count::text, '') AS total_count, coverage.error_code,
            coverage.missing_components, coverage.recorded_at
     FROM (
-        SELECT c.interval_start, c.sli_id, c.measurement_revision, c.interval_end, c.outcome, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.observation_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at FROM public.almanac_sli_coverage AS c
+        SELECT c.interval_start, c.sli_id, c.measurement_revision, c.interval_end, c.outcome, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.observation_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at, c.ingestion_generation FROM public.almanac_sli_coverage AS c
         WHERE c.sli_id = sli.id AND c.interval_start >= $1::timestamptz
         ORDER BY c.interval_start DESC, c.recorded_at DESC
         LIMIT 1

@@ -94,6 +94,9 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		if err != nil {
 			return true, err
 		}
+		if err := preserveRetainedPrefixes(bounded, q, row, source, start, through, now, points); err != nil {
+			return true, err
+		}
 		batch := dbgen.PublishRetainedSloPointBatchParams{SloID: row.ID, DefinitionRevision: row.DefinitionRevision,
 			MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion,
 			SourceGeneration: generation, PublishedAt: timestamp(now)}

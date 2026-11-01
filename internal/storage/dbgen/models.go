@@ -293,6 +293,7 @@ type AlmanacSliCoverage struct {
 	LeaseID               string             `json:"lease_id"`
 	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
 	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
+	IngestionGeneration   int64              `json:"ingestion_generation"`
 }
 
 type AlmanacSliCreateReceipt struct {

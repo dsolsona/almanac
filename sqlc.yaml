@@ -35,6 +35,7 @@ sql:
       - internal/storage/migrations/0029_slo_list_projection_references.sql
       - internal/storage/migrations/0030_audited_retention_work.sql
       - internal/storage/migrations/0031_retained_work_recovery.sql
+      - internal/storage/migrations/0032_coverage_ingestion_generation.sql
     gen:
       go:
         package: dbgen

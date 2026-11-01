@@ -226,6 +226,9 @@ type Querier interface {
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
 	ReadRetainedEdgePoints(ctx context.Context, arg ReadRetainedEdgePointsParams) ([]ReadRetainedEdgePointsRow, error)
+	// Per-interval commit generations distinguish genuinely new coverage from facts
+	// already included in a historical point, independently of receipt timestamps.
+	ReadRetainedLateTotals(ctx context.Context, arg ReadRetainedLateTotalsParams) ([]ReadRetainedLateTotalsRow, error)
 	// A dirty tile or a cursor that has not repaired its endpoints is unavailable,
 	// rather than silently serving values from before a late observation arrived.
 	ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error)

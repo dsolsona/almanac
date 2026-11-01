@@ -11,6 +11,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, oracle api.SloOperationalDetail) {
@@ -112,6 +113,7 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 	if err != nil {
 		t.Fatal(err)
 	}
+	verifyRetainedIngestionWatermark(t, databaseURL, row)
 	source, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
 	if err != nil {
 		t.Fatal(err)
@@ -150,5 +152,41 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 		Version: version, LeaseEpoch: epoch, CursorAt: timestamp(end), NextAttemptAt: timestamp(clock())})
 	if err != nil || advanced != 0 {
 		t.Fatalf("stale repair acknowledged a newer invalidation: %d, %v", advanced, err)
+	}
+}
+
+func verifyRetainedIngestionWatermark(t *testing.T, databaseURL string, row dbgen.GetSloRow) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	q := dbgen.New(conn)
+	params := dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision}
+	before, err := q.GetDerivedSourceGeneration(t.Context(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var minimum, maximum int64
+	if err := conn.QueryRow(t.Context(), `SELECT min(ingestion_generation),max(ingestion_generation) FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision).Scan(&minimum, &maximum); err != nil || minimum <= 0 || maximum != before {
+		t.Fatalf("accepted intervals lack their atomic source watermark: %d..%d / %d: %v", minimum, maximum, before, err)
+	}
+	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_coverage SELECT * FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2 LIMIT 1 ON CONFLICT DO NOTHING`, row.SliID, row.MeasurementRevision); err != nil {
+		t.Fatal(err)
+	}
+	after, err := q.GetDerivedSourceGeneration(t.Context(), params)
+	if err != nil || after != before {
+		t.Fatal("duplicate coverage advanced its committed source generation")
+	}
+	var start, end time.Time
+	var generation int64
+	var good, total string
+	if err := conn.QueryRow(t.Context(), `SELECT c.interval_start,c.interval_end,c.ingestion_generation,v.good_count::text,v.total_count::text
+        FROM public.almanac_sli_coverage c JOIN public.almanac_sli_observation_values v USING(interval_start,sli_id,measurement_revision)
+        WHERE c.sli_id=$1 AND c.measurement_revision=$2 ORDER BY c.ingestion_generation DESC LIMIT 1`, row.SliID, row.MeasurementRevision).Scan(&start, &end, &generation, &good, &total); err != nil {
+		t.Fatal(err)
+	}
+	deltas, err := q.ReadRetainedLateTotals(t.Context(), dbgen.ReadRetainedLateTotalsParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision,
+		Starts: []pgtype.Timestamptz{timestamp(start), timestamp(start)}, Ends: []pgtype.Timestamptz{timestamp(end), timestamp(end)}, Generations: []int64{generation - 1, generation}})
+	if err != nil || len(deltas) != 2 || deltas[0].Observed != 1 || deltas[0].Good != good || deltas[0].Total != total || deltas[1].Observed != 0 || deltas[1].Good != "0" || deltas[1].Total != "0" {
+		t.Fatalf("late totals repeated or lost a newly accepted interval: %+v, %v", deltas, err)
 	}
 }
