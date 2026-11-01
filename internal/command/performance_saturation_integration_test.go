@@ -70,7 +70,7 @@ func (s *performanceSaturation) fail(message string) {
 
 func (s *performanceSaturation) run(parent context.Context) error {
 	defer closePerformanceObserver(s.db)
-	if len(s.fleet.readers) != performanceUsers || len(s.fleet.objectives) != 100 {
+	if len(s.fleet.readers) != performanceUsers || len(s.fleet.objectives) < performanceUsers {
 		return errors.New("saturation requires the complete controlled fleet")
 	}
 	ctx, cancel := context.WithCancel(parent)
@@ -155,7 +155,11 @@ FROM public.almanac_sli_hourly_aggregates a
 JOIN public.almanac_sli_source_generations source USING(sli_id,measurement_revision)
 WHERE a.sli_id=ANY($1::uuid[]) AND a.hour_start >= $2::timestamptz-interval '56 days'
 AND a.hour_start < $2::timestamptz-interval '30 days'
-ORDER BY a.sli_id,a.hour_start ON CONFLICT DO NOTHING`, s.fleet.slis, now.UTC())
+AND NOT EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges d
+    WHERE d.sli_id=a.sli_id AND d.measurement_revision=a.measurement_revision AND d.range_start=a.hour_start)
+ORDER BY a.sli_id,a.hour_start
+LIMIT GREATEST(0,1000-(SELECT count(*) FROM (SELECT 1 FROM public.almanac_derived_dirty_ranges LIMIT 1000) busy))
+ON CONFLICT DO NOTHING`, s.fleet.slis, now.UTC())
 	if err != nil {
 		return errors.New("enqueue bounded historical saturation work failed")
 	}
@@ -170,50 +174,40 @@ func (s *performanceSaturation) readLoop(ctx context.Context, actor int, reader 
 	ticks := time.NewTicker(250 * time.Millisecond)
 	defer ticks.Stop()
 	for turn := 0; ctx.Err() == nil; turn++ {
-		id := s.fleet.objectives[actor+performanceUsers*((turn/2)%10)]
+		id := s.fleet.objectives[(actor+performanceUsers*(turn/2))%len(s.fleet.objectives)]
 		path := "/api/v1/slos/" + id + "/status"
 		kind := "status"
 		if turn%4 == 0 {
-			kind, path = "list", "/api/v1/slos/overview?limit=50"
+			kind, path = "list", "/api/v1/slos/overview?limit=20"
 		} else if turn%4 == 2 {
 			kind, path = "history", "/api/v1/slos/"+id+"/operational?"+historyQuery
 		}
 		started := time.Now()
-		status, retry, body, err := performanceLoadRequest(ctx, reader, path)
+		status, _, body, err := performanceLoadRequest(ctx, reader, path)
 		elapsed := time.Since(started)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		outcome := "ready"
 		if err == nil && status == http.StatusOK {
 			err = s.checkRead(kind, id, body)
-		} else if err == nil && status == http.StatusServiceUnavailable {
-			var problem api.Problem
-			if json.Unmarshal(body, &problem) != nil {
-				err = errors.New("saturation read returned an invalid problem")
-			} else if problem.Code == "derived_data_pending" && retry == "2" && problem.Preparation != nil && problem.Preparation.State == api.DerivedPreparationStatePending && problem.Preparation.RetryAfterSeconds == 2 {
-				outcome = "pending"
-			} else if kind == "history" && problem.Code == "resource_limit" {
-				outcome = "admission"
-			} else {
-				err = errors.New("saturation read returned an unexpected unavailable state")
-			}
 		} else if err == nil {
 			err = fmt.Errorf("saturation %s read returned HTTP %d", kind, status)
+		}
+		budget := 200 * time.Millisecond
+		if kind == "history" {
+			budget = 500 * time.Millisecond
+		}
+		if err == nil && elapsed >= budget {
+			err = fmt.Errorf("saturation %s read exceeded its latency budget", kind)
 		}
 		s.mu.Lock()
 		if len(s.durations[actor]) < 4000 {
 			s.durations[actor] = append(s.durations[actor], elapsed)
 		}
 		counts := &s.report.Readers[actor]
-		switch {
-		case err != nil:
+		if err != nil {
 			counts.Failed++
-		case outcome == "pending":
-			counts.Pending++
-		case outcome == "admission":
-			counts.AdmissionLimit++
-		default:
+		} else {
 			counts.Ready++
 		}
 		s.mu.Unlock()
@@ -238,7 +232,7 @@ func (s *performanceSaturation) checkRead(kind, id string, body []byte) error {
 		return s.currentness.observe(status, time.Now())
 	case "list":
 		var page api.SloOperationalOverviewPage
-		if json.Unmarshal(body, &page) != nil || len(page.Items) != 50 || page.NextCursor == "" || page.GroupCounts.Healthy+page.GroupCounts.NeedsAttention+page.GroupCounts.Watch != 100 {
+		if json.Unmarshal(body, &page) != nil || len(page.Items) != min(20, len(s.fleet.objectives)) || (page.NextCursor != "") != (len(s.fleet.objectives) > 20) || page.GroupCounts.Healthy+page.GroupCounts.NeedsAttention+page.GroupCounts.Watch != int64(len(s.fleet.objectives)) {
 			return errors.New("saturation overview lost its bounded page or global counts")
 		}
 	case "history":

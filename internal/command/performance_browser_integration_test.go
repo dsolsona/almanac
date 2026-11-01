@@ -24,7 +24,7 @@ import (
 func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceFleet) (string, error) {
 	t.Helper()
 	f := fleet.fixture
-	if len(fleet.objectives) != 100 {
+	if len(fleet.objectives) != 10 && len(fleet.objectives) != 100 && len(fleet.objectives) != 1000 {
 		return "", errors.New("browser performance requires the complete controlled fleet")
 	}
 	block, rest := pem.Decode(f.certificate)

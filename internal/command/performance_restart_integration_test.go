@@ -19,6 +19,7 @@ type performanceRestartReport struct {
 	Startup           time.Duration          `json:"startup_to_livez_ns"`
 	CanonicalRows     int64                  `json:"preserved_canonical_rows"`
 	QueuedHours       int64                  `json:"queued_hours"`
+	Maintenance       time.Duration          `json:"automatic_maintenance_ns"`
 	PreparationAndAPI performancePhaseReport `json:"preparation_and_api"`
 }
 
@@ -35,6 +36,13 @@ func restartPerformancePhase(t *testing.T, fleet performanceFleet, blankDerived 
 		report.OfflineSetup = time.Since(started)
 	}
 	report.Startup = fleet.fixture.backend.start(t)
+	if blankDerived {
+		var err error
+		report.Maintenance, err = awaitPerformanceHistory(t, fleet.ctx, fleet)
+		if err != nil {
+			return report, err
+		}
+	}
 	phase, err := runPerformanceReadyPhase(fleet.ctx, fleet, report.Kind, end)
 	report.PreparationAndAPI = phase
 	return report, err
@@ -77,6 +85,7 @@ func clearPerformanceDerivedFixture(t *testing.T, fleet performanceFleet) (int64
 		`DELETE FROM public.almanac_slo_overview_snapshot_items`,
 		`DELETE FROM public.almanac_slo_overview_snapshots`,
 		`DELETE FROM public.almanac_slo_current_projections`,
+		`DELETE FROM public.almanac_slo_projection_payloads`,
 		`DELETE FROM public.almanac_slo_history_jobs`,
 		`DELETE FROM public.almanac_slo_history_blocks`,
 		`DELETE FROM public.almanac_slo_display_blocks`,

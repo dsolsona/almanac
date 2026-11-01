@@ -40,19 +40,19 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 		}
 		return prepared, true
 	}
-	run(performanceOperation{Name: "sli-list", Paths: []string{"/api/v1/slis?limit=50"}, Budget: 200 * time.Millisecond,
+	run(performanceOperation{Name: "sli-list", Paths: []string{"/api/v1/slis?limit=20"}, Budget: 200 * time.Millisecond,
 		Check: func(_ int, body []byte) error {
 			var page api.SliPage
-			if json.Unmarshal(body, &page) != nil || len(page.Items) != 50 || page.NextCursor == "" {
+			if json.Unmarshal(body, &page) != nil || len(page.Items) != min(20, len(fleet.slis)) || (page.NextCursor != "") != (len(fleet.slis) > 20) {
 				return errors.New("SLI list did not return a bounded first page")
 			}
 			return nil
 		}})
-	run(performanceOperation{Name: "slo-list", Paths: []string{"/api/v1/slos/overview?limit=50"}, Budget: 200 * time.Millisecond,
+	run(performanceOperation{Name: "slo-list", Paths: []string{"/api/v1/slos/overview?limit=20"}, Budget: 200 * time.Millisecond,
 		Check: func(_ int, body []byte) error {
 			var page api.SloOperationalOverviewPage
-			if json.Unmarshal(body, &page) != nil || len(page.Items) != 50 || page.NextCursor == "" ||
-				page.GroupCounts.Healthy+page.GroupCounts.NeedsAttention+page.GroupCounts.Watch != 100 {
+			if json.Unmarshal(body, &page) != nil || len(page.Items) != min(20, len(fleet.objectives)) || (page.NextCursor != "") != (len(fleet.objectives) > 20) ||
+				page.GroupCounts.Healthy+page.GroupCounts.NeedsAttention+page.GroupCounts.Watch != int64(len(fleet.objectives)) {
 				return errors.New("SLO list did not preserve global counts and pagination")
 			}
 			for _, item := range page.Items {
@@ -76,52 +76,55 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 	}
 	run(status)
 	for _, days := range []int{7, 28, 90, 365} {
-		operation := performanceOperation{Name: fmt.Sprintf("slo-history-%dd", days), Budget: 500 * time.Millisecond}
-		start := end.Add(-time.Duration(days) * 24 * time.Hour)
-		query := url.Values{"at": {end.UTC().Format(time.RFC3339Nano)}, "start": {start.UTC().Format(time.RFC3339Nano)}, "end": {end.UTC().Format(time.RFC3339Nano)}, "burn_window_seconds": {"3600"}}
-		for _, id := range fleet.objectives {
-			operation.Paths = append(operation.Paths, "/api/v1/slos/"+id+"/operational?"+query.Encode())
-		}
-		operation.Check = func(target int, body []byte) error {
-			var value api.SloOperationalDetail
-			if json.Unmarshal(body, &value) != nil || value.Objective.Id.String() != fleet.objectives[target] || value.Generation == nil ||
-				checkPerformanceGeneration(*value.Generation) != nil || !value.Generation.EvaluatedThrough.Equal(end) ||
-				len(value.AttainmentSeries.Samples) > 1500 || len(value.BudgetSeries.Samples) > 1500 || len(value.BurnSeries.Samples) > 1500 ||
-				len(value.ComplianceSeries.Days) > days {
-				return errors.New("history identity, provenance or point bound mismatch")
+		for _, burnWindow := range []int{3600, 21600} {
+			operation := performanceOperation{Name: fmt.Sprintf("slo-history-%dd-%dh", days, burnWindow/3600), Budget: 500 * time.Millisecond}
+			start := end.Add(-time.Duration(days) * 24 * time.Hour)
+			query := url.Values{"at": {end.UTC().Format(time.RFC3339Nano)}, "start": {start.UTC().Format(time.RFC3339Nano)}, "end": {end.UTC().Format(time.RFC3339Nano)}, "burn_window_seconds": {strconv.Itoa(burnWindow)}}
+			for _, id := range fleet.objectives {
+				operation.Paths = append(operation.Paths, "/api/v1/slos/"+id+"/operational?"+query.Encode())
 			}
-			return nil
-		}
-		prepared, ready := run(operation)
-		if !ready {
-			continue
-		}
-		generations := make([]string, len(prepared))
-		values := performanceOperation{Name: fmt.Sprintf("slo-values-%dd", days), Budget: 500 * time.Millisecond}
-		for target, sample := range prepared {
-			var detail api.SloOperationalDetail
-			// The preparation helper has already validated the document. Retain
-			// its exact generation for value requests even if currentness moves.
-			if err := json.Unmarshal(sample.Body, &detail); err != nil || detail.Generation == nil {
-				report.Failures = append(report.Failures, "prepared history document could not be pinned")
+			operation.Check = func(target int, body []byte) error {
+				var value api.SloOperationalDetail
+				if json.Unmarshal(body, &value) != nil || value.Objective.Id.String() != fleet.objectives[target] || value.Generation == nil ||
+					checkPerformanceGeneration(*value.Generation) != nil || !value.Generation.EvaluatedThrough.Equal(end) ||
+					value.BurnSeries.BurnWindowSeconds == nil || int(*value.BurnSeries.BurnWindowSeconds) != burnWindow ||
+					len(value.AttainmentSeries.Samples) > 1500 || len(value.BudgetSeries.Samples) > 1500 || len(value.BurnSeries.Samples) > 1500 ||
+					len(value.ComplianceSeries.Days) > days {
+					return errors.New("history identity, provenance or point bound mismatch")
+				}
+				return nil
+			}
+			prepared, ready := run(operation)
+			if !ready {
 				continue
 			}
-			generations[target] = detail.Generation.GenerationId.String()
-			values.Paths = append(values.Paths, "/api/v1/slos/"+fleet.objectives[target]+"/history/"+generations[target]+"/values?lane=budget&offset=0&limit=100")
-		}
-		if len(values.Paths) != len(fleet.objectives) {
-			continue
-		}
-		values.Check = func(target int, body []byte) error {
-			var page api.SloHistoryValuePage
-			if json.Unmarshal(body, &page) != nil || checkPerformanceGeneration(page.Generation) != nil ||
-				page.Generation.GenerationId.String() != generations[target] || page.Lane != api.SloHistoryValuePageLane("budget") ||
-				page.Offset != 0 || len(page.Samples) != min(100, page.TotalValues) || len(page.Days) != 0 {
-				return errors.New("exact-value page changed the pinned history generation or bounds")
+			generations := make([]string, len(prepared))
+			values := performanceOperation{Name: fmt.Sprintf("slo-values-%dd-%dh", days, burnWindow/3600), Budget: 500 * time.Millisecond}
+			for target, sample := range prepared {
+				var detail api.SloOperationalDetail
+				// The preparation helper has already validated the document. Retain
+				// its exact generation for value requests even if currentness moves.
+				if err := json.Unmarshal(sample.Body, &detail); err != nil || detail.Generation == nil {
+					report.Failures = append(report.Failures, "prepared history document could not be pinned")
+					continue
+				}
+				generations[target] = detail.Generation.GenerationId.String()
+				values.Paths = append(values.Paths, "/api/v1/slos/"+fleet.objectives[target]+"/history/"+generations[target]+"/values?lane=budget&offset=0&limit=100")
 			}
-			return nil
+			if len(values.Paths) != len(fleet.objectives) {
+				continue
+			}
+			values.Check = func(target int, body []byte) error {
+				var page api.SloHistoryValuePage
+				if json.Unmarshal(body, &page) != nil || checkPerformanceGeneration(page.Generation) != nil ||
+					page.Generation.GenerationId.String() != generations[target] || page.Lane != api.SloHistoryValuePageLane("budget") ||
+					page.Offset != 0 || len(page.Samples) != min(100, page.TotalValues) || len(page.Days) != 0 {
+					return errors.New("exact-value page changed the pinned history generation or bounds")
+				}
+				return nil
+			}
+			run(values)
 		}
-		run(values)
 	}
 	if len(report.Failures) > 0 {
 		return report, fmt.Errorf("performance phase %s has %d failures", name, len(report.Failures))

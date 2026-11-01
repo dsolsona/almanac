@@ -135,20 +135,32 @@ func performanceQueryPlans(t *testing.T, fleet performanceFleet) map[string]json
 	if err := db.QueryRow(ctx, `SELECT g.id::text,g.calculation_version,g.definition_revision,g.measurement_revision,g.source_generation,
 g.evaluated_through,b.range_start,b.range_end,g.retention_start,b.burn_window_seconds,b.kind
 FROM public.almanac_slo_derived_generations g JOIN public.almanac_slo_history_blocks b ON b.generation_id=g.id
-WHERE g.slo_id=$1 AND b.kind='detail' ORDER BY g.published_at DESC LIMIT 1`, fleet.objectives[0]).Scan(&generation, &calc, &definition, &measurement, &source, &through, &start, &end, &retention, &burn, &kind); err != nil {
+WHERE g.slo_id=$1 AND b.kind='retained_detail' ORDER BY g.published_at DESC LIMIT 1`, fleet.objectives[0]).Scan(&generation, &calc, &definition, &measurement, &source, &through, &start, &end, &retention, &burn, &kind); err != nil {
 		t.Fatal("query-plan evidence requires a real prepared history generation")
 	}
 	now := time.Now().UTC()
+	var tileStarts, tileEnds []time.Time
+	var resolutions []int32
+	firstDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	if firstDay.Before(start) {
+		firstDay = firstDay.Add(24 * time.Hour)
+	}
+	for day := firstDay; !day.Add(24 * time.Hour).After(end); day = day.Add(24 * time.Hour) {
+		tileStarts, tileEnds = append(tileStarts, day), append(tileEnds, day.Add(24*time.Hour))
+		resolutions = append(resolutions, 86400)
+	}
 	queries := []struct {
 		file, name string
 		args       []any
 		canonical  bool
 	}{
-		{"slis.sql.go", "listSlis", []any{now.Add(-400 * 24 * time.Hour), now, "", nil, time.Unix(0, 0).UTC(), "00000000-0000-0000-0000-000000000000", int32(51)}, true},
+		{"slis.sql.go", "listSlis", []any{now.Add(-365 * 24 * time.Hour), now, "", nil, time.Unix(0, 0).UTC(), "00000000-0000-0000-0000-000000000000", int32(21)}, true},
 		{"derived_overview.sql.go", "operationalScopeFingerprint", []any{calc, now, nil, nil}, false},
 		{"derived_projections.sql.go", "getPublishedCurrentProjection", []any{calc, now, fleet.objectives[0]}, false},
 		{"derived_history.sql.go", "findPreparedSloHistory", []any{fleet.objectives[0], definition, measurement, source, through, start, end, burn, calc, retention, now, kind}, false},
 		{"derived_history.sql.go", "readPreparedSloValuePage", []any{[]string{"budget_series", "samples"}, int32(0), int32(100), fleet.objectives[0], generation, now, calc}, false},
+		{"retained_read.sql.go", "readRetainedParts", []any{tileStarts, tileEnds, resolutions, fleet.objectives[0], definition, measurement, calc}, false},
+		{"retained_read.sql.go", "readRetainedEdgePoints", []any{fleet.objectives[0], definition, measurement, calc, end.Add(-time.Minute), end}, false},
 	}
 	report := make(map[string]jsontext.Value)
 	for _, query := range queries {

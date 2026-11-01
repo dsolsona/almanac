@@ -14,7 +14,7 @@ import (
 
 func performanceRetentionExpiry(ctx context.Context, fleet performanceFleet) (performancePhaseReport, error) {
 	report := performancePhaseReport{Name: "retention-expiry", Preparation: make(map[string][]performancePreparationSample)}
-	cutoff := time.Now().UTC().Truncate(time.Minute).Add(-400 * 24 * time.Hour)
+	cutoff := time.Now().UTC().Truncate(time.Minute).Add(-365 * 24 * time.Hour)
 	start, end := cutoff.Add(-48*time.Hour), cutoff.Add(24*time.Hour)
 	query := url.Values{"at": {end.Format(time.RFC3339Nano)}, "start": {start.Format(time.RFC3339Nano)}, "end": {end.Format(time.RFC3339Nano)}, "burn_window_seconds": {"3600"}}
 	operation := performanceOperation{Name: "retention-expiry", Budget: 500 * time.Millisecond}
@@ -27,7 +27,7 @@ func performanceRetentionExpiry(ctx context.Context, fleet performanceFleet) (pe
 			checkPerformanceGeneration(*detail.Generation) != nil || detail.Generation.RetentionStart == nil ||
 			!detail.Generation.RetentionStart.After(start) || detail.Current.Quality.ExpiredIntervals <= 0 ||
 			len(detail.AttainmentSeries.Samples) > 1500 || len(detail.BudgetSeries.Samples) > 1500 || len(detail.BurnSeries.Samples) > 1500 {
-			return errors.New("400-day boundary did not disclose expired input coverage")
+			return errors.New("365-day boundary did not disclose expired input coverage")
 		}
 		return nil
 	}

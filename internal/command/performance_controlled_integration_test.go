@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -35,6 +36,17 @@ func runControlledBackendPerformance(t *testing.T) {
 	defer stop()
 	ctx, cancel := context.WithTimeout(signals, 8*time.Hour)
 	defer cancel()
+	for _, size := range []int{10, 100, 1000} {
+		if !t.Run(fmt.Sprintf("independent-%d", size), func(t *testing.T) {
+			runControlledBackendPerformanceFleet(t, ctx, size)
+		}) {
+			return
+		}
+	}
+}
+
+func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, size int) {
+	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal("resolve controlled performance workspace failed")
@@ -83,7 +95,7 @@ func runControlledBackendPerformance(t *testing.T) {
 		return resultErr == nil
 	}
 	stage("fleet-setup")
-	fleet := newPerformanceFleet(t, ctx)
+	fleet := newPerformanceFleet(t, ctx, size)
 	record("fleet-setup", struct {
 		SLIs, SLOs, Agents, Users int
 		Setup                     time.Duration
@@ -94,6 +106,11 @@ func runControlledBackendPerformance(t *testing.T) {
 	record("disk-admission-56-days", performanceFixtureDisk(t, ctx, performanceDiskReserve), nil)
 	seeded := seedPerformanceHistory(t, fleet, 56)
 	record("seed-56-days", seeded, nil)
+	stage("automatic-maintenance-56-days")
+	maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+	if !record("automatic-maintenance-56-days", maintenance, err) {
+		return
+	}
 	stage("ready-56-days")
 	ready, err := runPerformanceReadyPhase(ctx, fleet, "ready-56-days", time.Now().UTC().Truncate(time.Minute))
 	if !record("ready-56-days", ready, err) {
@@ -135,23 +152,28 @@ func runControlledBackendPerformance(t *testing.T) {
 	if !record("production-browser", struct{ Artifacts string }{browserArtifacts}, err) {
 		return
 	}
-	stage("seed-400-days")
-	required, err := performanceDiskRequired(seeded.DatabaseBytes, seeded.CanonicalRows, 400*24*60*100-seeded.NominalSlots)
+	stage("seed-365-days")
+	required, err := performanceDiskRequired(seeded.DatabaseBytes, seeded.CanonicalRows, 365*24*60*int64(size)-seeded.NominalSlots)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record("disk-admission-400-days", performanceFixtureDisk(t, ctx, required), nil)
-	record("seed-400-days", seedPerformanceHistory(t, fleet, 400), nil)
-	stage("ready-400-days")
-	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-400-days", time.Now().UTC().Truncate(time.Minute))
-	if !record("ready-400-days", retained, err) {
+	record("disk-admission-365-days", performanceFixtureDisk(t, ctx, required), nil)
+	record("seed-365-days", seedPerformanceHistory(t, fleet, 365), nil)
+	stage("automatic-maintenance-365-days")
+	maintenance, err = awaitPerformanceHistory(t, ctx, fleet)
+	if !record("automatic-maintenance-365-days", maintenance, err) {
 		return
 	}
-	stage("query-plans-400-days")
-	record("query-plans-400-days", performanceQueryPlans(t, fleet), nil)
-	stage("persisted-restart-400-days")
+	stage("ready-365-days")
+	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-365-days", time.Now().UTC().Truncate(time.Minute))
+	if !record("ready-365-days", retained, err) {
+		return
+	}
+	stage("query-plans-365-days")
+	record("query-plans-365-days", performanceQueryPlans(t, fleet), nil)
+	stage("persisted-restart-365-days")
 	restart, err = restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
-	if !record("persisted-restart-400-days", restart, err) {
+	if !record("persisted-restart-365-days", restart, err) {
 		return
 	}
 	stage("retention-expiry")

@@ -35,8 +35,11 @@ type performanceFleet struct {
 	historyEnd time.Time
 }
 
-func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
+func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {
 	t.Helper()
+	if size != 10 && size != 100 && size != 1000 {
+		t.Fatal("controlled performance requires 10,100 or1000 independent measurements/objectives")
+	}
 	started := time.Now()
 	f := startObjectiveJourneyFixtureWithMetrics(t, true)
 	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour)}
@@ -51,8 +54,8 @@ func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
 		agent := runNamedConnectedSLIAgentJourney(t, f.databaseURL, f.binary, dir, f.baseURL, f.certFile, f.password, fmt.Sprintf("performance-agent-%02d", index))
 		fleet.agents = append(fleet.agents, agent)
 		datasourceID := createSLIJourneyDatasourceWithCadence(t, f.binary, dir, agent, f.sourceEndpoint, f.sourceCA, fmt.Sprintf("performance-metrics-%02d", index), 60)
-		for offset := range 10 {
-			name := fmt.Sprintf("performance-%03d", index*10+offset)
+		for offset := range size / 10 {
+			name := fmt.Sprintf("performance-%04d", index*(size/10)+offset)
 			var measurement api.Sli
 			performanceCreateCLI(t, f, agent.profile, "slis", name, map[string]any{
 				"name": name, "display_name": name, "datasource_id": datasourceID,
@@ -68,11 +71,6 @@ func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
 	profile := fleet.agents[0].profile
 	performanceCreateCLI(t, f, profile, "services", "performance-service", map[string]string{"name": "performance-service", "display_name": "Performance service"}, &service, "service")
 	for index, sliID := range fleet.slis {
-		// Ten objectives share measurements with the first ten. All 100 SLIs
-		// continue collecting, so sharing cannot reduce the ingestion workload.
-		if index >= 90 {
-			sliID = fleet.slis[index-90]
-		}
 		name := fmt.Sprintf("performance-%03d", index)
 		var objective api.Slo
 		performanceCreateCLI(t, f, profile, "slos", name, map[string]any{
@@ -143,8 +141,9 @@ type performanceHistorySetup struct {
 
 func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) performanceHistorySetup {
 	t.Helper()
-	if (days != 56 && days != 400) || len(fleet.slis) != 100 || len(fleet.agents) != 10 || len(fleet.objectives) != 100 {
-		t.Fatal("historical performance fixture must use the accepted fleet and 56/400-day bounds")
+	size := len(fleet.slis)
+	if (days != 56 && days != 365) || (size != 10 && size != 100 && size != 1000) || len(fleet.agents) != 10 || len(fleet.objectives) != size {
+		t.Fatal("historical performance fixture must use 10/100/1000 independent measurements and56/365 days")
 	}
 	started := time.Now()
 	f := fleet.fixture
@@ -157,11 +156,11 @@ func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) perf
 		if err := db.QueryRow(t.Context(), `SELECT count(DISTINCT sli_id) FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND outcome='observed'`, fleet.slis).Scan(&count); err != nil {
 			t.Fatal("read live performance fleet coverage failed")
 		}
-		if count == 100 {
+		if count == size {
 			break
 		}
 		if time.Since(started) > 2*time.Minute {
-			t.Fatalf("performance agents did not establish live coverage for all measurements: %d/100", count)
+			t.Fatalf("performance agents did not establish live coverage for all measurements: %d/%d", count, size)
 		}
 		select {
 		case <-t.Context().Done():
@@ -252,7 +251,7 @@ ORDER BY c.sli_id,c.interval_start ON CONFLICT DO NOTHING`, hour)
 			t.Fatalf("seed bounded performance history hour failed: %v", err)
 		}
 	}
-	report := performanceHistorySetup{Days: days, Start: start, End: end, NominalSlots: int64(days) * 24 * 60 * 100}
+	report := performanceHistorySetup{Days: days, Start: start, End: end, NominalSlots: int64(days) * 24 * 60 * int64(size)}
 	if err := db.QueryRow(t.Context(), `SELECT count(*),count(*) FILTER(WHERE outcome='complete_empty')
 FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND interval_start >= $2 AND interval_start < $3`, fleet.slis, start, end).Scan(&report.CanonicalRows, &report.KnownEmptyRows); err != nil {
 		t.Fatal("count actual retained performance coverage failed")
@@ -262,7 +261,7 @@ WHERE sli_id=ANY($1::uuid[]) AND interval_start >= $2 AND interval_start < $3 AN
 		t.Fatal("count retained performance zero-traffic intervals failed")
 	}
 	report.GapSlots = report.NominalSlots - report.CanonicalRows
-	if report.GapSlots != int64(days)*24*10 || report.KnownEmptyRows != int64(days)*24*10 || report.ZeroTrafficRows != int64(days)*24*10 {
+	if report.GapSlots != int64(days)*24*int64(size/10) || report.KnownEmptyRows != int64(days)*24*int64(size/10) || report.ZeroTrafficRows != int64(days)*24*int64(size/10) {
 		t.Fatal("retained performance fixture lost its deliberate gaps, empty or zero-traffic intervals")
 	}
 	if err := db.QueryRow(t.Context(), `SELECT pg_database_size(current_database()),pg_wal_lsn_diff(pg_current_wal_lsn(),$1::pg_lsn)::text`, initialLSN).Scan(&report.DatabaseBytes, &report.WALBytes); err != nil {
