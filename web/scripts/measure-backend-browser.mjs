@@ -11,7 +11,7 @@ let stage = 'fixture';
 const report = {
   schema_version: 1,
   environment: { cpu_slowdown: 4, download_bits_per_second: 10_000_000, latency_ms: 100, viewport: { width: 1440, height: 900 } },
-  cold_loads: [], interactions: [], failures: [],
+  cold_loads: [], interactions: [], list_actions: [], list_coverage: {}, failures: [],
 };
 
 function distribution(samples, key) {
@@ -21,10 +21,13 @@ function distribution(samples, key) {
 }
 
 // Runs before the app. It observes real fetches/DOM changes without supplying or
-// altering API responses. Only timings and route paths leave the browser.
-function installMeasurements({ fleetSize }) {
+// altering API responses. Reports retain fixture identities, counts and timings;
+// credentials and private request headers never leave the authentication setup.
+function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   const documents = new Map();
-  const state = window.__almanacPerformance = { fetches: [], primary_ms: null, interaction: null };
+  const requests = new Map();
+  const requestKey=(path,query)=>{const copy=new URLSearchParams(query);copy.sort();return `${path}?${copy}`;};
+  const state = window.__almanacPerformance = { fetches: [], primary_ms: null, interaction: null, listOffset: 0, listEvidence: null };
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
     const input = args[0];
@@ -39,7 +42,11 @@ function installMeasurements({ fleetSize }) {
       sample.parse_started_ms = performance.now();
       try {
         const value = await json();
-        if (response.status === 200 && (url.pathname === '/api/v1/slis' || url.pathname === '/api/v1/slos/overview' || /\/api\/v1\/slos\/[^/]+\/(status|operational)$/.test(url.pathname))) documents.set(url.pathname, { value, query: url.searchParams });
+        if (response.status === 200 && (url.pathname === '/api/v1/slis' || url.pathname === '/api/v1/slos/overview' || /\/api\/v1\/slos\/[^/]+\/(status|operational)$/.test(url.pathname))) {
+          const parsed={ value, query: url.searchParams };
+          documents.set(url.pathname, parsed);
+          requests.set(requestKey(url.pathname,url.searchParams),parsed);
+        }
         return value;
       }
       finally { sample.parsed_ms = performance.now(); }
@@ -49,34 +56,64 @@ function installMeasurements({ fleetSize }) {
   const visible = element => !!element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const percent = value => value === null ? '—' : `${(Number(value) * 100).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
   const validGeneration = value => !!value?.generation_id && !!value?.evaluated_through && !!value?.source_generation;
+  let namesKey='',namesCache=new Set();
+  const expectedNames=(view,params)=>{
+    const key=JSON.stringify([view,params.get('q'),params.get('datasource_id'),params.get('service_id')]);
+    if(key!==namesKey){
+      namesKey=key;namesCache=new Set();
+      for(let index=0;index<fleetSize;index++){
+        const name=`performance-${String(index).padStart(view==='slis'?4:3,'0')}`;
+        if((!params.get('q')||name.includes(params.get('q')))&&(!params.get('datasource_id')||datasourceIDs[Math.floor(index/(fleetSize/10))]===params.get('datasource_id'))&&(!params.get('service_id')||serviceID===params.get('service_id')))namesCache.add(name);
+      }
+    }
+    return namesCache;
+  };
   const ready = () => {
     if (document.querySelector('[role="alert"],.slo-error')) return false;
-    const expectedRows = Math.min(Number(new URLSearchParams(location.search).get('page_size') || 20), fleetSize);
+    const params=new URLSearchParams(location.search),pageSize=Number(params.get('page_size')||20);
+    if(state.listAction&&(!Number.isFinite(state.listAction.started_ms)||state.listAction.initial_location===location.pathname+location.search))return false;
+    const listRequest=path=>{
+      const query=new URLSearchParams({limit:String(pageSize)});
+      for(const key of ['q','cursor','datasource_id','service_id','urgency'])if(params.get(key))query.set(key,params.get(key));
+      return requests.get(requestKey(path,query))?.value;
+    };
     if (location.pathname === '/slis') {
-      const page = documents.get('/api/v1/slis')?.value;
+      const page = listRequest('/api/v1/slis'),names=expectedNames('slis',params);
+      const expectedRows=Math.min(pageSize,names.size-state.listOffset);
       const rows = [...document.querySelectorAll('.sli-list-table tbody tr')];
-      return page?.items.length === expectedRows && rows.length === expectedRows && page.items.every(item => rows.some(row => visible(row.querySelector(`a[href="/slis/${item.id}"]`)) && row.querySelectorAll('td').length === 7 && (!item.latest_observation || row.querySelector('time')?.dateTime === item.latest_observation.interval_end)));
+      const complete=page?.items.length === expectedRows && rows.length === expectedRows && (expectedRows>0||visible(document.querySelector('.sli-empty'))) && page.items.every(item => names.has(item.name)&&rows.some(row => visible(row.querySelector(`a[href="/slis/${item.id}"]`)) && row.querySelectorAll('td').length === 7 && (!item.latest_observation || row.querySelector('time')?.dateTime === item.latest_observation.interval_end)));
+      if(complete)state.listEvidence={ids:page.items.map(item=>item.id),names:page.items.map(item=>item.name),items:page.items,expected_total:names.size,next_cursor:page.next_cursor};
+      return complete;
     }
     if (location.pathname === '/slos') {
-      const page = documents.get('/api/v1/slos/overview')?.value;
+      const page = listRequest('/api/v1/slos/overview'),names=expectedNames('slos',params);
       const rows = [...document.querySelectorAll('.app-slo-row')];
       const count = page && Object.values(page.group_counts).reduce((sum, value) => sum + value, 0);
-      return count === fleetSize && page.items.length === expectedRows && rows.length === expectedRows && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${fleetSize} SLO`) && page.items.every(item => validGeneration(item.generation) && rows.some(row => visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))));
+      const matching=page&&(params.get('urgency')?page.group_counts[params.get('urgency')]:count),expectedRows=Math.min(pageSize,matching-state.listOffset);
+      const complete=count===names.size && page.items.length===expectedRows && rows.length===expectedRows && (expectedRows>0||visible(document.querySelector('.slo-empty'))) && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${matching} SLO`) && page.items.every(item=>names.has(item.slo.name)&&(!params.get('urgency')||item.urgency===params.get('urgency'))&&validGeneration(item.generation)&&rows.some(row=>visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))));
+      if(complete)state.listEvidence={ids:page.items.map(item=>item.slo.id),names:page.items.map(item=>item.slo.name),items:page.items,urgencies:page.items.map(item=>item.urgency),expected_total:matching,counts:page.group_counts,snapshot_id:page.snapshot_id,next_cursor:page.next_cursor,previous_cursor:page.previous_cursor};
+      return complete;
     }
     const id = location.pathname.split('/').at(-1);
     const status = documents.get(`/api/v1/slos/${id}/status`)?.value;
     const history = documents.get(`/api/v1/slos/${id}/operational`);
-    const params = new URLSearchParams(location.search);
     const burn = params.get('burn_window') === '21600' ? 21600 : 3600;
     const statusReady = status?.slo.id === id && validGeneration(status.generation) && visible(document.querySelector('.app-status-facts')) && document.querySelector('[aria-label="Refresh objective status"]')?.getAttribute('aria-busy') !== 'true' && document.querySelector('.app-budget-hero')?.textContent === percent(status.current.performance.remaining_fraction);
     return statusReady && history?.value.objective.id === id && validGeneration(history.value.generation) && history.value.burn_series.burn_window_seconds === burn && history.query.get('burn_window_seconds') === String(burn) && visible(document.querySelector('.app-timeline-plot .timeline-chart__plot svg')) && document.querySelectorAll('.app-lane-label').length === 4;
   };
   let primaryScheduled = false;
+  let primaryGeneration=0;
+  state.beginListAction=(offset,event)=>{
+    primaryGeneration++;primaryScheduled=false;state.primary_ms=null;state.listOffset=offset;
+    state.listAction={started_ms:null,initial_location:location.pathname+location.search};
+    document.addEventListener(event,()=>{state.listAction.started_ms=performance.now();},{once:true,capture:true});
+  };
   const afterPaint = callback => void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(callback)));
   new MutationObserver(mutations => {
     if (state.primary_ms === null && !primaryScheduled && ready()) {
       primaryScheduled = true;
-      afterPaint(() => { if (ready()) state.primary_ms = performance.now(); else primaryScheduled = false; });
+      const generation=primaryGeneration;
+      afterPaint(() => { if(generation!==primaryGeneration)return;if (ready()) state.primary_ms = performance.now(); else primaryScheduled = false; });
     }
     const interaction = state.interaction;
     if (!interaction?.started_ms) return;
@@ -100,8 +137,8 @@ function installMeasurements({ fleetSize }) {
   }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
 }
 
-async function measuredPage(context, fleetSize) {
-  await context.addInitScript(installMeasurements, { fleetSize });
+async function measuredPage(context, fixture) {
+  await context.addInitScript(installMeasurements, { fleetSize:fixture.fleet_size,datasourceIDs:fixture.datasource_ids,serviceID:fixture.service_id });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -146,6 +183,8 @@ try {
   assert.match(fixture.slo_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.match(fixture.candidate_binary_sha256, /^[0-9a-f]{64}$/);
   assert.ok([10, 100, 1000].includes(fixture.fleet_size));
+  assert.equal(fixture.datasource_ids.length,10);
+  for(const id of [...fixture.datasource_ids,fixture.service_id])assert.match(id,/^[0-9a-f-]{36}$/);
   assert.ok(typeof fixture.login === 'string' && typeof fixture.password === 'string' && fixture.login && fixture.password);
   output = resolve(fixture.artifacts);
   assert.ok(output.startsWith(resolve('..', '.local') + sep));
@@ -170,7 +209,7 @@ try {
     for (let index = 0; index < 20; index++) {
       stage = `${view}-cold-${index}`;
       const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
-      const page = await measuredPage(context, fixture.fleet_size);
+      const page = await measuredPage(context, fixture);
       const sample = { view, index, budget_ms: budget };
       try {
         await page.goto(new URL(path, origin).href, { waitUntil: 'domcontentloaded', timeout: 10_000 });
@@ -191,9 +230,93 @@ try {
       }
     }
   }
+  for(const view of ['slis','slos']) {
+    stage=`${view}-list-actions`;
+    const listContext=await browser.newContext({storageState,viewport:report.environment.viewport,colorScheme:'light'});
+    try {
+      const listPage=await measuredPage(listContext,fixture);
+      await listPage.goto(new URL(`/${view}`,origin).href);
+      await listPage.waitForFunction(()=>Number.isFinite(window.__almanacPerformance?.primary_ms),{},{timeout:10_000});
+      const navigation=listPage.getByRole('navigation',{name:view==='slis'?'SLI result pages':'SLO result pages',exact:true});
+      const evidence=()=>listPage.evaluate(()=>window.__almanacPerformance.listEvidence);
+      const action=async(name,event,offset,perform)=>{
+        stage=`${view}-${name}`;
+        await listPage.evaluate(({offset,event})=>window.__almanacPerformance.beginListAction(offset,event),{offset,event});
+        await perform();
+        await listPage.waitForFunction(()=>Number.isFinite(window.__almanacPerformance.primary_ms),{},{timeout:10_000});
+        const measured=await listPage.evaluate(()=>{
+          const state=window.__almanacPerformance;
+          return {elapsed_ms:state.primary_ms-state.listAction.started_ms,page_size:Number(new URLSearchParams(location.search).get('page_size')||20),data:state.listEvidence,unavailable:state.fetches.some(fetch=>fetch.started_ms>=state.listAction.started_ms&&fetch.status>=400)};
+        });
+        const {data}=measured;
+        report.list_actions.push({view,action:name,offset,page_size:measured.page_size,elapsed_ms:measured.elapsed_ms,ids:data.ids,expected_total:data.expected_total,counts:data.counts,snapshot_id:data.snapshot_id});
+        await writeFile(join(output,'browser-performance.json'),JSON.stringify(report)+'\n',{mode:0o600});
+        assert.ok(Number.isFinite(measured.elapsed_ms)&&measured.elapsed_ms>=0&&measured.elapsed_ms<1000&&!measured.unavailable,'list action did not meet usable-content acceptance');
+        return data;
+      };
+      let firstCoverage;
+      for(const size of [20,10]) {
+        if(await listPage.getByLabel(view==='slis'?'SLIs per page':'SLOs per page',{exact:true}).inputValue()!==String(size)) {
+          await action(`size-${size}`,'change',0,()=>listPage.getByLabel(view==='slis'?'SLIs per page':'SLOs per page',{exact:true}).selectOption(String(size)));
+        }
+        let current=await evidence(),offset=0;
+        const seen=new Set(),names=new Set(),groups={needs_attention:0,watch:0,healthy:0};
+        const initialSnapshot=current.snapshot_id,initialCounts=current.counts;
+        for(let pageIndex=0;pageIndex<Math.ceil(fixture.fleet_size/size);pageIndex++) {
+          assert.equal(current.ids.length,Math.min(size,fixture.fleet_size-offset));
+          for(let index=0;index<current.ids.length;index++) {
+            assert.ok(!seen.has(current.ids[index])&&!names.has(current.names[index]),'list pagination duplicated a fixture identity');
+            seen.add(current.ids[index]);names.add(current.names[index]);
+            if(view==='slos')groups[current.urgencies[index]]++;
+          }
+          if(view==='slos'){assert.equal(current.snapshot_id,initialSnapshot);assert.deepEqual(current.counts,initialCounts);}
+          assert.equal(Boolean(current.next_cursor),offset+current.ids.length<fixture.fleet_size);
+          if(!current.next_cursor)break;
+          const previous=current;
+          current=await action(`next-${size}-${pageIndex}`,'click',offset+size,()=>navigation.getByRole('button',{name:'Next page',exact:true}).click());
+          if(pageIndex===0) {
+            const forward=current;
+            const back=await action(`back-${size}`,'click',offset,()=>navigation.getByRole('button',{name:/^(Previous page|First page)$/}).click());
+            assert.deepEqual(back.ids,previous.ids);
+            if(view==='slos'){assert.deepEqual(back.items,previous.items);assert.equal(back.snapshot_id,initialSnapshot);}
+            current=await action(`next-again-${size}`,'click',offset+size,()=>navigation.getByRole('button',{name:'Next page',exact:true}).click());
+            assert.deepEqual(current.ids,forward.ids);
+            if(view==='slos')assert.deepEqual(current.items,forward.items);
+          }
+          offset+=size;
+        }
+        assert.equal(seen.size,fixture.fleet_size);assert.equal(names.size,fixture.fleet_size);
+        if(view==='slos')assert.deepEqual(groups,initialCounts,'group counts describe the whole snapshot');
+        const coverage=[...seen].sort();
+        if(firstCoverage)assert.deepEqual(coverage,firstCoverage);else firstCoverage=coverage;
+      }
+      report.list_coverage[view]=firstCoverage;
+      const search=listPage.getByLabel(view==='slis'?'Search SLIs':'Search SLOs',{exact:true});
+      const searchFor=async(name,query)=>{
+        if(view==='slos')await search.fill(query);
+        return action(name,view==='slis'?'input':'keydown',0,()=>view==='slis'?search.fill(query):search.press('Enter'));
+      };
+      const matched=await searchFor('search-match',view==='slis'?'performance-000':'performance-00');
+      assert.equal(matched.expected_total,10);assert.equal(matched.ids.length,10);
+      const empty=await searchFor('search-empty','no-performance-match');assert.equal(empty.ids.length,0);assert.equal(empty.expected_total,0);
+      await searchFor('search-clear','');
+      if(view==='slis') {
+        const filtered=await action('datasource-filter','change',0,()=>listPage.getByLabel('Datasource',{exact:true}).selectOption(fixture.datasource_ids[0]));
+        assert.equal(filtered.expected_total,fixture.fleet_size/10);
+        await action('datasource-clear','change',0,()=>listPage.getByLabel('Datasource',{exact:true}).selectOption(''));
+      } else {
+        await listPage.getByText('Filters',{exact:true}).click();
+        await action('service-filter','change',0,()=>listPage.getByLabel('Service',{exact:true}).selectOption(fixture.service_id));
+        await action('service-clear','change',0,()=>listPage.getByLabel('Service',{exact:true}).selectOption(''));
+        const {counts}=await evidence(),group=Object.keys(counts).find(key=>counts[key]>0);assert.ok(group);
+        await action('urgency-filter','change',0,()=>listPage.getByLabel('Urgency',{exact:true}).selectOption(group));
+        await action('urgency-clear','change',0,()=>listPage.getByLabel('Urgency',{exact:true}).selectOption(''));
+      }
+    } finally {await listContext.close();}
+  }
   stage = 'interaction-setup';
   const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
-  const page = await measuredPage(context, fixture.fleet_size);
+  const page = await measuredPage(context, fixture);
   await page.goto(new URL(`/slos/${fixture.slo_id}`, origin).href);
   await page.waitForFunction(() => Number.isFinite(window.__almanacPerformance?.primary_ms), { }, { timeout: 10_000 });
   for (let index = 0; index < 50; index++) {

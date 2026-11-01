@@ -25,14 +25,16 @@ import (
 // gate, not the ordinary two-minute integration catalog. All external resources
 // are owned by the existing isolated executable fixture and its cleanup stack.
 type performanceFleet struct {
-	ctx        context.Context
-	fixture    objectiveJourneyFixture
-	agents     []connectedAgentJourney
-	readers    []performanceReader
-	slis       []string
-	objectives []string
-	setup      time.Duration
-	historyEnd time.Time
+	ctx         context.Context
+	fixture     objectiveJourneyFixture
+	agents      []connectedAgentJourney
+	readers     []performanceReader
+	slis        []string
+	objectives  []string
+	datasources []string
+	serviceID   string
+	setup       time.Duration
+	historyEnd  time.Time
 }
 
 func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {
@@ -54,6 +56,7 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 		agent := runNamedConnectedSLIAgentJourney(t, f.databaseURL, f.binary, dir, f.baseURL, f.certFile, f.password, fmt.Sprintf("performance-agent-%02d", index))
 		fleet.agents = append(fleet.agents, agent)
 		datasourceID := createSLIJourneyDatasourceWithCadence(t, f.binary, dir, agent, f.sourceEndpoint, f.sourceCA, fmt.Sprintf("performance-metrics-%02d", index), 60)
+		fleet.datasources = append(fleet.datasources, datasourceID)
 		for offset := range size / 10 {
 			name := fmt.Sprintf("performance-%04d", index*(size/10)+offset)
 			var measurement api.Sli
@@ -70,6 +73,7 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 	var service api.Service
 	profile := fleet.agents[0].profile
 	performanceCreateCLI(t, f, profile, "services", "performance-service", map[string]string{"name": "performance-service", "display_name": "Performance service"}, &service, "service")
+	fleet.serviceID = service.Id.String()
 	for index, sliID := range fleet.slis {
 		name := fmt.Sprintf("performance-%03d", index)
 		var objective api.Slo
