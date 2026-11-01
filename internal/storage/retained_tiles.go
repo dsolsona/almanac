@@ -79,14 +79,16 @@ func compactRetainedPoints(points []retainedSloPoint, start, end time.Time, targ
 	return tile, err
 }
 
-func retainedMetric(sample api.SloOperationalSample, target, metric string) (*big.Rat, error) {
+// At a fixed target, attainment and remaining budget increase together, while
+// burn decreases. Their exact extrema need only the unrounded attainment ratio.
+func retainedExtremumKey(sample api.SloOperationalSample, metric string) (*big.Rat, error) {
 	if sample.Good == nil && sample.Total == nil {
 		return nil, nil
 	}
 	if sample.Good == nil || sample.Total == nil {
 		return nil, slo.ErrOperationalFacts
 	}
-	value, err := slo.CalculateOccurrences(*sample.Good, *sample.Total, target, false)
+	value, err := slo.ExactAttainment(*sample.Good, *sample.Total)
 	if errors.Is(err, slo.ErrNoTraffic) {
 		return nil, nil
 	}
@@ -94,17 +96,10 @@ func retainedMetric(sample api.SloOperationalSample, target, metric string) (*bi
 		return nil, err
 	}
 	switch metric {
-	case "attainment":
-		good, ok := new(big.Rat).SetString(*sample.Good)
-		total, totalOK := new(big.Rat).SetString(*sample.Total)
-		if !ok || !totalOK || total.Sign() == 0 {
-			return nil, slo.ErrOperationalFacts
-		}
-		return good.Quo(good, total), nil
-	case "budget":
-		return value.ExactRemainingFraction, nil
+	case "attainment", "budget":
+		return value, nil
 	case "burn":
-		return value.ExactConsumed, nil
+		return value.Neg(value), nil
 	default:
 		return nil, slo.ErrOperationalFacts
 	}
@@ -118,6 +113,9 @@ func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time
 	}
 	if len(samples) == 0 {
 		return []api.SloOperationalSample{}, nil
+	}
+	if _, err := slo.CalculateOccurrences("0", "1", target, false); err != nil {
+		return nil, err
 	}
 	selected := map[int]bool{0: true, len(samples) - 1: true}
 	minimum, maximum := -1, -1
@@ -133,7 +131,7 @@ func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time
 				selected[index-1], selected[index] = true, true
 			}
 		}
-		value, err := retainedMetric(sample, target, metric)
+		value, err := retainedExtremumKey(sample, metric)
 		if err != nil {
 			return nil, err
 		}
