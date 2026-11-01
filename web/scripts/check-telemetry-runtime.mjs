@@ -38,6 +38,7 @@ async function captureTraces(traceURL,events,artifacts,backendSHA,containsSecret
     return event;
   });
   const pending=new Map(required.map(event=>[event.journey,{event,lookups:[],document:null,connected:false}]));
+  for(const event of events.filter(value=>value.diagnostic).slice(0,6))pending.set(`${event.journey}-failure-${event.trace_id}`,{event,lookups:[],document:null,connected:false});
   const started=performance.now();
   // The pinned sink deliberately hides traces for 30s and flushes indexes at
   // 20s. This collector observation bound never changes the page-load budget.
@@ -90,11 +91,16 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       addEventListener('almanac:journey',event=>{const value=event.detail;if(/^[0-9a-f]{32}$/.test(value?.traceId)&&Number.isFinite(value.duration))window.almanacRuntimeJourneys.push({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration});});
     });
     const capabilities=new Set(); let pending=0;
+    const unavailable=[];
     page.on('response',response=>{
       if(new URL(response.url()).pathname.startsWith('/api/')){
         const headers=response.headers();if(headers['x-almanac-tracing'])capabilities.add(headers['x-almanac-tracing']);
         const date=Date.parse(headers.date);if(Number.isFinite(date))latestDate=date;
-        if(response.status()===503)pending++;
+        if(response.status()===503){
+          pending++;
+          const trace=response.request().headers().traceparent;
+          unavailable.push({method:response.request().method(),path:new URL(response.url()).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g,'{id}'),status:503,trace_id:typeof trace==='string'?trace.split('-')[1]:null});
+        }
       }
     });
     const started=performance.now(),wallStarted=Date.now();
@@ -115,11 +121,11 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       const elapsed=performance.now()-started;
       const rendered=await page.evaluate(()=>({events:window.almanacRuntimeJourneys,resources:performance.getEntriesByType('resource').filter(entry=>/\/assets\/[^/]+\.js$/.test(new URL(entry.name).pathname)).map(entry=>({path:new URL(entry.name).pathname,start_ms:entry.startTime,duration_ms:entry.duration,response_start_ms:entry.responseStart,response_end_ms:entry.responseEnd,transfer_bytes:entry.transferSize,encoded_bytes:entry.encodedBodySize,decoded_bytes:entry.decodedBodySize}))}));
       const wallElapsed=Date.now()-wallStarted;
-      Object.assign(sample,{result:'ready',elapsed_ms:elapsed,wall_elapsed_ms:wallElapsed,clock_adjustment_ms:wallElapsed-elapsed,server_date_ms:latestDate,pending_responses:pending,script_resources:rendered.resources,script_encoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.encoded_bytes,0),script_decoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.decoded_bytes,0)});
+      Object.assign(sample,{result:'ready',elapsed_ms:elapsed,wall_elapsed_ms:wallElapsed,clock_adjustment_ms:wallElapsed-elapsed,server_date_ms:latestDate,pending_responses:pending,unavailable_responses:unavailable,script_resources:rendered.resources,script_encoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.encoded_bytes,0),script_decoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.decoded_bytes,0)});
       assert.ok(Math.abs(wallElapsed-elapsed)<250,'clock discontinuity invalidates the runtime sample');
       assert.deepEqual([...capabilities],[mode==='enabled'?'1':'0'],'runtime tracing configuration was not applied');
       if(mode==='enabled')events.push(...rendered.events);
-      if(mode==='enabled'&&phase==='first'){
+      if(mode==='enabled'&&(phase==='first'||pending>0)){
         // The measured load is already complete. Preserve this trace before
         // closing its tab; diagnostic export is outside the page-load timing.
         const flushed=await page.evaluate(()=>new Promise(resolve=>{
@@ -128,6 +134,9 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
           dispatchEvent(new Event('almanac:telemetry-flush'));
         }));
         assert.equal(flushed.result,'ready','container evidence flush did not finish');
+        const emitted=await page.evaluate(()=>window.almanacRuntimeJourneys);
+        events.push(...emitted.map(event=>({...event,diagnostic:pending>0})));
+        sample.trace_id=emitted.find(event=>event.journey===journey)?.trace_id??null;
       }
     } catch(error) {
       if(sample.result==='ready')sample.evidence_error_type=error.name;

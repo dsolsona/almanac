@@ -1,4 +1,5 @@
-import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ModuleView } from '../components/ModuleView.tsx';
 import type { components } from '../api/generated.ts';
 import { Button, SelectField } from '../components/ui/index.ts';
 import { SloExactValuesTable, type SloExactRow } from '../components/charts/SloExactValuesTable.tsx';
@@ -369,7 +370,7 @@ export function OperationalDetailView({id,definition,serverClock,locationKey,onL
       {currentStatus?.generation&&detail.generation&&!sameDerivedInputs(currentStatus.generation,detail.generation)&&<p className="app-coverage-note" role="status">These graphs and the status panel show different evaluations. Refresh the timeline to align them.</p>}
       {activeBurnWindow!==burnWindow&&<p className="app-coverage-note" role="status">{busy?`Showing ${activeBurnLabel} burn while the selected window loads.`:`Showing the last confirmed ${activeBurnLabel} burn; the selected result is unavailable.`}</p>}
       <div className="app-timeline-body" ref={tableRegion}><div className="app-timeline-labels">{facts.map((fact,index)=><div className="app-lane-label" key={fact.id} style={{height:fact.height+(tableOpen[index]?340:0)}}><h3>{fact.title}</h3><div className="app-lane-value">{fact.value}</div><p>{fact.sub}</p><div className="app-lane-tools">{index===2&&<div role="group" aria-label="Burn window">{([3600,21600] as const).map(value=><Button key={value} variant={burnWindow===value?'selected':'outline'} aria-pressed={burnWindow===value} onClick={()=>changeView({burn_window:String(value)})}>{value===3600?'1 h':'6 h'}</Button>)}</div>}<Button variant="outline" data-table-toggle aria-label={`View ${fact.title} as table`} aria-expanded={tableOpen[index]} aria-controls={`slo-exact-${id}-${fact.id}`} onClick={()=>toggleTable(index)}>▦ <span className={index===2?'sr-only':undefined}>Table</span></Button></div></div>)}</div>
-        <div className="app-timeline-plot"><OperationalChartBoundary><Suspense fallback={<p role="status">Loading timeline charts…</p>}><TimelineChartViewLazy chart={plotChart!} showHeader={false}/></Suspense></OperationalChartBoundary></div>
+        <div className="app-timeline-plot"><OperationalChartBoundary><ModuleView load={loadTimelineChart} componentProps={{chart:plotChart!,showHeader:false}} fallback={<p role="status">Loading timeline charts…</p>}/></OperationalChartBoundary></div>
         {facts.map((fact,index)=>{const target=`slo-exact-${id}-${fact.id}`,common={title:fact.title,titleId:`${target}-title`,page:tablePages[index]!,timeZone:zone,onPageChange:(value:number)=>setTablePages(values=>values.map((page,i)=>i===index?value:page)),onClose:()=>closeTable(index)};return <div className="app-lane-insert" id={target} key={fact.id} hidden={!tableOpen[index]} data-lane-table={index} role="region" aria-labelledby={`${target}-title`} style={{top:facts.slice(0,index+1).reduce((sum,lane)=>sum+lane.height,0),height:340}}>{tableOpen[index]&&<div className="app-lane-insert-panel">{detail.generation?<PreparedLaneTable {...common} id={id} generation={detail.generation.generation_id} lane={fact.id as HistoryLane} onSessionFailure={()=>sessionFailure.current()} onRefresh={refresh}/>:<LaneTable {...common} rows={fact.rows}/>}</div>}</div>;})}
       </div>
       {qualityWarning(q,p,current.window)&&<p className="app-coverage-note">{qualityWarning(q,p,current.window)}</p>}
@@ -384,4 +385,5 @@ export function OperationalDetailView({id,definition,serverClock,locationKey,onL
   </section>;
 }
 
-const TimelineChartViewLazy=lazy(()=>import('../components/charts/TimelineChartView.tsx').then(module=>({default:module.TimelineChartView})));
+const loadTimelineChart=()=>import('../components/charts/TimelineChartView.tsx').then(module=>({default:module.TimelineChartView}));
+if(/^\/slos\/[0-9a-f-]{36}$/.test(location.pathname))void loadTimelineChart().catch(()=>{});

@@ -1197,6 +1197,16 @@ async function checkLocalAgentRegistration() {
     assert.equal(intentionalReloadCounts.document_navigation_requests, 1);
     assert.equal(intentionalReloadCounts.auth_context_requests, 1);
     const collection = await checkCollectedSLI(page, result.agent.id);
+    const collectorToken=collection.oldAgent.token;
+    await stopAgent(collection.oldAgent);
+    stage='real Compose tracing baseline, time boundary and enabled/disabled overhead';
+    await checkComposeTelemetryRuntime();
+    activeBrowser=browser;
+    collection.oldAgent=await startAgent(page,result.agent.id,collectorToken);
+    await expect.poll(()=>page.evaluate(async id=>{
+      const response=await fetch(`/api/v1/agents/${id}`);
+      return response.ok?(await response.json()).runtime?.collection_explanation:null;
+    },result.agent.id),{timeout:15_000}).toBe('none');
     await checkAgentRetirement(page, result, collection);
     writeFileSync(join(artifacts, 'local-agent-registration.json'), JSON.stringify({
       name: 'local', display_name: 'Local', create_requests: requests.length,
@@ -1430,8 +1440,6 @@ try {
   await checkPermanentLogin();
   stage = 'real Compose browser registration with Local display name';
   await checkLocalAgentRegistration();
-  stage = 'real Compose tracing baseline, time boundary and enabled/disabled overhead';
-  await checkComposeTelemetryRuntime();
   stage = 'logs exclude credentials';
   const logs = await compose(['logs', '--no-color']);
   const agentLogs = launcherLogs;
