@@ -206,6 +206,7 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 		if clientErr != nil {
 			result = diagnosticFailure(request.DiagnosticID, "unsupported")
 		} else {
+			defer source.CloseIdleConnections()
 			query := request.Query
 			if request.Operation == "connection_test" {
 				query = "vector(1)"

@@ -8,9 +8,63 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestClientReusesConnectionsAndRetainsDestinationPolicy(t *testing.T) {
+	var connections, requests atomic.Int32
+	closed := make(chan struct{}, 4)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		switch state {
+		case http.StateNew:
+			connections.Add(1)
+		case http.StateClosed:
+			closed <- struct{}{}
+		}
+	}
+	server.Start()
+	defer server.Close()
+	client, err := NewClient(Config{Endpoint: server.URL, AllowedDestinations: []string{"127.0.0.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.CloseIdleConnections()
+	for range 2 {
+		if _, err := client.Query(t.Context(), "up"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := connections.Load(); got != 1 {
+		t.Fatalf("two queries opened %d connections, want 1", got)
+	}
+	client.CloseIdleConnections()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("idle connection was not closed")
+	}
+	if _, err := client.Query(t.Context(), "up"); err != nil {
+		t.Fatal(err)
+	}
+	denied, err := NewClient(Config{Endpoint: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer denied.CloseIdleConnections()
+	_, err = denied.Query(t.Context(), "up")
+	if sourceErr, ok := errors.AsType[*SourceError](err); !ok || sourceErr.Code != "network" {
+		t.Fatalf("unlisted client's query error = %v, want network denial", err)
+	}
+	if connections.Load() != 2 || requests.Load() != 3 {
+		t.Fatalf("connections = %d, requests = %d, want 2 and 3", connections.Load(), requests.Load())
+	}
+}
 
 func TestSafeDialFallsBackAcrossAllowedLoopbackAddresses(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")

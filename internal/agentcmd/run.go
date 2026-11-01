@@ -119,6 +119,7 @@ func Run(ctx context.Context, args []string) error {
 	defer func() {
 		cancelUploads()
 		uploadWorkers.Wait()
+		client.collections.closeSources()
 	}()
 	return client.run(ctx)
 }
