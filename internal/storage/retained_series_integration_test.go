@@ -99,4 +99,56 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 	if err := q.ReleaseRetainedTileWork(t.Context(), dbgen.ReleaseRetainedTileWorkParams{ID: work.ID, LeaseEpoch: work.LeaseEpoch}); err != nil {
 		t.Fatal(err)
 	}
+	verifyRetainedRepairBatch(t, databaseURL, proof, id, clock, oracle)
+}
+
+func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, oracle api.SloOperationalDetail) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	q := dbgen.New(conn)
+	pgID, _ := canonicalUUID(id)
+	row, err := q.GetSlo(t.Context(), pgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cadence := time.Duration(row.CadenceSeconds) * time.Second
+	end := oracle.EffectiveAt
+	start := end.Add(-3 * cadence)
+	points, err := buildRetainedRepairPoints(t.Context(), q, row, source, start, end, clock())
+	if err != nil || len(points) != 3 {
+		t.Fatalf("batched retained repair failed: %d points, %v", len(points), err)
+	}
+	for _, point := range points {
+		at := point.Current.EvaluationAt
+		from := at.Add(-cadence)
+		canonical, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
+			Now: clock, At: &at, Start: &from, End: &at, BurnWindow: 3600})
+		if err != nil || len(canonical.AttainmentSeries.Samples) != 1 {
+			t.Fatalf("canonical historical oracle failed: %v", err)
+		}
+		if !reflect.DeepEqual(point.Current, canonical.Current) || !reflect.DeepEqual(point.Burn1h, canonical.Burn1h) ||
+			!reflect.DeepEqual(point.Burn6h, canonical.Burn6h) || !reflect.DeepEqual(point.Attainment, canonical.AttainmentSeries.Samples[0]) {
+			t.Fatalf("batched historical counts/quality/budget/burn differ from canonical at %s", at)
+		}
+	}
+	var version, epoch int64
+	if err := conn.QueryRow(t.Context(), `SELECT version,lease_epoch FROM public.almanac_slo_series_repair
+        WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4`,
+		pgID, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion).Scan(&version, &epoch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET version=version+1 WHERE slo_id=$1`, pgID); err != nil {
+		t.Fatal(err)
+	}
+	advanced, err := q.AdvanceRetainedSeriesRepair(t.Context(), dbgen.AdvanceRetainedSeriesRepairParams{SloID: pgID,
+		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion,
+		Version: version, LeaseEpoch: epoch, CursorAt: timestamp(end), NextAttemptAt: timestamp(clock())})
+	if err != nil || advanced != 0 {
+		t.Fatalf("stale repair acknowledged a newer invalidation: %d, %v", advanced, err)
+	}
 }

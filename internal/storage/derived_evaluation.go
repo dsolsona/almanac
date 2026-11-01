@@ -36,6 +36,10 @@ func evaluateDerivedWindow(ctx context.Context, q *dbgen.Queries, sliID pgtype.U
 	if err != nil {
 		return slo.WindowResult{}, operationError(ctx, "storage: exact aggregate window read failed", err)
 	}
+	return evaluateDerivedCounts(ctx, input, counts)
+}
+
+func evaluateDerivedCounts(ctx context.Context, input slo.WindowInput, counts dbgen.ReadDerivedWindowTotalsRow) (slo.WindowResult, error) {
 	if counts.Exhausted {
 		return slo.WindowResult{}, ErrDerivedSourceFailed
 	}

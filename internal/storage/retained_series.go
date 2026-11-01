@@ -40,5 +40,14 @@ func publishRetainedCurrent(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 		CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(value.EffectiveAt),
 		SourceGeneration: generation, PublishedAt: timestamp(now), Payload: payload})
-	return err
+	if err != nil {
+		return err
+	}
+	start := ceilSliBoundary(maxTime(row.EvaluationValidFrom.Time, row.SliValidFrom.Time, now.Add(-sli.ObservationRetention)), cadence)
+	if start.After(value.EffectiveAt) {
+		start = value.EffectiveAt
+	}
+	return q.ExtendRetainedSeriesRepair(ctx, dbgen.ExtendRetainedSeriesRepairParams{SloID: row.ID,
+		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+		CalculationVersion: operationalCalculationVersion, CursorAt: timestamp(start), EndAt: timestamp(value.EffectiveAt), NextAttemptAt: timestamp(now)})
 }

@@ -29,6 +29,7 @@ sql:
       - internal/storage/migrations/0023_history_admission_fence.sql
       - internal/storage/migrations/0024_retained_slo_points.sql
       - internal/storage/migrations/0025_retained_slo_tiles.sql
+      - internal/storage/migrations/0026_retained_series_repair.sql
     gen:
       go:
         package: dbgen
