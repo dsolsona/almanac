@@ -75,17 +75,21 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 		return nil
 	}
 	run(status)
+	historyObjectives := fleet.objectives
+	if fleet.reserveDetail {
+		historyObjectives = historyObjectives[:len(historyObjectives)-1]
+	}
 	for _, days := range []int{7, 28, 90, 365} {
 		for _, burnWindow := range []int{3600, 21600} {
 			operation := performanceOperation{Name: fmt.Sprintf("slo-history-%dd-%dh", days, burnWindow/3600), Budget: 500 * time.Millisecond}
 			start := end.Add(-time.Duration(days) * 24 * time.Hour)
 			query := url.Values{"at": {end.UTC().Format(time.RFC3339Nano)}, "start": {start.UTC().Format(time.RFC3339Nano)}, "end": {end.UTC().Format(time.RFC3339Nano)}, "burn_window_seconds": {strconv.Itoa(burnWindow)}}
-			for _, id := range fleet.objectives {
+			for _, id := range historyObjectives {
 				operation.Paths = append(operation.Paths, "/api/v1/slos/"+id+"/operational?"+query.Encode())
 			}
 			operation.Check = func(target int, body []byte) error {
 				var value api.SloOperationalDetail
-				if json.Unmarshal(body, &value) != nil || value.Objective.Id.String() != fleet.objectives[target] || value.Generation == nil ||
+				if json.Unmarshal(body, &value) != nil || value.Objective.Id.String() != historyObjectives[target] || value.Generation == nil ||
 					checkPerformanceGeneration(*value.Generation) != nil || !value.Generation.EvaluatedThrough.Equal(end) ||
 					value.BurnSeries.BurnWindowSeconds == nil || int(*value.BurnSeries.BurnWindowSeconds) != burnWindow ||
 					len(value.AttainmentSeries.Samples) > 1500 || len(value.BudgetSeries.Samples) > 1500 || len(value.BurnSeries.Samples) > 1500 ||
@@ -110,9 +114,9 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 					continue
 				}
 				generations[target] = detail.Generation.GenerationId.String()
-				values.Paths = append(values.Paths, "/api/v1/slos/"+fleet.objectives[target]+"/history/"+generations[target]+"/values?lane=budget&offset=0&limit=100")
+				values.Paths = append(values.Paths, "/api/v1/slos/"+historyObjectives[target]+"/history/"+generations[target]+"/values?lane=budget&offset=0&limit=100")
 			}
-			if len(values.Paths) != len(fleet.objectives) {
+			if len(values.Paths) != len(historyObjectives) {
 				continue
 			}
 			values.Check = func(target int, body []byte) error {

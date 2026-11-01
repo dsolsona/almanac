@@ -247,6 +247,7 @@ try {
   assert.ok([10, 100, 1000].includes(fixture.fleet_size));
   assert.equal(fixture.cache_setup.result,'restarted-with-retained-data');
   assert.equal(fixture.cache_setup.target_slo_id,fixture.slo_id);
+  assert.equal(fixture.cache_setup.never_visited_detail,true);
   assert.ok(fixture.cache_setup.preserved_target_points>0&&fixture.cache_setup.preserved_target_tiles>0);
   assert.equal(fixture.cache_setup.preserved_current_summaries,fixture.fleet_size);
   assert.equal(fixture.datasource_ids.length,10);
@@ -260,7 +261,7 @@ try {
   await mkdir(output, { recursive: true, mode: 0o700 });
   report.candidate_binary_sha256 = fixture.candidate_binary_sha256;
   report.deployment=fixture.deployment;
-  report.cache_setup={result:fixture.cache_setup.result,target_slo_id:fixture.cache_setup.target_slo_id,preserved_target_points:fixture.cache_setup.preserved_target_points,preserved_target_tiles:fixture.cache_setup.preserved_target_tiles,preserved_current_summaries:fixture.cache_setup.preserved_current_summaries,evicted_history_responses:fixture.cache_setup.evicted_history_responses,evicted_overview_snapshots:fixture.cache_setup.evicted_overview_snapshots};
+  report.cache_setup={result:fixture.cache_setup.result,target_slo_id:fixture.cache_setup.target_slo_id,never_visited_detail:fixture.cache_setup.never_visited_detail,preserved_target_points:fixture.cache_setup.preserved_target_points,preserved_target_tiles:fixture.cache_setup.preserved_target_tiles,preserved_current_summaries:fixture.cache_setup.preserved_current_summaries,evicted_history_responses:fixture.cache_setup.evicted_history_responses,evicted_overview_snapshots:fixture.cache_setup.evicted_overview_snapshots};
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
   report.environment.browser = browser.version();
   report.environment.cache = 'cold: fresh context/disabled HTTP cache; warm: same-context reload with HTTP cache enabled; response eviction precedes backend restart; OS/PostgreSQL buffers are not claimed cold';

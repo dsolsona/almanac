@@ -31,6 +31,9 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	if len(fleet.objectives) != 10 && len(fleet.objectives) != 100 && len(fleet.objectives) != 1000 {
 		return "", errors.New("browser performance requires the complete controlled fleet")
 	}
+	if !restart.NeverVisited || restart.Target != fleet.objectives[len(fleet.objectives)-1] {
+		return "", errors.New("browser acceptance requires its reserved never-visited detail target")
+	}
 	block, rest := pem.Decode(f.certificate)
 	if block == nil || block.Type != "CERTIFICATE" || len(rest) != 0 {
 		return "", errors.New("invalid browser performance certificate")
@@ -79,7 +82,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		CacheSetup  performanceBrowserRestartReport `json:"cache_setup"`
 		TraceURL    string                          `json:"trace_url"`
 		Deployment  performanceDeploymentEvidence   `json:"deployment"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment})
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, restart.Target, artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}

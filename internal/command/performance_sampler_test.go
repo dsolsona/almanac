@@ -37,11 +37,14 @@ func TestPerformancePublicationBoundsPreserveObservationUncertainty(t *testing.T
 
 // Ten users keep a frequent authenticated visibility cohort while their history
 // visits rotate across the entire installation. Publication is observed separately.
-func performanceSaturationTarget(actor, turn, size int) (int, string) {
+func performanceSaturationTarget(actor, turn, size int, reserveDetail bool) (int, string) {
 	switch turn % 4 {
 	case 0:
 		return actor, "list"
 	case 2:
+		if reserveDetail {
+			size--
+		}
 		return (actor + performanceUsers*(turn/4)) % size, "history"
 	default:
 		return actor, "status"
@@ -54,7 +57,7 @@ func TestPerformanceSamplerMaintainsVisibilityCadenceAndFullHistoryCoverage(t *t
 		var last [performanceUsers]int
 		for turn := range 4 * (size / performanceUsers) {
 			for actor := range performanceUsers {
-				target, kind := performanceSaturationTarget(actor, turn, size)
+				target, kind := performanceSaturationTarget(actor, turn, size, false)
 				if target < 0 || target >= size {
 					t.Fatalf("size%d selected invalid objective%d", size, target)
 				}
@@ -71,6 +74,30 @@ func TestPerformanceSamplerMaintainsVisibilityCadenceAndFullHistoryCoverage(t *t
 		}
 		if len(history) != size {
 			t.Fatalf("size%d sampled only%d historical objectives", size, len(history))
+		}
+	}
+}
+
+func TestPerformanceSamplerReservesFirstBrowserDetailWithoutReducingVisibility(t *testing.T) {
+	for _, size := range []int{10, 100, 1000} {
+		history := make(map[int]bool)
+		status := make(map[int]bool)
+		for turn := range 4 * (size / performanceUsers) {
+			for actor := range performanceUsers {
+				target, kind := performanceSaturationTarget(actor, turn, size, true)
+				if target < 0 || target >= size {
+					t.Fatal("reserved sampler selected invalid target")
+				}
+				if kind == "history" {
+					history[target] = true
+				}
+				if kind == "status" {
+					status[target] = true
+				}
+			}
+		}
+		if history[size-1] || len(history) != size-1 || len(status) != performanceUsers {
+			t.Fatalf("size%d lost its reserved detail or frequent status cohort", size)
 		}
 	}
 }

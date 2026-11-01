@@ -99,7 +99,8 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	record("fleet-setup", struct {
 		SLIs, SLOs, Agents, Users int
 		Setup                     time.Duration
-	}{len(fleet.slis), len(fleet.objectives), len(fleet.agents), len(fleet.readers), fleet.setup}, nil)
+		ReservedDetail            string `json:"reserved_detail_slo_id"`
+	}{len(fleet.slis), len(fleet.objectives), len(fleet.agents), len(fleet.readers), fleet.setup, fleet.objectives[len(fleet.objectives)-1]}, nil)
 	stage("environment")
 	record("environment", performanceEnvironmentEvidence(t, fleet), nil)
 	stage("seed-56-days")
@@ -140,16 +141,6 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("automatic-maintenance-365-days", maintenance, err) {
 		return
 	}
-	stage("independent-accuracy-365-days")
-	accuracy, err := runPerformanceAccuracy(ctx, fleet)
-	if !record("independent-accuracy-365-days", accuracy, err) {
-		return
-	}
-	stage("ready-365-days")
-	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-365-days", time.Now().UTC().Truncate(time.Minute))
-	if !record("ready-365-days", retained, err) {
-		return
-	}
 	stage("query-plans-365-days")
 	record("query-plans-365-days", performanceQueryPlans(t, fleet), nil)
 	stage("persisted-restart-365-days")
@@ -184,6 +175,17 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("production-browser-365-days", struct{ Artifacts string }{browserArtifacts}, err) {
 		return
 	}
+	fleet.reserveDetail = false
+	stage("independent-accuracy-365-days")
+	accuracy, err := runPerformanceAccuracy(ctx, fleet)
+	if !record("independent-accuracy-365-days", accuracy, err) {
+		return
+	}
+	stage("ready-365-days")
+	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-365-days", time.Now().UTC().Truncate(time.Minute))
+	if !record("ready-365-days", retained, err) {
+		return
+	}
 	stage("late-correction-and-retained-restart")
 	late, err := performanceLateCorrection(t, ctx, fleet)
 	if !record("late-correction-and-retained-restart", late, err) {
@@ -197,6 +199,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	stage("populated-retention-cleanup")
 	cleanup, err := performanceRetentionCleanup(t, ctx, fleet)
 	if !record("populated-retention-cleanup", cleanup, err) {
+		return
+	}
+	stage("supplemental-shared-source")
+	shared, err := performanceSharedSource(t, ctx, fleet)
+	if !record("supplemental-shared-source", shared, err) {
 		return
 	}
 	stage("completed")

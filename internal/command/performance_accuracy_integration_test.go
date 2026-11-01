@@ -48,32 +48,6 @@ func checkPerformanceOracleQualityWithExpiry(q api.SloOperationalQuality, want p
 	return nil
 }
 
-func checkPerformanceOracleMetrics(good, total, attainment, allowed, remaining, fraction, burn *string, want performanceOracleCounts, metric string) error {
-	if err := checkPerformanceOracleCounts(good, total, want); err != nil {
-		return err
-	}
-	if want.Total.Sign() == 0 {
-		if attainment != nil || burn != nil || fraction != nil {
-			return errors.New("oracle zero traffic/missing interval became a measured fraction")
-		}
-		return nil
-	}
-	ratio := new(big.Rat).Quo(want.Good, want.Total)
-	if !performanceOracleRounded(attainment, ratio) {
-		return errors.New("oracle attainment mismatch")
-	}
-	if metric == "attainment" {
-		return nil
-	}
-	budget := new(big.Rat).Quo(want.Total, big.NewRat(200, 1)) // Fixture target 99.5%.
-	bad := new(big.Rat).Sub(want.Total, want.Good)
-	left := new(big.Rat).Sub(budget, bad)
-	if !performanceOracleRounded(allowed, budget) || !performanceOracleRounded(remaining, left) || !performanceOracleRounded(fraction, new(big.Rat).Quo(left, budget)) || !performanceOracleRounded(burn, new(big.Rat).Quo(bad, budget)) {
-		return errors.New("oracle error-budget/burn mismatch")
-	}
-	return nil
-}
-
 func checkPerformanceOracleSample(sample api.SloOperationalSample, class int, duration time.Duration, metric string) error {
 	want, err := performanceOracleWindow(class, sample.EvaluationAt.Add(-duration), sample.EvaluationAt)
 	if err != nil {

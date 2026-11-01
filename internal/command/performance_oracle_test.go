@@ -15,6 +15,55 @@ type performanceOracleCounts struct {
 	Observed, Empty, Zero, Missing int64
 }
 
+func checkPerformanceOracleMetrics(good, total, attainment, allowed, remaining, fraction, burn *string, want performanceOracleCounts, metric string) error {
+	return checkPerformanceOracleTargetMetrics(good, total, attainment, allowed, remaining, fraction, burn, want, metric, "0.995")
+}
+
+func checkPerformanceOracleTargetMetrics(good, total, attainment, allowed, remaining, fraction, burn *string, want performanceOracleCounts, metric, target string) error {
+	if err := checkPerformanceOracleCounts(good, total, want); err != nil {
+		return err
+	}
+	if want.Total.Sign() == 0 {
+		if attainment != nil || burn != nil || fraction != nil {
+			return errors.New("oracle zero traffic/missing interval became a measured fraction")
+		}
+		return nil
+	}
+	if !performanceOracleRounded(attainment, new(big.Rat).Quo(want.Good, want.Total)) {
+		return errors.New("oracle attainment mismatch")
+	}
+	if metric == "attainment" {
+		return nil
+	}
+	ratio, valid := new(big.Rat).SetString(target)
+	if !valid || ratio.Sign() < 0 || ratio.Cmp(big.NewRat(1, 1)) >= 0 {
+		return errors.New("oracle invalid target")
+	}
+	budget := new(big.Rat).Mul(want.Total, new(big.Rat).Sub(big.NewRat(1, 1), ratio))
+	bad := new(big.Rat).Sub(want.Total, want.Good)
+	left := new(big.Rat).Sub(budget, bad)
+	if !performanceOracleRounded(allowed, budget) || !performanceOracleRounded(remaining, left) || !performanceOracleRounded(fraction, new(big.Rat).Quo(left, budget)) || !performanceOracleRounded(burn, new(big.Rat).Quo(bad, budget)) {
+		return errors.New("oracle error-budget/burn mismatch")
+	}
+	return nil
+}
+
+func TestPerformanceOracleDifferentTargets(t *testing.T) {
+	want := performanceOracleCounts{Good: big.NewRat(999, 1), Total: big.NewRat(1000, 1), Observed: 1}
+	for _, test := range []struct{ target, allowed, left, fraction, burn string }{
+		{"0.99", "10.000000000000", "9.000000000000", "0.900000000000", "0.100000000000"},
+		{"0.999", "1.000000000000", "0.000000000000", "0.000000000000", "1.000000000000"},
+		{"0.9999", "0.100000000000", "-0.900000000000", "-9.000000000000", "10.000000000000"},
+	} {
+		if err := checkPerformanceOracleTargetMetrics(new("999"), new("1000"), new("0.999000000000"), &test.allowed, &test.left, &test.fraction, &test.burn, want, "budget", test.target); err != nil {
+			t.Fatalf("target%s: %v", test.target, err)
+		}
+		if err := checkPerformanceOracleTargetMetrics(new("999"), new("1000"), new("0.999000000000"), &test.allowed, &test.left, new("0.500000000000"), &test.burn, want, "budget", test.target); err == nil {
+			t.Fatal("wrong target budget accepted")
+		}
+	}
+}
+
 func performanceOracleRollingWindow(class int) time.Duration {
 	window := 28 * 24 * time.Hour
 	if class == 6 {

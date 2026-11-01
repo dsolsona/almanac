@@ -25,17 +25,18 @@ import (
 // gate, not the ordinary two-minute integration catalog. All external resources
 // are owned by the existing isolated executable fixture and its cleanup stack.
 type performanceFleet struct {
-	ctx         context.Context
-	fixture     objectiveJourneyFixture
-	agents      []connectedAgentJourney
-	readers     []performanceReader
-	slis        []string
-	objectives  []string
-	datasources []string
-	serviceID   string
-	setup       time.Duration
-	historyEnd  time.Time
-	traceURL    string
+	ctx           context.Context
+	fixture       objectiveJourneyFixture
+	agents        []connectedAgentJourney
+	readers       []performanceReader
+	slis          []string
+	objectives    []string
+	datasources   []string
+	serviceID     string
+	setup         time.Duration
+	historyEnd    time.Time
+	traceURL      string
+	reserveDetail bool
 }
 
 func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {
@@ -55,7 +56,7 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
 	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.01")
 	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
-	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL}
+	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL, reserveDetail: true}
 	for index := range 10 {
 		if ctx.Err() != nil {
 			t.Fatal("controlled performance fleet setup cancelled")

@@ -32,6 +32,7 @@ type performanceBrowserRestartReport struct {
 	PreservedPoints  int64         `json:"preserved_target_points"`
 	PreservedTiles   int64         `json:"preserved_target_tiles"`
 	PreservedCurrent int64         `json:"preserved_current_summaries"`
+	NeverVisited     bool          `json:"never_visited_detail"`
 }
 
 // This deliberately evicts response caches, not maintained source/history data.
@@ -39,7 +40,7 @@ type performanceBrowserRestartReport struct {
 func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet) performanceBrowserRestartReport {
 	t.Helper()
 	f := fleet.fixture
-	report := performanceBrowserRestartReport{Target: fleet.objectives[0]}
+	report := performanceBrowserRestartReport{Target: fleet.objectives[len(fleet.objectives)-1]}
 	report.Shutdown = f.backend.stop(t)
 	if f.backend.deployment == nil {
 		t.Fatal("response eviction requires stopped test-owned backend and disposable database")
@@ -66,7 +67,7 @@ func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet) performa
 (SELECT count(*) FROM public.almanac_slo_series_points WHERE slo_id=$1),
 (SELECT count(*) FROM public.almanac_slo_series_tiles WHERE slo_id=$1),
 (SELECT count(*) FROM public.almanac_slo_current_projections WHERE slo_id=ANY($2::uuid[])),
-(SELECT generation FROM public.almanac_sli_source_generations WHERE sli_id=$3 AND measurement_revision=1)`, report.Target, fleet.objectives, fleet.slis[0]).Scan(&value.points, &value.tiles, &value.current, &value.source); err != nil {
+			(SELECT generation FROM public.almanac_sli_source_generations WHERE sli_id=$3 AND measurement_revision=1)`, report.Target, fleet.objectives, fleet.slis[len(fleet.slis)-1]).Scan(&value.points, &value.tiles, &value.current, &value.source); err != nil {
 			t.Fatal("verify preserved browser fixture state failed")
 		}
 		return value
@@ -75,6 +76,11 @@ func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet) performa
 	if before.points == 0 || before.tiles == 0 || before.current != int64(len(fleet.objectives)) || before.source <= 0 {
 		t.Fatal("browser cache fixture omitted maintained history/current state")
 	}
+	var priorDetails int64
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='retained_detail'`, report.Target).Scan(&priorDetails); err != nil || priorDetails != 0 || !fleet.reserveDetail {
+		t.Fatal("first browser detail target was visited before response eviction")
+	}
+	report.NeverVisited = true
 	if _, err := tx.Exec(ctx, `DELETE FROM public.almanac_slo_overview_snapshot_items`); err != nil {
 		t.Fatal("evict fixture overview references failed")
 	}

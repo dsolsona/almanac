@@ -213,7 +213,7 @@ func (s *performanceSaturation) readLoop(ctx context.Context, actor int, reader 
 	ticks := time.NewTicker(250 * time.Millisecond)
 	defer ticks.Stop()
 	for turn := 0; ctx.Err() == nil; turn++ {
-		target, kind := performanceSaturationTarget(actor, turn, len(s.fleet.objectives))
+		target, kind := performanceSaturationTarget(actor, turn, len(s.fleet.objectives), s.fleet.reserveDetail)
 		id := s.fleet.objectives[target]
 		path := "/api/v1/slos/" + id + "/status"
 		if kind == "list" {
