@@ -300,16 +300,20 @@ func ListAgentCredentials(ctx context.Context, databaseURL string, input ListAge
 	return page, nil
 }
 
-func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+func beginAgentRead(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	return beginAgentReadWithRoles(ctx, databaseURL, verifier, clock, "administrator")
 }
 
-func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+func beginAgentReadWithRoles(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, roles ...string) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	return beginAgentReadWithOptions(ctx, databaseURL, verifier, clock, pgx.TxOptions{}, roles...)
 }
 
-func beginAgentReadWithOptions(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, options pgx.TxOptions, roles ...string) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
-	conn, err := connectCurrentSchema(ctx, databaseURL)
+func beginAgentReadWithOptions(ctx context.Context, databaseURL string, verifier [32]byte, clock func() time.Time, options pgx.TxOptions, roles ...string) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	return beginPooledAgentRead(ctx, databaseURL, nil, verifier, clock, options, roles...)
+}
+
+func beginPooledAgentRead(ctx context.Context, databaseURL string, runtime *Runtime, verifier [32]byte, clock func() time.Time, options pgx.TxOptions, roles ...string) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	conn, err := acquireReadConnection(ctx, databaseURL, runtime)
 	if err != nil {
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
 	}
@@ -333,8 +337,15 @@ func beginAgentReadWithOptions(ctx context.Context, databaseURL string, verifier
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read setup failed", err)
 	}
+	if runtime != nil {
+		if _, err := tx.Exec(ctx, "SET LOCAL jit = off; SET LOCAL lock_timeout = '250ms'; SET LOCAL statement_timeout = '2s'"); err != nil {
+			rollbackTransaction(tx)
+			closeInitialOwnerConnection(conn)
+			return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
+		}
+	}
 	q := dbgen.New(tx)
-	fail := func(e error) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+	fail := func(e error) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 		rollbackTransaction(tx)
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, e

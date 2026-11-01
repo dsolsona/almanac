@@ -4,7 +4,9 @@ import { Button, SelectField } from '../components/ui/index.ts';
 import { SloExactValuesTable, type SloExactRow } from '../components/charts/SloExactValuesTable.tsx';
 import { SloBudgetSparkline } from '../components/charts/SloBudgetSparkline.tsx';
 import type { Coverage, TimelineChart } from '../components/charts/timelineModel.ts';
-import { sloClient, SloFailure, type OperationalDetail, type OperationalOverview } from './client.ts';
+import { sloClient, SloFailure, sameDerivedInputs, type OperationalDetail, type OperationalOverview } from './client.ts';
+import type { CurrentStatus, HistoryLane, HistoryValuePage } from './client.ts';
+import { clearQueryCache } from '../queryCache.ts';
 import './slos.css';
 import './slo-reference.css';
 
@@ -119,7 +121,7 @@ function OverviewRow({item}:{item:OverviewItem}) {
   return <article className="app-slo-row" role="row">
     <div className="app-slo-status" role="cell"><ReferenceStatus status={status} title={reason}/>{item.reasons.length>1?<details><summary>Reasons ({item.reasons.length})</summary><ul>{item.reasons.map(value=><li key={value.code}>{reasonLabel(value.code)}{value.provisional?' · observed only':''}</li>)}</ul></details>:<span className="sr-only">{reason}</span>}</div>
     <div className="app-slo-name" role="cell"><a data-app-route className="app-slo-hitarea" href={`/slos/${slo.id}`} title={slo.display_name}>{slo.display_name}</a><small><a data-app-route href={`/services/${slo.service_id}`}>{slo.service_display_name}</a><span>·</span><a data-app-route className="app-slo-indicator" href={`/slis/${slo.sli_id}`}>{slo.sli_display_name}</a></small><span className="sr-only">Target {shift(slo.target,2)}% over {windowDuration(slo.rolling_window_seconds)}</span></div>
-    <div className="app-slo-spark" role="cell"><span className="app-slo-window" title="Budget history shown for the last 7 days">{windowDuration(slo.rolling_window_seconds)}</span><SloBudgetSparkline samples={item.budget_sparkline} label={`${slo.display_name} rolling remaining budget`}/></div>
+    <div className="app-slo-spark" role="cell" title={item.budget_history_generation?`History evaluated through ${item.budget_history_generation.evaluated_through}`:undefined}><span className="app-slo-window" title="Budget history shown for the last 7 days">{windowDuration(slo.rolling_window_seconds)}</span>{item.budget_sparkline.length===0&&item.budget_history_state?<span className="app-slo-history-empty">{item.budget_history_state==='unavailable'?'History unavailable':item.budget_history_state==='preparing'?'Preparing history…':'No budget history'}</span>:<SloBudgetSparkline samples={item.budget_sparkline} label={`${slo.display_name} rolling remaining budget`}/>} {item.budget_sparkline.length>0&&item.budget_history_state==='preparing'&&<small>Updating history</small>}</div>
     <div className="app-slo-budget" role="cell" title={partial?'Observed only; collection coverage is incomplete':undefined}><b className={budget===null?'muted':budget<0?'crit':budget<.2?'warn':''} title={p.remaining_fraction===null?undefined:`${shift(p.remaining_fraction,2)}%`}>{budgetPercent(p.remaining_fraction,1)}</b><span className="slo-reference-meter" role="progressbar" aria-label={`${slo.display_name} budget remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={budget===null?undefined:meterFraction(p.remaining_fraction)*100} aria-valuetext={budget===null?'Unavailable':budgetPercent(p.remaining_fraction)}><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${status})`}}/></span><span className="sr-only">{partial?'Observed only; ':''}{p.remaining_budget===null?'Budget unavailable':`${decimal(p.remaining_budget)} bad events left`}</span></div>
     <div className="app-slo-burn" role="cell" title={qualityWarning(item.burn_1h.quality)}><b className={burn!==null&&Number(burn)>=10?'hot':burn!==null&&Number(burn)>=2?'warm':''}>{multiple(burn)}</b><small>{item.burn_6h.performance.burn===null?'no samples':`6 h ${multiple(item.burn_6h.performance.burn)}`}</small></div>
     <div className="app-slo-exhaustion" role="cell" title={formatExhaustion(item.exhaustion)}><b className={item.exhaustion.state==='exhausted'?'hot':''}>{shortExhaustion(item.exhaustion)}</b><small>{caption}</small></div><span className="app-slo-chevron" role="cell" aria-hidden="true">›</span>
@@ -130,7 +132,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   const params=queryFrom(locationKey),query=params.get('q')??'',serviceID=params.get('service_id')??'',urgency=(params.get('urgency')??'') as ''|Urgency;
   const cursor=params.get('cursor')??'';
   const [draftQuery,setDraftQuery]=useState(query),[page,setPage]=useState<OperationalOverview|null>(null),[services,setServices]=useState<Awaited<ReturnType<typeof sloClient.services>>['items']>([]);
-  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[refreshCount,setRefreshCount]=useState(0);
+  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[refreshCount,setRefreshCount]=useState(0),[servicesError,setServicesError]=useState('');
   const lastKey=useRef('');
   const searchInput=useRef<HTMLInputElement>(null);
   useEffect(()=>{const focusSearch=(event:KeyboardEvent)=>{if(event.key==='/'&&!(event.target instanceof HTMLElement&&event.target.closest('input,textarea,select,[contenteditable="true"]'))){event.preventDefault();searchInput.current?.focus();}};window.addEventListener('keydown',focusSearch);return()=>window.removeEventListener('keydown',focusSearch);},[]);
@@ -138,20 +140,33 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   useEffect(()=>setDraftQuery(query),[query]);
   useEffect(()=>{
     const abort=new AbortController();
+    void allServices(abort.signal).then(items=>{if(!abort.signal.aborted){setServices(items);setServicesError('');}}).catch(failure=>{if(!abort.signal.aborted){if(failure instanceof SloFailure&&(failure.status===401||failure.status===403)){setPage(null);setServices([]);setError('Your session can no longer access these SLOs. Sign in again to continue.');}else setServicesError('Service filters could not load. Refresh to try again.');}});
+    return()=>abort.abort();
+  },[refreshCount]);
+  useEffect(()=>{
+    const abort=new AbortController();
     const sameView=lastKey.current===filtersKey;
+    let preparationTimer:ReturnType<typeof setTimeout>|undefined;
+    let preparationReads=0;
     if(!sameView){setPage(null);setError('');}
     lastKey.current=filtersKey;setBusy(true);
     const read=async()=>{
       try {
-        const [overview,serviceList]=await Promise.all([
-          sloClient.overview({q:query,service_id:serviceID||undefined,urgency:urgency||undefined,limit:50,cursor:cursor||undefined},abort.signal),
-          services.length?Promise.resolve(services):allServices(abort.signal),
-        ]);
-        if(!abort.signal.aborted){setPage(overview);setServices(serviceList);setError('');}
+        const overview=await sloClient.overview({q:query,service_id:serviceID||undefined,urgency:urgency||undefined,limit:50,cursor:cursor||undefined},abort.signal);
+        if(!abort.signal.aborted){
+          setPage(overview);setError('');
+          // Only replace a first page, never a generation-pinned cursor page.
+          // Three replacements keep this view within the four-snapshot budget
+          // even when each preparation completion publishes different data.
+          if(!cursor&&preparationReads<3&&overview.items.some(item=>item.budget_history_state==='preparing')){
+            preparationReads++;
+            preparationTimer=setTimeout(()=>{void read();},2000);
+          }
+        }
       } catch(failure){if(!abort.signal.aborted){if(failure instanceof SloFailure&&(failure.status===401||failure.status===403))setPage(null);setError(failure instanceof Error?failure.message:'The operational overview could not be loaded.');}}
       finally{if(!abort.signal.aborted)setBusy(false);}
     };
-    void read();return()=>abort.abort();
+    void read();return()=>{abort.abort();clearTimeout(preparationTimer);};
   },[locationKey,filtersKey,refreshCount]);
   function apply(changes:Record<string,string>) {onLocationChange(updateQuery(locationKey,changes,['cursor','previous_cursor']));}
   function changeUrgency(value:string) {apply({urgency:value});}
@@ -178,6 +193,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       {canWrite&&<Button className="app-slo-new" onClick={onCreate}>New SLO</Button>}
       <button className="app-slo-refresh" aria-label="Refresh" title="Refresh SLOs" disabled={busy} onClick={()=>{if(cursor){onLocationChange(updateQuery(locationKey,{},['cursor','previous_cursor']));return;}setRefreshCount(value=>value+1);}}><RefreshIcon/></button>
     </div></header>
+    {servicesError&&<p role="alert">{servicesError}</p>}
     {busy&&<span className="sr-only" role="status">Refreshing operational SLOs</span>}
     {error&&<div className="slo-error" role="alert"><p>{error}</p>{page&&<p>Previously loaded values are retained and may be stale.{lastConfirmedAt&&` Last confirmed evaluation: ${lastConfirmedAt}.`}</p>}</div>}
     {snapshotExpired&&<Button variant="outline" onClick={restartSnapshot}>Restart from first page</Button>}
@@ -219,9 +235,34 @@ function exactRows(samples:components['schemas']['SloOperationalSample'][],lane:
 function LaneTable({title,titleId,rows,page,onPageChange,onClose,timeZone}:{title:string;titleId:string;rows:SloExactRow[];page:number;onPageChange:(value:number)=>void;onClose:()=>void;timeZone:'UTC'|'local'}) {
   return <section className="slo-operational-exact"><header><h3 id={titleId} aria-label={`${title} exact values`}>{title} · exact values</h3><Button variant="outline" aria-label="Close table" onClick={onClose}>Close</Button></header>{rows.length===0?<p role="status">No samples are available for this range.</p>:<SloExactValuesTable rows={rows.slice((page-1)*50,page*50)} title={title} page={page} totalRows={rows.length} onPageChange={onPageChange} timeZone={timeZone}/>}</section>;
 }
+function PreparedLaneTable({id,generation,lane,title,titleId,page,onPageChange,onClose,timeZone,onSessionFailure,onRefresh}:{id:string;generation:string;lane:HistoryLane;title:string;titleId:string;page:number;onPageChange:(value:number)=>void;onClose:()=>void;timeZone:'UTC'|'local';onSessionFailure:()=>void;onRefresh:()=>void}) {
+  const [data,setData]=useState<HistoryValuePage|null>(null),[error,setError]=useState('');
+  const authorityFailure=useRef(onSessionFailure);authorityFailure.current=onSessionFailure;
+  useEffect(()=>{
+    const abort=new AbortController();setData(null);setError('');
+    void sloClient.values(id,generation,lane,(page-1)*50,abort.signal).then(value=>{if(!abort.signal.aborted)setData(value);}).catch(failure=>{
+      if(abort.signal.aborted)return;
+      if(failure instanceof SloFailure&&(failure.status===401||failure.status===403))authorityFailure.current();
+      setError(failure instanceof SloFailure&&failure.status===409?'These history values expired. Refresh the timeline to load a new evaluation.':'Exact values could not load. Refresh the timeline to try again.');
+    });
+    return()=>abort.abort();
+  },[id,generation,lane,page]);
+  const rows:SloExactRow[]=data?(lane==='compliance'?data.days.map(day=>({timestamp:day.day_end,day:day.utc_date,lane:'Daily compliance',series:`${dailyStatusLabel(day.status)}${day.performance.provisional?' · provisional':''}`,unit:'%',good:day.performance.good,total:day.performance.total,samples:day.quality.observed_intervals,effectiveAt:day.effective_at,window:day.performance.provisional?'Partial':'Full',value:day.performance.attainment===null?null:shift(day.performance.attainment,2),coverage:day.status==='unknown'&&day.performance.attainment!==null?'partial':dailyChartCoverage(day),details:`${day.explanation.replaceAll('_',' ')} · requested ${day.requested_at} · effective ${day.effective_at} · target ${shift(day.target,2)}% · attainment ${day.performance.attainment===null?'unavailable':shift(day.performance.attainment,2)+'%'}`})):exactRows(data.samples,lane==='attainment'?'SLI attainment':lane==='budget'?'Rolling budget remaining':'Burn rate',lane==='attainment'?'attainment':lane==='budget'?'remaining_fraction':'burn',lane==='budget'?'fraction':'ratio')):[];
+  return <section className="slo-operational-exact"><header><h3 id={titleId} aria-label={`${title} exact values`}>{title} · exact values</h3><Button variant="outline" aria-label="Close table" onClick={onClose}>Close</Button></header>{error?<div role="alert"><p>{error}</p><Button variant="outline" onClick={onRefresh}>Refresh timeline</Button></div>:!data?<p role="status">Loading exact values…</p>:data.total_values===0?<p role="status">No samples are available for this range.</p>:<SloExactValuesTable rows={rows} title={title} page={page} totalRows={data.total_values} onPageChange={onPageChange} timeZone={timeZone}/>}</section>;
+}
 function burnValue(value:components['schemas']['SloBurnValue']) {return multiple(value.performance.burn);}
+function CurrentStatusCard({value,target,busy,onRefresh}:{value:Pick<OperationalDetail,'current'|'burn_1h'|'burn_6h'|'exhaustion'>;target:string;busy:boolean;onRefresh:()=>void}) {
+  const current=value.current,p=current.performance,q=current.quality,refresh=onRefresh;
+  return <section className="app-rail-card"><header><h2>Status</h2><Button variant="outline" aria-label="Refresh objective status" pending={busy} onClick={refresh}><RefreshIcon/></Button></header><div className="app-rail-card-body"><div className="app-budget-hero" style={{color:`var(--status-${statusFor(current)})`}}>{budgetPercent(p.remaining_fraction)}</div><p className="app-budget-caption">error budget remaining</p><div className="app-budget-meter"><span className="slo-reference-meter"><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${statusFor(current)})`}}/></span></div><dl className="app-status-facts">{[['Attainment',budgetPercent(p.attainment)],['Target',`${shift(target,2)}%`],['Burn 1 h',burnValue(value.burn_1h),value.burn_1h.performance.burn===null?undefined:`${decimal(value.burn_1h.performance.burn)}×`],['Burn 6 h',burnValue(value.burn_6h),value.burn_6h.performance.burn===null?undefined:`${decimal(value.burn_6h.performance.burn)}×`],['Bad events left',p.remaining_budget===null?'—':decimal(p.remaining_budget)],['Exhaustion',shortExhaustion(value.exhaustion)]].map(([label,value,exact])=><div key={label}><dt>{label}</dt><dd title={exact}>{value}</dd></div>)}</dl>{p.provisional&&<p className="app-coverage-note">Observed only · {coveragePercent(q.coverage)} collection coverage</p>}</div></section>;
+}
+
 export function OperationalDetailView({id,definition,locationKey,onLocationChange,refreshVersion=0,onSessionFailure=()=>{}}:{id:string;definition:Slo;locationKey:string;onLocationChange:(path:string)=>void;refreshVersion?:number;onSessionFailure?:()=>void}) {
-  const [detail,setDetail]=useState<OperationalDetail|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const [detailValue,setDetail]=useState<OperationalDetail|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const detail=detailValue?.objective.id===id?detailValue:null;
+  const [currentStatusValue,setCurrentStatus]=useState<CurrentStatus|null>(null),[statusBusy,setStatusBusy]=useState(false),[statusError,setStatusError]=useState('');
+  const currentStatus=currentStatusValue?.slo.id===id?currentStatusValue:null;
+  const authorityFailed=useRef(false);
+  useEffect(()=>{authorityFailed.current=false;},[id]);
   const [refreshCount,setRefreshCount]=useState(0);
   const params=queryFrom(locationKey);
   const windowDays=Math.max(1,Math.min(365,Math.round(definition.rolling_window_seconds/86400)));
@@ -234,6 +275,17 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
   const tableRegion=useRef<HTMLDivElement>(null);
   const generation=useRef(0);
   const sessionFailure=useRef(onSessionFailure);sessionFailure.current=onSessionFailure;
+  useEffect(()=>{
+    const abort=new AbortController();let running=false;
+    const read=async()=>{
+      if(running)return;running=true;setStatusBusy(true);
+      try{const value=await sloClient.current(id,abort.signal);if(!abort.signal.aborted&&!authorityFailed.current){setCurrentStatus(value);setStatusError('');}}
+      catch(failure){if(!abort.signal.aborted){setStatusError('Current status could not refresh.');if(failure instanceof SloFailure&&(failure.status===401||failure.status===403)){authorityFailed.current=true;setCurrentStatus(null);setDetail(null);sessionFailure.current();}}}
+      finally{running=false;if(!abort.signal.aborted)setStatusBusy(false);}
+    };
+    void read();const timer=setInterval(()=>void read(),5000);
+    return()=>{clearInterval(timer);abort.abort();};
+  },[id,refreshCount,refreshVersion]);
   function changeView(values:Record<string,string>) {
     const next=queryFrom(locationKey);
     for(const [key,value] of Object.entries(values)){if(value)next.set(key,value);else next.delete(key);}
@@ -247,19 +299,20 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
     const abort=new AbortController(),requestID=++generation.current;setBusy(true);
     setError('');
     const read=async()=>{
-      if(range==='7d')return sloClient.operational(id,{burn_window_seconds:burnWindow},abort.signal);
       const serverTime=await sloClient.serverTime(id,abort.signal);
       const cadence=definition.cadence_seconds*1000,rangeMs=(range==='1y'?365:Number.parseInt(range,10))*86_400_000;
       const end=Math.floor(serverTime/cadence)*cadence;
       const start=Math.ceil((end-rangeMs)/cadence)*cadence;
-      return sloClient.operational(id,{start:new Date(start).toISOString(),end:new Date(end).toISOString(),burn_window_seconds:burnWindow},abort.signal);
+      // Keep one evaluation boundary throughout asynchronous preparation/retry.
+      // Current status continues loading independently at the backend's clock.
+      return sloClient.operational(id,{at:new Date(end).toISOString(),start:new Date(start).toISOString(),end:new Date(end).toISOString(),burn_window_seconds:burnWindow},abort.signal);
     };
     void read().then(value=>{
-      if(!abort.signal.aborted&&requestID===generation.current){setDetail(value);setError('');}
+      if(!abort.signal.aborted&&!authorityFailed.current&&requestID===generation.current){setDetail(value);setError('');}
     }).catch(failure=>{
       if(!abort.signal.aborted&&requestID===generation.current){
         const problem=failure instanceof Error?failure.message:'The operational detail could not be loaded.';
-        if(failure instanceof SloFailure&&(failure.status===401||failure.status===403)){setDetail(null);setError(problem);sessionFailure.current();}
+        if(failure instanceof SloFailure&&(failure.status===401||failure.status===403)){authorityFailed.current=true;setDetail(null);setCurrentStatus(null);setError(problem);sessionFailure.current();}
         else setError(problem);
       }
     }).finally(()=>{if(!abort.signal.aborted&&requestID===generation.current)setBusy(false);});
@@ -284,11 +337,11 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
       ]};
   },[detail,definition.target,zone]);
   const plotChart=useMemo<TimelineChart|null>(()=>chart?{...chart,lanes:chart.lanes.map((lane,index)=>({...lane,extra:tableOpen[index]?340:0}))}:null,[chart,tableOpen]);
-  const refresh=()=>setRefreshCount(value=>value+1);
+  const refresh=()=>{clearQueryCache();setRefreshCount(value=>value+1);};
   const heading=<><a className="app-detail-back" href="/slos" data-app-route>← All SLOs</a><header className="app-detail-heading"><div><h1 className="app-page-heading" aria-label={definition.display_name} tabIndex={-1}>{definition.display_name}{detail&&<ReferenceStatus status={statusFor(detail.current)} title={detail.reasons.map(reason=>reasonLabel(reason.code)).join('; ')}/>}</h1><div className="app-detail-meta"><a href={`/services/${definition.service_id}`} data-app-route>{definition.service_display_name}</a><span>·</span><span>{shift(definition.target,2)}% over {windowDuration(definition.rolling_window_seconds)} rolling</span><span>·</span><span>SLI <a href={`/slis/${definition.sli_id}`} data-app-route>{definition.sli_display_name}</a></span></div></div></header></>;
   const controls=<div className="app-timeline-controls"><div role="group" aria-label="Objective history period">{rangeOptions.map(value=><Button key={value} variant={range===value?'selected':'outline'} aria-pressed={range===value} onClick={()=>changeView({range:value})}>{value==='1y'?'1 y':value.replace('d',' d')}</Button>)}</div><div role="group" aria-label="Timezone">{(['UTC','local'] as const).map(value=><Button key={value} variant={zone===value?'selected':'outline'} aria-pressed={zone===value} onClick={()=>changeView({tz:value})}>{value==='UTC'?'UTC':'Local'}</Button>)}</div><Button variant="outline" aria-label="Refresh objective history" pending={busy} onClick={refresh}><RefreshIcon/></Button></div>;
   const toolbar=<div className="app-timeline-bar"><h2>Timeline</h2><span className="app-timeline-hint">one time axis for every panel</span>{controls}</div>;
-  if(!detail)return <section className="app-slo-detail" aria-label="Operational SLO detail">{heading}<div className="app-detail-columns"><section className="app-timeline" aria-label="Objective history">{toolbar}{error?<div role="alert" className="slo-error"><p>{error}</p><p>Refresh or choose a shorter period to try again.</p></div>:<p className="app-timeline-loading" role="status">{busy?'Loading objective history…':'Measurements unavailable'}</p>}</section></div></section>;
+  if(!detail)return <section className="app-slo-detail" aria-label="Operational SLO detail">{heading}<div className="app-detail-columns"><section className="app-timeline" aria-label="Objective history">{toolbar}{error?<div role="alert" className="slo-error"><p>{error}</p><p>Refresh or choose a shorter period to try again.</p></div>:<p className="app-timeline-loading" role="status">{busy?'Loading objective history…':'Measurements unavailable'}</p>}</section><aside className="app-detail-rail" aria-label="Current SLO status">{currentStatus?<CurrentStatusCard value={currentStatus} target={definition.target} busy={statusBusy} onRefresh={refresh}/>:<p role="status">{statusError||"Preparing current status…"}</p>}</aside></div></section>;
   const current=detail.current,p=current.performance,q=current.quality;
   const activeBurn=activeBurnWindow===3600?detail.burn_1h:detail.burn_6h;
   const facts=[
@@ -301,16 +354,18 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
     <div className="app-detail-columns"><div className="app-detail-main"><section className="app-timeline" aria-label="Objective history">{toolbar}
       {error&&<div role="alert" className="slo-error"><p>{error}</p><p>Showing the last confirmed evaluation at {detail.effective_at}; values may be stale.</p></div>}
       {busy&&<span role="status" className="sr-only">Refreshing operational evaluation</span>}
+      {currentStatus?.generation&&detail.generation&&!sameDerivedInputs(currentStatus.generation,detail.generation)&&<p className="app-coverage-note" role="status">These graphs and the status panel show different evaluations. Refresh the timeline to align them.</p>}
       {activeBurnWindow!==burnWindow&&<p className="app-coverage-note" role="status">{busy?`Showing ${activeBurnLabel} burn while the selected window loads.`:`Showing the last confirmed ${activeBurnLabel} burn; the selected result is unavailable.`}</p>}
       <div className="app-timeline-body" ref={tableRegion}><div className="app-timeline-labels">{facts.map((fact,index)=><div className="app-lane-label" key={fact.id} style={{height:fact.height+(tableOpen[index]?340:0)}}><h3>{fact.title}</h3><div className="app-lane-value">{fact.value}</div><p>{fact.sub}</p><div className="app-lane-tools">{index===2&&<div role="group" aria-label="Burn window">{([3600,21600] as const).map(value=><Button key={value} variant={burnWindow===value?'selected':'outline'} aria-pressed={burnWindow===value} onClick={()=>changeView({burn_window:String(value)})}>{value===3600?'1 h':'6 h'}</Button>)}</div>}<Button variant="outline" data-table-toggle aria-label={`View ${fact.title} as table`} aria-expanded={tableOpen[index]} aria-controls={`slo-exact-${id}-${fact.id}`} onClick={()=>toggleTable(index)}>▦ <span className={index===2?'sr-only':undefined}>Table</span></Button></div></div>)}</div>
         <div className="app-timeline-plot"><OperationalChartBoundary><Suspense fallback={<p role="status">Loading timeline charts…</p>}><TimelineChartViewLazy chart={plotChart!} showHeader={false}/></Suspense></OperationalChartBoundary></div>
-        {facts.map((fact,index)=>{const target=`slo-exact-${id}-${fact.id}`;return <div className="app-lane-insert" id={target} key={fact.id} hidden={!tableOpen[index]} data-lane-table={index} role="region" aria-labelledby={`${target}-title`} style={{top:facts.slice(0,index+1).reduce((sum,lane)=>sum+lane.height,0),height:340}}>{tableOpen[index]&&<div className="app-lane-insert-panel"><LaneTable title={fact.title} titleId={`${target}-title`} rows={fact.rows} page={tablePages[index]!} timeZone={zone} onPageChange={value=>setTablePages(values=>values.map((page,i)=>i===index?value:page))} onClose={()=>closeTable(index)}/></div>}</div>;})}
+        {facts.map((fact,index)=>{const target=`slo-exact-${id}-${fact.id}`,common={title:fact.title,titleId:`${target}-title`,page:tablePages[index]!,timeZone:zone,onPageChange:(value:number)=>setTablePages(values=>values.map((page,i)=>i===index?value:page)),onClose:()=>closeTable(index)};return <div className="app-lane-insert" id={target} key={fact.id} hidden={!tableOpen[index]} data-lane-table={index} role="region" aria-labelledby={`${target}-title`} style={{top:facts.slice(0,index+1).reduce((sum,lane)=>sum+lane.height,0),height:340}}>{tableOpen[index]&&<div className="app-lane-insert-panel">{detail.generation?<PreparedLaneTable {...common} id={id} generation={detail.generation.generation_id} lane={fact.id as HistoryLane} onSessionFailure={()=>sessionFailure.current()} onRefresh={refresh}/>:<LaneTable {...common} rows={fact.rows}/>}</div>}</div>;})}
       </div>
       {qualityWarning(q,p,current.window)&&<p className="app-coverage-note">{qualityWarning(q,p,current.window)}</p>}
       <p className="app-coverage-note">Completed UTC days · {detail.compliance_summary.unknown_days} unknown · {detail.compliance_summary.not_applicable_days} not applicable</p>
     </section></div>
     <aside className="app-detail-rail" aria-label="Current SLO status and definition">
-      <section className="app-rail-card"><header><h2>Status</h2><Button variant="outline" aria-label="Refresh objective status" pending={busy} onClick={refresh}><RefreshIcon/></Button></header><div className="app-rail-card-body"><div className="app-budget-hero" style={{color:`var(--status-${statusFor(current)})`}}>{budgetPercent(p.remaining_fraction)}</div><p className="app-budget-caption">error budget remaining</p><div className="app-budget-meter"><span className="slo-reference-meter"><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${statusFor(current)})`}}/></span></div><dl className="app-status-facts">{[['Attainment',budgetPercent(p.attainment)],['Target',`${shift(definition.target,2)}%`],['Burn 1 h',burnValue(detail.burn_1h),detail.burn_1h.performance.burn===null?undefined:`${decimal(detail.burn_1h.performance.burn)}×`],['Burn 6 h',burnValue(detail.burn_6h),detail.burn_6h.performance.burn===null?undefined:`${decimal(detail.burn_6h.performance.burn)}×`],['Bad events left',p.remaining_budget===null?'—':decimal(p.remaining_budget)],['Exhaustion',shortExhaustion(detail.exhaustion)]].map(([label,value,exact])=><div key={label}><dt>{label}</dt><dd title={exact}>{value}</dd></div>)}</dl>{p.provisional&&<p className="app-coverage-note">Observed only · {coveragePercent(q.coverage)} collection coverage</p>}</div></section>
+      <CurrentStatusCard value={currentStatus??detail} target={definition.target} busy={statusBusy} onRefresh={refresh}/>
+      {statusError&&<p role="status" className="app-coverage-note">Current status could not refresh. Showing the last confirmed evaluation.</p>}
       <section className="app-rail-card"><details className="app-calculation-disclosure"><summary>View calculation details</summary><dl className="app-definition-facts"><div><dt>Source counts</dt><dd>{p.good??'—'} good / {p.total??'—'} total</dd></div><div><dt>Computed at</dt><dd>{detail.effective_at}</dd></div><div><dt>Coverage</dt><dd>{coveragePercent(q.coverage)} · {q.state} · {q.freshness}</dd></div><div><dt>Window</dt><dd>{current.window.effective_start} – {current.window.end}</dd></div></dl><p>{detail.reasons.map(reason=>reasonLabel(reason.code)+(reason.provisional?' · observed only':'')).join('; ')}</p><p>Evaluation {detail.evaluation_id} · {detail.calculation_version} · definition revision {definition.definition_revision}.</p><p>Requested range {detail.range.requested_start} to {detail.range.requested_end}; effective range {detail.range.effective_start} to {detail.range.effective_end}. Resolution {detail.range.resolution_seconds} seconds.</p><p>{q.observed_intervals} observed, {q.known_empty_intervals} known empty, {q.missing_intervals} missing, {q.expired_intervals} expired; {q.expected_intervals} expected intervals.</p><p>Exhaustion: {detail.exhaustion.reason??detail.exhaustion.state}. {detail.exhaustion.assumptions.join('; ')}</p></details></section>
       <section className="app-rail-card"><header><h2>Definition</h2><a href={`/slis/${definition.sli_id}`} data-app-route>View SLI</a></header><div className="app-rail-card-body"><dl className="app-definition-facts">{[['SLI',definition.sli_display_name],['Type','Request count'],['Datasource',detail.context.datasource_display_name],['Step',`${detail.context.polling_interval_seconds} s`],['Query delay',`${detail.context.settling_delay_seconds} s`],['Spec',`v${detail.context.measurement_revision}`]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{label==='Datasource'?<a href={`/datasources/${detail.context.datasource_id}`} data-app-route>{value}</a>:value}</dd></div>)}</dl><h3 className="app-query-label">Good events</h3><pre>{detail.context.good_query}</pre><h3 className="app-query-label">Total events</h3><pre>{detail.context.total_query}</pre></div></section>
     </aside></div>

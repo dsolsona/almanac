@@ -67,6 +67,10 @@ func TestOperationalRangeRequiresPairedPositiveAtMostYearBounds(t *testing.T) {
 func TestOperationalCommandRejectsInvalidFiltersBeforeProfileRead(t *testing.T) {
 	id := "11111111-1111-1111-1111-111111111111"
 	for _, args := range [][]string{
+		{"status", "--profile-file=unused", "--output=json"},
+		{"values", "--profile-file=unused", "--output=json", "--slo-id=" + id, "--generation-id=" + id, "--lane=budget", "--offset=-1"},
+		{"values", "--profile-file=unused", "--output=json", "--slo-id=" + id, "--generation-id=" + id, "--lane=budget", "--limit=101"},
+		{"values", "--profile-file=unused", "--output=json", "--slo-id=" + id, "--generation-id=" + id, "--lane=unknown"},
 		{"overview", "--profile-file=unused", "--output=json", "--urgency=critical"},
 		{"overview", "--profile-file=unused", "--output=json", "--q=" + strings.Repeat("x", 129)},
 		{"operational", "--profile-file=unused", "--output=json", "--slo-id=" + id, "--burn-window-seconds=60"},

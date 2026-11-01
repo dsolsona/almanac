@@ -18,12 +18,16 @@ type AgentAccessPrincipal struct {
 	ExpiresAt    time.Time
 }
 
-func AuthenticateAgentCredential(ctx context.Context, databaseURL, credentialID string, verifier [32]byte, clock func() time.Time) (AgentAccessPrincipal, error) {
+func AuthenticateAgentCredential(ctx context.Context, databaseURL, credentialID string, verifier [32]byte, clock func() time.Time, runtimes ...*Runtime) (AgentAccessPrincipal, error) {
 	credentialUUID, ok := canonicalUUID(credentialID)
 	if !ok || clock == nil {
 		return AgentAccessPrincipal{}, ErrInvalidAgentCredential
 	}
-	conn, err := connectCurrentSchema(ctx, databaseURL)
+	runtime, err := runtimeOption(runtimes)
+	if err != nil {
+		return AgentAccessPrincipal{}, err
+	}
+	conn, err := acquireConnection(ctx, databaseURL, runtime, LiveTraffic)
 	if err != nil {
 		return AgentAccessPrincipal{}, err
 	}

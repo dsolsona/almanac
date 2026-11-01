@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"time"
 	"uuid"
 
 	"github.com/coder/websocket"
@@ -100,6 +101,27 @@ func (r *Registry) Drain(ctx context.Context) error {
 		sessions = append(sessions, session)
 	}
 	r.mu.Unlock()
+	// The WebSocket library's Close uses its own five-second handshake budget,
+	// independent of ctx. Reserve part of the caller's budget for joining handlers
+	// and draining ordinary HTTP after giving cooperative peers a graceful notice.
+	grace := writeTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		grace = min(grace, max(0, time.Until(deadline)/2))
+	}
+	closeCtx, cancelClose := context.WithTimeout(ctx, grace)
+	defer cancelClose()
+	forced := make(chan struct{})
+	stopForce := context.AfterFunc(closeCtx, func() {
+		defer close(forced)
+		for _, session := range sessions {
+			session.forceClose()
+		}
+	})
+	defer func() {
+		if !stopForce() {
+			<-forced
+		}
+	}()
 	for _, session := range sessions {
 		session.readyMu.RLock()
 		ready := session.ready
@@ -141,6 +163,10 @@ func (r *Registry) Close() error {
 	for _, session := range sessions {
 		session.stopOnce.Do(func() { close(session.shutdown) })
 		session.cancel()
+		if session.transport != nil {
+			_ = session.transport.SetDeadline(time.Now())
+			_ = session.transport.Close()
+		}
 		if err := session.conn.CloseNow(); err != nil {
 			closeErr = errors.Join(closeErr, err)
 		}
@@ -242,5 +268,9 @@ func (r *Registry) CancelDiagnostic(ctx context.Context, agentID string, generat
 
 func (c *sessionControl) forceClose() {
 	c.cancel()
+	if c.transport != nil {
+		_ = c.transport.SetDeadline(time.Now())
+		_ = c.transport.Close()
+	}
 	_ = c.conn.CloseNow()
 }

@@ -219,7 +219,7 @@ func ReconcileDatasourceReassignments(ctx context.Context, databaseURL string, s
 	return notices, nil
 }
 
-func reconcileDatasourceReassignment(ctx context.Context, conn *pgx.Conn, candidate dbgen.ListReadyDatasourceReassignmentsRow, secrets *sourcesecret.Adapter, clock func() time.Time) ([]ReassignmentNotice, error) {
+func reconcileDatasourceReassignment(ctx context.Context, conn *readConnection, candidate dbgen.ListReadyDatasourceReassignmentsRow, secrets *sourcesecret.Adapter, clock func() time.Time) ([]ReassignmentNotice, error) {
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return nil, err

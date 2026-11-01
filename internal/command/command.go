@@ -77,7 +77,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, `Usage:
   almanac version [--output=json]
-  almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--backend-url=ORIGIN] [--database-url-file=FILE] [--initial-admin-login=LOGIN] [--initial-admin-password-file=FILE] [--public-origin=ORIGIN] [--tls-cert-file=FILE] [--tls-key-file=FILE] [--trusted-proxy-cidrs=LIST] [--shutdown-timeout=DURATION]
+  almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--metrics-listen=INTERNAL_ADDR] [--backend-url=ORIGIN] [--database-url-file=FILE] [--initial-admin-login=LOGIN] [--initial-admin-password-file=FILE] [--public-origin=ORIGIN] [--tls-cert-file=FILE] [--tls-key-file=FILE] [--trusted-proxy-cidrs=LIST] [--shutdown-timeout=DURATION]
   almanac db upgrade [--database-url-file=FILE] [--timeout=30s] [--output=json]
   almanac setup --backend-url=ORIGIN --initial-admin-login=LOGIN --initial-admin-password-file=FILE --new-password-file=FILE [--ca-file=PEM] [--timeout=30s] [--output=json]
   almanac auth login --profile-file=FILE --backend-url=ORIGIN --login=LOGIN --password-file=FILE [--ca-file=PEM] [--timeout=30s] [--output=json]
@@ -115,6 +115,8 @@ func printHelp(w io.Writer) {
   almanac slos evaluate --profile-file=FILE --slo-id=UUID [--at=TIME] [--timeline-start=TIME --timeline-end=TIME]
   almanac slos overview --profile-file=FILE [--q=TEXT] [--service-id=UUID] [--urgency=needs_attention|watch|healthy] [--limit=50] [--cursor=CURSOR] [--output=json]
   almanac slos operational --profile-file=FILE --slo-id=UUID [--at=UTC-TIME] [--start=UTC-TIME --end=UTC-TIME] [--burn-window-seconds=3600|21600] [--output=json]
+  almanac slos status --profile-file=FILE --slo-id=UUID [--output=json]
+  almanac slos values --profile-file=FILE --slo-id=UUID --generation-id=UUID --lane=attainment|budget|burn|compliance [--offset=0] [--limit=50] [--output=json]
     Operational times require UTC RFC3339 with microsecond precision; range bounds are paired and at most 365 days.
   almanac secrets provision-source-keyset --file=FILE --keyset-id=UUID [--output=json]
 
@@ -132,6 +134,7 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "strict JSON configuration file")
 	fs.String("listen", "", "HTTP listen address")
+	fs.String("metrics-listen", "", "separate internal metrics address (disabled by default)")
 	fs.String("components", "", "comma-separated components")
 	fs.String("backend-url", "", "fixed backend origin for UI mode")
 	fs.String("shutdown-timeout", "", "graceful shutdown deadline")
@@ -231,14 +234,41 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 		logger.Error("backend authentication initialization failed")
 		return 1
 	}
+	storageRuntime, err := storage.OpenRuntime(initCtx, databaseURL)
+	if err != nil {
+		logger.Error("backend database pool initialization failed")
+		return 1
+	}
+	defer storageRuntime.Close()
 	lifeCtx, cancelLife := context.WithCancelCause(context.Background())
 	defer cancelLife(context.Canceled)
-	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig, assets)
+	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig, assets, storageRuntime)
 	if err != nil {
 		logger.Error("backend server initialization failed")
 		return 2
 	}
 	defer server.Close()
+	metrics, err := startMetricsServer(cfg.MetricsListen, storageRuntime.MetricsHandler())
+	if err != nil {
+		logger.Error("backend internal metrics listener failed")
+		return 1
+	}
+	defer metrics.close()
+	derivedDone := make(chan struct{})
+	currentDone := make(chan struct{})
+	go func() {
+		defer close(derivedDone)
+		storageRuntime.RunDerived(lifeCtx, logger)
+	}()
+	go func() {
+		defer close(currentDone)
+		storageRuntime.RunHistory(lifeCtx, logger)
+	}()
+	defer func() {
+		cancelLife(context.Canceled)
+		<-derivedDone
+		<-currentDone
+	}()
 	server.RegisterOnShutdown(func() {
 		logger.Info("component draining", "component", "backend")
 	})
@@ -293,6 +323,12 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 			return 0
 		}
 		logger.Error("backend server failed")
+		return 1
+	case <-metrics.failed:
+		logger.Error("backend internal metrics server failed")
+		cancelLife(context.Canceled)
+		_ = server.Close()
+		<-serveErr
 		return 1
 	case <-owner.Done():
 		cancelLife(storage.ErrBackendOwnershipLost)

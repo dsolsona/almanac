@@ -11,12 +11,19 @@ import (
 )
 
 type Service struct {
+	runtime     *storage.Runtime
 	databaseURL string
 	now         func() time.Time
 }
 
 func New(databaseURL string, now func() time.Time) *Service {
 	return &Service{databaseURL: databaseURL, now: now}
+}
+
+func NewWithRuntime(databaseURL string, now func() time.Time, runtime *storage.Runtime) *Service {
+	service := New(databaseURL, now)
+	service.runtime = runtime
+	return service
 }
 
 func (s *Service) Acquire(ctx context.Context, token string, resumeSecret []byte) (Result, error) {
@@ -32,7 +39,7 @@ func (s *Service) AcquireWithHello(ctx context.Context, token string, resumeSecr
 		return Result{}, err
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
-	stored, err := storage.AcquireAgentOwnershipWithHello(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, hello, s.now)
+	stored, err := storage.AcquireAgentOwnershipWithHello(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, hello, s.now, s.runtime)
 	result := publicResult(stored)
 	if errors.Is(err, storage.ErrAgentOwnershipConflict) {
 		conflict := &ConflictError{ReplaceAt: stored.ReplaceAt}
@@ -54,7 +61,7 @@ func (s *Service) ResumeWithHello(ctx context.Context, token string, generation 
 		return Result{}, err
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
-	stored, err := storage.ResumeAgentOwnershipWithHello(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, hello, s.now)
+	stored, err := storage.ResumeAgentOwnershipWithHello(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier, generation, hello, s.now, s.runtime)
 	return publicResult(stored), s.mapStorageError(err)
 }
 
@@ -70,7 +77,7 @@ func (s *Service) RecordIncompatibleAttempt(ctx context.Context, token string, g
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
 	revision, err := storage.RecordAgentIncompatibleAttempt(ctx, s.databaseURL, credentialID, credentialVerifier,
-		resumeVerifier, generation, s.now)
+		resumeVerifier, generation, s.now, s.runtime)
 	if errors.Is(err, storage.ErrAgentOwnershipConflict) {
 		return 0, &ConflictError{}
 	}
@@ -96,7 +103,7 @@ func (s *Service) RenewWithHeartbeat(ctx context.Context, token string, generati
 	var renewalNonce [ProofSize]byte
 	copy(renewalNonce[:], nonce)
 	stored, err := storage.RenewAgentOwnershipWithHeartbeat(ctx, s.databaseURL, credentialID, credentialVerifier, resumeVerifier,
-		generation, expectedSequence, renewalNonce, heartbeat, s.now)
+		generation, expectedSequence, renewalNonce, heartbeat, s.now, s.runtime)
 	return publicResult(stored), s.mapStorageError(err)
 }
 
@@ -114,7 +121,7 @@ func (s *Service) RecordAppliedProtocol(ctx context.Context, token string, gener
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
 	if err := storage.RecordAgentConfigurationAppliedProtocol(ctx, s.databaseURL, credentialID, credentialVerifier,
-		resumeVerifier, generation, revision, protocol, s.now); errors.Is(err, storage.ErrInvalidAgentCredential) {
+		resumeVerifier, generation, revision, protocol, s.now, s.runtime); errors.Is(err, storage.ErrInvalidAgentCredential) {
 		return ErrInvalidCredential
 	} else if errors.Is(err, storage.ErrAgentOwnershipDenied) {
 		return ErrDenied
@@ -136,7 +143,7 @@ func (s *Service) RecordConfigurationFailed(ctx context.Context, token string, g
 	}
 	resumeVerifier := sha256.Sum256(resumeSecret)
 	err = storage.RecordAgentConfigurationFailed(ctx, s.databaseURL, credentialID, credentialVerifier,
-		resumeVerifier, generation, revision, failureCode, s.now)
+		resumeVerifier, generation, revision, failureCode, s.now, s.runtime)
 	return s.mapStorageError(err)
 }
 

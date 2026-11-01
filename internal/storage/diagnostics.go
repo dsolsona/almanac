@@ -441,13 +441,13 @@ func transitionOpenDiagnostic(ctx context.Context, tx pgx.Tx, record DiagnosticR
 	return readDiagnostic(ctx, tx, id)
 }
 
-func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, generation int64, result agentprotocol.DiagnosticResult, now time.Time) error {
+func CompleteDatasourceDiagnostic(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, generation int64, result agentprotocol.DiagnosticResult, now time.Time, runtimes ...*Runtime) error {
 	id, validID := canonicalUUID(result.DiagnosticID)
 	credential, validCredential := canonicalUUID(credentialID)
 	if !validID || !validCredential || generation <= 0 || result.ValidateHTTPS() != nil || !validAgentClock(now) {
 		return ErrInvalidAgentInput
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credential, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credential, credentialVerifier, runtimes...)
 	if err != nil {
 		return err
 	}

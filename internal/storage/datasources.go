@@ -638,7 +638,7 @@ func updateEncryptedField(adapter *sourcesecret.Adapter, installationID string, 
 	}
 }
 
-func beginDatasourceAdminWrite(ctx context.Context, databaseURL string, verifier [32]byte, now func() time.Time) (*pgx.Conn, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
+func beginDatasourceAdminWrite(ctx context.Context, databaseURL string, verifier [32]byte, now func() time.Time) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {
 	conn, q, tx, user, installation, session, started, err := beginAgentRead(ctx, databaseURL, verifier, now)
 	if err != nil {
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err

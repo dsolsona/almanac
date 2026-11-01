@@ -34,11 +34,15 @@ type Session struct {
 	Welcome     agentprotocol.Envelope[agentprotocol.Welcome]
 }
 
-func New(databaseURL string, now func() time.Time) (*Service, error) {
-	if _, err := storage.ParseDatabaseURL(databaseURL); err != nil || now == nil {
+func New(databaseURL string, now func() time.Time, runtimes ...*storage.Runtime) (*Service, error) {
+	if _, err := storage.ParseDatabaseURL(databaseURL); err != nil || now == nil || len(runtimes) > 1 {
 		return nil, ErrInvalidInput
 	}
-	return &Service{ownership: agentownership.New(databaseURL, now), now: now}, nil
+	var runtime *storage.Runtime
+	if len(runtimes) == 1 {
+		runtime = runtimes[0]
+	}
+	return &Service{ownership: agentownership.NewWithRuntime(databaseURL, now, runtime), now: now}, nil
 }
 
 func (s *Service) Open(ctx context.Context, token string, envelope agentprotocol.Envelope[agentprotocol.Hello]) (Session, error) {

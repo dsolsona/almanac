@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { sloClient, SloFailure } from '../src/slos/client.ts';
+import { sloClient, SloFailure, sameDerivedInputs } from '../src/slos/client.ts';
 import type { AuthContext } from '../src/auth/client.ts';
 import type { components } from '../src/api/generated.ts';
+import { clearQueryCache } from '../src/queryCache.ts';
 const context:AuthContext={csrf_token:'csrf',session:{user_id:'u',login:'editor',role:'editor',restricted:false}};
 const id='11111111-1111-1111-1111-111111111111';
 const service={id,name:'checkout',display_name:'Checkout',version:'1',created_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:00:00Z'};
@@ -19,6 +20,33 @@ function operationalDetail(objectiveID=id):components['schemas']['SloOperational
  return {evaluation_id:'22222222-2222-2222-2222-222222222222',requested_at:instant,effective_at:instant,calculation_version:'1',snapshot_kind:'current_operational_read',objective,context:{sli_id:id,sli_name:'request-success',sli_display_name:'Request success',datasource_id:'33333333-3333-3333-3333-333333333333',datasource_display_name:'Metrics',measurement_revision:'1',polling_interval_seconds:60,settling_delay_seconds:0,good_query:'good',total_query:'total'},current:value,urgency:'healthy',leading_reason:{code:'on_track',provisional:false},reasons:[{code:'on_track',provisional:false}],burn_1h:burn(3600),burn_6h:burn(21600),exhaustion:{state:'unavailable',remaining_events:null,bad_events_per_hour:null,hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[]},range:{requested_start:'2026-10-22T12:00:00Z',requested_end:instant,effective_start:'2026-10-22T12:00:00Z',effective_end:instant,source_cadence_seconds:60,resolution_seconds:60,reduced:false,max_samples_per_series:1500,bucket_bounds:'half_open'},attainment_series:series('attainment',null),budget_series:series('rolling_budget',null),burn_series:series('burn',3600),compliance_series:{kind:'daily_compliance',days},compliance_summary:{met_days:7,violated_days:0,evaluable_days:7,unknown_days:0,not_applicable_days:0}};
 }
 afterEach(()=>vi.unstubAllGlobals());
+it('accepts independent current status with UTC generation metadata and rejects a local-offset stamp',async()=>{
+ const detail=operationalDetail();
+ const generation={generation_id:id,source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'v1',evaluated_through:instant,published_at:instant,calculation_lag_seconds:0};
+ const status={slo:detail.objective,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation};
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(status),{status:200})));
+ await expect(sloClient.current(id)).resolves.toMatchObject({generation:{evaluated_through:instant}});
+ generation.evaluated_through='2026-10-29T13:00:00+01:00';
+ await expect(sloClient.current(id)).rejects.toThrow('invalid response');
+});
+
+it('compares the calculation inputs rather than independent publication IDs',()=>{
+ const first={generation_id:id,source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'v1',evaluated_through:instant,published_at:instant,calculation_lag_seconds:0};
+ const second={...first,generation_id:'22222222-2222-2222-2222-222222222222'};
+ expect(sameDerivedInputs(first,second)).toBe(true);
+ expect(sameDerivedInputs(first,{...second,source_generation:'2'})).toBe(false);
+ expect(sameDerivedInputs(first,{...second,evaluated_through:'2026-10-29T12:01:00Z'})).toBe(false);
+});
+it('keeps exact-value pages on the requested generation and rejects cross-generation responses',async()=>{
+ const generation='22222222-2222-2222-2222-222222222222';
+ const page={generation:{generation_id:generation,source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'v1',evaluated_through:instant,published_at:instant,calculation_lag_seconds:0},lane:'budget',offset:0,next_offset:null,total_values:0,samples:[],days:[]};
+ const fetcher=vi.fn(async(_input:RequestInfo|URL)=>new Response(JSON.stringify(page),{status:200}));
+ vi.stubGlobal('fetch',fetcher);
+ await expect(sloClient.values(id,generation,'budget',0)).resolves.toMatchObject({generation:{generation_id:generation}});
+ expect(String(fetcher.mock.calls[0]?.[0])).toContain(`/history/${generation}/values?lane=budget&offset=0&limit=50`);
+ clearQueryCache();page.generation.generation_id=id;
+ await expect(sloClient.values(id,generation,'budget',0)).rejects.toThrow('invalid response');
+});
 it('uses the lightweight definition response Date for server-anchored history bounds',async()=>{
  const fetcher=vi.fn(async(_input:RequestInfo|URL)=>new Response(JSON.stringify(operationalDetail().objective),{status:200,headers:{ETag:`"slo:${id}:1"`,Date:'Thu, 29 Oct 2026 12:00:00 GMT'}}));
  vi.stubGlobal('fetch',fetcher);
@@ -41,6 +69,7 @@ it('accepts operational detail without a resource ETag but still validates its I
   .mockResolvedValueOnce(new Response(JSON.stringify(operationalDetail().objective),{status:200}));
  vi.stubGlobal('fetch',missingTag);
  await expect(sloClient.operational(id)).resolves.toMatchObject({evaluation_id:'22222222-2222-2222-2222-222222222222',objective:{id}});
+ clearQueryCache(); // Exercise a new server response rather than the confirmed cached snapshot.
  await expect(sloClient.operational(id)).rejects.toThrow('invalid response');
  await expect(sloClient.get(id)).rejects.toThrow('record version could not be confirmed');
 });

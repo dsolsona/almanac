@@ -321,9 +321,26 @@ SELECT id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urg
 FROM public.almanac_slo_overview_snapshots WHERE id=$1 FOR UPDATE
 `
 
-func (q *Queries) GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (AlmanacSloOverviewSnapshot, error) {
+type GetSloOverviewSnapshotRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	CursorSecret    []byte             `json:"cursor_secret"`
+	ActorID         pgtype.UUID        `json:"actor_id"`
+	SessionVerifier []byte             `json:"session_verifier"`
+	Role            string             `json:"role"`
+	QueryText       string             `json:"query_text"`
+	ServiceID       pgtype.UUID        `json:"service_id"`
+	Urgency         pgtype.Text        `json:"urgency"`
+	PageLimit       int32              `json:"page_limit"`
+	GroupCounts     []byte             `json:"group_counts"`
+	State           string             `json:"state"`
+	PayloadBytes    int32              `json:"payload_bytes"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (GetSloOverviewSnapshotRow, error) {
 	row := q.db.QueryRow(ctx, getSloOverviewSnapshot, id)
-	var i AlmanacSloOverviewSnapshot
+	var i GetSloOverviewSnapshotRow
 	err := row.Scan(
 		&i.ID,
 		&i.CursorSecret,
@@ -635,9 +652,16 @@ SELECT c.interval_start, c.interval_end, c.outcome,
        CASE WHEN c.outcome='observed' THEN COALESCE(v.total_count::text, '') ELSE '' END::text AS total,
        c.recorded_at
 FROM public.almanac_sli_coverage c
-LEFT JOIN public.almanac_sli_observation_values v
-  ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision
-WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start >= $3 AND c.interval_end <= $4
+LEFT JOIN LATERAL (
+    SELECT value.good_count, value.total_count
+    FROM public.almanac_sli_observation_values value
+    WHERE value.interval_start=c.interval_start
+      AND value.sli_id=$1 AND value.measurement_revision=$2
+      AND value.interval_start >= $3 AND value.interval_start < $4
+    LIMIT 1
+) v ON true
+WHERE c.sli_id=$1 AND c.measurement_revision=$2
+  AND c.interval_start >= $3 AND c.interval_start < $4 AND c.interval_end <= $4
 ORDER BY c.interval_start LIMIT $5
 `
 

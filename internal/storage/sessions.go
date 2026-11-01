@@ -344,6 +344,10 @@ func timestamp(value time.Time) pgtype.Timestamptz {
 }
 
 func setTransactionBounds(ctx context.Context, tx pgx.Tx) error {
+	if boundRuntime(ctx) != nil {
+		_, err := tx.Exec(ctx, "SET LOCAL lock_timeout='250ms'; SET LOCAL statement_timeout='2s'; SET LOCAL jit=off")
+		return err
+	}
 	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '5s'"); err != nil {
 		return err
 	}

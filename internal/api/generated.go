@@ -236,22 +236,22 @@ func (e AgentRuntimeStatusReachability) Valid() bool {
 
 // Defines values for AgentRuntimeStatusSchedulerHealth.
 const (
-	Degraded AgentRuntimeStatusSchedulerHealth = "degraded"
-	Ready    AgentRuntimeStatusSchedulerHealth = "ready"
-	Starting AgentRuntimeStatusSchedulerHealth = "starting"
-	Stopped  AgentRuntimeStatusSchedulerHealth = "stopped"
+	AgentRuntimeStatusSchedulerHealthDegraded AgentRuntimeStatusSchedulerHealth = "degraded"
+	AgentRuntimeStatusSchedulerHealthReady    AgentRuntimeStatusSchedulerHealth = "ready"
+	AgentRuntimeStatusSchedulerHealthStarting AgentRuntimeStatusSchedulerHealth = "starting"
+	AgentRuntimeStatusSchedulerHealthStopped  AgentRuntimeStatusSchedulerHealth = "stopped"
 )
 
 // Valid indicates whether the value is a known member of the AgentRuntimeStatusSchedulerHealth enum.
 func (e AgentRuntimeStatusSchedulerHealth) Valid() bool {
 	switch e {
-	case Degraded:
+	case AgentRuntimeStatusSchedulerHealthDegraded:
 		return true
-	case Ready:
+	case AgentRuntimeStatusSchedulerHealthReady:
 		return true
-	case Starting:
+	case AgentRuntimeStatusSchedulerHealthStarting:
 		return true
-	case Stopped:
+	case AgentRuntimeStatusSchedulerHealthStopped:
 		return true
 	default:
 		return false
@@ -483,6 +483,24 @@ const (
 func (e DatasourceWriteProvider) Valid() bool {
 	switch e {
 	case DatasourceWriteProviderPrometheus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivedPreparationState.
+const (
+	DerivedPreparationStateFailed  DerivedPreparationState = "failed"
+	DerivedPreparationStatePending DerivedPreparationState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the DerivedPreparationState enum.
+func (e DerivedPreparationState) Valid() bool {
+	switch e {
+	case DerivedPreparationStateFailed:
+		return true
+	case DerivedPreparationStatePending:
 		return true
 	default:
 		return false
@@ -1287,6 +1305,27 @@ func (e SloBurnValueWindowSeconds) Valid() bool {
 	}
 }
 
+// Defines values for SloCurrentStatusUrgency.
+const (
+	SloCurrentStatusUrgencyHealthy        SloCurrentStatusUrgency = "healthy"
+	SloCurrentStatusUrgencyNeedsAttention SloCurrentStatusUrgency = "needs_attention"
+	SloCurrentStatusUrgencyWatch          SloCurrentStatusUrgency = "watch"
+)
+
+// Valid indicates whether the value is a known member of the SloCurrentStatusUrgency enum.
+func (e SloCurrentStatusUrgency) Valid() bool {
+	switch e {
+	case SloCurrentStatusUrgencyHealthy:
+		return true
+	case SloCurrentStatusUrgencyNeedsAttention:
+		return true
+	case SloCurrentStatusUrgencyWatch:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloDailyComplianceDayStatus.
 const (
 	SloDailyComplianceDayStatusMet           SloDailyComplianceDayStatus = "met"
@@ -1524,6 +1563,30 @@ func (e SloExhaustionEstimateState) Valid() bool {
 	}
 }
 
+// Defines values for SloHistoryValuePageLane.
+const (
+	SloHistoryValuePageLaneAttainment SloHistoryValuePageLane = "attainment"
+	SloHistoryValuePageLaneBudget     SloHistoryValuePageLane = "budget"
+	SloHistoryValuePageLaneBurn       SloHistoryValuePageLane = "burn"
+	SloHistoryValuePageLaneCompliance SloHistoryValuePageLane = "compliance"
+)
+
+// Valid indicates whether the value is a known member of the SloHistoryValuePageLane enum.
+func (e SloHistoryValuePageLane) Valid() bool {
+	switch e {
+	case SloHistoryValuePageLaneAttainment:
+		return true
+	case SloHistoryValuePageLaneBudget:
+		return true
+	case SloHistoryValuePageLaneBurn:
+		return true
+	case SloHistoryValuePageLaneCompliance:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloOperationalDetailSnapshotKind.
 const (
 	CurrentOperationalRead SloOperationalDetailSnapshotKind = "current_operational_read"
@@ -1554,6 +1617,27 @@ func (e SloOperationalDetailUrgency) Valid() bool {
 	case SloOperationalDetailUrgencyNeedsAttention:
 		return true
 	case SloOperationalDetailUrgencyWatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloOperationalOverviewItemBudgetHistoryState.
+const (
+	SloOperationalOverviewItemBudgetHistoryStatePreparing   SloOperationalOverviewItemBudgetHistoryState = "preparing"
+	SloOperationalOverviewItemBudgetHistoryStateReady       SloOperationalOverviewItemBudgetHistoryState = "ready"
+	SloOperationalOverviewItemBudgetHistoryStateUnavailable SloOperationalOverviewItemBudgetHistoryState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalOverviewItemBudgetHistoryState enum.
+func (e SloOperationalOverviewItemBudgetHistoryState) Valid() bool {
+	switch e {
+	case SloOperationalOverviewItemBudgetHistoryStatePreparing:
+		return true
+	case SloOperationalOverviewItemBudgetHistoryStateReady:
+		return true
+	case SloOperationalOverviewItemBudgetHistoryStateUnavailable:
 		return true
 	default:
 		return false
@@ -1748,19 +1832,61 @@ func (e SloOperationalSeriesBurnWindowSeconds) Valid() bool {
 
 // Defines values for SloOperationalSeriesKind.
 const (
-	Attainment    SloOperationalSeriesKind = "attainment"
-	Burn          SloOperationalSeriesKind = "burn"
-	RollingBudget SloOperationalSeriesKind = "rolling_budget"
+	SloOperationalSeriesKindAttainment    SloOperationalSeriesKind = "attainment"
+	SloOperationalSeriesKindBurn          SloOperationalSeriesKind = "burn"
+	SloOperationalSeriesKindRollingBudget SloOperationalSeriesKind = "rolling_budget"
 )
 
 // Valid indicates whether the value is a known member of the SloOperationalSeriesKind enum.
 func (e SloOperationalSeriesKind) Valid() bool {
 	switch e {
-	case Attainment:
+	case SloOperationalSeriesKindAttainment:
 		return true
-	case Burn:
+	case SloOperationalSeriesKindBurn:
 		return true
-	case RollingBudget:
+	case SloOperationalSeriesKindRollingBudget:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloPreparationJobStage.
+const (
+	Aggregate SloPreparationJobStage = "aggregate"
+	Current   SloPreparationJobStage = "current"
+	History   SloPreparationJobStage = "history"
+)
+
+// Valid indicates whether the value is a known member of the SloPreparationJobStage enum.
+func (e SloPreparationJobStage) Valid() bool {
+	switch e {
+	case Aggregate:
+		return true
+	case Current:
+		return true
+	case History:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloPreparationJobState.
+const (
+	SloPreparationJobStateFailed  SloPreparationJobState = "failed"
+	SloPreparationJobStatePending SloPreparationJobState = "pending"
+	SloPreparationJobStateRunning SloPreparationJobState = "running"
+)
+
+// Valid indicates whether the value is a known member of the SloPreparationJobState enum.
+func (e SloPreparationJobState) Valid() bool {
+	switch e {
+	case SloPreparationJobStateFailed:
+		return true
+	case SloPreparationJobStatePending:
+		return true
+	case SloPreparationJobStateRunning:
 		return true
 	default:
 		return false
@@ -1866,6 +1992,30 @@ func (e GetSloOperationalOverviewParamsUrgency) Valid() bool {
 	case GetSloOperationalOverviewParamsUrgencyNeedsAttention:
 		return true
 	case GetSloOperationalOverviewParamsUrgencyWatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetSloHistoryValuesParamsLane.
+const (
+	GetSloHistoryValuesParamsLaneAttainment GetSloHistoryValuesParamsLane = "attainment"
+	GetSloHistoryValuesParamsLaneBudget     GetSloHistoryValuesParamsLane = "budget"
+	GetSloHistoryValuesParamsLaneBurn       GetSloHistoryValuesParamsLane = "burn"
+	GetSloHistoryValuesParamsLaneCompliance GetSloHistoryValuesParamsLane = "compliance"
+)
+
+// Valid indicates whether the value is a known member of the GetSloHistoryValuesParamsLane enum.
+func (e GetSloHistoryValuesParamsLane) Valid() bool {
+	switch e {
+	case GetSloHistoryValuesParamsLaneAttainment:
+		return true
+	case GetSloHistoryValuesParamsLaneBudget:
+		return true
+	case GetSloHistoryValuesParamsLaneBurn:
+		return true
+	case GetSloHistoryValuesParamsLaneCompliance:
 		return true
 	default:
 		return false
@@ -2216,6 +2366,33 @@ type DatasourceWriteConfigurationFormat string
 // DatasourceWriteProvider defines model for DatasourceWrite.Provider.
 type DatasourceWriteProvider string
 
+// DerivedGeneration defines model for DerivedGeneration.
+type DerivedGeneration struct {
+	CalculationLagSeconds float32            `json:"calculation_lag_seconds"`
+	CalculationVersion    string             `json:"calculation_version"`
+	DefinitionRevision    string             `json:"definition_revision"`
+	EvaluatedThrough      time.Time          `json:"evaluated_through"`
+	ExclusionRevision     string             `json:"exclusion_revision"`
+	GenerationId          openapi_types.UUID `json:"generation_id"`
+	MeasurementRevision   string             `json:"measurement_revision"`
+	PublishedAt           time.Time          `json:"published_at"`
+
+	// RetentionStart Cadence-aligned retained-input boundary used by this generation; present on runtime-prepared results
+	RetentionStart   *time.Time `json:"retention_start,omitempty"`
+	SourceGeneration string     `json:"source_generation"`
+}
+
+// DerivedPreparation defines model for DerivedPreparation.
+type DerivedPreparation struct {
+	// DetailsUrl Relative authorized URL for bounded job diagnostics
+	DetailsUrl        *string                 `json:"details_url,omitempty"`
+	RetryAfterSeconds int                     `json:"retry_after_seconds"`
+	State             DerivedPreparationState `json:"state"`
+}
+
+// DerivedPreparationState defines model for DerivedPreparation.State.
+type DerivedPreparationState string
+
 // Diagnostic defines model for Diagnostic.
 type Diagnostic struct {
 	CreatedAt  time.Time            `json:"created_at"`
@@ -2386,8 +2563,9 @@ type Problem struct {
 		Field   string `json:"field"`
 		Message string `json:"message"`
 	} `json:"field_errors"`
-	Message   string `json:"message"`
-	RequestId string `json:"request_id"`
+	Message     string              `json:"message"`
+	Preparation *DerivedPreparation `json:"preparation,omitempty"`
+	RequestId   string              `json:"request_id"`
 }
 
 // ProviderDescriptor defines model for ProviderDescriptor.
@@ -2746,6 +2924,22 @@ type SloCreateRequest struct {
 	Target string `json:"target"`
 }
 
+// SloCurrentStatus defines model for SloCurrentStatus.
+type SloCurrentStatus struct {
+	Burn1h        SloBurnValue            `json:"burn_1h"`
+	Burn6h        SloBurnValue            `json:"burn_6h"`
+	Current       SloOperationalValue     `json:"current"`
+	Exhaustion    SloExhaustionEstimate   `json:"exhaustion"`
+	Generation    DerivedGeneration       `json:"generation"`
+	LeadingReason SloUrgencyReason        `json:"leading_reason"`
+	Reasons       []SloUrgencyReason      `json:"reasons"`
+	Slo           Slo                     `json:"slo"`
+	Urgency       SloCurrentStatusUrgency `json:"urgency"`
+}
+
+// SloCurrentStatusUrgency defines model for SloCurrentStatus.Urgency.
+type SloCurrentStatusUrgency string
+
 // SloDailyComplianceDay defines model for SloDailyComplianceDay.
 type SloDailyComplianceDay struct {
 	DayEnd             time.Time `json:"day_end"`
@@ -2914,6 +3108,20 @@ type SloExhaustionEstimateAssumptions string
 // SloExhaustionEstimateState defines model for SloExhaustionEstimate.State.
 type SloExhaustionEstimateState string
 
+// SloHistoryValuePage defines model for SloHistoryValuePage.
+type SloHistoryValuePage struct {
+	Days        []SloDailyComplianceDay `json:"days"`
+	Generation  DerivedGeneration       `json:"generation"`
+	Lane        SloHistoryValuePageLane `json:"lane"`
+	NextOffset  *int                    `json:"next_offset"`
+	Offset      int                     `json:"offset"`
+	Samples     []SloOperationalSample  `json:"samples"`
+	TotalValues int                     `json:"total_values"`
+}
+
+// SloHistoryValuePageLane defines model for SloHistoryValuePage.Lane.
+type SloHistoryValuePageLane string
+
 // SloOperationalContext defines model for SloOperationalContext.
 type SloOperationalContext struct {
 	DatasourceDisplayName  string             `json:"datasource_display_name"`
@@ -2943,6 +3151,7 @@ type SloOperationalDetail struct {
 	EffectiveAt        time.Time                        `json:"effective_at"`
 	EvaluationId       openapi_types.UUID               `json:"evaluation_id"`
 	Exhaustion         SloExhaustionEstimate            `json:"exhaustion"`
+	Generation         *DerivedGeneration               `json:"generation,omitempty"`
 	LeadingReason      SloUrgencyReason                 `json:"leading_reason"`
 	Objective          Slo                              `json:"objective"`
 	Range              SloOperationalRange              `json:"range"`
@@ -2960,17 +3169,26 @@ type SloOperationalDetailUrgency string
 
 // SloOperationalOverviewItem defines model for SloOperationalOverviewItem.
 type SloOperationalOverviewItem struct {
+	BudgetHistoryGeneration *DerivedGeneration `json:"budget_history_generation,omitempty"`
+
+	// BudgetHistoryState Retained budget history is labelled preparing until it matches the current published generation.
+	BudgetHistoryState *SloOperationalOverviewItemBudgetHistoryState `json:"budget_history_state,omitempty"`
+
 	// BudgetSparkline Exact rolling-budget evaluation samples from the preceding seven days; first/last/min/max per bucket and explicit gaps
 	BudgetSparkline []SloOperationalSample            `json:"budget_sparkline"`
 	Burn1h          SloBurnValue                      `json:"burn_1h"`
 	Burn6h          SloBurnValue                      `json:"burn_6h"`
 	Current         SloOperationalValue               `json:"current"`
 	Exhaustion      SloExhaustionEstimate             `json:"exhaustion"`
+	Generation      *DerivedGeneration                `json:"generation,omitempty"`
 	LeadingReason   SloUrgencyReason                  `json:"leading_reason"`
 	Reasons         []SloUrgencyReason                `json:"reasons"`
 	Slo             Slo                               `json:"slo"`
 	Urgency         SloOperationalOverviewItemUrgency `json:"urgency"`
 }
+
+// SloOperationalOverviewItemBudgetHistoryState Retained budget history is labelled preparing until it matches the current published generation.
+type SloOperationalOverviewItemBudgetHistoryState string
 
 // SloOperationalOverviewItemUrgency defines model for SloOperationalOverviewItem.Urgency.
 type SloOperationalOverviewItemUrgency string
@@ -3085,6 +3303,28 @@ type SloOperationalValue struct {
 type SloPage struct {
 	Items      []Slo  `json:"items"`
 	NextCursor string `json:"next_cursor"`
+}
+
+// SloPreparationJob defines model for SloPreparationJob.
+type SloPreparationJob struct {
+	Attempts      int                    `json:"attempts"`
+	ErrorCode     string                 `json:"error_code"`
+	Id            openapi_types.UUID     `json:"id"`
+	NextAttemptAt time.Time              `json:"next_attempt_at"`
+	Stage         SloPreparationJobStage `json:"stage"`
+	State         SloPreparationJobState `json:"state"`
+}
+
+// SloPreparationJobStage defines model for SloPreparationJob.Stage.
+type SloPreparationJobStage string
+
+// SloPreparationJobState defines model for SloPreparationJob.State.
+type SloPreparationJobState string
+
+// SloPreparationPage defines model for SloPreparationPage.
+type SloPreparationPage struct {
+	Items     []SloPreparationJob `json:"items"`
+	Truncated bool                `json:"truncated"`
 }
 
 // SloTimelineItem defines model for SloTimelineItem.
@@ -3354,6 +3594,16 @@ type EvaluateSloParams struct {
 	TimelineStart *time.Time `form:"timeline_start,omitempty" json:"timeline_start,omitempty"`
 	TimelineEnd   *time.Time `form:"timeline_end,omitempty" json:"timeline_end,omitempty"`
 }
+
+// GetSloHistoryValuesParams defines parameters for GetSloHistoryValues.
+type GetSloHistoryValuesParams struct {
+	Lane   GetSloHistoryValuesParamsLane `form:"lane" json:"lane"`
+	Offset *int                          `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int                          `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSloHistoryValuesParamsLane defines parameters for GetSloHistoryValues.
+type GetSloHistoryValuesParamsLane string
 
 // GetSloOperationalDetailParams defines parameters for GetSloOperationalDetail.
 type GetSloOperationalDetailParams struct {
@@ -4240,12 +4490,40 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 	EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetSloHistoryValues Page exact represented values from one immutable history generation
+	//
+	// Reads only the named prepared generation, with fresh authorization on every page. A generation is retained for five minutes after publication; unavailable or expired generations return 409 snapshot_expired. The endpoint never silently moves to a newer generation. Decimal values are returned unchanged. Choose another bounded operational range to inspect finer resolution. Samples contains numeric-lane rows; days contains daily compliance rows. The other array is empty. Null next_offset ends paging.
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/history/{generation_id}/values (the `GetSloHistoryValues` operationId).
+	GetSloHistoryValues(ctx context.Context, sloId SloId, generationId openapi_types.UUID, params *GetSloHistoryValuesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetSloOperationalDetail Read current operational evaluation and bounded history
 	//
 	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 	GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
+	//
+	// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
+	GetSloPreparation(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
+	//
+	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+	//
+	// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
+	RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSloCurrentStatus Read the published current SLO result independently of history
+	//
+	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
+	GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLiveness Report whether the UI process is alive
 	//
@@ -5394,6 +5672,23 @@ func (c *Client) EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateS
 	return c.Client.Do(req)
 }
 
+// GetSloHistoryValues Page exact represented values from one immutable history generation
+//
+// Reads only the named prepared generation, with fresh authorization on every page. A generation is retained for five minutes after publication; unavailable or expired generations return 409 snapshot_expired. The endpoint never silently moves to a newer generation. Decimal values are returned unchanged. Choose another bounded operational range to inspect finer resolution. Samples contains numeric-lane rows; days contains daily compliance rows. The other array is empty. Null next_offset ends paging.
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/history/{generation_id}/values (the `GetSloHistoryValues` operationId).
+func (c *Client) GetSloHistoryValues(ctx context.Context, sloId SloId, generationId openapi_types.UUID, params *GetSloHistoryValuesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSloHistoryValuesRequest(c.Server, sloId, generationId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetSloOperationalDetail Read current operational evaluation and bounded history
 //
 // Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
@@ -5401,6 +5696,57 @@ func (c *Client) EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateS
 // Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 func (c *Client) GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSloOperationalDetailRequest(c.Server, sloId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
+//
+// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
+func (c *Client) GetSloPreparation(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSloPreparationRequest(c.Server, sloId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
+//
+// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+//
+// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
+func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetrySloPreparationRequest(c.Server, sloId, jobId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSloCurrentStatus Read the published current SLO result independently of history
+//
+// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
+func (c *Client) GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSloCurrentStatusRequest(c.Server, sloId)
 	if err != nil {
 		return nil, err
 	}
@@ -7764,6 +8110,94 @@ func NewEvaluateSloRequest(server string, sloId SloId, params *EvaluateSloParams
 	return req, nil
 }
 
+// NewGetSloHistoryValuesRequest constructs an http.Request for the GetSloHistoryValues method
+func NewGetSloHistoryValuesRequest(server string, sloId SloId, generationId openapi_types.UUID, params *GetSloHistoryValuesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "generation_id", generationId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/history/%s/values", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "lane", params.Lane, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "offset", *params.Offset, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSloOperationalDetailRequest constructs an http.Request for the GetSloOperationalDetail method
 func NewGetSloOperationalDetailRequest(server string, sloId SloId, params *GetSloOperationalDetailParams) (*http.Request, error) {
 	var err error
@@ -7851,6 +8285,115 @@ func NewGetSloOperationalDetailRequest(server string, sloId SloId, params *GetSl
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSloPreparationRequest constructs an http.Request for the GetSloPreparation method
+func NewGetSloPreparationRequest(server string, sloId SloId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/preparation", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRetrySloPreparationRequest constructs an http.Request for the RetrySloPreparation method
+func NewRetrySloPreparationRequest(server string, sloId SloId, jobId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "job_id", jobId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/preparation/%s/retry", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSloCurrentStatusRequest constructs an http.Request for the GetSloCurrentStatus method
+func NewGetSloCurrentStatusRequest(server string, sloId SloId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/status", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -8491,6 +9034,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 	EvaluateSloWithResponse(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*EvaluateSloResponse, error)
 
+	// GetSloHistoryValuesWithResponse Page exact represented values from one immutable history generation
+	//
+	// Reads only the named prepared generation, with fresh authorization on every page. A generation is retained for five minutes after publication; unavailable or expired generations return 409 snapshot_expired. The endpoint never silently moves to a newer generation. Decimal values are returned unchanged. Choose another bounded operational range to inspect finer resolution. Samples contains numeric-lane rows; days contains daily compliance rows. The other array is empty. Null next_offset ends paging.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/history/{generation_id}/values (the `GetSloHistoryValues` operationId).
+	GetSloHistoryValuesWithResponse(ctx context.Context, sloId SloId, generationId openapi_types.UUID, params *GetSloHistoryValuesParams, reqEditors ...RequestEditorFn) (*GetSloHistoryValuesResponse, error)
+
 	// GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
 	//
 	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
@@ -8499,6 +9051,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 	GetSloOperationalDetailWithResponse(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*GetSloOperationalDetailResponse, error)
+
+	// GetSloPreparationWithResponse Read bounded preparation progress and exhausted-job diagnostics
+	//
+	// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
+	GetSloPreparationWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloPreparationResponse, error)
+
+	// RetrySloPreparationWithResponse Give one exhausted preparation job another bounded attempt budget
+	//
+	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
+	RetrySloPreparationWithResponse(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*RetrySloPreparationResponse, error)
+
+	// GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
+	//
+	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
+	GetSloCurrentStatusWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloCurrentStatusResponse, error)
 
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
@@ -11050,6 +11629,89 @@ func (r EvaluateSloResponse) ContentType() string {
 	return ""
 }
 
+type GetSloHistoryValuesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloHistoryValuePage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSloHistoryValuesResponse) GetJSON200() *SloHistoryValuePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r GetSloHistoryValuesResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r GetSloHistoryValuesResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r GetSloHistoryValuesResponse) GetApplicationproblemJSON403() *Problem {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r GetSloHistoryValuesResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r GetSloHistoryValuesResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetSloHistoryValuesResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSloHistoryValuesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSloHistoryValuesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSloHistoryValuesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSloHistoryValuesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetSloOperationalDetailResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -11127,6 +11789,234 @@ func (r GetSloOperationalDetailResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetSloOperationalDetailResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSloPreparationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloPreparationPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSloPreparationResponse) GetJSON200() *SloPreparationPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r GetSloPreparationResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r GetSloPreparationResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r GetSloPreparationResponse) GetApplicationproblemJSON403() *Problem {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r GetSloPreparationResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetSloPreparationResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSloPreparationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSloPreparationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSloPreparationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSloPreparationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RetrySloPreparationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r RetrySloPreparationResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r RetrySloPreparationResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r RetrySloPreparationResponse) GetApplicationproblemJSON403() *Problem {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r RetrySloPreparationResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r RetrySloPreparationResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r RetrySloPreparationResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RetrySloPreparationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RetrySloPreparationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RetrySloPreparationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RetrySloPreparationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSloCurrentStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SloCurrentStatus
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Problem
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Problem
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *Problem
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSloCurrentStatusResponse) GetJSON200() *SloCurrentStatus {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r GetSloCurrentStatusResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r GetSloCurrentStatusResponse) GetApplicationproblemJSON401() *Problem {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r GetSloCurrentStatusResponse) GetApplicationproblemJSON403() *Problem {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r GetSloCurrentStatusResponse) GetApplicationproblemJSON404() *Problem {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetSloCurrentStatusResponse) GetApplicationproblemJSON503() *Problem {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSloCurrentStatusResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSloCurrentStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSloCurrentStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSloCurrentStatusResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12138,6 +13028,21 @@ func (c *ClientWithResponses) EvaluateSloWithResponse(ctx context.Context, sloId
 	return ParseEvaluateSloResponse(rsp)
 }
 
+// GetSloHistoryValuesWithResponse Page exact represented values from one immutable history generation
+//
+// Reads only the named prepared generation, with fresh authorization on every page. A generation is retained for five minutes after publication; unavailable or expired generations return 409 snapshot_expired. The endpoint never silently moves to a newer generation. Decimal values are returned unchanged. Choose another bounded operational range to inspect finer resolution. Samples contains numeric-lane rows; days contains daily compliance rows. The other array is empty. Null next_offset ends paging.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/history/{generation_id}/values (the `GetSloHistoryValues` operationId).
+func (c *ClientWithResponses) GetSloHistoryValuesWithResponse(ctx context.Context, sloId SloId, generationId openapi_types.UUID, params *GetSloHistoryValuesParams, reqEditors ...RequestEditorFn) (*GetSloHistoryValuesResponse, error) {
+	rsp, err := c.GetSloHistoryValues(ctx, sloId, generationId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSloHistoryValuesResponse(rsp)
+}
+
 // GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
 //
 // Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
@@ -12151,6 +13056,51 @@ func (c *ClientWithResponses) GetSloOperationalDetailWithResponse(ctx context.Co
 		return nil, err
 	}
 	return ParseGetSloOperationalDetailResponse(rsp)
+}
+
+// GetSloPreparationWithResponse Read bounded preparation progress and exhausted-job diagnostics
+//
+// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
+func (c *ClientWithResponses) GetSloPreparationWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloPreparationResponse, error) {
+	rsp, err := c.GetSloPreparation(ctx, sloId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSloPreparationResponse(rsp)
+}
+
+// RetrySloPreparationWithResponse Give one exhausted preparation job another bounded attempt budget
+//
+// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
+func (c *ClientWithResponses) RetrySloPreparationWithResponse(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*RetrySloPreparationResponse, error) {
+	rsp, err := c.RetrySloPreparation(ctx, sloId, jobId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRetrySloPreparationResponse(rsp)
+}
+
+// GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
+//
+// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
+func (c *ClientWithResponses) GetSloCurrentStatusWithResponse(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*GetSloCurrentStatusResponse, error) {
+	rsp, err := c.GetSloCurrentStatus(ctx, sloId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSloCurrentStatusResponse(rsp)
 }
 
 // GetLivenessWithResponse Report whether the UI process is alive
@@ -14243,6 +15193,74 @@ func ParseEvaluateSloResponse(rsp *http.Response) (*EvaluateSloResponse, error) 
 	return response, nil
 }
 
+// ParseGetSloHistoryValuesResponse parses an HTTP response from a GetSloHistoryValuesWithResponse call
+func ParseGetSloHistoryValuesResponse(rsp *http.Response) (*GetSloHistoryValuesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSloHistoryValuesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloHistoryValuePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetSloOperationalDetailResponse parses an HTTP response from a GetSloOperationalDetailWithResponse call
 func ParseGetSloOperationalDetailResponse(rsp *http.Response) (*GetSloOperationalDetailResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -14298,6 +15316,192 @@ func ParseGetSloOperationalDetailResponse(rsp *http.Response) (*GetSloOperationa
 			return nil, err
 		}
 		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSloPreparationResponse parses an HTTP response from a GetSloPreparationWithResponse call
+func ParseGetSloPreparationResponse(rsp *http.Response) (*GetSloPreparationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSloPreparationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloPreparationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRetrySloPreparationResponse parses an HTTP response from a RetrySloPreparationWithResponse call
+func ParseRetrySloPreparationResponse(rsp *http.Response) (*RetrySloPreparationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RetrySloPreparationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSloCurrentStatusResponse parses an HTTP response from a GetSloCurrentStatusWithResponse call
+func ParseGetSloCurrentStatusResponse(rsp *http.Response) (*GetSloCurrentStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSloCurrentStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SloCurrentStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
@@ -14501,9 +15705,21 @@ type ServerInterface interface {
 	// EvaluateSlo Evaluate a rolling occurrence objective
 	// (GET /api/v1/slos/{slo_id}/evaluation)
 	EvaluateSlo(w http.ResponseWriter, r *http.Request, sloId SloId, params EvaluateSloParams)
+	// GetSloHistoryValues Page exact represented values from one immutable history generation
+	// (GET /api/v1/slos/{slo_id}/history/{generation_id}/values)
+	GetSloHistoryValues(w http.ResponseWriter, r *http.Request, sloId SloId, generationId openapi_types.UUID, params GetSloHistoryValuesParams)
 	// GetSloOperationalDetail Read current operational evaluation and bounded history
 	// (GET /api/v1/slos/{slo_id}/operational)
 	GetSloOperationalDetail(w http.ResponseWriter, r *http.Request, sloId SloId, params GetSloOperationalDetailParams)
+	// GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
+	// (GET /api/v1/slos/{slo_id}/preparation)
+	GetSloPreparation(w http.ResponseWriter, r *http.Request, sloId SloId)
+	// RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
+	// (POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry)
+	RetrySloPreparation(w http.ResponseWriter, r *http.Request, sloId SloId, jobId openapi_types.UUID)
+	// GetSloCurrentStatus Read the published current SLO result independently of history
+	// (GET /api/v1/slos/{slo_id}/status)
+	GetSloCurrentStatus(w http.ResponseWriter, r *http.Request, sloId SloId)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -16363,6 +17579,83 @@ func (siw *ServerInterfaceWrapper) EvaluateSlo(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetSloHistoryValues operation middleware
+func (siw *ServerInterfaceWrapper) GetSloHistoryValues(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "generation_id" -------------
+	var generationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "generation_id", r.PathValue("generation_id"), &generationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "generation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSloHistoryValuesParams
+
+	// ------------- Required query parameter "lane" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lane", r.URL.Query(), &params.Lane, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lane"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lane", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSloHistoryValues(w, r, sloId, generationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSloOperationalDetail operation middleware
 func (siw *ServerInterfaceWrapper) GetSloOperationalDetail(w http.ResponseWriter, r *http.Request) {
 
@@ -16435,6 +17728,93 @@ func (siw *ServerInterfaceWrapper) GetSloOperationalDetail(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSloOperationalDetail(w, r, sloId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSloPreparation operation middleware
+func (siw *ServerInterfaceWrapper) GetSloPreparation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSloPreparation(w, r, sloId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetrySloPreparation operation middleware
+func (siw *ServerInterfaceWrapper) RetrySloPreparation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "job_id" -------------
+	var jobId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "job_id", r.PathValue("job_id"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "job_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetrySloPreparation(w, r, sloId, jobId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSloCurrentStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetSloCurrentStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSloCurrentStatus(w, r, sloId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -16630,6 +18010,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos", wrapper.ListSlos)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slos", wrapper.CreateSlo)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/overview", wrapper.GetSloOperationalOverview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/status", wrapper.GetSloCurrentStatus)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/history/{generation_id}/values", wrapper.GetSloHistoryValues)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/preparation", wrapper.GetSloPreparation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slos/{slo_id}/preparation/{job_id}/retry", wrapper.RetrySloPreparation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/operational", wrapper.GetSloOperationalDetail)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}", wrapper.GetSlo)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slos/{slo_id}", wrapper.PatchSloMetadata)

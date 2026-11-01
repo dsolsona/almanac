@@ -118,10 +118,17 @@ SELECT c.interval_start, c.interval_end, c.outcome,
        CASE WHEN c.outcome='observed' THEN COALESCE(v.total_count::text, '') ELSE '' END::text AS total,
        c.recorded_at
 FROM public.almanac_sli_coverage c
-LEFT JOIN public.almanac_sli_observation_values v
-  ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision
-WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start >= $3 AND c.interval_end <= $4
-ORDER BY c.interval_start LIMIT $5;
+LEFT JOIN LATERAL (
+    SELECT value.good_count, value.total_count
+    FROM public.almanac_sli_observation_values value
+    WHERE value.interval_start=c.interval_start
+      AND value.sli_id=sqlc.arg(sli_id) AND value.measurement_revision=sqlc.arg(measurement_revision)
+      AND value.interval_start >= sqlc.arg(interval_start) AND value.interval_start < sqlc.arg(interval_end)
+    LIMIT 1
+) v ON true
+WHERE c.sli_id=sqlc.arg(sli_id) AND c.measurement_revision=sqlc.arg(measurement_revision)
+  AND c.interval_start >= sqlc.arg(interval_start) AND c.interval_start < sqlc.arg(interval_end) AND c.interval_end <= sqlc.arg(interval_end)
+ORDER BY c.interval_start LIMIT sqlc.arg('limit');
 
 -- name: DeleteExpiredSloOverviewSnapshots :exec
 WITH expired AS (

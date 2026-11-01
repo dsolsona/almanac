@@ -927,22 +927,30 @@ LEFT JOIN LATERAL (
            coverage.interval_end, coverage.outcome, COALESCE(obs.good_count::text, '') AS good_count,
            COALESCE(obs.total_count::text, '') AS total_count, coverage.error_code,
            coverage.missing_components, coverage.recorded_at
-    FROM public.almanac_sli_coverage AS coverage
+    FROM (
+        SELECT c.interval_start, c.sli_id, c.measurement_revision, c.interval_end, c.outcome, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.observation_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at FROM public.almanac_sli_coverage AS c
+        WHERE c.sli_id = sli.id AND c.interval_start >= $1::timestamptz
+        ORDER BY c.interval_start DESC, c.recorded_at DESC
+        LIMIT 1
+    ) AS coverage
     LEFT JOIN public.almanac_sli_observation_values AS obs
       ON obs.interval_start = coverage.interval_start AND obs.sli_id = coverage.sli_id
      AND obs.measurement_revision = coverage.measurement_revision
-    WHERE coverage.sli_id = sli.id AND coverage.interval_start >= $1::timestamptz
     UNION ALL
     SELECT attempt.observation_id, attempt.measurement_revision, attempt.interval_start,
            attempt.interval_end, attempt.outcome, '' AS good_count, '' AS total_count,
            attempt.error_code, attempt.missing_components, attempt.recorded_at
-    FROM public.almanac_sli_execution_attempts AS attempt
-    WHERE attempt.sli_id = sli.id AND attempt.interval_start >= $1::timestamptz
-      AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage c WHERE c.sli_id = attempt.sli_id
-        AND c.measurement_revision = attempt.measurement_revision AND c.interval_start = attempt.interval_start)
-      AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts newer WHERE newer.sli_id = attempt.sli_id
-        AND newer.measurement_revision = attempt.measurement_revision AND newer.interval_start = attempt.interval_start
-        AND (newer.recorded_at, newer.execution_id) > (attempt.recorded_at, attempt.execution_id))
+    FROM (
+        SELECT a.agent_id, a.execution_id, a.observation_id, a.sli_id, a.measurement_revision, a.interval_start, a.interval_end, a.outcome, a.error_code, a.missing_components, a.lease_id, a.recorded_at FROM public.almanac_sli_execution_attempts AS a
+        WHERE a.sli_id = sli.id AND a.interval_start >= $1::timestamptz
+          AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage c WHERE c.sli_id = a.sli_id
+            AND c.measurement_revision = a.measurement_revision AND c.interval_start = a.interval_start)
+          AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts newer WHERE newer.sli_id = a.sli_id
+            AND newer.measurement_revision = a.measurement_revision AND newer.interval_start = a.interval_start
+            AND (newer.recorded_at, newer.execution_id) > (a.recorded_at, a.execution_id))
+        ORDER BY a.interval_start DESC, a.recorded_at DESC
+        LIMIT 1
+    ) AS attempt
     ORDER BY interval_start DESC, recorded_at DESC
     LIMIT 1
 ) AS latest ON true

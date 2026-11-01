@@ -575,6 +575,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/slos/{slo_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the published current SLO result independently of history
+         * @description Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+         */
+        get: operations["getSloCurrentStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}/history/{generation_id}/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page exact represented values from one immutable history generation
+         * @description Reads only the named prepared generation, with fresh authorization on every page. A generation is retained for five minutes after publication; unavailable or expired generations return 409 snapshot_expired. The endpoint never silently moves to a newer generation. Decimal values are returned unchanged. Choose another bounded operational range to inspect finer resolution. Samples contains numeric-lane rows; days contains daily compliance rows. The other array is empty. Null next_offset ends paging.
+         */
+        get: operations["getSloHistoryValues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}/preparation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read bounded preparation progress and exhausted-job diagnostics
+         * @description Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+         */
+        get: operations["getSloPreparation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}/preparation/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give one exhausted preparation job another bounded attempt budget
+         * @description Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+         */
+        post: operations["retrySloPreparation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/slos/{slo_id}/operational": {
         parameters: {
             query?: never;
@@ -768,7 +848,61 @@ export interface components {
             /** Format: int64 */
             healthy: number;
         };
+        SloPreparationJob: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            stage: "current" | "history" | "aggregate";
+            /** @enum {string} */
+            state: "pending" | "running" | "failed";
+            attempts: number;
+            /** Format: date-time */
+            next_attempt_at: string;
+            error_code: string;
+        };
+        SloPreparationPage: {
+            items: components["schemas"]["SloPreparationJob"][];
+            truncated: boolean;
+        };
+        DerivedGeneration: {
+            /** Format: uuid */
+            generation_id: string;
+            source_generation: string;
+            measurement_revision: string;
+            definition_revision: string;
+            exclusion_revision: string;
+            calculation_version: string;
+            /** Format: date-time */
+            evaluated_through: string;
+            /** Format: date-time */
+            published_at: string;
+            calculation_lag_seconds: number;
+            /**
+             * Format: date-time
+             * @description Cadence-aligned retained-input boundary used by this generation; present on runtime-prepared results
+             */
+            retention_start?: string;
+        };
+        SloCurrentStatus: {
+            generation: components["schemas"]["DerivedGeneration"];
+            slo: components["schemas"]["Slo"];
+            /** @enum {string} */
+            urgency: "needs_attention" | "watch" | "healthy";
+            leading_reason: components["schemas"]["SloUrgencyReason"];
+            reasons: components["schemas"]["SloUrgencyReason"][];
+            current: components["schemas"]["SloOperationalValue"];
+            burn_1h: components["schemas"]["SloBurnValue"];
+            burn_6h: components["schemas"]["SloBurnValue"];
+            exhaustion: components["schemas"]["SloExhaustionEstimate"];
+        };
         SloOperationalOverviewItem: {
+            generation?: components["schemas"]["DerivedGeneration"];
+            budget_history_generation?: components["schemas"]["DerivedGeneration"];
+            /**
+             * @description Retained budget history is labelled preparing until it matches the current published generation.
+             * @enum {string}
+             */
+            budget_history_state?: "ready" | "preparing" | "unavailable";
             slo: components["schemas"]["Slo"];
             /** @enum {string} */
             urgency: "needs_attention" | "watch" | "healthy";
@@ -845,6 +979,7 @@ export interface components {
             reason?: string | null;
         };
         SloOperationalDetail: {
+            generation?: components["schemas"]["DerivedGeneration"];
             /** Format: uuid */
             evaluation_id: string;
             /** Format: date-time */
@@ -942,6 +1077,16 @@ export interface components {
             max_samples_per_series: 1500;
             /** @enum {string} */
             bucket_bounds: "half_open";
+        };
+        SloHistoryValuePage: {
+            generation: components["schemas"]["DerivedGeneration"];
+            /** @enum {string} */
+            lane: "attainment" | "budget" | "burn" | "compliance";
+            offset: number;
+            next_offset: number | null;
+            total_values: number;
+            samples: components["schemas"]["SloOperationalSample"][];
+            days: components["schemas"]["SloDailyComplianceDay"][];
         };
         SloOperationalSeries: {
             /** @enum {string} */
@@ -1668,9 +1813,17 @@ export interface components {
             csrf_token: string;
             session: components["schemas"]["SafeIdentity"] | null;
         };
+        DerivedPreparation: {
+            /** @enum {string} */
+            state: "pending" | "failed";
+            retry_after_seconds: number;
+            /** @description Relative authorized URL for bounded job diagnostics */
+            details_url?: string;
+        };
         Problem: {
             code: string;
             message: string;
+            preparation?: components["schemas"]["DerivedPreparation"];
             request_id: string;
             field_errors: {
                 field: string;
@@ -3477,6 +3630,296 @@ export interface operations {
                 };
             };
             /** @description Resource limit or storage unavailable; no partial overview is returned */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSloCurrentStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Published current SLO status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloCurrentStatus"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session missing or expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current role cannot read SLO operations */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description SLO not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Preparation pending or storage unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSloHistoryValues: {
+        parameters: {
+            query: {
+                lane: "attainment" | "budget" | "burn" | "compliance";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+                generation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exact generation-pinned page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloHistoryValuePage"];
+                };
+            };
+            /** @description Invalid lane or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session missing or expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current role cannot read SLO operations */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Objective not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Generation missing or expired */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Derived values unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSloPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded preparation diagnostics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SloPreparationPage"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session missing or expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current role cannot read SLO operations */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Objective not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Storage unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    retrySloPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded retry admitted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session missing or expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Session role or CSRF validation rejected */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Objective not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Job is not failed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Storage unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

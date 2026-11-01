@@ -33,14 +33,35 @@ type InitialOwnerResult struct {
 	Created bool
 }
 
-func ReadInitialOwnerState(ctx context.Context, databaseURL string) (InitialOwnerState, error) {
-	conn, err := connectCurrentSchema(ctx, databaseURL)
+func ReadInitialOwnerState(ctx context.Context, databaseURL string, runtimes ...*Runtime) (InitialOwnerState, error) {
+	if len(runtimes) > 1 {
+		return InitialOwnerState{}, errors.New("storage: invalid runtime options")
+	}
+	var runtime *Runtime
+	if len(runtimes) == 1 {
+		runtime = runtimes[0]
+	}
+	conn, err := acquireReadConnection(ctx, databaseURL, runtime)
 	if err != nil {
 		return InitialOwnerState{}, err
 	}
 	defer closeInitialOwnerConnection(conn)
+	return readInitialOwnerState(ctx, dbgen.New(conn))
+}
 
-	row, err := dbgen.New(conn).GetInitialOwnerState(ctx)
+// ReadInitialOwnerState keeps the entire readiness probe in reserved live
+// admission; an exhausted interactive pool cannot strand this second read.
+func (r *Runtime) ReadInitialOwnerState(ctx context.Context) (InitialOwnerState, error) {
+	conn, err := acquireConnection(ctx, r.databaseURL, r, LiveTraffic)
+	if err != nil {
+		return InitialOwnerState{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	return readInitialOwnerState(ctx, dbgen.New(conn))
+}
+
+func readInitialOwnerState(ctx context.Context, queries *dbgen.Queries) (InitialOwnerState, error) {
+	row, err := queries.GetInitialOwnerState(ctx)
 	if err != nil {
 		return InitialOwnerState{}, operationError(ctx, "storage: initial owner state read failed", err)
 	}
@@ -112,7 +133,11 @@ func ProvisionInitialOwner(ctx context.Context, databaseURL string, input Initia
 	}, Created: true}, nil
 }
 
-func connectCurrentSchema(ctx context.Context, databaseURL string) (*pgx.Conn, error) {
+func connectCurrentSchema(ctx context.Context, databaseURL string) (*readConnection, error) {
+	return acquireReadConnection(ctx, databaseURL, nil)
+}
+
+func connectStandaloneCurrentSchema(ctx context.Context, databaseURL string) (*pgx.Conn, error) {
 	config, err := ParseDatabaseURL(databaseURL)
 	if err != nil {
 		return nil, err
@@ -143,7 +168,7 @@ func connectCurrentSchema(ctx context.Context, databaseURL string) (*pgx.Conn, e
 	return conn, nil
 }
 
-func closeInitialOwnerConnection(conn *pgx.Conn) {
+func closeInitialOwnerConnection(conn interface{ Close(context.Context) error }) {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_ = conn.Close(cleanupCtx)

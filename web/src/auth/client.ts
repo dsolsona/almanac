@@ -1,4 +1,5 @@
 import type { components } from '../api/generated.ts';
+import { clearQueryCache } from '../queryCache.ts';
 
 export type AuthContext = components['schemas']['AuthResponse'];
 export type LoginInput = components['schemas']['LoginRequest'];
@@ -217,19 +218,23 @@ async function mutation(fetcher: typeof fetch, path: 'login' | 'password', body:
 export function createAuthClient(fetcher: typeof fetch = fetch) {
   return {
     context(options: AuthOptions = {}): Promise<AuthContext> {
+      clearQueryCache();
       return withBudget(options.signal, (budget) => getValidContext(fetcher, budget).catch(() => { throw unavailable('context_unavailable'); }));
     },
     login(input: LoginInput, _context: AuthContext, options: AuthOptions = {}): Promise<AuthContext> {
+      clearQueryCache();
       return withBudget(options.signal, (budget) => mutation(fetcher, 'login', input, _context.csrf_token,
         (value): value is AuthContext => validContext(value) && value.session !== null, budget));
     },
     changePassword(input: PasswordInput, context: AuthContext, options: AuthOptions = {}): Promise<AuthContext> {
+      clearQueryCache();
       if (context.session === null) return Promise.reject(new AuthFailure('rejected', 'unauthenticated', 'Sign in before changing the password.'));
       return withBudget(options.signal, (budget) => mutation(fetcher, 'password', input, context.csrf_token,
         (value): value is AuthContext => validContext(value) && value.session !== null
           && !value.session.restricted && value.session.user_id === context.session?.user_id, budget));
     },
     logout(context: AuthContext, options: AuthOptions = {}): Promise<void> {
+      clearQueryCache();
       return withBudget(options.signal, async (budget) => {
         try {
           const response = await post(fetcher, 'logout', {}, context.csrf_token, budget);

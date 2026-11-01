@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -32,8 +31,23 @@ import (
 	"github.com/dsolsona/almanac/internal/testpostgres"
 )
 
-func TestIntegrationExecutableFirstObjectiveJourney(t *testing.T) {
-	started := time.Now()
+type objectiveJourneyFixture struct {
+	databaseURL, binary, dir, baseURL, certFile, password string
+	certificate, sourceCA                                 []byte
+	sourceEndpoint                                        string
+	apiClient                                             *http.Client
+	logs                                                  *runtimeLog
+	backend                                               *objectiveJourneyBackend
+	metricsURL                                            string
+}
+
+func startObjectiveJourneyFixture(t *testing.T) objectiveJourneyFixture {
+	t.Helper()
+	return startObjectiveJourneyFixtureWithMetrics(t, false)
+}
+
+func startObjectiveJourneyFixtureWithMetrics(t *testing.T, internalMetrics bool) objectiveJourneyFixture {
+	t.Helper()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		db := testpostgres.Connect(t, databaseURL)
@@ -117,67 +131,47 @@ func TestIntegrationExecutableFirstObjectiveJourney(t *testing.T) {
 		"--initial-admin-login=sli-owner", "--initial-admin-password-file=" + initialPasswordFile, "--public-origin=" + baseURL,
 		"--tls-cert-file=" + certFile, "--tls-key-file=" + keyFile, "--source-secret-keyset-file=" + keysetFile,
 		"--source-secret-keyset-id=" + keysetID, "--shutdown-timeout=5s"}
-	process := exec.Command(binary, args...)
+	metricsURL := ""
+	if internalMetrics {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal("reserve isolated performance metrics listener failed")
+		}
+		metricsAddress := listener.Addr().String()
+		if err := listener.Close(); err != nil {
+			t.Fatal("release isolated performance metrics listener reservation failed")
+		}
+		args = append(args, "--metrics-listen="+metricsAddress)
+		metricsURL = "http://" + metricsAddress + "/metrics"
+	}
 	logs := newRuntimeLog()
-	process.Stdout, process.Stderr = io.Discard, logs
-	if err := process.Start(); err != nil {
-		t.Fatal("start isolated SLI journey backend executable failed")
-	}
-	processDone := make(chan struct{})
-	var processErr error
-	go func() { processErr = process.Wait(); close(processDone) }()
-	t.Cleanup(func() {
-		if process.Process == nil {
-			return
-		}
-		_ = process.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-processDone:
-			if processErr != nil {
-				t.Errorf("SLI journey backend did not shut down cleanly (failed=%t)", true)
-			}
-		case <-time.After(8 * time.Second):
-			_ = process.Process.Kill()
-			<-processDone
-			t.Error("SLI journey backend exceeded its shutdown bound")
-		}
-	})
-	ready := false
-	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
-		select {
-		case <-processDone:
-			t.Fatalf("SLI journey backend exited before readiness (failed=%t)", processErr != nil)
-		default:
-		}
-		response, requestErr := apiClient.Get(baseURL + "/livez")
-		if requestErr == nil {
-			_ = response.Body.Close()
-			if response.StatusCode == http.StatusOK {
-				ready = true
-				break
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !ready {
-		t.Fatal("SLI journey backend did not become live")
-	}
+	backend := &objectiveJourneyBackend{binary: binary, args: args, client: apiClient, baseURL: baseURL, logs: logs}
+	t.Cleanup(func() { backend.stop(t) })
+	backend.start(t)
 	setup := exec.CommandContext(t.Context(), binary, "setup", "--backend-url="+baseURL, "--initial-admin-login=sli-owner",
 		"--initial-admin-password-file="+initialPasswordFile, "--new-password-file="+permanentPasswordFile, "--ca-file="+certFile, "--output=json")
 	setup.Stdout, setup.Stderr = io.Discard, io.Discard
 	if err := setup.Run(); err != nil {
 		t.Fatal("complete isolated SLI journey administrator setup failed")
 	}
-	journey := runConnectedSLIAgentJourney(t, databaseURL, binary, dir, baseURL, certFile, permanentPassword)
+	return objectiveJourneyFixture{databaseURL: databaseURL, binary: binary, dir: dir, baseURL: baseURL, certFile: certFile, password: permanentPassword,
+		certificate: certificate, sourceCA: sourceCA, sourceEndpoint: sourceEndpoint, apiClient: apiClient, logs: logs, backend: backend, metricsURL: metricsURL}
+}
+
+func TestIntegrationExecutableFirstObjectiveJourney(t *testing.T) {
+	started := time.Now()
+	f := startObjectiveJourneyFixture(t)
+	journey := runConnectedSLIAgentJourney(t, f.databaseURL, f.binary, f.dir, f.baseURL, f.certFile, f.password)
 	t.Logf("SLI journey stage=agent_ready elapsed=%s", time.Since(started).Round(time.Millisecond))
-	datasourceID := createSLIJourneyDatasource(t, binary, dir, journey, sourceEndpoint, sourceCA)
+	datasourceID := createSLIJourneyDatasource(t, f.binary, f.dir, journey, f.sourceEndpoint, f.sourceCA)
 	t.Logf("SLI journey stage=datasource_created elapsed=%s", time.Since(started).Round(time.Millisecond))
-	sliID := checkSLIBrowserJourney(t, baseURL, certificate, "sli-owner", permanentPassword, journey.id, datasourceID)
+	sliID := checkSLIBrowserJourney(t, f.baseURL, f.certificate, "sli-owner", f.password, journey.id, datasourceID)
 	t.Logf("SLI journey stage=browser_observed elapsed=%s", time.Since(started).Round(time.Millisecond))
-	verifyPersistedSLIJourneyObservation(t, databaseURL, sliID, journey.id)
-	runObjectiveCLIJourney(t, binary, dir, journey.profile, sliID, databaseURL, baseURL, apiClient)
-	runObjectiveBrowserJourney(t, baseURL, certificate, "sli-owner", permanentPassword, sliID)
-	if strings.Contains(logs.String(), initialPassword) || strings.Contains(logs.String(), permanentPassword) {
+	verifyPersistedSLIJourneyObservation(t, f.databaseURL, sliID, journey.id)
+	verifySLIMalformedBatchIsAtomic(t, f.apiClient, f.baseURL, f.databaseURL, filepath.Join(f.dir, "sli-agent-token"), sliID)
+	runObjectiveCLIJourney(t, f.binary, f.dir, journey.profile, sliID, f.databaseURL, f.baseURL, f.apiClient)
+	runObjectiveBrowserJourney(t, f.baseURL, f.certificate, "sli-owner", f.password, sliID)
+	if strings.Contains(f.logs.String(), "SLI journey initial phrase 473!") || strings.Contains(f.logs.String(), f.password) {
 		t.Fatal("backend logs contained a credential")
 	}
 }

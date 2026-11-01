@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,7 +42,7 @@ func TestIntegrationUpgradeIsIdempotentAndPreservesInstallationIdentity(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Applied != 21 || first.DatabaseSchemaVersion != 21 {
+	if first.Applied != latestTestSchemaVersion(t) || first.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("first upgrade = %+v, want twenty-one applied migrations at version 21", first)
 	}
 	firstID, firstEpoch, firstCreatedAt := installationIdentity(t, databaseURL)
@@ -49,7 +50,7 @@ func TestIntegrationUpgradeIsIdempotentAndPreservesInstallationIdentity(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Applied != 0 || second.DatabaseSchemaVersion != 21 {
+	if second.Applied != 0 || second.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("second upgrade = %+v, want zero applied migrations at version 21", second)
 	}
 	secondID, secondEpoch, secondCreatedAt := installationIdentity(t, databaseURL)
@@ -88,7 +89,7 @@ func TestIntegrationConcurrentUpgradesApplyOnce(t *testing.T) {
 		}
 		totalApplied += outcome.result.Applied
 	}
-	if totalApplied != 21 {
+	if totalApplied != latestTestSchemaVersion(t) {
 		t.Fatalf("concurrent upgrades applied %d migrations, want 21", totalApplied)
 	}
 	conn := integrationConnect(t, databaseURL)
@@ -96,7 +97,7 @@ func TestIntegrationConcurrentUpgradesApplyOnce(t *testing.T) {
 	if err := conn.QueryRow(ctx, "SELECT count(*) FROM public.almanac_schema_migrations").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 21 {
+	if count != latestTestSchemaVersion(t) {
 		t.Fatalf("history row count = %d, want 21", count)
 	}
 	var installationCount int
@@ -114,8 +115,13 @@ func TestIntegrationUpgradeFromVersionOneAppliesInitialOwnerSchema(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(migrations) != 21 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 || migrations[5].Version != 6 || migrations[6].Version != 7 || migrations[7].Version != 8 || migrations[8].Version != 9 || migrations[9].Version != 10 || migrations[10].Version != 11 || migrations[11].Version != 12 || migrations[12].Version != 13 || migrations[13].Version != 14 || migrations[14].Version != 15 || migrations[15].Version != 16 || migrations[16].Version != 17 || migrations[17].Version != 18 || migrations[18].Version != 19 || migrations[19].Version != 20 || migrations[20].Version != 21 {
-		t.Fatalf("embedded migration versions = %v, want [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21]", versions(migrations))
+	if len(migrations) != latestTestSchemaVersion(t) {
+		t.Fatal("migration sequence length mismatch")
+	}
+	for index, migration := range migrations {
+		if migration.Version != index+1 {
+			t.Fatalf("non-contiguous migration at %d", index)
+		}
 	}
 	first, err := UpgradeWithMigrations(t.Context(), databaseURL, migrations[:1])
 	if err != nil || first.Applied != 1 || first.DatabaseSchemaVersion != 1 {
@@ -127,7 +133,7 @@ func TestIntegrationUpgradeFromVersionOneAppliesInitialOwnerSchema(t *testing.T)
 		t.Fatalf("version 1 to 2 upgrade = %+v, %v", second, err)
 	}
 	third, err := Upgrade(t.Context(), databaseURL)
-	if err != nil || third.Applied != 19 || third.DatabaseSchemaVersion != 21 {
+	if err != nil || third.Applied != latestTestSchemaVersion(t)-2 || third.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("version 2 to 21 upgrade = %+v, %v", third, err)
 	}
 	gotID, gotEpoch, gotCreatedAt := installationIdentity(t, databaseURL)
@@ -146,7 +152,7 @@ func TestIntegrationFailedMigrationRollsBackAndReleasesLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	failedSQL := "CREATE TABLE public.storage_rolled_back (id integer); SELECT 1 / 0;"
-	failed := Migration{Version: 22, Name: "0022_fails.sql", SQL: failedSQL, Checksum: sha256.Sum256([]byte(failedSQL))}
+	failed := Migration{Version: latestTestSchemaVersion(t) + 1, Name: fmt.Sprintf("%04d_fails.sql", latestTestSchemaVersion(t)+1), SQL: failedSQL, Checksum: sha256.Sum256([]byte(failedSQL))}
 	if _, err := UpgradeWithMigrations(t.Context(), databaseURL, append(base, failed)); err == nil {
 		t.Fatal("upgrade accepted a migration that failed after DDL")
 	}
@@ -156,18 +162,18 @@ func TestIntegrationFailedMigrationRollsBackAndReleasesLock(t *testing.T) {
 	if err := conn.QueryRow(t.Context(), "SELECT count(*) FROM public.almanac_schema_migrations").Scan(&historyCount); err != nil {
 		t.Fatal(err)
 	}
-	if historyCount != 21 {
+	if historyCount != latestTestSchemaVersion(t) {
 		t.Fatalf("history rows after rollback = %d, want 21", historyCount)
 	}
 	closeIntegrationConn(conn)
 
 	validSQL := "CREATE TABLE public.storage_after_failure (id integer);"
-	valid := Migration{Version: 22, Name: "0022_valid.sql", SQL: validSQL, Checksum: sha256.Sum256([]byte(validSQL))}
+	valid := Migration{Version: latestTestSchemaVersion(t) + 1, Name: fmt.Sprintf("%04d_valid.sql", latestTestSchemaVersion(t)+1), SQL: validSQL, Checksum: sha256.Sum256([]byte(validSQL))}
 	result, err := UpgradeWithMigrations(t.Context(), databaseURL, append(base, valid))
 	if err != nil {
 		t.Fatalf("upgrade after failed migration could not acquire lock: %v", err)
 	}
-	if result.Applied != 1 || result.DatabaseSchemaVersion != 22 {
+	if result.Applied != 1 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t)+1 {
 		t.Fatalf("upgrade after failure = %+v", result)
 	}
 }
@@ -298,7 +304,7 @@ func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing
 		t.Fatalf("first binary upgrade: code=%d stdout=%q stderr=%q", firstCode, firstStdout, firstStderr)
 	}
 	first := decodeBinaryUpgrade(t, firstStdout)
-	if first.DatabaseSchemaVersion != 21 || first.Applied != 21 || first.Error != nil {
+	if first.DatabaseSchemaVersion != latestTestSchemaVersion(t) || first.Applied != latestTestSchemaVersion(t) || first.Error != nil {
 		t.Fatalf("first binary upgrade result = %+v", first)
 	}
 	identityID, identityEpoch, identityCreated := installationIdentity(t, databaseURL)
@@ -307,7 +313,7 @@ func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing
 		t.Fatalf("second binary upgrade: code=%d stdout=%q stderr=%q", secondCode, secondStdout, secondStderr)
 	}
 	second := decodeBinaryUpgrade(t, secondStdout)
-	if second.DatabaseSchemaVersion != 21 || second.Applied != 0 || second.Error != nil {
+	if second.DatabaseSchemaVersion != latestTestSchemaVersion(t) || second.Applied != 0 || second.Error != nil {
 		t.Fatalf("second binary upgrade result = %+v", second)
 	}
 	secondID, secondEpoch, secondCreated := installationIdentity(t, databaseURL)
@@ -519,4 +525,13 @@ func assertTableAbsent(t *testing.T, databaseURL, table string) {
 	if name != nil {
 		t.Fatalf("table %s unexpectedly exists", *name)
 	}
+}
+
+func latestTestSchemaVersion(t *testing.T) int {
+	t.Helper()
+	migrations, err := LoadMigrations(embeddedMigrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return migrations[len(migrations)-1].Version
 }

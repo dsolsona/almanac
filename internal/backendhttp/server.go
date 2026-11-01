@@ -35,6 +35,7 @@ import (
 type Server struct {
 	http           *http.Server
 	databaseURL    string
+	storageRuntime *storage.Runtime
 	agentSessions  *agentws.Registry
 	sourceSecrets  *sourcesecret.Adapter
 	ready          atomic.Bool
@@ -70,9 +71,16 @@ func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{pair}}, nil
 }
 
-func New(ctx context.Context, cfg config.Config, service *authentication.Service, databaseURL string, tlsConfig *tls.Config, assets http.Handler) (*Server, error) {
+func New(ctx context.Context, cfg config.Config, service *authentication.Service, databaseURL string, tlsConfig *tls.Config, assets http.Handler, runtimes ...*storage.Runtime) (*Server, error) {
 	if ctx == nil || service == nil || databaseURL == "" || (cfg.Components != "backend" && !cfg.BackendUI()) || (cfg.BackendUI() && assets == nil) || (cfg.Components == "backend" && assets != nil) {
 		return nil, errors.New("backendhttp: invalid configuration")
+	}
+	if len(runtimes) > 1 {
+		return nil, errors.New("backendhttp: invalid runtime options")
+	}
+	var runtime *storage.Runtime
+	if len(runtimes) == 1 {
+		runtime = runtimes[0]
 	}
 	agentSessions := agentws.NewRegistry()
 	var sourceSecrets *sourcesecret.Adapter
@@ -86,7 +94,10 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 			return nil, errors.New("backendhttp: source-secret keyset is unavailable")
 		}
 	}
-	s := &Server{databaseURL: databaseURL, agentSessions: agentSessions, sourceSecrets: sourceSecrets, newConnections: make(map[net.Conn]struct{}), workerContext: ctx}
+	s := &Server{databaseURL: databaseURL, storageRuntime: runtime, agentSessions: agentSessions, sourceSecrets: sourceSecrets, newConnections: make(map[net.Conn]struct{}), workerContext: ctx}
+	if runtime != nil {
+		s.workerContext = runtime.Bind(ctx)
+	}
 	options := authhttp.Options{PublicOrigin: cfg.PublicOrigin, TrustedProxyCIDRs: cfg.TrustedProxyCIDRs, Now: time.Now, Preflight: s.authenticationPreflight}
 	auth, err := authhttp.New(service, options)
 	if err != nil {
@@ -100,7 +111,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent HTTP configuration")
 	}
-	access := agentaccess.New(databaseURL, time.Now, sourceSecrets)
+	access := agentaccess.NewWithRuntime(databaseURL, time.Now, runtime, sourceSecrets)
 	configuration, err := agenthttp.NewConfigurationHandler(access, auth, time.Now)
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent configuration handler")
@@ -109,7 +120,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent diagnostic result handler")
 	}
-	agentRuntime, err := agentruntime.New(databaseURL, time.Now)
+	agentRuntime, err := agentruntime.New(databaseURL, time.Now, runtime)
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid agent runtime configuration")
 	}
@@ -124,11 +135,11 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid datasource handler configuration")
 	}
-	slis, err := slihttp.New(databaseURL, sourceSecrets, auth, access, slihttp.Options{Now: time.Now, Preflight: s.authenticationPreflight})
+	slis, err := slihttp.New(databaseURL, sourceSecrets, auth, access, slihttp.Options{Runtime: runtime, Now: time.Now, Preflight: s.authenticationPreflight})
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid SLI handler configuration")
 	}
-	objectives, err := slohttp.New(databaseURL, auth, time.Now, s.authenticationPreflight)
+	objectives, err := slohttp.New(databaseURL, auth, time.Now, s.authenticationPreflight, runtime)
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid objective handler configuration")
 	}
@@ -161,7 +172,15 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if tlsConfig != nil {
 		clonedTLS = tlsConfig.Clone()
 	}
-	s.http = &http.Server{Handler: s.rejectAfterShutdown(strictPaths(mux, agents)), TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ConnState: s.connectionState, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	var handler http.Handler = s.rejectAfterShutdown(strictPaths(mux, agents))
+	handler = compressOperationalReads(handler)
+	if runtime != nil {
+		next := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(runtime.Bind(r.Context())))
+		})
+	}
+	s.http = &http.Server{Handler: handler, TLSConfig: clonedTLS, BaseContext: func(net.Listener) context.Context { return ctx }, ConnState: s.connectionState, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	return s, nil
 }
 
@@ -311,13 +330,27 @@ func (s *Server) Close() error {
 func (s *Server) RegisterOnShutdown(callback func()) { s.http.RegisterOnShutdown(callback) }
 
 func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
+	if s.storageRuntime != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.storageRuntime.CheckReady(ctx); err != nil {
+			writeHealth(w, http.StatusServiceUnavailable)
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if !s.ready.Load() {
 		writeHealth(w, http.StatusServiceUnavailable)
 		return
 	}
-	owner, err := storage.ReadInitialOwnerState(ctx, s.databaseURL)
+	var owner storage.InitialOwnerState
+	var err error
+	if s.storageRuntime != nil {
+		owner, err = s.storageRuntime.ReadInitialOwnerState(ctx)
+	} else {
+		owner, err = storage.ReadInitialOwnerState(ctx, s.databaseURL)
+	}
 	if err != nil || !owner.Provisioned {
 		writeHealth(w, http.StatusServiceUnavailable)
 		return
@@ -328,7 +361,7 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authenticationPreflight(requestCtx context.Context) error {
 	ctx, cancel := context.WithTimeout(requestCtx, 2*time.Second)
 	defer cancel()
-	owner, err := storage.ReadInitialOwnerState(ctx, s.databaseURL)
+	owner, err := storage.ReadInitialOwnerState(ctx, s.databaseURL, s.storageRuntime)
 	if err != nil || !owner.Provisioned || !s.ready.Load() {
 		return errors.New("backendhttp: authentication setup unavailable")
 	}

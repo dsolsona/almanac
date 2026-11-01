@@ -35,13 +35,13 @@ type SliIngestResult struct {
 // that authorized its execution. The observation interval is validated
 // separately from the execution timestamp so renewal does not erase authority
 // for an already running interval.
-func IngestAgentObservation(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, item sli.ObservationItem, clock func() time.Time) (SliIngestResult, error) {
+func IngestAgentObservation(ctx context.Context, databaseURL, credentialID string, credentialVerifier [32]byte, item sli.ObservationItem, clock func() time.Time, runtimes ...*Runtime) (SliIngestResult, error) {
 	result := SliIngestResult{DeliveryID: item.DeliveryID, Status: "rejected"}
 	credential, valid := canonicalUUID(credentialID)
 	if !valid || clock == nil {
 		return result, ErrObservationInvalid
 	}
-	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credential, credentialVerifier)
+	state, err := beginAgentOwnershipTransaction(ctx, databaseURL, credential, credentialVerifier, runtimes...)
 	if err != nil {
 		return result, err
 	}

@@ -654,7 +654,7 @@ SELECT $1, decode(repeat('01',32),'hex'), 1, credential_epoch, false, $2, $2 FRO
 			t.Fatal("seed schema 3 audit failed")
 		}
 		closeIntegrationConn(conn)
-		if result, err := Upgrade(t.Context(), databaseURL); err != nil || result.Applied != 18 || result.DatabaseSchemaVersion != 21 {
+		if result, err := Upgrade(t.Context(), databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-3 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 			t.Fatalf("schema 3 to 13 = %+v, %v", result, err)
 		}
 		conn = integrationConnect(t, databaseURL)

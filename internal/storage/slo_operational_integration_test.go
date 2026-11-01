@@ -121,6 +121,15 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	watch := createSLO("operational-watch", goodSLI.ID, at.Add(-30*time.Minute))
 	readAt := at
 	readNow := func() time.Time { return readAt }
+	t.Run("derived aggregate, durable preparation and recovery", func(t *testing.T) {
+		verifyDerivedOperationalRecovery(t, f.databaseURL, proof, attention.ID, readNow)
+	})
+	t.Run("history admission fences stale snapshots", func(t *testing.T) {
+		verifyHistoryAdmissionSnapshotFences(t, f.databaseURL, attention.ID, readNow)
+	})
+	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
+		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
+	})
 	t.Run("overlapping overview admission waits for the preceding filter", func(t *testing.T) {
 		lockTx, err := conn.Begin(t.Context())
 		if err != nil {
@@ -397,6 +406,7 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if groups[attention.Name] != "needs_attention" || groups[watch.Name] != "watch" || groups[healthy.Name] != "healthy" {
 		t.Fatalf("overview classifications = %v", groups)
 	}
+	t.Run("retained history and persisted-cache restart", verifyDerivedRetainedHistoryRegression)
 }
 
 func sameDecimal(actual, expected string) bool {
