@@ -54,7 +54,6 @@ export function SlosPage({context}:{context:AuthContext}) {
   const [services,setServices]=useState<Service[]>([]);
   const [slis,setSlis]=useState<Sli[]>([]);
   const [slo,setSlo]=useState<Slo|null>(null);
-  const [serverClock,setServerClock]=useState<Awaited<ReturnType<typeof sloClient.get>>['serverClock']>();
   const [service,setService]=useState<Service|null>(null);
   const [etag,setEtag]=useState('');
   const [loading,setLoading]=useState(true);
@@ -126,7 +125,7 @@ export function SlosPage({context}:{context:AuthContext}) {
         } else if (id) {
           const data = await sloClient.get(id, abort.signal);
           if (active) {
-            setSlo(data.value); setServerClock(data.serverClock); setMetadata(data.value.display_name); setEtag(data.etag);
+            setSlo(data.value); setMetadata(data.value.display_name); setEtag(data.etag);
           }
         }
       } catch (failure) {
@@ -356,8 +355,8 @@ export function SlosPage({context}:{context:AuthContext}) {
       <TextField id="service-rename" label="Display name" value={metadata} onChange={e=>setMetadata(e.target.value)}/>
       <Button type="submit" pending={busy}>Save display name</Button>
       </form>}{formError&&<p role="alert">{formError}</p>}</>}
-    {!loading&&!isService&&slo&&<>
-      <OperationalDetailView id={slo.id} definition={slo} serverClock={serverClock} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}}/>{slo&&<details>
+    {!isService&&!isNew&&id&&!error&&<>
+      <OperationalDetailView id={id} definition={slo?.id===id?slo:undefined} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}}/>{slo?.id===id&&<details>
       <summary>Settings and technical details</summary>
       <p>Identifier: {slo.name} · Definition revision: {slo.definition_revision} · Resource version: {slo.version}</p>
       <p>Activated: {date(slo.activated_at)} · Evaluation valid from: {date(slo.evaluation_valid_from)}</p>{slo.historical_requested_at&&<p>This target was explicitly applied to earlier measurements on {date(slo.historical_requested_at)}.</p>}{canWrite&&<form onSubmit={e=>void saveMetadata(e)}>

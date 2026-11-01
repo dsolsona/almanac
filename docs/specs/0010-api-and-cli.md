@@ -1,5 +1,10 @@
 # SPEC-0010: API and CLI
 
+> Accepted amendment, 2026-11-01: The existing operational detail endpoint accepts
+> `period=window|7d|90d|1y` for server-aligned bounds, mutually exclusive with
+> `start`/`end`. Existing timestamp callers and the seven-day API default remain
+> compatible. The maintainer approved [the parallel-read plan](../plans/0024-parallel-operational-detail-reads.md).
+
 > Accepted amendment, 2026-10-31: Normal operational reads return bounded maintained time-series results without graph job/polling waits. Explicit import/repair/recovery retains honest preparation/failure outcomes. Exact-value pages pin a generation and recheck authorization. Preserve compatible existing CLI/API limits while UI lists request 10/20 rows. [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md) governs this amendment.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the

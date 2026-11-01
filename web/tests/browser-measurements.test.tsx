@@ -56,7 +56,7 @@ it('rejects an old drawn generation and timezone until the requested graph is co
   const stamp={generation_id:generation,evaluated_through:end,source_generation:'1',definition_revision:'1',measurement_revision:'1'};
   const objective={id,target:'0.995',rolling_window_seconds:28*86400,cadence_seconds:60,definition_revision:'1'};
   const status={slo:objective,generation:stamp,current,burn_1h:{performance:{burn:'1'}},burn_6h:{performance:{burn:'2'}}};
-  const historyValue={objective,generation:stamp,current,burn_1h:status.burn_1h,burn_6h:status.burn_6h,effective_at:end,context:{measurement_revision:'1'},range:{requested_start:start,requested_end:end,effective_start:start,effective_end:end},burn_series:{burn_window_seconds:21600},compliance_summary:{met_days:6,evaluable_days:7}};
+  const historyValue={objective,generation:stamp,current,burn_1h:status.burn_1h,burn_6h:status.burn_6h,requested_at:end,effective_at:end,context:{measurement_revision:'1'},range:{requested_start:start,requested_end:end,effective_start:start,effective_end:end},burn_series:{burn_window_seconds:21600},compliance_summary:{met_days:6,evaluable_days:7}};
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('/status')?status:historyValue))));
   const Observer=globalThis.MutationObserver;
   vi.stubGlobal('MutationObserver',class extends Observer {constructor(callback:MutationCallback){super(callback);observers.push(this);}});
@@ -65,7 +65,7 @@ it('rejects an old drawn generation and timezone until the requested graph is co
   history.replaceState({},'',`/slos/${id}?range=7d&burn_window=21600&tz=local`);
   document.body.innerHTML='<div class="app-budget-hero">50%</div><dl class="app-status-facts">'+[['Attainment','99.9%'],['Target','99.5%'],['Burn 1 h','1×'],['Burn 6 h','2×'],['Bad events left','50']].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')+'</dl><button aria-label="Refresh objective status"></button>'+['99.9%','50%','2×','6 / 7'].map(value=>`<div class="app-lane-value">${value}</div>`).join('')+'<div class="app-timeline-plot"><div class="timeline-chart__plot" data-chart-ready="true" data-rendered-generation="old" data-rendered-zone="UTC"><svg></svg></div></div>';
   measurementInstaller()({fleetSize:1,datasourceIDs:['source'],serviceID:'service'});
-  const query=new URLSearchParams({at:end,start,end,burn_window_seconds:'21600'});
+  const query=new URLSearchParams({period:'7d',burn_window_seconds:'21600'});
   await window.fetch(`/api/v1/slos/${id}/status`);
   await window.fetch(`/api/v1/slos/${id}/operational?${query}`);
   const state=()=> (window as unknown as {__almanacPerformance:{primary_ms:number|null;fetches:{observed_body_ms?:number}[];detailEvidence:{rendered_generation:string;time_zone:string;burn_window_seconds:number}}}).__almanacPerformance;

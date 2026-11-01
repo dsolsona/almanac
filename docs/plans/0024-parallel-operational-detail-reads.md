@@ -1,6 +1,7 @@
 # Parallel operational detail reads
 
-- State: proposed; public contract amendment awaiting maintainer approval
+- State: accepted; implementation in progress
+- Accepted: 2026-11-01, explicit maintainer approval in the working conversation
 - Created: 2026-11-01
 - Task: [F3-T08](../tasks/F3-T08.md)
 - Governing contracts: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md), [API contract](../../api/openapi.yaml)
@@ -19,7 +20,7 @@ Start definition, current status and the requested history together after sessio
 confirmation. Preserve the layout, initial period, exact results, disclosed bounds,
 authorization, independent status loading and all existing performance limits.
 
-## Proposed API amendment
+## Accepted API amendment
 
 Add one optional query parameter to
 `GET /api/v1/slos/{slo_id}/operational`:

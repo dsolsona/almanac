@@ -287,11 +287,12 @@ export const sloClient = {
     if(filters.cursor) params.set('cursor',filters.cursor);
     return request<OperationalOverview>(`/api/v1/slos/overview?${params}`,{signal},false,20*1024*1024).then(x=>x.value);
   },
-  operational: (id:string, options:{at?:string;start?:string;end?:string;burn_window_seconds?:3600|21600}={}, signal?:AbortSignal) => {
+  operational: (id:string, options:{at?:string;start?:string;end?:string;period?:'window'|'7d'|'90d'|'1y';burn_window_seconds?:3600|21600}={}, signal?:AbortSignal) => {
     const params=new URLSearchParams();
     if(options.at) params.set('at',options.at);
     if(options.start) params.set('start',options.start);
     if(options.end) params.set('end',options.end);
+    if(options.period) params.set('period',options.period);
     if(options.burn_window_seconds) params.set('burn_window_seconds',String(options.burn_window_seconds));
     return request<OperationalDetail>(`/api/v1/slos/${id}/operational?${params}`,{signal},false,20*1024*1024).then(x=>x.value);
   },

@@ -298,6 +298,12 @@ func (h *Handler) operationalDetail(w http.ResponseWriter, r *http.Request, requ
 			case "end":
 				input.End = &parsed
 			}
+		case "period":
+			if value != "window" && value != "7d" && value != "90d" && value != "1y" {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+			input.Period = value
 		case "burn_window_seconds":
 			seconds, err := strconv.Atoi(value)
 			if err != nil || strconv.Itoa(seconds) != value || seconds != 3600 && seconds != 21600 {
@@ -309,6 +315,10 @@ func (h *Handler) operationalDetail(w http.ResponseWriter, r *http.Request, requ
 			problem(w, 400, "invalid_request", requestID)
 			return
 		}
+	}
+	if input.Period != "" && (input.Start != nil || input.End != nil) {
+		problem(w, 400, "invalid_request", requestID)
+		return
 	}
 	result, err := storage.ReadSloOperationalDetail(r.Context(), h.databaseURL, input)
 	if err != nil {

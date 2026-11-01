@@ -96,6 +96,7 @@ type OperationalDetailInput struct {
 	ID             string
 	At, Start, End *time.Time
 	BurnWindow     int
+	Period         string
 	Now            func() time.Time
 }
 
@@ -1527,7 +1528,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	defer span.End()
 	now := normalizedAgentNow(input.Now)
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
-	bound, err := resolveOperationalBounds(input, cadence)
+	bound, err := resolveOperationalBounds(input, cadence, row.RollingWindowSeconds)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}

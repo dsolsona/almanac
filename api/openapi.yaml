@@ -761,6 +761,10 @@ paths:
         supplied together, are UTC and cadence aligned, have end no later than
         effective at, and span a positive interval of at most 365 days. If omitted,
         end is the cadence-aligned effective time and start is seven days earlier.
+        Alternatively, period selects window, 7d, 90d or 1y without start/end.
+        Window rounds the objective window to the nearest whole day (half up),
+        clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns
+        down and start up to cadence boundaries, using server now unless at is supplied.
         Any aligned range within the supported horizon is allowed. 400 is returned
         for invalid range/window parameters; 503 resource_limit indicates actual
         canonical coverage rows exceed 2,500,000 across distinct SLI/revision
@@ -781,6 +785,7 @@ paths:
         - {name: start, in: query, required: false, schema: {type: string, format: date-time}}
         - {name: end, in: query, required: false, schema: {type: string, format: date-time}}
         - {name: burn_window_seconds, in: query, required: false, schema: {type: integer, enum: [3600, 21600], default: 3600}}
+        - {name: period, in: query, required: false, schema: {type: string, enum: [window, 7d, 90d, 1y]}, description: Server-aligned display period; cannot be combined with start or end.}
       responses:
         '200': {description: Current operational summary and bounded historical series, content: {application/json: {schema: {$ref: '#/components/schemas/SloOperationalDetail'}}}}
         '400': {description: Invalid timestamp, range, cadence alignment or burn duration, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}

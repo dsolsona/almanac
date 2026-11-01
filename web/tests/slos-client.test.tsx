@@ -47,6 +47,14 @@ it('keeps exact-value pages on the requested generation and rejects cross-genera
  clearQueryCache();page.generation.generation_id=id;
  await expect(sloClient.values(id,generation,'budget',0)).rejects.toThrow('invalid response');
 });
+it('requests a server-selected display period without a client timestamp',async()=>{
+ const fetcher=vi.fn().mockResolvedValue(new Response(JSON.stringify(operationalDetail()),{status:200}));
+ vi.stubGlobal('fetch',fetcher);
+ await sloClient.operational(id,{period:'window',burn_window_seconds:21600});
+ const params=new URL(String(fetcher.mock.calls[0]?.[0]),'https://localhost').searchParams;
+ expect([...params]).toEqual([['period','window'],['burn_window_seconds','21600']]);
+});
+
 it('uses the lightweight definition response Date for server-anchored history bounds',async()=>{
  const fetcher=vi.fn(async(_input:RequestInfo|URL)=>new Response(JSON.stringify(operationalDetail().objective),{status:200,headers:{ETag:`"slo:${id}:1"`,Date:'Thu, 29 Oct 2026 12:00:00 GMT'}}));
  vi.stubGlobal('fetch',fetcher);

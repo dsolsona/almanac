@@ -16,6 +16,19 @@ import (
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
+func TestOperationalPeriodsRejectAmbiguousOrUnknownQueries(t *testing.T) {
+	h := &Handler{}
+	for _, query := range []string{"period=invalid", "period=", "period=7d&period=1y", "period=7d&start=2026-11-01T00:00:00Z", "period=7d&end=2026-11-01T00:00:00Z"} {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/slos/11111111-1111-1111-1111-111111111111/operational?"+query, nil)
+		w := httptest.NewRecorder()
+		h.operationalDetail(w, r, "fixture", storage.DatasourceProof{}, "11111111-1111-1111-1111-111111111111", r.URL.Query())
+		var problem api.Problem
+		if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil || w.Code != 400 || problem.Code != "invalid_request" {
+			t.Fatalf("query %q: status=%d body=%s err=%v", query, w.Code, w.Body.String(), err)
+		}
+	}
+}
+
 func TestPreparationProblemsExposeBoundedRecoveryMetadata(t *testing.T) {
 	id := "11111111-1111-1111-1111-111111111111"
 	for _, test := range []struct {

@@ -123,6 +123,14 @@ responses. Show status without waiting for history. Lists use bounded backend
 projections, not per-row detail requests. Cache hits retain their disclosed evaluation
 time; they do not extend freshness or invalidate the mutation fencing above.
 
+The maintainer approved server-selected `period=window|7d|90d|1y` bounds on
+2026-11-01 under [the parallel-read plan](../plans/0024-parallel-operational-detail-reads.md).
+Definition, status and history start independently after authentication; history
+does not wait for a definition or browser clock. The additive selector preserves
+explicit timestamp callers and the existing seven-day API default. Its selected
+period, server alignment and unchanged calculation/response contracts are defined
+in the API source and approved plan.
+
 ### Work and resource budgets
 
 Use separate live, interactive and derived/historical connection admission as in

@@ -42,8 +42,8 @@ func preparedHistoryMatches(value api.SloOperationalDetail, key dbgen.FindPrepar
 
 type operationalBounds struct{ requestedAt, effectiveAt, start, end time.Time }
 
-func resolveOperationalBounds(input OperationalDetailInput, cadence time.Duration) (operationalBounds, error) {
-	if cadence <= 0 || input.Now == nil || (input.Start == nil) != (input.End == nil) {
+func resolveOperationalBounds(input OperationalDetailInput, cadence time.Duration, windowSeconds int64) (operationalBounds, error) {
+	if cadence <= 0 || input.Now == nil || (input.Start == nil) != (input.End == nil) || input.Period != "" && input.Start != nil {
 		return operationalBounds{}, ErrOperationalRange
 	}
 	now := normalizedAgentNow(input.Now)
@@ -58,7 +58,27 @@ func resolveOperationalBounds(input OperationalDetailInput, cadence time.Duratio
 	bound := operationalBounds{requestedAt: at, effectiveAt: floorSliBoundary(at, cadence)}
 	if input.Start == nil {
 		bound.end = bound.effectiveAt
-		bound.start = floorSliBoundary(bound.end.Add(-7*24*time.Hour), cadence)
+		days := int64(7)
+		switch input.Period {
+		case "", "7d":
+		case "90d":
+			days = 90
+		case "1y":
+			days = 365
+		case "window":
+			if windowSeconds <= 0 {
+				return operationalBounds{}, ErrOperationalRange
+			}
+			days = min(365, max(1, windowSeconds/86400+(windowSeconds%86400+43200)/86400))
+		default:
+			return operationalBounds{}, ErrOperationalRange
+		}
+		bound.start = bound.end.Add(-time.Duration(days) * 24 * time.Hour)
+		if input.Period == "" {
+			bound.start = floorSliBoundary(bound.start, cadence)
+		} else {
+			bound.start = ceilSliBoundary(bound.start, cadence)
+		}
 	} else {
 		_, startOffset := input.Start.Zone()
 		_, endOffset := input.End.Zone()
@@ -308,7 +328,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if input.overviewOnly {
 		kind = "overview"
 	}
-	bound, err := resolveOperationalBounds(input, time.Duration(row.CadenceSeconds)*time.Second)
+	bound, err := resolveOperationalBounds(input, time.Duration(row.CadenceSeconds)*time.Second, row.RollingWindowSeconds)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
