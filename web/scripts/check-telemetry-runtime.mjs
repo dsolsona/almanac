@@ -109,7 +109,10 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     try {
       await page.goto(url+path);
       if(journey==='sli.list')await expect(page.locator(`a[href="/slis/${sliID}"]`).first()).toBeVisible();
-      else if(journey==='slo.list')await expect(page.locator(`a[href="/slos/${sloID}"]`).first()).toBeVisible();
+      else if(journey==='slo.list'){
+        await expect(page.locator(`a[href="/slos/${sloID}"]`).first()).toBeVisible();
+        await expect(page.locator('.app-slo-rows .slo-reference-spark:not([data-chart-ready="true"])')).toHaveCount(0);
+      }
       else {
         await expect(page.locator('.app-lane-label')).toHaveCount(4);
         await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();

@@ -34,6 +34,7 @@ func routeDocuments(assets fs.FS) (map[string][]byte, error) {
 	for key, roots := range map[string][]string{
 		"slis":       {"src/slis/SlisPage.tsx"},
 		"slos":       {"src/slos/SlosPage.tsx"},
+		"slo-list":   {"src/slos/SlosPage.tsx", "src/components/charts/BudgetSparklinePlot.tsx"},
 		"slo-detail": {"src/slos/SlosPage.tsx", "src/components/charts/TimelineChartView.tsx"},
 	} {
 		var links strings.Builder
@@ -71,10 +72,13 @@ func routeDocuments(assets fs.FS) (map[string][]byte, error) {
 }
 
 func routeDocumentKey(path string) string {
+	if path == "/slos" {
+		return "slo-list"
+	}
 	if sloDetailPath.MatchString(path) {
 		return "slo-detail"
 	}
-	if path == "/slos" || path == "/slos/new" || serviceDetailPath.MatchString(path) {
+	if path == "/slos/new" || serviceDetailPath.MatchString(path) {
 		return "slos"
 	}
 	if path == "/slis" || path == "/slis/new" || sliDetailPath.MatchString(path) {

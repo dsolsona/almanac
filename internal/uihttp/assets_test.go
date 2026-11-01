@@ -53,9 +53,10 @@ func TestColdNavigationPreloadsOnlyItsPublicRouteDependencies(t *testing.T) {
 				t.Fatalf("document %s: status %d, %v", route, response.Code, err)
 			}
 			for module, want := range map[string]bool{
-				"src/slos/SlosPage.tsx":                       strings.HasPrefix(route, "/slos"),
-				"src/slis/SlisPage.tsx":                       route == "/slis",
-				"src/components/charts/TimelineChartView.tsx": sloDetailPath.MatchString(route),
+				"src/slos/SlosPage.tsx":                         strings.HasPrefix(route, "/slos"),
+				"src/slis/SlisPage.tsx":                         route == "/slis",
+				"src/components/charts/TimelineChartView.tsx":   sloDetailPath.MatchString(route),
+				"src/components/charts/BudgetSparklinePlot.tsx": route == "/slos",
 			} {
 				link := `<link rel="modulepreload" crossorigin href="/` + manifest[module].File + `">`
 				if strings.Contains(string(body), link) != want {

@@ -26,6 +26,7 @@ function distribution(samples, key) {
 function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   const documents = new Map();
   const requests = new Map();
+  let observedBodyReady=()=>{};
   const requestKey=(path,query)=>{const copy=new URLSearchParams(query);copy.sort();return `${path}?${copy}`;};
   const state = window.__almanacPerformance = { fetches: [], primary_ms: null, interaction: null, listOffset: 0, listEvidence: null };
   const originalFetch = window.fetch;
@@ -37,20 +38,24 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return response;
     const sample = { path: url.pathname, started_ms: started, headers_ms: performance.now(), wall_received_ms:Date.now(),status: response.status, server_date_ms:Date.parse(response.headers.get('Date')) };
     state.fetches.push(sample);
-    const json = response.json.bind(response);
-    response.json = async () => {
-      sample.parse_started_ms = performance.now();
-      try {
-        const value = await json();
-        if (response.status === 200 && (url.pathname === '/api/v1/slis' || url.pathname === '/api/v1/slos/overview' || /\/api\/v1\/slos\/[^/]+\/(status|operational)$/.test(url.pathname))) {
+    // Clients parse bounded streams rather than Response.json(). Observe a clone
+    // without replacing their reader, validation or telemetry parse spans.
+    if(response.status===200&&(url.pathname==='/api/v1/slis'||url.pathname==='/api/v1/slos/overview'||/\/api\/v1\/slos\/[^/]+\/(status|operational)$/.test(url.pathname))){
+      const copy=response.clone();
+      void (async()=>{
+        const reader=copy.body.getReader(),chunks=[];let size=0;
+        try{
+          for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>20*1024*1024){void reader.cancel().catch(()=>{});throw new Error('observed body exceeds bound');}chunks.push(value);}
+          const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+          const value=JSON.parse(new TextDecoder().decode(bytes));
           const parsed={ value, query: url.searchParams };
           documents.set(url.pathname, parsed);
           requests.set(requestKey(url.pathname,url.searchParams),parsed);
-        }
-        return value;
-      }
-      finally { sample.parsed_ms = performance.now(); }
-    };
+          sample.observed_body_ms=performance.now();
+          observedBodyReady();
+        }finally{reader.releaseLock();}
+      })().catch(()=>{sample.body_observation_failed=true;});
+    }
     return response;
   };
   const visible = element => !!element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
@@ -90,7 +95,7 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
       const rows = [...document.querySelectorAll('.app-slo-row')];
       const count = page && Object.values(page.group_counts).reduce((sum, value) => sum + value, 0);
       const matching=page&&(params.get('urgency')?page.group_counts[params.get('urgency')]:count),expectedRows=Math.min(pageSize,matching-state.listOffset);
-      const complete=count===names.size && page.items.length===expectedRows && rows.length===expectedRows && (expectedRows>0||visible(document.querySelector('.slo-empty'))) && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${matching} SLO`) && page.items.every(item=>names.has(item.slo.name)&&(!params.get('urgency')||item.urgency===params.get('urgency'))&&validGeneration(item.generation)&&rows.some(row=>visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))));
+      const complete=count===names.size && page.items.length===expectedRows && rows.length===expectedRows && !document.querySelector('.app-slo-rows .slo-reference-spark:not([data-chart-ready="true"])') && (expectedRows>0||visible(document.querySelector('.slo-empty'))) && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${matching} SLO`) && page.items.every(item=>names.has(item.slo.name)&&(!params.get('urgency')||item.urgency===params.get('urgency'))&&validGeneration(item.generation)&&rows.some(row=>visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))));
       if(complete)state.listEvidence={ids:page.items.map(item=>item.slo.id),names:page.items.map(item=>item.slo.name),items:page.items,urgencies:page.items.map(item=>item.urgency),expected_total:matching,counts:page.group_counts,snapshot_id:page.snapshot_id,next_cursor:page.next_cursor,previous_cursor:page.previous_cursor};
       return complete;
     }
@@ -111,7 +116,7 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     document.addEventListener(event,()=>{state.listAction.started_ms=performance.now();},{once:true,capture:true});
   };
   const afterPaint = callback => void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(callback)));
-  new MutationObserver(mutations => {
+  const observe=mutations => {
     if (state.primary_ms === null && !primaryScheduled && ready()) {
       primaryScheduled = true;
       const generation=primaryGeneration;
@@ -130,13 +135,18 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     if (!interaction.update_scheduled && interaction.plot_mutated && interaction.button.getAttribute('aria-pressed') === 'true' && !refreshing && ready()) {
       interaction.update_scheduled = true;
       afterPaint(() => {
-        const parsed = state.fetches.filter(sample => sample.path.endsWith('/operational') && sample.status === 200 && sample.parsed_ms >= interaction.started_ms).at(-1);
+        const parsed = state.fetches.filter(sample => sample.path.endsWith('/operational') && sample.status === 200 && sample.started_ms >= interaction.started_ms).at(-1);
         interaction.finished_ms = performance.now();
-        interaction.chart_ms = interaction.finished_ms - (parsed?.parsed_ms ?? interaction.started_ms);
+        // Headers precede client decoding: this conservatively includes body
+        // transfer/parse rather than understating rendering with observer timing.
+        interaction.chart_ms = interaction.finished_ms - (parsed?.headers_ms ?? interaction.started_ms);
+        interaction.chart_timing_origin='response_headers_upper_bound';
         interaction.network_backed = !!parsed;
       });
     }
-  }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  };
+  observedBodyReady=()=>observe([]);
+  new MutationObserver(observe).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
 }
 
 async function measuredPage(context, fixture) {

@@ -116,7 +116,8 @@ function shortExhaustion(item:OverviewItem['exhaustion']):string {
   const hours=Number(item.hours_until_exhaustion);
   return hours<1?`${Math.ceil(hours*60)} min`:hours>=48?`${Math.ceil(hours/24)} d`:`${Math.ceil(hours)} h`;
 }
-function OverviewRow({item}:{item:OverviewItem}) {
+function OverviewRow({item,onChartReady}:{item:OverviewItem;onChartReady:(item:OverviewItem,ready:boolean)=>void}) {
+  useEffect(()=>()=>onChartReady(item,false),[item]);
   const slo=item.slo,p=item.current.performance,q=item.current.quality,status=statusFor(item.current);
   const reason=item.reasons.map(reason=>reasonLabel(reason.code)+(reason.provisional?' · observed only':'')).join('; ');
   const partial=p.provisional||q.state==='partial';
@@ -125,7 +126,7 @@ function OverviewRow({item}:{item:OverviewItem}) {
   return <article className="app-slo-row" role="row">
     <div className="app-slo-status" role="cell"><ReferenceStatus status={status} title={reason}/>{item.reasons.length>1?<details><summary>Reasons ({item.reasons.length})</summary><ul>{item.reasons.map(value=><li key={value.code}>{reasonLabel(value.code)}{value.provisional?' · observed only':''}</li>)}</ul></details>:<span className="sr-only">{reason}</span>}</div>
     <div className="app-slo-name" role="cell"><a data-app-route className="app-slo-hitarea" href={`/slos/${slo.id}`} title={slo.display_name}>{slo.display_name}</a><small><a data-app-route href={`/services/${slo.service_id}`}>{slo.service_display_name}</a><span>·</span><a data-app-route className="app-slo-indicator" href={`/slis/${slo.sli_id}`}>{slo.sli_display_name}</a></small><span className="sr-only">Target {shift(slo.target,2)}% over {windowDuration(slo.rolling_window_seconds)}</span></div>
-    <div className="app-slo-spark" role="cell" title={item.budget_history_generation?`History evaluated through ${item.budget_history_generation.evaluated_through}`:undefined}><span className="app-slo-window" title="Budget history shown for the last 7 days">{windowDuration(slo.rolling_window_seconds)}</span>{item.budget_sparkline.length===0&&item.budget_history_state?<span className="app-slo-history-empty">{item.budget_history_state==='unavailable'?'History unavailable':item.budget_history_state==='preparing'?'Preparing history…':'No budget history'}</span>:<SloBudgetSparkline samples={item.budget_sparkline} label={`${slo.display_name} rolling remaining budget`}/>} {item.budget_sparkline.length>0&&item.budget_history_state==='preparing'&&<small>Updating history</small>}</div>
+    <div className="app-slo-spark" role="cell" title={item.budget_history_generation?`History evaluated through ${item.budget_history_generation.evaluated_through}`:undefined}><span className="app-slo-window" title="Budget history shown for the last 7 days">{windowDuration(slo.rolling_window_seconds)}</span>{item.budget_sparkline.length===0&&item.budget_history_state?<span className="app-slo-history-empty">{item.budget_history_state==='unavailable'?'History unavailable':item.budget_history_state==='preparing'?'Preparing history…':'No budget history'}</span>:<SloBudgetSparkline samples={item.budget_sparkline} label={`${slo.display_name} rolling remaining budget`} onReady={()=>onChartReady(item,true)}/>} {item.budget_sparkline.length>0&&item.budget_history_state==='preparing'&&<small>Updating history</small>}</div>
     <div className="app-slo-budget" role="cell" title={partial?'Observed only; collection coverage is incomplete':undefined}><b className={budget===null?'muted':budget<0?'crit':budget<.2?'warn':''} title={p.remaining_fraction===null?undefined:`${shift(p.remaining_fraction,2)}%`}>{budgetPercent(p.remaining_fraction,1)}</b><span className="slo-reference-meter" role="progressbar" aria-label={`${slo.display_name} budget remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={budget===null?undefined:meterFraction(p.remaining_fraction)*100} aria-valuetext={budget===null?'Unavailable':budgetPercent(p.remaining_fraction)}><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${status})`}}/></span><span className="sr-only">{partial?'Observed only; ':''}{p.remaining_budget===null?'Budget unavailable':`${decimal(p.remaining_budget)} bad events left`}</span></div>
     <div className="app-slo-burn" role="cell" title={qualityWarning(item.burn_1h.quality)}><b className={burn!==null&&Number(burn)>=10?'hot':burn!==null&&Number(burn)>=2?'warm':''}>{multiple(burn)}</b><small>{item.burn_6h.performance.burn===null?'no samples':`6 h ${multiple(item.burn_6h.performance.burn)}`}</small></div>
     <div className="app-slo-exhaustion" role="cell" title={formatExhaustion(item.exhaustion)}><b className={item.exhaustion.state==='exhausted'?'hot':''}>{shortExhaustion(item.exhaustion)}</b><small>{caption}</small></div><span className="app-slo-chevron" role="cell" aria-hidden="true">›</span>
@@ -144,7 +145,11 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   const filtersKey=JSON.stringify([query,serviceID,urgency,cursor,pageSize]);
   const renderedKey=useRef('');
   const requestedKey=JSON.stringify([filtersKey,refreshCount]);
-  useEffect(()=>{if(!busy&&renderedKey.current===requestedKey&&(page||error))journeyContentReady('slo.list',!!error);},[page,busy,error,requestedKey]);
+  const readyCharts=useRef(new WeakSet<OverviewItem>());
+  const [chartRevision,setChartRevision]=useState(0);
+  function chartReady(item:OverviewItem,ready:boolean){if(!ready){readyCharts.current.delete(item);return;}if(!readyCharts.current.has(item)){readyCharts.current.add(item);setChartRevision(value=>value+1);}}
+  const pendingCharts=page?.items.some(item=>item.budget_sparkline.some(sample=>sample.remaining_fraction!==null)&&!readyCharts.current.has(item));
+  useEffect(()=>{if(!busy&&renderedKey.current===requestedKey&&(error||page&&!pendingCharts))journeyContentReady('slo.list',!!error);},[page,busy,error,requestedKey,pendingCharts,chartRevision]);
   useEffect(()=>setDraftQuery(query),[query]);
   useEffect(()=>{
     const abort=new AbortController();
@@ -211,7 +216,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       if(!items.length||urgency&&group!==urgency)return null;
       return <section className="app-slo-group" key={group} aria-labelledby={`slo-group-${group}`}>
         <header><h2 id={`slo-group-${group}`} aria-label={`${label}, ${count} SLOs`}>{label}</h2><span>{count}</span><small>{explanation}</small></header>
-        <div role="table" aria-label={`${label} SLOs`}><div role="row" className="app-slo-columns"><span role="columnheader">Status</span><span role="columnheader">SLO</span><span role="columnheader">Budget · window</span><span role="columnheader">Remaining</span><span role="columnheader">Burn 1 h</span><span role="columnheader" className="app-slo-exhaustion-head">Exhaustion</span></div><div className="app-slo-rows" role="rowgroup">{items.map(item=><OverviewRow item={item} key={item.slo.id}/>)}</div></div>
+        <div role="table" aria-label={`${label} SLOs`}><div role="row" className="app-slo-columns"><span role="columnheader">Status</span><span role="columnheader">SLO</span><span role="columnheader">Budget · window</span><span role="columnheader">Remaining</span><span role="columnheader">Burn 1 h</span><span role="columnheader" className="app-slo-exhaustion-head">Exhaustion</span></div><div className="app-slo-rows" role="rowgroup">{items.map(item=><OverviewRow item={item} key={item.slo.id} onChartReady={chartReady}/>)}</div></div>
       </section>;
     })}</div>}
     {page&&!page.items.length&&<div className="slo-empty">{!query&&!serviceID&&!urgency&&matchingCount===0?<><h2>No SLOs yet</h2><p>Create an SLO from an existing SLI to start tracking its target.</p></>:<p>{matchingCount===0?'No SLOs match these filters.':'No SLOs are on this page.'}</p>}</div>}
