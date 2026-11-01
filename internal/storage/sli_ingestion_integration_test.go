@@ -694,6 +694,9 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_retention_work`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_archive_current_slo_projection ON public.almanac_slo_current_projections; DROP FUNCTION public.almanac_archive_slo_projection(); DROP TABLE public.almanac_slo_projection_payloads CASCADE`); err != nil {
 		t.Fatal(err)
 	}
@@ -707,6 +710,9 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_sli_derived_dirty ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_mark_derived_dirty(); DROP TABLE public.almanac_slo_history_blocks, public.almanac_slo_current_projections, public.almanac_slo_derived_generations, public.almanac_sli_hourly_aggregates, public.almanac_derived_dirty_ranges, public.almanac_sli_source_generations; DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version >= 16`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_coverage DROP COLUMN ingestion_generation`); err != nil {
 		t.Fatal(err)
 	}
 	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {

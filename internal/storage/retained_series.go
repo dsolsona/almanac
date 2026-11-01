@@ -30,7 +30,7 @@ func publishRetainedCurrent(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		return err
 	}
 	point := retainedSloPoint{Current: value.Current, Burn1h: value.Burn1h, Burn6h: value.Burn6h,
-		Attainment: operationalSample(interval, value.EffectiveAt.Add(-cadence), value.EffectiveAt, value.Objective.DefinitionRevision)}
+		Attainment: operationalAttainmentSample(interval, value.EffectiveAt.Add(-cadence), value.EffectiveAt, value.Objective.DefinitionRevision)}
 	point.Current.Window.RequestedStart = value.EffectiveAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
 	payload, err := json.Marshal(point)
 	if err != nil {
@@ -50,4 +50,16 @@ func publishRetainedCurrent(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	return q.ExtendRetainedSeriesRepair(ctx, dbgen.ExtendRetainedSeriesRepairParams{SloID: row.ID,
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 		CalculationVersion: operationalCalculationVersion, CursorAt: timestamp(start), EndAt: timestamp(value.EffectiveAt), NextAttemptAt: timestamp(now)})
+}
+
+// Attainment buckets contain interval counts and quality, rather than a rolling
+// error-budget projection or receipt provenance for the enclosing window.
+func operationalAttainmentSample(value slo.WindowResult, start, end time.Time, revision string) api.SloOperationalSample {
+	sample := operationalSample(value, start, end, revision)
+	sample.AllowedBudget, sample.RemainingBudget, sample.RemainingFraction, sample.Burn, sample.ReceivedAt = nil, nil, nil, nil, nil
+	sample.Quality.Reason = nil
+	if value.Observed == 0 {
+		sample.Quality.LatestReceiptAt = nil
+	}
+	return sample
 }

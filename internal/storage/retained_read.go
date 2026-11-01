@@ -212,7 +212,7 @@ func (c *retainedSeriesReader) unobservedPoint(ctx context.Context, base slo.Win
 		return retainedSloPoint{}, err
 	}
 	point := retainedSloPoint{Current: operationalValue(rolling),
-		Attainment: operationalSample(interval, at.Add(-base.Cadence), at, strconv.FormatInt(c.row.DefinitionRevision, 10)),
+		Attainment: operationalAttainmentSample(interval, at.Add(-base.Cadence), at, strconv.FormatInt(c.row.DefinitionRevision, 10)),
 		Burn1h:     unavailableBurn(3600, at, "cadence_mismatch"), Burn6h: unavailableBurn(21600, at, "cadence_mismatch")}
 	for _, duration := range []time.Duration{time.Hour, 6 * time.Hour} {
 		if duration%base.Cadence != 0 {

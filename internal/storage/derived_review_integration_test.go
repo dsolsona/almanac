@@ -45,7 +45,17 @@ FROM public.almanac_slo_definitions d JOIN public.almanac_slos s ON s.id=d.slo_i
 			return
 		}
 		defer rollbackTransaction(tx)
-		for _, table := range []string{"almanac_slo_current_projections", "almanac_slo_history_jobs", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
+		if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_overview_snapshots s WHERE EXISTS (
+            SELECT 1 FROM public.almanac_slo_overview_snapshot_items i WHERE i.snapshot_id=s.id
+              AND (i.payload#>>'{slo,id}')::uuid=ANY($1::uuid[]))`, ids); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_projection_payloads WHERE (payload#>>'{slo,id}')::uuid=ANY($1::uuid[])`, ids); err != nil {
+			t.Error(err)
+			return
+		}
+		for _, table := range []string{"almanac_slo_series_tile_work", "almanac_slo_series_tiles", "almanac_slo_series_repair", "almanac_slo_series_points", "almanac_slo_current_projections", "almanac_slo_history_jobs", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
 			key := "slo_id"
 			if table == "almanac_slos" {
 				key = "id"
@@ -180,11 +190,20 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 	for batch := range 2 {
 		if batch == 1 {
 			// Even when the deferral expires before the next batch, never-tried
-			// work must receive a turn ahead of the blocked objectives.
-			schedulerNow = schedulerNow.Add(time.Minute)
+			// work must receive a turn. Keep evaluation time fixed so the healthy
+			// fixture does not acquire an uncollected future interval.
+			if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_failures SET next_attempt_at=$2 WHERE slo_id=ANY($1::uuid[])`, ids[:100], schedulerNow); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if err := runtime.refreshCurrentProjections(t.Context(), schedulerClock); err != nil && !errors.Is(err, ErrDerivedSourceFailed) {
 			t.Fatal(err)
+		}
+		if batch == 0 {
+			var paused int
+			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_current_failures WHERE slo_id=ANY($1::uuid[]) AND attempts=0 AND next_attempt_at>$2`, ids[:100], clock()).Scan(&paused); err != nil || paused == 0 || paused > 64 {
+				t.Fatalf("source waits were not deferred within the first bounded batch: %d, %v", paused, err)
+			}
 		}
 	}
 	projection, err := dbgen.New(conn).GetPublishedCurrentProjection(t.Context(), dbgen.GetPublishedCurrentProjectionParams{SloID: last, Now: timestamp(schedulerNow), CalculationVersion: operationalCalculationVersion})
@@ -192,7 +211,7 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 		t.Fatalf("100 blocked objectives starved the healthy tail: %v", err)
 	}
 	var deferred int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_current_failures WHERE slo_id=ANY($1::uuid[]) AND attempts=0 AND next_attempt_at>$2`, ids[:100], clock()).Scan(&deferred); err != nil || deferred != 100 {
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_current_failures WHERE slo_id=ANY($1::uuid[]) AND attempts=0 AND next_attempt_at>=$2`, ids[:100], clock()).Scan(&deferred); err != nil || deferred != 100 {
 		t.Fatalf("source waits spent calculation attempts or were not deferred: %d, %v", deferred, err)
 	}
 	input := OperationalOverviewInput{Runtime: runtime, Proof: proof, Query: "review-", Limit: 50, Now: schedulerClock}

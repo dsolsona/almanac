@@ -50,6 +50,43 @@ func TestRetainedTileCannotHideCorruptionAsEmptyHistory(t *testing.T) {
 	}
 }
 
+func TestRetainedAttainmentMatchesCanonicalSingleInterval(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	for _, state := range []string{"observed", "complete_empty", "zero_traffic", "missing", "expired", "not_applicable"} {
+		t.Run(state, func(t *testing.T) {
+			base := slo.WindowInput{At: end, Now: end, ValidFrom: start, SliValidFrom: start, Cadence: time.Minute, Duration: time.Minute, Target: "0.99", FreshnessGrace: 2 * time.Minute}
+			fact := slo.Observation{Start: start, End: end, Received: end, Outcome: "observed", Good: "99", Total: "100"}
+			switch state {
+			case "complete_empty":
+				fact.Outcome = "complete_empty"
+			case "zero_traffic":
+				fact.Good, fact.Total = "0", "0"
+			case "expired":
+				base.Now = end.Add(366 * 24 * time.Hour)
+			case "not_applicable":
+				base.ValidFrom = end
+			}
+			base.RetentionStart = base.Now.Add(-365 * 24 * time.Hour)
+			if state != "missing" {
+				base.Observations = []slo.Observation{fact}
+			}
+			canonical, _, _, err := buildAttainmentSamples(t.Context(), base, start, end, time.Minute, "1")
+			if err != nil || len(canonical) != 1 {
+				t.Fatal("canonical interval unavailable", err)
+			}
+			value, err := evaluateOperationalAt(t.Context(), base, end, time.Minute)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual := operationalAttainmentSample(value, start, end, "1")
+			if !reflect.DeepEqual(actual, canonical[0]) {
+				t.Fatalf("retained attainment differs from canonical %s: %+v / %+v", state, actual, canonical[0])
+			}
+		})
+	}
+}
+
 func TestRetainedDisplayPreservesExtremaGapsAndYearBounds(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 17, 0, 0, time.UTC)
 	end := start.Add(365 * 24 * time.Hour)

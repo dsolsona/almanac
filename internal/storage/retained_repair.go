@@ -191,7 +191,7 @@ func buildRetainedRepairPoints(ctx context.Context, q *dbgen.Queries, row dbgen.
 			applyOperationalDefinitionWindow(&point.Current, row.ActivatedAt.Time.UTC(), row.EvaluationValidFrom.Time.UTC(), row.HistoricalRequestedBy, row.HistoricalRequestedAt)
 			point.Burn1h, point.Burn6h = unavailableBurn(3600, input.At, "cadence_mismatch"), unavailableBurn(21600, input.At, "cadence_mismatch")
 		case 1:
-			point.Attainment = operationalSample(value, input.At.Add(-cadence), input.At, revision)
+			point.Attainment = operationalAttainmentSample(value, input.At.Add(-cadence), input.At, revision)
 		default:
 			if input.Duration == time.Hour {
 				point.Burn1h = burnValue(value, 3600)
