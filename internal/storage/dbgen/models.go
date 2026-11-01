@@ -459,6 +459,10 @@ type AlmanacSloDisplayBlock struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AlmanacSloHistoryAdmission struct {
+	Singleton bool `json:"singleton"`
+}
+
 type AlmanacSloHistoryBlock struct {
 	GenerationID      pgtype.UUID        `json:"generation_id"`
 	RangeStart        pgtype.Timestamptz `json:"range_start"`

@@ -3,7 +3,7 @@
 This records the current implementation of [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md)
 and [ADR-0024](../adr/0024-precomputed-operational-reads.md). It is not performance
 acceptance. The schema and additive wire contracts are reviewable in migration
-0022 and `api/openapi.yaml`; real workload evidence remains outstanding.
+0022/0023 and `api/openapi.yaml`; real workload evidence remains outstanding.
 
 ## Connections and admission
 
@@ -49,6 +49,10 @@ commits those aggregates, then acknowledges only the claimed generations/epochs.
 Calculation never holds dirty-row locks. Newer arrivals survive old acknowledgments.
 Backlogs drain without a mandatory sleep after every hundred keys; current status
 gets a turn each second independently of historical preparation.
+Source-dependent current work persists a bounded next-attempt time without
+spending or resetting its calculation-failure budget. Never-attempted due work
+sorts ahead of deferred work, so a full batch of blocked objectives cannot
+permanently exclude a healthy objective.
 
 An aggregate range uses boundaries common to UTC hours and the source cadence.
 For irregular/long cadences, the common grid leaves at most 7,200 canonical source
@@ -97,8 +101,17 @@ at most 100 records, and a manual retry addresses one current/history/aggregate
 job, respects a one-minute retry limit and commits its audit record atomically.
 
 History admission counts retained failures as well as active jobs: at most 64
-retained history jobs globally and eight per objective. Whole history payloads
-are capped at 20 MiB. Reusable and complete history payloads share a 2 GiB logical
+retained history jobs globally and eight per objective.
+Admission updates a dedicated singleton row in the requesting transaction.
+Its MVCC version forces a stale repeatable-read contender to restart; an advisory
+lock alone cannot refresh that contender's snapshot. The existing finite retry
+bound recognizes raw PostgreSQL serialization errors as well as classified ones.
+Exhausted current/source work is checked across non-current filtered rows before
+returning pending, using two batched reads and the shared exact source bounds.
+The load acceptance helper rejects missing intervals, failed attempts and
+inconsistent observation accounting in either phase, independently of latency.
+
+Whole history payloads are capped at 20 MiB. Reusable and complete history payloads share a 2 GiB logical
 JSON byte budget, enforced transactionally. Current status does not take that
 budget lock, so historical cache pressure cannot block current publication there.
 The budget is a bound on encoded live payloads; indexes, WAL and dead tuples are

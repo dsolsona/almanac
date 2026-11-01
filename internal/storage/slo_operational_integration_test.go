@@ -124,6 +124,12 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	t.Run("derived aggregate, durable preparation and recovery", func(t *testing.T) {
 		verifyDerivedOperationalRecovery(t, f.databaseURL, proof, attention.ID, readNow)
 	})
+	t.Run("history admission fences stale snapshots", func(t *testing.T) {
+		verifyHistoryAdmissionSnapshotFences(t, f.databaseURL, attention.ID, readNow)
+	})
+	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
+		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
+	})
 	t.Run("overlapping overview admission waits for the preceding filter", func(t *testing.T) {
 		lockTx, err := conn.Begin(t.Context())
 		if err != nil {

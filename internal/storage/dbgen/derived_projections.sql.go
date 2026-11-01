@@ -11,6 +11,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const anyExhaustedDerivedSources = `-- name: AnyExhaustedDerivedSources :one
+WITH windows AS (
+    SELECT unnest($2::uuid[]) AS sli_id,unnest($3::bigint[]) AS revision,
+           unnest($4::timestamptz[]) AS start_at,unnest($5::timestamptz[]) AS end_at
+)
+SELECT EXISTS (
+    SELECT 1 FROM windows w
+    JOIN public.almanac_derived_dirty_ranges d ON d.sli_id=w.sli_id AND d.measurement_revision=w.revision
+    WHERE w.start_at<w.end_at AND d.range_start<w.end_at AND d.range_end>w.start_at
+      AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$1::timestamptz)
+)
+`
+
+type AnyExhaustedDerivedSourcesParams struct {
+	Now       pgtype.Timestamptz   `json:"now"`
+	SliIds    []pgtype.UUID        `json:"sli_ids"`
+	Revisions []int64              `json:"revisions"`
+	Starts    []pgtype.Timestamptz `json:"starts"`
+	Ends      []pgtype.Timestamptz `json:"ends"`
+}
+
+func (q *Queries) AnyExhaustedDerivedSources(ctx context.Context, arg AnyExhaustedDerivedSourcesParams) (bool, error) {
+	row := q.db.QueryRow(ctx, anyExhaustedDerivedSources,
+		arg.Now,
+		arg.SliIds,
+		arg.Revisions,
+		arg.Starts,
+		arg.Ends,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const clearCurrentPreparationFailure = `-- name: ClearCurrentPreparationFailure :exec
 DELETE FROM public.almanac_slo_current_failures WHERE slo_id=$1
 `
@@ -40,6 +74,40 @@ func (q *Queries) CurrentPreparationExhausted(ctx context.Context, arg CurrentPr
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const deferCurrentPreparation = `-- name: DeferCurrentPreparation :exec
+INSERT INTO public.almanac_slo_current_failures
+    (slo_id,definition_revision,measurement_revision,calculation_version,attempts,next_attempt_at,last_error)
+VALUES ($1,$2,$3,$4,0,$5::timestamptz+interval '2 seconds','current_waiting_for_source')
+ON CONFLICT (slo_id) DO UPDATE
+SET definition_revision=EXCLUDED.definition_revision,measurement_revision=EXCLUDED.measurement_revision,
+    calculation_version=EXCLUDED.calculation_version,
+    attempts=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)
+         = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
+         THEN almanac_slo_current_failures.attempts ELSE 0 END,
+    next_attempt_at=EXCLUDED.next_attempt_at,last_error=EXCLUDED.last_error
+`
+
+type DeferCurrentPreparationParams struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	Column5             pgtype.Timestamptz `json:"column_5"`
+}
+
+// Waiting on source work is schedulable state, not a failed calculation attempt.
+// Preserve an existing failure budget for this revision instead of resetting it.
+func (q *Queries) DeferCurrentPreparation(ctx context.Context, arg DeferCurrentPreparationParams) error {
+	_, err := q.db.Exec(ctx, deferCurrentPreparation,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+		arg.Column5,
+	)
+	return err
 }
 
 const getPublishedCurrentProjection = `-- name: GetPublishedCurrentProjection :one
@@ -142,6 +210,66 @@ func (q *Queries) InsertDerivedGeneration(ctx context.Context, arg InsertDerived
 	return id, err
 }
 
+const listCurrentPreparationStates = `-- name: ListCurrentPreparationStates :many
+SELECT s.id,d.sli_id,d.measurement_revision,d.cadence_seconds,d.rolling_window_seconds,
+       d.evaluation_valid_from,m.effective_from AS sli_valid_from,
+       EXISTS(SELECT 1 FROM public.almanac_slo_current_failures f
+           WHERE f.slo_id=s.id AND f.definition_revision=d.revision
+             AND f.measurement_revision=d.measurement_revision
+             AND f.calculation_version=$1 AND f.attempts>=5) AS exhausted
+FROM unnest($2::uuid[]) requested(id)
+JOIN public.almanac_slos s ON s.id=requested.id
+JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
+`
+
+type ListCurrentPreparationStatesParams struct {
+	CalculationVersion string        `json:"calculation_version"`
+	SloIds             []pgtype.UUID `json:"slo_ids"`
+}
+
+type ListCurrentPreparationStatesRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	SliID                pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision  int64              `json:"measurement_revision"`
+	CadenceSeconds       int32              `json:"cadence_seconds"`
+	RollingWindowSeconds int64              `json:"rolling_window_seconds"`
+	EvaluationValidFrom  pgtype.Timestamptz `json:"evaluation_valid_from"`
+	SliValidFrom         pgtype.Timestamptz `json:"sli_valid_from"`
+	Exhausted            bool               `json:"exhausted"`
+}
+
+// Fetch preparation metadata once for the non-current filtered set, not once
+// per objective. Source-window bounds are calculated by the shared exact helper.
+func (q *Queries) ListCurrentPreparationStates(ctx context.Context, arg ListCurrentPreparationStatesParams) ([]ListCurrentPreparationStatesRow, error) {
+	rows, err := q.db.Query(ctx, listCurrentPreparationStates, arg.CalculationVersion, arg.SloIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCurrentPreparationStatesRow{}
+	for rows.Next() {
+		var i ListCurrentPreparationStatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SliID,
+			&i.MeasurementRevision,
+			&i.CadenceSeconds,
+			&i.RollingWindowSeconds,
+			&i.EvaluationValidFrom,
+			&i.SliValidFrom,
+			&i.Exhausted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueDerivedObjectives = `-- name: ListDueDerivedObjectives :many
 SELECT s.id FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
@@ -159,7 +287,7 @@ WHERE (f.slo_id IS NULL OR (f.attempts<5 AND f.next_attempt_at<=$2::timestamptz)
    OR p.payload_digest IS DISTINCT FROM sha256(convert_to(p.payload::text,'UTF8'))
    OR g.source_generation<>coalesce(source.generation,0)
    OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds))
-ORDER BY g.evaluated_through NULLS FIRST, s.id LIMIT $3
+ORDER BY f.next_attempt_at NULLS FIRST, g.evaluated_through NULLS FIRST, s.id LIMIT $3
 `
 
 type ListDueDerivedObjectivesParams struct {

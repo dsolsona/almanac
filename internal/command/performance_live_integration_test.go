@@ -24,17 +24,6 @@ type performanceMetricsSample struct {
 	Scalars   map[string]float64            `json:"scalars"`
 }
 
-type performanceCollectionReport struct {
-	Start           time.Time               `json:"start"`
-	End             time.Time               `json:"end"`
-	Expected        int64                   `json:"expected_intervals"`
-	Observed        int64                   `json:"observed_intervals"`
-	Missing         int64                   `json:"missing_source_intervals"`
-	AttemptFailures int64                   `json:"failed_or_incomplete_attempts"`
-	CollectionDelay performanceDistribution `json:"collection_delay_after_settling"`
-	DeliveryAge     performanceDistribution `json:"delivery_age_before_commit"`
-}
-
 type performanceLiveReport struct {
 	Name       string                      `json:"name"`
 	Started    time.Time                   `json:"started"`
@@ -164,8 +153,8 @@ func measurePerformanceLiveWindow(t *testing.T, fleet performanceFleet, name str
 		}
 	}
 	report.Collection = collectPerformanceCollectionTiming(t, fleet, report.Started, report.Ended)
-	if report.Collection.Missing < 0 {
-		report.Failures = append(report.Failures, "collection interval count exceeded the fixed fleet cadence")
+	if err := checkPerformanceCollection(report.Collection); err != nil {
+		report.Failures = append(report.Failures, err.Error())
 	}
 	if len(report.Failures) > 0 {
 		return report, fmt.Errorf("live phase %s has %d failures", name, len(report.Failures))
@@ -176,6 +165,11 @@ func measurePerformanceLiveWindow(t *testing.T, fleet performanceFleet, name str
 func checkPerformanceLiveIsolation(baseline, loaded performanceLiveReport) error {
 	if len(baseline.Failures) != 0 || len(loaded.Failures) != 0 || baseline.Wall < 15*time.Minute || loaded.Wall < 15*time.Minute {
 		return errors.New("live isolation requires two complete, failure-free fifteen-minute phases")
+	}
+	for _, phase := range []performanceLiveReport{baseline, loaded} {
+		if err := checkPerformanceCollection(phase.Collection); err != nil {
+			return err
+		}
 	}
 	if err := checkPerformanceIngestionIsolation(baseline.Ingestion, loaded.Ingestion); err != nil {
 		return err

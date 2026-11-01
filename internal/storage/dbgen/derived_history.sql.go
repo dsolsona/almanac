@@ -393,7 +393,7 @@ func (q *Queries) LatestPreparedBudgetSparkline(ctx context.Context, arg LatestP
 }
 
 const lockHistoryAdmission = `-- name: LockHistoryAdmission :exec
-SELECT pg_advisory_xact_lock(1095520259, 1)
+UPDATE public.almanac_slo_history_admission SET singleton=true WHERE singleton
 `
 
 func (q *Queries) LockHistoryAdmission(ctx context.Context) error {
