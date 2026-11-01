@@ -141,7 +141,7 @@ try {
   fixture.password = '';
   await loginContext.close();
 
-  for (const [view, path, budget] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 2500]]) {
+  for (const [view, path, budget] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 500]]) {
     for (let index = 0; index < 20; index++) {
       stage = `${view}-cold-${index}`;
       const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
@@ -151,6 +151,10 @@ try {
         await page.goto(new URL(path, origin).href, { waitUntil: 'domcontentloaded', timeout: 10_000 });
         await page.waitForFunction(() => Number.isFinite(window.__almanacPerformance?.primary_ms), { }, { timeout: 10_000 });
         Object.assign(sample, await browserTimings(page));
+        if (sample.fetches.some(fetch=>fetch.status===503)) {
+          sample.failure='normal_navigation_unavailable';
+          report.failures.push(stage);
+        }
       } catch {
         sample.failure = 'primary_content_unavailable';
         sample.primary_ms = await page.evaluate(() => performance.now()).catch(() => 10_000);
@@ -198,13 +202,15 @@ try {
     await writeFile(join(output, 'browser-performance.json'), JSON.stringify(report) + '\n', { mode: 0o600 });
   }
   report.interaction_resources = await browserTimings(page);
+  if (report.interaction_resources.fetches.some(fetch=>fetch.status===503)) report.failures.push('interaction-preparation-wait');
   await context.close();
   report.distributions = Object.fromEntries(['sli-list', 'slo-list', 'slo-detail'].map(view => [view, distribution(report.cold_loads.filter(sample => sample.view === view), 'primary_ms')]));
   report.distributions.feedback = distribution(report.interactions, 'feedback_ms');
   report.distributions.chart = distribution(report.interactions, 'chart_ms');
-  for (const [view, budget] of [['sli-list', 1000], ['slo-list', 1000], ['slo-detail', 2500]]) {
-    if (report.distributions[view].count !== 20 || report.distributions[view].p75_ms > budget) report.failures.push(`${view}-p75-budget`);
+  for (const [view, budget] of [['sli-list', 1000], ['slo-list', 1000], ['slo-detail', 500]]) {
+    if (report.distributions[view].count !== 20 || report.distributions[view].max_ms >= budget) report.failures.push(`${view}-load-budget`);
   }
+  if (report.interactions.some(sample=>!Number.isFinite(sample.total_ms)||sample.total_ms>=500)) report.failures.push('interaction-total-budget');
   for (const name of ['feedback', 'chart']) {
     if (report.distributions[name].count !== 50 || report.distributions[name].p95_ms > 200) report.failures.push(`${name}-p95-budget`);
   }

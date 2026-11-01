@@ -177,6 +177,8 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     await captureTraces(traceURL,events,artifacts,backendSHA,containsSecret);
     assert.ok(report.overhead.every(value=>value.p95_fraction<=.05),'tracing exceeds the 5% p95 overhead allowance; inspect telemetry-runtime.json');
     report.tracing_checks_passed=true;
+    assert.ok(samples.every(value=>value.result==='ready'&&value.pending_responses===0),'normal navigation waited for preparation or unavailable responses; inspect telemetry-runtime.json');
+    assert.equal(report.page_speed_passed,true,'rendered page-load budget exceeded; inspect telemetry-runtime.json and connected VictoriaTraces');
   } catch(error) {
     report.failure_type=error.name;
     throw error;
