@@ -191,7 +191,7 @@ func (s *Server) Serve(listener net.Listener) error {
 	s.startReassignmentWorker()
 	defer s.stopReassignmentWorker(context.Background())
 	if s.http.TLSConfig != nil {
-		listener = tls.NewListener(listener, s.http.TLSConfig)
+		return s.http.ServeTLS(listener, "", "")
 	}
 	return s.http.Serve(listener)
 }

@@ -196,6 +196,31 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     report.page_speed_passed=report.speed_failures.length===0;
     await writeFile(join(artifacts,'telemetry-runtime.json'),JSON.stringify(report,null,2),{mode:0o600});
     await captureTraces(traceURL,events,artifacts,backendSHA,containsSecret);
+    if(!report.page_speed_passed){
+      // A separate diagnostic visit keeps profiler overhead out of acceptance samples.
+      const diagnostic=await browser.newContext({storageState,viewport:{width:1440,height:1000},colorScheme:'light'});
+      try{
+        const page=await diagnostic.newPage(),cdp=await diagnostic.newCDPSession(page);
+        await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
+        await cdp.send('Network.enable');
+        await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:100,downloadThroughput:10_000_000/8,uploadThroughput:10_000_000/8});
+        await cdp.send('Profiler.enable');
+        await cdp.send('Profiler.setSamplingInterval',{interval:1000});
+        await cdp.send('Profiler.start');
+        await page.goto(url+'/slos/'+sloID,{waitUntil:'domcontentloaded',timeout:10_000});
+        await expect(page.locator('.timeline-chart__plot')).toHaveAttribute('data-chart-ready','true',{timeout:10_000});
+        await expect(page.locator('.app-budget-hero')).toHaveText('-900%');
+        await page.evaluate(async()=>{await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
+        const {profile}=await cdp.send('Profiler.stop');
+        assert.ok(Array.isArray(profile.nodes)&&profile.nodes.length>0&&profile.endTime>profile.startTime,'browser CPU profile is incomplete');
+        const resources=await page.evaluate(()=>performance.getEntriesByType('resource').filter(entry=>new URL(entry.name).pathname.startsWith('/assets/')).map(entry=>({path:new URL(entry.name).pathname,protocol:entry.nextHopProtocol,start_ms:entry.startTime,end_ms:entry.responseEnd,encoded_bytes:entry.encodedBodySize})));
+        const encoded=JSON.stringify({acceptance_sample:false,backend_sha256:backendSHA,profile,resources});
+        assert.ok(Buffer.byteLength(encoded)<=8*1024*1024&&!containsSecret(encoded),'unsafe or oversized browser CPU profile');
+        await writeFile(join(artifacts,'browser-cpu-slo.detail.json'),encoded,{mode:0o600});
+        report.diagnostic_profile='browser-cpu-slo.detail.json';
+      }catch(error){report.diagnostic_profile_error=error.name;}
+      finally{await diagnostic.close();}
+    }
     assert.ok(report.overhead.every(value=>value.p95_fraction<=.05),'tracing exceeds the 5% p95 overhead allowance; inspect telemetry-runtime.json');
     report.tracing_checks_passed=true;
     assert.ok(samples.every(value=>value.result==='ready'&&value.pending_responses===0),'normal navigation waited for preparation or unavailable responses; inspect telemetry-runtime.json');
