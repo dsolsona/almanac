@@ -4,8 +4,6 @@ package command
 
 import (
 	"context"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -43,10 +41,10 @@ func restartPerformanceForBrowser(t *testing.T, fleet performanceFleet) performa
 	f := fleet.fixture
 	report := performanceBrowserRestartReport{Target: fleet.objectives[0]}
 	report.Shutdown = f.backend.stop(t)
-	parsed, err := url.Parse(f.databaseURL)
-	if err != nil || parsed.Host != "127.0.0.1:15487" || !strings.HasPrefix(parsed.Path, "/almanac_test_") || f.backend.process != nil {
+	if f.backend.deployment == nil {
 		t.Fatal("response eviction requires stopped test-owned backend and disposable database")
 	}
+	f.backend.deployment.requireStoppedDatabase(t, f.databaseURL)
 	started := time.Now()
 	ctx, cancel := context.WithTimeout(fleet.ctx, 30*time.Second)
 	defer cancel()
@@ -135,10 +133,10 @@ func restartPerformancePhase(t *testing.T, fleet performanceFleet, blankDerived 
 func clearPerformanceDerivedFixture(t *testing.T, fleet performanceFleet) (int64, int64) {
 	t.Helper()
 	f := fleet.fixture
-	parsed, err := url.Parse(f.databaseURL)
-	if err != nil || parsed.Host != "127.0.0.1:15487" || !strings.HasPrefix(parsed.Path, "/almanac_test_") || f.backend.process != nil {
+	if f.backend.deployment == nil {
 		t.Fatal("blank-derived setup requires the stopped test-owned backend and disposable fixture database")
 	}
+	f.backend.deployment.requireStoppedDatabase(t, f.databaseURL)
 	ctx, cancel := context.WithTimeout(fleet.ctx, 5*time.Minute)
 	defer cancel()
 	db := testpostgres.Connect(t, f.databaseURL)

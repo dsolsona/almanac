@@ -235,7 +235,15 @@ try {
   assert.match(fixture.spki, /^[A-Za-z0-9+/]{43}=$/);
   assert.match(fixture.slo_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.match(fixture.candidate_binary_sha256, /^[0-9a-f]{64}$/);
-  assert.equal(fixture.trace_url,'http://127.0.0.1:19428');
+  assert.match(fixture.deployment?.project,/^almanac-perf-[a-z0-9]+$/);
+  assert.equal(fixture.deployment.backend_sha256,fixture.candidate_binary_sha256);
+  assert.equal(fixture.deployment.app_user,'10001:10001');assert.equal(fixture.deployment.app_read_only,true);
+  assert.match(fixture.deployment.app_image_id,/^sha256:[0-9a-f]{64}$/);
+  for(const id of [fixture.deployment.app_container,fixture.deployment.postgres_container])assert.match(id,/^[0-9a-f]{64}$/);
+  const traceOrigin=new URL(fixture.trace_url);
+  assert.equal(traceOrigin.protocol,'http:');assert.equal(traceOrigin.hostname,'127.0.0.1');
+  assert.ok(Number(traceOrigin.port)>0&&Number(traceOrigin.port)<=65535);
+  assert.equal(traceOrigin.pathname,'/');assert.equal(traceOrigin.username+traceOrigin.password+traceOrigin.search+traceOrigin.hash,'');
   assert.ok([10, 100, 1000].includes(fixture.fleet_size));
   assert.equal(fixture.cache_setup.result,'restarted-with-retained-data');
   assert.equal(fixture.cache_setup.target_slo_id,fixture.slo_id);
@@ -251,6 +259,7 @@ try {
   assert.ok(output.startsWith(resolve('..', '.local') + sep));
   await mkdir(output, { recursive: true, mode: 0o700 });
   report.candidate_binary_sha256 = fixture.candidate_binary_sha256;
+  report.deployment=fixture.deployment;
   report.cache_setup={result:fixture.cache_setup.result,target_slo_id:fixture.cache_setup.target_slo_id,preserved_target_points:fixture.cache_setup.preserved_target_points,preserved_target_tiles:fixture.cache_setup.preserved_target_tiles,preserved_current_summaries:fixture.cache_setup.preserved_current_summaries,evicted_history_responses:fixture.cache_setup.evicted_history_responses,evicted_overview_snapshots:fixture.cache_setup.evicted_overview_snapshots};
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
   report.environment.browser = browser.version();

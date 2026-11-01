@@ -25,22 +25,27 @@ import (
 )
 
 type performanceEnvironment struct {
-	GoVersion     string            `json:"go_version"`
-	OS            string            `json:"os"`
-	Architecture  string            `json:"architecture"`
-	LogicalCPUs   int               `json:"host_logical_cpus"`
-	HostMemory    int64             `json:"host_memory_bytes"`
-	CPUQuota      string            `json:"host_cgroup_cpu_max"`
-	MemoryLimit   string            `json:"host_cgroup_memory_max"`
-	BackendSHA256 string            `json:"backend_sha256"`
-	AgentSHA256   string            `json:"agent_sha256"`
-	PostgreSQL    string            `json:"postgresql"`
-	Settings      map[string]string `json:"postgresql_settings"`
+	GoVersion     string                        `json:"go_version"`
+	OS            string                        `json:"os"`
+	Architecture  string                        `json:"architecture"`
+	LogicalCPUs   int                           `json:"host_logical_cpus"`
+	HostMemory    int64                         `json:"host_memory_bytes"`
+	CPUQuota      string                        `json:"host_cgroup_cpu_max"`
+	MemoryLimit   string                        `json:"host_cgroup_memory_max"`
+	BackendSHA256 string                        `json:"backend_sha256"`
+	AgentSHA256   string                        `json:"agent_sha256"`
+	PostgreSQL    string                        `json:"postgresql"`
+	Settings      map[string]string             `json:"postgresql_settings"`
+	Deployment    performanceDeploymentEvidence `json:"deployment"`
 }
 
 func performanceEnvironmentEvidence(t *testing.T, fleet performanceFleet) performanceEnvironment {
 	t.Helper()
 	report := performanceEnvironment{GoVersion: runtime.Version(), OS: runtime.GOOS, Architecture: runtime.GOARCH, LogicalCPUs: runtime.NumCPU(), Settings: make(map[string]string)}
+	if fleet.fixture.backend.deployment == nil {
+		t.Fatal("capacity evidence requires normal container deployment")
+	}
+	report.Deployment = fleet.fixture.backend.deployment.evidence(t)
 	for path, destination := range map[string]*string{fleet.fixture.binary: &report.BackendSHA256, filepath.Join(filepath.Dir(fleet.fixture.binary), "almanac-agent"): &report.AgentSHA256} {
 		file, err := os.Open(path)
 		if err != nil {

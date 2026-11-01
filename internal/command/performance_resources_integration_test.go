@@ -16,13 +16,16 @@ type performanceDiskAdmission struct {
 	Required  int64 `json:"required_bytes"`
 }
 
-func performanceFixtureDisk(t *testing.T, parent context.Context, required int64) performanceDiskAdmission {
+func performanceFixtureDisk(t *testing.T, parent context.Context, fleet performanceFleet, required int64) performanceDiskAdmission {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	// A fixed read-only operation on the already verified isolated fixture.
-	// No host path, container, shell command or argument is caller-selectable.
-	command := exec.CommandContext(ctx, "docker", "exec", "almanac-f1-t05-postgres18.6", "df", "-Pk", "/var/lib/postgresql")
+	deployment := fleet.fixture.backend.deployment
+	if deployment == nil {
+		t.Fatal("capacity disk admission requires the owned normal deployment")
+	}
+	deployment.evidence(t)
+	command := exec.CommandContext(ctx, "docker", "exec", deployment.postgresID, "df", "-Pk", "/var/lib/postgresql")
 	output, err := command.Output()
 	if err != nil || len(output) > 4096 {
 		t.Fatal("read isolated performance fixture free disk failed")

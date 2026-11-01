@@ -103,7 +103,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	stage("environment")
 	record("environment", performanceEnvironmentEvidence(t, fleet), nil)
 	stage("seed-56-days")
-	record("disk-admission-56-days", performanceFixtureDisk(t, ctx, performanceDiskReserve), nil)
+	record("disk-admission-56-days", performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve), nil)
 	seeded := seedPerformanceHistory(t, fleet, 56)
 	record("seed-56-days", seeded, nil)
 	stage("automatic-maintenance-56-days")
@@ -133,7 +133,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if err != nil {
 		t.Fatal(err)
 	}
-	record("disk-admission-365-days", performanceFixtureDisk(t, ctx, required), nil)
+	record("disk-admission-365-days", performanceFixtureDisk(t, ctx, fleet, required), nil)
 	record("seed-365-days", seedPerformanceHistory(t, fleet, 365), nil)
 	stage("automatic-maintenance-365-days")
 	maintenance, err = awaitPerformanceHistory(t, ctx, fleet)

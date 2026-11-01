@@ -57,6 +57,13 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	if hashErr != nil || closeErr != nil {
 		return artifacts, errors.New("identify candidate executable for browser evidence failed")
 	}
+	if f.backend.deployment == nil {
+		return artifacts, errors.New("browser capacity acceptance requires normal container deployment")
+	}
+	deployment := f.backend.deployment.evidence(t)
+	if deployment.BackendSHA != hex.EncodeToString(digest.Sum(nil)) {
+		return artifacts, errors.New("browser candidate differs from normal deployed executable")
+	}
 	spki := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
 	input, err := json.Marshal(struct {
 		URL         string                          `json:"url"`
@@ -71,7 +78,8 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		ServiceID   string                          `json:"service_id"`
 		CacheSetup  performanceBrowserRestartReport `json:"cache_setup"`
 		TraceURL    string                          `json:"trace_url"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL})
+		Deployment  performanceDeploymentEvidence   `json:"deployment"`
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}
@@ -143,11 +151,12 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 			Elapsed  float64  `json:"elapsed_ms"`
 			IDs      []string `json:"ids"`
 		} `json:"list_actions"`
-		Failures []string        `json:"failures"`
-		Traces   []traceEvidence `json:"trace_evidence"`
+		Failures   []string                      `json:"failures"`
+		Traces     []traceEvidence               `json:"trace_evidence"`
+		Deployment performanceDeploymentEvidence `json:"deployment"`
 	}
 	if readErr != nil || reportCloseErr != nil || len(reportBody) > 8<<20 || json.Unmarshal(reportBody, &report) != nil ||
-		report.Result != "passed" || report.Candidate != hex.EncodeToString(digest.Sum(nil)) ||
+		report.Result != "passed" || report.Candidate != hex.EncodeToString(digest.Sum(nil)) || report.Deployment != deployment ||
 		len(report.ColdLoads) != 60 || len(report.WarmLoads) != 60 || len(report.LifecycleLoads) != 1 || len(report.Interactions) != 50 || len(report.Failures) != 0 || len(report.Traces) != 171 {
 		return artifacts, errors.New("browser performance report is incomplete, failed or from another executable")
 	}

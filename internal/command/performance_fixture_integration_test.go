@@ -44,8 +44,9 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 		t.Fatal("controlled performance requires 10,100 or1000 independent measurements/objectives")
 	}
 	started := time.Now()
-	sink := startJourneyTraceSink(t)
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", sink.server.URL+"/v1/traces")
+	f := startPerformanceComposeFixture(t)
+	traceURL := "http://127.0.0.1:" + f.backend.deployment.tracesPort
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", traceURL+"/insert/opentelemetry/v1/traces")
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
 	t.Setenv("OTEL_SDK_DISABLED", "false")
@@ -54,8 +55,7 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
 	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.01")
 	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
-	f := startObjectiveJourneyFixtureWithMetrics(t, true)
-	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: "http://127.0.0.1:19428"}
+	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL}
 	for index := range 10 {
 		if ctx.Err() != nil {
 			t.Fatal("controlled performance fleet setup cancelled")
@@ -102,6 +102,11 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 	// creates neither sessions directly nor a bypass of permission enforcement.
 	db := testpostgres.Connect(t, f.databaseURL)
 	defer closePerformanceObserver(db)
+	var database, user string
+	var version int
+	if err := db.QueryRow(t.Context(), `SELECT current_database(),current_user,current_setting('server_version_num')::integer`).Scan(&database, &user, &version); err != nil || database != "almanac" || user != "almanac" || version != 180006 {
+		t.Fatal("normal capacity deployment database differs from its pinned PostgreSQL identity")
+	}
 	for index := range performanceUsers {
 		login := fmt.Sprintf("performance-reader-%02d", index)
 		var identity string
@@ -222,7 +227,7 @@ SELECT array_position($1::uuid[],sli_id)::bigint AS ordinal, proof.* FROM (
 			t.Fatal("controlled retained-history setup cancelled")
 		}
 		if int(hour.Sub(start)/time.Hour)%24 == 0 {
-			performanceFixtureDisk(t, fleet.ctx, 8<<30)
+			performanceFixtureDisk(t, fleet.ctx, fleet, 8<<30)
 		}
 		ctx, cancel := context.WithTimeout(fleet.ctx, 30*time.Second)
 		tx, err := db.Begin(ctx)
