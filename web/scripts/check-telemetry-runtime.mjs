@@ -7,6 +7,12 @@ import { expect } from '@playwright/test';
 const percentile=(values,fraction)=>[...values].sort((a,b)=>a-b)[Math.ceil(values.length*fraction)-1];
 const summary=values=>({samples:values.length,p50_ms:percentile(values,.5),p95_ms:percentile(values,.95),max_ms:Math.max(...values)});
 
+function transportFailure(request) {
+  const path=new URL(request.url()).pathname,error=request.failure()?.errorText??'';
+  if(!path.startsWith('/api/'))return null;
+  return {path:path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g,'{id}'),error:/^net::ERR_[A-Z0-9_]+$/.test(error)?error:'unclassified'};
+}
+
 function connected(document,event,backendSHA,expectedEnvironment) {
   return document.data?.some(data=>{
     if(data.traceID!==event.trace_id)return false;
@@ -78,7 +84,7 @@ export async function captureTraces(traceURL,events,artifacts,backendSHA,contain
 
 // Called only by the existing isolated Compose acceptance gate. The application,
 // PostgreSQL, authentication and collector are real; no product route is mocked.
-export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloID,artifacts,backendSHA,traceURL,setEnabled,containsSecret,sampleRuntime,snapshotDataset,precedingFailure=null,networkLatency=0}) {
+export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloID,artifacts,backendSHA,traceURL,setEnabled,containsSecret,sampleRuntime,snapshotDataset,captureFailure,precedingFailure=null,networkLatency=0}) {
   assert.ok(networkLatency===0||networkLatency===100,'unsupported network comparison');
   const dependencies=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).dependencies;
   const cases=[['sli.list','/slis'],['slo.list','/slos'],['slo.detail','/slos/'+sloID]];
@@ -100,7 +106,11 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       addEventListener('almanac:journey',event=>{const value=event.detail;if(/^[0-9a-f]{32}$/.test(value?.traceId)&&Number.isFinite(value.duration))window.almanacRuntimeJourneys.push({trace_id:value.traceId,journey:value.journey,result:value.result,duration_ms:value.duration});});
     });
     const capabilities=new Set(); let pending=0;
-    const unavailable=[],httpFailures=[];
+    const unavailable=[],httpFailures=[],transportFailures=[];
+    page.on('requestfailed',request=>{
+      const failure=transportFailure(request);
+      if(failure&&transportFailures.length<32)transportFailures.push(failure);
+    });
     page.on('response',response=>{
       if(new URL(response.url()).pathname.startsWith('/api/')){
         const headers=response.headers();if(headers['x-almanac-tracing'])capabilities.add(headers['x-almanac-tracing']);
@@ -156,8 +166,10 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       if(sample.result==='ready')sample.evidence_error_type=error.name;
       else {
         const alerts=await page.getByRole('alert').allTextContents().catch(()=>[]);
-        Object.assign(sample,{result:'failed',elapsed_ms:performance.now()-started,wall_elapsed_ms:Date.now()-wallStarted,error_type:error.name,pending_responses:pending,http_failures:httpFailures,alerts:alerts.map(value=>containsSecret(value)?'[fixture credential redacted]':value.slice(0,1000))});
+        Object.assign(sample,{result:'failed',elapsed_ms:performance.now()-started,wall_elapsed_ms:Date.now()-wallStarted,error_type:error.name,pending_responses:pending,http_failures:httpFailures,transport_failures:transportFailures,alerts:alerts.map(value=>containsSecret(value)?'[fixture credential redacted]':value.slice(0,1000))});
         await page.screenshot({path:join(artifacts,'failed-navigation.png'),fullPage:true}).catch(()=>{});
+        // Capture this process before the next tracing mode replaces its container.
+        try{await captureFailure(artifacts);}catch(failure){sample.runtime_evidence_error_type=failure.name;}
       }
       throw error;
     } finally {await page.close();}

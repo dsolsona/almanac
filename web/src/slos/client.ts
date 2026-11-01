@@ -211,8 +211,10 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     const code = typeof data === 'object' && data !== null && 'code' in data && typeof data.code === 'string' ? data.code : '';
     const errors = record(data) && Array.isArray(data.field_errors) && data.field_errors.length <= 16 ? data.field_errors : [];
     const guidance = errors.filter(record).map(item => fieldMessages[`${item.field}:${item.code}`]).filter(Boolean).join(' ');
+    const listLimit=code==='resource_limit'&&path.split('?')[0]==='/api/v1/slos/overview'
+      ? 'The SLO list is temporarily at its resource limit. Try Refresh shortly.' : '';
     if(response.status===401 || response.status===403)clearQueryCache(false);
-    throw new SloFailure(guidance || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
+    throw new SloFailure(guidance || listLimit || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
   }
   const expected = init.method === 'POST' ? 201 : 200;
   if (response.status !== expected) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);

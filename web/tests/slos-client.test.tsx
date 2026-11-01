@@ -153,3 +153,10 @@ it('cancels an operational response when its streamed body exceeds the fixed 20 
  await expect(sloClient.overview()).rejects.toThrow('invalid response');
  expect(cancelled).toBe(true);
 });
+
+it('describes list resource failures without suggesting a graph range and never retries the quota',async()=>{
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({code:'resource_limit'}),{status:503}));
+ vi.stubGlobal('fetch',fetcher);
+ await expect(sloClient.overview({q:'demo'})).rejects.toThrow('The SLO list is temporarily at its resource limit. Try Refresh shortly.');
+ expect(fetcher).toHaveBeenCalledOnce();
+});

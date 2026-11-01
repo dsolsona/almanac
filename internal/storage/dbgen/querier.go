@@ -41,8 +41,6 @@ type Querier interface {
 	CompleteRetentionWork(ctx context.Context, arg CompleteRetentionWorkParams) (int64, error)
 	CompleteSloHistoryJob(ctx context.Context, arg CompleteSloHistoryJobParams) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
-	CountLiveSloOverviewSnapshots(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error)
-	CountLiveSloOverviewSnapshotsForSession(ctx context.Context, arg CountLiveSloOverviewSnapshotsForSessionParams) (int64, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
 	CurrentPreparationExhausted(ctx context.Context, arg CurrentPreparationExhaustedParams) (bool, error)
 	// Waiting on source work is schedulable state, not a failed calculation attempt.
@@ -280,6 +278,7 @@ type Querier interface {
 	// A repair cursor's expired prefix can be skipped, but its retained tail stays
 	// admitted. Bumping both fences prevents an old lease from moving it backwards.
 	SkipExpiredRetainedRepairs(ctx context.Context, arg SkipExpiredRetainedRepairsParams) (int64, error)
+	SloOverviewSnapshotUsage(ctx context.Context, arg SloOverviewSnapshotUsageParams) (SloOverviewSnapshotUsageRow, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateAgentAppliedConfiguration(ctx context.Context, arg UpdateAgentAppliedConfigurationParams) (int64, error)
 	UpdateAgentDesiredConfigurationRevision(ctx context.Context, arg UpdateAgentDesiredConfigurationRevisionParams) (int64, error)

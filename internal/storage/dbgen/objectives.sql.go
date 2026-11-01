@@ -64,35 +64,6 @@ func (q *Queries) AggregateSloObservations(ctx context.Context, arg AggregateSlo
 	return i, err
 }
 
-const countLiveSloOverviewSnapshots = `-- name: CountLiveSloOverviewSnapshots :one
-SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots WHERE expires_at>$1
-`
-
-func (q *Queries) CountLiveSloOverviewSnapshots(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error) {
-	row := q.db.QueryRow(ctx, countLiveSloOverviewSnapshots, expiresAt)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const countLiveSloOverviewSnapshotsForSession = `-- name: CountLiveSloOverviewSnapshotsForSession :one
-SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots
-WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3
-`
-
-type CountLiveSloOverviewSnapshotsForSessionParams struct {
-	ActorID         pgtype.UUID        `json:"actor_id"`
-	SessionVerifier []byte             `json:"session_verifier"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) CountLiveSloOverviewSnapshotsForSession(ctx context.Context, arg CountLiveSloOverviewSnapshotsForSessionParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countLiveSloOverviewSnapshotsForSession, arg.ActorID, arg.SessionVerifier, arg.ExpiresAt)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const deleteExpiredSloOverviewSnapshots = `-- name: DeleteExpiredSloOverviewSnapshots :exec
 WITH expired AS (
     SELECT snapshot.id FROM public.almanac_slo_overview_snapshots snapshot
@@ -953,6 +924,53 @@ func (q *Queries) ListSlos(ctx context.Context, arg ListSlosParams) ([]ListSlosR
 		return nil, err
 	}
 	return items, nil
+}
+
+const sloOverviewSnapshotUsage = `-- name: SloOverviewSnapshotUsage :one
+WITH charged AS (
+    SELECT actor_id=$1 AND session_verifier=$2 AS own_session,
+           state='preparing' AS preparing,
+           CASE WHEN state='preparing' THEN $3::bigint
+                ELSE greatest(payload_bytes::bigint,$4::bigint) END AS bytes
+    FROM public.almanac_slo_overview_snapshots WHERE expires_at>$5
+)
+SELECT count(*) FILTER (WHERE preparing AND own_session)::bigint AS session_builds,
+       count(*) FILTER (WHERE preparing)::bigint AS installation_builds,
+       coalesce(sum(bytes) FILTER (WHERE own_session),0)::bigint AS session_bytes,
+       coalesce(sum(bytes),0)::bigint AS installation_bytes FROM charged
+`
+
+type SloOverviewSnapshotUsageParams struct {
+	ActorID         pgtype.UUID        `json:"actor_id"`
+	SessionVerifier []byte             `json:"session_verifier"`
+	ReservedBytes   int64              `json:"reserved_bytes"`
+	MinimumBytes    int64              `json:"minimum_bytes"`
+	Now             pgtype.Timestamptz `json:"now"`
+}
+
+type SloOverviewSnapshotUsageRow struct {
+	SessionBuilds      int64 `json:"session_builds"`
+	InstallationBuilds int64 `json:"installation_builds"`
+	SessionBytes       int64 `json:"session_bytes"`
+	InstallationBytes  int64 `json:"installation_bytes"`
+}
+
+func (q *Queries) SloOverviewSnapshotUsage(ctx context.Context, arg SloOverviewSnapshotUsageParams) (SloOverviewSnapshotUsageRow, error) {
+	row := q.db.QueryRow(ctx, sloOverviewSnapshotUsage,
+		arg.ActorID,
+		arg.SessionVerifier,
+		arg.ReservedBytes,
+		arg.MinimumBytes,
+		arg.Now,
+	)
+	var i SloOverviewSnapshotUsageRow
+	err := row.Scan(
+		&i.SessionBuilds,
+		&i.InstallationBuilds,
+		&i.SessionBytes,
+		&i.InstallationBytes,
+	)
+	return i, err
 }
 
 const updateServiceMetadata = `-- name: UpdateServiceMetadata :one

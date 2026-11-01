@@ -89,6 +89,13 @@ func overviewScopeFilters(input OperationalOverviewInput) (pgtype.UUID, pgtype.T
 	return serviceID, pgtype.Text{String: input.Urgency, Valid: input.Urgency != ""}
 }
 
+func canReserveOverview(usage dbgen.SloOverviewSnapshotUsageRow) bool {
+	// Preparing results reserve their maximum size; ready pages charge actual bytes.
+	return usage.SessionBuilds < sloOverviewSessionLimit && usage.InstallationBuilds < sloOverviewInstallationLimit &&
+		usage.SessionBytes <= sloOverviewSessionByteLimit-sloOverviewProjectionByteLimit &&
+		usage.InstallationBytes <= sloOverviewInstallationBytes-sloOverviewProjectionByteLimit
+}
+
 func findReusableOverview(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time, actorID pgtype.UUID, role string) (pgtype.UUID, bool, error) {
 	if input.Runtime == nil {
 		return pgtype.UUID{}, false, nil

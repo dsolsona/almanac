@@ -250,6 +250,13 @@ requires every selected package; partial artifacts are not a passing gate.
 Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's
 execution selector. Pure unit cases belong in ordinary test files so the fast lane
 runs them. Discovery alone does not prove a test was executed.
+The retained-history datasets have separate mandatory top-level integration tests:
+`TestIntegrationRetainedDenseHistoryAndPersistedRestart` and
+`TestIntegrationRetainedMinuteHistoryAndPersistedRestart`. The full integration
+discovery includes both, with their original datasets, assertions and per-test
+timeout. They no longer run inside the small overview/burn-window test selected
+by `slo-integration`; a focused pagination pass does not establish retained-history
+or recovery acceptance.
 The Go portability mode only compiles test binaries; it does not execute Darwin
 tests or prove runtime behavior on macOS. Its target platform, architecture,
 CGO setting, cache, and output paths are fixed in the Makefile.

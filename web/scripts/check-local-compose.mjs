@@ -282,6 +282,13 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     const sample=JSON.parse(await command('docker',['stats','--no-stream','--format','{{json .}}',appID],{timeout:5000}));
     return {cpu_percent:sample.CPUPerc,memory_usage:sample.MemUsage,pids:sample.PIDs};
   };
+  const captureFailure=async directory=>{
+    const container=(await compose(['ps','-aq','app'])).trim();
+    assert.match(container,/^[a-f0-9]{12,64}$/);
+    const logs=redact(await compose(['logs','--no-color','--tail','80','app']));
+    assert.ok(Buffer.byteLength(logs)<=256*1024&&!containsFixtureSecret(logs),'unsafe or oversized failure diagnostics');
+    writeFileSync(join(directory,'failure-runtime.json'),JSON.stringify({container,backend_sha256:backendSHA,logs}),{mode:0o600});
+  };
   const snapshotDataset=async()=>JSON.parse((await compose(['exec','-T','postgres','psql','-U','almanac','-d','almanac','-Atc',
     `SELECT json_build_object('slis',(SELECT count(*) FROM public.almanac_slis),'slos',(SELECT count(*) FROM public.almanac_slos),'observations',(SELECT count(*) FROM public.almanac_sli_coverage),'source_generation',(SELECT max(generation)::text FROM public.almanac_sli_source_generations WHERE sli_id='${objective.sli_id}'),'measurement_revision',(SELECT d.measurement_revision::text FROM public.almanac_slos s JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision WHERE s.id='${objective.slo_id}'))`])).trim());
   try {
@@ -301,7 +308,7 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
       mkdirSync(directory,{mode:0o700});
       try{
         await checkTelemetryRuntime({browser,url,storageState,sliID:objective.sli_id,sloID:objective.slo_id,
-          artifacts:directory,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,precedingFailure,networkLatency});
+          artifacts:directory,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,captureFailure,precedingFailure,networkLatency});
         comparisons.push({added_latency_ms:networkLatency,result:'passed',artifacts:directory});
       }catch(error){
         firstFailure??=error;

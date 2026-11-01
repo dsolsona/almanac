@@ -115,6 +115,17 @@ or versioned during the API contract review; do not silently alter generated typ
 
 ### Browser behavior
 
+Pagination admission clarification accepted by the maintainer on 2026-11-01:
+completed list versions remain immutable for two minutes and do not consume
+concurrent build slots. Admit at most four building snapshots per actor/session
+and 64 per installation. Reserve 16 MiB per building snapshot; charge completed
+snapshots their payload size with a 16-KiB minimum metadata charge. Combined
+usage is bounded to 64 MiB per actor/session and 1 GiB per installation, retaining
+the previous worst-case storage budgets. Keep the 16-MiB/10,000-objective per-result
+limits, scope binding and unexpired cursors. Lists must not automatically poll
+preparing history or consume new versions without an explicit user action.
+This replaces the former cap of four/64 completed and building versions together.
+
 On 2026-11-01 the maintainer clarified that the acceptance device is reasonably
 capable, without artificial CPU slowdown. Record real hardware and measure the
 complete journey with separate normal-network and added-100-ms-latency cohorts,

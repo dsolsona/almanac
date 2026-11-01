@@ -231,19 +231,38 @@ func verifyCurrentStatusBoundaryRead(t *testing.T, databaseURL string, runtime *
 	if err := conn.QueryRow(t.Context(), state, pgID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	for _, advance := range []time.Duration{time.Duration(published.Slo.CadenceSeconds) * time.Second, 2 * time.Hour} {
+	access, err := AuthenticateSession(t.Context(), databaseURL, proof.SessionVerifier, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := ReadLocalIdentity(t.Context(), databaseURL, access.Login)
+	if err != nil || !identity.Found {
+		t.Fatalf("boundary fixture identity unavailable: %v", err)
+	}
+	for index, advance := range []time.Duration{time.Duration(published.Slo.CadenceSeconds) * time.Second, 2 * time.Hour} {
 		at := now.Add(advance)
 		clock := func() time.Time { return at }
-		oracle, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id, Now: clock, BurnWindow: 3600})
+		// The long clock-only gap exceeds idle expiry; use a normal fresh session.
+		boundaryProof := proof
+		boundaryProof.SessionVerifier[31] ^= byte(index + 1)
+		if _, err := IssueSession(t.Context(), databaseURL, IssueSessionInput{UserID: identity.UserID,
+			ExpectedCredentialEpoch: identity.CredentialEpoch, ExpectedCredentialRevision: identity.CredentialRevision,
+			Verifier: boundaryProof.SessionVerifier, Now: at, RequestID: "boundary-session-" + advance.String()}); err != nil {
+			t.Fatal(err)
+		}
+		oracle, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: boundaryProof, ID: id, Now: clock, BurnWindow: 3600})
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := ReadCurrentSloStatus(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: proof, ID: id, Now: clock})
+		got, err := ReadCurrentSloStatus(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: boundaryProof, ID: id, Now: clock})
 		if err != nil || !reflect.DeepEqual(got.Current, oracle.Current) || !reflect.DeepEqual(got.Burn1h, oracle.Burn1h) || !reflect.DeepEqual(got.Burn6h, oracle.Burn6h) || !reflect.DeepEqual(got.Exhaustion, oracle.Exhaustion) || string(got.Urgency) != string(oracle.Urgency) {
 			t.Fatalf("current boundary read after %s differs from canonical values: %v", advance, err)
 		}
 		if got.Generation.GenerationId == published.Generation.GenerationId || !got.Generation.EvaluatedThrough.Equal(oracle.EffectiveAt) || !got.Generation.PublishedAt.Equal(at) || got.Generation.SourceGeneration != published.Generation.SourceGeneration {
 			t.Fatalf("current boundary read reused invalidated provenance after %s: %+v", advance, got.Generation)
+		}
+		if _, err := RevokeSession(t.Context(), databaseURL, boundaryProof.SessionVerifier, at, "boundary-session-cleanup"); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if err := conn.QueryRow(t.Context(), state, pgID).Scan(&after); err != nil || before != after {

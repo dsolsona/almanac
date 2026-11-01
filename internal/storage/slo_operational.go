@@ -37,6 +37,9 @@ const (
 	sloOperationalFactsLimit       = 2_500_000
 	sloOverviewDefinitionLimit     = 10_000
 	sloOverviewProjectionByteLimit = 16 << 20
+	sloOverviewMinimumBytes        = 16 << 10
+	sloOverviewSessionByteLimit    = sloOverviewSessionLimit * sloOverviewProjectionByteLimit
+	sloOverviewInstallationBytes   = sloOverviewInstallationLimit * sloOverviewProjectionByteLimit
 	sloOperationalSeriesLimit      = 1500
 	sloOperationalReadAttempts     = 3
 )
@@ -619,15 +622,14 @@ func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input O
 		}
 		return uuid.UUID(id.Bytes), user.Role, true, nil
 	}
-	sessionCount, err := q.CountLiveSloOverviewSnapshotsForSession(ctx, dbgen.CountLiveSloOverviewSnapshotsForSessionParams{ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], ExpiresAt: timestamp(now)})
+	usage, err := q.SloOverviewSnapshotUsage(ctx, dbgen.SloOverviewSnapshotUsageParams{
+		ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], Now: timestamp(now),
+		ReservedBytes: sloOverviewProjectionByteLimit, MinimumBytes: sloOverviewMinimumBytes,
+	})
 	if err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview session admission failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview resource accounting failed", err)
 	}
-	installationCount, err := q.CountLiveSloOverviewSnapshots(ctx, timestamp(now))
-	if err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview installation admission failed", err)
-	}
-	if sessionCount >= sloOverviewSessionLimit || installationCount >= sloOverviewInstallationLimit {
+	if !canReserveOverview(usage) {
 		return uuid.Nil, "", false, ErrOperationalResource
 	}
 	id, err := uuid.NewRandom()

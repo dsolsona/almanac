@@ -137,12 +137,18 @@ WITH expired AS (
 )
 DELETE FROM public.almanac_slo_overview_snapshots s USING expired e WHERE s.id=e.id;
 
--- name: CountLiveSloOverviewSnapshotsForSession :one
-SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots
-WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3;
-
--- name: CountLiveSloOverviewSnapshots :one
-SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots WHERE expires_at>$1;
+-- name: SloOverviewSnapshotUsage :one
+WITH charged AS (
+    SELECT actor_id=sqlc.arg(actor_id) AND session_verifier=sqlc.arg(session_verifier) AS own_session,
+           state='preparing' AS preparing,
+           CASE WHEN state='preparing' THEN sqlc.arg(reserved_bytes)::bigint
+                ELSE greatest(payload_bytes::bigint,sqlc.arg(minimum_bytes)::bigint) END AS bytes
+    FROM public.almanac_slo_overview_snapshots WHERE expires_at>sqlc.arg(now)
+)
+SELECT count(*) FILTER (WHERE preparing AND own_session)::bigint AS session_builds,
+       count(*) FILTER (WHERE preparing)::bigint AS installation_builds,
+       coalesce(sum(bytes) FILTER (WHERE own_session),0)::bigint AS session_bytes,
+       coalesce(sum(bytes),0)::bigint AS installation_bytes FROM charged;
 
 -- name: InsertSloOverviewSnapshot :exec
 INSERT INTO public.almanac_slo_overview_snapshots

@@ -159,8 +159,6 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   useEffect(()=>{
     const abort=new AbortController();
     const sameView=lastKey.current===filtersKey;
-    let preparationTimer:ReturnType<typeof setTimeout>|undefined;
-    let preparationReads=0;
     if(!sameView){setPage(null);setError('');}
     lastKey.current=filtersKey;setBusy(true);
     const read=async()=>{
@@ -169,18 +167,11 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
         if(!abort.signal.aborted){
           renderedKey.current=requestedKey;
           setPage(overview);setError('');
-          // Only replace a first page, never a generation-pinned cursor page.
-          // Three replacements keep this view within the four-snapshot budget
-          // even when each preparation completion publishes different data.
-          if(!cursor&&preparationReads<3&&overview.items.some(item=>item.budget_history_state==='preparing')){
-            preparationReads++;
-            preparationTimer=setTimeout(()=>{void read();},2000);
-          }
         }
       } catch(failure){if(!abort.signal.aborted){renderedKey.current=requestedKey;if(failure instanceof SloFailure&&(failure.status===401||failure.status===403))setPage(null);setError(failure instanceof Error?failure.message:'The operational overview could not be loaded.');}}
       finally{if(!abort.signal.aborted)setBusy(false);}
     };
-    void read();return()=>{abort.abort();clearTimeout(preparationTimer);};
+    void read();return()=>abort.abort();
   },[locationKey,filtersKey,refreshCount]);
   function apply(changes:Record<string,string>) {onLocationChange(updateQuery(locationKey,changes,['cursor','previous_cursor']));}
   function changeUrgency(value:string) {apply({urgency:value});}

@@ -80,6 +80,20 @@ it('rejects an old drawn generation and timezone until the requested graph is co
   expect(state().detailEvidence).toMatchObject({rendered_generation:generation,time_zone:'local',burn_window_seconds:21600});
 });
 
+it('keeps transport error identity without request identifiers, queries or arbitrary error text',()=>{
+  const runtime=(globalThis as unknown as {process:{getBuiltinModule:(name:string)=>unknown}}).process;
+  const fs=runtime.getBuiltinModule('node:fs') as {readFileSync:(path:string,encoding:string)=>string};
+  const source=fs.readFileSync('scripts/check-telemetry-runtime.mjs','utf8');
+  const start=source.indexOf('function transportFailure('),end=source.indexOf('\nfunction connected(',start);
+  expect(start).toBeGreaterThan(0);expect(end).toBeGreaterThan(start);
+  const failure=new Function(`return (${source.slice(start,end)});`)() as (request:{url:()=>string;failure:()=>{errorText:string}|null})=>unknown;
+  const url=()=> 'https://localhost/api/v1/slos/11111111-1111-1111-1111-111111111111/status?secret=private';
+  expect(failure({url,failure:()=>({errorText:'net::ERR_HTTP2_PROTOCOL_ERROR'})})).toEqual({path:'/api/v1/slos/{id}/status',error:'net::ERR_HTTP2_PROTOCOL_ERROR'});
+  expect(failure({url,failure:()=>({errorText:'request failed: secret=private'})})).toEqual({path:'/api/v1/slos/{id}/status',error:'unclassified'});
+  expect(failure({url,failure:()=>null})).toEqual({path:'/api/v1/slos/{id}/status',error:'unclassified'});
+  expect(failure({url:()=> 'https://localhost/assets/application.js',failure:()=>null})).toBeNull();
+});
+
 it('requires matching build, timing and descended backend/database/chart spans for trace evidence',()=>{
   const runtime=(globalThis as unknown as {process:{getBuiltinModule:(name:string)=>unknown}}).process;
   const fs=runtime.getBuiltinModule('node:fs') as {readFileSync:(path:string,encoding:string)=>string};

@@ -639,8 +639,13 @@ paths:
         Results are globally ordered by urgency rank, lower(name), then UUID.
         A PostgreSQL projection snapshot freezes definitions and calculated values
         across pages; it is bound to the actor, current session, role, filters and
-        limit, expires after two minutes, and is not renewable. At most four live
-        snapshots per actor/session and 64 per installation are admitted. A
+        limit, expires after two minutes, and is not renewable. At most four
+        snapshots per actor/session and 64 per installation may be building
+        concurrently. Ready snapshots are charged by payload size, with a minimum
+        16 KiB metadata charge each. Building snapshots reserve 16 MiB each.
+        Combined reservations and ready charges are bounded to 64 MiB per
+        actor/session and 1 GiB per installation; exceeding these bounds returns
+        503 resource_limit without evicting an unexpired cursor. A
         snapshot may contain at most 10,000 matching objectives and 16 MiB of
         projection payload; exceeding either returns 503 resource_limit and asks
         the client to narrow q or service_id. No observation receipt timestamp is

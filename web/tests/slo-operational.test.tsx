@@ -63,7 +63,7 @@ it('shows server group counts and sends submitted filters through the operationa
  expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('page_size=10'));
 });
 
-it('bounds first-page preparation refreshes and leaves cursor pages pinned',async()=>{
+it('never polls preparing first pages and leaves cursor pages pinned until explicit navigation',async()=>{
  vi.useFakeTimers();
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({items:[],next_cursor:''}),{status:200})));
  const detail=operationalDetail();
@@ -72,16 +72,17 @@ it('bounds first-page preparation refreshes and leaves cursor pages pinned',asyn
  const view=render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await act(async()=>{});
  expect(read).toHaveBeenCalledTimes(1);
- for(let index=0;index<3;index++)await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
- expect(read).toHaveBeenCalledTimes(4);
  await act(async()=>{await vi.advanceTimersByTimeAsync(60000);});
- expect(read).toHaveBeenCalledTimes(4);
+ expect(read).toHaveBeenCalledTimes(1);
+ fireEvent.click(screen.getByRole('button',{name:/^Refresh$/}));
+ await act(async()=>{});
+ expect(read).toHaveBeenCalledTimes(2);
  view.rerender(<OperationalOverviewView locationKey="/slos?cursor=page-two" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await act(async()=>{});
- expect(read).toHaveBeenCalledTimes(5);
+ expect(read).toHaveBeenCalledTimes(3);
  await act(async()=>{await vi.advanceTimersByTimeAsync(60000);});
- expect(read).toHaveBeenCalledTimes(5);
- expect(read.mock.calls[4]?.[0]).toMatchObject({cursor:'page-two'});
+ expect(read).toHaveBeenCalledTimes(3);
+ expect(read.mock.calls[2]?.[0]).toMatchObject({cursor:'page-two'});
 });
 
 it('opens exact values from the generation displayed by the timeline',async()=>{

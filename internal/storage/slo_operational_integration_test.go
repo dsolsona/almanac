@@ -252,14 +252,46 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3`, f.userID, freshVerifier[:], at).Scan(&multiPageSnapshots); err != nil || multiPageSnapshots != 1 {
 		t.Fatalf("multi-page snapshot retention count = %d, %v", multiPageSnapshots, err)
 	}
-	for snapshotIndex := 0; snapshotIndex < 3; snapshotIndex++ {
+	for snapshotIndex := range 6 {
 		admitted, admissionErr := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 		if admissionErr != nil || admitted.NextCursor == "" {
 			t.Fatalf("admission snapshot %d = %+v, %v", snapshotIndex+2, admitted, admissionErr)
 		}
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow}); !errors.Is(err, ErrOperationalResource) {
-		t.Fatalf("fifth live session snapshot error = %v, want resource limit", err)
+	replayedAfterReads, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow})
+	if err != nil || replayedAfterReads.SnapshotId != first.SnapshotId || len(replayedAfterReads.Items) != 1 {
+		t.Fatalf("old cursor after seven ready snapshots = %+v, %v", replayedAfterReads, err)
+	}
+	var buildingVerifier [32]byte
+	buildingVerifier[0] = 100
+	if _, err := IssueSession(t.Context(), f.databaseURL, IssueSessionInput{UserID: f.userID, ExpectedCredentialEpoch: f.epoch,
+		ExpectedCredentialRevision: f.revision, Verifier: buildingVerifier, Now: at.Add(-time.Minute), RequestID: "overview-building-session"}); err != nil {
+		t.Fatal(err)
+	}
+	buildingInput := OperationalOverviewInput{Proof: DatasourceProof{SessionVerifier: buildingVerifier}, Limit: 1, Now: readNow}
+	for range 4 {
+		if _, _, reused, err := reserveSloOverviewSnapshot(t.Context(), f.databaseURL, buildingInput); err != nil || reused {
+			t.Fatalf("reserve independent build: reused=%v err=%v", reused, err)
+		}
+	}
+	if _, _, _, err := reserveSloOverviewSnapshot(t.Context(), f.databaseURL, buildingInput); !errors.Is(err, ErrOperationalResource) {
+		t.Fatalf("fifth concurrent build = %v, want resource limit", err)
+	}
+	actorID, validActor := canonicalUUID(f.userID)
+	if !validActor {
+		t.Fatal("invalid fixture actor")
+	}
+	usage, err := dbgen.New(conn).SloOverviewSnapshotUsage(t.Context(), dbgen.SloOverviewSnapshotUsageParams{
+		ActorID: actorID, SessionVerifier: buildingVerifier[:], Now: timestamp(at), ReservedBytes: 16 << 20, MinimumBytes: 16 << 10,
+	})
+	if err != nil || usage.SessionBuilds != 4 || usage.SessionBytes != 64<<20 {
+		t.Fatalf("reserved build accounting = %+v, %v", usage, err)
+	}
+	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow}); err != nil {
+		t.Fatalf("another session's builds blocked a small ready view: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2`, f.userID, buildingVerifier[:]); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='editor' WHERE id=$1`, f.userID); err != nil {
 		t.Fatal(err)
@@ -406,7 +438,6 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if groups[attention.Name] != "needs_attention" || groups[watch.Name] != "watch" || groups[healthy.Name] != "healthy" {
 		t.Fatalf("overview classifications = %v", groups)
 	}
-	t.Run("retained history and persisted-cache restart", verifyDerivedRetainedHistoryRegression)
 }
 
 func sameDecimal(actual, expected string) bool {

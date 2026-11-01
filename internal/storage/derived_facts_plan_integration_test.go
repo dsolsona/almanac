@@ -40,7 +40,8 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 	}
 	capture := &factsQueryCapture{}
 	_, err = buildRetainedRepairPoints(t.Context(), dbgen.New(capture), row, source, start, end, now)
-	if !errors.Is(err, errFactsQueryCaptured) || capture.statement == "" {
+	// Production error sanitization strips the capture marker; verify the actual SQL.
+	if err == nil || !strings.HasPrefix(capture.statement, "-- name: ReadRetainedWindowBatch :many\n") {
 		t.Fatal("capture retained repair query failed", err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
