@@ -82,7 +82,11 @@ func Start(ctx context.Context, service string) (*Provider, error) {
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, errors.New("telemetry: invalid OTLP endpoint")
 	}
-	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint), otlptracehttp.WithTimeout(2*time.Second), otlptracehttp.WithRetry(otlptracehttp.RetryConfig{Enabled: false}))
+	client, headers, err := exportHTTPConfig()
+	if err != nil {
+		return nil, err
+	}
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint), otlptracehttp.WithHTTPClient(client), otlptracehttp.WithHeaders(headers), otlptracehttp.WithTimeout(2*time.Second), otlptracehttp.WithRetry(otlptracehttp.RetryConfig{Enabled: false}))
 	if err != nil {
 		return nil, errors.New("telemetry: exporter initialization failed")
 	}
@@ -104,7 +108,7 @@ func Start(ctx context.Context, service string) (*Provider, error) {
 	)
 	otel.SetTracerProvider(provider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
-	owned := &Provider{provider: provider, browser: newBrowserExporter(endpoint), meter: meter, reader: reader, attributes: attributes}
+	owned := &Provider{provider: provider, browser: newBrowserExporter(endpoint, client, headers), meter: meter, reader: reader, attributes: attributes}
 	activeProvider.Store(owned)
 	return owned, nil
 }

@@ -3,6 +3,7 @@ import type { AuthContext } from '../auth/client.ts';
 import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createDatasourceClient, DatasourceFailure, type Datasource, type DatasourceWrite, type Diagnostic, type Provider } from './client.ts';
 import './datasources.css';
+import { journeyContentReady } from '../telemetry/client.ts';
 
 type Agent = { id: string; name: string; display_name: string; enabled: boolean; runtime?: { reachability?: string; capabilities?: { provider: string; configuration_formats: string[]; operations: string[] }[] } | null };
 type ProviderReadinessState = Provider['availability'] | 'loading' | 'still_applying' | 'error';
@@ -283,6 +284,9 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     return () => request.abort();
   // locationKey is the route state; cursor is intentionally retained by Back.
   }, [locationKey, selectedID, isNew, loadList, admin, canPreview]);
+  useEffect(() => {
+    if (!loading) journeyContentReady('management', !!error);
+  }, [loading, error, locationKey]);
 
   useEffect(() => {
     if (!source || source.reassignment || !canPreview) return;

@@ -277,7 +277,7 @@ export function OperationalDetailView({id,definition,locationKey,onLocationChang
   const burnWindow=(params.get('burn_window')==='21600'?21600:3600) as 3600|21600;
   const renderedKey=useRef('');
   const requestedKey=JSON.stringify([id,range,burnWindow,refreshVersion,refreshCount]);
-  useEffect(()=>{if(!busy&&!statusBusy&&renderedKey.current===requestedKey&&((detail&&currentStatus)||error||statusError))journeyContentReady('slo.detail',!!error||!!statusError);},[detail,currentStatus,busy,statusBusy,error,statusError,requestedKey]);
+  useEffect(()=>{if(!busy&&!statusBusy&&renderedKey.current===requestedKey&&((detail&&currentStatus)||error||statusError))journeyContentReady('slo.detail',!!error||!!statusError);},[detail,currentStatus,busy,statusBusy,error,statusError,requestedKey,zone]);
   const [tablePages,setTablePages]=useState([1,1,1,1]);
   const [tableOpen,setTableOpen]=useState([false,false,false,false]);
   const tableRegion=useRef<HTMLDivElement>(null);

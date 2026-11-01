@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { TracerProvider, SimpleSpanProcessor, type ReadableSpan } from '@opentelemetry/sdk-trace';
 import { trace } from '@opentelemetry/api';
+import { cleanup, render, screen } from '@testing-library/react';
+import { AgentsPage } from '../src/agents/AgentsPage.tsx';
+import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BrowserTraceOutbox } from '../src/telemetry/outbox.ts';
 import { installTelemetry, telemetrySession, journeyContentReady, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
@@ -31,12 +34,58 @@ async function expectReadyJourney(action: () => void) {
   } finally { window.removeEventListener('almanac:journey', listener); }
 }
 afterEach(async () => {
+  cleanup();
   await stop?.(); stop = undefined;
   exported.bodies.length = 0; exported.failures.length = 0;
   vi.unstubAllGlobals();
   trace.disable();
   sessionStorage.clear();
   history.replaceState({}, '', '/');
+});
+
+it.each(['agents', 'datasources'] as const)('ends a successful %s page journey after its records render', async page => {
+  history.replaceState({}, '', '/' + page);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
+  let respond!: (response: Response) => void;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { respond = resolve; })));
+  stop = installTelemetry();
+  const context = { csrf_token: 'fixture-csrf', session: { user_id: 'fixture-user', login: 'owner', role: 'administrator', restricted: false } };
+  telemetrySession(context);
+  const completed = vi.fn();
+  window.addEventListener('almanac:journey', completed);
+  try {
+    if (page === 'agents') render(<AgentsPage context={context} recheckSession={async () => ({ confirmed: true, context })} suspended={false} draft={{ name: '', displayName: '', lifetime: '' }} onDraftChange={() => {}} intent={null} onIntentChange={() => {}} lifecycleIntent={null} onLifecycleIntentChange={() => {}} />);
+    else render(<DatasourcesPage context={{ ...context, session: { ...context.session, role: 'viewer' } }} />);
+    expect(completed).not.toHaveBeenCalled();
+    await expectReadyJourney(() => respond(new Response('{"items":[],"next_cursor":""}', { headers: { 'X-Almanac-Tracing': '1' } })));
+    expect(await screen.findByText(page === 'agents' ? 'No agents have been registered.' : 'No datasources are available to your account.')).toBeVisible();
+    await flushTelemetry();
+    expect(exported.bodies.some(body => body.includes('ui.management') && body.includes('ready'))).toBe(true);
+  } finally { window.removeEventListener('almanac:journey', completed); }
+});
+
+it('resumes capture in the same tab after an explicit disabled-to-enabled response', async () => {
+  history.replaceState({}, '', '/slis');
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
+  const upstream = vi.fn()
+    .mockResolvedValueOnce(new Response(null, { headers: { 'X-Almanac-Tracing': '0' } }))
+    .mockResolvedValueOnce(new Response(null))
+    .mockResolvedValueOnce(new Response(null, { headers: { 'X-Almanac-Tracing': '1' } }))
+    .mockResolvedValueOnce(new Response(null));
+  vi.stubGlobal('fetch', upstream);
+  stop = installTelemetry();
+  telemetrySession({ csrf_token: 'fixture-csrf', session: {} });
+  await fetch('/api/v1/auth/context');
+  await fetch('/api/v1/auth/context');
+  expect(upstream.mock.calls[1]?.[1]).toBeUndefined();
+  await fetch('/api/v1/auth/context');
+  expect(upstream.mock.calls[2]?.[1]).toBeUndefined();
+  history.pushState({}, '', '/slis?q=enabled');
+  await fetch('/api/v1/slis');
+  expect(new Headers(upstream.mock.calls[3]?.[1]?.headers).get('traceparent')).toMatch(/^00-/);
+  await expectReadyJourney(() => journeyContentReady('sli.list'));
+  await flushTelemetry();
+  expect(exported.bodies.some(body => body.includes('ui.sli.list') && body.includes('ready'))).toBe(true);
 });
 
 it('does not replay another user\'s pending telemetry or expired batches', async () => {

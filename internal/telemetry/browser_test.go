@@ -72,7 +72,11 @@ func TestBrowserPartialExportRejectionIsCounted(t *testing.T) {
 		_, _ = w.Write([]byte(`{"partialSuccess":{"rejectedSpans":"1","errorMessage":"private remote diagnostic"}}`))
 	}))
 	defer server.Close()
-	exporter := newBrowserExporter(server.URL)
+	client, headers, err := exportHTTPConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exporter := newBrowserExporter(server.URL, client, headers)
 	before := BrowserExportFailures()
 	fixture, err := os.ReadFile("testdata/browser-sdk.json")
 	if err != nil {

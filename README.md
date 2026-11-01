@@ -114,6 +114,13 @@ an endpoint, tracing stays disabled. `OTEL_SDK_DISABLED=true` disables it explic
 `ALMANAC_ENVIRONMENT` labels the deployment. Traces include service name, executable
 SHA-256 and the source revision when available; dirty builds are identified.
 
+Protected collectors can use `OTEL_EXPORTER_OTLP_HEADERS` (comma-separated
+`key=value` pairs with percent-encoded values), `OTEL_EXPORTER_OTLP_CERTIFICATE`
+for a trusted CA PEM file, and `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` plus
+`OTEL_EXPORTER_OTLP_CLIENT_KEY` for mutual TLS. The corresponding
+`OTEL_EXPORTER_OTLP_TRACES_*` settings take precedence. Backend spans and relayed
+browser spans share these server-side settings; credentials stay off the browser.
+
 Go root sampling defaults to `parentbased_always_on`. Supported
 `OTEL_TRACES_SAMPLER` values also include `parentbased_always_off` and
 `parentbased_traceidratio`; the latter requires `OTEL_TRACES_SAMPLER_ARG` between

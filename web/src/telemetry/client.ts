@@ -240,7 +240,17 @@ export function installTelemetry() {
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
     if (url.origin !== location.origin || !url.pathname.startsWith('/api/') || url.pathname.startsWith('/api/v1/telemetry/')) return upstream(input, init);
-    if (!enabled) return upstream(input, init);
+    const observeCapability = (response: Response) => {
+      const capability = response.headers.get('X-Almanac-Tracing');
+      // Observe explicit changes while capture is off, too. Missing metadata
+      // on proxy/error responses does not change the last backend decision.
+      if (capability === '0' || capability === '1') {
+        enabled = capability === '1';
+        if (!enabled) outbox?.clear();
+      }
+      return response;
+    };
+    if (!enabled) return observeCapability(await upstream(input, init));
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
     const parent = journeyContext();
     const span = tracer().startSpan('http.' + method + ' ' + apiRoute(url.pathname), { startTime: traceTime(), kind: SpanKind.CLIENT, attributes: { 'http.request.method': method, 'http.route': apiRoute(url.pathname) } }, parent);
@@ -248,14 +258,7 @@ export function installTelemetry() {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     propagator.inject(ctx, headers, { set: (carrier, key, value) => carrier.set(key, value) });
     try {
-      const response = await upstream(input, { ...init, headers });
-      const capability = response.headers.get('X-Almanac-Tracing');
-      // A proxy or failure response may omit capability metadata. Only an
-      // explicit backend decision disables capture; absence is not a decision.
-      if (capability === '0' || capability === '1') {
-        enabled = capability === '1';
-        if (!enabled) outbox?.clear();
-      }
+      const response = observeCapability(await upstream(input, { ...init, headers }));
       span.setAttribute('http.response.status_code', response.status);
       if (response.status >= 500) span.setStatus({ code: SpanStatusCode.ERROR, message: 'server error' });
       if (enabled && response.body) {

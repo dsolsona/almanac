@@ -111,6 +111,10 @@ for (const interrupted of [false, true]) test(`production UI roots survive route
       await expect.poll(() => completed.filter(value => value.journey === 'sli.list' && value.result === 'ready').length).toBe(2);
     }
     await page.getByRole('link', { name: 'Agents', exact: true }).click();
+    await expect.poll(() => completed.filter(value => value.journey === 'management' && value.result === 'ready').length).toBe(1);
+    await page.getByRole('link', { name: 'Datasources', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'No datasources yet' })).toBeVisible();
+    await expect.poll(() => completed.filter(value => value.journey === 'management' && value.result === 'ready').length).toBe(2);
     await page.getByRole('link', { name: 'SLIs', exact: true }).click();
     await expect.poll(() => completed.filter(value => value.journey === 'sli.list' && value.result === 'ready').length).toBe(interrupted ? 3 : 2);
     await page.goto('/agents');
@@ -121,9 +125,9 @@ for (const interrupted of [false, true]) test(`production UI roots survive route
       addEventListener('almanac:telemetry-flushed', () => { clearTimeout(timeout); resolve(); }, { once: true });
       dispatchEvent(new Event('almanac:telemetry-flush'));
     }));
-    for (const root of completed.filter(value => value.journey === 'sli.list' && value.result === 'ready')) {
+    for (const root of completed.filter(value => ['sli.list', 'management'].includes(value.journey) && value.result === 'ready')) {
       expect(root.recording).toBe(true);
-      expect(delivered.some(span => span.name === 'ui.sli.list' && span.traceId === root.traceId)).toBe(true);
+      expect(delivered.some(span => span.name === 'ui.' + root.journey && span.traceId === root.traceId)).toBe(true);
     }
   } finally {
     const directory = resolve('../.local/browser-telemetry');

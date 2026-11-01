@@ -1,4 +1,5 @@
 import { Component, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { journeyContentReady } from '../telemetry/client.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createSliClient, type Sli } from '../slis/client.ts';
@@ -79,6 +80,7 @@ export function SlosPage({context}:{context:AuthContext}) {
   const sloIntent=useRef<Intent|null>(null);
   const serviceIntent=useRef<Intent|null>(null);
   const generation=useRef(0);
+  const loadedPath=useRef('');
   const heading=useRef<HTMLDivElement>(null);
   const canWrite = !context.session?.restricted && ['administrator','editor'].includes(context.session?.role ?? '');
   const path=locationKey.split('?')[0]!;
@@ -130,6 +132,7 @@ export function SlosPage({context}:{context:AuthContext}) {
         if (active) setError(message(failure));
       } finally {
         if (active) {
+          loadedPath.current=path;
           setLoading(false);
           requestAnimationFrame(() => {
             if (!active) return;
@@ -144,6 +147,10 @@ export function SlosPage({context}:{context:AuthContext}) {
     void run();
     return () => { active = false; abort.abort(); };
   }, [path,id,isService,isNew,isList]);
+  useEffect(() => {
+    if (!loading && loadedPath.current===path && (isNew || isService)) journeyContentReady('management', !!error);
+    if (!loading && loadedPath.current===path && id && !isService && error) journeyContentReady('slo.detail', true);
+  }, [loading, path, isNew, isService, id, error]);
 
   useEffect(() => {
     setBound(''); setBoundError(''); setHistorical(false);

@@ -27,6 +27,7 @@ type browserExporter struct {
 	endpoint string
 	queue    chan []byte
 	client   *http.Client
+	headers  map[string]string
 	ctx      context.Context
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -34,12 +35,9 @@ type browserExporter struct {
 	closed   bool
 }
 
-func newBrowserExporter(endpoint string) *browserExporter {
+func newBrowserExporter(endpoint string, client *http.Client, headers map[string]string) *browserExporter {
 	ctx, cancel := context.WithCancel(context.Background())
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.MaxConnsPerHost = 2
-	transport.MaxIdleConnsPerHost = 2
-	b := &browserExporter{endpoint: endpoint, queue: make(chan []byte, 32), ctx: ctx, cancel: cancel, done: make(chan struct{}), client: &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	b := &browserExporter{endpoint: endpoint, queue: make(chan []byte, 32), ctx: ctx, cancel: cancel, done: make(chan struct{}), client: client, headers: headers}
 	go b.run()
 	return b
 }
@@ -71,6 +69,9 @@ func (b *browserExporter) run() {
 		ctx, cancel := context.WithTimeout(b.ctx, 2*time.Second)
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, b.endpoint, bytes.NewReader(body))
 		if err == nil {
+			for key, value := range b.headers {
+				request.Header.Set(key, value)
+			}
 			request.Header.Set("Content-Type", "application/json")
 			var response *http.Response
 			response, err = b.client.Do(request)

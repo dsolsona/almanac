@@ -129,6 +129,11 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [sourceLoading, setSourceLoading] = useState(false);
   const [loadRevision, setLoadRevision] = useState(0);
   useEffect(() => { if (route.kind === 'list' && !loading && !listBusy) journeyContentReady('sli.list', !!error); }, [route.kind, loading, listBusy, items, error]);
+  useEffect(() => {
+    if (loading) return;
+    if (route.kind === 'detail' && !historyBusy && (historyLoaded || error || historyError)) journeyContentReady('sli.detail', !!error || !!historyError);
+    if (route.kind === 'create') journeyContentReady('management', !!error || !!sourceError);
+  }, [route.kind, loading, historyBusy, historyLoaded, error, historyError, sourceError]);
   const nameEdited = useRef(false);
   const routeGeneration = useRef(0);
   const historyRequest = useRef(0);
