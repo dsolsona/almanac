@@ -4,6 +4,7 @@ import { waitFor } from '@testing-library/react';
 const observers:MutationObserver[]=[];
 afterEach(()=>{
   for(const observer of observers)observer.disconnect();
+  observers.length=0;
   document.body.innerHTML='';
   Reflect.deleteProperty(document,'fonts');
   Reflect.deleteProperty(window,'__almanacPerformance');
@@ -12,7 +13,7 @@ afterEach(()=>{
   vi.restoreAllMocks();
 });
 
-it('recognizes usable rows when the application consumes a stream without Response.json',async()=>{
+function measurementInstaller(){
   const runtime=(globalThis as unknown as {process:{getBuiltinModule:(name:string)=>unknown}}).process;
   const fs=runtime.getBuiltinModule('node:fs') as {readFileSync:(path:string,encoding:string)=>string};
   const source=fs.readFileSync('scripts/measure-backend-browser.mjs','utf8');
@@ -20,7 +21,11 @@ it('recognizes usable rows when the application consumes a stream without Respon
   expect(start).toBeGreaterThan(0);expect(end).toBeGreaterThan(start);
   // Run the same self-contained function Playwright serializes, without starting
   // the executable's database/browser capacity workload.
-  const install=new Function(`return (${source.slice(start,end)});`)() as (fixture:{fleetSize:number;datasourceIDs:string[];serviceID:string})=>void;
+  return new Function(`return (${source.slice(start,end)});`)() as (fixture:{fleetSize:number;datasourceIDs:string[];serviceID:string})=>void;
+}
+
+it('recognizes usable rows when the application consumes a stream without Response.json',async()=>{
+  const install=measurementInstaller();
   const response=new Response(JSON.stringify({items:[{id:'example',name:'performance-0000',latest_observation:null}],next_cursor:''}));
   const json=vi.spyOn(response,'json');
   vi.stubGlobal('fetch',vi.fn(async()=>response));
@@ -41,4 +46,36 @@ it('recognizes usable rows when the application consumes a stream without Respon
   expect(state().fetches[0]!.observed_body_ms).toBeGreaterThan(0);
   expect(json).not.toHaveBeenCalled();
   expect(received).toBeGreaterThan(0);
+});
+
+it('rejects an old drawn generation and timezone until the requested graph is committed',async()=>{
+  const id='11111111-1111-1111-1111-111111111111',generation='22222222-2222-2222-2222-222222222222';
+  const start='2026-10-01T00:00:00.000Z',end='2026-10-08T00:00:00.000Z';
+  const performance={remaining_fraction:'0.5',attainment:'0.999',remaining_budget:'50.000000000000',burn:'1'};
+  const current={performance,evaluation_at:end};
+  const stamp={generation_id:generation,evaluated_through:end,source_generation:'1',definition_revision:'1',measurement_revision:'1'};
+  const objective={id,target:'0.995',rolling_window_seconds:28*86400,cadence_seconds:60,definition_revision:'1'};
+  const status={slo:objective,generation:stamp,current,burn_1h:{performance:{burn:'1'}},burn_6h:{performance:{burn:'2'}}};
+  const historyValue={objective,generation:stamp,current,burn_1h:status.burn_1h,burn_6h:status.burn_6h,effective_at:end,context:{measurement_revision:'1'},range:{requested_start:start,requested_end:end,effective_start:start,effective_end:end},burn_series:{burn_window_seconds:21600},compliance_summary:{met_days:6,evaluable_days:7}};
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('/status')?status:historyValue))));
+  const Observer=globalThis.MutationObserver;
+  vi.stubGlobal('MutationObserver',class extends Observer {constructor(callback:MutationCallback){super(callback);observers.push(this);}});
+  Object.defineProperty(document,'fonts',{configurable:true,value:{ready:Promise.resolve()}});
+  vi.spyOn(Element.prototype,'getBoundingClientRect').mockReturnValue({width:100,height:20} as DOMRect);
+  history.replaceState({},'',`/slos/${id}?range=7d&burn_window=21600&tz=local`);
+  document.body.innerHTML='<div class="app-budget-hero">50%</div><dl class="app-status-facts">'+[['Attainment','99.9%'],['Target','99.5%'],['Burn 1 h','1×'],['Burn 6 h','2×'],['Bad events left','50']].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')+'</dl><button aria-label="Refresh objective status"></button>'+['99.9%','50%','2×','6 / 7'].map(value=>`<div class="app-lane-value">${value}</div>`).join('')+'<div class="app-timeline-plot"><div class="timeline-chart__plot" data-chart-ready="true" data-rendered-generation="old" data-rendered-zone="UTC"><svg></svg></div></div>';
+  measurementInstaller()({fleetSize:1,datasourceIDs:['source'],serviceID:'service'});
+  const query=new URLSearchParams({at:end,start,end,burn_window_seconds:'21600'});
+  await window.fetch(`/api/v1/slos/${id}/status`);
+  await window.fetch(`/api/v1/slos/${id}/operational?${query}`);
+  const state=()=> (window as unknown as {__almanacPerformance:{primary_ms:number|null;fetches:{observed_body_ms?:number}[];detailEvidence:{rendered_generation:string;time_zone:string;burn_window_seconds:number}}}).__almanacPerformance;
+  await waitFor(()=>expect(state().fetches.every(sample=>Number.isFinite(sample.observed_body_ms))).toBe(true));
+  expect(state().primary_ms).toBeNull();
+  const plot=document.querySelector<HTMLElement>('.timeline-chart__plot')!;
+  plot.dataset.renderedGeneration=generation;
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  expect(state().primary_ms).toBeNull();
+  plot.dataset.renderedZone='local';
+  await waitFor(()=>expect(Number.isFinite(state().primary_ms)).toBe(true));
+  expect(state().detailEvidence).toMatchObject({rendered_generation:generation,time_zone:'local',burn_window_seconds:21600});
 });

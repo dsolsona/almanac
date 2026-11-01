@@ -116,6 +116,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       else {
         await expect(page.locator('.app-lane-label')).toHaveCount(4);
         await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
+        await expect(page.locator('.timeline-chart__plot')).toHaveAttribute('data-chart-ready','true');
         await expect.poll(()=>page.locator('.timeline-chart__plot svg text').allTextContents()).toContain('1×');
         await expect(page.locator('.app-budget-hero')).toHaveText('-900%');
         await expect(page.locator('.app-lane-label').first()).toContainText('99%');

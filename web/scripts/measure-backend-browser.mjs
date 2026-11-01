@@ -60,6 +60,8 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   };
   const visible = element => !!element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const percent = value => value === null ? '—' : `${(Number(value) * 100).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
+  const multiple=value=>value===null?'—':`${Number(value).toLocaleString(undefined,{maximumFractionDigits:2})}×`;
+  const decimal=value=>value===null?'—':value.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
   const validGeneration = value => !!value?.generation_id && !!value?.evaluated_through && !!value?.source_generation;
   let namesKey='',namesCache=new Set();
   const expectedNames=(view,params)=>{
@@ -95,7 +97,11 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
       const rows = [...document.querySelectorAll('.app-slo-row')];
       const count = page && Object.values(page.group_counts).reduce((sum, value) => sum + value, 0);
       const matching=page&&(params.get('urgency')?page.group_counts[params.get('urgency')]:count),expectedRows=Math.min(pageSize,matching-state.listOffset);
-      const complete=count===names.size && page.items.length===expectedRows && rows.length===expectedRows && !document.querySelector('.app-slo-rows .slo-reference-spark:not([data-chart-ready="true"])') && (expectedRows>0||visible(document.querySelector('.slo-empty'))) && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${matching} SLO`) && page.items.every(item=>names.has(item.slo.name)&&(!params.get('urgency')||item.urgency===params.get('urgency'))&&validGeneration(item.generation)&&rows.some(row=>visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))));
+      const complete=count===names.size && page.items.length===expectedRows && rows.length===expectedRows && !document.querySelector('.app-slo-rows .slo-reference-spark:not([data-chart-ready="true"])') && (expectedRows>0||visible(document.querySelector('.slo-empty'))) && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${matching} SLO`) && page.items.every(item=>names.has(item.slo.name)&&(!params.get('urgency')||item.urgency===params.get('urgency'))&&validGeneration(item.generation)&&rows.some(row=>{
+        const budget=item.current.performance.remaining_fraction;
+        const budgetText=budget===null?'—':`${(Number(budget)*100).toLocaleString(undefined,{maximumFractionDigits:1})}%`;
+        return visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))&&row.querySelector('.app-slo-budget b')?.textContent===budgetText&&row.querySelector('.app-slo-burn b')?.textContent===multiple(item.burn_1h.performance.burn);
+      }));
       if(complete)state.listEvidence={ids:page.items.map(item=>item.slo.id),names:page.items.map(item=>item.slo.name),items:page.items,urgencies:page.items.map(item=>item.urgency),expected_total:matching,counts:page.group_counts,snapshot_id:page.snapshot_id,next_cursor:page.next_cursor,previous_cursor:page.previous_cursor};
       return complete;
     }
@@ -103,9 +109,20 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     const status = documents.get(`/api/v1/slos/${id}/status`)?.value;
     const history = documents.get(`/api/v1/slos/${id}/operational`);
     const burn = params.get('burn_window') === '21600' ? 21600 : 3600;
-    const statusReady = status?.slo.id === id && validGeneration(status.generation) && visible(document.querySelector('.app-status-facts')) && document.querySelector('[aria-label="Refresh objective status"]')?.getAttribute('aria-busy') !== 'true' && document.querySelector('.app-budget-hero')?.textContent === percent(status.current.performance.remaining_fraction);
-    const complete=statusReady && history?.value.objective.id === id && validGeneration(history.value.generation) && history.value.burn_series.burn_window_seconds === burn && history.query.get('burn_window_seconds') === String(burn) && visible(document.querySelector('.app-timeline-plot .timeline-chart__plot svg')) && document.querySelectorAll('.app-lane-label').length === 4;
-    if(complete)state.detailEvidence={history_generation:history.value.generation.generation_id,history_evaluated_through:history.value.generation.evaluated_through,status_generation:status.generation.generation_id,status_evaluated_through:status.generation.evaluated_through};
+    const fact=label=>[...document.querySelectorAll('.app-status-facts>div')].find(row=>row.querySelector('dt')?.textContent===label)?.querySelector('dd')?.textContent;
+    const statusReady = status?.slo.id === id && validGeneration(status.generation) && status.generation.evaluated_through===status.current.evaluation_at && visible(document.querySelector('.app-status-facts')) && document.querySelector('[aria-label="Refresh objective status"]')?.getAttribute('aria-busy') !== 'true' && document.querySelector('.app-budget-hero')?.textContent === percent(status.current.performance.remaining_fraction)
+      &&fact('Attainment')===percent(status.current.performance.attainment)&&fact('Target')===`${Number(status.slo.target)*100}%`&&fact('Burn 1 h')===multiple(status.burn_1h.performance.burn)&&fact('Burn 6 h')===multiple(status.burn_6h.performance.burn)&&fact('Bad events left')===decimal(status.current.performance.remaining_budget);
+    const value=history?.value,plot=document.querySelector('.app-timeline-plot .timeline-chart__plot');
+    if(!statusReady||value?.objective.id!==id||!validGeneration(value.generation)||value.burn_series.burn_window_seconds!==burn||history.query.get('burn_window_seconds')!==String(burn))return false;
+    const windowDays=Math.max(1,Math.min(365,Math.round(value.objective.rolling_window_seconds/86400)));
+    const ranges=['7d',`${windowDays}d`,'90d','1y'],range=ranges.includes(params.get('range'))?params.get('range'):`${windowDays}d`;
+    const days=range==='1y'?365:Number.parseInt(range,10),cadence=value.objective.cadence_seconds*1000;
+    const end=Date.parse(history.query.get('end')),start=Date.parse(history.query.get('start'));
+    const rangeReady=Number.isFinite(end)&&end%cadence===0&&start===Math.ceil((end-days*86400000)/cadence)*cadence&&Date.parse(history.query.get('at'))===end&&Date.parse(value.range.requested_start)===start&&Date.parse(value.range.requested_end)===end&&Date.parse(value.range.effective_start)===start&&Date.parse(value.range.effective_end)===end&&Date.parse(value.generation.evaluated_through)===end&&Date.parse(value.effective_at)===end&&value.generation.definition_revision===value.objective.definition_revision&&value.generation.measurement_revision===value.context.measurement_revision;
+    const laneValues=[...document.querySelectorAll('.app-lane-value')].map(node=>node.textContent);
+    const expected=[percent(value.current.performance.attainment),percent(value.current.performance.remaining_fraction),multiple((burn===3600?value.burn_1h:value.burn_6h).performance.burn),`${value.compliance_summary.met_days} / ${value.compliance_summary.evaluable_days}`];
+    const complete=rangeReady&&plot?.dataset.chartReady==='true'&&plot.dataset.renderedGeneration===value.generation.generation_id&&plot.dataset.renderedZone===(params.get('tz')==='local'?'local':'UTC')&&visible(plot.querySelector('svg'))&&laneValues.length===4&&laneValues.every((text,index)=>text===expected[index]);
+    if(complete)state.detailEvidence={history_generation:value.generation.generation_id,rendered_generation:plot.dataset.renderedGeneration,history_evaluated_through:value.generation.evaluated_through,status_generation:status.generation.generation_id,status_evaluated_through:status.generation.evaluated_through,range_start:value.range.effective_start,range_end:value.range.effective_end,burn_window_seconds:burn,time_zone:plot.dataset.renderedZone};
     return complete;
   };
   let primaryScheduled = false;
@@ -379,7 +396,7 @@ try {
       }, { }, { timeout: 15_000 });
       Object.assign(sample, await page.evaluate(() => {
         const value = window.__almanacPerformance.interaction;
-        return { feedback_ms: value.feedback_ms, chart_ms: value.chart_ms, total_ms: value.finished_ms - value.started_ms, network_backed: value.network_backed };
+        return { feedback_ms: value.feedback_ms, chart_ms: value.chart_ms, chart_timing_origin:value.chart_timing_origin,total_ms: value.finished_ms - value.started_ms, network_backed: value.network_backed,detail:window.__almanacPerformance.detailEvidence };
       }));
     } catch {
       sample.failure = 'interaction_or_chart_unavailable';

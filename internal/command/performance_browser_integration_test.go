@@ -99,7 +99,14 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		Failure string    `json:"failure"`
 		Before  time.Time `json:"before_evaluated_through"`
 		Detail  struct {
-			Through time.Time `json:"history_evaluated_through"`
+			Through    time.Time `json:"history_evaluated_through"`
+			History    string    `json:"history_generation"`
+			Rendered   string    `json:"rendered_generation"`
+			Status     string    `json:"status_generation"`
+			RangeStart time.Time `json:"range_start"`
+			RangeEnd   time.Time `json:"range_end"`
+			Burn       int       `json:"burn_window_seconds"`
+			Zone       string    `json:"time_zone"`
 		} `json:"detail"`
 	}
 	var report struct {
@@ -131,12 +138,20 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	if report.CacheSetup.Result != restart.Result || report.CacheSetup.Target != restart.Target || report.CacheSetup.PreservedPoints != restart.PreservedPoints || report.CacheSetup.PreservedTiles != restart.PreservedTiles || report.CacheSetup.PreservedCurrent != int64(len(fleet.objectives)) {
 		return artifacts, errors.New("browser report omitted retained-restart/cache-eviction provenance")
 	}
+	validDetail := func(sample measuredLoad) bool {
+		value := sample.Detail
+		return validCLIUUID(value.History) && value.Rendered == value.History && validCLIUUID(value.Status) &&
+			!value.Through.IsZero() && value.RangeEnd.Equal(value.Through) && value.RangeEnd.Sub(value.RangeStart) == 28*24*time.Hour && value.Burn == 3600 && value.Zone == "UTC"
+	}
 	for _, cohort := range [][]measuredLoad{report.ColdLoads, report.WarmLoads} {
 		counts := make(map[string]int)
 		for _, sample := range cohort {
 			budget := 1000.0
 			if sample.View == "slo-detail" {
 				budget = 500
+				if !validDetail(sample) {
+					return artifacts, errors.New("browser omitted the rendered generation, current status or requested graph bounds")
+				}
 			} else if sample.View != "sli-list" && sample.View != "slo-list" {
 				return artifacts, errors.New("browser load has unknown journey identity")
 			}
@@ -152,7 +167,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		}
 	}
 	minute := report.LifecycleLoads[0]
-	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 500 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) {
+	if minute.View != "slo-detail" || minute.Failure != "" || minute.Elapsed <= 0 || minute.Elapsed >= 500 || minute.Before.IsZero() || !minute.Detail.Through.After(minute.Before) || !validDetail(minute) {
 		return artifacts, errors.New("browser minute-boundary visit omitted newer rendered evaluation or violated latency")
 	}
 	for _, coverage := range []struct{ actual, expected []string }{{report.ListCoverage.Slis, fleet.slis}, {report.ListCoverage.Slos, fleet.objectives}} {
