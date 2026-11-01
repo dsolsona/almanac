@@ -27,7 +27,7 @@ func restartPerformancePhase(t *testing.T, fleet performanceFleet, blankDerived 
 	t.Helper()
 	report := performanceRestartReport{Kind: "persisted-cache"}
 	if blankDerived {
-		report.Kind = "blank-derived-rebuild"
+		report.Kind = "source-and-response-cache-rebuild"
 	}
 	report.Shutdown = fleet.fixture.backend.stop(t)
 	if blankDerived {
@@ -79,8 +79,8 @@ func clearPerformanceDerivedFixture(t *testing.T, fleet performanceFleet) (int64
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM public.almanac_sli_coverage`).Scan(&before); err != nil {
 		t.Fatal("count canonical fixture before cache removal failed")
 	}
-	// Only disposable derived outputs/work are removed. Canonical measurements,
-	// source generations, users, leases, credentials and agent config are retained.
+	// Rebuild source summaries and response caches; durable SLO points/tiles remain.
+	// Canonical measurements, generations, identities and agent config also remain.
 	for _, statement := range []string{
 		`DELETE FROM public.almanac_slo_overview_snapshot_items`,
 		`DELETE FROM public.almanac_slo_overview_snapshots`,

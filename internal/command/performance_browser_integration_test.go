@@ -62,7 +62,8 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		SloID     string `json:"slo_id"`
 		Artifacts string `json:"artifacts"`
 		Candidate string `json:"candidate_binary_sha256"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil))})
+		FleetSize int    `json:"fleet_size"`
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, fleet.objectives[0], artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives)})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}

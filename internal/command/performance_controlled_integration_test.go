@@ -123,33 +123,9 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("persisted-restart-56-days", restart, err) {
 		return
 	}
-	stage("blank-derived-rebuild-56-days")
+	stage("source-and-response-cache-rebuild-56-days")
 	rebuild, err := restartPerformancePhase(t, fleet, true, time.Now().UTC().Truncate(time.Minute))
-	if !record("blank-derived-rebuild-56-days", rebuild, err) {
-		return
-	}
-	stage("ingestion-only-baseline")
-	baseline, err := measurePerformanceLiveWindow(t, fleet, "ingestion-only-baseline", nil)
-	if !record("ingestion-only-baseline", baseline, err) {
-		return
-	}
-	stage("live-historical-saturation")
-	saturation := newPerformanceSaturation(t, fleet)
-	loaded, err := measurePerformanceLiveWindow(t, fleet, "live-historical-saturation", saturation.run)
-	record("saturation-traffic-and-currentness", saturation.evidence(), nil)
-	if !record("live-historical-saturation", loaded, err) {
-		return
-	}
-	if err := checkPerformanceLiveIsolation(baseline, loaded); err != nil {
-		record("live-isolation-gate", struct{}{}, err)
-		return
-	}
-	record("live-isolation-gate", struct{ Result string }{"passed"}, nil)
-	stage("production-browser")
-	browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
-	browserArtifacts, err := runPerformanceBrowser(t, browserContext, fleet)
-	stopBrowser()
-	if !record("production-browser", struct{ Artifacts string }{browserArtifacts}, err) {
+	if !record("source-and-response-cache-rebuild-56-days", rebuild, err) {
 		return
 	}
 	stage("seed-365-days")
@@ -174,6 +150,30 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	stage("persisted-restart-365-days")
 	restart, err = restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
 	if !record("persisted-restart-365-days", restart, err) {
+		return
+	}
+	stage("ingestion-only-baseline-365-days")
+	baseline, err := measurePerformanceLiveWindow(t, fleet, "ingestion-only-baseline-365-days", nil)
+	if !record("ingestion-only-baseline-365-days", baseline, err) {
+		return
+	}
+	stage("live-historical-saturation-365-days")
+	saturation := newPerformanceSaturation(t, fleet)
+	loaded, err := measurePerformanceLiveWindow(t, fleet, "live-historical-saturation-365-days", saturation.run)
+	record("saturation-traffic-and-currentness-365-days", saturation.evidence(), nil)
+	if !record("live-historical-saturation-365-days", loaded, err) {
+		return
+	}
+	if err := checkPerformanceLiveIsolation(baseline, loaded); err != nil {
+		record("live-isolation-gate", struct{}{}, err)
+		return
+	}
+	record("live-isolation-gate", struct{ Result string }{"passed"}, nil)
+	stage("production-browser-365-days")
+	browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
+	browserArtifacts, err := runPerformanceBrowser(t, browserContext, fleet)
+	stopBrowser()
+	if !record("production-browser-365-days", struct{ Artifacts string }{browserArtifacts}, err) {
 		return
 	}
 	stage("retention-expiry")

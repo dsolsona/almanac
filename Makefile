@@ -105,6 +105,7 @@ _verify_all:
 	$(MAKE) _verify_go
 
 _verify_web:
+	cd web && node --check scripts/measure-backend-browser.mjs
 	cd web && node --check scripts/check-telemetry-runtime.mjs
 	cd web && node --check scripts/check-local-compose.mjs
 	cd web && node --check scripts/check-slo-browser.mjs

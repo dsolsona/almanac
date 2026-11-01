@@ -149,12 +149,13 @@ WHERE g.slo_id=$1 AND b.kind='retained_detail' ORDER BY g.published_at DESC LIMI
 		tileStarts, tileEnds = append(tileStarts, day), append(tileEnds, day.Add(24*time.Hour))
 		resolutions = append(resolutions, 86400)
 	}
+	const sliFetchLimit = 21
 	queries := []struct {
 		file, name string
 		args       []any
 		canonical  bool
 	}{
-		{"slis.sql.go", "listSlis", []any{now.Add(-365 * 24 * time.Hour), now, "", nil, time.Unix(0, 0).UTC(), "00000000-0000-0000-0000-000000000000", int32(21)}, true},
+		{"slis.sql.go", "listSlis", []any{now.Add(-365 * 24 * time.Hour), now, "", nil, time.Unix(0, 0).UTC(), "00000000-0000-0000-0000-000000000000", int32(sliFetchLimit)}, true},
 		{"derived_overview.sql.go", "operationalScopeFingerprint", []any{calc, now, nil, nil}, false},
 		{"derived_projections.sql.go", "getPublishedCurrentProjection", []any{calc, now, fleet.objectives[0]}, false},
 		{"derived_history.sql.go", "findPreparedSloHistory", []any{fleet.objectives[0], definition, measurement, source, through, start, end, burn, calc, retention, now, kind}, false},
@@ -193,7 +194,7 @@ WHERE g.slo_id=$1 AND b.kind='retained_detail' ORDER BY g.published_at DESC LIMI
 			t.Fatal("candidate query-plan capture omitted real result rows")
 		}
 		actualRows, valid := plan[0].Plan["Actual Rows"].(float64)
-		if !valid || actualRows <= 0 || (query.name == "listSlis" && actualRows != 51) {
+		if !valid || actualRows <= 0 || (query.name == "listSlis" && actualRows != float64(min(sliFetchLimit, len(fleet.slis)))) {
 			t.Fatal("candidate query-plan capture omitted the required populated result")
 		}
 		report[query.name] = jsontext.Value(body)

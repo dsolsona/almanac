@@ -22,7 +22,8 @@ function distribution(samples, key) {
 
 // Runs before the app. It observes real fetches/DOM changes without supplying or
 // altering API responses. Only timings and route paths leave the browser.
-function installMeasurements() {
+function installMeasurements({ fleetSize }) {
+  const documents = new Map();
   const state = window.__almanacPerformance = { fetches: [], primary_ms: null, interaction: null };
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
@@ -36,19 +37,42 @@ function installMeasurements() {
     const json = response.json.bind(response);
     response.json = async () => {
       sample.parse_started_ms = performance.now();
-      try { return await json(); }
+      try {
+        const value = await json();
+        if (response.status === 200 && (url.pathname === '/api/v1/slis' || url.pathname === '/api/v1/slos/overview' || /\/api\/v1\/slos\/[^/]+\/(status|operational)$/.test(url.pathname))) documents.set(url.pathname, { value, query: url.searchParams });
+        return value;
+      }
       finally { sample.parsed_ms = performance.now(); }
     };
     return response;
   };
   const visible = element => !!element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
+  const percent = value => value === null ? '—' : `${(Number(value) * 100).toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
+  const validGeneration = value => !!value?.generation_id && !!value?.evaluated_through && !!value?.source_generation;
   const ready = () => {
-    if (location.pathname === '/slis') return visible(document.querySelector('.sli-list-table tbody tr'));
-    if (location.pathname === '/slos') return visible(document.querySelector('.app-slo-row'));
-    return visible(document.querySelector('.app-timeline-plot .timeline-chart__plot svg')) && document.querySelectorAll('.app-lane-label').length === 4 && !document.querySelector('.slo-error');
+    if (document.querySelector('[role="alert"],.slo-error')) return false;
+    const expectedRows = Math.min(Number(new URLSearchParams(location.search).get('page_size') || 20), fleetSize);
+    if (location.pathname === '/slis') {
+      const page = documents.get('/api/v1/slis')?.value;
+      const rows = [...document.querySelectorAll('.sli-list-table tbody tr')];
+      return page?.items.length === expectedRows && rows.length === expectedRows && page.items.every(item => rows.some(row => visible(row.querySelector(`a[href="/slis/${item.id}"]`)) && row.querySelectorAll('td').length === 7 && (!item.latest_observation || row.querySelector('time')?.dateTime === item.latest_observation.interval_end)));
+    }
+    if (location.pathname === '/slos') {
+      const page = documents.get('/api/v1/slos/overview')?.value;
+      const rows = [...document.querySelectorAll('.app-slo-row')];
+      const count = page && Object.values(page.group_counts).reduce((sum, value) => sum + value, 0);
+      return count === fleetSize && page.items.length === expectedRows && rows.length === expectedRows && document.querySelector('.app-slo-list-sub')?.textContent.startsWith(`${fleetSize} SLO`) && page.items.every(item => validGeneration(item.generation) && rows.some(row => visible(row.querySelector(`a[href="/slos/${item.slo.id}"]`))));
+    }
+    const id = location.pathname.split('/').at(-1);
+    const status = documents.get(`/api/v1/slos/${id}/status`)?.value;
+    const history = documents.get(`/api/v1/slos/${id}/operational`);
+    const params = new URLSearchParams(location.search);
+    const burn = params.get('burn_window') === '21600' ? 21600 : 3600;
+    const statusReady = status?.slo.id === id && validGeneration(status.generation) && visible(document.querySelector('.app-status-facts')) && document.querySelector('[aria-label="Refresh objective status"]')?.getAttribute('aria-busy') !== 'true' && document.querySelector('.app-budget-hero')?.textContent === percent(status.current.performance.remaining_fraction);
+    return statusReady && history?.value.objective.id === id && validGeneration(history.value.generation) && history.value.burn_series.burn_window_seconds === burn && history.query.get('burn_window_seconds') === String(burn) && visible(document.querySelector('.app-timeline-plot .timeline-chart__plot svg')) && document.querySelectorAll('.app-lane-label').length === 4;
   };
   let primaryScheduled = false;
-  const afterPaint = callback => requestAnimationFrame(() => requestAnimationFrame(callback));
+  const afterPaint = callback => void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(callback)));
   new MutationObserver(mutations => {
     if (state.primary_ms === null && !primaryScheduled && ready()) {
       primaryScheduled = true;
@@ -76,8 +100,8 @@ function installMeasurements() {
   }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
 }
 
-async function measuredPage(context) {
-  await context.addInitScript(installMeasurements);
+async function measuredPage(context, fleetSize) {
+  await context.addInitScript(installMeasurements, { fleetSize });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -121,6 +145,7 @@ try {
   assert.match(fixture.spki, /^[A-Za-z0-9+/]{43}=$/);
   assert.match(fixture.slo_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.match(fixture.candidate_binary_sha256, /^[0-9a-f]{64}$/);
+  assert.ok([10, 100, 1000].includes(fixture.fleet_size));
   assert.ok(typeof fixture.login === 'string' && typeof fixture.password === 'string' && fixture.login && fixture.password);
   output = resolve(fixture.artifacts);
   assert.ok(output.startsWith(resolve('..', '.local') + sep));
@@ -145,7 +170,7 @@ try {
     for (let index = 0; index < 20; index++) {
       stage = `${view}-cold-${index}`;
       const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
-      const page = await measuredPage(context);
+      const page = await measuredPage(context, fixture.fleet_size);
       const sample = { view, index, budget_ms: budget };
       try {
         await page.goto(new URL(path, origin).href, { waitUntil: 'domcontentloaded', timeout: 10_000 });
@@ -168,7 +193,7 @@ try {
   }
   stage = 'interaction-setup';
   const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
-  const page = await measuredPage(context);
+  const page = await measuredPage(context, fixture.fleet_size);
   await page.goto(new URL(`/slos/${fixture.slo_id}`, origin).href);
   await page.waitForFunction(() => Number.isFinite(window.__almanacPerformance?.primary_ms), { }, { timeout: 10_000 });
   for (let index = 0; index < 50; index++) {
