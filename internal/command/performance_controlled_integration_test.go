@@ -184,6 +184,11 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("production-browser-365-days", struct{ Artifacts string }{browserArtifacts}, err) {
 		return
 	}
+	stage("late-correction-and-retained-restart")
+	late, err := performanceLateCorrection(t, ctx, fleet)
+	if !record("late-correction-and-retained-restart", late, err) {
+		return
+	}
 	stage("retention-expiry")
 	expiry, err := performanceRetentionExpiry(ctx, fleet)
 	if !record("retention-expiry", expiry, err) {

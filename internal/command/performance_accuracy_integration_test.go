@@ -75,6 +75,10 @@ func checkPerformanceOracleSample(sample api.SloOperationalSample, class int, du
 	if err != nil {
 		return err
 	}
+	return checkPerformanceOracleSampleCounts(sample, want, duration, metric)
+}
+
+func checkPerformanceOracleSampleCounts(sample api.SloOperationalSample, want performanceOracleCounts, duration time.Duration, metric string) error {
 	if err := checkPerformanceOracleQuality(sample.Quality, want, duration); err != nil {
 		return err
 	}
