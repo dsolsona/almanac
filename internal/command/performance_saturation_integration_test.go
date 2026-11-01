@@ -32,19 +32,25 @@ type performanceLoadReader struct {
 }
 
 type performanceSaturationReport struct {
-	EnqueuePasses int                                `json:"enqueue_passes"`
-	EnqueuedHours int64                              `json:"enqueued_hours"`
-	Readers       []performanceLoadReader            `json:"readers"`
-	Currentness   []performanceCurrentnessSample     `json:"currentness"`
-	Lag           map[string]performanceDistribution `json:"lag_upper_bounds"`
-	Unfinished    int                                `json:"overdue_currentness"`
-	Failures      []string                           `json:"failures"`
+	EnqueuePasses         int                                `json:"enqueue_passes"`
+	EnqueuedHours         int64                              `json:"enqueued_hours"`
+	Readers               []performanceLoadReader            `json:"readers"`
+	Currentness           []performanceCurrentnessSample     `json:"currentness"`
+	Lag                   map[string]performanceDistribution `json:"lag_upper_bounds"`
+	Unfinished            int                                `json:"overdue_currentness"`
+	AuthenticatedCohort   []string                           `json:"authenticated_visibility_cohort"`
+	Publication           []performanceCurrentnessSample     `json:"publication_currentness"`
+	PublicationLag        map[string]performanceDistribution `json:"publication_lag_upper_bounds"`
+	PublicationUnfinished int                                `json:"overdue_publication"`
+	Failures              []string                           `json:"failures"`
 }
 
 type performanceSaturation struct {
 	fleet       performanceFleet
 	db          *pgx.Conn
+	enqueueDB   *pgx.Conn
 	currentness *performanceCurrentness
+	publication *performanceCurrentness
 	mu          sync.Mutex
 	report      performanceSaturationReport
 	durations   [performanceUsers][]time.Duration
@@ -52,7 +58,7 @@ type performanceSaturation struct {
 
 func newPerformanceSaturation(t *testing.T, fleet performanceFleet) *performanceSaturation {
 	t.Helper()
-	s := &performanceSaturation{fleet: fleet, db: testpostgres.Connect(t, fleet.fixture.databaseURL),
+	s := &performanceSaturation{fleet: fleet, db: testpostgres.Connect(t, fleet.fixture.databaseURL), enqueueDB: testpostgres.Connect(t, fleet.fixture.databaseURL),
 		report: performanceSaturationReport{Readers: make([]performanceLoadReader, performanceUsers)}}
 	for index := range s.report.Readers {
 		s.report.Readers[index].Actor = index
@@ -70,12 +76,17 @@ func (s *performanceSaturation) fail(message string) {
 
 func (s *performanceSaturation) run(parent context.Context) error {
 	defer closePerformanceObserver(s.db)
+	defer closePerformanceObserver(s.enqueueDB)
 	if len(s.fleet.readers) != performanceUsers || len(s.fleet.objectives) < performanceUsers {
 		return errors.New("saturation requires the complete controlled fleet")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	s.currentness = newPerformanceCurrentness(time.Now())
+	now := time.Now()
+	s.currentness = newPerformanceCurrentness(now, "authenticated_visibility")
+	s.publication = newPerformanceCurrentness(now, "publication_observed")
+	cohort := s.fleet.objectives[:performanceUsers]
+	s.report.AuthenticatedCohort = slices.Clone(cohort)
 	end := time.Now().UTC().Truncate(time.Minute)
 	query := url.Values{"at": {end.Format(time.RFC3339Nano)}, "start": {end.Add(-7 * 24 * time.Hour).Format(time.RFC3339Nano)}, "end": {end.Format(time.RFC3339Nano)}, "burn_window_seconds": {"3600"}}
 	var workers sync.WaitGroup
@@ -87,27 +98,49 @@ func (s *performanceSaturation) run(parent context.Context) error {
 			}
 		})
 	}
+	// Fault injection owns a separate connection and cannot delay the observer.
+	workers.Go(func() {
+		ticks := time.NewTicker(5 * time.Second)
+		defer ticks.Stop()
+		for ctx.Err() == nil {
+			if err := s.enqueueHistory(ctx, time.Now()); err != nil {
+				if ctx.Err() == nil {
+					s.fail(err.Error())
+					cancel()
+				}
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticks.C:
+			}
+		}
+	})
 	ticks := time.NewTicker(time.Second)
 	defer ticks.Stop()
-	var nextEnqueue time.Time
 	for ctx.Err() == nil {
 		now := time.Now()
-		if err := s.currentness.discover(ctx, s.db, s.fleet.objectives, now); err != nil {
+		if err := s.currentness.discover(ctx, s.db, cohort, now); err != nil {
 			if ctx.Err() == nil {
 				s.fail(err.Error())
 			}
 			cancel()
 			break
 		}
-		if !now.Before(nextEnqueue) {
-			if err := s.enqueueHistory(ctx, now); err != nil {
-				if ctx.Err() == nil {
-					s.fail(err.Error())
-				}
-				cancel()
-				break
+		if err := s.publication.discover(ctx, s.db, s.fleet.objectives, now); err != nil {
+			if ctx.Err() == nil {
+				s.fail(err.Error())
 			}
-			nextEnqueue = time.Now().Add(5 * time.Second)
+			cancel()
+			break
+		}
+		if err := s.publication.observePublished(ctx, s.db, s.fleet.objectives); err != nil {
+			if ctx.Err() == nil {
+				s.fail(err.Error())
+			}
+			cancel()
+			break
 		}
 		select {
 		case <-ctx.Done():
@@ -117,8 +150,10 @@ func (s *performanceSaturation) run(parent context.Context) error {
 	cancel()
 	workers.Wait()
 	completed, lag, unfinished, lagErr := s.currentness.evidence(time.Now())
+	publication, publicationLag, publicationUnfinished, publicationErr := s.publication.evidence(time.Now())
 	s.mu.Lock()
 	s.report.Currentness, s.report.Lag, s.report.Unfinished = completed, lag, unfinished
+	s.report.Publication, s.report.PublicationLag, s.report.PublicationUnfinished = publication, publicationLag, publicationUnfinished
 	for actor := range s.report.Readers {
 		s.report.Readers[actor].Latency = performancePercentiles(s.durations[actor])
 	}
@@ -128,6 +163,10 @@ func (s *performanceSaturation) run(parent context.Context) error {
 	if lagErr != nil {
 		s.fail(lagErr.Error())
 		return lagErr
+	}
+	if publicationErr != nil {
+		s.fail(publicationErr.Error())
+		return publicationErr
 	}
 	if failed || enqueued == 0 {
 		return errors.New("historical saturation failed or enqueued no retained work")
@@ -139,7 +178,7 @@ func (s *performanceSaturation) enqueueHistory(ctx context.Context, now time.Tim
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var alreadyBusy bool
-	if err := s.db.QueryRow(bounded, `SELECT EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges OFFSET 999 LIMIT 1)`).Scan(&alreadyBusy); err != nil {
+	if err := s.enqueueDB.QueryRow(bounded, `SELECT EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges OFFSET 999 LIMIT 1)`).Scan(&alreadyBusy); err != nil {
 		return errors.New("observe historical saturation queue failed")
 	}
 	if alreadyBusy {
@@ -148,7 +187,7 @@ func (s *performanceSaturation) enqueueHistory(ctx context.Context, now time.Tim
 	// Fault/load injection requeues existing retained hours without fabricating
 	// canonical changes or advancing source generations. Recent live hours remain
 	// first in the production worker's newest-hour-first admission order.
-	tag, err := s.db.Exec(bounded, `INSERT INTO public.almanac_derived_dirty_ranges
+	tag, err := s.enqueueDB.Exec(bounded, `INSERT INTO public.almanac_derived_dirty_ranges
 (sli_id,measurement_revision,generation,range_start,range_end,next_attempt_at,updated_at)
 SELECT a.sli_id,a.measurement_revision,source.generation,a.hour_start,a.hour_start+interval '1 hour',$2,$2
 FROM public.almanac_sli_hourly_aggregates a
@@ -174,13 +213,13 @@ func (s *performanceSaturation) readLoop(ctx context.Context, actor int, reader 
 	ticks := time.NewTicker(250 * time.Millisecond)
 	defer ticks.Stop()
 	for turn := 0; ctx.Err() == nil; turn++ {
-		id := s.fleet.objectives[(actor+performanceUsers*(turn/2))%len(s.fleet.objectives)]
+		target, kind := performanceSaturationTarget(actor, turn, len(s.fleet.objectives))
+		id := s.fleet.objectives[target]
 		path := "/api/v1/slos/" + id + "/status"
-		kind := "status"
-		if turn%4 == 0 {
-			kind, path = "list", "/api/v1/slos/overview?limit=20"
-		} else if turn%4 == 2 {
-			kind, path = "history", "/api/v1/slos/"+id+"/operational?"+historyQuery
+		if kind == "list" {
+			path = "/api/v1/slos/overview?limit=20"
+		} else if kind == "history" {
+			path = "/api/v1/slos/" + id + "/operational?" + historyQuery
 		}
 		started := time.Now()
 		status, _, body, err := performanceLoadRequest(ctx, reader, path)
@@ -189,7 +228,7 @@ func (s *performanceSaturation) readLoop(ctx context.Context, actor int, reader 
 			return ctx.Err()
 		}
 		if err == nil && status == http.StatusOK {
-			err = s.checkRead(kind, id, body)
+			err = s.checkRead(kind, id, body, started)
 		} else if err == nil {
 			err = fmt.Errorf("saturation %s read returned HTTP %d", kind, status)
 		}
@@ -222,14 +261,14 @@ func (s *performanceSaturation) readLoop(ctx context.Context, actor int, reader 
 	return ctx.Err()
 }
 
-func (s *performanceSaturation) checkRead(kind, id string, body []byte) error {
+func (s *performanceSaturation) checkRead(kind, id string, body []byte, started time.Time) error {
 	switch kind {
 	case "status":
 		var status api.SloCurrentStatus
 		if json.Unmarshal(body, &status) != nil || status.Slo.Id.String() != id {
 			return errors.New("saturation status response changed objective identity")
 		}
-		return s.currentness.observe(status, time.Now())
+		return s.currentness.observe(status, started, time.Now())
 	case "list":
 		var page api.SloOperationalOverviewPage
 		if json.Unmarshal(body, &page) != nil || len(page.Items) != min(20, len(s.fleet.objectives)) || (page.NextCursor != "") != (len(s.fleet.objectives) > 20) || page.GroupCounts.Healthy+page.GroupCounts.NeedsAttention+page.GroupCounts.Watch != int64(len(s.fleet.objectives)) {
@@ -272,5 +311,8 @@ func (s *performanceSaturation) evidence() performanceSaturationReport {
 	report.Currentness = slices.Clone(report.Currentness)
 	report.Failures = slices.Clone(report.Failures)
 	report.Lag = maps.Clone(report.Lag)
+	report.AuthenticatedCohort = slices.Clone(report.AuthenticatedCohort)
+	report.Publication = slices.Clone(report.Publication)
+	report.PublicationLag = maps.Clone(report.PublicationLag)
 	return report
 }
