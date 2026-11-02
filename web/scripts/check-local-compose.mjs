@@ -266,15 +266,22 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
   assert.match(backendSHA,/^[0-9a-f]{64}$/);
   const tracePort=(await compose(['port','victoriatraces','10428'])).trim();
   assert.match(tracePort,/^127\.0\.0\.1:\d+$/);
-  const browser=await chromium.launch({args:[`--ignore-certificate-errors-spki-list=${spki}`]});
+  let browser=await chromium.launch({args:[`--ignore-certificate-errors-spki-list=${spki}`]});
   activeBrowser=browser;
   let enabled=true;
   const setEnabled=async value=>{
-    if(value===enabled)return;
+    if(value===enabled)return browser;
+    // Container recreation changes host networking; start its measured browser
+    // afterward so Chromium cannot carry a queued ERR_NETWORK_CHANGED into it.
+    await browser.close();
+    activeBrowser=undefined;
     env.ALMANAC_TELEMETRY_DISABLED=value?'false':'true';
     await compose(['up','-d','--no-deps','app']);
     await expect.poll(async()=>{try{return (await servedHTML()).includes(sourceMarker);}catch{return false;}},{timeout:15_000}).toBe(true);
+    browser=await chromium.launch({args:[`--ignore-certificate-errors-spki-list=${spki}`]});
+    activeBrowser=browser;
     enabled=value;
+    return browser;
   };
   const sampleRuntime=async()=>{
     const appID=(await compose(['ps','-q','app'])).trim();
@@ -318,9 +325,8 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     writeFileSync(join(artifacts,'network-comparison.json'),JSON.stringify({cpu_slowdown:1,bandwidth_cap:null,comparisons}),{mode:0o600});
     if(firstFailure)throw firstFailure;
   } finally {
-    activeBrowser=undefined;
-    await browser.close();
-    await setEnabled(true);
+    try { await setEnabled(true); }
+    finally { activeBrowser=undefined; await browser.close(); }
   }
 }
 async function setCaptureViewport(page, theme, viewport) {

@@ -14,7 +14,7 @@ WITH objective AS (
 ), selected AS MATERIALIZED (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
        r.resolution::integer AS resolution,convert_to(t.payload::text,'UTF8') AS payload,
-       t.source_generation,t.published_at,
+       t.source_generation,t.published_at,t.point_count,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=sqlc.arg(slo_id) AND w.definition_revision=sqlc.arg(definition_revision)
@@ -56,7 +56,7 @@ SELECT *,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes
 )
 SELECT ordinal,range_start,range_end,resolution,
        CASE WHEN payload_bytes<=20971520 THEN coalesce(payload,'{}'::bytea) ELSE '{}'::bytea END::bytea AS payload,
-       payload_bytes,source_generation,published_at,exhausted,ready
+       payload_bytes,source_generation,published_at,point_count,exhausted,ready
 FROM bounded ORDER BY ordinal;
 
 -- name: ReadRetainedEdgePoints :many

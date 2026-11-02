@@ -45,7 +45,7 @@ exact derived data and background preparation with measurable acceptance gates.
 The maintainer accepted the design and plan after Crit review on 2026-10-30.
 [F3-T08](tasks/F3-T08.md) is in progress on `perf/f3-t08-retained-series` in
 `.worktrees/backend-performance`, integrated with merged main `6d7403d`.
-The work is published in [draft PR #53](https://github.com/dsolsona/almanac/pull/53).
+The work has an [open PR #53](https://github.com/dsolsona/almanac/pull/53).
 The 2026-11-02 backfill correction is recorded in F3-T08: range-local source
 validation preserves ready graph intervals during historical processing, with
 explicit initial-preparation progress. Focused database and fast checks pass;
@@ -54,6 +54,15 @@ traced fixes for concurrent cache publication and exclusive read-authority locks
 Small-fixture normal-network list/detail ready traces are below 200 ms; year/fleet
 acceptance remains unverified. The operator app has these read corrections;
 imports and demo source processing remain paused.
+Final verification exposed dense-history setup exceeding its original timeout
+and an analyzed PostgreSQL plan reading 141,599 coverage blocks for bounded edges.
+The candidate now reuses ready hourly summaries for daily reduction and adds a
+revision/time index; full-fixture improvement remains unverified. Catalogue checks
+pass. The added-100-ms small-container cohort rendered all 73 samples in
+497–726 ms, but tracing overhead failed its separate limit and normal-network
+measurement encountered Chromium `ERR_NETWORK_CHANGED`. Both failures remain open;
+these observations are not scale acceptance. The latest index/reduction candidate
+is not deployed to the operator app.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,

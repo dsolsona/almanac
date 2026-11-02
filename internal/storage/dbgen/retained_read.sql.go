@@ -109,7 +109,7 @@ WITH objective AS (
 ), selected AS MATERIALIZED (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
        r.resolution::integer AS resolution,convert_to(t.payload::text,'UTF8') AS payload,
-       t.source_generation,t.published_at,
+       t.source_generation,t.published_at,t.point_count,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=$1 AND w.definition_revision=$2
@@ -147,11 +147,11 @@ FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
  AND t.range_start=r.range_start AND t.range_end=r.range_end
 CROSS JOIN objective o
 ), bounded AS (
-SELECT ordinal, range_start, range_end, resolution, payload, source_generation, published_at, exhausted, ready,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM selected
+SELECT ordinal, range_start, range_end, resolution, payload, source_generation, published_at, point_count, exhausted, ready,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM selected
 )
 SELECT ordinal,range_start,range_end,resolution,
        CASE WHEN payload_bytes<=20971520 THEN coalesce(payload,'{}'::bytea) ELSE '{}'::bytea END::bytea AS payload,
-       payload_bytes,source_generation,published_at,exhausted,ready
+       payload_bytes,source_generation,published_at,point_count,exhausted,ready
 FROM bounded ORDER BY ordinal
 `
 
@@ -174,6 +174,7 @@ type ReadRetainedPartsRow struct {
 	PayloadBytes     int64              `json:"payload_bytes"`
 	SourceGeneration pgtype.Int8        `json:"source_generation"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
+	PointCount       pgtype.Int4        `json:"point_count"`
 	Exhausted        bool               `json:"exhausted"`
 	Ready            bool               `json:"ready"`
 }
@@ -207,6 +208,7 @@ func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsPa
 			&i.PayloadBytes,
 			&i.SourceGeneration,
 			&i.PublishedAt,
+			&i.PointCount,
 			&i.Exhausted,
 			&i.Ready,
 		); err != nil {

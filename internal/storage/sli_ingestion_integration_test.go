@@ -694,6 +694,9 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_sli_coverage_revision_time_idx`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_retention_work`); err != nil {
 		t.Fatal(err)
 	}

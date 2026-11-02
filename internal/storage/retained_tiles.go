@@ -62,20 +62,24 @@ func compactRetainedPoints(points []retainedSloPoint, start, end time.Time, targ
 		burn1h = append(burn1h, retainedWindowSample(at, point.Burn1h.Quality, point.Burn1h.Performance, revision))
 		burn6h = append(burn6h, retainedWindowSample(at, point.Burn6h.Quality, point.Burn6h.Performance, revision))
 	}
+	return compactRetainedTile(retainedSloTile{Attainment: attainment, Budget: budget, Burn1h: burn1h, Burn6h: burn6h}, start, end, target)
+}
+
+func compactRetainedTile(tile retainedSloTile, start, end time.Time, target string) (retainedSloTile, error) {
 	var err error
-	tile.Attainment, err = reduceRetainedLane(attainment, start, end, target, "attainment")
+	tile.Attainment, err = reduceRetainedLane(tile.Attainment, start, end, target, "attainment")
 	if err != nil {
 		return tile, err
 	}
-	tile.Budget, err = reduceRetainedLane(budget, start, end, target, "budget")
+	tile.Budget, err = reduceRetainedLane(tile.Budget, start, end, target, "budget")
 	if err != nil {
 		return tile, err
 	}
-	tile.Burn1h, err = reduceRetainedLane(burn1h, start, end, target, "burn")
+	tile.Burn1h, err = reduceRetainedLane(tile.Burn1h, start, end, target, "burn")
 	if err != nil {
 		return tile, err
 	}
-	tile.Burn6h, err = reduceRetainedLane(burn6h, start, end, target, "burn")
+	tile.Burn6h, err = reduceRetainedLane(tile.Burn6h, start, end, target, "burn")
 	return tile, err
 }
 

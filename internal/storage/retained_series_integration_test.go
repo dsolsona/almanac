@@ -74,6 +74,7 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 		t.Fatal("hourly resolution changed exact point values")
 	}
 	verifyBackfillRangeAvailability(t, databaseURL, pgID, oracle.EffectiveAt)
+	verifyRetainedDailyComposition(t, databaseURL, pgID, oracle.EffectiveAt)
 	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_slo_series_tile_work
         (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at)
         SELECT slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,$2
@@ -103,6 +104,98 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 		t.Fatal(err)
 	}
 	verifyRetainedRepairBatch(t, databaseURL, proof, id, clock, oracle)
+}
+
+func verifyRetainedDailyComposition(t *testing.T, databaseURL string, id pgtype.UUID, at time.Time) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	q := dbgen.New(tx)
+	row, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := q.ReadRetainedSloPoint(t.Context(), dbgen.ReadRetainedSloPointParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prototype retainedSloPoint
+	if err := json.Unmarshal(saved.Payload, &prototype); err != nil {
+		t.Fatal(err)
+	}
+	start := utcDayStart(at).Add(-24 * time.Hour)
+	revision := strconv.FormatInt(row.DefinitionRevision, 10)
+	var points []retainedSloPoint
+	for hour := range 24 {
+		from := start.Add(time.Duration(hour) * time.Hour)
+		point := prototype
+		point.Current.EvaluationAt = from.Add(time.Hour)
+		point.Attainment.EvaluationAt, point.Burn1h.End, point.Burn6h.End = point.Current.EvaluationAt, point.Current.EvaluationAt, point.Current.EvaluationAt
+		point.Attainment.BucketStart, point.Attainment.BucketEnd = from, point.Current.EvaluationAt
+		points = append(points, point)
+		payload, err := json.Marshal(point)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := q.PublishRetainedSloPoint(t.Context(), dbgen.PublishRetainedSloPointParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+			MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(point.Current.EvaluationAt),
+			SourceGeneration: saved.SourceGeneration, PublishedAt: timestamp(at), Payload: payload}); err != nil {
+			t.Fatal(err)
+		}
+		tile, err := compactRetainedPoints([]retainedSloPoint{point}, from, from.Add(time.Hour), row.Target, revision)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tilePayload, err := json.Marshal(tile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_slo_series_tiles
+        (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at)
+        VALUES($1,$2,$3,$4,3600,$5,$6,$7,1,$8,$9)
+        ON CONFLICT(slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
+        DO UPDATE SET payload=EXCLUDED.payload,point_count=EXCLUDED.point_count,source_generation=EXCLUDED.source_generation`, id, row.DefinitionRevision, row.MeasurementRevision,
+			operationalCalculationVersion, from, from.Add(time.Hour), saved.SourceGeneration, tilePayload, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_series_tile_work WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start>=$2 AND range_start<$3`, id, start, start.Add(24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	work := dbgen.AlmanacSloSeriesTileWork{SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+		CalculationVersion: operationalCalculationVersion, ResolutionSeconds: 86400, RangeStart: timestamp(start), RangeEnd: timestamp(start.Add(24 * time.Hour)), SourceGeneration: saved.SourceGeneration}
+	want, err := compactRetainedPoints(points, start, start.Add(24*time.Hour), row.Target, revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(hourly bool) {
+		t.Helper()
+		got, err := prepareRetainedTileValue(t.Context(), q, work, row.Target)
+		if err != nil || got.hourly != hourly || got.count != 24 || got.generation != saved.SourceGeneration || !reflect.DeepEqual(got.tile, want) ||
+			got.last == nil || !reflect.DeepEqual(*got.last, points[23].Current) {
+			t.Fatalf("daily composition hourly=%t changed count, generation, closing value or exact lanes: %+v, %v", hourly, got, err)
+		}
+	}
+	check(true)
+	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_slo_series_tile_work
+        (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at)
+        VALUES($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',$6,$7)`, id, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion, start, saved.SourceGeneration, at); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
+	if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_series_tile_work WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start=$2`, id, start); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_series_tiles WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start=$2`, id, start); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
 }
 
 func verifyBackfillRangeAvailability(t *testing.T, databaseURL string, id pgtype.UUID, at time.Time) {

@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -10,6 +11,45 @@ import (
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/google/uuid"
 )
+
+func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	var raw, hours retainedSloTile
+	for hour := range 24 {
+		from := start.Add(time.Duration(hour) * time.Hour)
+		var input retainedSloTile
+		for minute := range 60 {
+			good := "99999999999999999999999" + strconv.Itoa((minute+hour)%10)
+			sample := api.SloOperationalSample{EvaluationAt: from.Add(time.Duration(minute+1) * time.Minute), State: "observed", Revision: "1",
+				Good: new(good), Total: new("1000000000000000000000000"), Attainment: new("1.000000000000"),
+				Quality: api.SloOperationalQuality{State: "complete", Freshness: "fresh"}}
+			if hour == 7 && minute >= 58 || hour == 8 && minute < 2 {
+				sample.State, sample.Quality.State, sample.Good, sample.Total = "missing", "no_data", nil, nil
+			}
+			if hour == 12 && minute == 30 {
+				sample.Quality.Freshness = "stale"
+			}
+			input.Attainment = append(input.Attainment, sample)
+			input.Budget = append(input.Budget, sample)
+			input.Burn1h = append(input.Burn1h, sample)
+			input.Burn6h = append(input.Burn6h, sample)
+		}
+		appendRetainedTile(&raw, input)
+		tile, err := compactRetainedTile(input, from, from.Add(time.Hour), "0.99")
+		if err != nil {
+			t.Fatal(err)
+		}
+		appendRetainedTile(&hours, tile)
+	}
+	want, err := compactRetainedTile(raw, start, start.Add(24*time.Hour), "0.99")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := compactRetainedTile(hours, start, start.Add(24*time.Hour), "0.99")
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("hourly composition changed exact extrema, ties or cross-hour gaps: %v", err)
+	}
+}
 
 func TestRetainedTileKeepsUnroundedExtremaAndExactSelectedCounts(t *testing.T) {
 	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
