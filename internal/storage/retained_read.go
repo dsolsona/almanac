@@ -62,12 +62,12 @@ type retainedSeriesReader struct {
 	failed       bool
 }
 
-func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedReadPart) ([]dbgen.ReadRetainedPartsRow, error) {
+func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedReadPart, complianceOnly bool) ([]dbgen.ReadRetainedPartsRow, error) {
 	if len(parts) == 0 {
 		return []dbgen.ReadRetainedPartsRow{}, nil
 	}
 	params := dbgen.ReadRetainedPartsParams{SloID: c.row.ID, DefinitionRevision: c.row.DefinitionRevision,
-		MeasurementRevision: c.row.MeasurementRevision, CalculationVersion: operationalCalculationVersion}
+		MeasurementRevision: c.row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, ComplianceOnly: complianceOnly}
 	for _, part := range parts {
 		params.Starts, params.Ends = append(params.Starts, timestamp(part.start)), append(params.Ends, timestamp(part.end))
 		params.Resolutions = append(params.Resolutions, part.resolution)
@@ -278,7 +278,7 @@ func (c *retainedSeriesReader) read(ctx context.Context, base slo.WindowInput, s
 	if err != nil {
 		return err
 	}
-	rows, err := c.readParts(ctx, parts)
+	rows, err := c.readParts(ctx, parts, false)
 	if err != nil {
 		return err
 	}
@@ -341,7 +341,7 @@ func (c *retainedSeriesReader) loadPart(ctx context.Context, base slo.WindowInpu
 			from := part.start.Add(time.Duration(index) * time.Hour)
 			parts[index] = retainedReadPart{start: from, end: from.Add(time.Hour), resolution: 3600}
 		}
-		rows, err := c.readParts(ctx, parts)
+		rows, err := c.readParts(ctx, parts, false)
 		if err != nil {
 			return retainedSloTile{}, err
 		}
@@ -492,7 +492,7 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 	for from := utcDayStart(start); !from.Add(24 * time.Hour).After(last); from = from.Add(24 * time.Hour) {
 		parts = append(parts, retainedReadPart{start: from, end: from.Add(24 * time.Hour), resolution: 86400})
 	}
-	rows, err := c.readParts(ctx, parts)
+	rows, err := c.readParts(ctx, parts, true)
 	if err != nil {
 		return series, summary, err
 	}
@@ -505,17 +505,17 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 			}
 			day = operationalComplianceDay(value, part.end, base.ValidFrom, id, revision, target, window, cadence)
 		} else if rows[index].Ready {
-			tile, err := decodeRetainedTile(rows[index].Payload, part, revision)
-			if err != nil {
-				return series, summary, err
+			var stored *api.SloDailyComplianceDay
+			if err := json.Unmarshal(rows[index].Payload, &stored); err != nil {
+				return series, summary, ErrDerivedFailed
 			}
-			if tile.Compliance == nil {
+			if stored == nil {
 				// A partial day tile can have valid graph points without its
 				// closing evaluation; that is unfinished compliance, not corruption.
 				c.pending = true
 				day = c.unpreparedDay(part, base.ValidFrom, id, revision, target, window, cadence)
 			} else {
-				day = *tile.Compliance
+				day = *stored
 			}
 		} else if !rows[index].Exhausted && part.end.Equal(utcDayStart(c.now)) {
 			at := floorSliBoundary(part.end, cadence)

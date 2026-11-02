@@ -13,7 +13,9 @@ WITH objective AS (
            unnest(sqlc.arg(resolutions)::integer[]) AS resolution
 ), tiles AS MATERIALIZED (
     SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
-           r.resolution::integer AS resolution,t.slo_id AS present_id,convert_to(t.payload::text,'UTF8') AS payload,
+           r.resolution::integer AS resolution,t.slo_id AS present_id,
+           convert_to((CASE WHEN sqlc.arg(compliance_only)::boolean AND t.slo_id IS NOT NULL
+                            THEN coalesce(t.payload->'compliance','null'::jsonb) ELSE t.payload END)::text,'UTF8') AS payload,
            coalesce(GREATEST(t.source_generation,
                CASE WHEN checkpoint.coherent_through>=to_timestamp(floor(extract(epoch FROM r.range_end)/o.cadence_seconds)*o.cadence_seconds)
                     THEN checkpoint.coherent_source_generation ELSE 0 END),0)::bigint AS source_generation,

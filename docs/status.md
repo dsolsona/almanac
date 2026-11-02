@@ -105,11 +105,18 @@ seconds. Nine concurrent cold requests after restart return coherent data in
 376–473 ms, with connected traces and exact pinned-table comparison. Earlier
 above-budget cohorts remain retained. These diagnostics use one viewer with
 agents stopped; they do not establish full fleet/year or rendered acceptance.
+Capacity run seven subsequently returns data for all requests but fails cold-read
+budgets at 517–599 ms. Daily compliance was unnecessarily decoding every graph
+lane; it now fetches only the daily value with unchanged source and readiness
+checks. Focused PostgreSQL and fast verification pass in 43.249/33.261 seconds.
+Four diagnostic cohorts across 36 cold gzip requests take 191–382 ms, with exact
+daily-table equivalence and connected traces. They still use the 56-day dataset;
+year-history/fleet/rendered acceptance remains pending.
 No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
-[PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;
-its three existing Greptile threads are resolved. Newer local work is committed,
-but publication currently fails SSH authentication. Operator schema 0034, preview,
+[PR #53](https://github.com/dsolsona/almanac/pull/53) is open; its three existing
+Greptile threads are resolved. The maintainer-requested SSH push succeeded and
+GitHub confirmed the retained-read corrections at `42df1f1`. Operator schema 0034, preview,
 stopped imports and parked demo source work remain unchanged; schemas 0035/0036
 and the newer candidate are not deployed there.
 

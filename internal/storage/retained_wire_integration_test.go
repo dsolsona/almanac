@@ -4,9 +4,12 @@ package storage
 
 import (
 	"context"
+	"encoding/json/v2"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,6 +37,19 @@ func verifyRetainedTileWire(t *testing.T, conn *pgx.Conn, id pgtype.UUID, hour t
 	if string(parts[0].Payload) != canonical || !parts[0].Ready || parts[1].Ready || string(parts[1].Payload) != "{}" || parts[0].PayloadBytes != int64(len(canonical)) || parts[1].PayloadBytes != parts[0].PayloadBytes {
 		t.Fatal("binary tile wire changed canonical UTF-8, missing-tile state or shared byte accounting")
 	}
+	params.ComplianceOnly = true
+	compliance, err := q.ReadRetainedParts(ctx, params)
+	if err != nil || len(compliance) != 2 {
+		t.Fatalf("bounded daily-only wire read: %v", err)
+	}
+	var tile retainedSloTile
+	var day *api.SloDailyComplianceDay
+	if json.Unmarshal([]byte(canonical), &tile) != nil || json.Unmarshal(compliance[0].Payload, &day) != nil || !reflect.DeepEqual(day, tile.Compliance) ||
+		compliance[0].Ready != parts[0].Ready || compliance[1].Ready || string(compliance[1].Payload) != "{}" ||
+		compliance[0].PayloadBytes != int64(len(compliance[0].Payload)) || compliance[1].PayloadBytes != compliance[0].PayloadBytes || len(compliance[0].Payload) >= len(parts[0].Payload) {
+		t.Fatal("daily-only wire changed compliance, readiness, missing state or byte accounting")
+	}
+	params.ComplianceOnly = false
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)

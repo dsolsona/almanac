@@ -131,15 +131,17 @@ WITH objective AS (
            unnest($5::integer[]) AS resolution
 ), tiles AS MATERIALIZED (
     SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
-           r.resolution::integer AS resolution,t.slo_id AS present_id,convert_to(t.payload::text,'UTF8') AS payload,
+           r.resolution::integer AS resolution,t.slo_id AS present_id,
+           convert_to((CASE WHEN $6::boolean AND t.slo_id IS NOT NULL
+                            THEN coalesce(t.payload->'compliance','null'::jsonb) ELSE t.payload END)::text,'UTF8') AS payload,
            coalesce(GREATEST(t.source_generation,
                CASE WHEN checkpoint.coherent_through>=to_timestamp(floor(extract(epoch FROM r.range_end)/o.cadence_seconds)*o.cadence_seconds)
                     THEN checkpoint.coherent_source_generation ELSE 0 END),0)::bigint AS source_generation,
            t.published_at,t.point_count
     FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
       ON t.slo_id=$1 AND t.definition_revision=$2
-     AND t.measurement_revision=$6 AND t.exclusion_revision=0
-     AND t.calculation_version=$7 AND t.resolution_seconds=r.resolution
+     AND t.measurement_revision=$7 AND t.exclusion_revision=0
+     AND t.calculation_version=$8 AND t.resolution_seconds=r.resolution
      AND t.range_start=r.range_start AND t.range_end=r.range_end
     LEFT JOIN public.almanac_slo_series_repair checkpoint
       ON checkpoint.slo_id=t.slo_id AND checkpoint.definition_revision=t.definition_revision
@@ -151,14 +153,14 @@ WITH objective AS (
 ), newer_dirty AS MATERIALIZED (
     SELECT d.range_start,d.range_end,d.generation
     FROM public.almanac_derived_dirty_ranges d CROSS JOIN objective o CROSS JOIN bounds b
-    WHERE d.sli_id=o.sli_id AND d.measurement_revision=$6
+    WHERE d.sli_id=o.sli_id AND d.measurement_revision=$7
       AND d.generation>b.source_generation
       AND d.range_start>=(date_trunc('hour',(b.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
       AND d.range_start<b.range_end
 ), newer_aggregates AS MATERIALIZED (
     SELECT a.hour_start,a.source_generation
     FROM public.almanac_sli_hourly_aggregates a CROSS JOIN objective o CROSS JOIN bounds b
-    WHERE a.sli_id=o.sli_id AND a.measurement_revision=$6
+    WHERE a.sli_id=o.sli_id AND a.measurement_revision=$7
       AND a.source_generation>b.source_generation
       AND a.hour_start>=(date_trunc('hour',(b.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
       AND a.hour_start<b.range_end
@@ -167,20 +169,20 @@ WITH objective AS (
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=$1 AND w.definition_revision=$2
-             AND w.measurement_revision=$6 AND w.exclusion_revision=0
-             AND w.calculation_version=$7 AND w.resolution_seconds=r.resolution
+             AND w.measurement_revision=$7 AND w.exclusion_revision=0
+             AND w.calculation_version=$8 AND w.resolution_seconds=r.resolution
              AND w.range_start=r.range_start AND w.attempts>=5
        ) OR EXISTS (
            SELECT 1 FROM public.almanac_slo_series_repair w
            WHERE w.slo_id=$1 AND w.definition_revision=$2
-             AND w.measurement_revision=$6 AND w.calculation_version=$7
+             AND w.measurement_revision=$7 AND w.calculation_version=$8
              AND w.cursor_at<r.range_end AND w.end_at>r.range_start AND w.attempts>=5
        ))::boolean AS exhausted,
        (r.present_id IS NOT NULL AND NOT EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=$1 AND w.definition_revision=$2
-             AND w.measurement_revision=$6 AND w.exclusion_revision=0
-             AND w.calculation_version=$7
+             AND w.measurement_revision=$7 AND w.exclusion_revision=0
+             AND w.calculation_version=$8
              AND w.resolution_seconds=r.resolution AND w.range_start=r.range_start
        ) AND NOT EXISTS (
            SELECT 1 FROM newer_dirty d
@@ -209,6 +211,7 @@ type ReadRetainedPartsParams struct {
 	Starts              []pgtype.Timestamptz `json:"starts"`
 	Ends                []pgtype.Timestamptz `json:"ends"`
 	Resolutions         []int32              `json:"resolutions"`
+	ComplianceOnly      bool                 `json:"compliance_only"`
 	MeasurementRevision int64                `json:"measurement_revision"`
 	CalculationVersion  string               `json:"calculation_version"`
 }
@@ -237,6 +240,7 @@ func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsPa
 		arg.Starts,
 		arg.Ends,
 		arg.Resolutions,
+		arg.ComplianceOnly,
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
 	)

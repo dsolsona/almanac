@@ -165,7 +165,7 @@ WHERE g.slo_id=$1 AND b.kind='retained_detail' ORDER BY g.published_at DESC LIMI
 		{"derived_projections.sql.go", "getPublishedCurrentProjection", []any{calc, now, fleet.objectives[0]}, false},
 		{"derived_history.sql.go", "findPreparedSloHistory", []any{fleet.objectives[0], definition, measurement, source, through, start, end, burn, calc, retention, now, kind}, false},
 		{"derived_history.sql.go", "readPreparedSloValuePage", []any{[]string{"budget_series", "samples"}, int32(0), int32(100), fleet.objectives[0], generation, now, calc}, false},
-		{"retained_read.sql.go", "readRetainedParts", []any{fleet.objectives[0], definition, tileStarts, tileEnds, resolutions, measurement, calc}, false},
+		{"retained_read.sql.go", "readRetainedParts", []any{fleet.objectives[0], definition, tileStarts, tileEnds, resolutions, false, measurement, calc}, false},
 		{"retained_read.sql.go", "readRetainedEdgePoints", []any{fleet.objectives[0], definition, measurement, calc, end.Add(-time.Minute), end}, false},
 	}
 	report := make(map[string]jsontext.Value)
@@ -181,6 +181,11 @@ WHERE g.slo_id=$1 AND b.kind='retained_detail' ORDER BY g.published_at DESC LIMI
 		for _, setting := range []string{`SET LOCAL statement_timeout='2s'`, `SET LOCAL lock_timeout='250ms'`, `SET LOCAL jit=off`} {
 			if _, err := tx.Exec(ctx, setting); err != nil {
 				t.Fatal("apply ordinary interactive query-plan budgets failed")
+			}
+		}
+		if strings.HasPrefix(query.name, "readRetained") {
+			if _, err := tx.Exec(ctx, `SET LOCAL work_mem='32MB'`); err != nil {
+				t.Fatal("apply retained detail query workspace failed")
 			}
 		}
 		var body []byte

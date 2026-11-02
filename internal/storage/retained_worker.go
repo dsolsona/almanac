@@ -120,7 +120,7 @@ func prepareRetainedTileValue(ctx context.Context, q *dbgen.Queries, work dbgen.
 			start := work.RangeStart.Time.UTC().Add(time.Duration(index) * time.Hour)
 			parts[index] = retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600}
 		}
-		rows, err := reader.readParts(ctx, parts)
+		rows, err := reader.readParts(ctx, parts, false)
 		if err != nil {
 			return prepared, err
 		}
