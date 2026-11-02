@@ -61,8 +61,9 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatal(err)
 	}
 	input.Runtime = runtime
-	if _, err := ReadSloOperationalDetail(t.Context(), databaseURL, input); !errors.Is(err, ErrDerivedPending) {
-		t.Fatalf("explicit retained-history bootstrap was not distinguished: %v", err)
+	partial, err := ReadSloOperationalDetail(t.Context(), databaseURL, input)
+	if err != nil || partial.HistoryPreparation == nil || partial.HistoryPreparation.ReadySeconds >= partial.HistoryPreparation.TotalSeconds || !reflect.DeepEqual(partial.Current, oracle.Current) {
+		t.Fatalf("initial history did not preserve current values and disclose incomplete coverage: %+v, %v", partial.HistoryPreparation, err)
 	}
 	var jobsAfter int
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
@@ -93,7 +94,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		}
 	}
 	prepared, err := ReadSloOperationalDetail(t.Context(), databaseURL, input)
-	if err != nil || prepared.Generation == nil {
+	if err != nil || prepared.Generation == nil || prepared.HistoryPreparation != nil {
 		t.Fatalf("history was not published: %v", err)
 	}
 	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)

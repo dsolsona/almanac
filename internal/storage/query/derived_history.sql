@@ -7,6 +7,7 @@ WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
   AND g.retention_start=sqlc.arg(retention_start)
   AND g.published_at>=sqlc.arg(now)::timestamptz-interval '5 minutes'
   AND g.source_generation=$4 AND g.evaluated_through=$5
+  AND b.payload->'history_preparation' IS NULL
   AND b.range_start=$6 AND b.range_end=$7 AND b.burn_window_seconds=$8
   AND b.kind=sqlc.arg(kind)
   AND b.payload_digest=sha256(convert_to(b.payload::text,'UTF8'))

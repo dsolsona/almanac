@@ -89,7 +89,7 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 			}
 			operation.Check = func(target int, body []byte) error {
 				var value api.SloOperationalDetail
-				if json.Unmarshal(body, &value) != nil || value.Objective.Id.String() != historyObjectives[target] || value.Generation == nil ||
+				if json.Unmarshal(body, &value) != nil || value.Objective.Id.String() != historyObjectives[target] || value.Generation == nil || value.HistoryPreparation != nil ||
 					checkPerformanceGeneration(*value.Generation) != nil || !value.Generation.EvaluatedThrough.Equal(end) ||
 					value.BurnSeries.BurnWindowSeconds == nil || int(*value.BurnSeries.BurnWindowSeconds) != burnWindow ||
 					len(value.AttainmentSeries.Samples) > 1500 || len(value.BudgetSeries.Samples) > 1500 || len(value.BurnSeries.Samples) > 1500 ||

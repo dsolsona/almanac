@@ -93,6 +93,15 @@ Explicit import/repair/disaster recovery may expose preparation/failure metadata
 it is distinct from source no-data, zero traffic, not-applicable eligibility,
 expired history and database failures. Never fabricate current success.
 
+Backfill never gates an unaffected selected range behind a whole-history repair
+cursor. Read availability follows source changes within each calculation's input
+window. Preserve ready graph intervals and current status while other intervals
+are unfinished; uncalculated intervals have unavailable quality and null values,
+not missing source observations or zero values. Initial preparation reports selected
+graph coverage (ready/total seconds) and failures without inventing an ETA or
+claiming paused processing is running. Partial responses do not become reusable
+ready caches. Exact-value pages remain pinned to their response generation.
+
 Current attainment, remaining budget and supported burn windows are maintained on
 affected ingestion and due window/freshness boundaries. Persist their historical
 points for one year independently of ephemeral response caches. Historical

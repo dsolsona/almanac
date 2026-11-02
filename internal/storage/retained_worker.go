@@ -71,7 +71,9 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 			return true, ErrOperationalRangeDense
 		}
 		points := make([]retainedSloPoint, len(rows))
+		minimumGeneration := work.SourceGeneration
 		for index, row := range rows {
+			minimumGeneration = min(minimumGeneration, row.SourceGeneration)
 			if err := json.Unmarshal(row.Payload, &points[index]); err != nil || !points[index].Current.EvaluationAt.Equal(row.EvaluationAt.Time) {
 				return true, ErrDerivedFailed
 			}
@@ -97,7 +99,7 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 			return true, ErrOperationalResource
 		}
 		if _, err := q.PublishRetainedTile(bounded, dbgen.PublishRetainedTileParams{ID: work.ID, Version: work.Version,
-			LeaseEpoch: work.LeaseEpoch, PublishedAt: timestamp(clock()), PointCount: int32(len(points)), Payload: payload}); err != nil {
+			LeaseEpoch: work.LeaseEpoch, SourceGeneration: minimumGeneration, PublishedAt: timestamp(clock()), PointCount: int32(len(points)), Payload: payload}); err != nil {
 			return true, err
 		}
 	}

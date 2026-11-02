@@ -1590,6 +1590,17 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 			currentWindows[duration] = slo.WindowResult{}
 		}
 		values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
+		if input.retainedReader != nil && (errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed)) {
+			input.retainedReader.pending = true
+			input.retainedReader.failed = errors.Is(err, ErrDerivedSourceFailed)
+			values = make([]slo.WindowResult, len(inputs))
+			for index, value := range inputs {
+				values[index] = slo.WindowResult{End: value.At, RequestedStart: value.At.Add(-value.Duration),
+					EffectiveStart: value.At.Add(-value.Duration), EligibleStart: maxTime(value.At.Add(-value.Duration), value.ValidFrom, value.SliValidFrom), RetentionStart: value.RetentionStart,
+					State: "unavailable", Freshness: "unknown", Performance: "unknown", Reason: "history_preparing"}
+			}
+			err = nil
+		}
 		if err != nil {
 			return api.SloOperationalDetail{}, err
 		}
@@ -1683,6 +1694,13 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		BudgetSeries:     api.SloOperationalSeries{Kind: "rolling_budget", Samples: budgetSamples},
 		BurnSeries:       api.SloOperationalSeries{Kind: "burn", BurnWindowSeconds: new(api.SloOperationalSeriesBurnWindowSeconds(input.BurnWindow)), Samples: burnSamples},
 		ComplianceSeries: complianceSeries, ComplianceSummary: complianceSummary}
+	if reader := input.retainedReader; reader != nil && reader.pending {
+		result.HistoryPreparation = &struct {
+			Failed       bool  `json:"failed"`
+			ReadySeconds int64 `json:"ready_seconds"`
+			TotalSeconds int64 `json:"total_seconds"`
+		}{Failed: reader.failed, ReadySeconds: reader.readySeconds, TotalSeconds: max(1, reader.totalSeconds)}
+	}
 	return result, nil
 }
 

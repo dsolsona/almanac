@@ -1168,6 +1168,14 @@ components:
       type: object
       required: [evaluation_id, requested_at, effective_at, calculation_version, snapshot_kind, objective, context, current, urgency, leading_reason, reasons, burn_1h, burn_6h, exhaustion, range, attainment_series, budget_series, burn_series, compliance_series, compliance_summary]
       properties:
+        history_preparation:
+          type: object
+          description: Present while selected history is incomplete. Ready values remain usable; unfinished intervals have unavailable quality and no numerical values. Progress describes calculated graph coverage, not imported observation counts or an ETA.
+          required: [ready_seconds, total_seconds, failed]
+          properties:
+            ready_seconds: {type: integer, format: int64, minimum: 0}
+            total_seconds: {type: integer, format: int64, minimum: 1}
+            failed: {type: boolean}
         generation: {$ref: '#/components/schemas/DerivedGeneration'}
         evaluation_id: {type: string, format: uuid}
         requested_at: {type: string, format: date-time}

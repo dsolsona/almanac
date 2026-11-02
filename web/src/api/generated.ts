@@ -999,6 +999,14 @@ export interface components {
             reason?: string | null;
         };
         SloOperationalDetail: {
+            /** @description Present while selected history is incomplete. Ready values remain usable; unfinished intervals have unavailable quality and no numerical values. Progress describes calculated graph coverage, not imported observation counts or an ETA. */
+            history_preparation?: {
+                /** Format: int64 */
+                ready_seconds: number;
+                /** Format: int64 */
+                total_seconds: number;
+                failed: boolean;
+            };
             generation?: components["schemas"]["DerivedGeneration"];
             /** Format: uuid */
             evaluation_id: string;

@@ -4,7 +4,6 @@ package storage
 
 import (
 	"encoding/json/v2"
-	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -148,8 +147,8 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsBefore); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input); !errors.Is(err, ErrDerivedPending) {
-			t.Fatalf("explicit retained bootstrap was not disclosed: %v", err)
+		if partial, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input); err != nil || partial.HistoryPreparation == nil || partial.HistoryPreparation.ReadySeconds >= partial.HistoryPreparation.TotalSeconds {
+			t.Fatalf("explicit retained bootstrap was not disclosed: %+v, %v", partial.HistoryPreparation, err)
 		}
 		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
 			t.Fatalf("navigation admitted graph jobs during retained bootstrap: %d -> %d, %v", jobsBefore, jobsAfter, err)

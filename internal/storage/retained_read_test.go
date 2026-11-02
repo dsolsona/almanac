@@ -50,6 +50,26 @@ func TestRetainedTileCannotHideCorruptionAsEmptyHistory(t *testing.T) {
 	}
 }
 
+func TestUnpreparedHistoryIsUnavailableRatherThanMissingMeasurements(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	reader := retainedSeriesReader{row: dbgen.GetSloRow{DefinitionRevision: 1}}
+	part := retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600}
+	base := slo.WindowInput{Cadence: time.Minute}
+	for _, failed := range []bool{false, true} {
+		reader.failed = failed
+		tile := reader.unpreparedTile(base, part)
+		for _, lane := range [][]api.SloOperationalSample{tile.Attainment, tile.Budget, tile.Burn1h, tile.Burn6h} {
+			if len(lane) != 1 || lane[0].Quality.State != "unavailable" || lane[0].Quality.MissingIntervals != 0 || lane[0].Good != nil || lane[0].Total != nil || lane[0].Attainment != nil || lane[0].RemainingFraction != nil || lane[0].Burn != nil {
+				t.Fatalf("uncalculated history fabricated measurements: %+v", lane)
+			}
+		}
+		day := reader.unpreparedDay(retainedReadPart{start: start, end: start.Add(24 * time.Hour)}, start, [16]byte{}, "1", "0.99", 24*time.Hour, time.Minute)
+		if day.Status != "unknown" || day.Quality.State != "unavailable" || day.Performance.Attainment != nil || day.Performance.Good != nil {
+			t.Fatalf("uncalculated compliance became a measured outcome: %+v", day)
+		}
+	}
+}
+
 func TestRetainedAttainmentMatchesCanonicalSingleInterval(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(time.Minute)

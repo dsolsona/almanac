@@ -53,7 +53,7 @@ ORDER BY evaluation_at LIMIT 5761;
 -- name: PublishRetainedTile :execrows
 INSERT INTO public.almanac_slo_series_tiles
     (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at)
-SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,w.resolution_seconds,w.range_start,w.range_end,w.source_generation,
+SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,w.resolution_seconds,w.range_start,w.range_end,sqlc.arg(source_generation)::bigint,
        sqlc.arg(point_count)::integer,sqlc.arg(payload)::jsonb,sqlc.arg(published_at)::timestamptz
 FROM public.almanac_slo_series_tile_work w
 WHERE w.id=sqlc.arg(id) AND w.version=sqlc.arg(version) AND w.lease_epoch=sqlc.arg(lease_epoch)

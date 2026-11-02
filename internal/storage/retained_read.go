@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"strconv"
 	"time"
 
@@ -42,13 +43,17 @@ func retainedReadParts(start, end time.Time) ([]retainedReadPart, error) {
 }
 
 type retainedSeriesReader struct {
-	q      *dbgen.Queries
-	row    dbgen.GetSloRow
-	source dbgen.GetSloOperationalContextRow
-	now    time.Time
-	series *retainedSloTile
-	first  *retainedSloPoint
-	bytes  int64
+	q            *dbgen.Queries
+	row          dbgen.GetSloRow
+	source       dbgen.GetSloOperationalContextRow
+	now          time.Time
+	series       *retainedSloTile
+	first        *retainedSloPoint
+	bytes        int64
+	readySeconds int64
+	totalSeconds int64
+	pending      bool
+	failed       bool
 }
 
 func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedReadPart) ([]dbgen.ReadRetainedPartsRow, error) {
@@ -150,7 +155,7 @@ func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput,
 	}
 	rows, err := c.q.ReadRetainedEdgePoints(ctx, dbgen.ReadRetainedEdgePointsParams{SloID: c.row.ID,
 		DefinitionRevision: c.row.DefinitionRevision, MeasurementRevision: c.row.MeasurementRevision,
-		CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(start), EvaluationAt_2: timestamp(end)})
+		CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(start), EvaluationAt2: timestamp(end)})
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +175,9 @@ func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput,
 		if c.bytes > 20<<20 {
 			return nil, ErrOperationalResource
 		}
-		if row.Exhausted {
-			return nil, ErrDerivedFailed
+		if row.Exhausted && row.Repairing {
+			c.failed = true
+			return nil, ErrDerivedPending
 		}
 		if row.Repairing {
 			return nil, ErrDerivedPending
@@ -249,6 +255,14 @@ func (c *retainedSeriesReader) load(ctx context.Context, base slo.WindowInput, s
 			return retainedSloTile{}, err
 		}
 		tile, err := c.loadPart(ctx, base, part, rows[index])
+		c.totalSeconds += int64(part.end.Sub(part.start) / time.Second)
+		if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed) {
+			c.pending = true
+			c.failed = c.failed || errors.Is(err, ErrDerivedSourceFailed)
+			tile, err = c.unpreparedTile(base, part), nil
+		} else if err == nil {
+			c.readySeconds += int64(part.end.Sub(part.start) / time.Second)
+		}
 		if err != nil {
 			return retainedSloTile{}, err
 		}
@@ -258,18 +272,28 @@ func (c *retainedSeriesReader) load(ctx context.Context, base slo.WindowInput, s
 	return combined, nil
 }
 
+func (c *retainedSeriesReader) unpreparedTile(base slo.WindowInput, part retainedReadPart) retainedSloTile {
+	reason := "history_preparing"
+	if c.failed {
+		reason = "history_preparation_failed"
+	}
+	samples := unavailableOperationalSamples(part.start, part.end, base.Cadence, strconv.FormatInt(c.row.DefinitionRevision, 10), 1, reason)
+	return retainedSloTile{Attainment: samples, Budget: samples, Burn1h: samples, Burn6h: samples}
+}
+
 func (c *retainedSeriesReader) loadPart(ctx context.Context, base slo.WindowInput, part retainedReadPart, stored dbgen.ReadRetainedPartsRow) (retainedSloTile, error) {
 	switch {
 	case !floorSliBoundary(part.end, base.Cadence).After(floorSliBoundary(part.start, base.Cadence)):
 		return retainedSloTile{}, nil
 	case !part.end.After(maxTime(base.ValidFrom, base.SliValidFrom, ceilSliBoundary(base.RetentionStart, base.Cadence))):
 		return c.beforeValidity(ctx, base, part)
-	case stored.Exhausted:
-		return retainedSloTile{}, ErrDerivedFailed
-	case part.resolution == 0:
-		return c.edge(ctx, base, part)
 	case stored.Ready:
 		return decodeRetainedTile(stored.Payload, part, strconv.FormatInt(c.row.DefinitionRevision, 10))
+	case stored.Exhausted:
+		c.failed = true
+		return retainedSloTile{}, ErrDerivedPending
+	case part.resolution == 0:
+		return c.edge(ctx, base, part)
 	case part.resolution == 3600 && part.end.After(c.now.Truncate(time.Hour).Add(-time.Hour)):
 		// A boundary can arrive before the final hour tile is published.
 		// This is a bounded exact read, not a request-triggered repair job.
@@ -362,6 +386,13 @@ func (c *retainedSeriesReader) rolling(ctx context.Context, base slo.WindowInput
 	// Budget/burn include the exact requested starting endpoint as well.
 	if c.first == nil {
 		points, err := c.points(ctx, base, start.Add(-cadence), start)
+		if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed) {
+			c.pending = true
+			c.failed = c.failed || errors.Is(err, ErrDerivedSourceFailed)
+			missing := c.unpreparedTile(base, retainedReadPart{start: start.Add(-cadence), end: start})
+			samples = append(missing.Budget, samples...)
+			return reduceRetainedDisplay(samples, start, end, c.row.Target, selectedMetric, min(maxBuckets, 375))
+		}
 		if err != nil || len(points) != 1 {
 			if err == nil {
 				err = slo.ErrOperationalFacts
@@ -415,26 +446,31 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 				return series, summary, err
 			}
 			day = operationalComplianceDay(value, part.end, base.ValidFrom, id, revision, target, window, cadence)
-		} else if rows[index].Exhausted {
-			return series, summary, ErrDerivedFailed
 		} else if rows[index].Ready {
 			tile, err := decodeRetainedTile(rows[index].Payload, part, revision)
 			if err != nil || tile.Compliance == nil {
 				return series, summary, ErrDerivedFailed
 			}
 			day = *tile.Compliance
-		} else if part.end.Equal(utcDayStart(c.now)) {
+		} else if !rows[index].Exhausted && part.end.Equal(utcDayStart(c.now)) {
 			at := floorSliBoundary(part.end, cadence)
 			points, err := c.points(ctx, base, at.Add(-cadence), at)
-			if err != nil || len(points) != 1 {
+			if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed) {
+				c.pending = true
+				c.failed = c.failed || errors.Is(err, ErrDerivedSourceFailed)
+				day = c.unpreparedDay(part, base.ValidFrom, id, revision, target, window, cadence)
+			} else if err != nil || len(points) != 1 {
 				if err == nil {
 					err = slo.ErrOperationalFacts
 				}
 				return series, summary, err
+			} else {
+				day = operationalComplianceDay(retainedOperationalResult(points[0].Current), part.end, base.ValidFrom, id, revision, target, window, cadence)
 			}
-			day = operationalComplianceDay(retainedOperationalResult(points[0].Current), part.end, base.ValidFrom, id, revision, target, window, cadence)
 		} else {
-			return series, summary, ErrDerivedPending
+			c.pending = true
+			c.failed = c.failed || rows[index].Exhausted
+			day = c.unpreparedDay(part, base.ValidFrom, id, revision, target, window, cadence)
 		}
 		if !day.DayStart.Equal(part.start) || !day.DayEnd.Equal(part.end) || day.DefinitionRevision != revision || day.SloId != id || !day.Status.Valid() {
 			return series, summary, ErrDerivedFailed
@@ -453,4 +489,15 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 	}
 	summary.EvaluableDays = summary.MetDays + summary.ViolatedDays
 	return series, summary, nil
+}
+
+func (c *retainedSeriesReader) unpreparedDay(part retainedReadPart, validFrom time.Time, id openapi_types.UUID, revision, target string, window, cadence time.Duration) api.SloDailyComplianceDay {
+	reason := "history_preparing"
+	if c.failed {
+		reason = "history_preparation_failed"
+	}
+	day := operationalComplianceDay(slo.WindowResult{End: floorSliBoundary(part.end, cadence), State: "unavailable", Freshness: "unknown", Performance: "unknown"}, part.end, validFrom, id, revision, target, window, cadence)
+	day.Status, day.Explanation = "unknown", reason
+	day.Quality.Reason, day.Performance.Reason = &reason, &reason
+	return day
 }

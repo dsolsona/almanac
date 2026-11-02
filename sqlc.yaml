@@ -37,6 +37,7 @@ sql:
       - internal/storage/migrations/0031_retained_work_recovery.sql
       - internal/storage/migrations/0032_coverage_ingestion_generation.sql
       - internal/storage/migrations/0033_retention_cleanup_progress.sql
+      - internal/storage/migrations/0034_retained_tile_generation_floor.sql
     gen:
       go:
         package: dbgen

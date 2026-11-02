@@ -240,8 +240,8 @@ type Querier interface {
 	// Per-interval commit generations distinguish genuinely new coverage from facts
 	// already included in a historical point, independently of receipt timestamps.
 	ReadRetainedLateTotals(ctx context.Context, arg ReadRetainedLateTotalsParams) ([]ReadRetainedLateTotalsRow, error)
-	// A dirty tile or a cursor that has not repaired its endpoints is unavailable,
-	// rather than silently serving values from before a late observation arrived.
+	// A repair cursor is scheduling metadata, not proof that every later point is
+	// invalid. Reuse the source-hour watermark checks used by display blocks.
 	// Materialize UTF-8 once for both the byte budget and binary wire payload.
 	ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error)
 	ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error)

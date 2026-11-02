@@ -3162,27 +3162,34 @@ type SloOperationalContext struct {
 
 // SloOperationalDetail defines model for SloOperationalDetail.
 type SloOperationalDetail struct {
-	AttainmentSeries   SloOperationalSeries             `json:"attainment_series"`
-	BudgetSeries       SloOperationalSeries             `json:"budget_series"`
-	Burn1h             SloBurnValue                     `json:"burn_1h"`
-	Burn6h             SloBurnValue                     `json:"burn_6h"`
-	BurnSeries         SloOperationalSeries             `json:"burn_series"`
-	CalculationVersion string                           `json:"calculation_version"`
-	ComplianceSeries   SloDailyComplianceSeries         `json:"compliance_series"`
-	ComplianceSummary  SloDailyComplianceSummary        `json:"compliance_summary"`
-	Context            SloOperationalContext            `json:"context"`
-	Current            SloOperationalValue              `json:"current"`
-	EffectiveAt        time.Time                        `json:"effective_at"`
-	EvaluationId       openapi_types.UUID               `json:"evaluation_id"`
-	Exhaustion         SloExhaustionEstimate            `json:"exhaustion"`
-	Generation         *DerivedGeneration               `json:"generation,omitempty"`
-	LeadingReason      SloUrgencyReason                 `json:"leading_reason"`
-	Objective          Slo                              `json:"objective"`
-	Range              SloOperationalRange              `json:"range"`
-	Reasons            []SloUrgencyReason               `json:"reasons"`
-	RequestedAt        time.Time                        `json:"requested_at"`
-	SnapshotKind       SloOperationalDetailSnapshotKind `json:"snapshot_kind"`
-	Urgency            SloOperationalDetailUrgency      `json:"urgency"`
+	AttainmentSeries   SloOperationalSeries      `json:"attainment_series"`
+	BudgetSeries       SloOperationalSeries      `json:"budget_series"`
+	Burn1h             SloBurnValue              `json:"burn_1h"`
+	Burn6h             SloBurnValue              `json:"burn_6h"`
+	BurnSeries         SloOperationalSeries      `json:"burn_series"`
+	CalculationVersion string                    `json:"calculation_version"`
+	ComplianceSeries   SloDailyComplianceSeries  `json:"compliance_series"`
+	ComplianceSummary  SloDailyComplianceSummary `json:"compliance_summary"`
+	Context            SloOperationalContext     `json:"context"`
+	Current            SloOperationalValue       `json:"current"`
+	EffectiveAt        time.Time                 `json:"effective_at"`
+	EvaluationId       openapi_types.UUID        `json:"evaluation_id"`
+	Exhaustion         SloExhaustionEstimate     `json:"exhaustion"`
+	Generation         *DerivedGeneration        `json:"generation,omitempty"`
+
+	// HistoryPreparation Present while selected history is incomplete. Ready values remain usable; unfinished intervals have unavailable quality and no numerical values. Progress describes calculated graph coverage, not imported observation counts or an ETA.
+	HistoryPreparation *struct {
+		Failed       bool  `json:"failed"`
+		ReadySeconds int64 `json:"ready_seconds"`
+		TotalSeconds int64 `json:"total_seconds"`
+	} `json:"history_preparation,omitempty"`
+	LeadingReason SloUrgencyReason                 `json:"leading_reason"`
+	Objective     Slo                              `json:"objective"`
+	Range         SloOperationalRange              `json:"range"`
+	Reasons       []SloUrgencyReason               `json:"reasons"`
+	RequestedAt   time.Time                        `json:"requested_at"`
+	SnapshotKind  SloOperationalDetailSnapshotKind `json:"snapshot_kind"`
+	Urgency       SloOperationalDetailUrgency      `json:"urgency"`
 }
 
 // SloOperationalDetailSnapshotKind defines model for SloOperationalDetail.SnapshotKind.

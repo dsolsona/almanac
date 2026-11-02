@@ -12,22 +12,32 @@ import (
 )
 
 const readRetainedEdgePoints = `-- name: ReadRetainedEdgePoints :many
-WITH selected AS (
+WITH objective AS (
+    SELECT definition.sli_id,GREATEST(definition.rolling_window_seconds,21600)::bigint AS window_seconds
+    FROM public.almanac_slo_definitions definition WHERE definition.slo_id=$1 AND definition.revision=$2
+), selected AS (
     SELECT p.evaluation_at,p.payload,
            sum(octet_length(p.payload::text)) OVER ()::bigint AS payload_bytes,
-           EXISTS (
-               SELECT 1 FROM public.almanac_slo_series_repair w
-               WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
-                 AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
-                 AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at
-           ) AS repairing,
+           (EXISTS (
+               SELECT 1 FROM public.almanac_derived_dirty_ranges d
+               WHERE d.sli_id=o.sli_id AND d.measurement_revision=p.measurement_revision
+                 AND d.generation>p.source_generation
+                 AND d.range_start>=(date_trunc('hour',(p.evaluation_at-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+                 AND d.range_start<p.evaluation_at AND d.range_end>p.evaluation_at-o.window_seconds*interval '1 second'
+           ) OR EXISTS (
+               SELECT 1 FROM public.almanac_sli_hourly_aggregates a
+               WHERE a.sli_id=o.sli_id AND a.measurement_revision=p.measurement_revision
+                 AND a.source_generation>p.source_generation
+                 AND a.hour_start>=(date_trunc('hour',(p.evaluation_at-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+                 AND a.hour_start<p.evaluation_at
+           ))::boolean AS repairing,
            EXISTS (
                SELECT 1 FROM public.almanac_slo_series_repair w
                WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
                  AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
                  AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at AND w.attempts>=5
            ) AS exhausted
-    FROM public.almanac_slo_series_points p
+    FROM public.almanac_slo_series_points p CROSS JOIN objective o
     WHERE p.slo_id=$1 AND p.definition_revision=$2 AND p.measurement_revision=$3
       AND p.exclusion_revision=0 AND p.calculation_version=$4 AND p.evaluation_at>$5 AND p.evaluation_at<=$6
     ORDER BY p.evaluation_at LIMIT 961
@@ -42,7 +52,7 @@ type ReadRetainedEdgePointsParams struct {
 	MeasurementRevision int64              `json:"measurement_revision"`
 	CalculationVersion  string             `json:"calculation_version"`
 	EvaluationAt        pgtype.Timestamptz `json:"evaluation_at"`
-	EvaluationAt_2      pgtype.Timestamptz `json:"evaluation_at_2"`
+	EvaluationAt2       pgtype.Timestamptz `json:"evaluation_at_2"`
 }
 
 type ReadRetainedEdgePointsRow struct {
@@ -60,7 +70,7 @@ func (q *Queries) ReadRetainedEdgePoints(ctx context.Context, arg ReadRetainedEd
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
 		arg.EvaluationAt,
-		arg.EvaluationAt_2,
+		arg.EvaluationAt2,
 	)
 	if err != nil {
 		return nil, err
@@ -87,24 +97,28 @@ func (q *Queries) ReadRetainedEdgePoints(ctx context.Context, arg ReadRetainedEd
 }
 
 const readRetainedParts = `-- name: ReadRetainedParts :many
-WITH requested AS (
-    SELECT generate_series(1,cardinality($1::timestamptz[]))::integer AS ordinal,
-           unnest($1::timestamptz[]) AS range_start,
-           unnest($2::timestamptz[]) AS range_end,
-           unnest($3::integer[]) AS resolution
+WITH objective AS (
+    SELECT definition.sli_id,GREATEST(definition.rolling_window_seconds,21600)::bigint AS window_seconds
+    FROM public.almanac_slo_definitions definition
+    WHERE definition.slo_id=$1 AND definition.revision=$2
+), requested AS (
+    SELECT generate_series(1,cardinality($3::timestamptz[]))::integer AS ordinal,
+           unnest($3::timestamptz[]) AS range_start,
+           unnest($4::timestamptz[]) AS range_end,
+           unnest($5::integer[]) AS resolution
 ), selected AS MATERIALIZED (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
        r.resolution::integer AS resolution,convert_to(t.payload::text,'UTF8') AS payload,
        t.source_generation,t.published_at,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
-           WHERE w.slo_id=$4 AND w.definition_revision=$5
+           WHERE w.slo_id=$1 AND w.definition_revision=$2
              AND w.measurement_revision=$6 AND w.exclusion_revision=0
              AND w.calculation_version=$7 AND w.resolution_seconds=r.resolution
              AND w.range_start=r.range_start AND w.attempts>=5
        ) OR EXISTS (
            SELECT 1 FROM public.almanac_slo_series_repair w
-           WHERE w.slo_id=$4 AND w.definition_revision=$5
+           WHERE w.slo_id=$1 AND w.definition_revision=$2
              AND w.measurement_revision=$6 AND w.calculation_version=$7
              AND w.cursor_at<r.range_end AND w.end_at>r.range_start AND w.attempts>=5
        ))::boolean AS exhausted,
@@ -114,15 +128,24 @@ SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestam
              AND w.exclusion_revision=0 AND w.calculation_version=t.calculation_version
              AND w.resolution_seconds=t.resolution_seconds AND w.range_start=t.range_start
        ) AND NOT EXISTS (
-           SELECT 1 FROM public.almanac_slo_series_repair w
-           WHERE w.slo_id=t.slo_id AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision
-             AND w.calculation_version=t.calculation_version AND w.cursor_at<t.range_end AND w.end_at>t.range_start
+           SELECT 1 FROM public.almanac_derived_dirty_ranges d
+           WHERE d.sli_id=o.sli_id AND d.measurement_revision=t.measurement_revision
+             AND d.generation>t.source_generation
+             AND d.range_start>=(date_trunc('hour',(t.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+             AND d.range_start<t.range_end AND d.range_end>t.range_start-o.window_seconds*interval '1 second'
+       ) AND NOT EXISTS (
+           SELECT 1 FROM public.almanac_sli_hourly_aggregates a
+           WHERE a.sli_id=o.sli_id AND a.measurement_revision=t.measurement_revision
+             AND a.source_generation>t.source_generation
+             AND a.hour_start>=(date_trunc('hour',(t.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+             AND a.hour_start<t.range_end
        ))::boolean AS ready
 FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
-  ON t.slo_id=$4 AND t.definition_revision=$5
+  ON t.slo_id=$1 AND t.definition_revision=$2
  AND t.measurement_revision=$6 AND t.exclusion_revision=0
  AND t.calculation_version=$7 AND t.resolution_seconds=r.resolution
  AND t.range_start=r.range_start AND t.range_end=r.range_end
+CROSS JOIN objective o
 ), bounded AS (
 SELECT ordinal, range_start, range_end, resolution, payload, source_generation, published_at, exhausted, ready,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM selected
 )
@@ -133,11 +156,11 @@ FROM bounded ORDER BY ordinal
 `
 
 type ReadRetainedPartsParams struct {
+	SloID               pgtype.UUID          `json:"slo_id"`
+	DefinitionRevision  int64                `json:"definition_revision"`
 	Starts              []pgtype.Timestamptz `json:"starts"`
 	Ends                []pgtype.Timestamptz `json:"ends"`
 	Resolutions         []int32              `json:"resolutions"`
-	SloID               pgtype.UUID          `json:"slo_id"`
-	DefinitionRevision  int64                `json:"definition_revision"`
 	MeasurementRevision int64                `json:"measurement_revision"`
 	CalculationVersion  string               `json:"calculation_version"`
 }
@@ -155,16 +178,16 @@ type ReadRetainedPartsRow struct {
 	Ready            bool               `json:"ready"`
 }
 
-// A dirty tile or a cursor that has not repaired its endpoints is unavailable,
-// rather than silently serving values from before a late observation arrived.
+// A repair cursor is scheduling metadata, not proof that every later point is
+// invalid. Reuse the source-hour watermark checks used by display blocks.
 // Materialize UTF-8 once for both the byte budget and binary wire payload.
 func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error) {
 	rows, err := q.db.Query(ctx, readRetainedParts,
+		arg.SloID,
+		arg.DefinitionRevision,
 		arg.Starts,
 		arg.Ends,
 		arg.Resolutions,
-		arg.SloID,
-		arg.DefinitionRevision,
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
 	)

@@ -13,6 +13,20 @@ beforeEach(()=>{
 
 const sloID='22222222-2222-2222-2222-222222222222';
 const definition:components['schemas']['Slo']={id:sloID,name:'checkout',display_name:'Checkout',version:'1',definition_revision:'1',service_id:'11111111-1111-1111-1111-111111111111',service_display_name:'Checkout service',sli_id:'33333333-3333-3333-3333-333333333333',sli_display_name:'Request success',target:'0.99',rolling_window_seconds:86400,cadence_seconds:60,activated_at:'2026-10-01T00:00:00Z',evaluation_valid_from:'2026-10-01T00:00:00Z',historical_requested_by:null,historical_requested_at:null,created_at:'2026-10-01T00:00:00Z',updated_at:'2026-10-01T00:00:00Z'};
+it('keeps graphs and current status usable while history is incomplete and refreshes progress',async()=>{
+ const detail=operationalDetail();
+ detail.history_preparation={ready_seconds:43200,total_seconds:86400,failed:false};
+ const read=vi.spyOn(sloClient,'operational').mockResolvedValueOnce(detail).mockResolvedValue({...detail,history_preparation:undefined});
+ const stamp={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};
+ vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:stamp});
+ render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ expect(await screen.findByText(/50% of this period’s history is ready/)).toBeVisible();
+ expect(screen.getByText('error budget remaining')).toBeVisible();
+ expect(screen.getByRole('button',{name:'View SLI as table'})).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));
+ await waitFor(()=>expect(screen.queryByText(/of this period’s history is ready/)).not.toBeInTheDocument());
+ expect(read).toHaveBeenCalledTimes(2);
+});
 it('signals timezone-only readiness without refetching history or waiting for a status poll',async()=>{
  const detail=operationalDetail();
  const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};

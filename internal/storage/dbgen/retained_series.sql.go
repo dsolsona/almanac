@@ -170,10 +170,10 @@ func (q *Queries) PublishRetainedSloPoint(ctx context.Context, arg PublishRetain
 const publishRetainedTile = `-- name: PublishRetainedTile :execrows
 INSERT INTO public.almanac_slo_series_tiles
     (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at)
-SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,w.resolution_seconds,w.range_start,w.range_end,w.source_generation,
-       $1::integer,$2::jsonb,$3::timestamptz
+SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,w.resolution_seconds,w.range_start,w.range_end,$1::bigint,
+       $2::integer,$3::jsonb,$4::timestamptz
 FROM public.almanac_slo_series_tile_work w
-WHERE w.id=$4 AND w.version=$5 AND w.lease_epoch=$6
+WHERE w.id=$5 AND w.version=$6 AND w.lease_epoch=$7
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
 DO UPDATE SET source_generation=EXCLUDED.source_generation,point_count=EXCLUDED.point_count,
               payload=EXCLUDED.payload,published_at=EXCLUDED.published_at
@@ -181,16 +181,18 @@ WHERE almanac_slo_series_tiles.published_at<=EXCLUDED.published_at
 `
 
 type PublishRetainedTileParams struct {
-	PointCount  int32              `json:"point_count"`
-	Payload     []byte             `json:"payload"`
-	PublishedAt pgtype.Timestamptz `json:"published_at"`
-	ID          pgtype.UUID        `json:"id"`
-	Version     int64              `json:"version"`
-	LeaseEpoch  int64              `json:"lease_epoch"`
+	SourceGeneration int64              `json:"source_generation"`
+	PointCount       int32              `json:"point_count"`
+	Payload          []byte             `json:"payload"`
+	PublishedAt      pgtype.Timestamptz `json:"published_at"`
+	ID               pgtype.UUID        `json:"id"`
+	Version          int64              `json:"version"`
+	LeaseEpoch       int64              `json:"lease_epoch"`
 }
 
 func (q *Queries) PublishRetainedTile(ctx context.Context, arg PublishRetainedTileParams) (int64, error) {
 	result, err := q.db.Exec(ctx, publishRetainedTile,
+		arg.SourceGeneration,
 		arg.PointCount,
 		arg.Payload,
 		arg.PublishedAt,

@@ -72,6 +72,7 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 		!reflect.DeepEqual(tile.Burn1h[0].Burn, point.Burn1h.Performance.Burn) || !reflect.DeepEqual(tile.Burn6h[0].Burn, point.Burn6h.Performance.Burn) {
 		t.Fatal("hourly resolution changed exact point values")
 	}
+	verifyBackfillRangeAvailability(t, databaseURL, pgID, oracle.EffectiveAt)
 	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_slo_series_tile_work
         (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at)
         SELECT slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,$2
@@ -101,6 +102,65 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 		t.Fatal(err)
 	}
 	verifyRetainedRepairBatch(t, databaseURL, proof, id, clock, oracle)
+}
+
+func verifyBackfillRangeAvailability(t *testing.T, databaseURL string, id pgtype.UUID, at time.Time) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	q := dbgen.New(tx)
+	row, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	window := max(time.Duration(row.RollingWindowSeconds)*time.Second, 6*time.Hour)
+	old := at.Add(-window - 48*time.Hour).Truncate(time.Hour)
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET cursor_at=$2,end_at=$3,attempts=5 WHERE slo_id=$1`, id, old, at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_series_tile_work WHERE slo_id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	params := dbgen.ReadRetainedPartsParams{SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion,
+		Starts: []pgtype.Timestamptz{timestamp(at.Add(-time.Microsecond).Truncate(time.Hour))}, Ends: []pgtype.Timestamptz{timestamp(at.Add(-time.Microsecond).Truncate(time.Hour).Add(time.Hour))}, Resolutions: []int32{3600}}
+	edge := dbgen.ReadRetainedEdgePointsParams{SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at.Add(-time.Duration(row.CadenceSeconds) * time.Second)), EvaluationAt2: timestamp(at)}
+	check := func(ready bool) {
+		t.Helper()
+		parts, err := q.ReadRetainedParts(t.Context(), params)
+		if err != nil || len(parts) != 1 || parts[0].Ready != ready {
+			t.Fatalf("backfill tile availability=%+v want %t: %v", parts, ready, err)
+		}
+		points, err := q.ReadRetainedEdgePoints(t.Context(), edge)
+		if err != nil || len(points) != 1 || points[0].Repairing == ready {
+			t.Fatalf("backfill endpoint availability=%+v want %t: %v", points, ready, err)
+		}
+	}
+	check(true)
+	var generation int64
+	if err := tx.QueryRow(t.Context(), `SELECT generation FROM public.almanac_sli_source_generations WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision).Scan(&generation); err != nil {
+		t.Fatal(err)
+	}
+	for _, from := range []time.Time{old, at.Add(-time.Hour).Truncate(time.Hour)} {
+		if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_derived_dirty_ranges(sli_id,measurement_revision,generation,range_start,range_end,next_attempt_at,updated_at)
+            VALUES($1,$2,$3,$4,$4::timestamptz+interval '1 hour',$5,$5)
+            ON CONFLICT(sli_id,measurement_revision,range_start) DO UPDATE SET generation=EXCLUDED.generation`, row.SliID, row.MeasurementRevision, generation+1, from, at); err != nil {
+			t.Fatal(err)
+		}
+		check(from.Equal(old))
+	}
+	// Completed source work must still invalidate stale endpoints until repaired.
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_sli_hourly_aggregates SET source_generation=$3 WHERE sli_id=$1 AND measurement_revision=$2 AND hour_start=$4`, row.SliID, row.MeasurementRevision, generation+1, at.Add(-time.Hour).Truncate(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_derived_dirty_ranges WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
 }
 
 func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, oracle api.SloOperationalDetail) {
