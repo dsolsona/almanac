@@ -15,6 +15,8 @@ import (
 var ErrDerivedPending = errors.New("storage: derived data preparation pending")
 var ErrDerivedSourceFailed = errors.Join(ErrDerivedFailed, errors.New("storage: source aggregate preparation exhausted"))
 
+const derivedWindowBatchLimit = 960
+
 // Whole-hour sums are safe only when both boundaries also lie on the source
 // cadence. The common grid leaves at most 7,200 raw intervals in both edges,
 // even for a cadence that does not divide an hour or exceeds an hour.
@@ -43,7 +45,7 @@ func derivedWindowBatchParams(sliID pgtype.UUID, revision int64, inputs []slo.Wi
 	if len(inputs) == 0 {
 		return dbgen.ReadRetainedWindowBatchParams{}, slo.ErrInvalidCalculation
 	}
-	if len(inputs) > 960 {
+	if len(inputs) > derivedWindowBatchLimit {
 		return dbgen.ReadRetainedWindowBatchParams{}, ErrOperationalResource
 	}
 	params := dbgen.ReadRetainedWindowBatchParams{SliID: sliID, MeasurementRevision: revision, Now: timestamp(inputs[0].Now)}

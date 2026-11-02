@@ -111,9 +111,10 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 		return 0
 	})
 	t.Logf("retained repair plan planning=%.3fms execution=%.3fms coverage_blocks=%.0f expensive=%+v artifact=%s", decoded[0].Planning, decoded[0].Execution, coverageBlocks, expensive[:min(8, len(expensive))], path)
-	// Four windows share at most four hours of distinct raw edges in this batch.
+	// Four windows share bounded raw edges across the batch's evaluation points.
 	// Allow index/heap overhead without allowing a retained-table scan per edge.
-	if bound := float64(32 * (4*3600/int64(row.CadenceSeconds) + 1)); coverageBlocks > bound {
+	points := int64(end.Sub(start) / (time.Duration(row.CadenceSeconds) * time.Second))
+	if bound := float64(32 * (4*points + 1)); coverageBlocks > bound {
 		t.Fatalf("retained repair coverage access grows beyond bounded edges: %.0f blocks > %.0f", coverageBlocks, bound)
 	}
 }

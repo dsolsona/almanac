@@ -84,6 +84,7 @@ verify:
 	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then python3 scripts/verification-controls.py run-gate go-race; \
 	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then python3 scripts/verification-controls.py run-gate auth-bench; \
 	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then python3 scripts/verification-controls.py run-gate integration; \
+	elif [ "$${VERIFY_MODE:-}" = "performance" ]; then python3 scripts/verification-controls.py run-gate performance; \
 	elif [ "$${VERIFY_MODE:-}" = "journey" ]; then python3 scripts/verification-controls.py run-gate journey; \
 	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then python3 scripts/verification-controls.py run-gate compose; \
 	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then python3 scripts/verification-controls.py run-gate providers; \
@@ -97,7 +98,7 @@ verify:
 	elif [ "$${VERIFY_MODE:-}" = "browser" ]; then python3 scripts/verification-controls.py run-gate browser; \
 	elif [ -z "$${VERIFY_MODE:-}" ]; then \
 	  python3 scripts/verification-controls.py run-gate ordinary; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, journey, providers, compose, smoke, linux, linux-sli, slo-unit, slo-integration, slo-journey, agent-lifecycle, or verification-tools)' >&2; exit 2; fi
+	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, performance, journey, providers, compose, smoke, linux, linux-sli, slo-unit, slo-integration, slo-journey, agent-lifecycle, or verification-tools)' >&2; exit 2; fi
 
 .PHONY: _verify_all
 _verify_all:
@@ -155,6 +156,8 @@ _verify_go:
 	  if [ -z "$${GO_PACKAGE:-}" ]; then \
 	    echo 'Compile database acceptance tests without running them'; \
 	    .local/bin/go test -tags=integration -run '^$$' ./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/command; \
+	    echo 'Compile controlled capacity entry without running it'; \
+	    .local/bin/go test -tags=integration,performance -run '^$$' ./internal/command; \
 	    $(MAKE) _verify_sqlc_generated; \
 	    mkdir -p bin; .local/bin/go build -o bin/almanac ./cmd/almanac; \
 	    .local/bin/go build -o bin/almanac-agent ./cmd/almanac-agent; \
@@ -241,6 +244,25 @@ _verify_integration: _ensure_web_assets
 	  printf '0\n' > "$$exit_artifact"; \
 	  summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
 	  exit "$$summary_status"
+
+.PHONY: _verify_performance
+_verify_performance:
+	@set -eu; umask 077; \
+	  case "$${ALMANAC_TEST_DATABASE_URL:-}" in 'postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable') ;; *) echo 'performance requires the existing isolated local fixture' >&2; exit 2 ;; esac; \
+	  test -z "$${GO_PACKAGE:-}$${TEST_FILE:-}$${BROWSER_SCENARIO:-}$${BROWSER_PROJECT:-}$${GOFLAGS:-}" || { echo 'performance has no custom selectors or Go flags' >&2; exit 2; }; \
+	  test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
+	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
+	  sh scripts/setup-database.sh --check; \
+	  $(MAKE) build; \
+	  selected=$$(.local/bin/go test -tags=integration,performance -list '^TestIntegrationControlledBackendPerformance$$' ./internal/command); \
+	  test "$$(printf '%s\n' "$$selected" | awk '/^TestIntegrationControlledBackendPerformance$$/{n++} END{print n+0}')" -eq 1 || { echo 'controlled performance entry missing' >&2; exit 1; }; \
+	  echo 'Selected controlled performance cases: independent 10/100/1000-SLO fleets'; \
+	  artifact="$(CURDIR)/.local/performance-go-test.jsonl"; status_file="$(CURDIR)/.local/performance-go-test.exit"; \
+	  printf 'running\n' > "$$status_file"; go_status=0; \
+	  .local/bin/go test -json -tags=integration,performance -p=1 -run '^TestIntegrationControlledBackendPerformance$$' -count=1 -timeout=8h30m ./internal/command > "$$artifact" || go_status=$$?; \
+	  printf '%s\n' "$$go_status" > "$$status_file"; \
+	  echo "Controlled performance Go events: $$artifact"; \
+	  if [ "$$go_status" -eq 0 ]; then python3 scripts/verification-controls.py performance-evidence; else exit "$$go_status"; fi
 
 _verify_journey:
 	@set -eu; \

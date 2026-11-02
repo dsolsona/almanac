@@ -153,7 +153,7 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
 			t.Fatalf("navigation admitted graph jobs during retained bootstrap: %d -> %d, %v", jobsBefore, jobsAfter, err)
 		}
-		logRetainedRepairPlan(t, conn, objective.ID, end.Add(-time.Hour), end, clock())
+		logRetainedRepairPlan(t, conn, objective.ID, end.Add(-retainedRepairSpan(28*24*time.Hour, time.Duration(fixture.cadence)*time.Second)), end, clock())
 		repairStarted := time.Now()
 		for attempt := range fixture.days*24 + 2 {
 			worked, err := runtime.repairRetainedSeries(t.Context(), clock)

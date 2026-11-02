@@ -334,6 +334,30 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 			t.Fatalf("batched historical counts/quality/budget/burn differ from canonical at %s", at)
 		}
 	}
+	span := retainedRepairSpan(time.Duration(row.RollingWindowSeconds)*time.Second, cadence)
+	if span > max(time.Hour, cadence) {
+		from := end.Add(-span)
+		whole, err := buildRetainedRepairPoints(t.Context(), q, row, source, from, end, clock())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var hourly []retainedSloPoint
+		for cursor := from; cursor.Before(end); {
+			through := floorSliBoundary(cursor.Add(max(time.Hour, cadence)), cadence)
+			if through.After(end) {
+				through = end
+			}
+			part, err := buildRetainedRepairPoints(t.Context(), q, row, source, cursor, through, clock())
+			if err != nil {
+				t.Fatal(err)
+			}
+			hourly = append(hourly, part...)
+			cursor = through
+		}
+		if len(whole) != int(span/cadence) || !reflect.DeepEqual(whole, hourly) {
+			t.Fatal("full repair batch changed exact values or quality across hourly boundaries")
+		}
+	}
 	var version, epoch int64
 	if err := conn.QueryRow(t.Context(), `SELECT version,lease_epoch FROM public.almanac_slo_series_repair
         WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4`,

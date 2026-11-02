@@ -56,13 +56,16 @@ acceptance remains unverified. The operator app has these read corrections;
 imports and demo source processing remain paused.
 Final verification exposed dense-history setup exceeding its original timeout
 and an analyzed PostgreSQL plan reading 141,599 coverage blocks for bounded edges.
-The candidate now reuses ready hourly summaries for daily reduction and adds a
-revision/time index; full-fixture improvement remains unverified. Catalogue checks
-pass. The added-100-ms small-container cohort rendered all 73 samples in
-497–726 ms, but tracing overhead failed its separate limit and normal-network
-measurement encountered Chromium `ERR_NETWORK_CHANGED`. Both failures remain open;
-these observations are not scale acceptance. The latest index/reduction candidate
-is not deployed to the operator app.
+The revision/time index reduces that query to 2,156 accesses/15.122 ms, and the
+original dense 14-day calculation/restart case passes within its unchanged limit.
+The 56-day case then exposes underfilled calculation batches; the corrected batch
+passes focused exact-value checks but awaits full throughput verification.
+Catalogue checks pass. The latest added-100-ms small-container cohort passes all
+73 samples in 501–755 ms and tracing-overhead checks. Normal networking still
+fails with Chromium `ERR_NETWORK_CHANGED`; integrated acceptance remains failed.
+The fixed capacity runner is defined and compiled, but its new invocation remains
+unapproved and unexecuted. These observations do not establish scale acceptance.
+The latest index/reduction/batching candidate is not deployed to the operator app.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,

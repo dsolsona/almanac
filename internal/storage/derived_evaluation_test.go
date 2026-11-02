@@ -9,6 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+func TestRetainedRepairFillsBoundedCalculationBatch(t *testing.T) {
+	for _, test := range []struct{ cadence, span time.Duration }{
+		{15 * time.Second, time.Hour}, {30 * time.Second, 2 * time.Hour}, {time.Minute, 4 * time.Hour},
+		{5 * time.Minute, 20 * time.Hour}, {17 * time.Minute, 23*time.Hour + 48*time.Minute},
+		{90 * time.Minute, 24 * time.Hour}, {24 * time.Hour, 24 * time.Hour}, {36 * time.Hour, 36 * time.Hour},
+	} {
+		window := 28 * 24 * time.Hour
+		span := retainedRepairSpan(window, test.cadence)
+		inputs := int(span/test.cadence) * len(retainedRepairDurations(window, test.cadence))
+		if span != test.span || span%test.cadence != 0 || inputs > derivedWindowBatchLimit || inputs < 1 {
+			t.Fatalf("cadence %s: span=%s inputs=%d; want %s within %d inputs", test.cadence, span, inputs, test.span, derivedWindowBatchLimit)
+		}
+	}
+}
+
 func TestCurrentWindowBatchPreservesEachExactBoundary(t *testing.T) {
 	end := time.Date(2026, 11, 1, 12, 34, 0, 0, time.UTC)
 	now := end.Add(10 * time.Second)

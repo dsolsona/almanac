@@ -95,6 +95,27 @@ reporting success; a failed check preserves the running services and volumes.
 Git publication operations must likewise match current approval rules and existing
 user authorization. Do not merge PRs merely because publishing them was authorized.
 
+## Controlled capacity entry: execution not yet approved
+
+The fixed runner is implemented, but this invocation is outside the approved
+catalogue above. Its presence does not authorize execution, and ordinary,
+integration and Compose verification do not launch it:
+
+```sh
+make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+```
+
+It requires that exact existing isolated fixture, rejects custom test/Go selectors,
+builds the candidate and runs the separately tagged 10/100/1,000-SLO capacity
+entry. The workload retains its eight-hour execution bound; the Go process has
+30 additional minutes for setup/cleanup. Existing disk admission, private normal
+Compose deployments, independent numerical checks and VictoriaTraces evidence
+remain mandatory. Required fleet cases must all run and pass, without skips.
+Source-bound receipts and the timing ledger use the existing controls. Go events
+and exit status are retained in `.local/performance-go-test.jsonl` and
+`.local/performance-go-test.exit`; each fleet keeps its own resource/stage report.
+Compile-only checks in the Go gate do not establish capacity acceptance.
+
 ## Linux verifier entry points
 
 The project defines these fixed-purpose commands for the isolated Linux lane. Their

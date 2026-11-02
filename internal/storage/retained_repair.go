@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// Repair one bounded hour, publishing its exact points and moving its cursor in
+// Repair one bounded calculation batch, publishing points and moving its cursor in
 // the same transaction. Coverage arriving during calculation changes the work
 // version; the old writer cannot acknowledge or commit over that invalidation.
 func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Time) (worked bool, resultErr error) {
@@ -77,7 +77,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		now := clock().UTC()
 		cadence := time.Duration(row.CadenceSeconds) * time.Second
 		start := maxTime(work.CursorAt.Time.UTC(), ceilSliBoundary(maxTime(now.Add(-sli.ObservationRetention), row.EvaluationValidFrom.Time, row.SliValidFrom.Time), cadence))
-		if chunkEnd := floorSliBoundary(start.Add(max(time.Hour, cadence)), cadence); chunkEnd.Before(through) {
+		if chunkEnd := start.Add(retainedRepairSpan(time.Duration(row.RollingWindowSeconds)*time.Second, cadence)); chunkEnd.Before(through) {
 			through = chunkEnd
 		}
 		source, err := q.GetSloOperationalContext(bounded, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
@@ -125,21 +125,32 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 	return true, tx.Commit(bounded)
 }
 
-func buildRetainedRepairPoints(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, start, end, now time.Time) ([]retainedSloPoint, error) {
-	cadence := time.Duration(row.CadenceSeconds) * time.Second
-	base := slo.WindowInput{Now: now, Cadence: cadence, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
-		RetentionStart: now.Add(-sli.ObservationRetention), Target: sli.NormalizeDecimal(row.Target),
-		FreshnessGrace: cadence + time.Duration(source.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds))}
-	var inputs []slo.WindowInput
-	durations := []time.Duration{time.Duration(row.RollingWindowSeconds) * time.Second, cadence}
+func retainedRepairDurations(window, cadence time.Duration) []time.Duration {
+	durations := []time.Duration{window, cadence}
 	if time.Hour%cadence == 0 {
 		durations = append(durations, time.Hour)
 	}
 	if 6*time.Hour%cadence == 0 {
 		durations = append(durations, 6*time.Hour)
 	}
+	return durations
+}
+
+func retainedRepairSpan(window, cadence time.Duration) time.Duration {
+	// Fill the existing input budget; a sparse cadence must not multiply jobs.
+	points := max(1, min(derivedWindowBatchLimit/len(retainedRepairDurations(window, cadence)), int(24*time.Hour/cadence)))
+	return time.Duration(points) * cadence
+}
+
+func buildRetainedRepairPoints(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, start, end, now time.Time) ([]retainedSloPoint, error) {
+	cadence := time.Duration(row.CadenceSeconds) * time.Second
+	base := slo.WindowInput{Now: now, Cadence: cadence, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
+		RetentionStart: now.Add(-sli.ObservationRetention), Target: sli.NormalizeDecimal(row.Target),
+		FreshnessGrace: cadence + time.Duration(source.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds))}
+	var inputs []slo.WindowInput
+	durations := retainedRepairDurations(time.Duration(row.RollingWindowSeconds)*time.Second, cadence)
 	for at := start.Add(cadence); !at.After(end); at = at.Add(cadence) {
-		if len(inputs) >= 960 {
+		if len(inputs) >= derivedWindowBatchLimit {
 			return nil, ErrOperationalResource
 		}
 		for _, duration := range durations {

@@ -91,7 +91,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
   const samples=[],events=[];
   const report={hardware:{host_cpu:cpus()[0]?.model,host_memory_bytes:totalmem(),platform:platform(),architecture:arch()},
     software:{node:process.version,chromium:browser.version(),otel_api:dependencies['@opentelemetry/api'],otel_sdk:dependencies['@opentelemetry/sdk-trace'],otel_http_exporter:dependencies['@opentelemetry/exporter-trace-otlp-http']},
-    fixture:{viewport:[1440,1000],cpu_slowdown:1,bandwidth_cap:null,rtt_ms:networkLatency,root_sampling:1,order:['enabled','disabled','disabled','enabled'],warm_samples_per_page_and_mode:10,matrix_collection_bound_ms:180_000,browser_lifecycle:'Restarted after container recreation; cache retained within each mode block.',disabled_mode:'Same production bundle; OTEL_SDK_DISABLED and browser capability disable tracing. Common SDK loading remains in both modes.'},
+    fixture:{viewport:[1440,1000],cpu_slowdown:1,bandwidth_cap:null,rtt_ms:networkLatency,root_sampling:1,order:['enabled','disabled','disabled','enabled'],warm_samples_per_page_and_mode:10,matrix_collection_bound_ms:180_000,disabled_mode:'Same production bundle; OTEL_SDK_DISABLED and browser capability disable tracing. Common SDK loading remains in both modes.'},
     backend_sha256:backendSHA,preceding_gate_failure:precedingFailure,samples,overhead:[],process_samples:[],speed_failures:[],minute_boundary:null,tracing_checks_passed:false,page_speed_passed:false};
   let latestDate=0;
   const visit=async(context,journey,path,mode,block,phase)=>{
@@ -178,8 +178,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     report.dataset_before=await snapshotDataset();
     const matrixStarted=performance.now();
     for(const [block,enabled]of [true,false,false,true].entries()){
-      browser=await setEnabled(enabled);
-      assert.ok(browser.isConnected(),'measured browser is unavailable after configuration');
+      await setEnabled(enabled);
       for(const [journey,path]of cases){
         const context=await browser.newContext({storageState,viewport:{width:1440,height:1000},colorScheme:'light'});
         try {
@@ -249,6 +248,6 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     throw error;
   } finally {
     await writeFile(join(artifacts,'telemetry-runtime.json'),JSON.stringify(report,null,2),{mode:0o600});
-    browser=await setEnabled(true);
+    await setEnabled(true);
   }
 }

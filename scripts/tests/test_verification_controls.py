@@ -96,6 +96,24 @@ class VerificationControlsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             vc.counted_go_events(events, names)
 
+    def test_performance_requires_all_fleets_without_running_through_existing_modes(self):
+        name = "TestIntegrationControlledBackendPerformance"
+        names = [name, *(f"{name}/independent-{size}" for size in (10, 100, 1000))]
+        events = self.put(".local/performance-go-test.jsonl", "\n".join(json.dumps({"Action": action, "Test": case}) for case in names for action in ("run", "pass")))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(vc.performance_evidence(), 0)
+        for action in ("skip", "fail"):
+            events.write_text("\n".join(json.dumps({"Action": outcome, "Test": case}) for case in names for outcome in ("run", action if case == names[-1] else "pass")))
+            with self.assertRaises(ValueError):
+                vc.performance_evidence()
+        events.write_text("\n".join(json.dumps({"Action": action, "Test": case}) for case in names[:-1] for action in ("run", "pass")))
+        with self.assertRaises(ValueError):
+            vc.performance_evidence()
+        self.assertNotIn("performance", vc.MODES)
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        ordinary = makefile.split("_verify_all:\n", 1)[1].split("\n_verify_web:", 1)[0]
+        self.assertNotIn("performance", ordinary)
+
     def test_timing_ledger_deduplicates_runs_marks_unknown_and_unions_overlap(self):
         records = [
             {"id": "a", "mode": "slo-unit", "result": "passed", "started_unix": 100, "ended_unix": 110, "elapsed_seconds": 10, "selected_count": 12, "executed_count": 12},

@@ -48,7 +48,7 @@ DB_TESTS = {
     "slo-journey": ("TestIntegrationExecutableFirstObjectiveJourney",),
     "agent-lifecycle": ("TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle",),
 }
-BROAD_MODES = {"ordinary", "linux", "linux-sli", "go", "go-portability", "go-race", "auth-bench", "integration", "journey", "compose", "providers", "smoke", "unit", "browser"}
+BROAD_MODES = {"ordinary", "linux", "linux-sli", "go", "go-portability", "go-race", "auth-bench", "integration", "performance", "journey", "compose", "providers", "smoke", "unit", "browser"}
 BROAD_INPUTS = {
     "ordinary": GO_PRODUCTION + WEB_PRODUCTION + ("web/tests", "sqlc.yaml", "scripts", "Makefile"),
     "linux": GO_PRODUCTION + WEB_PRODUCTION + ("web/tests", "sqlc.yaml", "scripts", "Makefile"),
@@ -58,6 +58,7 @@ BROAD_INPUTS = {
     "go-race": GO_PRODUCTION + ("scripts", "Makefile"),
     "auth-bench": ("internal/identity", "go.mod", "go.sum", "Makefile", "scripts"),
     "integration": GO_PRODUCTION + ("sqlc.yaml", "scripts", "Makefile"),
+    "performance": GO_PRODUCTION + WEB_PRODUCTION + ("compose.yaml", "Dockerfile", ".dockerignore", "deploy", "sqlc.yaml", "scripts", "Makefile"),
     "journey": GO_PRODUCTION + WEB_PRODUCTION + ("web/tests", "sqlc.yaml", "scripts", "Makefile"),
     "compose": GO_PRODUCTION + ("compose.yaml", "Dockerfile", ".dockerignore", "deploy") + WEB_PRODUCTION + ("web/tests", "web/browser", "scripts", "Makefile"),
     "unit": ("web/src", "web/tests", "web/package.json", "web/package-lock.json", "web/vitest.config.ts", "Makefile", "scripts/verification-controls.py"),
@@ -152,6 +153,7 @@ def run_broad(gate: str) -> int:
         "go-race": [["make", "_verify_go_race"]],
         "auth-bench": [["make", "_verify_auth_bench"]],
         "integration": [["make", "_verify_integration"]],
+        "performance": [["make", "_verify_performance"]],
         "journey": [["make", "_verify_journey"]],
         "compose": [["python3", "scripts/local-agent-tty-test.py"], ["node", "scripts/check-local-agent.mjs"], ["node", "scripts/check-local-compose.mjs"], ["node", "scripts/check-local-compose-cancellation.mjs"]],
         "providers": [["node", "scripts/check-local-providers.mjs"]],
@@ -242,6 +244,14 @@ def counted_go_events(path: Path, expected: set[str]) -> int:
     if run != expected or passed != expected or failed or skipped:
         raise ValueError(f"Go selected tests did not all run and pass (expected {len(expected)}, ran {len(run)}, passed {len(passed)}, failed {len(failed)}, skipped {len(skipped)})")
     return len(expected)
+
+
+def performance_evidence() -> int:
+    name = "TestIntegrationControlledBackendPerformance"
+    expected = {name, *(f"{name}/independent-{size}" for size in (10, 100, 1000))}
+    count = counted_go_events(ROOT / ".local/performance-go-test.jsonl", expected)
+    print(f"Controlled performance: {count} required cases ran and passed")
+    return 0
 
 
 def go_run_count(path: Path, expected: set[str]) -> int:
@@ -964,10 +974,12 @@ def main_for_test(argv=None) -> int:
     gate = sub.add_parser("run-gate"); gate.add_argument("gate", choices=sorted(BROAD_MODES))
     sub.add_parser("handoff")
     sub.add_parser("report")
+    sub.add_parser("performance-evidence")
     args = p.parse_args(argv)
     if args.command == "run": return execute(args.mode)
     if args.command == "run-gate": return run_broad(args.gate)
     if args.command == "report": return report()
+    if args.command == "performance-evidence": return performance_evidence()
     return guard(args.command, args)
 
 
