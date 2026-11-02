@@ -174,6 +174,16 @@ func verifyBackfillRangeAvailability(t *testing.T, databaseURL string, id pgtype
 	if err != nil || len(daily.Days) != 1 || daily.Days[0].Quality.State != "unavailable" || daily.Days[0].Performance.Attainment != nil || summary.UnknownDays != 1 || !reader.pending || reader.failed {
 		t.Fatalf("partial daily graph tile blocked history or fabricated compliance: %+v, %+v, %v", daily, summary, err)
 	}
+	// Deleted tiles before retention are expired facts, never preparation work.
+	retention := reader.now.Add(-365 * 24 * time.Hour)
+	expiredEnd := utcDayStart(retention)
+	expiredStart := expiredEnd.Add(-24 * time.Hour)
+	validFrom := expiredStart.Add(-window)
+	reader.pending = false
+	daily, summary, err = reader.daily(t.Context(), slo.WindowInput{Now: reader.now, Cadence: cadence, ValidFrom: validFrom, SliValidFrom: validFrom, RetentionStart: retention, Target: row.Target}, expiredStart, expiredEnd, expiredEnd, id.Bytes, strconv.FormatInt(row.DefinitionRevision, 10), row.Target, time.Duration(row.RollingWindowSeconds)*time.Second, cadence)
+	if err != nil || len(daily.Days) != 1 || daily.Days[0].Quality.State != "expired_history" || daily.Days[0].Quality.ExpiredIntervals == 0 || daily.Days[0].Explanation != "expired_history" || daily.Days[0].Performance.Attainment != nil || summary.UnknownDays != 1 || reader.pending || reader.failed {
+		t.Fatalf("expired daily history became pending or successful: %+v, %+v, %v", daily, summary, err)
+	}
 	var generation int64
 	if err := tx.QueryRow(t.Context(), `SELECT generation FROM public.almanac_sli_source_generations WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision).Scan(&generation); err != nil {
 		t.Fatal(err)

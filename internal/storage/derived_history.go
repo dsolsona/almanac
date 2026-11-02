@@ -99,6 +99,9 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 	defer ticks.Stop()
 	for {
 		repaired, repairErr := r.repairRetainedSeries(ctx, time.Now)
+		if repaired && repairErr == nil && ctx.Err() == nil {
+			r.metrics.historyJobs.Add(1)
+		}
 		if repairErr != nil && !errors.Is(repairErr, ErrDerivedPending) && !errors.Is(repairErr, ErrDerivedSourceFailed) && ctx.Err() == nil {
 			r.metrics.preparationErrors[1].Add(1)
 			logger.ErrorContext(ctx, "retained SLO series repair failed")
@@ -120,8 +123,10 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 			r.metrics.preparationErrors[1].Add(1)
 			logger.ErrorContext(ctx, "SLO history preparation failed")
 		}
-		if (worked && err == nil || repaired && repairErr == nil || seriesWorked && seriesErr == nil) && ctx.Err() == nil {
+		if worked && err == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
+		}
+		if (worked && err == nil || repaired && repairErr == nil || seriesWorked && seriesErr == nil) && ctx.Err() == nil {
 			continue
 		}
 		select {

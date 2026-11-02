@@ -161,11 +161,11 @@ WHERE g.slo_id=$1 AND b.kind='retained_detail' ORDER BY g.published_at DESC LIMI
 		canonical  bool
 	}{
 		{"slis.sql.go", "listSlis", []any{now.Add(-365 * 24 * time.Hour), now, "", nil, time.Unix(0, 0).UTC(), "00000000-0000-0000-0000-000000000000", int32(sliFetchLimit)}, true},
-		{"derived_overview.sql.go", "operationalScopeFingerprint", []any{calc, now, nil, nil}, false},
+		{"derived_overview.sql.go", "operationalScopeFingerprint", []any{now, calc, nil, nil}, false},
 		{"derived_projections.sql.go", "getPublishedCurrentProjection", []any{calc, now, fleet.objectives[0]}, false},
 		{"derived_history.sql.go", "findPreparedSloHistory", []any{fleet.objectives[0], definition, measurement, source, through, start, end, burn, calc, retention, now, kind}, false},
 		{"derived_history.sql.go", "readPreparedSloValuePage", []any{[]string{"budget_series", "samples"}, int32(0), int32(100), fleet.objectives[0], generation, now, calc}, false},
-		{"retained_read.sql.go", "readRetainedParts", []any{tileStarts, tileEnds, resolutions, fleet.objectives[0], definition, measurement, calc}, false},
+		{"retained_read.sql.go", "readRetainedParts", []any{fleet.objectives[0], definition, tileStarts, tileEnds, resolutions, measurement, calc}, false},
 		{"retained_read.sql.go", "readRetainedEdgePoints", []any{fleet.objectives[0], definition, measurement, calc, end.Add(-time.Minute), end}, false},
 	}
 	report := make(map[string]jsontext.Value)

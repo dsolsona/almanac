@@ -440,7 +440,7 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 	}
 	for index, part := range parts {
 		var day api.SloDailyComplianceDay
-		if !floorSliBoundary(part.end, cadence).After(maxTime(base.ValidFrom, base.SliValidFrom)) {
+		if !floorSliBoundary(part.end, cadence).After(maxTime(base.ValidFrom, base.SliValidFrom, ceilSliBoundary(base.RetentionStart, cadence))) {
 			value, err := evaluateOperationalAt(ctx, base, floorSliBoundary(part.end, cadence), window)
 			if err != nil {
 				return series, summary, err
