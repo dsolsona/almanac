@@ -448,10 +448,17 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 			day = operationalComplianceDay(value, part.end, base.ValidFrom, id, revision, target, window, cadence)
 		} else if rows[index].Ready {
 			tile, err := decodeRetainedTile(rows[index].Payload, part, revision)
-			if err != nil || tile.Compliance == nil {
-				return series, summary, ErrDerivedFailed
+			if err != nil {
+				return series, summary, err
 			}
-			day = *tile.Compliance
+			if tile.Compliance == nil {
+				// A partial day tile can have valid graph points without its
+				// closing evaluation; that is unfinished compliance, not corruption.
+				c.pending = true
+				day = c.unpreparedDay(part, base.ValidFrom, id, revision, target, window, cadence)
+			} else {
+				day = *tile.Compliance
+			}
 		} else if !rows[index].Exhausted && part.end.Equal(utcDayStart(c.now)) {
 			at := floorSliBoundary(part.end, cadence)
 			points, err := c.points(ctx, base, at.Add(-cadence), at)

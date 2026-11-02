@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
+	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -141,6 +142,38 @@ func verifyBackfillRangeAvailability(t *testing.T, databaseURL string, id pgtype
 		}
 	}
 	check(true)
+	// Reproduce a completed day's partial graph tile without a midnight result.
+	saved, err := q.ReadRetainedSloPoint(t.Context(), dbgen.ReadRetainedSloPointParams{SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var point retainedSloPoint
+	if err := json.Unmarshal(saved.Payload, &point); err != nil {
+		t.Fatal(err)
+	}
+	dayStart := utcDayStart(at.Add(-time.Microsecond))
+	dayEnd := dayStart.Add(24 * time.Hour)
+	tile, err := compactRetainedPoints([]retainedSloPoint{point}, dayStart, dayEnd, row.Target, strconv.FormatInt(row.DefinitionRevision, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(tile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_slo_series_tiles
+        (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at)
+        VALUES($1,$2,$3,$4,86400,$5,$6,$7,1,$8,$9)
+        ON CONFLICT(slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
+        DO UPDATE SET payload=EXCLUDED.payload,source_generation=EXCLUDED.source_generation`, id, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion, dayStart, dayEnd, saved.SourceGeneration, payload, at); err != nil {
+		t.Fatal(err)
+	}
+	reader := retainedSeriesReader{q: q, row: row, now: dayEnd.Add(time.Hour)}
+	cadence := time.Duration(row.CadenceSeconds) * time.Second
+	daily, summary, err := reader.daily(t.Context(), slo.WindowInput{Cadence: cadence, ValidFrom: row.EvaluationValidFrom.Time, SliValidFrom: row.SliValidFrom.Time}, dayStart, dayEnd, dayEnd, id.Bytes, strconv.FormatInt(row.DefinitionRevision, 10), row.Target, time.Duration(row.RollingWindowSeconds)*time.Second, cadence)
+	if err != nil || len(daily.Days) != 1 || daily.Days[0].Quality.State != "unavailable" || daily.Days[0].Performance.Attainment != nil || summary.UnknownDays != 1 || !reader.pending || reader.failed {
+		t.Fatalf("partial daily graph tile blocked history or fabricated compliance: %+v, %+v, %v", daily, summary, err)
+	}
 	var generation int64
 	if err := tx.QueryRow(t.Context(), `SELECT generation FROM public.almanac_sli_source_generations WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision).Scan(&generation); err != nil {
 		t.Fatal(err)
