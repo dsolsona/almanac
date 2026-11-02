@@ -5,8 +5,8 @@ was accepted in Crit and takes priority over the previous
 execution order. The maintainer requires accurate calculations, < 1,000 ms
 SLI/SLO lists and detail/range actions (preferred <=500 ms after the 2026-11-01 clarification) at 10/100/1,000 SLOs, without normal navigation
 waiting for background jobs, plus OpenTelemetry journey traces in VictoriaTraces.
-Earlier checkpoints below do not establish those requirements. PR #48 remains
-under review; its four Greptile findings are included in the intervention plan.
+Earlier checkpoints below do not establish those requirements. Earlier PR #48
+feedback is tracked in the intervention plan.
 
 [ADR-0025](adr/0025-fast-operational-journeys-and-tracing.md) records the accepted
 decision. [F3-T09](tasks/F3-T09.md) is complete: tracing implementation, runtime
@@ -24,7 +24,7 @@ wait in the disabled sample, not evidence that instrumentation makes pages faste
 Real exporter-outage evidence separately preserves correct visible values and a
 new canonical observation, with zero invalid values or sequence gaps.
 
-**Page-speed acceptance still fails.** At 4× CPU slowdown, 10 Mbps and 100 ms RTT,
+**Earlier tracing-only baseline:** at 4× CPU slowdown, 10 Mbps and 100 ms RTT,
 actual first-visit browser trace roots take 1,285.1 ms for SLIs, 1,617.9 ms for SLOs
 and 4,580.7 ms for details. The detail trace exposes about two seconds of foreground
 polling while individual server responses remain short. These are baseline
@@ -32,76 +32,49 @@ measurements, not a 10/100/1,000-SLO/year-history capacity claim. Retention,
 pagination, retained series/read correction, scale acceptance and the four PR #48
 findings remain [F3-T08](tasks/F3-T08.md) work.
 
-Latest ordinary verification passes 335 web and 452 Go cases, types/build/generated
+At that checkpoint ordinary verification passed 335 web and 452 Go cases, types/build/generated
 checks and smoke. Earlier failed runtime attempts and all timing records are
 retained in F3-T09's evidence. Container verification used only its separate
 `18086` project; the operator preview's `18088/readyz` remains healthy.
 
-Feature implementation is paused by maintainer direction on 2026-10-30 pending
-backend stabilization. [ADR-0024](adr/0024-precomputed-operational-reads.md),
-[SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and the
-[delivery plan](plans/0022-backend-stabilization.md) define pooled access,
-exact derived data and background preparation with measurable acceptance gates.
-The maintainer accepted the design and plan after Crit review on 2026-10-30.
-[F3-T08](tasks/F3-T08.md) is in progress on `perf/f3-t08-retained-series` in
-`.worktrees/backend-performance`, integrated with merged main `6d7403d`.
-The work has an [open PR #53](https://github.com/dsolsona/almanac/pull/53).
-The 2026-11-02 backfill correction is recorded in F3-T08: range-local source
-validation preserves ready graph intervals during historical processing, with
-explicit initial-preparation progress. Focused database and fast checks pass;
-the complete browser journey now passes after corrected response observation and
-traced fixes for concurrent cache publication and exclusive read-authority locks.
-Small-fixture normal-network list/detail ready traces are below 200 ms; year/fleet
-acceptance remains unverified. The operator app has these read corrections;
-imports and demo source processing remain paused.
-Final verification exposed dense-history setup exceeding its original timeout
-and an analyzed PostgreSQL plan reading 141,599 coverage blocks for bounded edges.
-The revision/time index reduces that query to 2,156 accesses/15.122 ms, and the
-original dense 14-day calculation/restart case passes within its unchanged limit.
-The 56-day case then exposes underfilled calculation batches; the corrected batch
-passes focused exact-value checks but awaits full throughput verification.
-Catalogue checks pass. The latest added-100-ms small-container cohort passes all
-73 samples in 501–755 ms and tracing-overhead checks. Normal networking still
-fails with Chromium `ERR_NETWORK_CHANGED`; integrated acceptance remains failed.
-The fixed capacity runner is defined and compiled, but its new invocation remains
-unapproved and unexecuted. These observations do not establish scale acceptance.
-The latest index/reduction/batching candidate is not deployed to the operator app.
-Final focused review also reproduces and fixes false historical preparation caused
-by per-arrival generation differences. A persisted completed-input checkpoint now
-keeps correct earlier points/tiles readable during unrelated pending or failed
-backfill, while newer intersecting inputs still invalidate them. Focused database
-and generated/Go checks pass; integrated verification and operator deployment of
-schema 0036 remain pending.
-The completed batch/checkpoint candidate's full gate still fails at the 56-day
-case's tile stage. Repair now publishes complete hourly summaries directly from
-its already calculated points, under the existing transaction/version fences;
-partial hours retain ordinary worker processing. The intermediate SQL projection
-and decoder are removed. Focused PostgreSQL equivalence/fencing checks pass;
-full retained throughput and fleet/year acceptance remain outstanding.
-The 56-day calculation/restart now finishes within 112 seconds, exposing a later
-audited-cleanup foreign-key failure. Detaching the checked expired coverage
-partition before restricted removal preserves retained foreign keys; the same
-cleanup/audit/lease/scope regression passes on the small real PostgreSQL fixture.
-Full integrated verification of this corrected candidate remains pending.
-Full database/API verification subsequently passes all 173 cases on `7078957`,
-including both retained workloads and real browser journeys. The next container
-checkpoint renders 73 normal pages in 178–435 ms and 73 added-100-ms pages in
-507–730 ms, but remains failed: normal SLI tracing overhead exceeds 5% and an
-earlier filtered journey times out. Startup transport preflight and bounded
-failure/slowest-trace attribution are added; the focused real journey passes,
-while the previous failures and fleet/year gap remain open.
-The approved server-selected period contract now starts definition, current status
-and history independently; fast checks pass, but its real latency benefit is unverified.
-Committed work adds exact retained points/tiles, bounded operational reads,
-immutable paged lists, selective asset preloads and connected browser measurement.
-The capacity harness now uses isolated normal Compose deployments and private
-VictoriaTraces endpoints for independent 10/100/1,000-SLO fleets with 365-day seeds.
-Its independent oracle covers deliberate gaps, empty/zero-traffic observations,
-large decimals, one-minute outages and a non-hour rolling window. Harness wiring
-is implemented/compiled; the scale workload is unexecuted. Actual latency
-acceptance still fails in the last controlled container run. Subsequent cold-path
-and loading changes have fast checks but have not been remeasured under that
-fixture. The task record lists remaining accuracy, recovery and runtime gaps.
+Feature implementation remains paused pending backend stabilization.
+[ADR-0024](adr/0024-precomputed-operational-reads.md),
+[SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and
+[the accepted intervention plan](plans/0023-performance-and-tracing-intervention.md)
+govern [F3-T08](tasks/F3-T08.md), in progress on `perf/f3-t08-retained-series`
+in `.worktrees/backend-performance`, based on merged main `6d7403d`.
+
+The latest product candidate `7078957` passes the complete PostgreSQL/API gate:
+173 cases in 957.340 seconds, including exact retained 14/56-day calculations,
+persisted restart, audited cleanup, authentication, agent and real browser journeys.
+Complete hourly summaries now reuse repair's calculated points atomically.
+The revision/time index, source checkpoints, bounded read/cache transactions and
+foreign-key-safe retention preserve accuracy and availability during backfill.
+
+The subsequent verification candidate `2355c7c` passes normal isolated Compose
+in 528.117 seconds, including actual SLI/SLO flows, collection, handoff, restart
+and cancellation cleanup. Each network cohort has 73 ready page-load samples:
+183–402 ms normally and 512–721 ms with added 100-ms latency, at normal CPU speed.
+Both unchanged 5% tracing-overhead gates pass; eight connected VictoriaTraces
+captures include representative pages and the slowest enabled SLI repeat.
+This fixture contains two SLIs and eight SLOs. It is not fleet/year acceptance.
+The final ordinary gate passes 357 web and 499 Go cases plus generated/build checks
+and smoke in 27.558 seconds; matching catalogue evidence is retained.
+
+Earlier transport, filtered-journey, overhead and timeout failures remain in the
+task record and timing ledger. A bounded startup transport preflight now precedes
+login/container comparisons; measured navigation and mutations are not retried.
+The measured slowest normal SLI repeat is 260 ms externally versus a 191-ms
+rendered trace. That difference does not explain every earlier failure.
+
+The fixed 10/100/1,000-SLO, 365-day workload is implemented and compiled but its
+new invocation remains unapproved and unexecuted. T08 stays open until its
+accuracy, storage, freshness, trace and latency requirements are demonstrated.
+[PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;
+its three existing Greptile threads are resolved. Newer local work is committed,
+but publication currently fails SSH authentication. Operator schema 0034, preview,
+stopped imports and parked demo source work remain unchanged; schemas 0035/0036
+and the newer candidate are not deployed there.
 
 Earlier checkpoints, preserved as historical evidence:
 The most recent ordinary checkpoint passed 441 Go and 329 web tests. A subsequent
