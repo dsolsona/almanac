@@ -112,6 +112,11 @@ checks. Focused PostgreSQL and fast verification pass in 43.249/33.261 seconds.
 Four diagnostic cohorts across 36 cold gzip requests take 191–382 ms, with exact
 daily-table equivalence and connected traces. They still use the 56-day dataset;
 year-history/fleet/rendered acceptance remains pending.
+A further deterministic minute-boundary check exposed graph and generation
+evaluation times disagreeing. Retained calculations now pin one evaluation time
+while keeping publication and authorization expiry on the live clock. Its focused
+PostgreSQL gate passes in 39.181 seconds; the full fast gate passes in 32.016
+seconds. These corrections are not full capacity acceptance.
 No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
 [PR #53](https://github.com/dsolsona/almanac/pull/53) is open; its three existing

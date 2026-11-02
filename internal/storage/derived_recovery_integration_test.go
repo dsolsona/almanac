@@ -113,6 +113,23 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		}
 		t.Fatal("retained completed-day compliance differs from canonical evaluation")
 	}
+	t.Run("one evaluation time across minute boundary", func(t *testing.T) {
+		crossing := input
+		crossing.Period = "90d"
+		now, calls := clock(), 0
+		crossing.Now = func() time.Time {
+			calls++
+			if calls > 2 {
+				return now.Add(time.Minute)
+			}
+			return now
+		}
+		value, err := ReadSloOperationalDetail(t.Context(), databaseURL, crossing)
+		if err != nil || value.Generation == nil || !value.EffectiveAt.Equal(prepared.EffectiveAt) ||
+			!value.Generation.EvaluatedThrough.Equal(value.EffectiveAt) || !value.Range.EffectiveEnd.Equal(value.EffectiveAt) {
+			t.Fatalf("minute boundary mixed response evaluation and generation: effective=%s generation=%+v err=%v", value.EffectiveAt, value.Generation, err)
+		}
+	})
 	valuesInput := SloHistoryValuesInput{Runtime: runtime, Proof: proof, ID: id,
 		GenerationID: prepared.Generation.GenerationId.String(), Lane: "budget", Limit: 3, Now: clock}
 	first, err := ReadSloHistoryValues(t.Context(), databaseURL, valuesInput)

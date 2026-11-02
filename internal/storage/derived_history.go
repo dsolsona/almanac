@@ -339,7 +339,10 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if input.overviewOnly {
 		kind = "overview"
 	}
-	bound, err := resolveOperationalBounds(input, time.Duration(row.CadenceSeconds)*time.Second, row.RollingWindowSeconds)
+	now := normalizedAgentNow(input.Now)
+	calculation := input
+	calculation.Now = func() time.Time { return now }
+	bound, err := resolveOperationalBounds(calculation, time.Duration(row.CadenceSeconds)*time.Second, row.RollingWindowSeconds)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
@@ -350,8 +353,8 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	} else if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
-	retention := timestamp(ceilSliBoundary(normalizedAgentNow(input.Now).Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
-	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(normalizedAgentNow(input.Now)), RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
+	retention := timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
+	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(now), RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
 		EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow)}
 	cached, err := q.FindPreparedSloHistory(ctx, key)
 	if err == nil {
@@ -370,15 +373,14 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		return api.SloOperationalDetail{}, err
 	}
 	input.Runtime.metrics.historyMisses.Add(1)
-	now := normalizedAgentNow(input.Now)
-	input.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
-	result, err = buildSloOperationalDetail(ctx, q, row, source, input)
+	calculation.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
+	result, err = buildSloOperationalDetail(ctx, q, row, source, calculation)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	input.historyPublication.generation = dbgen.InsertDerivedGenerationParams{SloID: row.ID,
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
-		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(now)}
+		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(normalizedAgentNow(input.Now))}
 	input.historyPublication.history = dbgen.InsertPreparedSloHistoryParams{RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Kind: kind}
 	return result, nil
 }
