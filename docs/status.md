@@ -59,7 +59,7 @@ Both unchanged 5% tracing-overhead gates pass; eight connected VictoriaTraces
 captures include representative pages and the slowest enabled SLI repeat.
 This fixture contains two SLIs and eight SLOs. It is not fleet/year acceptance.
 The final ordinary gate passes 357 web and 499 Go cases plus generated/build checks
-and smoke in 27.558 seconds; matching catalogue evidence is retained.
+and smoke in 27.348 seconds; matching catalogue evidence is retained.
 
 Earlier transport, filtered-journey, overhead and timeout failures remain in the
 task record and timing ledger. A bounded startup transport preflight now precedes

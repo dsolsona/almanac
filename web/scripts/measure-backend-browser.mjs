@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, sep, join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { captureTraces } from './check-telemetry-runtime.mjs';
+import { browserTransportReady } from './browser-readiness.mjs';
 
 // This executable belongs to the controlled performance fixture. It is not
 // invoked by the ordinary browser catalogue or the two-minute journey gate.
@@ -266,6 +267,7 @@ try {
   report.deployment=fixture.deployment;
   report.cache_setup={result:fixture.cache_setup.result,target_slo_id:fixture.cache_setup.target_slo_id,never_visited_detail:fixture.cache_setup.never_visited_detail,preserved_target_points:fixture.cache_setup.preserved_target_points,preserved_target_tiles:fixture.cache_setup.preserved_target_tiles,preserved_current_summaries:fixture.cache_setup.preserved_current_summaries,evicted_history_responses:fixture.cache_setup.evicted_history_responses,evicted_overview_snapshots:fixture.cache_setup.evicted_overview_snapshots};
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
+  await browserTransportReady(browser,origin.href);
   report.environment.browser = browser.version();
   report.environment.cache = 'cold: fresh context/disabled HTTP cache; warm: same-context reload with HTTP cache enabled; response eviction precedes backend restart; OS/PostgreSQL buffers are not claimed cold';
   stage = 'authenticate';
