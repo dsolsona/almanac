@@ -114,10 +114,41 @@ WITH objective AS (
            unnest($3::timestamptz[]) AS range_start,
            unnest($4::timestamptz[]) AS range_end,
            unnest($5::integer[]) AS resolution
+), tiles AS MATERIALIZED (
+    SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
+           r.resolution::integer AS resolution,t.slo_id AS present_id,convert_to(t.payload::text,'UTF8') AS payload,
+           coalesce(GREATEST(t.source_generation,
+               CASE WHEN checkpoint.coherent_through>=to_timestamp(floor(extract(epoch FROM r.range_end)/o.cadence_seconds)*o.cadence_seconds)
+                    THEN checkpoint.coherent_source_generation ELSE 0 END),0)::bigint AS source_generation,
+           t.published_at,t.point_count
+    FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
+      ON t.slo_id=$1 AND t.definition_revision=$2
+     AND t.measurement_revision=$6 AND t.exclusion_revision=0
+     AND t.calculation_version=$7 AND t.resolution_seconds=r.resolution
+     AND t.range_start=r.range_start AND t.range_end=r.range_end
+    LEFT JOIN public.almanac_slo_series_repair checkpoint
+      ON checkpoint.slo_id=t.slo_id AND checkpoint.definition_revision=t.definition_revision
+     AND checkpoint.measurement_revision=t.measurement_revision AND checkpoint.calculation_version=t.calculation_version
+    CROSS JOIN objective o
+), bounds AS MATERIALIZED (
+    SELECT min(range_start) AS range_start,max(range_end) AS range_end,min(source_generation) AS source_generation
+    FROM tiles WHERE present_id IS NOT NULL
+), newer_dirty AS MATERIALIZED (
+    SELECT d.range_start,d.range_end,d.generation
+    FROM public.almanac_derived_dirty_ranges d CROSS JOIN objective o CROSS JOIN bounds b
+    WHERE d.sli_id=o.sli_id AND d.measurement_revision=$6
+      AND d.generation>b.source_generation
+      AND d.range_start>=(date_trunc('hour',(b.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+      AND d.range_start<b.range_end
+), newer_aggregates AS MATERIALIZED (
+    SELECT a.hour_start,a.source_generation
+    FROM public.almanac_sli_hourly_aggregates a CROSS JOIN objective o CROSS JOIN bounds b
+    WHERE a.sli_id=o.sli_id AND a.measurement_revision=$6
+      AND a.source_generation>b.source_generation
+      AND a.hour_start>=(date_trunc('hour',(b.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+      AND a.hour_start<b.range_end
 ), selected AS MATERIALIZED (
-SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
-       r.resolution::integer AS resolution,convert_to(t.payload::text,'UTF8') AS payload,
-       coalesce(stamp.source_generation,0)::bigint AS source_generation,t.published_at,t.point_count,
+    SELECT r.ordinal,r.range_start,r.range_end,r.resolution,r.payload,r.source_generation,r.published_at,r.point_count,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=$1 AND w.definition_revision=$2
@@ -130,39 +161,24 @@ SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestam
              AND w.measurement_revision=$6 AND w.calculation_version=$7
              AND w.cursor_at<r.range_end AND w.end_at>r.range_start AND w.attempts>=5
        ))::boolean AS exhausted,
-       (t.slo_id IS NOT NULL AND NOT EXISTS (
+       (r.present_id IS NOT NULL AND NOT EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
-           WHERE w.slo_id=t.slo_id AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision
-             AND w.exclusion_revision=0 AND w.calculation_version=t.calculation_version
-             AND w.resolution_seconds=t.resolution_seconds AND w.range_start=t.range_start
+           WHERE w.slo_id=$1 AND w.definition_revision=$2
+             AND w.measurement_revision=$6 AND w.exclusion_revision=0
+             AND w.calculation_version=$7
+             AND w.resolution_seconds=r.resolution AND w.range_start=r.range_start
        ) AND NOT EXISTS (
-           SELECT 1 FROM public.almanac_derived_dirty_ranges d
-           WHERE d.sli_id=o.sli_id AND d.measurement_revision=t.measurement_revision
-             AND d.generation>stamp.source_generation
-             AND d.range_start>=(date_trunc('hour',(t.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
-             AND d.range_start<t.range_end AND d.range_end>t.range_start-o.window_seconds*interval '1 second'
+           SELECT 1 FROM newer_dirty d
+           WHERE d.generation>r.source_generation
+             AND d.range_start>=(date_trunc('hour',(r.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+             AND d.range_start<r.range_end AND d.range_end>r.range_start-o.window_seconds*interval '1 second'
        ) AND NOT EXISTS (
-           SELECT 1 FROM public.almanac_sli_hourly_aggregates a
-           WHERE a.sli_id=o.sli_id AND a.measurement_revision=t.measurement_revision
-             AND a.source_generation>stamp.source_generation
-             AND a.hour_start>=(date_trunc('hour',(t.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
-             AND a.hour_start<t.range_end
+           SELECT 1 FROM newer_aggregates a
+           WHERE a.source_generation>r.source_generation
+             AND a.hour_start>=(date_trunc('hour',(r.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+             AND a.hour_start<r.range_end
        ))::boolean AS ready
-FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
-  ON t.slo_id=$1 AND t.definition_revision=$2
- AND t.measurement_revision=$6 AND t.exclusion_revision=0
- AND t.calculation_version=$7 AND t.resolution_seconds=r.resolution
- AND t.range_start=r.range_start AND t.range_end=r.range_end
-LEFT JOIN public.almanac_slo_series_repair checkpoint
-  ON checkpoint.slo_id=t.slo_id AND checkpoint.definition_revision=t.definition_revision
- AND checkpoint.measurement_revision=t.measurement_revision AND checkpoint.calculation_version=t.calculation_version
-CROSS JOIN objective o
-CROSS JOIN LATERAL (
-    SELECT CASE WHEN t.slo_id IS NOT NULL THEN GREATEST(t.source_generation,
-        CASE WHEN checkpoint.coherent_through>=to_timestamp(floor(extract(epoch FROM r.range_end)/o.cadence_seconds)*o.cadence_seconds)
-             THEN checkpoint.coherent_source_generation ELSE 0 END)
-        END::bigint AS source_generation
-) stamp
+    FROM tiles r CROSS JOIN objective o
 ), bounded AS (
 SELECT ordinal, range_start, range_end, resolution, payload, source_generation, published_at, point_count, exhausted, ready,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM selected
 )
@@ -196,8 +212,8 @@ type ReadRetainedPartsRow struct {
 	Ready            bool               `json:"ready"`
 }
 
-// A repair cursor is scheduling metadata, not proof that every later point is
-// invalid. Reuse the source-hour watermark checks used by display blocks.
+// Validate newer source hours once per requested scope, then test each tile
+// against that bounded set. Keep the same per-tile generation/overlap fences.
 // Materialize UTF-8 once for both the byte budget and binary wire payload.
 func (q *Queries) ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error) {
 	rows, err := q.db.Query(ctx, readRetainedParts,

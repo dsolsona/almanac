@@ -544,4 +544,34 @@ func verifyIncrementalRetainedAvailability(t *testing.T, databaseURL string, id 
 		t.Fatal(err)
 	}
 	check(false)
+	// Different tile watermarks must still be validated independently in one read.
+	next := start.Add(time.Hour)
+	updated, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_tiles SET source_generation=$3 WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start=$2`, id, next, generation+1)
+	if err != nil || updated.RowsAffected() != 1 {
+		t.Fatalf("mixed-watermark fixture lacks its second tile: %v", err)
+	}
+	params := dbgen.ReadRetainedPartsParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion,
+		Starts:      []pgtype.Timestamptz{timestamp(start), timestamp(next), timestamp(start.Add(48 * time.Hour))},
+		Ends:        []pgtype.Timestamptz{timestamp(next), timestamp(next.Add(time.Hour)), timestamp(start.Add(49 * time.Hour))},
+		Resolutions: []int32{3600, 3600, 3600}}
+	checkParts := func(secondReady bool) {
+		t.Helper()
+		parts, err := q.ReadRetainedParts(t.Context(), params)
+		if err != nil || len(parts) != 3 {
+			t.Fatalf("mixed-watermark retained read: rows=%d err=%v", len(parts), err)
+		}
+		if parts[0].Ready || parts[1].Ready != secondReady || parts[2].Ready || parts[2].SourceGeneration != 0 || string(parts[2].Payload) != "{}" {
+			t.Fatalf("batched validation mixed tile watermarks or missing state: first=%t second=%t missing=%t", parts[0].Ready, parts[1].Ready, parts[2].Ready)
+		}
+	}
+	checkParts(true)
+	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_derived_dirty_ranges
+        (sli_id,measurement_revision,generation,range_start,range_end,next_attempt_at,updated_at)
+        VALUES($1,$2,$3,$4,$5,$5,$5)
+        ON CONFLICT(sli_id,measurement_revision,range_start) DO UPDATE
+        SET generation=EXCLUDED.generation,range_end=EXCLUDED.range_end`, row.SliID, row.MeasurementRevision, generation+2, start, next); err != nil {
+		t.Fatal(err)
+	}
+	checkParts(false)
 }

@@ -17,7 +17,7 @@ cannot fit that bound, even when numerical values are otherwise constant.
 
 The controlled ten-objective fixture reaches maintained 56-day history, then
 fails long graph reads for the gap, empty-interval and zero-traffic cohorts.
-The exact HTTP problem codes remain under diagnosis. Separately, nine concurrent
+The retained capacity report confirms HTTP 422 `range_too_dense`. Separately, nine concurrent
 cold 28-day reads take approximately 0.96–1.24 seconds. This evidence establishes
 failed availability/latency acceptance, not a capacity result or a proven fix.
 
