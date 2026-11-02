@@ -17,6 +17,16 @@ SPEC.loader.exec_module(vc)
 
 
 class VerificationControlsTest(unittest.TestCase):
+    def test_storage_discovery_checks_retained_regressions_early_without_losing_cases(self):
+        spec = importlib.util.spec_from_file_location("integration_selection", REPO_ROOT / "scripts/select-integration-tests.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        names = ["TestIntegrationOther", "TestIntegrationRetainedDenseHistoryAndPersistedRestart",
+                 "TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict", "TestIntegrationRetainedMinuteHistoryAndPersistedRestart"]
+        got = module.select("\n".join(names), "storage")
+        self.assertEqual(got, [names[2], names[3], names[1], names[0]])
+        self.assertCountEqual(got, names)
+
     def test_forward_and_backward_clock_steps_do_not_change_test_duration(self):
         for wall_end in (488, -288):
             evidence = vc.elapsed_evidence(100, wall_end, 20, 38.929)

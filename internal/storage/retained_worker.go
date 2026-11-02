@@ -144,16 +144,22 @@ func prepareRetainedTileValue(ctx context.Context, q *dbgen.Queries, work dbgen.
 				return prepared, ErrOperationalRangeDense
 			}
 			lastAt := prepared.tile.Budget[len(prepared.tile.Budget)-1].EvaluationAt
-			prepared.last, err = retainedTileClosingValue(ctx, q, work, lastAt)
+			last, err := q.ReadRetainedSloPoint(ctx, dbgen.ReadRetainedSloPointParams{SloID: work.SloID, DefinitionRevision: work.DefinitionRevision,
+				MeasurementRevision: work.MeasurementRevision, CalculationVersion: work.CalculationVersion, EvaluationAt: timestamp(lastAt)})
 			if err != nil {
 				return prepared, err
 			}
+			var point retainedSloPoint
+			if err := json.Unmarshal(last.Payload, &point); err != nil || !point.Current.EvaluationAt.Equal(lastAt) {
+				return prepared, ErrDerivedFailed
+			}
+			prepared.last = &point.Current
 			prepared.hourly = true
 			prepared.tile, err = compactRetainedTile(prepared.tile, work.RangeStart.Time.UTC(), work.RangeEnd.Time.UTC(), target)
 			return prepared, err
 		}
 	}
-	rows, err := q.ReadRetainedTileCandidates(ctx, dbgen.ReadRetainedTileCandidatesParams{SloID: work.SloID,
+	rows, err := q.ReadRetainedTilePoints(ctx, dbgen.ReadRetainedTilePointsParams{SloID: work.SloID,
 		DefinitionRevision: work.DefinitionRevision, MeasurementRevision: work.MeasurementRevision,
 		CalculationVersion: work.CalculationVersion, EvaluationAt: work.RangeStart, EvaluationAt_2: work.RangeEnd})
 	if err != nil {
@@ -162,29 +168,17 @@ func prepareRetainedTileValue(ctx context.Context, q *dbgen.Queries, work dbgen.
 	if len(rows) > 5760 {
 		return prepared, ErrOperationalRangeDense
 	}
-	for _, row := range rows {
+	points := make([]retainedSloPoint, len(rows))
+	for index, row := range rows {
 		prepared.generation = min(prepared.generation, row.SourceGeneration)
-	}
-	prepared.count = int32(len(rows))
-	if work.ResolutionSeconds == 86400 && len(rows) > 0 {
-		prepared.last, err = retainedTileClosingValue(ctx, q, work, rows[len(rows)-1].EvaluationAt.Time)
-		if err != nil {
-			return prepared, err
+		if err := json.Unmarshal(row.Payload, &points[index]); err != nil || !points[index].Current.EvaluationAt.Equal(row.EvaluationAt.Time) {
+			return prepared, ErrDerivedFailed
 		}
 	}
-	prepared.tile, err = compactRetainedPayloads(rows, work.RangeStart.Time.UTC(), work.RangeEnd.Time.UTC(), target, revision)
+	prepared.count = int32(len(points))
+	if len(points) > 0 {
+		prepared.last = &points[len(points)-1].Current
+	}
+	prepared.tile, err = compactRetainedPoints(points, work.RangeStart.Time.UTC(), work.RangeEnd.Time.UTC(), target, revision)
 	return prepared, err
-}
-
-func retainedTileClosingValue(ctx context.Context, q *dbgen.Queries, work dbgen.AlmanacSloSeriesTileWork, at time.Time) (*api.SloOperationalValue, error) {
-	row, err := q.ReadRetainedSloPoint(ctx, dbgen.ReadRetainedSloPointParams{SloID: work.SloID, DefinitionRevision: work.DefinitionRevision,
-		MeasurementRevision: work.MeasurementRevision, CalculationVersion: work.CalculationVersion, EvaluationAt: timestamp(at)})
-	if err != nil {
-		return nil, err
-	}
-	var point retainedSloPoint
-	if err := json.Unmarshal(row.Payload, &point); err != nil || !point.Current.EvaluationAt.Equal(at) {
-		return nil, ErrDerivedFailed
-	}
-	return &point.Current, nil
 }

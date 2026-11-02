@@ -184,7 +184,7 @@ func (q *Queries) FailRetainedSeriesRepair(ctx context.Context, arg FailRetained
 	return err
 }
 
-const publishRetainedSloPointBatch = `-- name: PublishRetainedSloPointBatch :exec
+const publishRetainedSloPointBatch = `-- name: PublishRetainedSloPointBatch :many
 WITH requested AS (
     SELECT unnest($1::timestamptz[]) AS evaluation_at,
            unnest($2::text[]) AS payload
@@ -214,6 +214,7 @@ ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,
 DO UPDATE SET version=almanac_slo_series_tile_work.version+1,
               source_generation=GREATEST(almanac_slo_series_tile_work.source_generation,EXCLUDED.source_generation),
               next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at)
+RETURNING id, slo_id, definition_revision, measurement_revision, exclusion_revision, calculation_version, resolution_seconds, range_start, range_end, version, source_generation, next_attempt_at, attempts, lease_epoch, lease_until, last_error, manual_retried_at
 `
 
 type PublishRetainedSloPointBatchParams struct {
@@ -227,8 +228,8 @@ type PublishRetainedSloPointBatchParams struct {
 	PublishedAt         pgtype.Timestamptz   `json:"published_at"`
 }
 
-func (q *Queries) PublishRetainedSloPointBatch(ctx context.Context, arg PublishRetainedSloPointBatchParams) error {
-	_, err := q.db.Exec(ctx, publishRetainedSloPointBatch,
+func (q *Queries) PublishRetainedSloPointBatch(ctx context.Context, arg PublishRetainedSloPointBatchParams) ([]AlmanacSloSeriesTileWork, error) {
+	rows, err := q.db.Query(ctx, publishRetainedSloPointBatch,
 		arg.EvaluationAts,
 		arg.Payloads,
 		arg.SloID,
@@ -238,5 +239,38 @@ func (q *Queries) PublishRetainedSloPointBatch(ctx context.Context, arg PublishR
 		arg.SourceGeneration,
 		arg.PublishedAt,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlmanacSloSeriesTileWork{}
+	for rows.Next() {
+		var i AlmanacSloSeriesTileWork
+		if err := rows.Scan(
+			&i.ID,
+			&i.SloID,
+			&i.DefinitionRevision,
+			&i.MeasurementRevision,
+			&i.ExclusionRevision,
+			&i.CalculationVersion,
+			&i.ResolutionSeconds,
+			&i.RangeStart,
+			&i.RangeEnd,
+			&i.Version,
+			&i.SourceGeneration,
+			&i.NextAttemptAt,
+			&i.Attempts,
+			&i.LeaseEpoch,
+			&i.LeaseUntil,
+			&i.LastError,
+			&i.ManualRetriedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

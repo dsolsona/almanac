@@ -110,7 +110,11 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 			batch.EvaluationAts = append(batch.EvaluationAts, timestamp(point.Current.EvaluationAt))
 			batch.Payloads = append(batch.Payloads, string(payload))
 		}
-		if err := q.PublishRetainedSloPointBatch(bounded, batch); err != nil {
+		tiles, err := q.PublishRetainedSloPointBatch(bounded, batch)
+		if err != nil {
+			return true, err
+		}
+		if err := publishRetainedRepairTiles(bounded, q, tiles, points, start, through, row.Target, generation, now); err != nil {
 			return true, err
 		}
 	}
@@ -125,6 +129,46 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		return true, ErrDerivedPending
 	}
 	return true, tx.Commit(bounded)
+}
+
+// Complete hours reuse the exact calculated points before their metadata is
+// serialized; partial hours remain queued for the ordinary tile worker.
+func publishRetainedRepairTiles(ctx context.Context, q *dbgen.Queries, work []dbgen.AlmanacSloSeriesTileWork, points []retainedSloPoint, start, end time.Time, target string, generation int64, now time.Time) error {
+	for _, item := range work {
+		if item.ResolutionSeconds != 3600 || item.RangeStart.Time.Before(start) || item.RangeEnd.Time.After(end) {
+			continue
+		}
+		var selected []retainedSloPoint
+		for _, point := range points {
+			if point.Current.EvaluationAt.After(item.RangeStart.Time) && !point.Current.EvaluationAt.After(item.RangeEnd.Time) {
+				selected = append(selected, point)
+			}
+		}
+		tile, err := compactRetainedPoints(selected, item.RangeStart.Time.UTC(), item.RangeEnd.Time.UTC(), target, strconv.FormatInt(item.DefinitionRevision, 10))
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(tile)
+		if err != nil {
+			return err
+		}
+		if len(payload) > 20<<20 {
+			return ErrOperationalResource
+		}
+		published, err := q.PublishRetainedTile(ctx, dbgen.PublishRetainedTileParams{ID: item.ID, Version: item.Version, LeaseEpoch: item.LeaseEpoch,
+			SourceGeneration: generation, PublishedAt: timestamp(now), PointCount: int32(len(selected)), Payload: payload})
+		if err != nil {
+			return err
+		}
+		acknowledged, err := q.AcknowledgeRetainedTileWork(ctx, dbgen.AcknowledgeRetainedTileWorkParams{ID: item.ID, Version: item.Version, LeaseEpoch: item.LeaseEpoch})
+		if err != nil {
+			return err
+		}
+		if published != 1 || acknowledged != 1 {
+			return ErrDerivedPending
+		}
+	}
+	return nil
 }
 
 func retainedRepairDurations(window, cadence time.Duration) []time.Duration {

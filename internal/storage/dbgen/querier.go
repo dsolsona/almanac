@@ -229,7 +229,7 @@ type Querier interface {
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishRetainedSloPoint(ctx context.Context, arg PublishRetainedSloPointParams) (int64, error)
-	PublishRetainedSloPointBatch(ctx context.Context, arg PublishRetainedSloPointBatchParams) error
+	PublishRetainedSloPointBatch(ctx context.Context, arg PublishRetainedSloPointBatchParams) ([]AlmanacSloSeriesTileWork, error)
 	PublishRetainedTile(ctx context.Context, arg PublishRetainedTileParams) (int64, error)
 	QueueDueBudgetHistory(ctx context.Context, arg QueueDueBudgetHistoryParams) (int64, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
@@ -247,7 +247,6 @@ type Querier interface {
 	ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error)
 	ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error)
 	ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloPointParams) (ReadRetainedSloPointRow, error)
-	ReadRetainedTileCandidates(ctx context.Context, arg ReadRetainedTileCandidatesParams) ([]ReadRetainedTileCandidatesRow, error)
 	ReadRetainedTilePoints(ctx context.Context, arg ReadRetainedTilePointsParams) ([]ReadRetainedTilePointsRow, error)
 	// Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct
 	// interior once; only cadence-aligned boundary fragments use canonical rows.

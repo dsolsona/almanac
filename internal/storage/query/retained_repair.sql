@@ -40,7 +40,7 @@ UPDATE public.almanac_slo_series_repair SET lease_until=NULL,
     next_attempt_at=$6::timestamptz+power(2,LEAST(attempts,5))*interval '1 second',last_error='retained_series_repair_failed'
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5;
 
--- name: PublishRetainedSloPointBatch :exec
+-- name: PublishRetainedSloPointBatch :many
 WITH requested AS (
     SELECT unnest(sqlc.arg(evaluation_ats)::timestamptz[]) AS evaluation_at,
            unnest(sqlc.arg(payloads)::text[]) AS payload
@@ -69,4 +69,5 @@ SELECT slo_id,definition_revision,measurement_revision,calculation_version,secon
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
 DO UPDATE SET version=almanac_slo_series_tile_work.version+1,
               source_generation=GREATEST(almanac_slo_series_tile_work.source_generation,EXCLUDED.source_generation),
-              next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at);
+              next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at)
+RETURNING *;

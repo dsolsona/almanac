@@ -4,6 +4,7 @@ package storage
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"reflect"
 	"strconv"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -357,6 +359,7 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 		if len(whole) != int(span/cadence) || !reflect.DeepEqual(whole, hourly) {
 			t.Fatal("full repair batch changed exact values or quality across hourly boundaries")
 		}
+		verifyRetainedRepairTileReuse(t, conn, row, source, end, clock())
 	}
 	var version, epoch int64
 	if err := conn.QueryRow(t.Context(), `SELECT version,lease_epoch FROM public.almanac_slo_series_repair
@@ -372,6 +375,85 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 		Version: version, LeaseEpoch: epoch, CursorAt: timestamp(end), NextAttemptAt: timestamp(clock())})
 	if err != nil || advanced != 0 {
 		t.Fatalf("stale repair acknowledged a newer invalidation: %d, %v", advanced, err)
+	}
+}
+
+func verifyRetainedRepairTileReuse(t *testing.T, conn *pgx.Conn, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, at, now time.Time) {
+	t.Helper()
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	q := dbgen.New(tx)
+	cadence := time.Duration(row.CadenceSeconds) * time.Second
+	end := at.Truncate(time.Hour).Add(-cadence)
+	start := at.Truncate(time.Hour).Add(-4*time.Hour + cadence)
+	for _, table := range []string{"almanac_slo_series_tiles", "almanac_slo_series_tile_work"} {
+		if _, err := tx.Exec(t.Context(), `DELETE FROM public.`+table+` WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start>=$2 AND range_end<=$3`, row.ID, start.Truncate(time.Hour), end.Truncate(time.Hour).Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	points, err := buildRetainedRepairPoints(t.Context(), q, row, source, start, end, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generation, err := q.GetDerivedSourceGeneration(t.Context(), dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := dbgen.PublishRetainedSloPointBatchParams{SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+		CalculationVersion: operationalCalculationVersion, SourceGeneration: generation, PublishedAt: timestamp(now)}
+	for _, point := range points {
+		payload, err := json.Marshal(point)
+		if err != nil {
+			t.Fatal(err)
+		}
+		batch.EvaluationAts = append(batch.EvaluationAts, timestamp(point.Current.EvaluationAt))
+		batch.Payloads = append(batch.Payloads, string(payload))
+	}
+	work, err := q.PublishRetainedSloPointBatch(t.Context(), batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range work {
+		if item.ResolutionSeconds == 3600 && !item.RangeStart.Time.Before(start) && !item.RangeEnd.Time.After(end) {
+			stale := item
+			stale.Version--
+			if err := publishRetainedRepairTiles(t.Context(), q, []dbgen.AlmanacSloSeriesTileWork{stale}, points, start, end, row.Target, generation, now); !errors.Is(err, ErrDerivedPending) {
+				t.Fatalf("stale repair overwrote or acknowledged newer hourly work: %v", err)
+			}
+			break
+		}
+	}
+	if err := publishRetainedRepairTiles(t.Context(), q, work, points, start, end, row.Target, generation, now); err != nil {
+		t.Fatal(err)
+	}
+	tiles, err := q.ReadRetainedSeriesTiles(t.Context(), dbgen.ReadRetainedSeriesTilesParams{SloID: row.ID, DefinitionRevision: row.DefinitionRevision,
+		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, ResolutionSeconds: 3600,
+		RangeStart: timestamp(start.Truncate(time.Hour)), RangeEnd: timestamp(end.Truncate(time.Hour).Add(time.Hour))})
+	if err != nil || len(tiles) != 2 {
+		t.Fatalf("repair did not publish exactly the two complete hours: %d, %v", len(tiles), err)
+	}
+	for _, tile := range tiles {
+		var selected []retainedSloPoint
+		for _, point := range points {
+			if point.Current.EvaluationAt.After(tile.RangeStart.Time) && !point.Current.EvaluationAt.After(tile.RangeEnd.Time) {
+				selected = append(selected, point)
+			}
+		}
+		want, err := compactRetainedPoints(selected, tile.RangeStart.Time.UTC(), tile.RangeEnd.Time.UTC(), row.Target, strconv.FormatInt(row.DefinitionRevision, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got retainedSloTile
+		if err := json.Unmarshal(tile.Payload, &got); err != nil || !reflect.DeepEqual(got, want) || tile.PointCount != int32(len(selected)) || tile.SourceGeneration != generation {
+			t.Fatalf("repair changed exact hourly lanes, provenance or counts: %v", err)
+		}
+	}
+	var pending int
+	if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_series_tile_work WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start>=$2 AND range_end<=$3`, row.ID, start.Truncate(time.Hour), end.Truncate(time.Hour).Add(time.Hour)).Scan(&pending); err != nil || pending != 2 {
+		t.Fatalf("partial hours lost ordinary worker processing: %d, %v", pending, err)
 	}
 }
 
@@ -427,43 +509,6 @@ func verifyIncrementalRetainedAvailability(t *testing.T, databaseURL string, id 
 	}
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	pointAt := at.Add(-3*time.Hour - cadence)
-	full, err := q.ReadRetainedTilePoints(t.Context(), dbgen.ReadRetainedTilePointsParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
-		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at.Add(-time.Hour)), EvaluationAt_2: timestamp(at)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(full) == 0 {
-		t.Fatal("compaction fixture has no retained endpoints")
-	}
-	var tiles [2]retainedSloTile
-	var elapsed [2]time.Duration
-	for version := range 2 {
-		started := time.Now()
-		if version == 0 {
-			points := make([]retainedSloPoint, len(full))
-			for index, stored := range full {
-				if err := json.Unmarshal(stored.Payload, &points[index]); err != nil {
-					t.Fatal(err)
-				}
-			}
-			tiles[version], err = compactRetainedPoints(points, at.Add(-time.Hour), at, row.Target, strconv.FormatInt(row.DefinitionRevision, 10))
-		} else {
-			candidates, queryErr := q.ReadRetainedTileCandidates(t.Context(), dbgen.ReadRetainedTileCandidatesParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
-				MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at.Add(-time.Hour)), EvaluationAt_2: timestamp(at)})
-			if queryErr != nil || len(candidates) != len(full) {
-				t.Fatalf("candidate projection changed retained endpoint count: %d/%d, %v", len(candidates), len(full), queryErr)
-			}
-			tiles[version], err = compactRetainedPayloads(candidates, at.Add(-time.Hour), at, row.Target, strconv.FormatInt(row.DefinitionRevision, 10))
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		elapsed[version] = time.Since(started)
-	}
-	if !reflect.DeepEqual(tiles[0], tiles[1]) {
-		t.Fatal("selective compaction changed exact lanes, quality, extrema or gaps")
-	}
-	t.Logf("selective compaction rows=%d full_decode_reduce=%s selective_decode_reduce=%s", len(full), elapsed[0], elapsed[1])
 	var prefix, generation int64
 	if err := tx.QueryRow(t.Context(), `SELECT coalesce(max(ingestion_generation) FILTER(WHERE interval_end<=$3),0),max(ingestion_generation)
         FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision, pointAt).Scan(&prefix, &generation); err != nil || prefix <= 0 || prefix >= generation {

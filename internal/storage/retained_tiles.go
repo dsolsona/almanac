@@ -1,86 +1,13 @@
 package storage
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"math/big"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/slo"
-	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
-
-// Selection needs exact counts and quality transitions; decode receipt/window
-// metadata only for endpoints retained by at least one graph lane.
-func compactRetainedPayloads(rows []dbgen.ReadRetainedTileCandidatesRow, start, end time.Time, target, revision string) (retainedSloTile, error) {
-	type quality struct {
-		State     api.SloOperationalQualityState     `json:"state"`
-		Freshness api.SloOperationalQualityFreshness `json:"freshness"`
-		Observed  int64                              `json:"observed_intervals"`
-		Empty     int64                              `json:"known_empty_intervals"`
-		Missing   int64                              `json:"missing_intervals"`
-		Expired   int64                              `json:"expired_intervals"`
-	}
-	type sample struct {
-		At          time.Time                     `json:"evaluation_at"`
-		End         time.Time                     `json:"end"`
-		State       api.SloOperationalSampleState `json:"state"`
-		Quality     quality                       `json:"quality"`
-		Good        *string                       `json:"good"`
-		Total       *string                       `json:"total"`
-		Performance struct {
-			Good  *string `json:"good"`
-			Total *string `json:"total"`
-		} `json:"performance"`
-	}
-	var input retainedSloTile
-	for _, row := range rows {
-		var point struct {
-			Current    sample `json:"current"`
-			Burn1h     sample `json:"burn_1h"`
-			Burn6h     sample `json:"burn_6h"`
-			Attainment sample `json:"attainment"`
-		}
-		if err := json.Unmarshal(row.Selection, &point); err != nil || !point.Current.At.Equal(row.EvaluationAt.Time) ||
-			!point.Attainment.At.Equal(point.Current.At) || !point.Burn1h.End.Equal(point.Current.At) || !point.Burn6h.End.Equal(point.Current.At) {
-			return retainedSloTile{}, ErrDerivedFailed
-		}
-		for index, lane := range []*[]api.SloOperationalSample{&input.Attainment, &input.Budget, &input.Burn1h, &input.Burn6h} {
-			value := []sample{point.Attainment, point.Current, point.Burn1h, point.Burn6h}[index]
-			q := value.Quality
-			selected := retainedWindowSample(point.Current.At, api.SloOperationalQuality{State: q.State, Freshness: q.Freshness,
-				ObservedIntervals: q.Observed, KnownEmptyIntervals: q.Empty, MissingIntervals: q.Missing, ExpiredIntervals: q.Expired},
-				api.SloEvaluationPerformance{Good: value.Performance.Good, Total: value.Performance.Total}, revision)
-			if index == 0 {
-				selected.State, selected.Good, selected.Total = value.State, value.Good, value.Total
-			}
-			*lane = append(*lane, selected)
-		}
-	}
-	selection, err := compactRetainedTile(input, start, end, target)
-	if err != nil {
-		return retainedSloTile{}, err
-	}
-	selected := make(map[time.Time]bool)
-	for _, lane := range [][]api.SloOperationalSample{selection.Attainment, selection.Budget, selection.Burn1h, selection.Burn6h} {
-		for _, sample := range lane {
-			selected[sample.EvaluationAt.UTC()] = true
-		}
-	}
-	points := make([]retainedSloPoint, 0, len(selected))
-	for _, row := range rows {
-		if !selected[row.EvaluationAt.Time.UTC()] {
-			continue
-		}
-		var point retainedSloPoint
-		if err := json.Unmarshal(row.Payload, &point); err != nil {
-			return retainedSloTile{}, ErrDerivedFailed
-		}
-		points = append(points, point)
-	}
-	return compactRetainedPoints(points, start, end, target, revision)
-}
 
 type retainedSloTile struct {
 	Attainment []api.SloOperationalSample `json:"attainment"`
