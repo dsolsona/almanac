@@ -28,6 +28,30 @@ try {
   const {chromium,expect}=await import('@playwright/test'); browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${fixture.spki}`]});
   const operationalRequests=new Map();
   const context=await browser.newContext({viewport:{width:1440,height:900},colorScheme:'light'}); page=await context.newPage();
+  await page.addInitScript(()=>{
+    const original=globalThis.fetch;
+    globalThis.fetch=(input,init)=>{
+      const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url,location.href);
+      const observe=url.origin===location.origin&&url.pathname==='/api/v1/slos/overview'&&['10','20'].includes(url.searchParams.get('limit'));
+      const observed=observe?{settled:false,search:url.search}:null;
+      if(observe)globalThis.__almanacRefreshResponse=observed;
+      return original(input,init).then(response=>{
+        if(observe){
+          const copy=response.clone();
+          void (async()=>{
+            const reader=copy.body.getReader(),chunks=[];let size=0;
+            try{
+              for(;;){const item=await reader.read();if(item.done)break;size+=item.value.byteLength;if(size>20*1024*1024){void reader.cancel().catch(()=>{});throw new Error('response exceeds bound');}chunks.push(item.value);}
+              const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+              Object.assign(observed,{settled:true,status:response.status,body:JSON.parse(new TextDecoder().decode(bytes))});
+            }catch{Object.assign(observed,{settled:true,failed:true});}
+            finally{reader.releaseLock();}
+          })();
+        }
+        return response;
+      });
+    };
+  });
   const telemetryDeliveries=await captureTelemetryDelivery(page);
   const journeyTraces=[];
   await page.exposeFunction('recordAlmanacJourney',value=>{if(journeyTraces.length<256)journeyTraces.push({...value,stage});});
@@ -42,8 +66,31 @@ try {
     Object.assign(entry,{status:response.status(),elapsed_ms:Date.now()-entry.started_ms,retry_after:response.headers()['retry-after']??null,date:response.headers().date??null});
     if(response.status()>=400)void response.json().then(body=>{entry.code=body.code??null;entry.preparation=body.preparation?.state??null;}).catch(()=>{entry.problem_unreadable=true;});
   });
-  page.on('requestfailed',request=>{const entry=wireRequests.get(request);if(entry)entry.failed=true;});
+  page.on('requestfailed',request=>{const entry=wireRequests.get(request);if(entry){entry.failed=true;const error=request.failure()?.errorText??'';entry.transport_error=/^net::ERR_[A-Z0-9_]+$/.test(error)?error:'unclassified';}});
   const preparationReads=[];
+  const assertOverviewMatchesResponse=async()=>{
+    await page.waitForFunction(()=>{
+      const state=globalThis.__almanacRefreshResponse;
+      if(!state?.settled)return false;
+      const requested=new URLSearchParams(state.search),current=new URLSearchParams(location.search);
+      return ['q','service_id','urgency','cursor'].every(key=>(requested.get(key)??'')===(current.get(key)??''));
+    }).catch(async error=>{
+      const observed=await page.evaluate(()=>{
+        const state=globalThis.__almanacRefreshResponse;
+        const requested=new URLSearchParams(state?.search??''),current=new URLSearchParams(location.search);
+        return {settled:state?.settled,failed:state?.failed,status:state?.status,fields:['q','service_id','urgency','cursor'].map(key=>({key,same:(requested.get(key)??'')===(current.get(key)??''),requested_present:requested.has(key),current_present:current.has(key)}))};
+      });
+      throw new Error(`${error.name}: filtered response observation ${JSON.stringify(observed)}`);
+    });
+    const observed=await page.evaluate(()=>globalThis.__almanacRefreshResponse);
+    assert.equal(observed.failed,undefined,'browser could not consume the filtered overview response');assert.equal(observed.status,200);
+    const urgency=new URLSearchParams(new URL(page.url()).search).get('urgency');
+    const rows=observed.body.items.filter(item=>!urgency||item.urgency===urgency).map(item=>`/slos/${item.slo.id}`).sort();
+    await expect.poll(()=>page.locator('.app-slo-name>a.app-slo-hitarea').evaluateAll(links=>links.map(link=>new URL(link.href).pathname).sort())).toEqual(rows);
+    const count=urgency?observed.body.group_counts[urgency]:Object.values(observed.body.group_counts).reduce((sum,value)=>sum+value,0);
+    await expect(page.locator('.app-slo-list-sub')).toHaveText(`${count} SLO${count===1?'':'s'} · grouped by urgency · UTC`);
+    return observed.body;
+  };
   const openPreparedOverview=async()=>{
     const isOverview=response=>response.request().method()==='GET'&&new URL(response.url()).pathname==='/api/v1/slos/overview';
     const first=page.waitForResponse(isOverview);
@@ -229,17 +276,38 @@ try {
   // Compare the row with its own response: publication can advance while checking detail.
   // Refresh cancels the preceding overview; do not consume that request's headers.
   const precedingRequests=new Set(wireRequests.keys());
+  stage='filtered overview Refresh response';
+  const precedingJourneys=journeyTraces.length;
   const refreshedOverview=page.waitForResponse(r=>!precedingRequests.has(r.request())&&r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/v1/slos/overview')
-    .then(async response=>({status:response.status(),body:await response.json()}));
+    .then(response=>response.status());
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  const renderedOverviewResponse=await refreshedOverview; assert.equal(renderedOverviewResponse.status,200);
+  assert.equal(await refreshedOverview,200);
+  await page.waitForFunction(()=>globalThis.__almanacRefreshResponse?.settled);
+  const renderedOverviewResponse=await page.evaluate(()=>globalThis.__almanacRefreshResponse);
+  assert.equal(renderedOverviewResponse.failed,undefined,'browser could not consume the actual Refresh response');
+  assert.equal(renderedOverviewResponse.status,200);
+  await expect.poll(()=>journeyTraces.slice(precedingJourneys).some(value=>value.journey==='slo.list'&&value.result==='ready')).toBe(true);
+  stage='filtered overview Refresh values';
   const renderedOverviewItem=renderedOverviewResponse.body.items.find(item=>item.slo.id===slo.id);
   assert.ok(renderedOverviewItem,'created SLO appears in refreshed operational overview');
   overviewItem=renderedOverviewItem;
   const expectedReason=({on_track:'On track',stale_observations:'Observations are stale',no_data:'No evaluable data',expired_history:'History has expired',complete_window_violation:'Complete window is below target',negative_observed_budget:'Observed budget is negative',low_observed_budget:'Less than 20% of budget remains',high_1h_burn:'1 h burn is at least 1×',evaluation_unavailable:'Current evaluation unavailable',not_yet_eligible:'Not yet eligible',zero_traffic:'No traffic',incomplete_coverage:'Coverage is incomplete',short_burn_unavailable:'Short-window burn unavailable',budget_below_half:'Less than half of budget remains'})[renderedOverviewItem.leading_reason.code]??renderedOverviewItem.leading_reason.code;
   const objectiveRow=page.getByRole('row').filter({has:page.getByRole('link',{name:'Checkout availability historical',exact:true})}); await expect.poll(()=>objectiveRow.locator('.slo-reference-status').getAttribute('title')).toContain(expectedReason); await page.getByLabel('Search SLOs').fill('Checkout availability historical'); await page.getByLabel('Search SLOs').press('Enter'); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('q'))).toBe('Checkout availability historical');
   await page.getByText('Filters',{exact:true}).click(); await page.getByLabel('Service',{exact:true}).selectOption(slo.service_id); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('service_id'))).toBe(slo.service_id);
-  await page.getByLabel('Urgency',{exact:true}).selectOption(overviewItem.urgency); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('urgency'))).toBe(overviewItem.urgency); await expect(page.getByRole('link',{name:'Checkout availability historical',exact:true})).toBeVisible(); await page.getByText('Filters',{exact:true}).click(); await page.setViewportSize({width:1440,height:900}); await checkOverviewToolbarAlignment(); for(const theme of ['light','dark']) { if(theme==='dark') {await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'Switch to dark theme'}).click();} for(const [label,width,height] of [['desktop',1440,900],['intermediate',1024,900],['mobile',360,844]]) {await page.setViewportSize({width,height}); await capture(`slo-list-${theme}-${label}.png`);} if(theme==='dark') {await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'Switch to light theme'}).click();} } const filteredURL=page.url(); await page.reload(); await expect(page.getByRole('link',{name:'Checkout availability historical',exact:true})).toBeVisible(); await expect(page).toHaveURL(filteredURL); await page.goBack(); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('urgency'))).not.toBe(overviewItem.urgency);
+  stage='filtered overview urgency';
+  await page.getByLabel('Urgency',{exact:true}).selectOption(overviewItem.urgency);
+  await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('urgency'))).toBe(overviewItem.urgency);
+  await assertOverviewMatchesResponse();
+  await page.getByText('Filters',{exact:true}).click(); await page.setViewportSize({width:1440,height:900}); await checkOverviewToolbarAlignment();
+  for(const theme of ['light','dark']) {
+    if(theme==='dark') {await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'Switch to dark theme'}).click();}
+    for(const [label,width,height] of [['desktop',1440,900],['intermediate',1024,900],['mobile',360,844]]) {await page.setViewportSize({width,height}); await capture(`slo-list-${theme}-${label}.png`);}
+    if(theme==='dark') {await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'Switch to light theme'}).click();}
+  }
+  const filteredURL=page.url();
+  stage='filtered overview reload'; await page.reload();
+  await assertOverviewMatchesResponse(); await expect(page).toHaveURL(filteredURL);
+  await page.goBack(); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('urgency'))).not.toBe(overviewItem.urgency);
   stage='navigation'; await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await page.getByRole('link',{name:'Checkout availability historical',exact:true}).click(); await expect(page.getByRole('heading',{name:'Checkout availability historical',exact:true})).toBeVisible(); const detail=page.url(); await page.locator('.app-detail-meta a[href="/services/'+slo.service_id+'"]').click(); await expect(page).toHaveURL(/\/services\//); await page.goBack(); await expect(page).toHaveURL(detail); await page.locator('a[href="/slis/'+fixture.sli_id+'"]').first().click(); await expect(page).toHaveURL(/\/slis\//); await page.goBack(); await expect(page).toHaveURL(detail); await page.reload(); await expect(page.getByRole('heading',{name:'Checkout availability historical',exact:true})).toBeVisible(); await expect(page.locator('.app-lane-label').nth(0).locator('h3')).toHaveText('SLI'); await expect(page.getByText('Burn 1 h',{exact:true})).toBeVisible();
   stage='layout-chart'; await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
   stage='layout-controls'; await expect(page.locator('.app-lane-label')).toHaveCount(4); await expect(page.locator('.app-lane-label').nth(0)).toContainText('SLI'); await expect(page.locator('.app-lane-label').nth(1)).toContainText('Budget remaining'); await expect(page.locator('.app-lane-label').nth(2)).toContainText('Burn rate'); await expect(page.locator('.app-lane-label').nth(3)).toContainText('Compliance'); await expect(page.locator('.app-budget-caption')).toHaveText('error budget remaining');
@@ -304,4 +372,16 @@ try {
   await writeFile(join(fixture.artifacts,'journey-traces.json'),JSON.stringify(journeyTraces)+'\n',{mode:0o600});
   await writeFile(join(fixture.artifacts,'telemetry-deliveries.json'),JSON.stringify(telemetryDeliveries)+'\n',{mode:0o600});
   await context.close(); await browser.close(); console.log('PASS browser-slo-journey');
-} catch(error) { await page?.screenshot({path:fixture?.artifacts?join(fixture.artifacts,'slo-failure.png'):undefined,fullPage:true}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-stage.txt'),stage+'\n',{mode:0o600}).catch(()=>{}); if(fixture?.artifacts&&/^(create$|operational detail|exact-|layout-|range-controls)/.test(stage))await writeFile(join(fixture.artifacts,'failure-reason.txt'),String(error instanceof Error?error.message:error).slice(0,4000),{mode:0o600}).catch(()=>{}); await browser?.close().catch(()=>{}); console.error(`FAIL browser-slo-journey stage=${stage} ${error instanceof Error?error.message:'unknown error'}`); process.exitCode=1; }
+} catch(error) {
+  let reason=String(error instanceof Error?error.message:error);
+  for(const secret of [fixture?.login,fixture?.password,fixture?.trace_control_key])if(typeof secret==='string'&&secret)reason=reason.replaceAll(secret,'[redacted]');
+  if(fixture?.artifacts&&stage.startsWith('filtered overview')){
+    const diagnostics=await page?.evaluate(()=>({overview:{settled:globalThis.__almanacRefreshResponse?.settled,failed:globalThis.__almanacRefreshResponse?.failed,status:globalThis.__almanacRefreshResponse?.status},alerts:Array.from(document.querySelectorAll('[role="alert"]')).map(node=>node.textContent?.slice(0,1000))})).catch(()=>null);
+    if(diagnostics)await writeFile(join(fixture.artifacts,'refresh-cancellation.json'),JSON.stringify(diagnostics)+'\n',{mode:0o600}).catch(()=>{});
+  }
+  await page?.screenshot({path:fixture?.artifacts?join(fixture.artifacts,'slo-failure.png'):undefined,fullPage:true}).catch(()=>{});
+  if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600}).catch(()=>{});
+  if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-stage.txt'),stage+'\n',{mode:0o600}).catch(()=>{});
+  if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-reason.txt'),reason.slice(0,4000),{mode:0o600}).catch(()=>{});
+  await browser?.close().catch(()=>{}); console.error(`FAIL browser-slo-journey stage=${stage} ${reason}`); process.exitCode=1;
+}

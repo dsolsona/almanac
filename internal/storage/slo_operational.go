@@ -90,17 +90,18 @@ type OperationalOverviewInput struct {
 }
 
 type OperationalDetailInput struct {
-	displayCache   *sloDisplayCache
-	retainedReader *retainedSeriesReader
-	currentOnly    bool
-	overviewOnly   bool
-	Runtime        *Runtime
-	Proof          DatasourceProof
-	ID             string
-	At, Start, End *time.Time
-	BurnWindow     int
-	Period         string
-	Now            func() time.Time
+	displayCache       *sloDisplayCache
+	retainedReader     *retainedSeriesReader
+	historyPublication *retainedHistoryPublication
+	currentOnly        bool
+	overviewOnly       bool
+	Runtime            *Runtime
+	Proof              DatasourceProof
+	ID                 string
+	At, Start, End     *time.Time
+	BurnWindow         int
+	Period             string
+	Now                func() time.Time
 }
 
 // ReadSloOperationalDetail computes summary windows and reduced history in one
@@ -148,6 +149,7 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	}
 	var result api.SloOperationalDetail
 	if input.Runtime != nil {
+		input.historyPublication = new(retainedHistoryPublication)
 		result, err = loadRetainedSloHistory(ctx, q, row, contextRow, input)
 		if err == nil {
 			result.Context.SliDisplayName = contextRow.SliDisplayName
@@ -161,6 +163,9 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalDetail{}, err
+	}
+	if input.historyPublication != nil && input.historyPublication.generation.SloID.Valid {
+		return publishRetainedHistory(input.Runtime.Bind(ctx), conn, result, *input.historyPublication)
 	}
 	return result, nil
 }

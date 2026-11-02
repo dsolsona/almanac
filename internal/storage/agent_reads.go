@@ -354,10 +354,11 @@ func beginPooledAgentRead(ctx context.Context, databaseURL string, runtime *Runt
 	if err != nil {
 		return fail(readAuthorityError(ctx, err))
 	}
-	user, err := q.LockSessionUser(ctx, userID)
+	readUser, err := q.LockSessionUserRead(ctx, userID)
 	if err != nil {
 		return fail(readAuthorityError(ctx, err))
 	}
+	user := dbgen.LockSessionUserRow(readUser)
 	session, err := q.LockAgentSessionRead(ctx, verifier[:])
 	if err != nil {
 		return fail(readAuthorityError(ctx, err))

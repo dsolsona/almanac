@@ -214,6 +214,7 @@ type Querier interface {
 	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockSessionInstallation(ctx context.Context) (LockSessionInstallationRow, error)
 	LockSessionUser(ctx context.Context, userID pgtype.UUID) (LockSessionUserRow, error)
+	LockSessionUserRead(ctx context.Context, userID pgtype.UUID) (LockSessionUserReadRow, error)
 	LockSliMeasurementForObservation(ctx context.Context, arg LockSliMeasurementForObservationParams) (LockSliMeasurementForObservationRow, error)
 	LockSliMetadata(ctx context.Context, id pgtype.UUID) (LockSliMetadataRow, error)
 	LockUnrevokedAgentCredentials(ctx context.Context, agentID pgtype.UUID) (int64, error)

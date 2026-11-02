@@ -316,6 +316,12 @@ func derivedFailureCode(err error) string {
 	return "history_preparation_failed"
 }
 
+type retainedHistoryPublication struct {
+	generation        dbgen.InsertDerivedGenerationParams
+	history           dbgen.InsertPreparedSloHistoryParams
+	corruptGeneration pgtype.UUID
+}
+
 // Response generations pin exact tables. A cache miss composes maintained series
 // and bounded edges synchronously; normal navigation never admits graph jobs.
 func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, input OperationalDetailInput) (result api.SloOperationalDetail, resultErr error) {
@@ -359,9 +365,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 			found = true
 			return result, nil
 		}
-		if _, err := q.DeleteCorruptPreparedSloHistory(ctx, cached.GenerationID); err != nil {
-			return api.SloOperationalDetail{}, err
-		}
+		input.historyPublication.corruptGeneration = cached.GenerationID
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return api.SloOperationalDetail{}, err
 	}
@@ -372,14 +376,37 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
-	generationID, err := q.InsertDerivedGeneration(ctx, dbgen.InsertDerivedGenerationParams{SloID: row.ID,
+	input.historyPublication.generation = dbgen.InsertDerivedGenerationParams{SloID: row.ID,
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
-		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(now)})
+		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(now)}
+	input.historyPublication.history = dbgen.InsertPreparedSloHistoryParams{RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Kind: kind}
+	return result, nil
+}
+
+// Cache accounting shares a budget row. Publish after the protected calculation
+// snapshot commits so unrelated cache writers cannot invalidate that snapshot.
+func publishRetainedHistory(ctx context.Context, conn *readConnection, result api.SloOperationalDetail, publication retainedHistoryPublication) (api.SloOperationalDetail, error) {
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
-	stamp := generationStamp(generationID, sourceGeneration, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion,
-		bound.effectiveAt, now, retention.Time)
+	defer rollbackTransaction(tx)
+	if err := setTransactionBounds(ctx, tx); err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	q := dbgen.New(tx)
+	if publication.corruptGeneration.Valid {
+		if _, err := q.DeleteCorruptPreparedSloHistory(ctx, publication.corruptGeneration); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+	}
+	generationID, err := q.InsertDerivedGeneration(ctx, publication.generation)
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	g := publication.generation
+	stamp := generationStamp(generationID, g.SourceGeneration, g.DefinitionRevision, g.MeasurementRevision, g.CalculationVersion,
+		g.EvaluatedThrough.Time, g.PublishedAt.Time, g.RetentionStart.Time)
 	result.Generation = &stamp
 	payload, err := json.Marshal(result)
 	if err != nil {
@@ -388,9 +415,11 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if len(payload) > 20<<20 {
 		return api.SloOperationalDetail{}, ErrOperationalResource
 	}
-	if err := q.InsertPreparedSloHistory(ctx, dbgen.InsertPreparedSloHistoryParams{GenerationID: generationID,
-		RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow),
-		Payload: payload, Kind: kind}); err != nil {
+	publication.history.GenerationID, publication.history.Payload = generationID, payload
+	if err := q.InsertPreparedSloHistory(ctx, publication.history); err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	return result, nil

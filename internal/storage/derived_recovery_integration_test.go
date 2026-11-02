@@ -7,11 +7,13 @@ import (
 	"errors"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -136,6 +138,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
 		t.Fatalf("cold response-cache navigation queued graph work: %v", err)
 	}
+	verifyConcurrentRetainedPublication(t, databaseURL, input, repaired)
 	// Explicit background jobs retain their own durable failure/retry contract;
 	// their failure cannot block reads of independently maintained series.
 	q := dbgen.New(conn)
@@ -215,6 +218,77 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	}
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
 	verifyRetainedWorkRecovery(t, runtime, databaseURL, proof, id, clock)
+}
+
+func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input OperationalDetailInput, oracle api.SloOperationalDetail) {
+	t.Helper()
+	type outcome struct {
+		value api.SloOperationalDetail
+		err   error
+	}
+	results := make(chan outcome, 8)
+	start := make(chan struct{})
+	var pending sync.WaitGroup
+	for index := range 8 {
+		pending.Go(func() {
+			<-start
+			end := oracle.EffectiveAt
+			from := end.Add(-time.Duration(38+index) * time.Duration(oracle.Objective.CadenceSeconds) * time.Second)
+			request := input
+			request.Start, request.End, request.Period = &from, &end, ""
+			value, err := ReadSloOperationalDetail(t.Context(), databaseURL, request)
+			results <- outcome{value, err}
+		})
+	}
+	close(start)
+	pending.Wait()
+	close(results)
+	for result := range results {
+		if result.err != nil || result.value.Generation == nil || result.value.HistoryPreparation != nil || !reflect.DeepEqual(result.value.Current, oracle.Current) {
+			t.Fatalf("concurrent response publication lost a coherent usable result: %v", result.err)
+		}
+	}
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	var accounted, actual int64
+	if err := conn.QueryRow(t.Context(), `SELECT payload_bytes,(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_history_blocks)+(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_display_blocks) FROM public.almanac_derived_cache_usage WHERE singleton`).Scan(&accounted, &actual); err != nil || accounted != actual {
+		t.Fatalf("concurrent response cache accounting is not exact: accounted=%d actual=%d error=%v", accounted, actual, err)
+	}
+	userID, err := dbgen.New(conn).FindAgentSessionUserID(t.Context(), input.Proof.SessionVerifier[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var readers []pgx.Tx
+	for range 2 {
+		reader := integrationConnect(t, databaseURL)
+		defer closeIntegrationConn(reader)
+		tx, err := reader.Begin(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rollbackTransaction(tx)
+		if _, err := dbgen.New(tx).LockSessionUserRead(t.Context(), userID); err != nil {
+			t.Fatal(err)
+		}
+		readers = append(readers, tx)
+	}
+	if _, err := conn.Exec(t.Context(), "SET lock_timeout='25ms'"); err != nil {
+		t.Fatal(err)
+	}
+	// Authority mutations must wait for every concurrent read, not only the first.
+	for _, reader := range readers {
+		_, err := dbgen.New(conn).LockSessionUser(t.Context(), userID)
+		pgErr, ok := errors.AsType[*pgconn.PgError](err)
+		if !ok || pgErr.Code != "55P03" {
+			t.Fatalf("authority mutation bypassed active shared reads: %v", err)
+		}
+		if err := reader.Rollback(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := dbgen.New(conn).LockSessionUser(t.Context(), userID); err != nil {
+		t.Fatalf("authority mutation stayed blocked after reads completed: %v", err)
+	}
 }
 
 func verifyCurrentStatusBoundaryRead(t *testing.T, databaseURL string, runtime *Runtime, proof DatasourceProof, id string, now time.Time, published api.SloCurrentStatus) {

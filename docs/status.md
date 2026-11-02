@@ -49,8 +49,11 @@ The work is published in [draft PR #53](https://github.com/dsolsona/almanac/pull
 The 2026-11-02 backfill correction is recorded in F3-T08: range-local source
 validation preserves ready graph intervals during historical processing, with
 explicit initial-preparation progress. Focused database and fast checks pass;
-the complete browser journey remains failed at a later list Refresh. The operator
-app has this correction; imports and demo source processing remain paused.
+the complete browser journey now passes after corrected response observation and
+traced fixes for concurrent cache publication and exclusive read-authority locks.
+Small-fixture normal-network list/detail ready traces are below 200 ms; year/fleet
+acceptance remains unverified. The operator app has these read corrections;
+imports and demo source processing remain paused.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,

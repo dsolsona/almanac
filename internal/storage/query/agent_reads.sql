@@ -5,6 +5,13 @@ FROM public.almanac_sessions
 WHERE verifier = sqlc.arg(verifier)
 FOR SHARE;
 
+-- name: LockSessionUserRead :one
+SELECT id, login, role, password_verifier, enabled, must_change_password,
+       credential_revision
+FROM public.almanac_users
+WHERE id = sqlc.arg(user_id)
+FOR SHARE;
+
 -- name: GetAgent :one
 SELECT id, name, display_name, enabled, version, created_at, updated_at, deleted_at
 FROM public.almanac_agents WHERE id = sqlc.arg(agent_id) AND deleted_at IS NULL FOR SHARE;
