@@ -6,22 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/testpostgres"
 )
-
-type performancePreparationSample struct {
-	Target  int           `json:"target"`
-	Elapsed time.Duration `json:"elapsed_ns"`
-	Pending int           `json:"pending_responses"`
-	Failure string        `json:"failure,omitempty"`
-	Body    []byte        `json:"-"`
-}
 
 // First visits are checked once, including their latency. Only explicit fixture
 // import/recovery waits for automatic maintenance before normal reads begin.
@@ -51,44 +41,6 @@ func preparePerformanceOperation(ctx context.Context, readers []performanceReade
 		return samples, fmt.Errorf("%s: %d/%d preparation targets failed", operation.Name, failures, len(samples))
 	}
 	return samples, nil
-}
-
-func preparePerformanceTarget(ctx context.Context, reader performanceReader, operation performanceOperation, target int) performancePreparationSample {
-	started := time.Now()
-	sample := performancePreparationSample{Target: target}
-	requestContext, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	request, err := reader.Request(requestContext, operation.Paths[target])
-	if err != nil || request == nil {
-		sample.Failure = "request_construction"
-		sample.Elapsed = time.Since(started)
-		return sample
-	}
-	response, err := reader.Client.Do(request)
-	if err != nil {
-		sample.Failure = "transport"
-		sample.Elapsed = time.Since(started)
-		return sample
-	}
-	body, readErr := io.ReadAll(io.LimitReader(response.Body, (20<<20)+1))
-	closeErr := response.Body.Close()
-	sample.Elapsed = time.Since(started)
-	switch {
-	case readErr != nil || closeErr != nil || len(body) > 20<<20:
-		sample.Failure = "response_read_or_size"
-	case response.StatusCode != http.StatusOK:
-		sample.Failure = "normal_navigation_unavailable"
-		if response.StatusCode == http.StatusServiceUnavailable {
-			sample.Pending = 1
-		}
-	case operation.Check(target, body) != nil:
-		sample.Failure = "response_contract"
-	case sample.Elapsed >= operation.Budget:
-		sample.Failure = "first_request_budget"
-	default:
-		sample.Body = body
-	}
-	return sample
 }
 
 func awaitPerformanceHistory(t *testing.T, ctx context.Context, fleet performanceFleet) (time.Duration, error) {

@@ -59,6 +59,29 @@ func TestPerformancePostgresFailureEvidenceOmitsStatementValues(t *testing.T) {
 	}
 }
 
+func TestPerformanceFirstReadRetainsProblemAndTraceWithoutResponseBody(t *testing.T) {
+	var parent atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parent.Store(r.Header.Get("traceparent"))
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"code":"range_too_dense","message":"private-fixture-value"}`))
+	}))
+	defer server.Close()
+	reader := performanceReader{Client: server.Client(), Request: func(ctx context.Context, path string) (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet, server.URL+path, nil)
+	}}
+	sample := preparePerformanceTarget(t.Context(), reader, performanceOperation{Paths: []string{"/history"}, Budget: time.Second,
+		Check: func(int, []byte) error { t.Fatal("error response passed to success validator"); return nil }}, 0)
+	header, _ := parent.Load().(string)
+	if sample.Status != 422 || sample.ProblemCode != "range_too_dense" || sample.Failure != "normal_navigation_unavailable" || sample.Pending != 0 || len(sample.TraceID) != 32 || !strings.HasPrefix(header, "00-"+sample.TraceID+"-") || !strings.HasSuffix(header, "-01") || len(sample.Body) != 0 {
+		t.Fatalf("first-read failure evidence incomplete: %+v", sample)
+	}
+	body, err := marshalPerformanceEvidence(sample)
+	if err != nil || strings.Contains(string(body), "private-fixture-value") {
+		t.Fatal("first-read evidence retained response text")
+	}
+}
+
 func TestPerformanceNearestRank(t *testing.T) {
 	values := make([]time.Duration, 100)
 	for index := range values {

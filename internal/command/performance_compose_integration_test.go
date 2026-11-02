@@ -217,7 +217,10 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 	if err != nil {
 		t.Fatal("resolve normal performance deployment source failed")
 	}
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp(filepath.Join(root, ".local"), "backend-performance-runtime-")
+	if err != nil {
+		t.Fatal("create protected performance runtime directory failed")
+	}
 	ports, releasePorts := performancePorts(t)
 	r := &performanceDeployment{root: root, project: "almanac-perf-" + strings.ToLower(rand.Text()), override: filepath.Join(dir, "compose-performance.json"),
 		appPort: ports[0], postgresPort: ports[1], metricsPort: ports[2], providerPort: ports[3], tracesPort: ports[4]}
@@ -233,6 +236,10 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 		t.Fatal("write owned performance deployment overrides failed")
 	}
 	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("preserved failed performance deployment project=%s protected_runtime=%s", r.project, dir)
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		command, err := r.command(ctx, "down", "--volumes", "--remove-orphans")
@@ -248,6 +255,9 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 		remove.Stdout, remove.Stderr = io.Discard, io.Discard
 		if err := remove.Run(); err != nil {
 			t.Error("cleanup owned performance image failed")
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error("cleanup owned performance runtime directory failed")
 		}
 	})
 	r.run(t, t.Context(), 5*time.Minute, "build")

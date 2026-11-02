@@ -134,6 +134,11 @@ FROM public.almanac_users WHERE login='sli-owner' RETURNING id::text`, login).Sc
 		if loadErr != nil || closeErr != nil || !exists || record.Session == "" {
 			t.Fatal("read protected performance reader session failed")
 		}
+		if index == 0 {
+			if err := os.WriteFile(filepath.Join(f.dir, "diagnostic-headers"), []byte("Cookie: __Host-almanac-session="+record.Session+"\n"), 0o600); err != nil {
+				t.Fatal("save protected fixture-only diagnostic session failed")
+			}
+		}
 		fleet.readers = append(fleet.readers, performanceReader{Identity: identity, Client: f.apiClient,
 			Request: func(ctx context.Context, path string) (*http.Request, error) {
 				request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+path, nil)

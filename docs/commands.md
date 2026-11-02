@@ -115,6 +115,11 @@ remain mandatory. Required fleet cases must all run and pass, without skips.
 Source-bound receipts and the timing ledger use the existing controls. Go events
 and exit status are retained in `.local/performance-go-test.jsonl` and
 `.local/performance-go-test.exit`; each fleet keeps its own resource/stage report.
+Successful fleets clean up their owned containers, volumes, images and private
+runtime directory. A failed fleet retains its owned deployment and protected
+`.local/backend-performance-runtime-*` directory for diagnosis, including fixture-only
+credentials. Do not publish that directory. Record the project/path and clean up
+only those owned resources after diagnosis; preserve the operator's project/data.
 Compile-only checks in the Go gate do not establish capacity acceptance.
 
 ## Linux verifier entry points

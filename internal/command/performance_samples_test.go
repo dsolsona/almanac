@@ -7,6 +7,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	jsonv1 "encoding/json"
 	"encoding/json/v2"
 	"errors"
@@ -50,6 +51,70 @@ type performanceOperation struct {
 	// Check must validate the actual result, including generation provenance
 	// where applicable. A valid HTTP status alone is insufficient.
 	Check func(int, []byte) error
+}
+
+type performancePreparationSample struct {
+	Target      int           `json:"target"`
+	Elapsed     time.Duration `json:"elapsed_ns"`
+	Pending     int           `json:"pending_responses"`
+	Status      int           `json:"status"`
+	ProblemCode string        `json:"problem_code,omitempty"`
+	TraceID     string        `json:"trace_id"`
+	Failure     string        `json:"failure,omitempty"`
+	Body        []byte        `json:"-"`
+}
+
+func preparePerformanceTarget(ctx context.Context, reader performanceReader, operation performanceOperation, target int) performancePreparationSample {
+	started := time.Now()
+	sample := performancePreparationSample{Target: target}
+	requestContext, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	request, err := reader.Request(requestContext, operation.Paths[target])
+	if err != nil || request == nil {
+		sample.Failure = "request_construction"
+		sample.Elapsed = time.Since(started)
+		return sample
+	}
+	var parent [24]byte
+	if _, err := rand.Read(parent[:]); err != nil {
+		sample.Failure = "trace_identity"
+		sample.Elapsed = time.Since(started)
+		return sample
+	}
+	sample.TraceID = fmt.Sprintf("%x", parent[:16])
+	request.Header.Set("traceparent", fmt.Sprintf("00-%s-%x-01", sample.TraceID, parent[16:]))
+	response, err := reader.Client.Do(request)
+	if err != nil {
+		sample.Failure = "transport"
+		sample.Elapsed = time.Since(started)
+		return sample
+	}
+	sample.Status = response.StatusCode
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, (20<<20)+1))
+	closeErr := response.Body.Close()
+	sample.Elapsed = time.Since(started)
+	switch {
+	case readErr != nil || closeErr != nil || len(body) > 20<<20:
+		sample.Failure = "response_read_or_size"
+	case response.StatusCode != http.StatusOK:
+		sample.Failure = "normal_navigation_unavailable"
+		var problem struct {
+			Code string `json:"code"`
+		}
+		if json.Unmarshal(body, &problem) == nil && len(problem.Code) <= 80 {
+			sample.ProblemCode = problem.Code
+		}
+		if response.StatusCode == http.StatusServiceUnavailable {
+			sample.Pending = 1
+		}
+	case operation.Check(target, body) != nil:
+		sample.Failure = "response_contract"
+	case sample.Elapsed >= operation.Budget:
+		sample.Failure = "first_request_budget"
+	default:
+		sample.Body = body
+	}
+	return sample
 }
 
 type performanceSample struct {
