@@ -44,7 +44,7 @@ Feature implementation remains paused pending backend stabilization.
 govern [F3-T08](tasks/F3-T08.md), in progress on `perf/f3-t08-retained-series`
 in `.worktrees/backend-performance`, based on merged main `6d7403d`.
 
-The latest product candidate `7078957` passes the complete PostgreSQL/API gate:
+Earlier product candidate `7078957` passes the complete PostgreSQL/API gate:
 173 cases in 957.340 seconds, including exact retained 14/56-day calculations,
 persisted restart, audited cleanup, authentication, agent and real browser journeys.
 Complete hourly summaries now reuse repair's calculated points atomically.
@@ -78,7 +78,13 @@ Its first execution fails during setup evidence encoding after 30.606 seconds:
 JSON v2 requires explicit formatting for duration values. The capacity evidence
 encoder now preserves their intended nanosecond representation; its focused
 regression, 500 Go cases and tagged compilation pass. The corrected workload
-will run separately; no capacity result has passed. T08 stays open until its
+then exposes a real current-publication defect: serialization conflicts consume
+the calculation-failure budget during concurrent ingestion. Current publication
+now defers SQLSTATE 40001 while preserving genuine failure counts. The deterministic
+PostgreSQL regression fails before the fix and passes afterward in 30.217 seconds,
+including normal recovery. Earlier broad gates describe the preceding product;
+final capacity/integrated verification for this correction remains pending.
+No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
 [PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;
 its three existing Greptile threads are resolved. Newer local work is committed,

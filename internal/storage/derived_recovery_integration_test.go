@@ -217,9 +217,60 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if err := q.ClearCurrentPreparationFailure(t.Context(), pgID); err != nil {
 		t.Fatal(err)
 	}
+	verifyCurrentProjectionConflictBudget(t, runtime, databaseURL, pgID, clock)
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
 	verifyRetainedWorkRecovery(t, runtime, databaseURL, proof, id, clock)
 	verifyAuditedRetentionCleanup(t, runtime, databaseURL, id, clock())
+}
+
+func verifyCurrentProjectionConflictBudget(t *testing.T, runtime *Runtime, databaseURL string, id pgtype.UUID, clock func() time.Time) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	if _, err := conn.Exec(t.Context(), `CREATE FUNCTION public.almanac_test_current_conflict() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION USING ERRCODE=TG_ARGV[0],MESSAGE='fixture current publication failure'; END $$`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := conn.Exec(t.Context(), `DROP TRIGGER IF EXISTS almanac_test_current_conflict ON public.almanac_slo_series_repair;
+DROP FUNCTION public.almanac_test_current_conflict()`); err != nil {
+			t.Error(err)
+		}
+	}()
+	for _, test := range []struct {
+		code     string
+		calls    int
+		attempts int
+	}{{"40001", 6, 0}, {"XX000", 1, 1}, {"40001", 6, 1}} {
+		statement := `CREATE TRIGGER almanac_test_current_conflict BEFORE INSERT OR UPDATE ON public.almanac_slo_series_repair
+FOR EACH ROW EXECUTE FUNCTION public.almanac_test_current_conflict('` + test.code + `')`
+		if _, err := conn.Exec(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+		for range test.calls {
+			err := runtime.refreshCurrentProjection(t.Context(), id, clock)
+			if failure, ok := errors.AsType[*pgconn.PgError](err); !ok || failure.Code != test.code {
+				t.Fatalf("expected controlled current publication error %s, got %v", test.code, err)
+			}
+			if errors.Is(err, ErrDerivedPending) != (test.code == "40001") {
+				t.Fatalf("current concurrency conflict or genuine failure misclassified: %v", err)
+			}
+		}
+		var attempts int
+		if err := conn.QueryRow(t.Context(), `SELECT attempts FROM public.almanac_slo_current_failures WHERE slo_id=$1`, id).Scan(&attempts); err != nil || attempts != test.attempts {
+			t.Fatalf("current concurrency conflicts consumed or reset the calculation failure budget: code=%s attempts=%d want=%d err=%v", test.code, attempts, test.attempts, err)
+		}
+		if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_test_current_conflict ON public.almanac_slo_series_repair`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := runtime.refreshCurrentProjection(t.Context(), id, clock); err != nil {
+		t.Fatalf("current projection did not recover after conflicts ended: %v", err)
+	}
+	var remaining int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_current_failures WHERE slo_id=$1`, id).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatalf("successful current publication retained failure state: %d %v", remaining, err)
+	}
 }
 
 func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input OperationalDetailInput, oracle api.SloOperationalDetail) {

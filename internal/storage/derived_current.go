@@ -14,6 +14,7 @@ import (
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -174,11 +175,16 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
-		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) {
+		conflict, isPostgres := errors.AsType[*pgconn.PgError](resultErr)
+		serialization := isPostgres && conflict.Code == "40001"
+		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) || serialization {
 			err := dbgen.New(conn).DeferCurrentPreparation(cleanup, dbgen.DeferCurrentPreparationParams{
 				SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 				CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock()),
 			})
+			if serialization {
+				resultErr = errors.Join(ErrDerivedPending, resultErr)
+			}
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
