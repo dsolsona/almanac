@@ -49,6 +49,12 @@ type retainedSeriesReader struct {
 	now          time.Time
 	series       *retainedSloTile
 	first        *retainedSloPoint
+	firstLoaded  bool
+	parts        []retainedReadPart
+	stored       []dbgen.ReadRetainedPartsRow
+	edges        map[int]retainedSloTile
+	days         *api.SloDailyComplianceSeries
+	daySummary   api.SloDailyComplianceSummary
 	bytes        int64
 	readySeconds int64
 	totalSeconds int64
@@ -241,21 +247,50 @@ func (c *retainedSeriesReader) load(ctx context.Context, base slo.WindowInput, s
 	if c.series != nil {
 		return *c.series, nil
 	}
-	parts, err := retainedReadParts(start, end)
-	if err != nil {
-		return retainedSloTile{}, err
-	}
-	rows, err := c.readParts(ctx, parts)
-	if err != nil {
+	if err := c.read(ctx, base, start, end); err != nil {
 		return retainedSloTile{}, err
 	}
 	var combined retainedSloTile
-	for index, part := range parts {
+	for index, part := range c.parts {
 		if err := ctx.Err(); err != nil {
 			return retainedSloTile{}, err
 		}
-		tile, err := c.loadPart(ctx, base, part, rows[index])
+		tile, resolved := c.edges[index]
+		if !resolved {
+			var err error
+			tile, err = decodeRetainedTile(c.stored[index].Payload, part, strconv.FormatInt(c.row.DefinitionRevision, 10))
+			if err != nil {
+				return retainedSloTile{}, err
+			}
+		}
+		appendRetainedTile(&combined, tile)
+	}
+	c.series = &combined
+	return combined, nil
+}
+
+// Fetch every database-dependent edge before decoding the larger ready tiles.
+func (c *retainedSeriesReader) read(ctx context.Context, base slo.WindowInput, start, end time.Time) error {
+	if c.parts != nil {
+		return nil
+	}
+	parts, err := retainedReadParts(start, end)
+	if err != nil {
+		return err
+	}
+	rows, err := c.readParts(ctx, parts)
+	if err != nil {
+		return err
+	}
+	c.edges = make(map[int]retainedSloTile)
+	eligible := maxTime(base.ValidFrom, base.SliValidFrom, ceilSliBoundary(base.RetentionStart, base.Cadence))
+	for index, part := range parts {
 		c.totalSeconds += int64(part.end.Sub(part.start) / time.Second)
+		if rows[index].Ready && floorSliBoundary(part.end, base.Cadence).After(floorSliBoundary(part.start, base.Cadence)) && part.end.After(eligible) {
+			c.readySeconds += int64(part.end.Sub(part.start) / time.Second)
+			continue
+		}
+		tile, err := c.loadPart(ctx, base, part, rows[index])
 		if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed) {
 			c.pending = true
 			c.failed = c.failed || errors.Is(err, ErrDerivedSourceFailed)
@@ -264,12 +299,12 @@ func (c *retainedSeriesReader) load(ctx context.Context, base slo.WindowInput, s
 			c.readySeconds += int64(part.end.Sub(part.start) / time.Second)
 		}
 		if err != nil {
-			return retainedSloTile{}, err
+			return err
 		}
-		appendRetainedTile(&combined, tile)
+		c.edges[index] = tile
 	}
-	c.series = &combined
-	return combined, nil
+	c.parts, c.stored = parts, rows
+	return nil
 }
 
 func (c *retainedSeriesReader) unpreparedTile(base slo.WindowInput, part retainedReadPart) retainedSloTile {
@@ -392,22 +427,13 @@ func (c *retainedSeriesReader) rolling(ctx context.Context, base slo.WindowInput
 		}
 	}
 	// Budget/burn include the exact requested starting endpoint as well.
+	if err := c.readFirst(ctx, base, start, cadence); err != nil {
+		return nil, err
+	}
 	if c.first == nil {
-		points, err := c.points(ctx, base, start.Add(-cadence), start)
-		if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed) {
-			c.pending = true
-			c.failed = c.failed || errors.Is(err, ErrDerivedSourceFailed)
-			missing := c.unpreparedTile(base, retainedReadPart{start: start.Add(-cadence), end: start})
-			samples = append(missing.Budget, samples...)
-			return reduceRetainedDisplay(samples, start, end, c.row.Target, selectedMetric, min(maxBuckets, 375))
-		}
-		if err != nil || len(points) != 1 {
-			if err == nil {
-				err = slo.ErrOperationalFacts
-			}
-			return nil, err
-		}
-		c.first = &points[0]
+		missing := c.unpreparedTile(base, retainedReadPart{start: start.Add(-cadence), end: start})
+		samples = append(missing.Budget, samples...)
+		return reduceRetainedDisplay(samples, start, end, c.row.Target, selectedMetric, min(maxBuckets, 375))
 	}
 	first := c.first.Current
 	if metric == "burn" {
@@ -421,6 +447,27 @@ func (c *retainedSeriesReader) rolling(ctx context.Context, base slo.WindowInput
 	return reduceRetainedDisplay(samples, start, end, c.row.Target, selectedMetric, min(maxBuckets, 375))
 }
 
+func (c *retainedSeriesReader) readFirst(ctx context.Context, base slo.WindowInput, start time.Time, cadence time.Duration) error {
+	if c.firstLoaded || c.first != nil {
+		return nil
+	}
+	points, err := c.points(ctx, base, start.Add(-cadence), start)
+	if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed) {
+		c.pending = true
+		c.failed = c.failed || errors.Is(err, ErrDerivedSourceFailed)
+		c.firstLoaded = true
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if len(points) != 1 {
+		return slo.ErrOperationalFacts
+	}
+	c.first, c.firstLoaded = &points[0], true
+	return nil
+}
+
 func (c *retainedSeriesReader) attainment(ctx context.Context, base slo.WindowInput, start, end time.Time, cadence time.Duration, revision string, _ ...[]time.Time) ([]api.SloOperationalSample, time.Duration, bool, error) {
 	tile, err := c.load(ctx, base, start, end)
 	if err != nil {
@@ -432,6 +479,9 @@ func (c *retainedSeriesReader) attainment(ctx context.Context, base slo.WindowIn
 }
 
 func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, start, end, cutoff time.Time, id openapi_types.UUID, revision, target string, window, cadence time.Duration) (api.SloDailyComplianceSeries, api.SloDailyComplianceSummary, error) {
+	if c.days != nil {
+		return *c.days, c.daySummary, nil
+	}
 	series := api.SloDailyComplianceSeries{Kind: "daily_compliance", Days: []api.SloDailyComplianceDay{}}
 	var summary api.SloDailyComplianceSummary
 	last := utcDayStart(cutoff)

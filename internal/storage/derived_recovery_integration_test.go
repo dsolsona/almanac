@@ -99,6 +99,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if err != nil || prepared.Generation == nil || prepared.HistoryPreparation != nil {
 		t.Fatalf("history was not published: %v", err)
 	}
+	verifyDetachedRetainedSnapshot(t, databaseURL, input, prepared)
 	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)
 	verifyIncrementalRetainedAvailability(t, databaseURL, pgID, prepared.EffectiveAt)
 	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
@@ -273,16 +274,56 @@ FOR EACH ROW EXECUTE FUNCTION public.almanac_test_current_conflict('` + test.cod
 	}
 }
 
+func verifyDetachedRetainedSnapshot(t *testing.T, databaseURL string, input OperationalDetailInput, oracle api.SloOperationalDetail) {
+	t.Helper()
+	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(t.Context(), databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	id, _ := canonicalUUID(input.ID)
+	row, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &retainedSeriesReader{q: q, row: row, source: source, now: input.Now()}
+	input.retainedReader = reader
+	released := false
+	input.releaseSnapshot = func() error {
+		if err := finishAgentRead(t.Context(), tx, input.Now, started, user, installation, session); err != nil {
+			return err
+		}
+		closeInitialOwnerConnection(conn)
+		if input.Runtime.pools[InteractiveTraffic].Stat().AcquiredConns() != 0 {
+			t.Fatal("detached assembly retained a database connection")
+		}
+		reader.q = nil
+		released = true
+		return nil
+	}
+	actual, err := buildSloOperationalDetail(t.Context(), q, row, source, input)
+	if err != nil || !released || !reflect.DeepEqual(actual.Current, oracle.Current) || !reflect.DeepEqual(actual.BudgetSeries, oracle.BudgetSeries) ||
+		!reflect.DeepEqual(actual.BurnSeries, oracle.BurnSeries) || !reflect.DeepEqual(actual.AttainmentSeries, oracle.AttainmentSeries) ||
+		!reflect.DeepEqual(actual.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(actual.ComplianceSummary, oracle.ComplianceSummary) {
+		t.Fatalf("detached snapshot lost exact values, graph coverage or daily compliance: %v", err)
+	}
+}
+
 func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input OperationalDetailInput, oracle api.SloOperationalDetail) {
 	t.Helper()
 	type outcome struct {
 		value api.SloOperationalDetail
 		err   error
 	}
-	results := make(chan outcome, 8)
+	results := make(chan outcome, 10)
 	start := make(chan struct{})
 	var pending sync.WaitGroup
-	for index := range 8 {
+	for index := range 10 {
 		pending.Go(func() {
 			<-start
 			end := oracle.EffectiveAt

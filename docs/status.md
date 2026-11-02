@@ -95,7 +95,14 @@ not yet verified. Frequent quality transitions still produce 422 responses;
 selection of adaptive graph detail and explicit missing coverage. Its retained
 reducer, generated contract, qualified chart/table context and catalogue example
 pass the fast gate; actual rendered/year/fleet acceptance remains outstanding.
-List provenance failures during live ingestion also remain unresolved.
+Last-known list values now retain provenance with explicit stale/failed state.
+Capacity run six reaches maintained 56-day history, then fails two cold 28-day
+requests on interactive pool admission. The reader now releases the snapshot
+connection before graph decoding/reduction and rechecks authority afterward.
+Focused PostgreSQL verification passes in 34.221 seconds; a retained-deployment
+diagnostic returns all nine concurrent cold requests in 431–546 ms without pool
+errors. The slowest requests still exceed the 500-ms API budget. These diagnostics
+do not establish full fleet/year or rendered acceptance.
 No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
 [PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;

@@ -93,6 +93,7 @@ type OperationalDetailInput struct {
 	displayCache       *sloDisplayCache
 	retainedReader     *retainedSeriesReader
 	historyPublication *retainedHistoryPublication
+	releaseSnapshot    func() error
 	currentOnly        bool
 	overviewOnly       bool
 	Runtime            *Runtime
@@ -104,8 +105,8 @@ type OperationalDetailInput struct {
 	Now                func() time.Time
 }
 
-// ReadSloOperationalDetail computes summary windows and reduced history in one
-// authorized repeatable-read snapshot.
+// ReadSloOperationalDetail loads one authorized repeatable-read snapshot, then
+// reduces retained history without holding its connection and rechecks authority.
 func ReadSloOperationalDetail(ctx context.Context, databaseURL string, input OperationalDetailInput) (api.SloOperationalDetail, error) {
 	var result api.SloOperationalDetail
 	err := retryOperationalRead(ctx, func() error {
@@ -148,7 +149,16 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 		return api.SloOperationalDetail{}, ErrObjectiveInvalid
 	}
 	var result api.SloOperationalDetail
+	released := false
 	if input.Runtime != nil {
+		input.releaseSnapshot = func() error {
+			if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+				return err
+			}
+			closeInitialOwnerConnection(conn)
+			released = true
+			return nil
+		}
 		input.historyPublication = new(retainedHistoryPublication)
 		result, err = loadRetainedSloHistory(ctx, q, row, contextRow, input)
 		if err == nil {
@@ -161,11 +171,27 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
+	if released {
+		// Recheck authority after assembling the detached snapshot.
+		conn, _, tx, user, installation, session, started, err = beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, "administrator", "editor", "viewer")
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		defer closeInitialOwnerConnection(conn)
+		defer rollbackTransaction(tx)
+	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	if input.historyPublication != nil && input.historyPublication.generation.SloID.Valid {
-		return publishRetainedHistory(input.Runtime.Bind(ctx), conn, result, *input.historyPublication)
+		// Let queued readers use the pool before publishing this response cache.
+		closeInitialOwnerConnection(conn)
+		publicationConn, err := acquireReadConnection(ctx, databaseURL, input.Runtime)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		defer closeInitialOwnerConnection(publicationConn)
+		return publishRetainedHistory(input.Runtime.Bind(ctx), publicationConn, result, *input.historyPublication)
 	}
 	return result, nil
 }
@@ -1668,6 +1694,23 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), RequestedAt: requestedAt, EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
 			Current: current, Urgency: api.SloOperationalDetailUrgency(urgency.Group), LeadingReason: leading, Reasons: reasons,
 			Burn1h: burn1h, Burn6h: burn6h, Exhaustion: exhaustionValue(currentResult, burn1h, burn1hResult)}, nil
+	}
+	if reader := input.retainedReader; reader != nil && input.releaseSnapshot != nil {
+		if err := reader.read(ctx, base, rangeStart, rangeEnd); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		if err := reader.readFirst(ctx, base, rangeStart, cadence); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		days, summary, err := daily(ctx, base, rangeStart, rangeEnd, effectiveAt,
+			uuid.UUID(row.ID.Bytes), strconv.FormatInt(row.DefinitionRevision, 10), sli.NormalizeDecimal(row.Target), window, cadence)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		reader.days, reader.daySummary = &days, summary
+		if err := input.releaseSnapshot(); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
 	}
 	budgetSamples, err := rolling(ctx, base, rangeStart, rangeEnd, time.Duration(row.RollingWindowSeconds)*time.Second, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", sampleBucketLimit(rangeStart, rangeEnd, cadence))
 	if err != nil {
