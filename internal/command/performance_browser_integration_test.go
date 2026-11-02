@@ -68,7 +68,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		return artifacts, errors.New("browser candidate differs from normal deployed executable")
 	}
 	spki := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
-	input, err := json.Marshal(struct {
+	input, err := marshalPerformanceEvidence(struct {
 		URL         string                          `json:"url"`
 		SPKI        string                          `json:"spki"`
 		Login       string                          `json:"login"`

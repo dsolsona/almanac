@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,39 @@ import (
 	"testing"
 	"time"
 )
+
+func TestPerformanceEvidenceKeepsNanosecondDurationsAndStrictJSON(t *testing.T) {
+	value := struct {
+		Setup time.Duration
+		Read  performanceReadReport
+	}{Setup: time.Second + 7, Read: performanceReadReport{
+		Wall: 11, Invocation: 19, Latency: performanceDistribution{P95: 23},
+		Samples: []performanceSample{{Elapsed: 29}},
+	}}
+	body, err := marshalPerformanceEvidence(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Setup int64
+		Read  struct {
+			Wall       int64 `json:"wall_ns"`
+			Invocation int64 `json:"invocation_ns"`
+			Latency    struct {
+				P95 int64 `json:"p95_ns"`
+			} `json:"latency"`
+			Samples []struct {
+				Elapsed int64 `json:"elapsed_ns"`
+			} `json:"samples"`
+		}
+	}
+	if err := json.Unmarshal(body, &got); err != nil || got.Setup != 1_000_000_007 || got.Read.Wall != 11 || got.Read.Invocation != 19 || got.Read.Latency.P95 != 23 || len(got.Read.Samples) != 1 || got.Read.Samples[0].Elapsed != 29 {
+		t.Fatalf("capacity evidence lost nanosecond values: %s (%v)", body, err)
+	}
+	if _, err := marshalPerformanceEvidence(string([]byte{0xff})); err == nil {
+		t.Fatal("duration compatibility option disabled strict UTF-8 validation")
+	}
+}
 
 func TestPerformanceNearestRank(t *testing.T) {
 	values := make([]time.Duration, 100)

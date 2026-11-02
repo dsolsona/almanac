@@ -6,6 +6,8 @@ package command
 
 import (
 	"context"
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +20,11 @@ import (
 
 const performanceUsers = 10
 const performanceReadsPerOperation = 100
+
+// Capacity evidence records durations as nanoseconds, including nested reports.
+func marshalPerformanceEvidence(value any) ([]byte, error) {
+	return json.Marshal(value, jsonv1.FormatDurationAsNano(true))
+}
 
 type performanceReader struct {
 	// Identity is a fixture ID, never a login, cookie or credential.

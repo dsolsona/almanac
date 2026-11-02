@@ -73,8 +73,12 @@ login/container comparisons; measured navigation and mutations are not retried.
 The measured slowest normal SLI repeat is 260 ms externally versus a 191-ms
 rendered trace. That difference does not explain every earlier failure.
 
-The fixed 10/100/1,000-SLO, 365-day workload is implemented and compiled but its
-new invocation remains unapproved and unexecuted. T08 stays open until its
+The maintainer approved the fixed 10/100/1,000-SLO, 365-day workload on 2026-11-02.
+Its first execution fails during setup evidence encoding after 30.606 seconds:
+JSON v2 requires explicit formatting for duration values. The capacity evidence
+encoder now preserves their intended nanosecond representation; its focused
+regression, 500 Go cases and tagged compilation pass. The corrected workload
+will run separately; no capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
 [PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;
 its three existing Greptile threads are resolved. Newer local work is committed,

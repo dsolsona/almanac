@@ -95,11 +95,12 @@ reporting success; a failed check preserves the running services and volumes.
 Git publication operations must likewise match current approval rules and existing
 user authorization. Do not merge PRs merely because publishing them was authorized.
 
-## Controlled capacity entry: execution not yet approved
+## Approved controlled capacity entry
 
-The fixed runner is implemented, but this invocation is outside the approved
-catalogue above. Its presence does not authorize execution, and ordinary,
-integration and Compose verification do not launch it:
+On 2026-11-02 the maintainer explicitly approved this exact invocation for F3-T08,
+including reruns only after diagnosing and fixing a failure. Record the failure,
+correction and replan before a rerun. Ordinary, integration and Compose verification
+do not launch this separate workload:
 
 ```sh
 make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'

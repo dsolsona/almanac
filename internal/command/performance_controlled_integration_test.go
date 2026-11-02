@@ -5,7 +5,6 @@ package command
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/signal"
@@ -60,7 +59,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	report := performanceControlledReport{SchemaVersion: 1, Started: time.Now().UTC(), Result: "running", Stages: make(map[string]jsontext.Value)}
 	write := func() {
 		t.Helper()
-		body, err := json.Marshal(report)
+		body, err := marshalPerformanceEvidence(report)
 		if err != nil || os.WriteFile(filepath.Join(artifacts, "performance.json"), append(body, '\n'), 0o600) != nil {
 			t.Error("persist controlled performance evidence failed")
 		}
@@ -84,9 +83,9 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	}
 	record := func(name string, result any, resultErr error) bool {
 		t.Helper()
-		body, err := json.Marshal(result)
+		body, err := marshalPerformanceEvidence(result)
 		if err != nil {
-			t.Fatal("encode controlled performance stage evidence failed")
+			t.Fatalf("encode controlled performance stage evidence %T failed: %v", result, err)
 		}
 		report.Stages[name] = jsontext.Value(body)
 		if resultErr != nil {
