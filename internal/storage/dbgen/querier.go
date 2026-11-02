@@ -247,6 +247,7 @@ type Querier interface {
 	ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error)
 	ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error)
 	ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloPointParams) (ReadRetainedSloPointRow, error)
+	ReadRetainedTileCandidates(ctx context.Context, arg ReadRetainedTileCandidatesParams) ([]ReadRetainedTileCandidatesRow, error)
 	ReadRetainedTilePoints(ctx context.Context, arg ReadRetainedTilePointsParams) ([]ReadRetainedTilePointsRow, error)
 	// Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct
 	// interior once; only cadence-aligned boundary fragments use canonical rows.

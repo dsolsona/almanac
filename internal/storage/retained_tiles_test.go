@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"reflect"
 	"strconv"
@@ -9,8 +10,64 @@ import (
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/slo"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/google/uuid"
 )
+
+func TestRetainedSelectiveDecodingMatchesAllPointMetadata(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	var points []retainedSloPoint
+	var rows []dbgen.ReadRetainedTileCandidatesRow
+	for index := range 60 {
+		at := start.Add(time.Duration(index+1) * time.Minute)
+		quality := api.SloOperationalQuality{State: "complete", Freshness: "fresh", ExpectedIntervals: 60, ObservedIntervals: 60,
+			Coverage: new("1"), FirstObservationAt: &start, LastObservationAt: &at, LatestReceiptAt: &at, Reason: new("test provenance")}
+		good := "99999999999999999999999" + strconv.Itoa(index%10)
+		performance := api.SloEvaluationPerformance{Good: &good, Total: new("1000000000000000000000000"), Attainment: new("1.000000000000"),
+			AllowedBudget: new("10000000000000000000000"), RemainingBudget: new(good), RemainingFraction: new("0.99"), Burn: new("0.01")}
+		switch index {
+		case 10, 11:
+			quality.State, quality.ObservedIntervals, quality.KnownEmptyIntervals = "complete", 0, 60
+			performance.Good, performance.Total = nil, nil
+		case 20:
+			quality.State, quality.MissingIntervals = "partial", 1
+		case 30:
+			quality.Freshness = "stale"
+		case 40:
+			quality.State, quality.ObservedIntervals, quality.ExpiredIntervals = "expired_history", 0, 60
+			performance.Good, performance.Total = nil, nil
+		}
+		point := retainedSloPoint{Current: api.SloOperationalValue{EvaluationAt: at, Quality: quality, Performance: performance},
+			Burn1h: api.SloBurnValue{End: at, Quality: quality, Performance: performance},
+			Burn6h: api.SloBurnValue{End: at, Quality: quality, Performance: performance}, Attainment: retainedWindowSample(at, quality, performance, "1")}
+		if index == 35 {
+			point.Burn6h.Performance.Good = new("0")
+		}
+		payload, err := json.Marshal(point)
+		if err != nil {
+			t.Fatal(err)
+		}
+		points = append(points, point)
+		rows = append(rows, dbgen.ReadRetainedTileCandidatesRow{EvaluationAt: timestamp(at), Payload: payload, Selection: payload})
+	}
+	want, err := compactRetainedPoints(points, start, start.Add(time.Hour), "0.99", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := compactRetainedPayloads(rows, start, start.Add(time.Hour), "0.99", "1")
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("selective decoding changed exact extrema, gaps or retained metadata: %v", err)
+	}
+	points[25].Current.Performance.Good = new("invalid")
+	rows[25].Payload, err = json.Marshal(points[25])
+	rows[25].Selection = rows[25].Payload
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := compactRetainedPayloads(rows, start, start.Add(time.Hour), "0.99", "1"); err == nil {
+		t.Fatal("invalid counts in an otherwise unselected point were accepted")
+	}
+}
 
 func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)

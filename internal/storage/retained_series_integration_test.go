@@ -427,6 +427,43 @@ func verifyIncrementalRetainedAvailability(t *testing.T, databaseURL string, id 
 	}
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	pointAt := at.Add(-3*time.Hour - cadence)
+	full, err := q.ReadRetainedTilePoints(t.Context(), dbgen.ReadRetainedTilePointsParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at.Add(-time.Hour)), EvaluationAt_2: timestamp(at)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(full) == 0 {
+		t.Fatal("compaction fixture has no retained endpoints")
+	}
+	var tiles [2]retainedSloTile
+	var elapsed [2]time.Duration
+	for version := range 2 {
+		started := time.Now()
+		if version == 0 {
+			points := make([]retainedSloPoint, len(full))
+			for index, stored := range full {
+				if err := json.Unmarshal(stored.Payload, &points[index]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			tiles[version], err = compactRetainedPoints(points, at.Add(-time.Hour), at, row.Target, strconv.FormatInt(row.DefinitionRevision, 10))
+		} else {
+			candidates, queryErr := q.ReadRetainedTileCandidates(t.Context(), dbgen.ReadRetainedTileCandidatesParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+				MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(at.Add(-time.Hour)), EvaluationAt_2: timestamp(at)})
+			if queryErr != nil || len(candidates) != len(full) {
+				t.Fatalf("candidate projection changed retained endpoint count: %d/%d, %v", len(candidates), len(full), queryErr)
+			}
+			tiles[version], err = compactRetainedPayloads(candidates, at.Add(-time.Hour), at, row.Target, strconv.FormatInt(row.DefinitionRevision, 10))
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		elapsed[version] = time.Since(started)
+	}
+	if !reflect.DeepEqual(tiles[0], tiles[1]) {
+		t.Fatal("selective compaction changed exact lanes, quality, extrema or gaps")
+	}
+	t.Logf("selective compaction rows=%d full_decode_reduce=%s selective_decode_reduce=%s", len(full), elapsed[0], elapsed[1])
 	var prefix, generation int64
 	if err := tx.QueryRow(t.Context(), `SELECT coalesce(max(ingestion_generation) FILTER(WHERE interval_end<=$3),0),max(ingestion_generation)
         FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision, pointAt).Scan(&prefix, &generation); err != nil || prefix <= 0 || prefix >= generation {

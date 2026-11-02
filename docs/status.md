@@ -72,6 +72,11 @@ keeps correct earlier points/tiles readable during unrelated pending or failed
 backfill, while newer intersecting inputs still invalidate them. Focused database
 and generated/Go checks pass; integrated verification and operator deployment of
 schema 0036 remain pending.
+The completed batch/checkpoint candidate's full gate still fails at the 56-day
+case's tile-decoding stage. A bounded exact-count projection now selects graph
+endpoints before decoding full metadata; unit and real PostgreSQL equivalence
+checks pass, but its small diagnostic establishes no material speedup. Full
+retained throughput and fleet/year acceptance remain outstanding.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,

@@ -302,6 +302,82 @@ func (q *Queries) ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloP
 	return i, err
 }
 
+const readRetainedTileCandidates = `-- name: ReadRetainedTileCandidates :many
+WITH points AS MATERIALIZED (
+    SELECT evaluation_at,source_generation,payload
+    FROM public.almanac_slo_series_points
+    WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3
+      AND exclusion_revision=0 AND calculation_version=$4 AND evaluation_at>$5 AND evaluation_at<=$6
+    ORDER BY evaluation_at LIMIT 5761
+), lanes AS MATERIALIZED (
+    SELECT p.evaluation_at,v.name,v.value FROM points p
+    CROSS JOIN LATERAL jsonb_each(p.payload) AS v(name,value)
+    WHERE v.name IN ('current','burn_1h','burn_6h','attainment')
+), selection AS (
+    SELECT evaluation_at,jsonb_object_agg(name,jsonb_build_object(
+        'evaluation_at',value->'evaluation_at','end',value->'end','state',value->'state',
+        'good',value->'good','total',value->'total',
+        'quality',jsonb_build_object(
+            'state',value->'quality'->'state','freshness',value->'quality'->'freshness',
+            'observed_intervals',value->'quality'->'observed_intervals',
+            'known_empty_intervals',value->'quality'->'known_empty_intervals',
+            'missing_intervals',value->'quality'->'missing_intervals',
+            'expired_intervals',value->'quality'->'expired_intervals'),
+        'performance',jsonb_build_object('good',value->'performance'->'good','total',value->'performance'->'total')
+    )) AS selection FROM lanes GROUP BY evaluation_at
+)
+SELECT p.evaluation_at,p.source_generation,p.payload,s.selection::jsonb AS selection
+FROM points p JOIN selection s USING(evaluation_at) ORDER BY p.evaluation_at
+`
+
+type ReadRetainedTileCandidatesParams struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	EvaluationAt        pgtype.Timestamptz `json:"evaluation_at"`
+	EvaluationAt_2      pgtype.Timestamptz `json:"evaluation_at_2"`
+}
+
+type ReadRetainedTileCandidatesRow struct {
+	EvaluationAt     pgtype.Timestamptz `json:"evaluation_at"`
+	SourceGeneration int64              `json:"source_generation"`
+	Payload          []byte             `json:"payload"`
+	Selection        []byte             `json:"selection"`
+}
+
+func (q *Queries) ReadRetainedTileCandidates(ctx context.Context, arg ReadRetainedTileCandidatesParams) ([]ReadRetainedTileCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, readRetainedTileCandidates,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+		arg.EvaluationAt,
+		arg.EvaluationAt_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadRetainedTileCandidatesRow{}
+	for rows.Next() {
+		var i ReadRetainedTileCandidatesRow
+		if err := rows.Scan(
+			&i.EvaluationAt,
+			&i.SourceGeneration,
+			&i.Payload,
+			&i.Selection,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const readRetainedTilePoints = `-- name: ReadRetainedTilePoints :many
 SELECT evaluation_at,source_generation,payload
 FROM public.almanac_slo_series_points
