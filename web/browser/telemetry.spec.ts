@@ -110,11 +110,14 @@ for (const interrupted of [false, true]) test(`production UI roots survive route
       await page.reload();
       await expect.poll(() => completed.filter(value => value.journey === 'sli.list' && value.result === 'ready').length).toBe(2);
     }
+    if (await page.getByRole('button', { name: 'Menu', exact: true }).isVisible()) await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page.getByRole('link', { name: 'Agents', exact: true }).click();
     await expect.poll(() => completed.filter(value => value.journey === 'management' && value.result === 'ready').length).toBe(1);
+    if (await page.getByRole('button', { name: 'Menu', exact: true }).isVisible()) await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page.getByRole('link', { name: 'Datasources', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'No datasources yet' })).toBeVisible();
     await expect.poll(() => completed.filter(value => value.journey === 'management' && value.result === 'ready').length).toBe(2);
+    if (await page.getByRole('button', { name: 'Menu', exact: true }).isVisible()) await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page.getByRole('link', { name: 'SLIs', exact: true }).click();
     await expect.poll(() => completed.filter(value => value.journey === 'sli.list' && value.result === 'ready').length).toBe(interrupted ? 3 : 2);
     await page.goto('/agents');

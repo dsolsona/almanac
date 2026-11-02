@@ -51,15 +51,22 @@ Complete hourly summaries now reuse repair's calculated points atomically.
 The revision/time index, source checkpoints, bounded read/cache transactions and
 foreign-key-safe retention preserve accuracy and availability during backfill.
 
-The subsequent verification candidate `2355c7c` passes normal isolated Compose
-in 528.117 seconds, including actual SLI/SLO flows, collection, handoff, restart
+The subsequent verification candidate `31a6fd4` passes normal isolated Compose
+in 560.181 seconds, including actual SLI/SLO flows, collection, handoff, restart
 and cancellation cleanup. Each network cohort has 73 ready page-load samples:
-183–402 ms normally and 512–721 ms with added 100-ms latency, at normal CPU speed.
+182–411 ms normally and 501–740 ms with added 100-ms latency, at normal CPU speed.
 Both unchanged 5% tracing-overhead gates pass; eight connected VictoriaTraces
 captures include representative pages and the slowest enabled SLI repeat.
-This fixture contains two SLIs and eight SLOs. It is not fleet/year acceptance.
+This run records two SLIs and nine SLOs. It is not fleet/year acceptance.
 The final ordinary gate passes 357 web and 499 Go cases plus generated/build checks
-and smoke in 27.348 seconds; matching catalogue evidence is retained.
+and smoke in 27.348 seconds. The full browser matrix subsequently exposed four
+mobile telemetry-test failures: the fixture clicked hidden sidebar links without
+opening the menu. Only those navigation steps are corrected; no product change.
+The corrected full browser matrix passes all 126 cases in 89.584 seconds.
+The formal report still refuses completion: its broad Compose fingerprint includes
+the changed browser fixture, and the capacity receipt is missing. The earlier
+Compose measurements remain evidence for the unchanged application, not a final
+matching handoff receipt.
 
 Earlier transport, filtered-journey, overhead and timeout failures remain in the
 task record and timing ledger. A bounded startup transport preflight now precedes
