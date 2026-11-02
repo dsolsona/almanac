@@ -113,6 +113,15 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	if !record("automatic-maintenance-56-days", maintenance, err) {
 		return
 	}
+	storageObserver := testpostgres.Connect(t, fleet.fixture.databaseURL)
+	var maintainedDatabaseBytes int64
+	err = storageObserver.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&maintainedDatabaseBytes)
+	closePerformanceObserver(storageObserver)
+	if !record("maintained-storage-56-days", struct {
+		DatabaseBytes int64 `json:"database_bytes"`
+	}{maintainedDatabaseBytes}, err) {
+		return
+	}
 	stage("ready-56-days")
 	ready, err := runPerformanceReadyPhase(ctx, fleet, "ready-56-days", time.Now().UTC().Truncate(time.Minute))
 	if !record("ready-56-days", ready, err) {
@@ -131,7 +140,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		return
 	}
 	stage("seed-365-days")
-	required, err := performanceDiskRequired(seeded.DatabaseBytes, seeded.CanonicalRows, 365*24*60*int64(size)-seeded.NominalSlots)
+	required, err := performanceDiskRequired(maintainedDatabaseBytes, seeded.CanonicalRows, 365*24*60*int64(size)-seeded.NominalSlots)
 	if err != nil {
 		t.Fatal(err)
 	}
