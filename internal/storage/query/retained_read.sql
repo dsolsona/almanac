@@ -88,40 +88,55 @@ FROM bounded ORDER BY ordinal;
 WITH objective AS (
     SELECT definition.sli_id,GREATEST(definition.rolling_window_seconds,21600)::bigint AS window_seconds
     FROM public.almanac_slo_definitions definition WHERE definition.slo_id=sqlc.arg(slo_id) AND definition.revision=sqlc.arg(definition_revision)
+), points AS MATERIALIZED (
+    SELECT p.evaluation_at,convert_to(p.payload::text,'UTF8') AS payload,
+           GREATEST(p.source_generation,
+               CASE WHEN checkpoint.coherent_through>=p.evaluation_at THEN checkpoint.coherent_source_generation ELSE 0 END)::bigint AS source_generation
+    FROM public.almanac_slo_series_points p
+    LEFT JOIN public.almanac_slo_series_repair checkpoint
+      ON checkpoint.slo_id=p.slo_id AND checkpoint.definition_revision=p.definition_revision
+     AND checkpoint.measurement_revision=p.measurement_revision AND checkpoint.calculation_version=p.calculation_version
+    WHERE p.slo_id=sqlc.arg(slo_id) AND p.definition_revision=sqlc.arg(definition_revision) AND p.measurement_revision=sqlc.arg(measurement_revision)
+      AND p.exclusion_revision=0 AND p.calculation_version=sqlc.arg(calculation_version) AND p.evaluation_at>sqlc.arg(evaluation_at) AND p.evaluation_at<=sqlc.arg(evaluation_at_2)
+    ORDER BY p.evaluation_at LIMIT 961
+), bounds AS MATERIALIZED (
+    SELECT min(evaluation_at) AS range_start,max(evaluation_at) AS range_end,min(source_generation) AS source_generation
+    FROM points
+), newer_dirty AS MATERIALIZED (
+    SELECT d.range_start,d.range_end,d.generation
+    FROM public.almanac_derived_dirty_ranges d CROSS JOIN objective o CROSS JOIN bounds b
+    WHERE d.sli_id=o.sli_id AND d.measurement_revision=sqlc.arg(measurement_revision)
+      AND d.generation>b.source_generation
+      AND d.range_start>=(date_trunc('hour',(b.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+      AND d.range_start<b.range_end
+), newer_aggregates AS MATERIALIZED (
+    SELECT a.hour_start,a.source_generation
+    FROM public.almanac_sli_hourly_aggregates a CROSS JOIN objective o CROSS JOIN bounds b
+    WHERE a.sli_id=o.sli_id AND a.measurement_revision=sqlc.arg(measurement_revision)
+      AND a.source_generation>b.source_generation
+      AND a.hour_start>=(date_trunc('hour',(b.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+      AND a.hour_start<b.range_end
 ), selected AS (
     SELECT p.evaluation_at,p.payload,
-           sum(octet_length(p.payload::text)) OVER ()::bigint AS payload_bytes,
+           sum(octet_length(p.payload)) OVER ()::bigint AS payload_bytes,
            (EXISTS (
-               SELECT 1 FROM public.almanac_derived_dirty_ranges d
-               WHERE d.sli_id=o.sli_id AND d.measurement_revision=p.measurement_revision
-                 AND d.generation>stamp.source_generation
+               SELECT 1 FROM newer_dirty d
+               WHERE d.generation>p.source_generation
                  AND d.range_start>=(date_trunc('hour',(p.evaluation_at-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
                  AND d.range_start<p.evaluation_at AND d.range_end>p.evaluation_at-o.window_seconds*interval '1 second'
            ) OR EXISTS (
-               SELECT 1 FROM public.almanac_sli_hourly_aggregates a
-               WHERE a.sli_id=o.sli_id AND a.measurement_revision=p.measurement_revision
-                 AND a.source_generation>stamp.source_generation
+               SELECT 1 FROM newer_aggregates a
+               WHERE a.source_generation>p.source_generation
                  AND a.hour_start>=(date_trunc('hour',(p.evaluation_at-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
                  AND a.hour_start<p.evaluation_at
            ))::boolean AS repairing,
            EXISTS (
                SELECT 1 FROM public.almanac_slo_series_repair w
-               WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision
-                 AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
+               WHERE w.slo_id=sqlc.arg(slo_id) AND w.definition_revision=sqlc.arg(definition_revision)
+                 AND w.measurement_revision=sqlc.arg(measurement_revision) AND w.calculation_version=sqlc.arg(calculation_version)
                  AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at AND w.attempts>=5
            ) AS exhausted
-    FROM public.almanac_slo_series_points p
-    LEFT JOIN public.almanac_slo_series_repair checkpoint
-      ON checkpoint.slo_id=p.slo_id AND checkpoint.definition_revision=p.definition_revision
-     AND checkpoint.measurement_revision=p.measurement_revision AND checkpoint.calculation_version=p.calculation_version
-    CROSS JOIN LATERAL (
-        SELECT GREATEST(p.source_generation,
-            CASE WHEN checkpoint.coherent_through>=p.evaluation_at THEN checkpoint.coherent_source_generation ELSE 0 END)::bigint AS source_generation
-    ) stamp
-    CROSS JOIN objective o
-    WHERE p.slo_id=sqlc.arg(slo_id) AND p.definition_revision=sqlc.arg(definition_revision) AND p.measurement_revision=sqlc.arg(measurement_revision)
-      AND p.exclusion_revision=0 AND p.calculation_version=sqlc.arg(calculation_version) AND p.evaluation_at>sqlc.arg(evaluation_at) AND p.evaluation_at<=sqlc.arg(evaluation_at_2)
-    ORDER BY p.evaluation_at LIMIT 961
+    FROM points p CROSS JOIN objective o
 )
-SELECT evaluation_at,CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::jsonb END::jsonb AS payload,
+SELECT evaluation_at,CASE WHEN payload_bytes<=20971520 THEN payload ELSE '{}'::bytea END::bytea AS payload,
        payload_bytes,repairing,exhausted FROM selected ORDER BY evaluation_at;

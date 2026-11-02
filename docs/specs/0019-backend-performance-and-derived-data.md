@@ -192,6 +192,13 @@ fails; changing acceptance targets requires explicit review. No sleeping worker
 holds a database transaction or connection. Bound queue scans and retain dirty work
 durably across outages. Expose exhausted errors rather than retrying forever.
 
+Retained detail transactions set local PostgreSQL `work_mem` to 32 MiB so each
+bounded 20-MiB payload can remain in memory during materialization and sorting.
+The retained query has four payload workspaces, approximately 128 MiB per active
+read and 1 GiB across the eight interactive connections, in addition to database
+and application overhead. This is transaction-local, not a global database setting;
+wire limits, pool admission, timeouts and acceptance budgets remain unchanged.
+
 ## Failure and recovery
 
 Test termination before/after dirty-marker commit, claim, derived writes, publication

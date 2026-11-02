@@ -99,10 +99,12 @@ Last-known list values now retain provenance with explicit stale/failed state.
 Capacity run six reaches maintained 56-day history, then fails two cold 28-day
 requests on interactive pool admission. The reader now releases the snapshot
 connection before graph decoding/reduction and rechecks authority afterward.
-Focused PostgreSQL verification passes in 34.221 seconds; a retained-deployment
-diagnostic returns all nine concurrent cold requests in 431–546 ms without pool
-errors. The slowest requests still exceed the 500-ms API budget. These diagnostics
-do not establish full fleet/year or rendered acceptance.
+The subsequent edge-validation/workspace/transaction correction passes focused
+PostgreSQL verification in 30.217 seconds and the complete fast gate in 28.281
+seconds. Nine concurrent cold requests after restart return coherent data in
+376–473 ms, with connected traces and exact pinned-table comparison. Earlier
+above-budget cohorts remain retained. These diagnostics use one viewer with
+agents stopped; they do not establish full fleet/year or rendered acceptance.
 No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
 [PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;

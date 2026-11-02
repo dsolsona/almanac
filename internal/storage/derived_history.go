@@ -385,16 +385,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 
 // Cache accounting shares a budget row. Publish after the protected calculation
 // snapshot commits so unrelated cache writers cannot invalidate that snapshot.
-func publishRetainedHistory(ctx context.Context, conn *readConnection, result api.SloOperationalDetail, publication retainedHistoryPublication) (api.SloOperationalDetail, error) {
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	defer rollbackTransaction(tx)
-	if err := setTransactionBounds(ctx, tx); err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	q := dbgen.New(tx)
+func publishRetainedHistory(ctx context.Context, q *dbgen.Queries, result api.SloOperationalDetail, publication retainedHistoryPublication) (api.SloOperationalDetail, error) {
 	if publication.corruptGeneration.Valid {
 		if _, err := q.DeleteCorruptPreparedSloHistory(ctx, publication.corruptGeneration); err != nil {
 			return api.SloOperationalDetail{}, err
@@ -417,9 +408,6 @@ func publishRetainedHistory(ctx context.Context, conn *readConnection, result ap
 	}
 	publication.history.GenerationID, publication.history.Payload = generationID, payload
 	if err := q.InsertPreparedSloHistory(ctx, publication.history); err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	return result, nil

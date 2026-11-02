@@ -134,6 +134,12 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
+	if input.Runtime != nil {
+		// The bounded 20-MiB payload must fit each materialization/sort workspace.
+		if _, err := tx.Exec(ctx, "SET LOCAL work_mem = '32MB'"); err != nil {
+			return api.SloOperationalDetail{}, readTransactionError(ctx, "storage: operational read memory setup failed", err)
+		}
+	}
 	row, err := q.GetSlo(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.SloOperationalDetail{}, ErrObjectiveNotFound
@@ -171,27 +177,34 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
-	if released {
+	publication := input.historyPublication != nil && input.historyPublication.generation.SloID.Valid
+	if released || publication {
+		readStarted := started
+		if !released {
+			if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+				return api.SloOperationalDetail{}, err
+			}
+			closeInitialOwnerConnection(conn)
+		}
 		// Recheck authority after assembling the detached snapshot.
-		conn, _, tx, user, installation, session, started, err = beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, "administrator", "editor", "viewer")
+		conn, q, tx, user, installation, session, started, err = beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, "administrator", "editor", "viewer")
 		if err != nil {
 			return api.SloOperationalDetail{}, err
 		}
 		defer closeInitialOwnerConnection(conn)
 		defer rollbackTransaction(tx)
+		if started.Before(readStarted) {
+			return api.SloOperationalDetail{}, ErrInvalidSession
+		}
 	}
-	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-		return api.SloOperationalDetail{}, err
-	}
-	if input.historyPublication != nil && input.historyPublication.generation.SloID.Valid {
-		// Let queued readers use the pool before publishing this response cache.
-		closeInitialOwnerConnection(conn)
-		publicationConn, err := acquireReadConnection(ctx, databaseURL, input.Runtime)
+	if publication {
+		result, err = publishRetainedHistory(input.Runtime.Bind(ctx), q, result, *input.historyPublication)
 		if err != nil {
 			return api.SloOperationalDetail{}, err
 		}
-		defer closeInitialOwnerConnection(publicationConn)
-		return publishRetainedHistory(input.Runtime.Bind(ctx), publicationConn, result, *input.historyPublication)
+	}
+	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+		return api.SloOperationalDetail{}, err
 	}
 	return result, nil
 }

@@ -544,9 +544,31 @@ func verifyIncrementalRetainedAvailability(t *testing.T, databaseURL string, id 
 		t.Fatal(err)
 	}
 	check(false)
+	updated, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_points SET source_generation=$3 WHERE slo_id=$1 AND evaluation_at=$2`, id, pointAt.Add(cadence), generation+1)
+	if err != nil || updated.RowsAffected() != 1 {
+		t.Fatalf("mixed-watermark fixture lacks its second point: %v", err)
+	}
+	edgeParams := dbgen.ReadRetainedEdgePointsParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion,
+		EvaluationAt: timestamp(pointAt.Add(-cadence)), EvaluationAt2: timestamp(pointAt.Add(cadence))}
+	checkEdges := func(secondReady bool) {
+		t.Helper()
+		points, err := q.ReadRetainedEdgePoints(t.Context(), edgeParams)
+		if err != nil || len(points) != 2 || !points[0].Repairing || points[1].Repairing == secondReady {
+			t.Fatalf("batched edge validation mixed point watermarks: secondReady=%t rows=%d err=%v", secondReady, len(points), err)
+		}
+		bytes := int64(len(points[0].Payload) + len(points[1].Payload))
+		for _, point := range points {
+			var canonical string
+			if err := tx.QueryRow(t.Context(), `SELECT payload::text FROM public.almanac_slo_series_points WHERE slo_id=$1 AND evaluation_at=$2`, id, point.EvaluationAt).Scan(&canonical); err != nil || string(point.Payload) != canonical || point.PayloadBytes != bytes {
+				t.Fatalf("binary edge wire changed exact UTF-8 payload or shared byte accounting: %v", err)
+			}
+		}
+	}
+	checkEdges(true)
 	// Different tile watermarks must still be validated independently in one read.
 	next := start.Add(time.Hour)
-	updated, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_tiles SET source_generation=$3 WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start=$2`, id, next, generation+1)
+	updated, err = tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_tiles SET source_generation=$3 WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start=$2`, id, next, generation+1)
 	if err != nil || updated.RowsAffected() != 1 {
 		t.Fatalf("mixed-watermark fixture lacks its second tile: %v", err)
 	}
@@ -574,4 +596,5 @@ func verifyIncrementalRetainedAvailability(t *testing.T, databaseURL string, id 
 		t.Fatal(err)
 	}
 	checkParts(false)
+	checkEdges(false)
 }
