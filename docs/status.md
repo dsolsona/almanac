@@ -84,6 +84,15 @@ now defers SQLSTATE 40001 while preserving genuine failure counts. The determini
 PostgreSQL regression fails before the fix and passes afterward in 30.217 seconds,
 including normal recovery. Earlier broad gates describe the preceding product;
 final capacity/integrated verification for this correction remains pending.
+The next retained capacity run reaches maintained 56-day history, but fails graph
+reads. VictoriaTraces attributes 765 ms of a 1,000 ms request to repeated tile
+validation. Candidate `b01ee6c` batches that validation without changing its
+generation/overlap fences: isolated SQL profiling improves from 1,114 to 89 ms,
+and both versions return identical results for all 673 rows. The focused
+PostgreSQL gate passes in 31.080 seconds. Rendered latency on this correction is
+not yet verified. Frequent quality transitions still produce 422 responses;
+[ADR-0027](adr/0027-bounded-history-quality-display.md) is only a proposal.
+List provenance failures during live ingestion also remain unresolved.
 No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.
 [PR #53](https://github.com/dsolsona/almanac/pull/53) remains open at `2ae406c`;
