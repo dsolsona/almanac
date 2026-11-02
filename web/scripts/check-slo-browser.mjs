@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { join } from 'node:path';
 import { captureTelemetryDelivery } from './capture-telemetry-delivery.mjs';
+import { browserTransportReady } from './browser-readiness.mjs';
 let browser, page, fixture, stage='input';
 const wire=[];
 const wireRequests=new Map();
@@ -26,6 +27,7 @@ try {
   };
   await mkdir(fixture.artifacts,{recursive:true,mode:0o700});
   const {chromium,expect}=await import('@playwright/test'); browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${fixture.spki}`]});
+  await browserTransportReady(browser,fixture.url);
   const operationalRequests=new Map();
   const context=await browser.newContext({viewport:{width:1440,height:900},colorScheme:'light'}); page=await context.newPage();
   await page.addInitScript(()=>{
@@ -69,6 +71,7 @@ try {
   page.on('requestfailed',request=>{const entry=wireRequests.get(request);if(entry){entry.failed=true;const error=request.failure()?.errorText??'';entry.transport_error=/^net::ERR_[A-Z0-9_]+$/.test(error)?error:'unclassified';}});
   const preparationReads=[];
   const assertOverviewMatchesResponse=async()=>{
+    stage='filtered overview matching response';
     await page.waitForFunction(()=>{
       const state=globalThis.__almanacRefreshResponse;
       if(!state?.settled)return false;
@@ -86,8 +89,10 @@ try {
     assert.equal(observed.failed,undefined,'browser could not consume the filtered overview response');assert.equal(observed.status,200);
     const urgency=new URLSearchParams(new URL(page.url()).search).get('urgency');
     const rows=observed.body.items.filter(item=>!urgency||item.urgency===urgency).map(item=>`/slos/${item.slo.id}`).sort();
+    stage='filtered overview matching rows';
     await expect.poll(()=>page.locator('.app-slo-name>a.app-slo-hitarea').evaluateAll(links=>links.map(link=>new URL(link.href).pathname).sort())).toEqual(rows);
     const count=urgency?observed.body.group_counts[urgency]:Object.values(observed.body.group_counts).reduce((sum,value)=>sum+value,0);
+    stage='filtered overview matching count';
     await expect(page.locator('.app-slo-list-sub')).toHaveText(`${count} SLO${count===1?'':'s'} · grouped by urgency · UTC`);
     return observed.body;
   };
@@ -296,6 +301,7 @@ try {
   await page.getByText('Filters',{exact:true}).click(); await page.getByLabel('Service',{exact:true}).selectOption(slo.service_id); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('service_id'))).toBe(slo.service_id);
   stage='filtered overview urgency';
   await page.getByLabel('Urgency',{exact:true}).selectOption(overviewItem.urgency);
+  stage='filtered overview urgency URL';
   await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('urgency'))).toBe(overviewItem.urgency);
   await assertOverviewMatchesResponse();
   await page.getByText('Filters',{exact:true}).click(); await page.setViewportSize({width:1440,height:900}); await checkOverviewToolbarAlignment();
@@ -376,9 +382,17 @@ try {
   let reason=String(error instanceof Error?error.message:error);
   for(const secret of [fixture?.login,fixture?.password,fixture?.trace_control_key])if(typeof secret==='string'&&secret)reason=reason.replaceAll(secret,'[redacted]');
   if(fixture?.artifacts&&stage.startsWith('filtered overview')){
-    const diagnostics=await page?.evaluate(()=>({overview:{settled:globalThis.__almanacRefreshResponse?.settled,failed:globalThis.__almanacRefreshResponse?.failed,status:globalThis.__almanacRefreshResponse?.status},alerts:Array.from(document.querySelectorAll('[role="alert"]')).map(node=>node.textContent?.slice(0,1000))})).catch(()=>null);
+    const diagnostics=await page?.evaluate(()=>{
+      const state=globalThis.__almanacRefreshResponse,current=new URLSearchParams(location.search),requested=new URLSearchParams(state?.search??'');
+      return {overview:{settled:state?.settled,failed:state?.failed,status:state?.status},filters_open:document.querySelector('.app-slo-filters')?.open,
+        filters:['q','service_id','urgency','cursor'].map(key=>({key,same:(requested.get(key)??'')===(current.get(key)??''),requested_present:requested.has(key),current_present:current.has(key)})),
+        groups:state?.body?.group_counts,items:state?.body?.items?.map(item=>({id:item.slo.id,urgency:item.urgency})),
+        rows:Array.from(document.querySelectorAll('.app-slo-name>a.app-slo-hitarea')).map(link=>new URL(link.href).pathname),
+        alerts:Array.from(document.querySelectorAll('[role="alert"]')).map(node=>node.textContent?.slice(0,1000))};
+    }).catch(()=>null);
     if(diagnostics)await writeFile(join(fixture.artifacts,'refresh-cancellation.json'),JSON.stringify(diagnostics)+'\n',{mode:0o600}).catch(()=>{});
   }
+  if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-location.json'),JSON.stringify({locations:String(error?.stack??'').split('\n').filter(line=>line.includes('check-slo-browser.mjs:')).slice(0,8)})+'\n',{mode:0o600}).catch(()=>{});
   await page?.screenshot({path:fixture?.artifacts?join(fixture.artifacts,'slo-failure.png'):undefined,fullPage:true}).catch(()=>{});
   if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'slo-network.json'),JSON.stringify(wire)+'\n',{mode:0o600}).catch(()=>{});
   if(fixture?.artifacts)await writeFile(join(fixture.artifacts,'failure-stage.txt'),stage+'\n',{mode:0o600}).catch(()=>{});

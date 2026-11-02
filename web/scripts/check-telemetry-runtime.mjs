@@ -145,7 +145,8 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       const elapsed=performance.now()-started;
       const rendered=await page.evaluate(()=>({events:window.almanacRuntimeJourneys,resources:performance.getEntriesByType('resource').filter(entry=>/\/assets\/[^/]+\.js$/.test(new URL(entry.name).pathname)).map(entry=>({path:new URL(entry.name).pathname,start_ms:entry.startTime,duration_ms:entry.duration,response_start_ms:entry.responseStart,response_end_ms:entry.responseEnd,transfer_bytes:entry.transferSize,encoded_bytes:entry.encodedBodySize,decoded_bytes:entry.decodedBodySize}))}));
       const wallElapsed=Date.now()-wallStarted;
-      Object.assign(sample,{result:'ready',elapsed_ms:elapsed,wall_elapsed_ms:wallElapsed,clock_adjustment_ms:wallElapsed-elapsed,server_date_ms:latestDate,pending_responses:pending,unavailable_responses:unavailable,script_resources:rendered.resources,script_encoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.encoded_bytes,0),script_decoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.decoded_bytes,0)});
+      const root=rendered.events.find(event=>event.journey===journey&&event.result==='ready');
+      Object.assign(sample,{result:'ready',elapsed_ms:elapsed,wall_elapsed_ms:wallElapsed,clock_adjustment_ms:wallElapsed-elapsed,server_date_ms:latestDate,pending_responses:pending,unavailable_responses:unavailable,trace_id:root?.trace_id??null,trace_duration_ms:root?.duration_ms??null,script_resources:rendered.resources,script_encoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.encoded_bytes,0),script_decoded_bytes:rendered.resources.reduce((sum,entry)=>sum+entry.decoded_bytes,0)});
       assert.ok(Math.abs(wallElapsed-elapsed)<250,'clock discontinuity invalidates the runtime sample');
       assert.deepEqual([...capabilities],[mode==='enabled'?'1':'0'],'runtime tracing configuration was not applied');
       if(mode==='enabled')events.push(...rendered.events);
@@ -214,6 +215,10 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     report.page_speed_passed=report.speed_failures.length===0;
     await writeFile(join(artifacts,'telemetry-runtime.json'),JSON.stringify(report,null,2),{mode:0o600});
     await captureTraces(traceURL,events,artifacts,backendSHA,containsSecret);
+    const slowestSli=samples.filter(value=>value.journey==='sli.list'&&value.mode==='enabled'&&value.phase==='repeat').sort((a,b)=>b.elapsed_ms-a.elapsed_ms)[0];
+    const slowestEvent=events.find(event=>event.trace_id===slowestSli.trace_id&&event.result==='ready');
+    assert.ok(slowestEvent,'slowest enabled SLI sample has no rendered trace identity');
+    await captureTraces(traceURL,events,artifacts,backendSHA,containsSecret,'local',[slowestEvent]);
     if(!report.page_speed_passed){
       // A separate diagnostic visit keeps profiler overhead out of acceptance samples.
       const diagnostic=await browser.newContext({storageState,viewport:{width:1440,height:1000},colorScheme:'light'});

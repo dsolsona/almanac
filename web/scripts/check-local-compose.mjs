@@ -6,6 +6,7 @@ import { resolve, join, dirname } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { get, request } from 'node:https';
 import { chromium, expect } from '@playwright/test';
+import { browserTransportReady } from './browser-readiness.mjs';
 import { checkTelemetryRuntime } from './check-telemetry-runtime.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -274,6 +275,7 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     env.ALMANAC_TELEMETRY_DISABLED=value?'false':'true';
     await compose(['up','-d','--no-deps','app']);
     await expect.poll(async()=>{try{return (await servedHTML()).includes(sourceMarker);}catch{return false;}},{timeout:15_000}).toBe(true);
+    await browserTransportReady(browser,url);
     enabled=value;
   };
   const sampleRuntime=async()=>{

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { captureTelemetryDelivery } from './capture-telemetry-delivery.mjs';
+import { browserTransportReady } from './browser-readiness.mjs';
 
 let stage = 'fixture input';
 let fixture;
@@ -51,6 +52,7 @@ try {
   const { chromium, expect } = await import('@playwright/test');
   stage = 'browser launch';
   browser = await chromium.launch({ headless: true, args: [`--ignore-certificate-errors-spki-list=${fixture.spki}`] });
+  await browserTransportReady(browser,fixture.url);
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
   context.setDefaultTimeout(10_000);
   page = await context.newPage();

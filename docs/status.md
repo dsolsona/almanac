@@ -83,6 +83,13 @@ audited-cleanup foreign-key failure. Detaching the checked expired coverage
 partition before restricted removal preserves retained foreign keys; the same
 cleanup/audit/lease/scope regression passes on the small real PostgreSQL fixture.
 Full integrated verification of this corrected candidate remains pending.
+Full database/API verification subsequently passes all 173 cases on `7078957`,
+including both retained workloads and real browser journeys. The next container
+checkpoint renders 73 normal pages in 178–435 ms and 73 added-100-ms pages in
+507–730 ms, but remains failed: normal SLI tracing overhead exceeds 5% and an
+earlier filtered journey times out. Startup transport preflight and bounded
+failure/slowest-trace attribution are added; the focused real journey passes,
+while the previous failures and fleet/year gap remain open.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,
