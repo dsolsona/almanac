@@ -175,6 +175,7 @@ UPDATE public.almanac_slo_overview_snapshots SET state='ready',payload_bytes=$2 
 
 -- name: ListSloOverviewSnapshotItems :many
 SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
+       coalesce(a.digest=sha256(convert_to(a.payload::text,'UTF8')),false)::boolean AS projection_valid,
        (i.projection_current AND (i.projection_digest IS NULL OR
            a.digest=sha256(convert_to(a.payload::text,'UTF8'))))::boolean AS projection_current,
        coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,

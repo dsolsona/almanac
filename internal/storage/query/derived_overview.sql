@@ -2,6 +2,11 @@
 WITH scope AS (
     SELECT s.id,s.version,s.display_name,service.display_name AS service_name,measurement.display_name AS sli_name,
            d.revision,d.measurement_revision,p.generation_id,p.payload_digest,
+           coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
+             AND g.calculation_version=sqlc.arg(calculation_version)
+             AND g.source_generation<=coalesce(source.generation,0)
+             AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days'
+             AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS usable,
            coalesce(source.generation,0) AS source_generation,
            coalesce(f.attempts>=5,false) AS current_failed,
            EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges dirty WHERE dirty.sli_id=d.sli_id
@@ -30,7 +35,7 @@ WITH scope AS (
     ORDER BY s.id LIMIT 10001
 )
 SELECT sha256(convert_to(coalesce(jsonb_agg(jsonb_build_array(id,version,display_name,service_name,sli_name,
-           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed,current,current_failed,source_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
+           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed,current,usable,current_failed,source_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
        count(*)::bigint AS definition_count,coalesce(bool_and(current),true)::boolean AS current
 FROM scope;
 

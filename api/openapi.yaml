@@ -1102,6 +1102,7 @@ components:
       type: object
       required: [slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion, budget_sparkline]
       properties:
+        current_state: {type: string, enum: [ready, stale, failed, unavailable], description: State of the current calculation at snapshot creation. Stale/failed rows retain compatible last-known values and their original generation/evaluation time; observation freshness remains separate. Never infer current Healthy status from those values.}
         generation: {$ref: '#/components/schemas/DerivedGeneration'}
         budget_history_generation: {$ref: '#/components/schemas/DerivedGeneration'}
         budget_history_state: {type: string, enum: [ready, preparing, unavailable], description: Retained budget history is labelled preparing until it matches the current published generation.}

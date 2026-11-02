@@ -78,19 +78,24 @@ const operationalScopeFingerprint = `-- name: OperationalScopeFingerprint :one
 WITH scope AS (
     SELECT s.id,s.version,s.display_name,service.display_name AS service_name,measurement.display_name AS sli_name,
            d.revision,d.measurement_revision,p.generation_id,p.payload_digest,
+           coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
+             AND g.calculation_version=$1
+             AND g.source_generation<=coalesce(source.generation,0)
+             AND g.evaluated_through>=$2::timestamptz-interval '365 days'
+             AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS usable,
            coalesce(source.generation,0) AS source_generation,
            coalesce(f.attempts>=5,false) AS current_failed,
            EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges dirty WHERE dirty.sli_id=d.sli_id
              AND dirty.measurement_revision=d.measurement_revision AND dirty.attempts>=5
-             AND (dirty.lease_until IS NULL OR dirty.lease_until<=$1::timestamptz)) AS source_failed,
+             AND (dirty.lease_until IS NULL OR dirty.lease_until<=$2::timestamptz)) AS source_failed,
            EXISTS(SELECT 1 FROM public.almanac_slo_history_jobs j WHERE j.slo_id=s.id AND j.definition_revision=d.revision
-             AND j.measurement_revision=d.measurement_revision AND j.calculation_version=$2
+             AND j.measurement_revision=d.measurement_revision AND j.calculation_version=$1
              AND j.kind='overview' AND j.state='failed') AS budget_failed,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$2
+             AND g.calculation_version=$1
              AND g.source_generation=coalesce(source.generation,0)
-             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
+             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
+             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS current
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
@@ -100,20 +105,20 @@ WITH scope AS (
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
     LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision
-      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$2
+      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
     WHERE ($3::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower($3::text))>0)
       AND ($4::uuid IS NULL OR d.service_id=$4::uuid)
     ORDER BY s.id LIMIT 10001
 )
 SELECT sha256(convert_to(coalesce(jsonb_agg(jsonb_build_array(id,version,display_name,service_name,sli_name,
-           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed,current,current_failed,source_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
+           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed,current,usable,current_failed,source_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
        count(*)::bigint AS definition_count,coalesce(bool_and(current),true)::boolean AS current
 FROM scope
 `
 
 type OperationalScopeFingerprintParams struct {
-	Now                pgtype.Timestamptz `json:"now"`
 	CalculationVersion string             `json:"calculation_version"`
+	Now                pgtype.Timestamptz `json:"now"`
 	QueryText          pgtype.Text        `json:"query_text"`
 	ServiceID          pgtype.UUID        `json:"service_id"`
 }
@@ -126,8 +131,8 @@ type OperationalScopeFingerprintRow struct {
 
 func (q *Queries) OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error) {
 	row := q.db.QueryRow(ctx, operationalScopeFingerprint,
-		arg.Now,
 		arg.CalculationVersion,
+		arg.Now,
 		arg.QueryText,
 		arg.ServiceID,
 	)

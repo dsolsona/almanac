@@ -864,7 +864,19 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 			return api.SloOperationalOverviewPage{}, errors.New("storage: invalid overview snapshot item")
 		}
 		item.Slo.Target = sli.NormalizeDecimal(item.Slo.Target)
-		if !row.ProjectionCurrent {
+		if row.ProjectionCurrent {
+			if item.Generation != nil {
+				item.CurrentState = new(api.SloOperationalOverviewItemCurrentState("ready"))
+			}
+		} else if row.ProjectionValid && item.Generation != nil && item.CurrentState != nil && (*item.CurrentState == "stale" || *item.CurrentState == "failed") {
+			boundary := floorSliBoundary(snapshotRow.CreatedAt.Time.UTC(), time.Duration(item.Slo.CadenceSeconds)*time.Second)
+			item.Generation.CalculationLagSeconds = float32(max(0, boundary.Sub(item.Generation.EvaluatedThrough).Seconds()))
+			history := api.SloOperationalOverviewItemBudgetHistoryState("preparing")
+			if *item.CurrentState == "failed" {
+				history = "unavailable"
+			}
+			item.BudgetHistoryState = &history
+		} else {
 			reason := "current_calculation_pending"
 			if row.PreparationFailed {
 				reason = "current_calculation_failed"

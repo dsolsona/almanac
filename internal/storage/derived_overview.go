@@ -135,7 +135,7 @@ func unavailableOverviewItem(previous api.SloOperationalOverviewItem, now time.T
 	burn1h, burn6h := unavailableBurn(3600, at, reason), unavailableBurn(21600, at, reason)
 	urgency := slo.ClassifyOperational(slo.OperationalState{QualityState: "unavailable", Freshness: "unknown", PerformanceState: "unknown", Provisional: true})
 	reasons, leading := operationalReasons(urgency.Reasons)
-	return api.SloOperationalOverviewItem{Slo: objective, Current: current, Burn1h: burn1h, Burn6h: burn6h,
+	return api.SloOperationalOverviewItem{Slo: objective, CurrentState: new(api.SloOperationalOverviewItemCurrentState("unavailable")), Current: current, Burn1h: burn1h, Burn6h: burn6h,
 		Urgency: api.SloOperationalOverviewItemUrgency(urgency.Group), Reasons: reasons, LeadingReason: leading,
 		Exhaustion: exhaustionValue(value, burn1h, nil), BudgetHistoryState: &history,
 		BudgetSparkline: previous.BudgetSparkline, BudgetHistoryGeneration: previous.BudgetHistoryGeneration}

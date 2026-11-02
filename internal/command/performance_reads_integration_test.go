@@ -59,6 +59,10 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 				if item.Generation == nil || checkPerformanceGeneration(*item.Generation) != nil {
 					return errors.New("SLO row has no valid generation provenance")
 				}
+				if item.CurrentState == nil || (*item.CurrentState != "ready" && *item.CurrentState != "stale") ||
+					!item.Generation.EvaluatedThrough.Equal(item.Current.EvaluationAt) || *item.CurrentState == "stale" && item.Urgency == "healthy" {
+					return errors.New("SLO row obscured calculation state or last-known provenance")
+				}
 			}
 			return nil
 		}})

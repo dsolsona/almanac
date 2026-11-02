@@ -389,6 +389,41 @@ func verifyCurrentStatusBoundaryRead(t *testing.T, databaseURL string, runtime *
 		if got.Generation.GenerationId == published.Generation.GenerationId || !got.Generation.EvaluatedThrough.Equal(oracle.EffectiveAt) || !got.Generation.PublishedAt.Equal(at) || got.Generation.SourceGeneration != published.Generation.SourceGeneration {
 			t.Fatalf("current boundary read reused invalidated provenance after %s: %+v", advance, got.Generation)
 		}
+		page, err := ReadSloOperationalOverview(t.Context(), databaseURL, OperationalOverviewInput{Runtime: runtime, Proof: boundaryProof, Query: published.Slo.Name, Limit: 20, Now: clock})
+		if err != nil {
+			t.Fatalf("last-known list read after %s: %v", advance, err)
+		}
+		found := false
+		for _, item := range page.Items {
+			if item.Slo.Id.String() != id {
+				continue
+			}
+			found = true
+			if item.CurrentState == nil || *item.CurrentState != "stale" || item.Generation == nil || item.Generation.GenerationId != published.Generation.GenerationId ||
+				!reflect.DeepEqual(item.Current, published.Current) || !reflect.DeepEqual(item.Burn1h, published.Burn1h) || item.Urgency == "healthy" || item.Generation.CalculationLagSeconds <= 0 {
+				t.Fatalf("last-known list values lost provenance, changed values or appeared fresh after %s", advance)
+			}
+		}
+		if !found {
+			t.Fatal("last-known list omitted its objective")
+		}
+		if index == 0 {
+			q := dbgen.New(conn)
+			for range 5 {
+				if err := q.RecordCurrentPreparationFailure(t.Context(), dbgen.RecordCurrentPreparationFailureParams{SloID: pgID,
+					DefinitionRevision: 1, MeasurementRevision: 1, CalculationVersion: operationalCalculationVersion, Column5: timestamp(at)}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			failed, readErr := ReadSloOperationalOverview(t.Context(), databaseURL, OperationalOverviewInput{Runtime: runtime, Proof: boundaryProof, Query: published.Slo.Name, Limit: 20, Now: clock})
+			if err := q.ClearCurrentPreparationFailure(t.Context(), pgID); err != nil {
+				t.Fatal(err)
+			}
+			if readErr != nil || len(failed.Items) != 1 || failed.Items[0].CurrentState == nil || *failed.Items[0].CurrentState != "failed" ||
+				failed.Items[0].Generation == nil || failed.Items[0].Generation.GenerationId != published.Generation.GenerationId || !reflect.DeepEqual(failed.Items[0].Current, published.Current) {
+				t.Fatalf("failed current update erased or silently refreshed last-known values: %v", readErr)
+			}
+		}
 		if _, err := RevokeSession(t.Context(), databaseURL, boundaryProof.SessionVerifier, at, "boundary-session-cleanup"); err != nil {
 			t.Fatal(err)
 		}

@@ -730,6 +730,7 @@ func (q *Queries) ListServices(ctx context.Context, arg ListServicesParams) ([]A
 
 const listSloOverviewSnapshotItems = `-- name: ListSloOverviewSnapshotItems :many
 SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
+       coalesce(a.digest=sha256(convert_to(a.payload::text,'UTF8')),false)::boolean AS projection_valid,
        (i.projection_current AND (i.projection_digest IS NULL OR
            a.digest=sha256(convert_to(a.payload::text,'UTF8'))))::boolean AS projection_current,
        coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
@@ -748,6 +749,7 @@ type ListSloOverviewSnapshotItemsParams struct {
 type ListSloOverviewSnapshotItemsRow struct {
 	Ordinal           int32  `json:"ordinal"`
 	Payload           []byte `json:"payload"`
+	ProjectionValid   bool   `json:"projection_valid"`
 	ProjectionCurrent bool   `json:"projection_current"`
 	PreparationFailed bool   `json:"preparation_failed"`
 	SourceFailed      bool   `json:"source_failed"`
@@ -765,6 +767,7 @@ func (q *Queries) ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloO
 		if err := rows.Scan(
 			&i.Ordinal,
 			&i.Payload,
+			&i.ProjectionValid,
 			&i.ProjectionCurrent,
 			&i.PreparationFailed,
 			&i.SourceFailed,

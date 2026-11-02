@@ -345,6 +345,10 @@ view. Error pages preserve navigation and a safe retry path.
 - AC-14: Incomplete, stale, no-data, zero-traffic, expired and pre-validity states
   stay explicit in list groups, figures, estimates, graph gaps and tables. Rounded
   values never decide urgency or performance; partial data cannot prove success.
+  As approved on 2026-11-02, compatible last-known list figures remain visible
+  during updates, labelled Stale with their evaluation time; failed updates are
+  explicit. Calculation staleness is separate from observation freshness. A stale
+  previous Healthy result cannot display a Healthy badge or enter the Healthy group.
 
 ## Dependencies and open questions
 

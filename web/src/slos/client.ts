@@ -128,6 +128,11 @@ function validOperationalOverview(value:unknown):boolean {
     if(!record(item)||!validSlo(item.slo)||!['needs_attention','watch','healthy'].includes(String(item.urgency))||!validUrgency(item.leading_reason)||!Array.isArray(item.reasons)||item.reasons.length>14||!item.reasons.every(validUrgency)||!validOperationalValue(item.current)||
       ![item.burn_1h,item.burn_6h].every(v=>record(v)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))||
       !record(item.exhaustion)||!Array.isArray(item.budget_sparkline)||item.budget_sparkline.length>120||!item.budget_sparkline.every(validOperationalSample)) return false;
+    if(item.current_state!==undefined){
+      if(!['ready','stale','failed','unavailable'].includes(String(item.current_state)))return false;
+      if(item.current_state!=='unavailable'&&(!record(item.generation)||!utcTimestamp(item.generation.evaluated_through)||item.generation.evaluated_through!==(item.current as Record<string,unknown>).evaluation_at||item.generation.definition_revision!==(item.slo as Record<string,unknown>).definition_revision))return false;
+      if((item.current_state==='stale'||item.current_state==='failed')&&item.urgency==='healthy')return false;
+    }
     const exhaustion=item.exhaustion;
     return ['estimated','exhausted','unavailable'].includes(String(exhaustion.state))&&['remaining_events','bad_events_per_hour','hours_until_exhaustion'].every(k=>decimal(exhaustion[k]))&&validOperationalQuality(exhaustion.current_quality)&&validOperationalQuality(exhaustion.one_hour_quality)&&Array.isArray(exhaustion.assumptions)&&exhaustion.assumptions.every(v=>typeof v==='string');
   });

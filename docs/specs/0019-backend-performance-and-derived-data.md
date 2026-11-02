@@ -89,6 +89,18 @@ version, evaluated-through boundary and publication time. Report source-observat
 freshness separately from calculation lag. A new generation does not make old
 observations fresh. A current revision mismatch is invalidation, not mere cache age.
 
+On 2026-11-02 the maintainer approved showing last known values with explicit
+staleness instead of blanking them during updates. Operational list rows report
+`current_state`: `ready`, `stale`, `failed` or `unavailable`. Retain compatible,
+intact last-published values and their generation while newer source inputs or
+clock boundaries await publication; show their evaluation time and mark them
+stale, or failed when the update has exhausted its budget. This calculation state
+is separate from the original observations' freshness. Never show an unconfirmed
+Healthy badge/group: retain prior Needs attention, otherwise use Watch. Definition,
+measurement or calculation-version mismatches, corrupt payloads and values older
+than the retained horizon remain unavailable. Pinned pages preserve their selected
+values/state as of snapshot creation. Currentness and all latency gates still apply.
+
 Under the controlled workload, p95 time from accepted commit to its affected current
 summary becoming visible is at most 10 seconds. Clock-driven status must advance
 within 10 seconds after its required cadence boundary. Large historical rebuilding

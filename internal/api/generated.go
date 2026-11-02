@@ -1737,6 +1737,30 @@ func (e SloOperationalOverviewItemBudgetHistoryState) Valid() bool {
 	}
 }
 
+// Defines values for SloOperationalOverviewItemCurrentState.
+const (
+	SloOperationalOverviewItemCurrentStateFailed      SloOperationalOverviewItemCurrentState = "failed"
+	SloOperationalOverviewItemCurrentStateReady       SloOperationalOverviewItemCurrentState = "ready"
+	SloOperationalOverviewItemCurrentStateStale       SloOperationalOverviewItemCurrentState = "stale"
+	SloOperationalOverviewItemCurrentStateUnavailable SloOperationalOverviewItemCurrentState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SloOperationalOverviewItemCurrentState enum.
+func (e SloOperationalOverviewItemCurrentState) Valid() bool {
+	switch e {
+	case SloOperationalOverviewItemCurrentStateFailed:
+		return true
+	case SloOperationalOverviewItemCurrentStateReady:
+		return true
+	case SloOperationalOverviewItemCurrentStateStale:
+		return true
+	case SloOperationalOverviewItemCurrentStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloOperationalOverviewItemUrgency.
 const (
 	SloOperationalOverviewItemUrgencyHealthy        SloOperationalOverviewItemUrgency = "healthy"
@@ -3315,20 +3339,26 @@ type SloOperationalOverviewItem struct {
 	BudgetHistoryState *SloOperationalOverviewItemBudgetHistoryState `json:"budget_history_state,omitempty"`
 
 	// BudgetSparkline Exact rolling-budget evaluation samples from the preceding seven days; first/last/min/max per bucket and explicit gaps
-	BudgetSparkline []SloOperationalSample            `json:"budget_sparkline"`
-	Burn1h          SloBurnValue                      `json:"burn_1h"`
-	Burn6h          SloBurnValue                      `json:"burn_6h"`
-	Current         SloOperationalValue               `json:"current"`
-	Exhaustion      SloExhaustionEstimate             `json:"exhaustion"`
-	Generation      *DerivedGeneration                `json:"generation,omitempty"`
-	LeadingReason   SloUrgencyReason                  `json:"leading_reason"`
-	Reasons         []SloUrgencyReason                `json:"reasons"`
-	Slo             Slo                               `json:"slo"`
-	Urgency         SloOperationalOverviewItemUrgency `json:"urgency"`
+	BudgetSparkline []SloOperationalSample `json:"budget_sparkline"`
+	Burn1h          SloBurnValue           `json:"burn_1h"`
+	Burn6h          SloBurnValue           `json:"burn_6h"`
+	Current         SloOperationalValue    `json:"current"`
+
+	// CurrentState State of the current calculation at snapshot creation. Stale/failed rows retain compatible last-known values and their original generation/evaluation time; observation freshness remains separate. Never infer current Healthy status from those values.
+	CurrentState  *SloOperationalOverviewItemCurrentState `json:"current_state,omitempty"`
+	Exhaustion    SloExhaustionEstimate                   `json:"exhaustion"`
+	Generation    *DerivedGeneration                      `json:"generation,omitempty"`
+	LeadingReason SloUrgencyReason                        `json:"leading_reason"`
+	Reasons       []SloUrgencyReason                      `json:"reasons"`
+	Slo           Slo                                     `json:"slo"`
+	Urgency       SloOperationalOverviewItemUrgency       `json:"urgency"`
 }
 
 // SloOperationalOverviewItemBudgetHistoryState Retained budget history is labelled preparing until it matches the current published generation.
 type SloOperationalOverviewItemBudgetHistoryState string
+
+// SloOperationalOverviewItemCurrentState State of the current calculation at snapshot creation. Stale/failed rows retain compatible last-known values and their original generation/evaluation time; observation freshness remains separate. Never infer current Healthy status from those values.
+type SloOperationalOverviewItemCurrentState string
 
 // SloOperationalOverviewItemUrgency defines model for SloOperationalOverviewItem.Urgency.
 type SloOperationalOverviewItemUrgency string

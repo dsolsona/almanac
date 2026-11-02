@@ -3,6 +3,10 @@ WITH scope AS MATERIALIZED (
     SELECT s.id,lower(s.name) AS sort_name,p.payload_digest,a.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
              AND g.calculation_version=sqlc.arg(calculation_version) AND a.digest IS NOT NULL
+             AND g.source_generation<=coalesce(source.generation,0)
+             AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
+           coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
+             AND g.calculation_version=sqlc.arg(calculation_version) AND a.digest IS NOT NULL
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current,
@@ -50,7 +54,12 @@ WITH scope AS MATERIALIZED (
       AND (sqlc.narg(service_id)::uuid IS NULL OR d.service_id=sqlc.narg(service_id)::uuid)
     ORDER BY s.id LIMIT 10001
 ), classified AS MATERIALIZED (
-    SELECT *,CASE WHEN current THEN published_urgency ELSE 'watch' END::text AS urgency FROM scope
+    SELECT *,CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency,
+           CASE WHEN current THEN 'ready'
+                WHEN NOT usable THEN 'unavailable'
+                WHEN (metadata->>'_preparation_failed')::boolean OR (metadata->>'_source_failed')::boolean THEN 'failed'
+                ELSE 'stale' END::text AS current_state
+    FROM scope
 ), counts AS (
     SELECT count(*)::bigint AS definitions,
            jsonb_build_object('needs_attention',count(*) FILTER (WHERE urgency='needs_attention'),
@@ -58,7 +67,7 @@ WITH scope AS MATERIALIZED (
     FROM classified
 ), selected AS MATERIALIZED (
     SELECT *,row_number() OVER (ORDER BY CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END,sort_name,id)-1 AS ordinal,
-           (metadata||jsonb_build_object('urgency',urgency))::jsonb AS payload
+           (metadata||jsonb_build_object('urgency',urgency,'current_state',current_state))::jsonb AS payload
     FROM classified WHERE (sqlc.narg(urgency)::text IS NULL OR urgency=sqlc.narg(urgency)::text)
 ), sizes AS (
     SELECT count(*)::bigint AS selected_count,coalesce(sum(octet_length(payload::text)+32),0)::bigint AS payload_bytes FROM selected

@@ -916,6 +916,11 @@ export interface components {
             exhaustion: components["schemas"]["SloExhaustionEstimate"];
         };
         SloOperationalOverviewItem: {
+            /**
+             * @description State of the current calculation at snapshot creation. Stale/failed rows retain compatible last-known values and their original generation/evaluation time; observation freshness remains separate. Never infer current Healthy status from those values.
+             * @enum {string}
+             */
+            current_state?: "ready" | "stale" | "failed" | "unavailable";
             generation?: components["schemas"]["DerivedGeneration"];
             budget_history_generation?: components["schemas"]["DerivedGeneration"];
             /**
