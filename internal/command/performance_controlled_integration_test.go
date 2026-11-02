@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -57,6 +58,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		t.Fatal("create controlled performance evidence directory failed")
 	}
 	report := performanceControlledReport{SchemaVersion: 1, Started: time.Now().UTC(), Result: "running", Stages: make(map[string]jsontext.Value)}
+	var fleet performanceFleet
 	write := func() {
 		t.Helper()
 		body, err := marshalPerformanceEvidence(report)
@@ -80,6 +82,20 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		report.ActiveStage = name
 		write()
 		t.Logf("controlled performance stage=%s", name)
+		if !strings.HasPrefix(name, "production-browser-365-days-") || strings.HasSuffix(name, "-response-eviction") {
+			renewed, elapsed := renewPerformanceReaders(t, fleet)
+			if renewed > 0 {
+				body, err := marshalPerformanceEvidence(struct {
+					Readers int           `json:"readers"`
+					Elapsed time.Duration `json:"setup_ns"`
+				}{renewed, elapsed})
+				if err != nil {
+					t.Fatal("encode reader authentication setup failed")
+				}
+				report.Stages[name+"-authentication"] = jsontext.Value(body)
+				write()
+			}
+		}
 	}
 	record := func(name string, result any, resultErr error) bool {
 		t.Helper()
@@ -96,7 +112,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		return resultErr == nil
 	}
 	stage("fleet-setup")
-	fleet := newPerformanceFleet(t, ctx, size)
+	fleet = newPerformanceFleet(t, ctx, size)
 	record("fleet-setup", struct {
 		SLIs, SLOs, Agents, Users int
 		Setup                     time.Duration
@@ -104,6 +120,8 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	}{len(fleet.slis), len(fleet.objectives), len(fleet.agents), len(fleet.readers), fleet.setup, fleet.objectives[len(fleet.objectives)-1]}, nil)
 	stage("environment")
 	record("environment", performanceEnvironmentEvidence(t, fleet), nil)
+	stage("query-bind-preflight")
+	record("query-bind-preflight", performanceQueryPlans(t, fleet, false), nil)
 	stage("seed-56-days")
 	record("disk-admission-56-days", performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve), nil)
 	seeded := seedPerformanceHistory(t, fleet, 56)
@@ -128,7 +146,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		return
 	}
 	stage("query-plans-56-days")
-	record("query-plans-56-days", performanceQueryPlans(t, fleet), nil)
+	record("query-plans-56-days", performanceQueryPlans(t, fleet, true), nil)
 	stage("persisted-restart-56-days")
 	restart, err := restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
 	if !record("persisted-restart-56-days", restart, err) {
@@ -161,13 +179,13 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	stage("full-acceptance-tracing")
 	sampling := enablePerformanceFullTracing(t, fleet.fixture)
 	record("full-acceptance-tracing", sampling, nil)
-	stage("query-plans-365-days")
-	record("query-plans-365-days", performanceQueryPlans(t, fleet), nil)
 	stage("persisted-restart-365-days")
 	restart, err = restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
 	if !record("persisted-restart-365-days", restart, err) {
 		return
 	}
+	stage("query-plans-365-days")
+	record("query-plans-365-days", performanceQueryPlans(t, fleet, true), nil)
 	stage("ingestion-only-baseline-365-days")
 	baseline, err := measurePerformanceLiveWindow(t, fleet, "ingestion-only-baseline-365-days", nil)
 	if !record("ingestion-only-baseline-365-days", baseline, err) {

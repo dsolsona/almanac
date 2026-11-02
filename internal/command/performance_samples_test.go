@@ -39,9 +39,10 @@ func performancePostgresFailureCounts(logs []byte) map[string]int {
 
 type performanceReader struct {
 	// Identity is a fixture ID, never a login, cookie or credential.
-	Identity string
-	Client   *http.Client
-	Request  func(context.Context, string) (*http.Request, error)
+	Identity        string
+	Client          *http.Client
+	Request         func(context.Context, string) (*http.Request, error)
+	AuthenticatedAt time.Time
 }
 
 type performanceOperation struct {

@@ -118,38 +118,99 @@ SELECT $1,password_verifier,'viewer',true,false,CURRENT_TIMESTAMP,CURRENT_TIMEST
 FROM public.almanac_users WHERE login='sli-owner' RETURNING id::text`, login).Scan(&identity); err != nil {
 			t.Fatal("provision distinct performance reader failed")
 		}
-		readerProfile := filepath.Join(f.dir, fmt.Sprintf("reader-%02d.json", index))
-		command := exec.CommandContext(t.Context(), f.binary, "auth", "login", "--profile-file="+readerProfile, "--backend-url="+f.baseURL,
-			"--login="+login, "--password-file="+fleet.agents[0].passwordPath, "--ca-file="+f.certFile)
-		command.Stdout, command.Stderr = io.Discard, io.Discard
-		if err := command.Run(); err != nil {
-			t.Fatal("authenticate distinct performance reader failed")
-		}
-		locked, err := cliprofile.Open(t.Context(), readerProfile, false)
-		if err != nil {
-			t.Fatal("open protected performance reader profile failed")
-		}
-		record, exists, loadErr := locked.Load()
-		closeErr := locked.Close()
-		if loadErr != nil || closeErr != nil || !exists || record.Session == "" {
-			t.Fatal("read protected performance reader session failed")
-		}
-		if index == 0 {
-			if err := os.WriteFile(filepath.Join(f.dir, "diagnostic-headers"), []byte("Cookie: __Host-almanac-session="+record.Session+"\n"), 0o600); err != nil {
-				t.Fatal("save protected fixture-only diagnostic session failed")
-			}
-		}
-		fleet.readers = append(fleet.readers, performanceReader{Identity: identity, Client: f.apiClient,
-			Request: func(ctx context.Context, path string) (*http.Request, error) {
-				request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+path, nil)
-				if err == nil {
-					request.AddCookie(&http.Cookie{Name: "__Host-almanac-session", Value: record.Session})
-				}
-				return request, err
-			}})
+		fleet.readers = append(fleet.readers, loginPerformanceReader(t, fleet, index, identity))
 	}
 	fleet.setup = time.Since(started)
 	return fleet
+}
+
+func loginPerformanceReader(t *testing.T, fleet performanceFleet, index int, identity string) performanceReader {
+	t.Helper()
+	f := fleet.fixture
+	profile := filepath.Join(f.dir, fmt.Sprintf("reader-%02d.json", index))
+	command := exec.CommandContext(fleet.ctx, f.binary, "auth", "login", "--profile-file="+profile, "--backend-url="+f.baseURL,
+		"--login="+fmt.Sprintf("performance-reader-%02d", index), "--password-file="+fleet.agents[0].passwordPath, "--ca-file="+f.certFile)
+	command.Stdout, command.Stderr = io.Discard, io.Discard
+	if err := command.Run(); err != nil {
+		t.Fatal("authenticate distinct performance reader failed")
+	}
+	locked, err := cliprofile.Open(fleet.ctx, profile, false)
+	if err != nil {
+		t.Fatal("open protected performance reader profile failed")
+	}
+	record, exists, loadErr := locked.Load()
+	closeErr := locked.Close()
+	if loadErr != nil || closeErr != nil || !exists || record.Session == "" {
+		t.Fatal("read protected performance reader session failed")
+	}
+	if index == 0 {
+		if err := os.WriteFile(filepath.Join(f.dir, "diagnostic-headers"), []byte("Cookie: __Host-almanac-session="+record.Session+"\n"), 0o600); err != nil {
+			t.Fatal("save protected fixture-only diagnostic session failed")
+		}
+	}
+	return performanceReader{Identity: identity, Client: f.apiClient, AuthenticatedAt: time.Now(),
+		Request: func(ctx context.Context, path string) (*http.Request, error) {
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+path, nil)
+			if err == nil {
+				request.AddCookie(&http.Cookie{Name: "__Host-almanac-session", Value: record.Session})
+			}
+			return request, err
+		}}
+}
+
+// Long setup is not user activity; authenticate outside measured read cohorts.
+func renewPerformanceReaders(t *testing.T, fleet performanceFleet) (int, time.Duration) {
+	t.Helper()
+	started, renewed := time.Now(), 0
+	for index, reader := range fleet.readers {
+		if time.Since(reader.AuthenticatedAt) < 5*time.Minute {
+			continue
+		}
+		before, err := reader.Request(fleet.ctx, "/api/v1/slis?limit=20")
+		if err != nil {
+			t.Fatal("create prior reader identity proof failed")
+		}
+		oldCookie, err := before.Cookie("__Host-almanac-session")
+		if err != nil {
+			t.Fatal("prior reader has no session")
+		}
+		profile := filepath.Join(fleet.fixture.dir, fmt.Sprintf("reader-%02d.json", index))
+		logout := exec.CommandContext(fleet.ctx, fleet.fixture.binary, "auth", "logout", "--profile-file="+profile)
+		logout.Stdout, logout.Stderr = io.Discard, io.Discard
+		if err := logout.Run(); err != nil {
+			t.Fatal("sign out previous performance reader session failed")
+		}
+		next := loginPerformanceReader(t, fleet, index, reader.Identity)
+		after, err := next.Request(fleet.ctx, "/api/v1/slis?limit=20")
+		if err != nil {
+			t.Fatal("create renewed reader identity proof failed")
+		}
+		newCookie, err := after.Cookie("__Host-almanac-session")
+		if err != nil || newCookie.Value == oldCookie.Value {
+			t.Fatal("reader reauthentication did not issue a new session")
+		}
+		fleet.readers[index] = next
+		renewed++
+	}
+	return renewed, time.Since(started)
+}
+
+func reauthenticatePerformanceManager(t *testing.T, ctx context.Context, fleet performanceFleet, index int) time.Duration {
+	t.Helper()
+	started := time.Now()
+	for _, operation := range []string{"logout", "login"} {
+		args := []string{"auth", operation, "--profile-file=" + fleet.agents[index].profile}
+		if operation == "login" {
+			args = append(args, "--backend-url="+fleet.fixture.baseURL, "--login=sli-owner",
+				"--password-file="+fleet.agents[index].passwordPath, "--ca-file="+fleet.fixture.certFile)
+		}
+		command := exec.CommandContext(ctx, fleet.fixture.binary, args...)
+		command.Stdout, command.Stderr = io.Discard, io.Discard
+		if err := command.Run(); err != nil {
+			t.Fatal("reauthenticate owned fixture management profile failed")
+		}
+	}
+	return time.Since(started)
 }
 
 type performanceHistorySetup struct {

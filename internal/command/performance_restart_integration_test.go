@@ -11,14 +11,16 @@ import (
 )
 
 type performanceRestartReport struct {
-	Kind              string                 `json:"kind"`
-	Shutdown          time.Duration          `json:"shutdown_ns"`
-	OfflineSetup      time.Duration          `json:"offline_setup_ns"`
-	Startup           time.Duration          `json:"startup_to_livez_ns"`
-	CanonicalRows     int64                  `json:"preserved_canonical_rows"`
-	QueuedHours       int64                  `json:"queued_hours"`
-	Maintenance       time.Duration          `json:"automatic_maintenance_ns"`
-	PreparationAndAPI performancePhaseReport `json:"preparation_and_api"`
+	Kind                 string                 `json:"kind"`
+	Shutdown             time.Duration          `json:"shutdown_ns"`
+	OfflineSetup         time.Duration          `json:"offline_setup_ns"`
+	Startup              time.Duration          `json:"startup_to_livez_ns"`
+	CanonicalRows        int64                  `json:"preserved_canonical_rows"`
+	QueuedHours          int64                  `json:"queued_hours"`
+	Maintenance          time.Duration          `json:"automatic_maintenance_ns"`
+	ReaderAuthentication time.Duration          `json:"reader_authentication_ns"`
+	ReadersRenewed       int                    `json:"readers_renewed"`
+	PreparationAndAPI    performancePhaseReport `json:"preparation_and_api"`
 }
 
 type performanceBrowserRestartReport struct {
@@ -130,6 +132,7 @@ func restartPerformancePhase(t *testing.T, fleet performanceFleet, blankDerived 
 		if err != nil {
 			return report, err
 		}
+		report.ReadersRenewed, report.ReaderAuthentication = renewPerformanceReaders(t, fleet)
 	}
 	phase, err := runPerformanceReadyPhase(fleet.ctx, fleet, report.Kind, end)
 	report.PreparationAndAPI = phase

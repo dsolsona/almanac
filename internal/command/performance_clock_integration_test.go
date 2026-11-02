@@ -23,6 +23,7 @@ import (
 type performanceClockReport struct {
 	AgentsDisabled int                     `json:"agents_disabled"`
 	DisabledAt     time.Time               `json:"disabled_at"`
+	Authentication time.Duration           `json:"management_authentication_ns"`
 	Phases         []performanceClockPhase `json:"phases"`
 }
 
@@ -117,7 +118,8 @@ func performanceClockOnly(t *testing.T, parent context.Context, fleet performanc
 	ctx, cancel := context.WithTimeout(parent, 7*time.Minute)
 	defer cancel()
 	report := performanceClockReport{}
-	for _, agent := range fleet.agents {
+	for index, agent := range fleet.agents {
+		report.Authentication += reauthenticatePerformanceManager(t, ctx, fleet, index)
 		get := exec.CommandContext(ctx, fleet.fixture.binary, "agents", "get", "--profile-file="+agent.profile, "--agent-id="+agent.id, "--output=json")
 		get.Stderr = io.Discard
 		body, err := get.Output()

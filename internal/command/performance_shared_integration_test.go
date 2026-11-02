@@ -23,6 +23,7 @@ type performanceSharedReport struct {
 	SharedSLI       string                         `json:"shared_sli"`
 	Added           []api.Slo                      `json:"added_objectives"`
 	Maintenance     time.Duration                  `json:"maintenance_ns"`
+	Authentication  time.Duration                  `json:"management_authentication_ns"`
 	Reads           []performancePreparationSample `json:"historical_reads"`
 	Publication     []performanceCurrentnessSample `json:"publication"`
 }
@@ -37,6 +38,7 @@ func performanceSharedSource(t *testing.T, parent context.Context, fleet perform
 	f := fleet.fixture
 	sli := fleet.slis[9] // Class0 has complete retained input for the exact oracle.
 	report := performanceSharedReport{IndependentSLOs: len(fleet.objectives), FinalSLOs: len(fleet.objectives) + 2, SharedSLI: sli}
+	report.Authentication = reauthenticatePerformanceManager(t, ctx, fleet, 0)
 	end := time.Date(fleet.historyEnd.Year(), fleet.historyEnd.Month(), fleet.historyEnd.Day(), 0, 0, 0, 0, time.UTC).Add(-24 * time.Hour)
 	start := end.Add(-2 * time.Hour)
 	for index, shape := range []struct {
