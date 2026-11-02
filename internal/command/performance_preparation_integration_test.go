@@ -119,7 +119,29 @@ func awaitPerformanceHistory(t *testing.T, ctx context.Context, fleet performanc
 			return time.Since(started), errors.New("observe automatic historical maintenance failed")
 		}
 		if failed {
-			return time.Since(started), errors.New("automatic historical maintenance exhausted a work budget")
+			var detail []byte
+			bounded, stop := context.WithTimeout(ctx, 5*time.Second)
+			err := db.QueryRow(bounded, `SELECT coalesce(jsonb_agg(evidence),'[]'::jsonb) FROM (
+ SELECT jsonb_build_object('stage','source','attempts',attempts,'error',last_error,'start',range_start,'lease_until',lease_until) evidence
+ FROM public.almanac_derived_dirty_ranges WHERE sli_id=ANY($1::uuid[]) AND range_start<$3 AND attempts>=5
+ UNION ALL SELECT jsonb_build_object('stage','repair','attempts',attempts,'error',last_error,'cursor',cursor_at,'end',end_at,'lease_until',lease_until)
+ FROM public.almanac_slo_series_repair WHERE slo_id=ANY($2::uuid[]) AND cursor_at<$3 AND attempts>=5
+ UNION ALL SELECT jsonb_build_object('stage','tile','attempts',attempts,'error',last_error,'start',range_start,'lease_until',lease_until)
+ FROM public.almanac_slo_series_tile_work WHERE slo_id=ANY($2::uuid[]) AND range_end<=$3 AND attempts>=5
+ UNION ALL SELECT jsonb_build_object('stage','current','attempts',attempts,'error',last_error)
+ FROM public.almanac_slo_current_failures WHERE slo_id=ANY($2::uuid[]) AND attempts>=5
+ LIMIT 20) failures`, fleet.slis, fleet.objectives, fleet.historyEnd).Scan(&detail)
+			stop()
+			if err != nil {
+				return time.Since(started), errors.New("automatic historical maintenance failed; queue diagnostics unavailable")
+			}
+			logs := fleet.fixture.backend.deployment.output(t, "logs", "--no-color", "--tail", "80", "postgres")
+			categories, err := marshalPerformanceEvidence(performancePostgresFailureCounts(logs))
+			clear(logs)
+			if err != nil {
+				return time.Since(started), errors.New("encode maintenance failure categories failed")
+			}
+			return time.Since(started), fmt.Errorf("automatic historical maintenance exhausted a work budget: queues=%s postgres_error_counts=%s", detail, categories)
 		}
 		if !pending {
 			return time.Since(started), nil

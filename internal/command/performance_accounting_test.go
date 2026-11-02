@@ -48,6 +48,17 @@ func TestPerformanceEvidenceKeepsNanosecondDurationsAndStrictJSON(t *testing.T) 
 	}
 }
 
+func TestPerformancePostgresFailureEvidenceOmitsStatementValues(t *testing.T) {
+	counts := performancePostgresFailureCounts([]byte("ERROR: could not serialize access due to concurrent update\nSTATEMENT: private-fixture-value\nERROR: canceling statement due to lock timeout\nERROR: could not serialize access due to concurrent update"))
+	if counts["could not serialize access"] != 2 || counts["canceling statement due to lock timeout"] != 1 || counts["deadlock detected"] != 0 || len(counts) != 7 {
+		t.Fatalf("incorrect fixed PostgreSQL error counts: %+v", counts)
+	}
+	body, err := marshalPerformanceEvidence(counts)
+	if err != nil || strings.Contains(string(body), "private-fixture-value") {
+		t.Fatal("failure evidence retained statement values")
+	}
+}
+
 func TestPerformanceNearestRank(t *testing.T) {
 	values := make([]time.Duration, 100)
 	for index := range values {

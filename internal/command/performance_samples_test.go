@@ -5,6 +5,7 @@ package command
 // testable without starting a database, executable, browser or agent.
 
 import (
+	"bytes"
 	"context"
 	jsonv1 "encoding/json"
 	"encoding/json/v2"
@@ -24,6 +25,15 @@ const performanceReadsPerOperation = 100
 // Capacity evidence records durations as nanoseconds, including nested reports.
 func marshalPerformanceEvidence(value any) ([]byte, error) {
 	return json.Marshal(value, jsonv1.FormatDurationAsNano(true))
+}
+
+// Retain fixed error categories, never PostgreSQL statement text or parameters.
+func performancePostgresFailureCounts(logs []byte) map[string]int {
+	counts := make(map[string]int)
+	for _, message := range []string{"could not serialize access", "deadlock detected", "canceling statement due to statement timeout", "canceling statement due to lock timeout", "numeric field overflow", "violates check constraint", "violates foreign key constraint"} {
+		counts[message] = bytes.Count(logs, []byte(message))
+	}
+	return counts
 }
 
 type performanceReader struct {
