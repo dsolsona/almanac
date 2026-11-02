@@ -234,6 +234,12 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 		return true, errRetentionBlocked
 	}
 	for _, part := range preview.Partitions {
+		// Detach removes inherited FK dependencies from still-retained values partitions.
+		if part.Parent == "almanac_sli_coverage" {
+			if _, err := tx.Exec(bounded, "ALTER TABLE public.almanac_sli_coverage DETACH PARTITION "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
+				return true, err
+			}
+		}
 		if _, err := tx.Exec(bounded, "DROP TABLE "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
 			return true, err
 		}

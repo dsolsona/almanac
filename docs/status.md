@@ -78,6 +78,11 @@ its already calculated points, under the existing transaction/version fences;
 partial hours retain ordinary worker processing. The intermediate SQL projection
 and decoder are removed. Focused PostgreSQL equivalence/fencing checks pass;
 full retained throughput and fleet/year acceptance remain outstanding.
+The 56-day calculation/restart now finishes within 112 seconds, exposing a later
+audited-cleanup foreign-key failure. Detaching the checked expired coverage
+partition before restricted removal preserves retained foreign keys; the same
+cleanup/audit/lease/scope regression passes on the small real PostgreSQL fixture.
+Full integrated verification of this corrected candidate remains pending.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,

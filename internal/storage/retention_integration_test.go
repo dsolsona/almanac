@@ -10,6 +10,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -117,6 +118,11 @@ func verifyAuditedRetentionCleanup(t *testing.T, runtime *Runtime, databaseURL, 
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1`, row.SliID).Scan(&canonicalAfter); err != nil || canonicalAfter != canonicalBefore-1 {
 		t.Fatalf("retention removed retained rows or failed to remove the expired row: %d -> %d, %v", canonicalBefore, canonicalAfter, err)
 	}
+	missingAt := time.Date(now.Year(), now.Month(), 1, 0, 0, 1, 0, time.UTC)
+	_, err = conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES($1,$2,$3,0,1)`, missingAt, row.SliID, row.MeasurementRevision)
+	if foreignKey, ok := errors.AsType[*pgconn.PgError](err); !ok || foreignKey.Code != "23503" {
+		t.Fatalf("cleanup removed the retained observation coverage foreign key: %v", err)
+	}
 	var audit int
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_audit_events WHERE subject_id=$1 AND action IN ('retention.preview','retention.apply')`, plan).Scan(&audit); err != nil || audit != 2 {
 		t.Fatalf("retention preview/apply outcomes were not independently durable: %d, %v", audit, err)
@@ -139,6 +145,11 @@ func verifyAuditedRetentionCleanup(t *testing.T, runtime *Runtime, databaseURL, 
 		t.Fatal(err)
 	}
 	for _, part := range replacement.Partitions {
+		if part.Parent == "almanac_sli_coverage" {
+			if _, err := conn.Exec(t.Context(), "ALTER TABLE public.almanac_sli_coverage DETACH PARTITION "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if _, err := conn.Exec(t.Context(), "DROP TABLE "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
 			t.Fatal(err)
 		}

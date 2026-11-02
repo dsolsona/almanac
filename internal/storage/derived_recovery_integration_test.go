@@ -219,6 +219,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	}
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
 	verifyRetainedWorkRecovery(t, runtime, databaseURL, proof, id, clock)
+	verifyAuditedRetentionCleanup(t, runtime, databaseURL, id, clock())
 }
 
 func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input OperationalDetailInput, oracle api.SloOperationalDetail) {
