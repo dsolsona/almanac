@@ -115,7 +115,8 @@ func findReusableOverview(ctx context.Context, q *dbgen.Queries, input Operation
 	return id, err == nil, err
 }
 
-func unavailableOverviewItem(objective api.Slo, now time.Time, reason string) api.SloOperationalOverviewItem {
+func unavailableOverviewItem(previous api.SloOperationalOverviewItem, now time.Time, reason string) api.SloOperationalOverviewItem {
+	objective := previous.Slo
 	at := floorSliBoundary(now, time.Duration(objective.CadenceSeconds)*time.Second)
 	start := at.Add(-time.Duration(objective.RollingWindowSeconds) * time.Second)
 	eligible := maxTime(start, objective.EvaluationValidFrom)
@@ -136,7 +137,8 @@ func unavailableOverviewItem(objective api.Slo, now time.Time, reason string) ap
 	reasons, leading := operationalReasons(urgency.Reasons)
 	return api.SloOperationalOverviewItem{Slo: objective, Current: current, Burn1h: burn1h, Burn6h: burn6h,
 		Urgency: api.SloOperationalOverviewItemUrgency(urgency.Group), Reasons: reasons, LeadingReason: leading,
-		Exhaustion: exhaustionValue(value, burn1h, nil), BudgetHistoryState: &history, BudgetSparkline: []api.SloOperationalSample{}}
+		Exhaustion: exhaustionValue(value, burn1h, nil), BudgetHistoryState: &history,
+		BudgetSparkline: previous.BudgetSparkline, BudgetHistoryGeneration: previous.BudgetHistoryGeneration}
 }
 
 func overviewScopeFingerprint(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) (dbgen.OperationalScopeFingerprintRow, error) {

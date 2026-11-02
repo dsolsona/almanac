@@ -871,7 +871,7 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 			} else if row.SourceFailed {
 				reason = "source_aggregate_failed"
 			}
-			item = unavailableOverviewItem(item.Slo, snapshotRow.CreatedAt.Time.UTC(), reason)
+			item = unavailableOverviewItem(item, snapshotRow.CreatedAt.Time.UTC(), reason)
 		}
 		items = append(items, item)
 	}
