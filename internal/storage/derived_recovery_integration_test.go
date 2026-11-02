@@ -100,6 +100,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatalf("history was not published: %v", err)
 	}
 	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)
+	verifyIncrementalRetainedAvailability(t, databaseURL, pgID, prepared.EffectiveAt)
 	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
 		for index := range min(len(prepared.ComplianceSeries.Days), len(oracle.ComplianceSeries.Days)) {
 			if !reflect.DeepEqual(prepared.ComplianceSeries.Days[index], oracle.ComplianceSeries.Days[index]) {

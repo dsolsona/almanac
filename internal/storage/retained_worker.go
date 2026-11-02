@@ -126,7 +126,7 @@ func prepareRetainedTileValue(ctx context.Context, q *dbgen.Queries, work dbgen.
 		}
 		complete := true
 		for _, row := range rows {
-			complete = complete && row.Ready && row.SourceGeneration.Valid && row.PointCount.Valid && row.PointCount.Int32 > 0 && row.PointCount.Int32 <= 5760
+			complete = complete && row.Ready && row.PointCount.Valid && row.PointCount.Int32 > 0 && row.PointCount.Int32 <= 5760
 		}
 		if complete {
 			// Exact hourly extrema and both sides of quality changes are sufficient
@@ -138,7 +138,7 @@ func prepareRetainedTileValue(ctx context.Context, q *dbgen.Queries, work dbgen.
 				}
 				appendRetainedTile(&prepared.tile, tile)
 				prepared.count += row.PointCount.Int32
-				prepared.generation = min(prepared.generation, row.SourceGeneration.Int64)
+				prepared.generation = min(prepared.generation, row.SourceGeneration)
 			}
 			if prepared.count > 5760 {
 				return prepared, ErrOperationalRangeDense

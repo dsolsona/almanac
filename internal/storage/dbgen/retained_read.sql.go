@@ -21,13 +21,13 @@ WITH objective AS (
            (EXISTS (
                SELECT 1 FROM public.almanac_derived_dirty_ranges d
                WHERE d.sli_id=o.sli_id AND d.measurement_revision=p.measurement_revision
-                 AND d.generation>p.source_generation
+                 AND d.generation>stamp.source_generation
                  AND d.range_start>=(date_trunc('hour',(p.evaluation_at-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
                  AND d.range_start<p.evaluation_at AND d.range_end>p.evaluation_at-o.window_seconds*interval '1 second'
            ) OR EXISTS (
                SELECT 1 FROM public.almanac_sli_hourly_aggregates a
                WHERE a.sli_id=o.sli_id AND a.measurement_revision=p.measurement_revision
-                 AND a.source_generation>p.source_generation
+                 AND a.source_generation>stamp.source_generation
                  AND a.hour_start>=(date_trunc('hour',(p.evaluation_at-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
                  AND a.hour_start<p.evaluation_at
            ))::boolean AS repairing,
@@ -37,7 +37,15 @@ WITH objective AS (
                  AND w.measurement_revision=p.measurement_revision AND w.calculation_version=p.calculation_version
                  AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at AND w.attempts>=5
            ) AS exhausted
-    FROM public.almanac_slo_series_points p CROSS JOIN objective o
+    FROM public.almanac_slo_series_points p
+    LEFT JOIN public.almanac_slo_series_repair checkpoint
+      ON checkpoint.slo_id=p.slo_id AND checkpoint.definition_revision=p.definition_revision
+     AND checkpoint.measurement_revision=p.measurement_revision AND checkpoint.calculation_version=p.calculation_version
+    CROSS JOIN LATERAL (
+        SELECT GREATEST(p.source_generation,
+            CASE WHEN checkpoint.coherent_through>=p.evaluation_at THEN checkpoint.coherent_source_generation ELSE 0 END)::bigint AS source_generation
+    ) stamp
+    CROSS JOIN objective o
     WHERE p.slo_id=$1 AND p.definition_revision=$2 AND p.measurement_revision=$3
       AND p.exclusion_revision=0 AND p.calculation_version=$4 AND p.evaluation_at>$5 AND p.evaluation_at<=$6
     ORDER BY p.evaluation_at LIMIT 961
@@ -98,7 +106,7 @@ func (q *Queries) ReadRetainedEdgePoints(ctx context.Context, arg ReadRetainedEd
 
 const readRetainedParts = `-- name: ReadRetainedParts :many
 WITH objective AS (
-    SELECT definition.sli_id,GREATEST(definition.rolling_window_seconds,21600)::bigint AS window_seconds
+    SELECT definition.sli_id,definition.cadence_seconds,GREATEST(definition.rolling_window_seconds,21600)::bigint AS window_seconds
     FROM public.almanac_slo_definitions definition
     WHERE definition.slo_id=$1 AND definition.revision=$2
 ), requested AS (
@@ -109,7 +117,7 @@ WITH objective AS (
 ), selected AS MATERIALIZED (
 SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestamptz AS range_end,
        r.resolution::integer AS resolution,convert_to(t.payload::text,'UTF8') AS payload,
-       t.source_generation,t.published_at,t.point_count,
+       coalesce(stamp.source_generation,0)::bigint AS source_generation,t.published_at,t.point_count,
        (EXISTS (
            SELECT 1 FROM public.almanac_slo_series_tile_work w
            WHERE w.slo_id=$1 AND w.definition_revision=$2
@@ -130,13 +138,13 @@ SELECT r.ordinal,r.range_start::timestamptz AS range_start,r.range_end::timestam
        ) AND NOT EXISTS (
            SELECT 1 FROM public.almanac_derived_dirty_ranges d
            WHERE d.sli_id=o.sli_id AND d.measurement_revision=t.measurement_revision
-             AND d.generation>t.source_generation
+             AND d.generation>stamp.source_generation
              AND d.range_start>=(date_trunc('hour',(t.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
              AND d.range_start<t.range_end AND d.range_end>t.range_start-o.window_seconds*interval '1 second'
        ) AND NOT EXISTS (
            SELECT 1 FROM public.almanac_sli_hourly_aggregates a
            WHERE a.sli_id=o.sli_id AND a.measurement_revision=t.measurement_revision
-             AND a.source_generation>t.source_generation
+             AND a.source_generation>stamp.source_generation
              AND a.hour_start>=(date_trunc('hour',(t.range_start-o.window_seconds*interval '1 second') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
              AND a.hour_start<t.range_end
        ))::boolean AS ready
@@ -145,7 +153,16 @@ FROM requested r LEFT JOIN public.almanac_slo_series_tiles t
  AND t.measurement_revision=$6 AND t.exclusion_revision=0
  AND t.calculation_version=$7 AND t.resolution_seconds=r.resolution
  AND t.range_start=r.range_start AND t.range_end=r.range_end
+LEFT JOIN public.almanac_slo_series_repair checkpoint
+  ON checkpoint.slo_id=t.slo_id AND checkpoint.definition_revision=t.definition_revision
+ AND checkpoint.measurement_revision=t.measurement_revision AND checkpoint.calculation_version=t.calculation_version
 CROSS JOIN objective o
+CROSS JOIN LATERAL (
+    SELECT CASE WHEN t.slo_id IS NOT NULL THEN GREATEST(t.source_generation,
+        CASE WHEN checkpoint.coherent_through>=to_timestamp(floor(extract(epoch FROM r.range_end)/o.cadence_seconds)*o.cadence_seconds)
+             THEN checkpoint.coherent_source_generation ELSE 0 END)
+        END::bigint AS source_generation
+) stamp
 ), bounded AS (
 SELECT ordinal, range_start, range_end, resolution, payload, source_generation, published_at, point_count, exhausted, ready,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM selected
 )
@@ -172,7 +189,7 @@ type ReadRetainedPartsRow struct {
 	Resolution       int32              `json:"resolution"`
 	Payload          []byte             `json:"payload"`
 	PayloadBytes     int64              `json:"payload_bytes"`
-	SourceGeneration pgtype.Int8        `json:"source_generation"`
+	SourceGeneration int64              `json:"source_generation"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
 	PointCount       pgtype.Int4        `json:"point_count"`
 	Exhausted        bool               `json:"exhausted"`

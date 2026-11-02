@@ -22,7 +22,11 @@ RETURNING w.*;
 
 -- name: AdvanceRetainedSeriesRepair :execrows
 UPDATE public.almanac_slo_series_repair SET cursor_at=$7,attempts=0,lease_until=NULL,last_error=NULL,
-    next_attempt_at=$8
+    next_attempt_at=$8,
+    coherent_through=CASE WHEN $7>=end_at AND sqlc.narg(coherent_source_generation)::bigint IS NOT NULL
+                         THEN $7 ELSE coherent_through END,
+    coherent_source_generation=CASE WHEN $7>=end_at AND sqlc.narg(coherent_source_generation)::bigint IS NOT NULL
+                                   THEN sqlc.narg(coherent_source_generation)::bigint ELSE coherent_source_generation END
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4
   AND version=$5 AND lease_epoch=$6;
 

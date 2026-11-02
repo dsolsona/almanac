@@ -559,20 +559,22 @@ type AlmanacSloSeriesPoint struct {
 }
 
 type AlmanacSloSeriesRepair struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	CursorAt            pgtype.Timestamptz `json:"cursor_at"`
-	EndAt               pgtype.Timestamptz `json:"end_at"`
-	Version             int64              `json:"version"`
-	Attempts            int32              `json:"attempts"`
-	LeaseEpoch          int64              `json:"lease_epoch"`
-	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
-	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
-	LastError           pgtype.Text        `json:"last_error"`
-	ID                  pgtype.UUID        `json:"id"`
-	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	SloID                    pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision       int64              `json:"definition_revision"`
+	MeasurementRevision      int64              `json:"measurement_revision"`
+	CalculationVersion       string             `json:"calculation_version"`
+	CursorAt                 pgtype.Timestamptz `json:"cursor_at"`
+	EndAt                    pgtype.Timestamptz `json:"end_at"`
+	Version                  int64              `json:"version"`
+	Attempts                 int32              `json:"attempts"`
+	LeaseEpoch               int64              `json:"lease_epoch"`
+	LeaseUntil               pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt            pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError                pgtype.Text        `json:"last_error"`
+	ID                       pgtype.UUID        `json:"id"`
+	ManualRetriedAt          pgtype.Timestamptz `json:"manual_retried_at"`
+	CoherentThrough          pgtype.Timestamptz `json:"coherent_through"`
+	CoherentSourceGeneration int64              `json:"coherent_source_generation"`
 }
 
 type AlmanacSloSeriesTile struct {

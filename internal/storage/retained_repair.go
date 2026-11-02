@@ -73,6 +73,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		return true, err
 	}
 	through := work.EndAt.Time.UTC()
+	var coherentGeneration pgtype.Int8
 	if row.DefinitionRevision == work.DefinitionRevision && row.MeasurementRevision == work.MeasurementRevision && work.CalculationVersion == operationalCalculationVersion {
 		now := clock().UTC()
 		cadence := time.Duration(row.CadenceSeconds) * time.Second
@@ -90,6 +91,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		} else if err != nil {
 			return true, err
 		}
+		coherentGeneration = pgtype.Int8{Int64: generation, Valid: true}
 		points, err := buildRetainedRepairPoints(bounded, q, row, source, start, through, now)
 		if err != nil {
 			return true, err
@@ -115,7 +117,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 	advanced, err := q.AdvanceRetainedSeriesRepair(bounded, dbgen.AdvanceRetainedSeriesRepairParams{SloID: work.SloID,
 		DefinitionRevision: work.DefinitionRevision, MeasurementRevision: work.MeasurementRevision,
 		CalculationVersion: work.CalculationVersion, Version: work.Version, LeaseEpoch: work.LeaseEpoch,
-		CursorAt: timestamp(through), NextAttemptAt: timestamp(clock())})
+		CursorAt: timestamp(through), NextAttemptAt: timestamp(clock()), CoherentSourceGeneration: coherentGeneration})
 	if err != nil {
 		return true, err
 	}

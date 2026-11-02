@@ -410,3 +410,56 @@ func verifyRetainedIngestionWatermark(t *testing.T, databaseURL string, row dbge
 		t.Fatalf("late totals repeated or lost a newly accepted interval: %+v, %v", deltas, err)
 	}
 }
+
+func verifyIncrementalRetainedAvailability(t *testing.T, databaseURL string, id pgtype.UUID, at time.Time) {
+	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	q := dbgen.New(tx)
+	row, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cadence := time.Duration(row.CadenceSeconds) * time.Second
+	pointAt := at.Add(-3*time.Hour - cadence)
+	var prefix, generation int64
+	if err := tx.QueryRow(t.Context(), `SELECT coalesce(max(ingestion_generation) FILTER(WHERE interval_end<=$3),0),max(ingestion_generation)
+        FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision, pointAt).Scan(&prefix, &generation); err != nil || prefix <= 0 || prefix >= generation {
+		t.Fatalf("incremental fixture lacks measurements after its historical point: %d/%d, %v", prefix, generation, err)
+	}
+	// Later measurements do not change this historical calculation's inputs.
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_points SET source_generation=$3 WHERE slo_id=$1 AND evaluation_at=$2`, id, pointAt, prefix); err != nil {
+		t.Fatal(err)
+	}
+	start := pointAt.Add(-time.Microsecond).Truncate(time.Hour)
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_tiles SET source_generation=$3 WHERE slo_id=$1 AND resolution_seconds=3600 AND range_start=$2`, id, start, prefix); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET cursor_at=$2,attempts=5 WHERE slo_id=$1`, id, at.Add(-400*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	check := func(ready bool) {
+		t.Helper()
+		points, err := q.ReadRetainedEdgePoints(t.Context(), dbgen.ReadRetainedEdgePointsParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+			MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(pointAt.Add(-cadence)), EvaluationAt2: timestamp(pointAt)})
+		if err != nil || len(points) != 1 || points[0].Repairing == ready {
+			t.Fatalf("incremental historical point readiness mismatch: want=%t rows=%d err=%v", ready, len(points), err)
+		}
+		parts, err := q.ReadRetainedParts(t.Context(), dbgen.ReadRetainedPartsParams{SloID: id, DefinitionRevision: row.DefinitionRevision,
+			MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion,
+			Starts: []pgtype.Timestamptz{timestamp(start)}, Ends: []pgtype.Timestamptz{timestamp(start.Add(time.Hour))}, Resolutions: []int32{3600}})
+		if err != nil || len(parts) != 1 || parts[0].Ready != ready {
+			t.Fatalf("incremental historical tile readiness mismatch: want=%t rows=%d err=%v", ready, len(parts), err)
+		}
+	}
+	check(true)
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_sli_hourly_aggregates SET source_generation=$3 WHERE sli_id=$1 AND measurement_revision=$2 AND hour_start=$4`, row.SliID, row.MeasurementRevision, generation+1, start); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
+}

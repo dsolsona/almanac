@@ -66,6 +66,12 @@ fails with Chromium `ERR_NETWORK_CHANGED`; integrated acceptance remains failed.
 The fixed capacity runner is defined and compiled, but its new invocation remains
 unapproved and unexecuted. These observations do not establish scale acceptance.
 The latest index/reduction/batching candidate is not deployed to the operator app.
+Final focused review also reproduces and fixes false historical preparation caused
+by per-arrival generation differences. A persisted completed-input checkpoint now
+keeps correct earlier points/tiles readable during unrelated pending or failed
+backfill, while newer intersecting inputs still invalidate them. Focused database
+and generated/Go checks pass; integrated verification and operator deployment of
+schema 0036 remain pending.
 The approved server-selected period contract now starts definition, current status
 and history independently; fast checks pass, but its real latency benefit is unverified.
 Committed work adds exact retained points/tiles, bounded operational reads,

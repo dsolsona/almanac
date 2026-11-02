@@ -13,20 +13,25 @@ import (
 
 const advanceRetainedSeriesRepair = `-- name: AdvanceRetainedSeriesRepair :execrows
 UPDATE public.almanac_slo_series_repair SET cursor_at=$7,attempts=0,lease_until=NULL,last_error=NULL,
-    next_attempt_at=$8
+    next_attempt_at=$8,
+    coherent_through=CASE WHEN $7>=end_at AND $9::bigint IS NOT NULL
+                         THEN $7 ELSE coherent_through END,
+    coherent_source_generation=CASE WHEN $7>=end_at AND $9::bigint IS NOT NULL
+                                   THEN $9::bigint ELSE coherent_source_generation END
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4
   AND version=$5 AND lease_epoch=$6
 `
 
 type AdvanceRetainedSeriesRepairParams struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	Version             int64              `json:"version"`
-	LeaseEpoch          int64              `json:"lease_epoch"`
-	CursorAt            pgtype.Timestamptz `json:"cursor_at"`
-	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	SloID                    pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision       int64              `json:"definition_revision"`
+	MeasurementRevision      int64              `json:"measurement_revision"`
+	CalculationVersion       string             `json:"calculation_version"`
+	Version                  int64              `json:"version"`
+	LeaseEpoch               int64              `json:"lease_epoch"`
+	CursorAt                 pgtype.Timestamptz `json:"cursor_at"`
+	NextAttemptAt            pgtype.Timestamptz `json:"next_attempt_at"`
+	CoherentSourceGeneration pgtype.Int8        `json:"coherent_source_generation"`
 }
 
 func (q *Queries) AdvanceRetainedSeriesRepair(ctx context.Context, arg AdvanceRetainedSeriesRepairParams) (int64, error) {
@@ -39,6 +44,7 @@ func (q *Queries) AdvanceRetainedSeriesRepair(ctx context.Context, arg AdvanceRe
 		arg.LeaseEpoch,
 		arg.CursorAt,
 		arg.NextAttemptAt,
+		arg.CoherentSourceGeneration,
 	)
 	if err != nil {
 		return 0, err
@@ -58,7 +64,7 @@ UPDATE public.almanac_slo_series_repair w
 SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
 FROM candidate c WHERE (w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version)
     =(c.slo_id,c.definition_revision,c.measurement_revision,c.calculation_version)
-RETURNING w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.cursor_at, w.end_at, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.id, w.manual_retried_at
+RETURNING w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.cursor_at, w.end_at, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.id, w.manual_retried_at, w.coherent_through, w.coherent_source_generation
 `
 
 type ClaimRetainedSeriesRepairParams struct {
@@ -84,6 +90,8 @@ func (q *Queries) ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetain
 		&i.LastError,
 		&i.ID,
 		&i.ManualRetriedAt,
+		&i.CoherentThrough,
+		&i.CoherentSourceGeneration,
 	)
 	return i, err
 }
