@@ -6,6 +6,9 @@ import { SloBudgetSparkline } from '../components/charts/SloBudgetSparkline.tsx'
 import { Panel } from '../components/ui/Panel.tsx';
 import { StatusBadge } from '../components/ui/StatusBadge.tsx';
 import { illustrativeChart, illustrativeRows } from './chartFixture.ts';
+import type { TimelineChart } from '../components/charts/timelineModel.ts';
+
+const coarseChart:TimelineChart={title:'Illustrative coarse coverage',summary:'Synthetic exact values in a period containing small gaps. The line breaks; qualified markers retain the values. Choose a shorter range for finer gap detail.',start:'2026-10-26T00:00:00Z',end:'2026-10-27T00:00:00Z',stepMs:86400000,fillExpectedGaps:false,lanes:[{id:'attainment',label:'SLI',unit:'%',height:162,series:[{id:'coarse',label:'Observed values',points:[1,12,24].map((hour,index)=>({timestamp:new Date(Date.parse('2026-10-26T00:00:00Z')+hour*3600000).toISOString(),value:['99.99','99.50','99.98'][index]!,coverage:'complete',displayCoverage:{start:'2026-10-26T00:00:00Z',end:'2026-10-27T00:00:00Z',states:['complete','missing']}}))}]}]};
 
 const dailyCompliance = illustrativeChart.lanes.find(lane => lane.id === 'compliance');
 const dailyCounts = dailyCompliance?.series.flatMap(series => series.points).reduce((counts, point) => {
@@ -35,6 +38,7 @@ export function ChartsSection() {
     </section>
     {selectedLane&&<ExactValuesTable rows={selectedRows.slice((page-1)*50,page*50)} page={page} totalRows={selectedRows.length} onPageChange={setPage}/>}
     <Panel heading="Rolling budget sparkline"><p className="mono">Illustrative values; missing and expired samples break the line.</p><SloBudgetSparkline label="Synthetic SLO budget remaining" samples={[{remaining_fraction:'0.8',state:'observed'},{remaining_fraction:'0.65',state:'observed'},{remaining_fraction:null,state:'missing'},{remaining_fraction:'0.42',state:'observed'}]}/></Panel>
+    <Panel heading="Coarse coverage"><p>Illustrative values only. Shaded periods contain missing measurements. Markers retain exact selected values; choose a shorter range for finer gaps.</p><TimelineChartView chart={coarseChart}/></Panel>
     <div className="charts-section__states">
       <Panel heading="Empty state"><p>No samples are available in this illustrative range.</p></Panel>
       <Panel heading="Refresh error"><p className="ui-error" role="alert">The example refresh failed. Previously loaded values would be marked stale.</p><StatusBadge status="stale" /></Panel>

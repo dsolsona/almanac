@@ -328,6 +328,14 @@ func (c *retainedSeriesReader) loadPart(ctx context.Context, base slo.WindowInpu
 // survive this second selection because every contributing bucket's extrema
 // participate; exact counts are never averaged from plotted values.
 func reduceRetainedDisplay(samples []api.SloOperationalSample, start, end time.Time, target, metric string, buckets int) ([]api.SloOperationalSample, error) {
+	result, err := reduceRetainedDisplayLimit(samples, start, end, target, metric, buckets, sloOperationalSeriesLimit)
+	if errors.Is(err, ErrOperationalRangeDense) && buckets > 0 {
+		return reduceRetainedDisplayLimit(samples, start, end, target, metric, buckets, 4)
+	}
+	return result, err
+}
+
+func reduceRetainedDisplayLimit(samples []api.SloOperationalSample, start, end time.Time, target, metric string, buckets, perBucketLimit int) ([]api.SloOperationalSample, error) {
 	if len(samples) == 0 {
 		return []api.SloOperationalSample{}, nil
 	}
@@ -349,7 +357,7 @@ func reduceRetainedDisplay(samples []api.SloOperationalSample, start, end time.T
 		for last < len(samples) && !samples[last].EvaluationAt.After(to) {
 			last++
 		}
-		selected, err := reduceRetainedLane(samples[first:last], from, to, target, metric)
+		selected, err := reduceRetainedLaneLimit(samples[first:last], from, to, target, metric, perBucketLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -367,7 +375,7 @@ func retainedDisplayWidth(start, end time.Time, buckets int) time.Duration {
 	if end.Sub(start) > 28*24*time.Hour {
 		grid = 24 * time.Hour
 	}
-	ticks := (end.Sub(start) + grid - 1) / grid
+	ticks := (end.Sub(start.Truncate(grid)) + grid - 1) / grid
 	return max(1, (ticks+time.Duration(buckets)-1)/time.Duration(buckets)) * grid
 }
 

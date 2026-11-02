@@ -70,6 +70,16 @@ function validOperationalValue(value:unknown):boolean {
 function validOperationalSample(value:unknown):boolean {
   if(!record(value)||!utcTimestamp(value.bucket_start)||!utcTimestamp(value.bucket_end)||!utcTimestamp(value.evaluation_at)||!validOperationalQuality(value.quality)||typeof value.revision!=='string' || !Array.isArray(value.retained_extrema)) return false;
   if(!['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale'].includes(String(value.state))) return false;
+  if(value.display_coverage!==undefined){
+    const coverage=value.display_coverage;
+    if(!record(coverage)||Date.parse(value.bucket_start as string)>=Date.parse(value.bucket_end as string))return false;
+    const allowed={states:['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale'],quality_states:['complete','partial','no_data','zero_traffic','expired_history','not_yet_eligible','not_applicable','unavailable'],freshness:['unknown','fresh','stale']};
+    for(const [key,states] of Object.entries(allowed)){
+      const actual=coverage[key];
+      if(!Array.isArray(actual)||actual.length===0||actual.length>states.length||new Set(actual).size!==actual.length||actual.some(state=>typeof state!=='string'||!states.includes(state)))return false;
+    }
+    if(!(coverage.states as string[]).includes(String(value.state))||!(coverage.quality_states as string[]).includes(String((value.quality as Record<string,unknown>).state))||!(coverage.freshness as string[]).includes(String((value.quality as Record<string,unknown>).freshness)))return false;
+  }
   return ['good','total','attainment','allowed_budget','remaining_budget','remaining_fraction','burn'].every(k=>decimal(value[k])) &&
     value.retained_extrema.every(v=>['first','last','minimum','maximum'].includes(String(v)));
 }

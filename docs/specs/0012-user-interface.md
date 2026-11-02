@@ -258,6 +258,11 @@ required product behavior. Apply these rules from the first screen:
   explicitly report resolution, and retain extrema for numeric lines so visual
   averaging does not hide spikes. Exact values remain available through bounded
   pages, and budget/burn summaries come from canonical backend calculations.
+  For dense gaps, [ADR-0027](../adr/0027-bounded-history-quality-display.md)
+  permits coarse bucket presence sets while preserving exact selected values.
+  Clearly mark incomplete buckets, break continuous lines through them and keep
+  qualified numeric markers. Explain that a shorter range reveals finer detail;
+  never reject an otherwise supported graph solely for quality-transition density.
 - Cancel obsolete requests and discard stale responses after filter/range changes.
   Reuse unchanged chart state; updating a form must not rerender every graph.
   Refresh visible data only and bound retained response caches. Large export work

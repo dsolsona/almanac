@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"math/big"
+	"slices"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
@@ -112,6 +113,10 @@ func retainedExtremumKey(sample api.SloOperationalSample, metric string) (*big.R
 // Keep exact extrema and both sides of quality changes; page boundaries never
 // participate in selecting the points retained by a stable tile.
 func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time, target, metric string) ([]api.SloOperationalSample, error) {
+	return reduceRetainedLaneLimit(samples, start, end, target, metric, sloOperationalSeriesLimit)
+}
+
+func reduceRetainedLaneLimit(samples []api.SloOperationalSample, start, end time.Time, target, metric string, limit int) ([]api.SloOperationalSample, error) {
 	if !start.Before(end) {
 		return nil, ErrOperationalRange
 	}
@@ -151,8 +156,23 @@ func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time
 	if minimum >= 0 {
 		selected[minimum], selected[maximum] = true, true
 	}
-	if len(selected) > sloOperationalSeriesLimit {
-		return nil, ErrOperationalRangeDense
+	var coverage *api.SloDisplayCoverage
+	coarse := len(selected) > limit
+	for _, sample := range samples {
+		coarse = coarse || sample.DisplayCoverage != nil
+	}
+	if coarse {
+		var err error
+		coverage, err = retainedDisplayCoverage(samples)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(selected) > limit {
+		selected = map[int]bool{0: true, len(samples) - 1: true}
+		if minimum >= 0 {
+			selected[minimum], selected[maximum] = true, true
+		}
 	}
 	result := make([]api.SloOperationalSample, 0, len(selected))
 	for index, sample := range samples {
@@ -160,6 +180,7 @@ func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time
 			continue
 		}
 		sample.BucketStart, sample.BucketEnd = start, end
+		sample.DisplayCoverage = coverage
 		sample.RetainedExtrema = []api.SloOperationalSampleRetainedExtrema{}
 		for _, mark := range []struct {
 			index int
@@ -172,4 +193,49 @@ func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time
 		result = append(result, sample)
 	}
 	return result, nil
+}
+
+// Presence survives repeated reduction; reduced samples cannot establish counts.
+func retainedDisplayCoverage(samples []api.SloOperationalSample) (*api.SloDisplayCoverage, error) {
+	coverage := &api.SloDisplayCoverage{}
+	for _, sample := range samples {
+		states := []api.SloDisplayCoverageStates{api.SloDisplayCoverageStates(sample.State)}
+		qualities := []api.SloDisplayCoverageQualityStates{api.SloDisplayCoverageQualityStates(sample.Quality.State)}
+		freshness := []api.SloDisplayCoverageFreshness{api.SloDisplayCoverageFreshness(sample.Quality.Freshness)}
+		if sample.DisplayCoverage != nil {
+			stored := sample.DisplayCoverage
+			if len(stored.States) == 0 || len(stored.States) > 8 || len(stored.QualityStates) == 0 || len(stored.QualityStates) > 8 || len(stored.Freshness) == 0 || len(stored.Freshness) > 3 ||
+				!slices.Contains(stored.States, states[0]) || !slices.Contains(stored.QualityStates, qualities[0]) || !slices.Contains(stored.Freshness, freshness[0]) {
+				return nil, slo.ErrOperationalFacts
+			}
+			states = append(states, sample.DisplayCoverage.States...)
+			qualities = append(qualities, sample.DisplayCoverage.QualityStates...)
+			freshness = append(freshness, sample.DisplayCoverage.Freshness...)
+		}
+		for _, state := range states {
+			if !api.SloOperationalSampleState(state).Valid() {
+				return nil, slo.ErrOperationalFacts
+			}
+			if !slices.Contains(coverage.States, state) {
+				coverage.States = append(coverage.States, state)
+			}
+		}
+		for _, quality := range qualities {
+			if !api.SloOperationalQualityState(quality).Valid() {
+				return nil, slo.ErrOperationalFacts
+			}
+			if !slices.Contains(coverage.QualityStates, quality) {
+				coverage.QualityStates = append(coverage.QualityStates, quality)
+			}
+		}
+		for _, state := range freshness {
+			if !api.SloOperationalQualityFreshness(state).Valid() {
+				return nil, slo.ErrOperationalFacts
+			}
+			if !slices.Contains(coverage.Freshness, state) {
+				coverage.Freshness = append(coverage.Freshness, state)
+			}
+		}
+	}
+	return coverage, nil
 }

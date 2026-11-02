@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -10,6 +11,68 @@ import (
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
+
+func TestRetainedDenseYearKeepsExactExtremaAndDisclosesMissingCoverage(t *testing.T) {
+	start := time.Date(2025, 11, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(365 * 24 * time.Hour)
+	var samples []api.SloOperationalSample
+	for hour := range 365 * 24 {
+		from := start.Add(time.Duration(hour) * time.Hour)
+		for index, minute := range []int{1, 2, 60} {
+			sample := api.SloOperationalSample{EvaluationAt: from.Add(time.Duration(minute) * time.Minute), State: "observed", Revision: "1",
+				Good: new("99"), Total: new("100"), Quality: api.SloOperationalQuality{State: "complete", Freshness: "fresh"}}
+			if index == 1 {
+				sample.State, sample.Quality.State, sample.Good, sample.Total = "missing", "no_data", nil, nil
+			} else if hour == 4000 && index == 0 {
+				sample.Good = new("1")
+			}
+			samples = append(samples, sample)
+		}
+	}
+	got, err := reduceRetainedDisplay(samples, start, end, "0.99", "attainment", 375)
+	if err != nil || len(got) == 0 || len(got) > 1500 {
+		t.Fatalf("dense year unavailable or unbounded: samples=%d err=%v", len(got), err)
+	}
+	peak := false
+	for _, sample := range got {
+		if sample.DisplayCoverage == nil || !slices.Contains(sample.DisplayCoverage.States, api.SloDisplayCoverageStates("missing")) ||
+			!slices.Contains(sample.DisplayCoverage.QualityStates, api.SloDisplayCoverageQualityStates("no_data")) {
+			t.Fatal("coarse bucket hid missing coverage")
+		}
+		if sample.Good != nil && *sample.Good == "1" {
+			peak = sample.EvaluationAt.Equal(start.Add(4000*time.Hour+time.Minute)) && *sample.Total == "100" && sample.State == "observed" && sample.Quality.State == "complete"
+		}
+	}
+	if !peak || !got[0].EvaluationAt.Equal(samples[0].EvaluationAt) || !got[len(got)-1].EvaluationAt.Equal(end) {
+		t.Fatal("coarse graph changed an exact incident extremum or endpoint")
+	}
+	composed, err := reduceRetainedDisplay(got, start, end, "0.99", "attainment", 10)
+	if err != nil || len(composed) > 40 {
+		t.Fatalf("coarse composition is unavailable or unbounded: %d %v", len(composed), err)
+	}
+	for _, sample := range composed {
+		if sample.DisplayCoverage == nil || !slices.Contains(sample.DisplayCoverage.States, api.SloDisplayCoverageStates("missing")) {
+			t.Fatal("repeated reduction lost the original missing coverage")
+		}
+	}
+	got[0].DisplayCoverage.States = nil
+	if _, err := reduceRetainedDisplay(got, start, end, "0.99", "attainment", 10); !errors.Is(err, slo.ErrOperationalFacts) {
+		t.Fatalf("malformed retained coverage accepted: %v", err)
+	}
+	fine, err := reduceRetainedDisplay(samples[4000*3:4001*3], start.Add(4000*time.Hour), start.Add(4001*time.Hour), "0.99", "attainment", 375)
+	if err != nil || len(fine) != 3 || fine[1].State != "missing" || fine[0].DisplayCoverage != nil {
+		t.Fatal("narrow range did not restore the individual gap")
+	}
+}
+
+func TestRetainedDisplayIncludesPartialGridBucketsInItsBound(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 30, 0, 0, time.UTC)
+	end := start.Add(375 * time.Hour)
+	width := retainedDisplayWidth(start, end, 375)
+	if width != 2*time.Hour {
+		t.Fatalf("unaligned range creates more buckets than its limit: %s", width)
+	}
+}
 
 func TestRetainedYearReadBoundsCoverageAndEdgeWork(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

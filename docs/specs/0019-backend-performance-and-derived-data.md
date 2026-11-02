@@ -66,6 +66,15 @@ first/last/min/max and missing-region transitions remain available. Exact tables
 return the actual selected point and its source counts, not a value reconstructed
 from a plotted pixel or rounded percentage.
 
+Under [ADR-0027](../adr/0027-bounded-history-quality-display.md), dense quality
+transitions cannot reject an otherwise supported graph. Preserve individual
+transitions when they fit; otherwise attach the distinct sample, quality and
+freshness states present in each display bucket as `display_coverage`. These
+presence sets do not change selected-point values or imply exact interval counts.
+Render incomplete buckets conservatively, retain qualified numeric markers and
+use narrower ranges for finer gap locations. Compose presence from retained
+transitions/summaries and exact bounded edges, without a new preparation job.
+
 Late data dirties all endpoints in which that interval contributes. For an interval
 ending at t and a rolling window W, schedule the enclosing affected endpoint range
 through t+W, clipped to retained/evaluable time; include relevant burn windows,

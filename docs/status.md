@@ -91,7 +91,10 @@ generation/overlap fences: isolated SQL profiling improves from 1,114 to 89 ms,
 and both versions return identical results for all 673 rows. The focused
 PostgreSQL gate passes in 31.080 seconds. Rendered latency on this correction is
 not yet verified. Frequent quality transitions still produce 422 responses;
-[ADR-0027](adr/0027-bounded-history-quality-display.md) is only a proposal.
+[ADR-0027](adr/0027-bounded-history-quality-display.md) now records the maintainer's
+selection of adaptive graph detail and explicit missing coverage. Its retained
+reducer, generated contract, qualified chart/table context and catalogue example
+pass the fast gate; actual rendered/year/fleet acceptance remains outstanding.
 List provenance failures during live ingestion also remain unresolved.
 No capacity result has passed. T08 stays open until its
 accuracy, storage, freshness, trace and latency requirements are demonstrated.

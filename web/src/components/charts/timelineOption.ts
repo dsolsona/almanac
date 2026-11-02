@@ -100,8 +100,19 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     // converts missing coverage into a successful line segment.
     const gaps:Array<[{xAxis:number;itemStyle:unknown},{xAxis:number}]>=[];
     if(referenceLayout&&!lane.bars){
+      const coarse=new Set<string>();
+      for(const point of item.data){
+        const bucket=point.displayCoverage;
+        if(!bucket||!bucket.states.some(state=>state!=='complete'&&state!=='stale'))continue;
+        const key=`${bucket.start}:${bucket.end}`;
+        if(!coarse.has(key)){coarse.add(key);gaps.push([{xAxis:bucket.start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:bucket.end}]);}
+      }
       let start:number|undefined;
       for(const point of item.data){
+        if(point.displayCoverage){
+          if(start!==undefined){gaps.push([{xAxis:start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:point.displayCoverage.start}]);start=undefined;}
+          continue;
+        }
         const unavailable=point.coverage!=='complete'&&point.coverage!=='stale';
         if(unavailable&&start===undefined)start=point.timestamp;
         if(!unavailable&&start!==undefined){gaps.push([{xAxis:start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:point.timestamp}]);start=undefined;}
@@ -150,6 +161,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
           const label = coverageLabel(point.coverage);
           const display = point.value === null ? label : `${escapeHTML(point.value)} ${escapeHTML(lane.unit)} · ${label}`;
           rows.push(`<div>${escapeHTML(lane.label)} · ${escapeHTML(item.label)}: <strong>${display}</strong></div>`);
+          if(point.displayCoverage)rows.push(`<div>Displayed period contains: ${point.displayCoverage.states.map(state=>escapeHTML(coverageLabel(state))).join(', ')}. Choose a shorter range for finer detail.</div>`);
         }
         const label = chart.timeZone==='local' ? new Date(time).toLocaleString() : `${exactTime.slice(0, 16).replace('T', ' ')} UTC`;
         return `<div><strong>${label}</strong>${rows.join('') || '<div>No sample at this timestamp</div>'}</div>`;

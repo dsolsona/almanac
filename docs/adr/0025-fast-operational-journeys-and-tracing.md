@@ -6,6 +6,7 @@
 - Approval: maintainer approved the performance/tracing intervention in Crit session `ede9414e6ca5` after its retention, pagination, latency and historical-series amendments
 - Related specs: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0012](../specs/0012-user-interface.md)
 - Supersedes / superseded by: partially supersedes [ADR-0024](0024-precomputed-operational-reads.md)'s foreground preparation/cache policy; replaces provisional 400-day retention with one year as specified below
+- Gap-display amendment: [ADR-0027](0027-bounded-history-quality-display.md) preserves bounded graph availability with explicit coarse coverage when individual transitions cannot fit; arithmetic and latency requirements remain unchanged
 
 ## Context
 

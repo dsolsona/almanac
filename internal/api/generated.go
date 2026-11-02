@@ -1365,6 +1365,99 @@ func (e SloDailyComplianceSeriesKind) Valid() bool {
 	}
 }
 
+// Defines values for SloDisplayCoverageFreshness.
+const (
+	SloDisplayCoverageFreshnessFresh   SloDisplayCoverageFreshness = "fresh"
+	SloDisplayCoverageFreshnessStale   SloDisplayCoverageFreshness = "stale"
+	SloDisplayCoverageFreshnessUnknown SloDisplayCoverageFreshness = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SloDisplayCoverageFreshness enum.
+func (e SloDisplayCoverageFreshness) Valid() bool {
+	switch e {
+	case SloDisplayCoverageFreshnessFresh:
+		return true
+	case SloDisplayCoverageFreshnessStale:
+		return true
+	case SloDisplayCoverageFreshnessUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloDisplayCoverageQualityStates.
+const (
+	SloDisplayCoverageQualityStatesComplete       SloDisplayCoverageQualityStates = "complete"
+	SloDisplayCoverageQualityStatesExpiredHistory SloDisplayCoverageQualityStates = "expired_history"
+	SloDisplayCoverageQualityStatesNoData         SloDisplayCoverageQualityStates = "no_data"
+	SloDisplayCoverageQualityStatesNotApplicable  SloDisplayCoverageQualityStates = "not_applicable"
+	SloDisplayCoverageQualityStatesNotYetEligible SloDisplayCoverageQualityStates = "not_yet_eligible"
+	SloDisplayCoverageQualityStatesPartial        SloDisplayCoverageQualityStates = "partial"
+	SloDisplayCoverageQualityStatesUnavailable    SloDisplayCoverageQualityStates = "unavailable"
+	SloDisplayCoverageQualityStatesZeroTraffic    SloDisplayCoverageQualityStates = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloDisplayCoverageQualityStates enum.
+func (e SloDisplayCoverageQualityStates) Valid() bool {
+	switch e {
+	case SloDisplayCoverageQualityStatesComplete:
+		return true
+	case SloDisplayCoverageQualityStatesExpiredHistory:
+		return true
+	case SloDisplayCoverageQualityStatesNoData:
+		return true
+	case SloDisplayCoverageQualityStatesNotApplicable:
+		return true
+	case SloDisplayCoverageQualityStatesNotYetEligible:
+		return true
+	case SloDisplayCoverageQualityStatesPartial:
+		return true
+	case SloDisplayCoverageQualityStatesUnavailable:
+		return true
+	case SloDisplayCoverageQualityStatesZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SloDisplayCoverageStates.
+const (
+	SloDisplayCoverageStatesExpired       SloDisplayCoverageStates = "expired"
+	SloDisplayCoverageStatesKnownEmpty    SloDisplayCoverageStates = "known_empty"
+	SloDisplayCoverageStatesMissing       SloDisplayCoverageStates = "missing"
+	SloDisplayCoverageStatesNotApplicable SloDisplayCoverageStates = "not_applicable"
+	SloDisplayCoverageStatesObserved      SloDisplayCoverageStates = "observed"
+	SloDisplayCoverageStatesPartial       SloDisplayCoverageStates = "partial"
+	SloDisplayCoverageStatesStale         SloDisplayCoverageStates = "stale"
+	SloDisplayCoverageStatesZeroTraffic   SloDisplayCoverageStates = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the SloDisplayCoverageStates enum.
+func (e SloDisplayCoverageStates) Valid() bool {
+	switch e {
+	case SloDisplayCoverageStatesExpired:
+		return true
+	case SloDisplayCoverageStatesKnownEmpty:
+		return true
+	case SloDisplayCoverageStatesMissing:
+		return true
+	case SloDisplayCoverageStatesNotApplicable:
+		return true
+	case SloDisplayCoverageStatesObserved:
+		return true
+	case SloDisplayCoverageStatesPartial:
+		return true
+	case SloDisplayCoverageStatesStale:
+		return true
+	case SloDisplayCoverageStatesZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloEvaluationSnapshotKind.
 const (
 	CurrentEvaluation SloEvaluationSnapshotKind = "current_evaluation"
@@ -3008,6 +3101,22 @@ type SloDailyComplianceSummary struct {
 	ViolatedDays      int `json:"violated_days"`
 }
 
+// SloDisplayCoverage defines model for SloDisplayCoverage.
+type SloDisplayCoverage struct {
+	Freshness     []SloDisplayCoverageFreshness     `json:"freshness"`
+	QualityStates []SloDisplayCoverageQualityStates `json:"quality_states"`
+	States        []SloDisplayCoverageStates        `json:"states"`
+}
+
+// SloDisplayCoverageFreshness defines model for SloDisplayCoverage.Freshness.
+type SloDisplayCoverageFreshness string
+
+// SloDisplayCoverageQualityStates defines model for SloDisplayCoverage.QualityStates.
+type SloDisplayCoverageQualityStates string
+
+// SloDisplayCoverageStates defines model for SloDisplayCoverage.States.
+type SloDisplayCoverageStates string
+
 // SloEvaluation defines model for SloEvaluation.
 type SloEvaluation struct {
 	CalculationVersion string                    `json:"calculation_version"`
@@ -3284,14 +3393,15 @@ type SloOperationalRangeMaxSamplesPerSeries int
 
 // SloOperationalSample defines model for SloOperationalSample.
 type SloOperationalSample struct {
-	AllowedBudget *string               `json:"allowed_budget"`
-	Attainment    *string               `json:"attainment"`
-	BucketEnd     time.Time             `json:"bucket_end"`
-	BucketStart   time.Time             `json:"bucket_start"`
-	Burn          *string               `json:"burn"`
-	EvaluationAt  time.Time             `json:"evaluation_at"`
-	Good          *string               `json:"good"`
-	Quality       SloOperationalQuality `json:"quality"`
+	AllowedBudget   *string               `json:"allowed_budget"`
+	Attainment      *string               `json:"attainment"`
+	BucketEnd       time.Time             `json:"bucket_end"`
+	BucketStart     time.Time             `json:"bucket_start"`
+	Burn            *string               `json:"burn"`
+	DisplayCoverage *SloDisplayCoverage   `json:"display_coverage,omitempty"`
+	EvaluationAt    time.Time             `json:"evaluation_at"`
+	Good            *string               `json:"good"`
+	Quality         SloOperationalQuality `json:"quality"`
 
 	// ReceivedAt Receipt metadata only.
 	ReceivedAt        *time.Time                            `json:"received_at"`
@@ -4549,7 +4659,7 @@ type ClientInterface interface {
 
 	// GetSloOperationalDetail Read current operational evaluation and bounded history
 	//
-	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 	GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5759,7 +5869,7 @@ func (c *Client) GetSloHistoryValues(ctx context.Context, sloId SloId, generatio
 
 // GetSloOperationalDetail Read current operational evaluation and bounded history
 //
-// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 func (c *Client) GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -9216,7 +9326,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
 	//
-	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -13282,7 +13392,7 @@ func (c *ClientWithResponses) GetSloHistoryValuesWithResponse(ctx context.Contex
 
 // GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
 //
-// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 //
 // Returns a wrapper object for the known response body format(s).
 //

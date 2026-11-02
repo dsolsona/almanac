@@ -777,8 +777,10 @@ paths:
         computed arithmetically, not expanded into absent ticks. Each series has
         at most 1,500 samples. Reduced samples retain actual first/last/min/max
         evaluations and disclose bucket bounds, resolution and reduction; gaps and
-        revision/validity boundaries are never bridged. If those constraints cannot
-        fit, return 422 range_too_dense with narrower-range guidance. Exact-table
+        revision/validity boundaries are never bridged. When fine quality transitions
+        exceed the point bound, display_coverage reports the states present in each
+        bucket; render it conservatively and request a narrower range for finer gaps.
+        Quality-transition density alone cannot reject a supported graph. Exact-table
         values are the exact represented response samples; use another bounded
         operational range request to drill into a reduced region. No full interval
         timeline is embedded. Detail context includes existing authorized SLI
@@ -1292,6 +1294,31 @@ components:
         burn: {type: string, nullable: true}
         received_at: {type: string, format: date-time, nullable: true, description: Receipt metadata only.}
         retained_extrema: {type: array, items: {type: string, enum: [first, last, minimum, maximum]}}
+        display_coverage:
+          $ref: '#/components/schemas/SloDisplayCoverage'
+          description: Present when fine quality transitions were reduced. Presence sets apply to this sample's bucket bounds; the sample's own values and quality remain exact.
+    SloDisplayCoverage:
+      type: object
+      required: [states, quality_states, freshness]
+      properties:
+        states:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale]}
+        quality_states:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable]}
+        freshness:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, enum: [unknown, fresh, stale]}
     SloEvaluation:
       type: object
       required: [evaluation_id, requested_at, effective_end, calculation_version, snapshot_kind, objective, window, quality, performance, timeline]
