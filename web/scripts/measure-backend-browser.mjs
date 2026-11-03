@@ -203,7 +203,7 @@ async function measuredPage(context, fixture) {
 }
 
 async function browserTimings(page) {
-  return page.evaluate(() => ({
+  const timings = await page.evaluate(() => ({
     primary_ms: window.__almanacPerformance.primary_ms,
     detail:window.__almanacPerformance.detailEvidence,
     fetches: window.__almanacPerformance.fetches,
@@ -218,6 +218,7 @@ async function browserTimings(page) {
       dom_interactive_ms: entry.domInteractive, dom_content_loaded_ms: entry.domContentLoadedEventEnd,
     })),
   }));
+  return { ...timings, network_failures: networkFailures.get(page) ?? [] };
 }
 
 async function traceFailureDiagnostics(page) {
