@@ -331,7 +331,7 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 	if err := setup.Run(); err != nil {
 		t.Fatal("normal deployment administrator onboarding failed")
 	}
-	sourceCA, sourceKey, err := datasourceTestCertificate()
+	sourceCA, sourceKey, err := datasourceTestCertificateFor(performanceSourceCertificateValidity)
 	if err != nil {
 		t.Fatal("create independent performance source TLS identity failed")
 	}
