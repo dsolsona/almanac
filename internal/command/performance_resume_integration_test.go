@@ -191,14 +191,6 @@ func refreshRetainedBrowserIdentity(t *testing.T, fleet *performanceFleet, db *p
 	t.Helper()
 	index := len(fleet.objectives) - 1
 	previous := fleet.objectives[index]
-	var visited bool
-	if err := db.QueryRow(fleet.ctx, `SELECT EXISTS(SELECT 1 FROM public.almanac_slo_history_blocks b
-JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='retained_detail')`, previous).Scan(&visited); err != nil {
-		t.Fatal("inspect retained browser identity failed")
-	}
-	if !visited {
-		return
-	}
 	f := fleet.fixture
 	f.backend.stop(t)
 	f.backend.deployment.requireStoppedDatabase(t, f.databaseURL)
@@ -216,8 +208,8 @@ JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.sl
 		t.Fatal(err)
 	}
 	name := fmt.Sprintf("performance-%03d", index)
-	// A previously measured objective cannot count as never visited. Provision a
-	// fresh fixture identity while retaining its exact definition and year series.
+	// Expired responses cannot prove an objective was never visited. Every reuse
+	// provisions a fresh identity with its exact definition and retained series.
 	tag, err := tx.Exec(fleet.ctx, `UPDATE public.almanac_slos SET name='retired-'||id::text WHERE id=$1 AND name=$2`, previous, name)
 	if err != nil || tag.RowsAffected() != 1 {
 		t.Fatal("retained browser identity differs from its fixed fleet")

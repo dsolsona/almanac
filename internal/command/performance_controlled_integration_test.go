@@ -250,6 +250,10 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	}
 	stage("query-plans-365-days")
 	record("query-plans-365-days", performanceQueryPlans(t, fleet, true), nil)
+	// Fail browser readiness before the two mandatory fifteen-minute live windows.
+	if !measurePerformanceBrowsers(t, ctx, fleet, stage, record) {
+		return
+	}
 	stage("ingestion-only-baseline-365-days")
 	baseline, err := measurePerformanceLiveWindow(t, fleet, "ingestion-only-baseline-365-days", nil)
 	if !record("ingestion-only-baseline-365-days", baseline, err) {
@@ -270,23 +274,6 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	stage("independent-concurrent-current-365-days")
 	current, err := performanceConcurrentCurrent(t, ctx, fleet)
 	if !record("independent-concurrent-current-365-days", current, err) {
-		return
-	}
-	browserFailed := false
-	for _, latency := range []int{0, 100} {
-		label := fmt.Sprintf("production-browser-365-days-%dms", latency)
-		stage(label + "-response-eviction")
-		browserRestart := restartPerformanceForBrowser(t, fleet, latency == 0)
-		record(label+"-response-eviction", browserRestart, nil)
-		stage(label)
-		browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
-		browserArtifacts, browserErr := runPerformanceBrowser(t, browserContext, fleet, browserRestart, latency)
-		stopBrowser()
-		if !record(label, struct{ Artifacts string }{browserArtifacts}, browserErr) {
-			browserFailed = true
-		}
-	}
-	if browserFailed {
 		return
 	}
 	fleet.reserveDetail = false
@@ -332,4 +319,22 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	}
 	stage("completed")
 	t.Logf("controlled performance evidence: %s", artifacts)
+}
+
+func measurePerformanceBrowsers(t *testing.T, ctx context.Context, fleet performanceFleet, stage func(string), record func(string, any, error) bool) bool {
+	t.Helper()
+	for _, latency := range []int{0, 100} {
+		label := fmt.Sprintf("production-browser-365-days-%dms", latency)
+		stage(label + "-response-eviction")
+		browserRestart := restartPerformanceForBrowser(t, fleet, latency == 0)
+		record(label+"-response-eviction", browserRestart, nil)
+		stage(label)
+		browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
+		browserArtifacts, browserErr := runPerformanceBrowser(t, browserContext, fleet, browserRestart, latency)
+		stopBrowser()
+		if !record(label, struct{ Artifacts string }{browserArtifacts}, browserErr) {
+			return false
+		}
+	}
+	return true
 }

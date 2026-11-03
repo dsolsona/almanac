@@ -303,6 +303,7 @@ try {
     if(!Number.isFinite(sample.primary_ms)||sample.primary_ms>=budget)report.failures.push(`${stage}-load-budget`);
     report[`${cohort}_loads`].push(sample);
     await writeFile(join(output,'browser-performance.json'),JSON.stringify(report)+'\n',{mode:0o600});
+    if(sample.failure||!Number.isFinite(sample.primary_ms)||sample.primary_ms>=budget)throw new Error('rendered load failed');
     return sample;
   };
 
