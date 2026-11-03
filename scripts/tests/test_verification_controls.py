@@ -108,7 +108,7 @@ class VerificationControlsTest(unittest.TestCase):
 
     def test_performance_requires_all_fleets_without_running_through_existing_modes(self):
         name = "TestIntegrationControlledBackendPerformance"
-        names = [name, *(f"{name}/independent-{size}" for size in (10, 100, 1000))]
+        names = [name, *(f"{name}/independent-{size}" for size in (1, 10, 100, 1000))]
         events = self.put(".local/performance-go-test.jsonl", "\n".join(json.dumps({"Action": action, "Test": case}) for case in names for action in ("run", "pass")))
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(vc.performance_evidence(), 0)
@@ -117,6 +117,9 @@ class VerificationControlsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 vc.performance_evidence()
         events.write_text("\n".join(json.dumps({"Action": action, "Test": case}) for case in names[:-1] for action in ("run", "pass")))
+        with self.assertRaises(ValueError):
+            vc.performance_evidence()
+        events.write_text("\n".join(json.dumps({"Action": action, "Test": case}) for case in names if not case.endswith("/independent-1") for action in ("run", "pass")))
         with self.assertRaises(ValueError):
             vc.performance_evidence()
         self.assertNotIn("performance", vc.MODES)

@@ -42,8 +42,8 @@ type performanceFleet struct {
 
 func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {
 	t.Helper()
-	if size != 10 && size != 100 && size != 1000 {
-		t.Fatal("controlled performance requires 10,100 or1000 independent measurements/objectives")
+	if size != 1 && size != 10 && size != 100 && size != 1000 {
+		t.Fatal("controlled performance requires 1,10,100 or1000 independent measurements/objectives")
 	}
 	started := time.Now()
 	f := startPerformanceComposeFixture(t)
@@ -58,7 +58,8 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "1")
 	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
 	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL, reserveDetail: true}
-	for index := range 10 {
+	agentCount := min(size, 10)
+	for index := range agentCount {
 		if ctx.Err() != nil {
 			t.Fatal("controlled performance fleet setup cancelled")
 		}
@@ -70,8 +71,8 @@ func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanc
 		fleet.agents = append(fleet.agents, agent)
 		datasourceID := createSLIJourneyDatasourceWithCadence(t, f.binary, dir, agent, f.sourceEndpoint, f.sourceCA, fmt.Sprintf("performance-metrics-%02d", index), 60)
 		fleet.datasources = append(fleet.datasources, datasourceID)
-		for offset := range size / 10 {
-			name := fmt.Sprintf("performance-%04d", index*(size/10)+offset)
+		for offset := range size / agentCount {
+			name := fmt.Sprintf("performance-%04d", index*(size/agentCount)+offset)
 			var measurement api.Sli
 			performanceCreateCLI(t, f, agent.profile, "slis", name, map[string]any{
 				"name": name, "display_name": name, "datasource_id": datasourceID,
@@ -214,24 +215,25 @@ func reauthenticatePerformanceManager(t *testing.T, ctx context.Context, fleet p
 }
 
 type performanceHistorySetup struct {
-	Days            int           `json:"days"`
-	Start           time.Time     `json:"start"`
-	End             time.Time     `json:"end"`
-	NominalSlots    int64         `json:"nominal_slots"`
-	CanonicalRows   int64         `json:"canonical_rows"`
-	GapSlots        int64         `json:"gap_slots"`
-	KnownEmptyRows  int64         `json:"known_empty_rows"`
-	ZeroTrafficRows int64         `json:"zero_traffic_rows"`
-	Setup           time.Duration `json:"setup_ns"`
-	DatabaseBytes   int64         `json:"database_bytes"`
-	WALBytes        string        `json:"wal_bytes"`
+	PreviouslyRetainedDays int           `json:"previously_retained_days"`
+	Days                   int           `json:"days"`
+	Start                  time.Time     `json:"start"`
+	End                    time.Time     `json:"end"`
+	NominalSlots           int64         `json:"nominal_slots"`
+	CanonicalRows          int64         `json:"canonical_rows"`
+	GapSlots               int64         `json:"gap_slots"`
+	KnownEmptyRows         int64         `json:"known_empty_rows"`
+	ZeroTrafficRows        int64         `json:"zero_traffic_rows"`
+	Setup                  time.Duration `json:"setup_ns"`
+	DatabaseBytes          int64         `json:"database_bytes"`
+	WALBytes               string        `json:"wal_bytes"`
 }
 
-func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) performanceHistorySetup {
+func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days, previousDays int) performanceHistorySetup {
 	t.Helper()
 	size := len(fleet.slis)
-	if (days != 56 && days != 365) || (size != 10 && size != 100 && size != 1000) || len(fleet.agents) != 10 || len(fleet.objectives) != size {
-		t.Fatal("historical performance fixture must use 10/100/1000 independent measurements and56/365 days")
+	if (days != 56 && days != 90 && days != 180 && days != 365) || previousDays < 0 || previousDays >= days || (size != 1 && size != 10 && size != 100 && size != 1000) || len(fleet.agents) != min(size, 10) || len(fleet.objectives) != size {
+		t.Fatal("historical performance fixture requires a bounded incremental 1/10/100/1000-SLO history")
 	}
 	started := time.Now()
 	f := fleet.fixture
@@ -290,7 +292,9 @@ SELECT array_position($1::uuid[],sli_id)::bigint AS ordinal, proof.* FROM (
 	if err := db.QueryRow(t.Context(), `SELECT pg_current_wal_lsn()::text`).Scan(&initialLSN); err != nil {
 		t.Fatal("read fixture WAL baseline failed")
 	}
-	for hour := start; hour.Before(end); hour = hour.Add(time.Hour) {
+	// Extend the existing prefix; do not replay already imported hours.
+	importEnd := end.Add(-time.Duration(previousDays) * 24 * time.Hour)
+	for hour := start; hour.Before(importEnd); hour = hour.Add(time.Hour) {
 		if fleet.ctx.Err() != nil {
 			t.Fatal("controlled retained-history setup cancelled")
 		}
@@ -341,7 +345,7 @@ ORDER BY c.sli_id,c.interval_start ON CONFLICT DO NOTHING`, hour)
 			t.Fatalf("seed bounded performance history hour failed: %v", err)
 		}
 	}
-	report := performanceHistorySetup{Days: days, Start: start, End: end, NominalSlots: int64(days) * 24 * 60 * int64(size)}
+	report := performanceHistorySetup{Days: days, PreviouslyRetainedDays: previousDays, Start: start, End: end, NominalSlots: int64(days) * 24 * 60 * int64(size)}
 	if err := db.QueryRow(t.Context(), `SELECT count(*),count(*) FILTER(WHERE outcome='complete_empty')
 FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND interval_start >= $2 AND interval_start < $3`, fleet.slis, start, end).Scan(&report.CanonicalRows, &report.KnownEmptyRows); err != nil {
 		t.Fatal("count actual retained performance coverage failed")
@@ -351,7 +355,7 @@ WHERE sli_id=ANY($1::uuid[]) AND interval_start >= $2 AND interval_start < $3 AN
 		t.Fatal("count retained performance zero-traffic intervals failed")
 	}
 	report.GapSlots = report.NominalSlots - report.CanonicalRows
-	if report.GapSlots != int64(days)*24*int64(size/10) || report.KnownEmptyRows != int64(days)*24*int64(size/10) || report.ZeroTrafficRows != int64(days)*24*int64(size/10) {
+	if report.GapSlots != int64(days)*24*int64((size+9)/10) || report.KnownEmptyRows != int64(days)*24*int64((size+8)/10) || report.ZeroTrafficRows != int64(days)*24*int64((size+7)/10) {
 		t.Fatal("retained performance fixture lost its deliberate gaps, empty or zero-traffic intervals")
 	}
 	if err := db.QueryRow(t.Context(), `SELECT pg_database_size(current_database()),pg_wal_lsn_diff(pg_current_wal_lsn(),$1::pg_lsn)::text`, initialLSN).Scan(&report.DatabaseBytes, &report.WALBytes); err != nil {

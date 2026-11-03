@@ -256,7 +256,7 @@ _verify_performance:
 	  $(MAKE) build; \
 	  selected=$$(.local/bin/go test -tags=integration,performance -list '^TestIntegrationControlledBackendPerformance$$' ./internal/command); \
 	  test "$$(printf '%s\n' "$$selected" | awk '/^TestIntegrationControlledBackendPerformance$$/{n++} END{print n+0}')" -eq 1 || { echo 'controlled performance entry missing' >&2; exit 1; }; \
-	  echo 'Selected controlled performance cases: independent 10/100/1000-SLO fleets'; \
+	  echo 'Selected controlled performance cases: incremental 1-SLO diagnostic, then independent 10/100/1000-SLO fleets'; \
 	  artifact="$(CURDIR)/.local/performance-go-test.jsonl"; status_file="$(CURDIR)/.local/performance-go-test.exit"; \
 	  printf 'running\n' > "$$status_file"; go_status=0; \
 	  .local/bin/go test -json -tags=integration,performance -p=1 -run '^TestIntegrationControlledBackendPerformance$$' -count=1 -timeout=8h30m ./internal/command > "$$artifact" || go_status=$$?; \

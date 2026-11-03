@@ -248,7 +248,7 @@ def counted_go_events(path: Path, expected: set[str]) -> int:
 
 def performance_evidence() -> int:
     name = "TestIntegrationControlledBackendPerformance"
-    expected = {name, *(f"{name}/independent-{size}" for size in (10, 100, 1000))}
+    expected = {name, *(f"{name}/independent-{size}" for size in (1, 10, 100, 1000))}
     count = counted_go_events(ROOT / ".local/performance-go-test.jsonl", expected)
     print(f"Controlled performance: {count} required cases ran and passed")
     return 0

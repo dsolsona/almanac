@@ -107,7 +107,8 @@ make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL='postgres://almana
 ```
 
 It requires that exact existing isolated fixture, rejects custom test/Go selectors,
-builds the candidate and runs the separately tagged 10/100/1,000-SLO capacity
+builds the candidate and runs a fixed incremental one-SLO diagnostic (90/180/365
+days), then the separately tagged 10/100/1,000-SLO capacity
 entry. The workload retains its eight-hour execution bound; the Go process has
 30 additional minutes for setup/cleanup. Existing disk admission, private normal
 Compose deployments, independent numerical checks and VictoriaTraces evidence
