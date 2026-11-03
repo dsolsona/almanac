@@ -11,6 +11,8 @@ import (
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type retainedReadPart struct {
@@ -79,6 +81,8 @@ func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedRe
 	if len(rows) != len(parts) {
 		return nil, slo.ErrOperationalFacts
 	}
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Int64("almanac.retained.query_payload_bytes", rows[0].PayloadBytes),
+		attribute.Int("almanac.retained.parts", len(parts)))
 	for index, row := range rows {
 		if row.PayloadBytes > 20<<20 {
 			return nil, ErrOperationalResource

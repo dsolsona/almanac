@@ -590,6 +590,8 @@ type AlmanacSloSeriesTile struct {
 	PointCount          int32              `json:"point_count"`
 	Payload             []byte             `json:"payload"`
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	PayloadDigest       []byte             `json:"payload_digest"`
+	CompactPayload      []byte             `json:"compact_payload"`
 }
 
 type AlmanacSloSeriesTileWork struct {
@@ -610,6 +612,7 @@ type AlmanacSloSeriesTileWork struct {
 	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
 	LastError           pgtype.Text        `json:"last_error"`
 	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	SummaryOnly         bool               `json:"summary_only"`
 }
 
 type AlmanacUser struct {

@@ -703,7 +703,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_archive_current_slo_projection ON public.almanac_slo_current_projections; DROP FUNCTION public.almanac_archive_slo_projection(); DROP TABLE public.almanac_slo_projection_payloads CASCADE`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_slo_series_invalidation ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_invalidate_slo_series(); DROP TABLE public.almanac_slo_series_repair, public.almanac_slo_series_tile_work, public.almanac_slo_series_tiles, public.almanac_slo_series_points, public.almanac_slo_history_admission, public.almanac_slo_history_jobs, public.almanac_slo_current_failures, public.almanac_slo_display_blocks`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_slo_series_invalidation ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_invalidate_slo_series(); DROP FUNCTION public.almanac_retained_tile_digest() CASCADE; DROP TABLE public.almanac_slo_series_repair, public.almanac_slo_series_tile_work, public.almanac_slo_series_tiles, public.almanac_slo_series_points, public.almanac_slo_history_admission, public.almanac_slo_history_jobs, public.almanac_slo_current_failures, public.almanac_slo_display_blocks`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_derived_cache_usage; DROP FUNCTION public.almanac_account_derived_cache() CASCADE`); err != nil {

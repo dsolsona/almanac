@@ -35,8 +35,14 @@ FROM requested r CROSS JOIN LATERAL (
            min(c.interval_start) FILTER (WHERE c.outcome='observed') AS first_observation,
            max(c.interval_end) FILTER (WHERE c.outcome='observed') AS last_observation
     FROM public.almanac_sli_coverage c
-    LEFT JOIN public.almanac_sli_observation_values v
-      ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision
+    LEFT JOIN LATERAL (
+        SELECT value.good_count,value.total_count
+        FROM public.almanac_sli_observation_values value
+        WHERE value.interval_start=c.interval_start
+          AND value.sli_id=c.sli_id AND value.measurement_revision=c.measurement_revision
+          AND value.interval_start>=r.hour_start AND value.interval_start<r.hour_start+interval '1 hour'
+        LIMIT 1
+    ) v ON true
     WHERE c.sli_id=r.sli_id AND c.measurement_revision=r.revision
       AND c.interval_start>=r.hour_start AND c.interval_start<r.hour_start+interval '1 hour'
 ) a

@@ -100,6 +100,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatalf("history was not published: %v", err)
 	}
 	verifyDetachedRetainedSnapshot(t, databaseURL, input, prepared)
+	verifyRetainedTileWire(t, conn, pgID, prepared.EffectiveAt.Truncate(time.Hour).Add(-time.Hour))
 	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)
 	verifyIncrementalRetainedAvailability(t, databaseURL, pgID, prepared.EffectiveAt)
 	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
@@ -710,6 +711,7 @@ func verifyDerivedBlockFences(t *testing.T, runtime *Runtime, databaseURL, id st
 	}
 	job := jobs[0]
 	batch := dbgen.RebuildDerivedBatchParams{SliIds: []pgtype.UUID{job.SliID}, Revisions: []int64{job.MeasurementRevision}, Generations: []int64{job.Generation}, Starts: []pgtype.Timestamptz{job.RangeStart}}
+	verifyDerivedBatchValueLookup(t, tx, batch)
 	ack := dbgen.AcknowledgeDerivedBatchParams{SliIds: batch.SliIds, Revisions: batch.Revisions, Generations: batch.Generations, Starts: batch.Starts, Epochs: []int64{job.LeaseEpoch}}
 	if err := q.RebuildDerivedBatch(t.Context(), batch); err != nil {
 		t.Fatal(err)

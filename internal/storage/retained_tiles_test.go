@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -48,6 +50,24 @@ func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 	got, err := compactRetainedTile(hours, start, start.Add(24*time.Hour), "0.99")
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("hourly composition changed exact extrema, ties or cross-hour gaps: %v", err)
+	}
+	body, err := marshalRetainedTileSummary(want, start, start.Add(24*time.Hour), "0.99", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary retainedTileSummary
+	if json.Unmarshal(body, &summary) != nil || summary.SourceGeneration != 7 || summary.Transitions != ([4]int32{7, 7, 7, 7}) {
+		t.Fatal("summary changed the source or independent quality-transition count")
+	}
+	for _, lane := range [][]api.SloOperationalSample{summary.Tile.Attainment, summary.Tile.Budget, summary.Tile.Burn1h, summary.Tile.Burn6h} {
+		if len(lane) != 3 || !lane[0].EvaluationAt.Equal(start.Add(time.Minute)) || !lane[1].EvaluationAt.Equal(start.Add(10*time.Minute)) || !lane[2].EvaluationAt.Equal(start.Add(24*time.Hour)) {
+			t.Fatal("summary lost the first, last or exact unrounded extrema")
+		}
+		for _, sample := range lane {
+			if sample.DisplayCoverage == nil || !slices.Contains(sample.DisplayCoverage.States, "missing") || !slices.Contains(sample.DisplayCoverage.States, "observed") || !slices.Contains(sample.DisplayCoverage.Freshness, "stale") {
+				t.Fatal("summary hid a gap or a stale observation")
+			}
+		}
 	}
 }
 

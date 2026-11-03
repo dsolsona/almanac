@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,8 +35,11 @@ func verifyRetainedTileWire(t *testing.T, conn *pgx.Conn, id pgtype.UUID, hour t
 	if err != nil || len(parts) != 2 {
 		t.Fatalf("bounded tile wire read: %v", err)
 	}
-	if string(parts[0].Payload) != canonical || !parts[0].Ready || parts[1].Ready || string(parts[1].Payload) != "{}" || parts[0].PayloadBytes != int64(len(canonical)) || parts[1].PayloadBytes != parts[0].PayloadBytes {
-		t.Fatal("binary tile wire changed canonical UTF-8, missing-tile state or shared byte accounting")
+	var original, decoded retainedSloTile
+	if json.Unmarshal([]byte(canonical), &original) != nil || json.Unmarshal(parts[0].Payload, &decoded) != nil || !reflect.DeepEqual(original, decoded) ||
+		len(parts[0].Payload) >= len(canonical) || !parts[0].Ready || parts[1].Ready || string(parts[1].Payload) != "{}" ||
+		parts[0].PayloadBytes != int64(len(parts[0].Payload)) || parts[1].PayloadBytes != parts[0].PayloadBytes {
+		t.Fatal("null omission changed decoded tile values, missing-tile state or actual wire byte accounting")
 	}
 	params.ComplianceOnly = true
 	compliance, err := q.ReadRetainedParts(ctx, params)
@@ -50,6 +54,7 @@ func verifyRetainedTileWire(t *testing.T, conn *pgx.Conn, id pgtype.UUID, hour t
 		t.Fatal("daily-only wire changed compliance, readiness, missing state or byte accounting")
 	}
 	params.ComplianceOnly = false
+	verifyRetainedCoarseWire(t, conn, params, row.Target)
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -65,6 +70,134 @@ func verifyRetainedTileWire(t *testing.T, conn *pgx.Conn, id pgtype.UUID, hour t
 	for _, part := range parts {
 		if part.PayloadBytes <= 20<<20 || string(part.Payload) != "{}" {
 			t.Fatal("oversized tile payload crossed binary wire budget")
+		}
+	}
+}
+
+func verifyRetainedCoarseWire(t *testing.T, conn *pgx.Conn, params dbgen.ReadRetainedPartsParams, target string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var start, end time.Time
+	var payload []byte
+	var generation int64
+	var published time.Time
+	if err := conn.QueryRow(ctx, `SELECT range_start,range_end,payload,source_generation,published_at FROM public.almanac_slo_series_tiles
+WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND resolution_seconds=86400
+ORDER BY range_start DESC LIMIT 1`, params.SloID, params.DefinitionRevision, params.MeasurementRevision).Scan(&start, &end, &payload, &generation, &published); err != nil {
+		t.Fatal("read populated daily tile for projection regression", err)
+	}
+	start, end = start.UTC(), end.UTC()
+	var original retainedSloTile
+	if err := json.Unmarshal(payload, &original); err != nil {
+		t.Fatal(err)
+	}
+	// Reuse a real day to cross the lane budget without importing another history.
+	const parts = 800
+	params.Starts, params.Ends, params.Resolutions = make([]pgtype.Timestamptz, parts), make([]pgtype.Timestamptz, parts), make([]int32, parts)
+	for i := range parts {
+		params.Starts[i], params.Ends[i], params.Resolutions[i] = timestamp(start), timestamp(end), 86400
+	}
+	rows, err := dbgen.New(conn).ReadRetainedParts(ctx, params)
+	if err != nil || len(rows) != parts {
+		t.Fatalf("bounded coarse wire: %v", err)
+	}
+	var projected retainedSloTile
+	if err := json.Unmarshal(rows[0].Payload, &projected); err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].PayloadBytes != int64(parts*len(rows[0].Payload)) || rows[0].PayloadBytes > 20<<20 || !rows[0].Ready || rows[parts-1].Ordinal != parts {
+		t.Fatal("coarse wire changed actual byte accounting, readiness or ordinals")
+	}
+	for _, lane := range []struct {
+		metric              string
+		original, projected []api.SloOperationalSample
+	}{
+		{"attainment", original.Attainment, projected.Attainment}, {"budget", original.Budget, projected.Budget},
+		{"burn", original.Burn1h, projected.Burn1h}, {"burn", original.Burn6h, projected.Burn6h},
+	} {
+		extra := 0
+		for _, sample := range lane.original {
+			if len(sample.RetainedExtrema) == 0 {
+				extra++
+			}
+		}
+		want := lane.original
+		var err error
+		if extra*parts > 1500 {
+			want, err = reduceRetainedLaneLimit(lane.original, start, end, target, lane.metric, 4)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		coverage, err := retainedDisplayCoverage(lane.original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		slices.Sort(coverage.States)
+		slices.Sort(coverage.QualityStates)
+		slices.Sort(coverage.Freshness)
+		if extra*parts > 1500 {
+			for i := range want {
+				want[i].DisplayCoverage = coverage
+			}
+		}
+		if !reflect.DeepEqual(lane.projected, want) {
+			gotJSON, _ := json.Marshal(lane.projected)
+			wantJSON, _ := json.Marshal(want)
+			t.Fatalf("SQL projection changed exact %s extrema, selected counts or complete coverage sets: got=%s want=%s", lane.metric, gotJSON, wantJSON)
+		}
+	}
+	if !reflect.DeepEqual(projected.Compliance, original.Compliance) {
+		t.Fatal("graph projection changed daily compliance")
+	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	q := dbgen.New(tx)
+	if _, err := tx.Exec(ctx, `UPDATE public.almanac_slo_series_tiles SET compact_payload=NULL WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND resolution_seconds=86400 AND range_start=$4`, params.SloID, params.DefinitionRevision, params.MeasurementRevision, start); err != nil {
+		t.Fatal(err)
+	}
+	queued, err := q.QueueRetainedTileSummaries(ctx, dbgen.QueueRetainedTileSummariesParams{Now: timestamp(end.Add(time.Hour)), RetentionStart: timestamp(start.Add(-365 * 24 * time.Hour)), CalculationVersion: operationalCalculationVersion})
+	if err != nil || queued != 1 {
+		t.Fatalf("queue only the missing summary: %d,%v", queued, err)
+	}
+	work, err := q.ClaimRetainedTileWork(ctx, dbgen.ClaimRetainedTileWorkParams{Now: timestamp(end.Add(time.Hour)), LeaseUntil: timestamp(end.Add(2 * time.Hour))})
+	if err != nil || !work.SummaryOnly || !work.RangeStart.Time.Equal(start) {
+		t.Fatalf("claim summary: %+v,%v", work, err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE public.almanac_slo_series_tile_work SET attempts=5 WHERE id=$1`, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	available, err := q.ReadRetainedParts(ctx, params)
+	if err != nil || len(available) != parts || !available[0].Ready || available[0].Exhausted {
+		t.Fatalf("summary work hid existing history: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE public.almanac_slo_series_tile_work SET attempts=1 WHERE id=$1`, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareStoredRetainedTileSummary(ctx, q, work, target); err != nil {
+		t.Fatal(err)
+	}
+	var preserved bool
+	if err := tx.QueryRow(ctx, `SELECT payload=$5::jsonb AND source_generation=$6 AND published_at=$7 FROM public.almanac_slo_series_tiles WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND resolution_seconds=86400 AND range_start=$4`, params.SloID, params.DefinitionRevision, params.MeasurementRevision, start, payload, generation, published).Scan(&preserved); err != nil || !preserved {
+		t.Fatalf("format upgrade changed retained data or timestamps: %v", err)
+	}
+	changed, err := tx.Exec(ctx, `UPDATE public.almanac_sli_hourly_aggregates a SET source_generation=9223372036854775807
+FROM public.almanac_slo_definitions d WHERE d.slo_id=$1 AND d.revision=$2 AND a.sli_id=d.sli_id AND a.measurement_revision=$3
+AND a.hour_start>=$4::timestamptz-GREATEST(d.rolling_window_seconds,21600)*interval '1 second' AND a.hour_start<$5`, params.SloID, params.DefinitionRevision, params.MeasurementRevision, start, end)
+	if err != nil || changed.RowsAffected() == 0 {
+		t.Fatalf("invalidate populated daily tile: %v", err)
+	}
+	stale, err := dbgen.New(tx).ReadRetainedParts(ctx, params)
+	if err != nil || len(stale) != parts {
+		t.Fatalf("read invalidated daily wire: %v", err)
+	}
+	for _, part := range stale {
+		if part.Ready || part.PayloadBytes != 0 || string(part.Payload) != "{}" {
+			t.Fatal("unready tile transferred stale values or affected the display budget")
 		}
 	}
 }

@@ -155,8 +155,12 @@ func publishRetainedRepairTiles(ctx context.Context, q *dbgen.Queries, work []db
 		if len(payload) > 20<<20 {
 			return ErrOperationalResource
 		}
+		summary, err := marshalRetainedTileSummary(tile, item.RangeStart.Time.UTC(), item.RangeEnd.Time.UTC(), target, generation)
+		if err != nil {
+			return err
+		}
 		published, err := q.PublishRetainedTile(ctx, dbgen.PublishRetainedTileParams{ID: item.ID, Version: item.Version, LeaseEpoch: item.LeaseEpoch,
-			SourceGeneration: generation, PublishedAt: timestamp(now), PointCount: int32(len(selected)), Payload: payload})
+			SourceGeneration: generation, PublishedAt: timestamp(now), PointCount: int32(len(selected)), Payload: payload, CompactPayload: summary})
 		if err != nil {
 			return err
 		}

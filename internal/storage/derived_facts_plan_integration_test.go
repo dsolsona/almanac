@@ -15,6 +15,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var errFactsQueryCaptured = errors.New("test: operational facts query captured")
@@ -122,6 +123,60 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 func (c *factsQueryCapture) Query(_ context.Context, statement string, arguments ...any) (pgx.Rows, error) {
 	c.statement, c.arguments = statement, append([]any(nil), arguments...)
 	return nil, errFactsQueryCaptured
+}
+
+func (c *factsQueryCapture) Exec(_ context.Context, statement string, arguments ...any) (pgconn.CommandTag, error) {
+	c.statement, c.arguments = statement, append([]any(nil), arguments...)
+	return pgconn.CommandTag{}, errFactsQueryCaptured
+}
+
+func verifyDerivedBatchValueLookup(t *testing.T, tx pgx.Tx, batch dbgen.RebuildDerivedBatchParams) {
+	t.Helper()
+	capture := &factsQueryCapture{}
+	if err := dbgen.New(capture).RebuildDerivedBatch(t.Context(), batch); !errors.Is(err, errFactsQueryCaptured) {
+		t.Fatal("capture source aggregate query failed", err)
+	}
+	// Exercise the hash-join alternative without loading a year merely to change planner statistics.
+	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_nestloop=off"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := tx.Exec(t.Context(), "RESET enable_nestloop"); err != nil {
+			t.Error(err)
+		}
+	}()
+	var body []byte
+	if err := tx.QueryRow(t.Context(), "EXPLAIN (FORMAT JSON) "+capture.statement, capture.arguments...).Scan(&body); err != nil {
+		t.Fatal("source aggregate plan failed", err)
+	}
+	var plan []struct {
+		Plan map[string]any `json:"Plan"`
+	}
+	if err := json.Unmarshal(body, &plan); err != nil || len(plan) != 1 {
+		t.Fatal("invalid source aggregate plan", err)
+	}
+	lookups := 0
+	var inspect func(map[string]any)
+	inspect = func(node map[string]any) {
+		if relation, _ := node["Relation Name"].(string); strings.HasPrefix(relation, "almanac_sli_observation_values") {
+			condition, _ := node["Index Cond"].(string)
+			if !strings.Contains(condition, "c.interval_start") {
+				t.Fatalf("source aggregate can scan retained values instead of the outer interval: %s; plan=%s", condition, body)
+			}
+			lookups++
+		}
+		if children, ok := node["Plans"].([]any); ok {
+			for _, child := range children {
+				if next, ok := child.(map[string]any); ok {
+					inspect(next)
+				}
+			}
+		}
+	}
+	inspect(plan[0].Plan)
+	if lookups == 0 {
+		t.Fatal("source aggregate plan omitted value lookup evidence")
+	}
 }
 
 func logRetainedFactsPlan(t *testing.T, conn *pgx.Conn, id string, start, end time.Time, cadence int) {

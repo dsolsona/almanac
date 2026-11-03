@@ -67,20 +67,24 @@ func compactRetainedPoints(points []retainedSloPoint, start, end time.Time, targ
 }
 
 func compactRetainedTile(tile retainedSloTile, start, end time.Time, target string) (retainedSloTile, error) {
+	return compactRetainedTileLimit(tile, start, end, target, sloOperationalSeriesLimit)
+}
+
+func compactRetainedTileLimit(tile retainedSloTile, start, end time.Time, target string, limit int) (retainedSloTile, error) {
 	var err error
-	tile.Attainment, err = reduceRetainedLane(tile.Attainment, start, end, target, "attainment")
+	tile.Attainment, err = reduceRetainedLaneLimit(tile.Attainment, start, end, target, "attainment", limit)
 	if err != nil {
 		return tile, err
 	}
-	tile.Budget, err = reduceRetainedLane(tile.Budget, start, end, target, "budget")
+	tile.Budget, err = reduceRetainedLaneLimit(tile.Budget, start, end, target, "budget", limit)
 	if err != nil {
 		return tile, err
 	}
-	tile.Burn1h, err = reduceRetainedLane(tile.Burn1h, start, end, target, "burn")
+	tile.Burn1h, err = reduceRetainedLaneLimit(tile.Burn1h, start, end, target, "burn", limit)
 	if err != nil {
 		return tile, err
 	}
-	tile.Burn6h, err = reduceRetainedLane(tile.Burn6h, start, end, target, "burn")
+	tile.Burn6h, err = reduceRetainedLaneLimit(tile.Burn6h, start, end, target, "burn", limit)
 	return tile, err
 }
 

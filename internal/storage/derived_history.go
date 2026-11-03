@@ -97,6 +97,7 @@ func resolveOperationalBounds(input OperationalDetailInput, cadence time.Duratio
 func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 	ticks := time.NewTicker(time.Second)
 	defer ticks.Stop()
+	var nextSummaries time.Time
 	for {
 		repaired, repairErr := r.repairRetainedSeries(ctx, time.Now)
 		if repaired && repairErr == nil && ctx.Err() == nil {
@@ -128,6 +129,17 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 		}
 		if (worked && err == nil || repaired && repairErr == nil || seriesWorked && seriesErr == nil) && ctx.Err() == nil {
 			continue
+		}
+		if !time.Now().Before(nextSummaries) && ctx.Err() == nil {
+			queued, summaryErr := r.queueRetainedTileSummaries(ctx, time.Now())
+			nextSummaries = time.Now().Add(30 * time.Second)
+			if summaryErr != nil {
+				logger.ErrorContext(ctx, "retained tile summary admission failed")
+			}
+			if queued > 0 && summaryErr == nil {
+				nextSummaries = time.Time{}
+				continue
+			}
 		}
 		select {
 		case <-ctx.Done():

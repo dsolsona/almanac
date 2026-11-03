@@ -33,6 +33,7 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 	if err != nil {
 		return false, err
 	}
+	span.SetAttributes(attribute.Bool("almanac.series.summary_only", work.SummaryOnly))
 	defer func() {
 		if resultErr == nil {
 			return
@@ -62,7 +63,13 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 	if err != nil {
 		return true, err
 	}
-	if definition.DefinitionRevision == work.DefinitionRevision && definition.MeasurementRevision == work.MeasurementRevision && work.CalculationVersion == operationalCalculationVersion {
+	compatible := definition.DefinitionRevision == work.DefinitionRevision && definition.MeasurementRevision == work.MeasurementRevision && work.CalculationVersion == operationalCalculationVersion
+	if compatible && work.SummaryOnly {
+		if err := prepareStoredRetainedTileSummary(bounded, q, work, definition.Target); err != nil {
+			return true, err
+		}
+	}
+	if compatible && !work.SummaryOnly {
 		prepared, err := prepareRetainedTileValue(bounded, q, work, definition.Target)
 		if err != nil {
 			return true, err
@@ -85,8 +92,12 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 		if len(payload) > 20<<20 {
 			return true, ErrOperationalResource
 		}
+		summary, err := marshalRetainedTileSummary(tile, work.RangeStart.Time.UTC(), work.RangeEnd.Time.UTC(), definition.Target, prepared.generation)
+		if err != nil {
+			return true, err
+		}
 		if _, err := q.PublishRetainedTile(bounded, dbgen.PublishRetainedTileParams{ID: work.ID, Version: work.Version,
-			LeaseEpoch: work.LeaseEpoch, SourceGeneration: prepared.generation, PublishedAt: timestamp(clock()), PointCount: prepared.count, Payload: payload}); err != nil {
+			LeaseEpoch: work.LeaseEpoch, SourceGeneration: prepared.generation, PublishedAt: timestamp(clock()), PointCount: prepared.count, Payload: payload, CompactPayload: summary}); err != nil {
 			return true, err
 		}
 	}

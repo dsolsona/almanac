@@ -184,6 +184,13 @@ in the API source and approved plan.
 
 ### Work and resource budgets
 
+Write bounded graph summaries alongside retained fine tiles, preserving exact
+numeric extrema and coverage information. Validate each summary against the tile's
+source generation and payload digest before use. Preserve finer points whenever
+they fit the response limit; missing or stale summaries use the bounded legacy
+read path. Representation upgrades reuse low-priority, bounded background work;
+they neither invalidate ready measurements nor block normal data publication.
+
 Use separate live, interactive and derived/historical connection admission as in
 ADR-0024. Initial interactive pool acquisition timeout is 250 ms, statement timeout
 2 s and lock timeout 250 ms; background statements are bounded to 5 s and batches

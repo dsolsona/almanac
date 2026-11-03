@@ -67,7 +67,7 @@ INSERT INTO public.almanac_slo_series_tile_work
 SELECT slo_id,definition_revision,measurement_revision,calculation_version,seconds,start_at,start_at+seconds*interval '1 second',source_generation,
        CASE WHEN seconds=86400 THEN GREATEST(published_at,start_at+interval '1 day') ELSE published_at END FROM wanted
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
-DO UPDATE SET version=almanac_slo_series_tile_work.version+1,
+DO UPDATE SET version=almanac_slo_series_tile_work.version+1,summary_only=false,
               source_generation=GREATEST(almanac_slo_series_tile_work.source_generation,EXCLUDED.source_generation),
               next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at)
 RETURNING *;

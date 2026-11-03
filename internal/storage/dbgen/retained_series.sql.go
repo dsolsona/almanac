@@ -34,12 +34,12 @@ WITH candidate AS (
     SELECT id FROM public.almanac_slo_series_tile_work
     WHERE attempts<5 AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
-    ORDER BY next_attempt_at,resolution_seconds,range_start DESC,id
+    ORDER BY summary_only,next_attempt_at,resolution_seconds,range_start DESC,id
     LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_series_tile_work w
 SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
-FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.exclusion_revision, w.calculation_version, w.resolution_seconds, w.range_start, w.range_end, w.version, w.source_generation, w.next_attempt_at, w.attempts, w.lease_epoch, w.lease_until, w.last_error, w.manual_retried_at
+FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.exclusion_revision, w.calculation_version, w.resolution_seconds, w.range_start, w.range_end, w.version, w.source_generation, w.next_attempt_at, w.attempts, w.lease_epoch, w.lease_until, w.last_error, w.manual_retried_at, w.summary_only
 `
 
 type ClaimRetainedTileWorkParams struct {
@@ -68,6 +68,7 @@ func (q *Queries) ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTi
 		&i.LeaseUntil,
 		&i.LastError,
 		&i.ManualRetriedAt,
+		&i.SummaryOnly,
 	)
 	return i, err
 }
@@ -134,7 +135,7 @@ SELECT slo_id,definition_revision,measurement_revision,calculation_version,secon
        CASE WHEN seconds=86400 THEN GREATEST(published_at,start_at+interval '1 day') ELSE published_at END
 FROM wanted
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
-DO UPDATE SET version=almanac_slo_series_tile_work.version+1,
+DO UPDATE SET version=almanac_slo_series_tile_work.version+1,summary_only=false,
               source_generation=GREATEST(almanac_slo_series_tile_work.source_generation,EXCLUDED.source_generation),
               next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at)
 `
@@ -169,14 +170,16 @@ func (q *Queries) PublishRetainedSloPoint(ctx context.Context, arg PublishRetain
 
 const publishRetainedTile = `-- name: PublishRetainedTile :execrows
 INSERT INTO public.almanac_slo_series_tiles
-    (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at)
+    (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,point_count,payload,published_at,compact_payload)
 SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,w.resolution_seconds,w.range_start,w.range_end,$1::bigint,
-       $2::integer,$3::jsonb,$4::timestamptz
+       $2::integer,$3::jsonb,$4::timestamptz,
+       CASE WHEN $5::jsonb IS NULL THEN NULL ELSE $5::jsonb ||
+         jsonb_build_object('payload_digest',encode(sha256(convert_to($3::jsonb::text,'UTF8')),'hex')) END
 FROM public.almanac_slo_series_tile_work w
-WHERE w.id=$5 AND w.version=$6 AND w.lease_epoch=$7
+WHERE w.id=$6 AND w.version=$7 AND w.lease_epoch=$8
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
 DO UPDATE SET source_generation=EXCLUDED.source_generation,point_count=EXCLUDED.point_count,
-              payload=EXCLUDED.payload,published_at=EXCLUDED.published_at
+              payload=EXCLUDED.payload,published_at=EXCLUDED.published_at,compact_payload=EXCLUDED.compact_payload
 WHERE almanac_slo_series_tiles.published_at<=EXCLUDED.published_at
 `
 
@@ -185,6 +188,7 @@ type PublishRetainedTileParams struct {
 	PointCount       int32              `json:"point_count"`
 	Payload          []byte             `json:"payload"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
+	CompactPayload   []byte             `json:"compact_payload"`
 	ID               pgtype.UUID        `json:"id"`
 	Version          int64              `json:"version"`
 	LeaseEpoch       int64              `json:"lease_epoch"`
@@ -196,10 +200,77 @@ func (q *Queries) PublishRetainedTile(ctx context.Context, arg PublishRetainedTi
 		arg.PointCount,
 		arg.Payload,
 		arg.PublishedAt,
+		arg.CompactPayload,
 		arg.ID,
 		arg.Version,
 		arg.LeaseEpoch,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const publishRetainedTileSummary = `-- name: PublishRetainedTileSummary :execrows
+UPDATE public.almanac_slo_series_tiles t
+SET payload_digest=sha256(convert_to(t.payload::text,'UTF8')),
+    compact_payload=$1::jsonb || jsonb_build_object('payload_digest',encode(sha256(convert_to(t.payload::text,'UTF8')),'hex'))
+FROM public.almanac_slo_series_tile_work w
+WHERE w.id=$2 AND w.version=$3 AND w.lease_epoch=$4 AND w.summary_only
+  AND t.slo_id=w.slo_id AND t.definition_revision=w.definition_revision AND t.measurement_revision=w.measurement_revision
+  AND t.exclusion_revision=w.exclusion_revision AND t.calculation_version=w.calculation_version
+  AND t.resolution_seconds=w.resolution_seconds AND t.range_start=w.range_start AND t.source_generation=$5
+`
+
+type PublishRetainedTileSummaryParams struct {
+	CompactPayload   []byte      `json:"compact_payload"`
+	ID               pgtype.UUID `json:"id"`
+	Version          int64       `json:"version"`
+	LeaseEpoch       int64       `json:"lease_epoch"`
+	SourceGeneration int64       `json:"source_generation"`
+}
+
+func (q *Queries) PublishRetainedTileSummary(ctx context.Context, arg PublishRetainedTileSummaryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, publishRetainedTileSummary,
+		arg.CompactPayload,
+		arg.ID,
+		arg.Version,
+		arg.LeaseEpoch,
+		arg.SourceGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const queueRetainedTileSummaries = `-- name: QueueRetainedTileSummaries :execrows
+WITH candidates AS (
+    SELECT t.slo_id,t.definition_revision,t.measurement_revision,t.calculation_version,t.resolution_seconds,t.range_start,t.range_end,t.source_generation
+    FROM public.almanac_slo_series_tiles t JOIN public.almanac_slos s ON s.id=t.slo_id AND s.definition_revision=t.definition_revision
+    WHERE t.exclusion_revision=0 AND t.calculation_version=$2 AND t.range_end>$3
+      AND (t.compact_payload IS NULL OR t.payload_digest IS NULL
+        OR t.compact_payload->>'payload_digest' IS DISTINCT FROM encode(t.payload_digest,'hex')
+        OR t.compact_payload->>'source_generation' IS DISTINCT FROM t.source_generation::text)
+      AND NOT EXISTS (SELECT 1 FROM public.almanac_slo_series_tile_work w WHERE w.slo_id=t.slo_id
+        AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision AND w.exclusion_revision=t.exclusion_revision
+        AND w.calculation_version=t.calculation_version AND w.resolution_seconds=t.resolution_seconds AND w.range_start=t.range_start)
+    ORDER BY t.resolution_seconds DESC,t.range_end DESC,t.slo_id LIMIT 100
+)
+INSERT INTO public.almanac_slo_series_tile_work
+  (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at,summary_only)
+SELECT slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,$1,true FROM candidates
+ON CONFLICT DO NOTHING
+`
+
+type QueueRetainedTileSummariesParams struct {
+	Now                pgtype.Timestamptz `json:"now"`
+	CalculationVersion string             `json:"calculation_version"`
+	RetentionStart     pgtype.Timestamptz `json:"retention_start"`
+}
+
+func (q *Queries) QueueRetainedTileSummaries(ctx context.Context, arg QueueRetainedTileSummariesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, queueRetainedTileSummaries, arg.Now, arg.CalculationVersion, arg.RetentionStart)
 	if err != nil {
 		return 0, err
 	}
@@ -350,6 +421,27 @@ func (q *Queries) ReadRetainedTilePoints(ctx context.Context, arg ReadRetainedTi
 		return nil, err
 	}
 	return items, nil
+}
+
+const readRetainedTileSummaryInput = `-- name: ReadRetainedTileSummaryInput :one
+SELECT t.payload,t.source_generation
+FROM public.almanac_slo_series_tiles t JOIN public.almanac_slo_series_tile_work w
+  ON w.slo_id=t.slo_id AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision
+ AND w.exclusion_revision=t.exclusion_revision AND w.calculation_version=t.calculation_version
+ AND w.resolution_seconds=t.resolution_seconds AND w.range_start=t.range_start
+WHERE w.id=$1
+`
+
+type ReadRetainedTileSummaryInputRow struct {
+	Payload          []byte `json:"payload"`
+	SourceGeneration int64  `json:"source_generation"`
+}
+
+func (q *Queries) ReadRetainedTileSummaryInput(ctx context.Context, id pgtype.UUID) (ReadRetainedTileSummaryInputRow, error) {
+	row := q.db.QueryRow(ctx, readRetainedTileSummaryInput, id)
+	var i ReadRetainedTileSummaryInputRow
+	err := row.Scan(&i.Payload, &i.SourceGeneration)
+	return i, err
 }
 
 const releaseRetainedTileWork = `-- name: ReleaseRetainedTileWork :exec
