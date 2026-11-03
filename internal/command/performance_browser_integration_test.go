@@ -68,10 +68,11 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		return artifacts, errors.New("browser candidate differs from normal deployed executable")
 	}
 	spki := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
+	readerLogins := []string{"performance-reader-00", "performance-reader-01", "performance-reader-02", "performance-reader-03"}
 	input, err := marshalPerformanceEvidence(struct {
 		URL         string                          `json:"url"`
 		SPKI        string                          `json:"spki"`
-		Login       string                          `json:"login"`
+		Logins      []string                        `json:"logins"`
 		Password    string                          `json:"password"`
 		SloID       string                          `json:"slo_id"`
 		Artifacts   string                          `json:"artifacts"`
@@ -83,7 +84,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 		TraceURL    string                          `json:"trace_url"`
 		Deployment  performanceDeploymentEvidence   `json:"deployment"`
 		Latency     int                             `json:"network_latency_ms"`
-	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), "sli-owner", f.password, restart.Target, artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment, networkLatency})
+	}{f.baseURL, base64.StdEncoding.EncodeToString(spki[:]), readerLogins, f.password, restart.Target, artifacts, hex.EncodeToString(digest.Sum(nil)), len(fleet.objectives), fleet.datasources, fleet.serviceID, restart, fleet.traceURL, deployment, networkLatency})
 	if err != nil || len(input) > 16*1024 {
 		return artifacts, errors.New("encode protected browser performance input failed")
 	}
@@ -143,6 +144,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 			Download *int64 `json:"download_bits_per_second"`
 		} `json:"environment"`
 		Result         string                          `json:"result"`
+		ReaderLogins   []string                        `json:"reader_logins"`
 		Candidate      string                          `json:"candidate_binary_sha256"`
 		ColdLoads      []measuredLoad                  `json:"cold_loads"`
 		WarmLoads      []measuredLoad                  `json:"warm_loads"`
@@ -166,6 +168,7 @@ func runPerformanceBrowser(t *testing.T, ctx context.Context, fleet performanceF
 	}
 	if readErr != nil || reportCloseErr != nil || len(reportBody) > 8<<20 || json.Unmarshal(reportBody, &report) != nil ||
 		report.Result != "passed" || report.Candidate != hex.EncodeToString(digest.Sum(nil)) || report.Deployment != deployment ||
+		!slices.Equal(report.ReaderLogins, readerLogins) ||
 		report.Environment.CPU != 1 || report.Environment.Latency != networkLatency || report.Environment.Download != nil ||
 		len(report.ColdLoads) != 60 || len(report.WarmLoads) != 60 || len(report.LifecycleLoads) != 1 || len(report.Interactions) != 50 || len(report.Failures) != 0 || len(report.Traces) != 171 {
 		return artifacts, errors.New("browser performance report is incomplete, failed or from another executable")

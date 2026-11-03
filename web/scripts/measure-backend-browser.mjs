@@ -261,7 +261,8 @@ try {
   assert.equal(fixture.cache_setup.preserved_current_summaries,fixture.fleet_size);
   assert.equal(fixture.datasource_ids.length,10);
   for(const id of [...fixture.datasource_ids,fixture.service_id])assert.match(id,/^[0-9a-f-]{36}$/);
-  assert.ok(typeof fixture.login === 'string' && typeof fixture.password === 'string' && fixture.login && fixture.password);
+  assert.deepEqual(fixture.logins,Array.from({length:4},(_,index)=>`performance-reader-${String(index).padStart(2,'0')}`));
+  assert.ok(typeof fixture.password === 'string' && fixture.password);
   const fixturePassword=fixture.password;
   const traceEvents=[];
   const generationOrigins=new Map();
@@ -276,16 +277,23 @@ try {
   report.environment.browser = browser.version();
   report.environment.cache = 'cold: fresh context/disabled HTTP cache; warm: same-context reload with HTTP cache enabled; response eviction precedes backend restart; OS/PostgreSQL buffers are not claimed cold';
   stage = 'authenticate';
-  const loginContext = await browser.newContext({ viewport: report.environment.viewport });
-  const loginPage = await loginContext.newPage();
-  await loginPage.goto(origin.href);
-  await loginPage.getByLabel('Login', { exact: true }).fill(fixture.login);
-  await loginPage.getByLabel('Password', { exact: true }).fill(fixture.password);
-  await loginPage.getByLabel('Password', { exact: true }).press('Enter');
-  await loginPage.getByRole('heading', { name: 'Agents', exact: true }).waitFor();
-  const storageState = await loginContext.storageState();
+  const storageStates=[];
+  // Separate real readers keep each journey cohort within the unchanged
+  // 60-export/minute session limit; capture still includes every measured span.
+  for(const login of fixture.logins){
+    const loginContext = await browser.newContext({ viewport: report.environment.viewport });
+    try{
+      const loginPage = await loginContext.newPage();
+      await loginPage.goto(origin.href);
+      await loginPage.getByLabel('Login', { exact: true }).fill(login);
+      await loginPage.getByLabel('Password', { exact: true }).fill(fixture.password);
+      await loginPage.getByLabel('Password', { exact: true }).press('Enter');
+      await loginPage.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+      storageStates.push(await loginContext.storageState());
+    }finally{await loginContext.close();}
+  }
+  report.reader_logins=fixture.logins;
   fixture.password = '';
-  await loginContext.close();
 
   const load=async(page,view,budget,cohort,index,navigate)=>{
     const sample={view,index,budget_ms:budget,browser_cache:cohort==='cold'?'fresh-disabled':'warm-enabled',server_response_cache:cohort==='cold'&&index===0?(fixture.cache_setup.never_visited_detail?'evicted-before-restart; reserved first visit':'evicted-before-restart; previously exercised objective'):'reuse eligible; actual hit/miss requires trace evidence'};
@@ -313,7 +321,8 @@ try {
     return sample;
   };
 
-  for (const [view, path, budget] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 1000]]) {
+  for (const [readerIndex,[view, path, budget]] of [['sli-list', '/slis', 1000], ['slo-list', '/slos', 1000], ['slo-detail', `/slos/${fixture.slo_id}`, 1000]].entries()) {
+    const storageState=storageStates[readerIndex];
     for (let index = 0; index < 20; index++) {
       stage = `${view}-cold-${index}`;
       const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
@@ -346,7 +355,7 @@ try {
   }
   for(const view of ['slis','slos']) {
     stage=`${view}-list-actions`;
-    const listContext=await browser.newContext({storageState,viewport:report.environment.viewport,colorScheme:'light'});
+    const listContext=await browser.newContext({storageState:storageStates[view==='slis'?0:1],viewport:report.environment.viewport,colorScheme:'light'});
     try {
       const listPage=await measuredPage(listContext,fixture);
       await listPage.goto(new URL(`/${view}`,origin).href);
@@ -429,7 +438,7 @@ try {
     } finally {await listContext.close();}
   }
   stage = 'interaction-setup';
-  const context = await browser.newContext({ storageState, viewport: report.environment.viewport, colorScheme: 'light' });
+  const context = await browser.newContext({ storageState:storageStates[3], viewport: report.environment.viewport, colorScheme: 'light' });
   const page = await measuredPage(context, fixture);
   await page.goto(new URL(`/slos/${fixture.slo_id}`, origin).href);
   await page.waitForFunction(() => Number.isFinite(window.__almanacPerformance?.primary_ms), { }, { timeout: 10_000 });
