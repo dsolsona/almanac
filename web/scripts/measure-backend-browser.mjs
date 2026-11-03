@@ -510,6 +510,8 @@ try {
     report.interactions.push(sample);
     await writeFile(join(output, 'browser-performance.json'), JSON.stringify(report) + '\n', { mode: 0o600 });
     if(sample.failure)throw new Error('rendered interaction failed');
+    // Keep synthetic rapid-click capture bounded without flushing every click.
+    if ((index + 1) % 5 === 0) await flushBrowserTelemetry(page);
   }
   stage='interaction-trace-flush';
   await flushBrowserTelemetry(page);
