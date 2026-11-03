@@ -215,24 +215,27 @@ async function browserTimings(page) {
 async function traceFailureDiagnostics(page) {
   return page.evaluate(()=>{
     const state=window.__almanacPerformance;
-    const uploads=performance.getEntriesByType('resource').filter(entry=>new URL(entry.name).pathname==='/api/v1/telemetry/traces');
+    const uploads=state.fetches.filter(entry=>entry.path==='/api/v1/telemetry/traces');
     return {events:state.traces.slice(-8),deliveries:state.deliveries,upload_count:uploads.length,
-      uploads:uploads.slice(-8).map(entry=>({status:entry.responseStatus,started_ms:entry.startTime,ended_ms:entry.responseEnd}))};
+      uploads:uploads.slice(-8).map(entry=>({status:entry.status,started_ms:entry.started_ms,headers_ms:entry.headers_ms}))};
   }).catch(()=>null);
 }
 
-// Flush only after the measured UI outcome, and before closing/reloading its tab.
 async function renderedTrace(page,journey,started=0) {
   await page.waitForFunction(({journey,started})=>window.__almanacPerformance.traces.some(event=>event.journey===journey&&event.result==='ready'&&event.completed_ms>=started),{journey,started},{timeout:2500});
   const event=await page.evaluate(({journey,started})=>window.__almanacPerformance.traces.filter(event=>event.journey===journey&&event.result==='ready'&&event.completed_ms>=started).at(-1),{journey,started});
   assert.equal(event.recording,true,'browser journey was not sampled');
+  return event;
+}
+
+// Flush after measurement and before closing/reloading, not after every same-tab click.
+async function flushBrowserTelemetry(page) {
   const flushed=await page.evaluate(()=>new Promise(resolve=>{
     const timeout=setTimeout(()=>resolve({result:'timeout'}),2100);
     addEventListener('almanac:telemetry-flushed',event=>{clearTimeout(timeout);resolve(event.detail);},{once:true});
     dispatchEvent(new Event('almanac:telemetry-flush'));
   }));
   assert.equal(flushed.result,'ready','browser trace export did not finish');
-  return event;
 }
 
 try {
@@ -315,6 +318,7 @@ try {
       if(sample.fetches.some(fetch=>fetch.status>=400)){sample.failure='normal_navigation_unavailable';report.failures.push(stage);}
       const journey={'sli-list':'sli.list','slo-list':'slo.list','slo-detail':'slo.detail'}[view];
       const event=await renderedTrace(page,journey);
+      await flushBrowserTelemetry(page);
       Object.assign(sample,{trace_id:event.trace_id,trace_duration_ms:event.duration_ms});
       const generation=sample.detail?.history_generation;
       if(generation)generationOrigins.set(generation,event.trace_id);
@@ -446,6 +450,7 @@ try {
         await action('urgency-filter','change',0,()=>listPage.getByLabel('Urgency',{exact:true}).selectOption(group));
         await action('urgency-clear','change',0,()=>listPage.getByLabel('Urgency',{exact:true}).selectOption(''));
       }
+      await flushBrowserTelemetry(listPage);
     } finally {await listContext.close();}
   }
   stage = 'interaction-setup';
@@ -493,6 +498,8 @@ try {
     await writeFile(join(output, 'browser-performance.json'), JSON.stringify(report) + '\n', { mode: 0o600 });
     if(sample.failure)throw new Error('rendered interaction failed');
   }
+  stage='interaction-trace-flush';
+  await flushBrowserTelemetry(page);
   report.interaction_resources = await browserTimings(page);
   if (report.interaction_resources.fetches.some(fetch=>fetch.status===503)) report.failures.push('interaction-preparation-wait');
   await context.close();
