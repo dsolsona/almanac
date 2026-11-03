@@ -10,6 +10,7 @@ import { browserTransportReady } from './browser-readiness.mjs';
 let browser;
 let output;
 let stage = 'fixture';
+const networkFailures = new WeakMap();
 const report = {
   schema_version: 1,
   environment: { cpu_slowdown: 1, download_bits_per_second: null, latency_ms: null, viewport: { width: 1440, height: 900 } },
@@ -187,6 +188,12 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
 async function measuredPage(context, fixture) {
   await context.addInitScript(installMeasurements, { fleetSize:fixture.fleet_size,datasourceIDs:fixture.datasource_ids,serviceID:fixture.service_id });
   const page = await context.newPage();
+  const failures = [];
+  networkFailures.set(page, failures);
+  page.on('requestfailed', request => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/') && failures.length < 32) failures.push({ path: url.pathname, error: request.failure()?.errorText });
+  });
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
@@ -213,12 +220,13 @@ async function browserTimings(page) {
 }
 
 async function traceFailureDiagnostics(page) {
-  return page.evaluate(()=>{
+  const diagnostics = await page.evaluate(()=>{
     const state=window.__almanacPerformance;
     const uploads=state.fetches.filter(entry=>entry.path==='/api/v1/telemetry/traces');
-    return {events:state.traces.slice(-8),deliveries:state.deliveries,upload_count:uploads.length,
+    return {events:state.traces.slice(-8),deliveries:state.deliveries,fetches:state.fetches.slice(-16),upload_count:uploads.length,
       uploads:uploads.slice(-8).map(entry=>({status:entry.status,started_ms:entry.started_ms,headers_ms:entry.headers_ms}))};
   }).catch(()=>null);
+  return { ...diagnostics, network_failures: networkFailures.get(page) ?? [] };
 }
 
 async function renderedTrace(page,journey,started=0) {
