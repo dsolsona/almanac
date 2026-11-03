@@ -218,7 +218,7 @@ export function installTelemetry() {
     export(spans, callback) {
       if (!authenticated || !csrf || !enabled) { droppedBatches++; exportEvent(spans, !enabled ? 'disabled' : 'unauthenticated'); callback({ code: 0 }); return; }
       try {
-        exporter.export(spans, result => { if (result.code !== 0) exportFailures++; else outbox?.acknowledge(spans); exportEvent(spans, result.code === 0 ? 'exported' : 'failed'); callback(result); });
+        exporter.export(spans, result => { if (result.code !== 0) exportFailures++; else outbox?.acknowledge(spans); exportEvent(spans, result.code === 0 ? 'exported' : 'failed', result.error); callback(result); });
       } catch (error) {
         // Serialization may throw before the SDK invokes its result callback.
         // Always settle the processor, count the loss and retain only a fixed

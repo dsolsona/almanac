@@ -4,6 +4,7 @@ import { resolve, sep, join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { captureTraces } from './check-telemetry-runtime.mjs';
 import { browserTransportReady } from './browser-readiness.mjs';
+import { captureTelemetryDelivery } from './capture-telemetry-delivery.mjs';
 
 // This executable belongs to the controlled performance fixture. It is not
 // invoked by the ordinary browser catalogue or the two-minute journey gate.
@@ -11,6 +12,7 @@ let browser;
 let output;
 let stage = 'fixture';
 const networkFailures = new WeakMap();
+const telemetryDeliveries = new WeakMap();
 const report = {
   schema_version: 1,
   environment: { cpu_slowdown: 1, download_bits_per_second: null, latency_ms: null, viewport: { width: 1440, height: 900 } },
@@ -188,6 +190,7 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
 async function measuredPage(context, fixture) {
   await context.addInitScript(installMeasurements, { fleetSize:fixture.fleet_size,datasourceIDs:fixture.datasource_ids,serviceID:fixture.service_id });
   const page = await context.newPage();
+  telemetryDeliveries.set(page, await captureTelemetryDelivery(page));
   const failures = [];
   networkFailures.set(page, failures);
   page.on('requestfailed', request => {
@@ -218,7 +221,7 @@ async function browserTimings(page) {
       dom_interactive_ms: entry.domInteractive, dom_content_loaded_ms: entry.domContentLoadedEventEnd,
     })),
   }));
-  return { ...timings, network_failures: networkFailures.get(page) ?? [] };
+  return { ...timings, network_failures: networkFailures.get(page) ?? [], telemetry_delivery: telemetryDeliveries.get(page) ?? [] };
 }
 
 async function traceFailureDiagnostics(page) {
