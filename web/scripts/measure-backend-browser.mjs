@@ -36,8 +36,8 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   state.traces=[];
   state.deliveries=[];
   addEventListener('almanac:telemetry-delivery',event=>{
-    const {result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled}=event.detail;
-    state.deliveries.push({result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled});
+    const {trace_ids,result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled}=event.detail;
+    state.deliveries.push({trace_ids,result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled});
     if(state.deliveries.length>32)state.deliveries.shift();
   });
   addEventListener('almanac:journey',event=>{
@@ -207,6 +207,7 @@ async function browserTimings(page) {
     primary_ms: window.__almanacPerformance.primary_ms,
     detail:window.__almanacPerformance.detailEvidence,
     fetches: window.__almanacPerformance.fetches,
+    deliveries: window.__almanacPerformance.deliveries,
     resources: performance.getEntriesByType('resource').map(entry => ({
       path: new URL(entry.name).pathname, initiator: entry.initiatorType,
       started_ms: entry.startTime, response_started_ms: entry.responseStart, response_ended_ms: entry.responseEnd,
