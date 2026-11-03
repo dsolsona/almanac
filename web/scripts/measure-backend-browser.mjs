@@ -305,20 +305,20 @@ try {
   report.environment.cache = 'cold: fresh context/disabled HTTP cache; warm: same-context reload with HTTP cache enabled; response eviction precedes backend restart; OS/PostgreSQL buffers are not claimed cold';
   stage = 'authenticate';
   const storageStates=[];
-  // Separate real readers keep each journey cohort within the unchanged
-  // 60-export/minute session limit; capture still includes every measured span.
-  for(const login of fixture.logins){
+  // Use normal sign-in for each capture cohort, preserving every sampled span.
+  const loginReader = async login => {
     const loginContext = await browser.newContext({ viewport: report.environment.viewport });
     try{
       const loginPage = await loginContext.newPage();
       await loginPage.goto(origin.href);
       await loginPage.getByLabel('Login', { exact: true }).fill(login);
-      await loginPage.getByLabel('Password', { exact: true }).fill(fixture.password);
+      await loginPage.getByLabel('Password', { exact: true }).fill(fixturePassword);
       await loginPage.getByLabel('Password', { exact: true }).press('Enter');
       await loginPage.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
-      storageStates.push(await loginContext.storageState());
+      return await loginContext.storageState();
     }finally{await loginContext.close();}
-  }
+  };
+  for(const login of fixture.logins) storageStates.push(await loginReader(login));
   report.reader_logins=fixture.logins;
   fixture.password = '';
 
@@ -358,6 +358,8 @@ try {
       try {
         const sample=await load(page,view,budget,'cold',index,()=>page.goto(new URL(path,origin).href,{waitUntil:'domcontentloaded',timeout:10_000}));
         if(index===19&&!sample.failure){
+          // Keep the warmed asset cache, with a fresh normal session for this cohort.
+          await context.addCookies((await loginReader(fixture.logins[readerIndex])).cookies);
           const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:false});
           for(let repeat=0;repeat<20;repeat++){
             stage=`${view}-warm-${repeat}`;
@@ -383,7 +385,7 @@ try {
   }
   for(const view of ['slis','slos']) {
     stage=`${view}-list-actions`;
-    const listContext=await browser.newContext({storageState:storageStates[view==='slis'?0:1],viewport:report.environment.viewport,colorScheme:'light'});
+    const listContext=await browser.newContext({storageState:await loginReader(fixture.logins[view==='slis'?0:1]),viewport:report.environment.viewport,colorScheme:'light'});
     try {
       const listPage=await measuredPage(listContext,fixture);
       await listPage.goto(new URL(`/${view}`,origin).href);
