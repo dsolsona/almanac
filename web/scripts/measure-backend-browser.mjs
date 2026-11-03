@@ -36,7 +36,8 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   state.deliveries=[];
   addEventListener('almanac:telemetry-delivery',event=>{
     const {result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled}=event.detail;
-    if(state.deliveries.length<32)state.deliveries.push({result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled});
+    state.deliveries.push({result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled});
+    if(state.deliveries.length>32)state.deliveries.shift();
   });
   addEventListener('almanac:journey',event=>{
     const value=event.detail;
@@ -211,6 +212,15 @@ async function browserTimings(page) {
   }));
 }
 
+async function traceFailureDiagnostics(page) {
+  return page.evaluate(()=>{
+    const state=window.__almanacPerformance;
+    const uploads=performance.getEntriesByType('resource').filter(entry=>new URL(entry.name).pathname==='/api/v1/telemetry/traces');
+    return {events:state.traces.slice(-8),deliveries:state.deliveries,upload_count:uploads.length,
+      uploads:uploads.slice(-8).map(entry=>({status:entry.responseStatus,started_ms:entry.startTime,ended_ms:entry.responseEnd}))};
+  }).catch(()=>null);
+}
+
 // Flush only after the measured UI outcome, and before closing/reloading its tab.
 async function renderedTrace(page,journey,started=0) {
   await page.waitForFunction(({journey,started})=>window.__almanacPerformance.traces.some(event=>event.journey===journey&&event.result==='ready'&&event.completed_ms>=started),{journey,started},{timeout:2500});
@@ -313,7 +323,7 @@ try {
       if(event.duration_ms>=budget){sample.failure='trace_load_budget';report.failures.push(stage);}
     } catch {
       sample.failure=sample.trace_id?'trace_timing_rejected':Number.isFinite(sample.primary_ms)?'trace_evidence_unavailable':'primary_content_unavailable';sample.primary_ms??=await page.evaluate(()=>performance.now()).catch(()=>10_000);report.failures.push(stage);
-      sample.trace_diagnostics=await page.evaluate(()=>({events:window.__almanacPerformance.traces.slice(-8),deliveries:window.__almanacPerformance.deliveries})).catch(()=>null);
+      sample.trace_diagnostics=await traceFailureDiagnostics(page);
     }
     if(!Number.isFinite(sample.primary_ms)||sample.primary_ms>=budget)report.failures.push(`${stage}-load-budget`);
     report[`${cohort}_loads`].push(sample);
@@ -475,6 +485,7 @@ try {
       assert.ok(Math.abs(event.duration_ms-sample.total_ms)<=100&&event.duration_ms<1000,'interaction trace does not match the rendered journey budget');
     } catch {
       sample.failure = 'interaction_or_chart_unavailable';
+      sample.trace_diagnostics=await traceFailureDiagnostics(page);
       sample.feedback_ms ??= 15_000;sample.chart_ms ??= 15_000;
       report.failures.push(stage);
     }
