@@ -485,6 +485,7 @@ type AlmanacSloHistoryBlock struct {
 	PayloadDigest     []byte             `json:"payload_digest"`
 	Kind              string             `json:"kind"`
 	BudgetSparkline   []byte             `json:"budget_sparkline"`
+	PayloadBytes      pgtype.Int8        `json:"payload_bytes"`
 }
 
 type AlmanacSloHistoryJob struct {

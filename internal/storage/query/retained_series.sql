@@ -79,7 +79,8 @@ WITH candidates AS (
       AND (t.compact_payload IS NULL OR t.payload_digest IS NULL
         OR t.compact_payload->>'payload_digest' IS DISTINCT FROM encode(t.payload_digest,'hex')
         OR t.compact_payload->>'source_generation' IS DISTINCT FROM t.source_generation::text
-        OR (t.compact_payload ? 'tile' AND NOT t.compact_payload ? 'wire'))
+        OR (t.compact_payload ? 'tile' AND NOT t.compact_payload ? 'wire')
+        OR (t.resolution_seconds=3600 AND NOT t.compact_payload ? 'fine_wire'))
       AND NOT EXISTS (SELECT 1 FROM public.almanac_slo_series_tile_work w WHERE w.slo_id=t.slo_id
         AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision AND w.exclusion_revision=t.exclusion_revision
         AND w.calculation_version=t.calculation_version AND w.resolution_seconds=t.resolution_seconds AND w.range_start=t.range_start)

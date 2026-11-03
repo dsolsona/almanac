@@ -42,6 +42,8 @@ sql:
       - internal/storage/migrations/0036_retained_coherent_checkpoint.sql
       - internal/storage/migrations/0037_retained_tile_summaries.sql
       - internal/storage/migrations/0038_retained_summary_wire.sql
+      - internal/storage/migrations/0039_retained_hourly_wire.sql
+      - internal/storage/migrations/0040_history_payload_metadata.sql
     gen:
       go:
         package: dbgen

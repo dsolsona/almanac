@@ -355,16 +355,25 @@ func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input
 	close(start)
 	pending.Wait()
 	close(results)
+	var published []string
 	for result := range results {
 		if result.err != nil || result.value.Generation == nil || result.value.HistoryPreparation != nil || !reflect.DeepEqual(result.value.Current, oracle.Current) {
 			t.Fatalf("concurrent response publication lost a coherent usable result: %v", result.err)
 		}
+		published = append(published, result.value.Generation.GenerationId.String())
 	}
 	conn := integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)
 	var accounted, actual int64
 	if err := conn.QueryRow(t.Context(), `SELECT payload_bytes,(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_history_blocks)+(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_display_blocks) FROM public.almanac_derived_cache_usage WHERE singleton`).Scan(&accounted, &actual); err != nil || accounted != actual {
 		t.Fatalf("concurrent response cache accounting is not exact: accounted=%d actual=%d error=%v", accounted, actual, err)
+	}
+	var invalidMetadata, cached int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE b.payload_bytes IS NULL OR b.payload_bytes<>octet_length(b.payload::text)
+OR b.payload_digest<>sha256(convert_to(b.payload::text,'UTF8'))),count(*)
+FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
+WHERE g.id=ANY($1::uuid[])`, published).Scan(&invalidMetadata, &cached); err != nil || invalidMetadata != 0 || cached != len(published) {
+		t.Fatalf("published history metadata differs from its immutable payload: invalid=%d cached=%d expected=%d error=%v", invalidMetadata, cached, len(published), err)
 	}
 	userID, err := dbgen.New(conn).FindAgentSessionUserID(t.Context(), input.Proof.SessionVerifier[:])
 	if err != nil {

@@ -194,6 +194,12 @@ Encode coarse series during publication rather than reconstructing their JSON on
 each read. Reuse completed daily compliance from the same protected graph read,
 fetching only days absent from that read. Include every transferred payload in the
 shared wire budget; retain source, readiness, null and expiry checks during reuse.
+Hourly tiles also retain encoded finer lanes; daily tiles do not duplicate those
+larger fine representations. Recent edges first use source-validated maintained
+points, with bounded exact calculation when those points are missing or outdated.
+An immutable response derives its digest and canonical byte count together at
+insertion. Cache accounting reuses that exact count, including legacy-row fallback;
+payload edits retain the previous digest so corruption remains detectable.
 
 Use separate live, interactive and derived/historical connection admission as in
 ADR-0024. Initial interactive pool acquisition timeout is 250 ms, statement timeout

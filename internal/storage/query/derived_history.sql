@@ -102,8 +102,8 @@ FROM candidate c WHERE j.id=c.id RETURNING j.*;
 
 -- name: InsertPreparedSloHistory :exec
 INSERT INTO public.almanac_slo_history_blocks
-    (generation_id,range_start,range_end,burn_window_seconds,payload,kind,budget_sparkline,payload_digest)
-VALUES ($1,$2,$3,$4,$5,$6,$7,sha256(convert_to($5::jsonb::text,'UTF8')));
+    (generation_id,range_start,range_end,burn_window_seconds,payload,kind,budget_sparkline)
+VALUES ($1,$2,$3,$4,$5,$6,$7);
 
 -- name: LatestPreparedBudgetSparkline :one
 SELECT (b.payload->'budget_series'->'samples')::jsonb AS budget_sparkline,g.id,g.source_generation,g.definition_revision,g.measurement_revision,

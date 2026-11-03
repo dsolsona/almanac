@@ -304,8 +304,8 @@ func (q *Queries) FindPreparedSloHistory(ctx context.Context, arg FindPreparedSl
 
 const insertPreparedSloHistory = `-- name: InsertPreparedSloHistory :exec
 INSERT INTO public.almanac_slo_history_blocks
-    (generation_id,range_start,range_end,burn_window_seconds,payload,kind,budget_sparkline,payload_digest)
-VALUES ($1,$2,$3,$4,$5,$6,$7,sha256(convert_to($5::jsonb::text,'UTF8')))
+    (generation_id,range_start,range_end,burn_window_seconds,payload,kind,budget_sparkline)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
 `
 
 type InsertPreparedSloHistoryParams struct {

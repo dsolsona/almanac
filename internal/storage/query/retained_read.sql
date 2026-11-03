@@ -117,12 +117,12 @@ WITH lanes AS (
       convert_to((CASE WHEN NOT s.ready THEN NULL
         WHEN s.compliance_only AND s.present_id IS NOT NULL THEN coalesce(s.preview->'wire'->>'compliance',
           (coalesce(s.preview->'tile',s.tile_payload)->'compliance')::text,'null')
-        WHEN s.preview ? 'wire' THEN (
+        WHEN s.preview ? 'wire' OR s.preview ? 'fine_wire' THEN (
           SELECT '{' || string_agg(to_json(lane.key)::text || ':' ||
             CASE WHEN n.samples<=1500 AND (s.preview->'transitions'->>lane.lane_index)::integer>0
-                 THEN jsonb_strip_nulls(s.tile_payload->lane.key)::text
-                 ELSE s.preview->'wire'->>lane.key END,',') ||
-            ',"compliance":' || coalesce(s.preview->'wire'->>'compliance','null') || '}'
+                 THEN coalesce(s.preview->'fine_wire'->>lane.key,jsonb_strip_nulls(s.tile_payload->lane.key)::text)
+                 ELSE coalesce(s.preview->'wire'->>lane.key,s.preview->'fine_wire'->>lane.key) END,',') ||
+            ',"compliance":' || coalesce(s.preview->'wire'->>'compliance',s.preview->'fine_wire'->>'compliance','null') || '}'
           FROM lanes lane JOIN lane_counts n ON n.key=lane.key
         )
         ELSE jsonb_strip_nulls(coalesce(s.preview->'tile',s.tile_payload) || coalesce(coarse.payload,'{}'::jsonb) ||

@@ -49,6 +49,15 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 	if stored.SourceGeneration <= 0 {
 		t.Fatal("retained point lost its accepted-source generation")
 	}
+	row, err := q.GetSlo(t.Context(), pgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := retainedSeriesReader{q: q, row: row, now: clock().Add(5 * time.Minute)}
+	recent, err := reader.points(t.Context(), slo.WindowInput{Cadence: time.Duration(row.CadenceSeconds) * time.Second}, start, end)
+	if err != nil || len(recent) != 1 || !reflect.DeepEqual(recent[0], point) {
+		t.Fatal("a ready recent historical point changed when the read clock advanced", err)
+	}
 	changed, err := q.PublishRetainedSloPoint(t.Context(), dbgen.PublishRetainedSloPointParams{
 		SloID: pgID, DefinitionRevision: definition, MeasurementRevision: measurement, CalculationVersion: operationalCalculationVersion,
 		EvaluationAt: params.EvaluationAt, SourceGeneration: stored.SourceGeneration - 1, PublishedAt: timestamp(clock()), Payload: []byte(`{}`)})

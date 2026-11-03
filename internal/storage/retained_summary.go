@@ -17,6 +17,7 @@ type retainedTileSummary struct {
 	SourceGeneration int64             `json:"source_generation"`
 	Transitions      [4]int32          `json:"transitions"`
 	Wire             map[string]string `json:"wire,omitempty"`
+	FineWire         map[string]string `json:"fine_wire,omitempty"`
 }
 
 func marshalRetainedTileSummary(tile retainedSloTile, start, end time.Time, target string, generation int64) ([]byte, error) {
@@ -32,21 +33,35 @@ func marshalRetainedTileSummary(tile retainedSloTile, start, end time.Time, targ
 			}
 		}
 	}
+	if end.Sub(start) == time.Hour {
+		summary.FineWire, err = retainedTileWire(fine)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if summary.Transitions != ([4]int32{}) {
 		compact, err := compactRetainedTileLimit(fine, start, end, target, 4)
 		if err != nil {
 			return nil, err
 		}
-		summary.Wire = make(map[string]string, 5)
-		for name, value := range map[string]any{"attainment": compact.Attainment, "budget": compact.Budget, "burn_1h": compact.Burn1h, "burn_6h": compact.Burn6h, "compliance": compact.Compliance} {
-			body, err := json.Marshal(value)
-			if err != nil {
-				return nil, err
-			}
-			summary.Wire[name] = string(body)
+		summary.Wire, err = retainedTileWire(compact)
+		if err != nil {
+			return nil, err
 		}
 	}
 	return json.Marshal(summary)
+}
+
+func retainedTileWire(tile retainedSloTile) (map[string]string, error) {
+	wire := make(map[string]string, 5)
+	for name, value := range map[string]any{"attainment": tile.Attainment, "budget": tile.Budget, "burn_1h": tile.Burn1h, "burn_6h": tile.Burn6h, "compliance": tile.Compliance} {
+		body, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		wire[name] = string(body)
+	}
+	return wire, nil
 }
 
 func prepareStoredRetainedTileSummary(ctx context.Context, q *dbgen.Queries, work dbgen.AlmanacSloSeriesTileWork, target string) error {

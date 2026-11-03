@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strconv"
 	"time"
 
@@ -159,10 +160,7 @@ func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput,
 	if !start.Before(end) {
 		return prefix, nil
 	}
-	if end.After(c.now.Truncate(time.Hour).Add(-time.Hour)) {
-		points, err := buildRetainedRepairPoints(ctx, c.q, c.row, c.source, start, end, c.now)
-		return append(prefix, points...), err
-	}
+	recent := end.After(c.now.Truncate(time.Hour).Add(-time.Hour))
 	rows, err := c.q.ReadRetainedEdgePoints(ctx, dbgen.ReadRetainedEdgePointsParams{SloID: c.row.ID,
 		DefinitionRevision: c.row.DefinitionRevision, MeasurementRevision: c.row.MeasurementRevision,
 		CalculationVersion: operationalCalculationVersion, EvaluationAt: timestamp(start), EvaluationAt2: timestamp(end)})
@@ -173,11 +171,7 @@ func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput,
 		return nil, ErrOperationalResource
 	}
 	expected := int(end.Sub(start) / base.Cadence)
-	if len(rows) != expected {
-		return nil, ErrDerivedPending
-	}
-	points := make([]retainedSloPoint, len(rows))
-	for index, row := range rows {
+	for _, row := range rows {
 		if row.PayloadBytes > 20<<20 {
 			return nil, ErrOperationalResource
 		}
@@ -185,6 +179,16 @@ func (c *retainedSeriesReader) points(ctx context.Context, base slo.WindowInput,
 		if c.bytes > 20<<20 {
 			return nil, ErrOperationalResource
 		}
+	}
+	if recent && (len(rows) != expected || slices.ContainsFunc(rows, func(row dbgen.ReadRetainedEdgePointsRow) bool { return row.Repairing })) {
+		points, err := buildRetainedRepairPoints(ctx, c.q, c.row, c.source, start, end, c.now)
+		return append(prefix, points...), err
+	}
+	if len(rows) != expected {
+		return nil, ErrDerivedPending
+	}
+	points := make([]retainedSloPoint, len(rows))
+	for index, row := range rows {
 		if row.Exhausted && row.Repairing {
 			c.failed = true
 			return nil, ErrDerivedPending

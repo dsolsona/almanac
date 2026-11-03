@@ -42,6 +42,17 @@ func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		appendRetainedTile(&hours, tile)
+		if hour == 7 {
+			body, err := marshalRetainedTileSummary(tile, from, from.Add(time.Hour), "0.99", 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var summary retainedTileSummary
+			var restored []api.SloOperationalSample
+			if json.Unmarshal(body, &summary) != nil || len(summary.FineWire) != 5 || json.Unmarshal([]byte(summary.FineWire["attainment"]), &restored) != nil || len(restored) != len(tile.Attainment) {
+				t.Fatal("hourly wire dropped finer gap-boundary samples")
+			}
+		}
 	}
 	want, err := compactRetainedTile(raw, start, start.Add(24*time.Hour), "0.99")
 	if err != nil {
@@ -56,7 +67,7 @@ func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	var summary retainedTileSummary
-	if json.Unmarshal(body, &summary) != nil || summary.SourceGeneration != 7 || summary.Transitions != ([4]int32{7, 7, 7, 7}) {
+	if json.Unmarshal(body, &summary) != nil || summary.SourceGeneration != 7 || summary.Transitions != ([4]int32{7, 7, 7, 7}) || summary.FineWire != nil {
 		t.Fatal("summary changed the source or independent quality-transition count")
 	}
 	for _, name := range []string{"attainment", "budget", "burn_1h", "burn_6h"} {
