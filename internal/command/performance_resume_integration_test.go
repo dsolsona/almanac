@@ -162,6 +162,7 @@ func resumePerformanceFleet(t *testing.T, ctx context.Context, size int, saved p
 		t.Fatal("retained capacity identities differ from their independent fleet")
 	}
 	fleet.serviceID = services[0]
+	refreshRetainedBrowserIdentity(t, &fleet, db)
 	for index, id := range agents {
 		agentDir := filepath.Join(dir, fmt.Sprintf("agent-%02d", index))
 		fleet.agents = append(fleet.agents, connectedAgentJourney{id: id, profile: filepath.Join(agentDir, "sli-agent-profile", "profile.json"), passwordPath: filepath.Join(agentDir, "sli-agent-password")})
@@ -184,6 +185,71 @@ func resumePerformanceFleet(t *testing.T, ctx context.Context, size int, saved p
 	fleet.setup = time.Since(started)
 	t.Logf("reused retained year dataset project=%s original_report=%s; acceptance reruns on this candidate", r.project, saved.Report)
 	return fleet
+}
+
+func refreshRetainedBrowserIdentity(t *testing.T, fleet *performanceFleet, db *pgx.Conn) {
+	t.Helper()
+	index := len(fleet.objectives) - 1
+	previous := fleet.objectives[index]
+	var visited bool
+	if err := db.QueryRow(fleet.ctx, `SELECT EXISTS(SELECT 1 FROM public.almanac_slo_history_blocks b
+JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='retained_detail')`, previous).Scan(&visited); err != nil {
+		t.Fatal("inspect retained browser identity failed")
+	}
+	if !visited {
+		return
+	}
+	f := fleet.fixture
+	f.backend.stop(t)
+	f.backend.deployment.requireStoppedDatabase(t, f.databaseURL)
+	tx, err := db.Begin(fleet.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	}()
+	var replacement string
+	if err := tx.QueryRow(fleet.ctx, `SELECT gen_random_uuid()::text`).Scan(&replacement); err != nil {
+		t.Fatal(err)
+	}
+	name := fmt.Sprintf("performance-%03d", index)
+	// A previously measured objective cannot count as never visited. Provision a
+	// fresh fixture identity while retaining its exact definition and year series.
+	tag, err := tx.Exec(fleet.ctx, `UPDATE public.almanac_slos SET name='retired-'||id::text WHERE id=$1 AND name=$2`, previous, name)
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatal("retained browser identity differs from its fixed fleet")
+	}
+	if _, err := tx.Exec(fleet.ctx, `INSERT INTO public.almanac_slos(id,name,display_name,version,definition_revision,created_at,updated_at)
+SELECT $2::uuid,$3,display_name,version,definition_revision,created_at,updated_at FROM public.almanac_slos WHERE id=$1`, previous, replacement, name); err != nil {
+		t.Fatal("provision unvisited retained fixture identity failed", err)
+	}
+	if _, err := tx.Exec(fleet.ctx, `INSERT INTO public.almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from,historical_requested_by,historical_requested_at)
+SELECT $2::uuid,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from,historical_requested_by,historical_requested_at FROM public.almanac_slo_definitions WHERE slo_id=$1`, previous, replacement); err != nil {
+		t.Fatal("preserve retained fixture definition failed", err)
+	}
+	for _, table := range []string{"almanac_slo_series_points", "almanac_slo_series_tiles", "almanac_slo_series_tile_work", "almanac_slo_series_repair"} {
+		if _, err := tx.Exec(fleet.ctx, "UPDATE public."+table+" SET slo_id=$2 WHERE slo_id=$1", previous, replacement); err != nil {
+			t.Fatal("preserve retained fixture series failed", err)
+		}
+	}
+	for _, table := range []string{"almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_history_jobs", "almanac_slo_display_blocks", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
+		column := "slo_id"
+		if table == "almanac_slos" {
+			column = "id"
+		}
+		if _, err := tx.Exec(fleet.ctx, "DELETE FROM public."+table+" WHERE "+column+"=$1", previous); err != nil {
+			t.Fatal("remove previous retained fixture identity failed", err)
+		}
+	}
+	if err := tx.Commit(fleet.ctx); err != nil {
+		t.Fatal("commit unvisited retained fixture identity failed", err)
+	}
+	fleet.objectives[index] = replacement
+	f.backend.start(t)
+	t.Logf("reserved unvisited retained objective old=%s new=%s; canonical observations unchanged", previous, replacement)
 }
 
 func retainedPerformanceIDs(t *testing.T, ctx context.Context, db *pgx.Conn, statement string) []string {

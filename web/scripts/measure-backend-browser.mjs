@@ -97,8 +97,8 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     if (location.pathname === '/slis') {
       const page = listRequest('/api/v1/slis'),names=expectedNames('slis',params);
       const expectedRows=Math.min(pageSize,names.size-state.listOffset);
-      const rows = [...document.querySelectorAll('.sli-list-table tbody tr')];
-      const complete=page?.items.length === expectedRows && rows.length === expectedRows && (expectedRows>0||visible(document.querySelector('.sli-empty'))) && page.items.every(item => names.has(item.name)&&rows.some(row => visible(row.querySelector(`a[href="/slis/${item.id}"]`)) && row.querySelectorAll('td').length === 7 && (!item.latest_observation || row.querySelector('time')?.dateTime === item.latest_observation.interval_end)));
+      const rows = [...document.querySelectorAll('.sli-list-table > tbody > tr')];
+      const complete=page?.items.length === expectedRows && rows.length === expectedRows && (expectedRows>0||visible(document.querySelector('.sli-empty'))) && page.items.every(item => names.has(item.name)&&rows.some(row => visible(row.querySelector(`a[href="/slis/${item.id}"]`)) && row.querySelectorAll(':scope > td').length === 7 && (!item.latest_observation || row.querySelector('time')?.dateTime === item.latest_observation.interval_end)));
       if(complete)state.listEvidence={ids:page.items.map(item=>item.id),names:page.items.map(item=>item.name),items:page.items,expected_total:names.size,next_cursor:page.next_cursor};
       return complete;
     }
