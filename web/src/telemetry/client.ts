@@ -255,7 +255,13 @@ export function installTelemetry() {
   beginJourney(location.pathname + location.search, true);
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
-    if (url.origin !== location.origin || !url.pathname.startsWith('/api/') || url.pathname.startsWith('/api/v1/telemetry/')) return upstream(input, init);
+    if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return upstream(input, init);
+    if (url.pathname.startsWith('/api/v1/telemetry/')) {
+      const response = await upstream(input, init);
+      // The SDK reads only status/headers; release its unused upload response.
+      await response.body?.cancel().catch(() => undefined);
+      return response;
+    }
     const observeCapability = (response: Response) => {
       const capability = response.headers.get('X-Almanac-Tracing');
       // Observe explicit changes while capture is off, too. Missing metadata

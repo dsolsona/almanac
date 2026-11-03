@@ -49,6 +49,16 @@ it('waits for an automatic export already in flight before confirming a flush', 
 });
 
 let stop: (() => Promise<void>) | undefined;
+
+it('releases the unused telemetry response body before completing an upload', async () => {
+  const cancel = vi.fn();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream({ cancel }), { status: 202 })));
+  stop = installTelemetry();
+  const response = await fetch('/api/v1/telemetry/traces', { method: 'POST', body: '{}' });
+  expect(response.status).toBe(202);
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
 async function expectReadyJourney(action: () => void) {
   let ready = false;
   const listener = (event: Event) => { if ((event as CustomEvent).detail?.result === 'ready') ready = true; };
