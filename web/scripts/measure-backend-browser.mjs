@@ -33,6 +33,11 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
   const requestKey=(path,query)=>{const copy=new URLSearchParams(query);copy.sort();return `${path}?${copy}`;};
   const state = window.__almanacPerformance = { fetches: [], primary_ms: null, interaction: null, listOffset: 0, listEvidence: null };
   state.traces=[];
+  state.deliveries=[];
+  addEventListener('almanac:telemetry-delivery',event=>{
+    const {result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled}=event.detail;
+    if(state.deliveries.length<32)state.deliveries.push({result,error_name,exportFailures,droppedBatches,droppedSpans,authenticated,enabled});
+  });
   addEventListener('almanac:journey',event=>{
     const value=event.detail;
     if(!['sli.list','slo.list','slo.detail'].includes(value?.journey)||!/^[0-9a-f]{32}$/.test(value.traceId)||!Number.isFinite(value.duration))return;
@@ -299,6 +304,7 @@ try {
       if(event.duration_ms>=budget){sample.failure='trace_load_budget';report.failures.push(stage);}
     } catch {
       sample.failure=sample.trace_id?'trace_timing_rejected':Number.isFinite(sample.primary_ms)?'trace_evidence_unavailable':'primary_content_unavailable';sample.primary_ms??=await page.evaluate(()=>performance.now()).catch(()=>10_000);report.failures.push(stage);
+      sample.trace_diagnostics=await page.evaluate(()=>({events:window.__almanacPerformance.traces.slice(-8),deliveries:window.__almanacPerformance.deliveries})).catch(()=>null);
     }
     if(!Number.isFinite(sample.primary_ms)||sample.primary_ms>=budget)report.failures.push(`${stage}-load-budget`);
     report[`${cohort}_loads`].push(sample);

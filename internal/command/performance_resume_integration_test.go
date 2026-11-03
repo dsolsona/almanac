@@ -147,7 +147,6 @@ func resumePerformanceFleet(t *testing.T, ctx context.Context, size int, saved p
 	r.appID, r.imageID = "", ""
 	r.start(t)
 	f := openPerformanceComposeFixture(t, r, dir, false)
-	t.Cleanup(func() { f.backend.stop(t) })
 	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: imported.End, traceURL: "http://127.0.0.1:" + r.tracesPort, reserveDetail: size != 1, resumed: true}
 	configurePerformanceTracing(t, fleet.traceURL)
 	db := testpostgres.Connect(t, f.databaseURL)
