@@ -248,8 +248,17 @@ def counted_go_events(path: Path, expected: set[str]) -> int:
 
 def performance_evidence() -> int:
     name = "TestIntegrationControlledBackendPerformance"
-    expected = {name, *(f"{name}/independent-{size}" for size in (1, 10, 100, 1000))}
-    count = counted_go_events(ROOT / ".local/performance-go-test.jsonl", expected)
+    expected = {name, f"{name}/independent-10"}
+    path = ROOT / ".local/performance-go-test.jsonl"
+    count = counted_go_events(path, expected)
+    for line in path.read_text().splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        test = event.get("Test", "")
+        if event.get("Action") == "run" and isinstance(test, str) and test.startswith(name + "/independent-") and test not in expected:
+            raise ValueError("deferred capacity fleet executed outside the ten-SLO phase")
     print(f"Controlled performance: {count} required cases ran and passed")
     return 0
 

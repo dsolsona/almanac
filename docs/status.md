@@ -52,6 +52,12 @@ pending. See [F3-T08](tasks/F3-T08.md) for evidence and retained failures.
 govern [F3-T08](tasks/F3-T08.md), in progress on `perf/f3-t08-retained-series`
 in `.worktrees/backend-performance`, based on merged main `6d7403d`.
 
+On 2026-11-03 the maintainer requested finishing ten SLOs with a year of history
+and deferring larger tests. Current T08 acceptance retains its complete ten-user,
+live/browser/accuracy/recovery and final integrated checks for that fleet. Larger
+100/1,000-SLO validation is deferred to [F3-T10](tasks/F3-T10.md), with no larger
+capacity claim or authorization to load those fleets during this phase.
+
 Current run twelve on `935f53b` passes the one-SLO year-history checkpoint and
 ten-SLO 56-day reads/plans, then fails cold graph latency and two database
 admission timeouts after restart. The preserved dataset exposes cache-lookup

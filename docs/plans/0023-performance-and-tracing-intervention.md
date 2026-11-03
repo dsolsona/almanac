@@ -10,6 +10,13 @@
 
 ## Required outcome
 
+Phase scope clarification, 2026-11-03: the maintainer explicitly requested finishing
+the ten-SLO/year verification and deferring larger tests. F3-T08 completion therefore
+requires the full ten-SLO/year live, browser, accuracy, recovery and final integrated
+checks. The 100- and 1,000-SLO workloads are deferred to [F3-T10](../tasks/F3-T10.md)
+and must not run during this phase. Their performance targets remain unchanged;
+passing the ten-SLO fixture does not establish larger-installation acceptance.
+
 Hardware clarification, 2026-11-01: the maintainer requires a reasonably capable
 device without artificial CPU throttling. Measure normal networking and an added
 100 ms latency separately, without an artificial bandwidth cap. Use the updated

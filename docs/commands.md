@@ -106,10 +106,14 @@ do not launch this separate workload:
 make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
 ```
 
+On 2026-11-03 the maintainer narrowed this phase to ten SLOs with a year of history
+and deferred larger tests to [F3-T10](tasks/F3-T10.md). The same approved invocation
+now requires only that fleet; it must not start the 100/1,000-SLO loads or repeat
+the preliminary one-SLO imports during this phase.
+
 It requires that exact existing isolated fixture, rejects custom test/Go selectors,
-builds the candidate and runs a fixed incremental one-SLO diagnostic (90/180/365
-days), then the separately tagged 10/100/1,000-SLO capacity
-entry. The workload retains its eight-hour execution bound; the Go process has
+builds the candidate and runs the separately tagged ten-SLO/year capacity entry.
+The workload retains its eight-hour execution bound; the Go process has
 30 additional minutes for setup/cleanup. Existing disk admission, private normal
 Compose deployments, independent numerical checks and VictoriaTraces evidence
 remain mandatory. Required fleet cases must all run and pass, without skips.
@@ -122,6 +126,20 @@ runtime directory. A failed fleet retains its owned deployment and protected
 credentials. Do not publish that directory. Record the project/path and clean up
 only those owned resources after diagnosis; preserve the operator's project/data.
 Compile-only checks in the Go gate do not establish capacity acceptance.
+
+The same fixed entry can reuse an explicitly recorded year dataset through local
+`.local/performance-resume.json` metadata keyed only by `10` for this phase.
+Each record names its original failed report, private runtime directory, owned
+`almanac-perf-` project and five explicit loopback ports. Workspace paths, container
+ownership/bindings, original year import and fleet identities must match before
+reuse. The candidate is rebuilt and migrated normally; source TLS trust is renewed
+through authenticated management, and real agents/readers reconnect. Acceptance
+runs again on the candidate. Previous passing latency evidence is not substituted.
+Required ten-SLO acceptance and the eight-hour limit remain unchanged. Larger
+acceptance is deferred, not passed. There is no command, SQL, test-selector or
+database-URL passthrough.
+Source certificates cover the bounded run plus cleanup; ordinary short fixtures
+retain their existing certificate lifetime and all TLS verification remains enabled.
 
 ## Linux verifier entry points
 

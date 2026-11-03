@@ -235,6 +235,17 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 	if err != nil || os.WriteFile(r.override, body, 0o600) != nil {
 		t.Fatal("write owned performance deployment overrides failed")
 	}
+	registerPerformanceDeploymentCleanup(t, r, dir)
+	r.run(t, t.Context(), 5*time.Minute, "build")
+	releasePorts()
+	r.run(t, t.Context(), 2*time.Minute, "up", "-d", "--wait", "--wait-timeout", "90")
+	r.running = true
+	r.evidence(t)
+	return openPerformanceComposeFixture(t, r, dir, true)
+}
+
+func registerPerformanceDeploymentCleanup(t *testing.T, r *performanceDeployment, dir string) {
+	t.Helper()
 	t.Cleanup(func() {
 		if t.Failed() {
 			t.Logf("preserved failed performance deployment project=%s protected_runtime=%s", r.project, dir)
@@ -260,11 +271,10 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 			t.Error("cleanup owned performance runtime directory failed")
 		}
 	})
-	r.run(t, t.Context(), 5*time.Minute, "build")
-	releasePorts()
-	r.run(t, t.Context(), 2*time.Minute, "up", "-d", "--wait", "--wait-timeout", "90")
-	r.running = true
-	r.evidence(t)
+}
+
+func openPerformanceComposeFixture(t *testing.T, r *performanceDeployment, dir string, onboard bool) objectiveJourneyFixture {
+	t.Helper()
 	certificate := r.output(t, "exec", "-T", "app", "cat", "/run/almanac-secrets/tls.crt")
 	block, rest := pem.Decode(certificate)
 	if block == nil || len(rest) != 0 {
@@ -318,18 +328,26 @@ func startPerformanceComposeFixture(t *testing.T) objectiveJourneyFixture {
 	if len(deployed) != 2 || deployed[0] != r.digest {
 		t.Fatal("copied executable differs from normal deployed backend")
 	}
-	initial := r.output(t, "exec", "-T", "app", "cat", "/run/almanac-secrets/initial-admin-password")
 	initialFile, permanentFile := filepath.Join(dir, "initial-password"), filepath.Join(dir, "permanent-password")
 	password := "SLI journey permanent phrase 825!"
-	if os.WriteFile(initialFile, initial, 0o600) != nil || os.WriteFile(permanentFile, []byte(password), 0o600) != nil {
-		t.Fatal("write protected deployment onboarding input failed")
-	}
-	clear(initial)
-	setup := exec.CommandContext(t.Context(), binary, "setup", "--backend-url="+baseURL, "--initial-admin-login=sli-owner", "--initial-admin-password-file="+initialFile,
-		"--new-password-file="+permanentFile, "--ca-file="+certFile, "--output=json")
-	setup.Stdout, setup.Stderr = io.Discard, io.Discard
-	if err := setup.Run(); err != nil {
-		t.Fatal("normal deployment administrator onboarding failed")
+	if onboard {
+		initial := r.output(t, "exec", "-T", "app", "cat", "/run/almanac-secrets/initial-admin-password")
+		if os.WriteFile(initialFile, initial, 0o600) != nil || os.WriteFile(permanentFile, []byte(password), 0o600) != nil {
+			t.Fatal("write protected deployment onboarding input failed")
+		}
+		clear(initial)
+		setup := exec.CommandContext(t.Context(), binary, "setup", "--backend-url="+baseURL, "--initial-admin-login=sli-owner", "--initial-admin-password-file="+initialFile,
+			"--new-password-file="+permanentFile, "--ca-file="+certFile, "--output=json")
+		setup.Stdout, setup.Stderr = io.Discard, io.Discard
+		if err := setup.Run(); err != nil {
+			t.Fatal("normal deployment administrator onboarding failed")
+		}
+	} else {
+		body, err := os.ReadFile(permanentFile)
+		if err != nil || string(body) != password {
+			t.Fatal("retained fixture administrator differs from its original isolated setup")
+		}
+		clear(body)
 	}
 	sourceCA, sourceKey, err := datasourceTestCertificateFor(performanceSourceCertificateValidity)
 	if err != nil {

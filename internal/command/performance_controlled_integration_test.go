@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -38,16 +39,21 @@ func runControlledBackendPerformance(t *testing.T) {
 	defer stop()
 	ctx, cancel := context.WithTimeout(signals, 8*time.Hour)
 	defer cancel()
-	for _, size := range []int{1, 10, 100, 1000} {
+	retained := retainedPerformanceFixtures(t)
+	for _, size := range []int{10} {
 		if !t.Run(fmt.Sprintf("independent-%d", size), func(t *testing.T) {
-			runControlledBackendPerformanceFleet(t, ctx, size)
+			var saved *performanceRetainedFixture
+			if fixture, found := retained[strconv.Itoa(size)]; found {
+				saved = &fixture
+			}
+			runControlledBackendPerformanceFleet(t, ctx, size, saved)
 		}) {
 			return
 		}
 	}
 }
 
-func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, size int) {
+func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, size int, retainedFixture *performanceRetainedFixture) {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -112,7 +118,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 		return resultErr == nil
 	}
 	stage("fleet-setup")
-	fleet = newPerformanceFleet(t, ctx, size)
+	fleet = newPerformanceFleet(t, ctx, size, retainedFixture)
 	record("fleet-setup", struct {
 		SLIs, SLOs, Agents, Users int
 		Setup                     time.Duration
@@ -122,93 +128,110 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	record("environment", performanceEnvironmentEvidence(t, fleet), nil)
 	stage("query-bind-preflight")
 	record("query-bind-preflight", performanceQueryPlans(t, fleet, false), nil)
-	if size == 1 {
-		fleet.reserveDetail = false
-		previousDays := 0
-		for _, days := range []int{90, 180, 365} {
-			label := fmt.Sprintf("one-slo-%d-days", days)
-			stage(label + "-import")
-			performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve)
-			record(label+"-import", seedPerformanceHistory(t, fleet, days, previousDays), nil)
-			stage(label + "-maintenance")
-			maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
-			if !record(label+"-maintenance", maintenance, err) {
-				return
-			}
-			stage(label + "-reads")
-			reads, err := runPerformanceReadyPhase(ctx, fleet, label, time.Now().UTC().Truncate(time.Minute))
-			if !record(label+"-reads", reads, err) {
-				return
-			}
-			previousDays = days
+	if fleet.resumed {
+		record("retained-year-fixture", retainedFixture, nil)
+		stage("retained-year-preparation")
+		maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+		if !record("retained-year-preparation", maintenance, err) {
+			return
 		}
-		return
-	}
-	stage("seed-56-days")
-	record("disk-admission-56-days", performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve), nil)
-	seeded := seedPerformanceHistory(t, fleet, 56, 0)
-	record("seed-56-days", seeded, nil)
-	stage("automatic-maintenance-56-days")
-	maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
-	if !record("automatic-maintenance-56-days", maintenance, err) {
-		return
-	}
-	storageObserver := testpostgres.Connect(t, fleet.fixture.databaseURL)
-	var maintainedDatabaseBytes int64
-	err = storageObserver.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&maintainedDatabaseBytes)
-	closePerformanceObserver(storageObserver)
-	if !record("maintained-storage-56-days", struct {
-		DatabaseBytes int64 `json:"database_bytes"`
-	}{maintainedDatabaseBytes}, err) {
-		return
-	}
-	stage("ready-56-days")
-	ready, err := runPerformanceReadyPhase(ctx, fleet, "ready-56-days", time.Now().UTC().Truncate(time.Minute))
-	if !record("ready-56-days", ready, err) {
-		return
-	}
-	stage("query-plans-56-days")
-	record("query-plans-56-days", performanceQueryPlans(t, fleet, true), nil)
-	stage("persisted-restart-56-days")
-	restart, err := restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
-	if !record("persisted-restart-56-days", restart, err) {
-		return
-	}
-	stage("source-and-response-cache-rebuild-56-days")
-	rebuild, err := restartPerformancePhase(t, fleet, true, time.Now().UTC().Truncate(time.Minute))
-	if !record("source-and-response-cache-rebuild-56-days", rebuild, err) {
-		return
-	}
-	previousDays := 56
-	if size == 10 {
-		for _, days := range []int{90, 180} {
-			label := fmt.Sprintf("ten-slos-%d-days", days)
-			stage(label + "-import")
-			record(label+"-import", seedPerformanceHistory(t, fleet, days, previousDays), nil)
-			stage(label + "-maintenance")
-			maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
-			if !record(label+"-maintenance", maintenance, err) {
-				return
-			}
-			stage(label + "-reads")
-			reads, err := runPerformanceReadyPhase(ctx, fleet, label, time.Now().UTC().Truncate(time.Minute))
-			if !record(label+"-reads", reads, err) {
-				return
-			}
-			previousDays = days
+		if size == 1 {
+			fleet.reserveDetail = false
+			stage("one-slo-retained-year-reads")
+			reads, err := runPerformanceReadyPhase(ctx, fleet, "one-slo-retained-year", time.Now().UTC().Truncate(time.Minute))
+			record("one-slo-retained-year-reads", reads, err)
+			return
 		}
 	}
-	stage("seed-365-days")
-	required, err := performanceDiskRequired(maintainedDatabaseBytes, seeded.CanonicalRows, 365*24*60*int64(size)-seeded.NominalSlots)
-	if err != nil {
-		t.Fatal(err)
-	}
-	record("disk-admission-365-days", performanceFixtureDisk(t, ctx, fleet, required), nil)
-	record("seed-365-days", seedPerformanceHistory(t, fleet, 365, previousDays), nil)
-	stage("automatic-maintenance-365-days")
-	maintenance, err = awaitPerformanceHistory(t, ctx, fleet)
-	if !record("automatic-maintenance-365-days", maintenance, err) {
-		return
+	if !fleet.resumed {
+		if size == 1 {
+			fleet.reserveDetail = false
+			previousDays := 0
+			for _, days := range []int{90, 180, 365} {
+				label := fmt.Sprintf("one-slo-%d-days", days)
+				stage(label + "-import")
+				performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve)
+				record(label+"-import", seedPerformanceHistory(t, fleet, days, previousDays), nil)
+				stage(label + "-maintenance")
+				maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+				if !record(label+"-maintenance", maintenance, err) {
+					return
+				}
+				stage(label + "-reads")
+				reads, err := runPerformanceReadyPhase(ctx, fleet, label, time.Now().UTC().Truncate(time.Minute))
+				if !record(label+"-reads", reads, err) {
+					return
+				}
+				previousDays = days
+			}
+			return
+		}
+		stage("seed-56-days")
+		record("disk-admission-56-days", performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve), nil)
+		seeded := seedPerformanceHistory(t, fleet, 56, 0)
+		record("seed-56-days", seeded, nil)
+		stage("automatic-maintenance-56-days")
+		maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+		if !record("automatic-maintenance-56-days", maintenance, err) {
+			return
+		}
+		storageObserver := testpostgres.Connect(t, fleet.fixture.databaseURL)
+		var maintainedDatabaseBytes int64
+		err = storageObserver.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&maintainedDatabaseBytes)
+		closePerformanceObserver(storageObserver)
+		if !record("maintained-storage-56-days", struct {
+			DatabaseBytes int64 `json:"database_bytes"`
+		}{maintainedDatabaseBytes}, err) {
+			return
+		}
+		stage("ready-56-days")
+		ready, err := runPerformanceReadyPhase(ctx, fleet, "ready-56-days", time.Now().UTC().Truncate(time.Minute))
+		if !record("ready-56-days", ready, err) {
+			return
+		}
+		stage("query-plans-56-days")
+		record("query-plans-56-days", performanceQueryPlans(t, fleet, true), nil)
+		stage("persisted-restart-56-days")
+		restart, err := restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
+		if !record("persisted-restart-56-days", restart, err) {
+			return
+		}
+		stage("source-and-response-cache-rebuild-56-days")
+		rebuild, err := restartPerformancePhase(t, fleet, true, time.Now().UTC().Truncate(time.Minute))
+		if !record("source-and-response-cache-rebuild-56-days", rebuild, err) {
+			return
+		}
+		previousDays := 56
+		if size == 10 {
+			for _, days := range []int{90, 180} {
+				label := fmt.Sprintf("ten-slos-%d-days", days)
+				stage(label + "-import")
+				record(label+"-import", seedPerformanceHistory(t, fleet, days, previousDays), nil)
+				stage(label + "-maintenance")
+				maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+				if !record(label+"-maintenance", maintenance, err) {
+					return
+				}
+				stage(label + "-reads")
+				reads, err := runPerformanceReadyPhase(ctx, fleet, label, time.Now().UTC().Truncate(time.Minute))
+				if !record(label+"-reads", reads, err) {
+					return
+				}
+				previousDays = days
+			}
+		}
+		stage("seed-365-days")
+		required, err := performanceDiskRequired(maintainedDatabaseBytes, seeded.CanonicalRows, 365*24*60*int64(size)-seeded.NominalSlots)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record("disk-admission-365-days", performanceFixtureDisk(t, ctx, fleet, required), nil)
+		record("seed-365-days", seedPerformanceHistory(t, fleet, 365, previousDays), nil)
+		stage("automatic-maintenance-365-days")
+		maintenance, err = awaitPerformanceHistory(t, ctx, fleet)
+		if !record("automatic-maintenance-365-days", maintenance, err) {
+			return
+		}
 	}
 	stage("imported-prefix-source-watermarks")
 	observer := testpostgres.Connect(t, fleet.fixture.databaseURL)
@@ -221,7 +244,7 @@ func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, siz
 	sampling := enablePerformanceFullTracing(t, fleet.fixture)
 	record("full-acceptance-tracing", sampling, nil)
 	stage("persisted-restart-365-days")
-	restart, err = restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
+	restart, err := restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
 	if !record("persisted-restart-365-days", restart, err) {
 		return
 	}

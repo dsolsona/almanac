@@ -312,24 +312,7 @@ func runNamedConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, ba
 	if err != nil {
 		t.Fatal("resolve candidate agent executable failed")
 	}
-	agent := exec.Command(agentBinary, "run", "--backend-url="+baseURL, "--token-file="+tokenPath, "--ca-file="+certFile)
-	agent.Stdout, agent.Stderr = io.Discard, io.Discard
-	if err := agent.Start(); err != nil {
-		t.Fatal("start separate SLI agent executable failed")
-	}
-	done := make(chan struct{})
-	result := make(chan error, 1)
-	go func() { result <- agent.Wait(); close(done) }()
-	t.Cleanup(func() {
-		_ = agent.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-done:
-		case <-time.After(7 * time.Second):
-			_ = agent.Process.Kill()
-			<-done
-			t.Error("SLI agent exceeded its shutdown bound")
-		}
-	})
+	done, result := startSLIJourneyAgent(t, agentBinary, tokenPath, baseURL, certFile)
 	for deadline := time.Now().Add(25 * time.Second); time.Now().Before(deadline); {
 		command := exec.CommandContext(t.Context(), binary, "agents", "get", "--profile-file="+profile, "--agent-id="+created.Result.Agent.ID, "--output=json")
 		body, readErr := command.Output()
@@ -352,6 +335,28 @@ func runNamedConnectedSLIAgentJourney(t *testing.T, databaseURL, binary, dir, ba
 	}
 	t.Fatal("SLI agent executable did not connect and renew its lease")
 	return connectedAgentJourney{}
+}
+
+func startSLIJourneyAgent(t *testing.T, binary, tokenPath, baseURL, certFile string) (<-chan struct{}, <-chan error) {
+	t.Helper()
+	agent := exec.Command(binary, "run", "--backend-url="+baseURL, "--token-file="+tokenPath, "--ca-file="+certFile)
+	agent.Stdout, agent.Stderr = io.Discard, io.Discard
+	if err := agent.Start(); err != nil {
+		t.Fatal("start separate SLI agent executable failed")
+	}
+	done, result := make(chan struct{}), make(chan error, 1)
+	go func() { result <- agent.Wait(); close(done) }()
+	t.Cleanup(func() {
+		_ = agent.Process.Signal(syscall.SIGTERM)
+		select {
+		case <-done:
+		case <-time.After(7 * time.Second):
+			_ = agent.Process.Kill()
+			<-done
+			t.Error("SLI agent exceeded its shutdown bound")
+		}
+	})
+	return done, result
 }
 
 func createSLIJourneyDatasource(t *testing.T, binary, dir string, journey connectedAgentJourney, endpoint string, caPEM []byte) string {

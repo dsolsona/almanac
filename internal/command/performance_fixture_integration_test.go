@@ -38,25 +38,21 @@ type performanceFleet struct {
 	traceURL      string
 	reserveDetail bool
 	seedSources   map[string]int64
+	resumed       bool
 }
 
-func newPerformanceFleet(t *testing.T, ctx context.Context, size int) performanceFleet {
+func newPerformanceFleet(t *testing.T, ctx context.Context, size int, retained *performanceRetainedFixture) performanceFleet {
 	t.Helper()
 	if size != 1 && size != 10 && size != 100 && size != 1000 {
 		t.Fatal("controlled performance requires 1,10,100 or1000 independent measurements/objectives")
 	}
+	if retained != nil {
+		return resumePerformanceFleet(t, ctx, size, *retained)
+	}
 	started := time.Now()
 	f := startPerformanceComposeFixture(t)
 	traceURL := "http://127.0.0.1:" + f.backend.deployment.tracesPort
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", traceURL+"/insert/opentelemetry/v1/traces")
-	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
-	t.Setenv("OTEL_SDK_DISABLED", "false")
-	// Capture agent/CLI parents fully. The backend separately samples bulk-seed
-	// background roots until the measured acceptance stages enable full capture.
-	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
-	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "1")
-	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
+	configurePerformanceTracing(t, traceURL)
 	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL, reserveDetail: true}
 	agentCount := min(size, 10)
 	for index := range agentCount {
@@ -123,6 +119,18 @@ FROM public.almanac_users WHERE login='sli-owner' RETURNING id::text`, login).Sc
 	}
 	fleet.setup = time.Since(started)
 	return fleet
+}
+
+func configurePerformanceTracing(t *testing.T, traceURL string) {
+	t.Helper()
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", traceURL+"/insert/opentelemetry/v1/traces")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_SDK_DISABLED", "false")
+	// Agent/CLI parents are captured fully; bulk-seed backend roots sample separately.
+	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "1")
+	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
 }
 
 func loginPerformanceReader(t *testing.T, fleet performanceFleet, index int, identity string) performanceReader {
