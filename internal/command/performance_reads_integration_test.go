@@ -33,7 +33,7 @@ func runPerformanceReadyPhase(ctx context.Context, fleet performanceFleet, name 
 			report.Failures = append(report.Failures, err.Error())
 			return prepared, false
 		}
-		reads, err := samplePerformanceReads(ctx, fleet.readers, operation)
+		reads, err := samplePerformanceReads(ctx, fleet.readers, operation, prepared)
 		report.Reads = append(report.Reads, reads)
 		if err != nil {
 			report.Failures = append(report.Failures, err.Error())

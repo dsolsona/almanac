@@ -56,6 +56,7 @@ type performanceOperation struct {
 
 type performancePreparationSample struct {
 	Target      int           `json:"target"`
+	Started     time.Time     `json:"started"`
 	Elapsed     time.Duration `json:"elapsed_ns"`
 	Pending     int           `json:"pending_responses"`
 	Status      int           `json:"status"`
@@ -67,7 +68,7 @@ type performancePreparationSample struct {
 
 func preparePerformanceTarget(ctx context.Context, reader performanceReader, operation performanceOperation, target int) performancePreparationSample {
 	started := time.Now()
-	sample := performancePreparationSample{Target: target}
+	sample := performancePreparationSample{Target: target, Started: started.UTC()}
 	requestContext, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	request, err := reader.Request(requestContext, operation.Paths[target])
@@ -110,8 +111,8 @@ func preparePerformanceTarget(ctx context.Context, reader performanceReader, ope
 		}
 	case operation.Check(target, body) != nil:
 		sample.Failure = "response_contract"
-	case sample.Elapsed >= operation.Budget:
-		sample.Failure = "first_request_budget"
+	case sample.Elapsed >= time.Second:
+		sample.Failure = "first_request_navigation_budget"
 	default:
 		sample.Body = body
 	}
@@ -119,6 +120,7 @@ func preparePerformanceTarget(ctx context.Context, reader performanceReader, ope
 }
 
 type performanceSample struct {
+	First   bool          `json:"first_visit"`
 	Actor   int           `json:"actor"`
 	Target  int           `json:"target"`
 	Started time.Time     `json:"started"`
@@ -160,7 +162,7 @@ func performancePercentiles(values []time.Duration) performanceDistribution {
 	return performanceDistribution{Count: len(ordered), P50: percentile(.50), P95: percentile(.95), P99: percentile(.99), Max: ordered[len(ordered)-1]}
 }
 
-func samplePerformanceReads(ctx context.Context, readers []performanceReader, operation performanceOperation) (performanceReadReport, error) {
+func samplePerformanceReads(ctx context.Context, readers []performanceReader, operation performanceOperation, first []performancePreparationSample) (performanceReadReport, error) {
 	report := performanceReadReport{Operation: operation.Name}
 	if len(readers) != performanceUsers || operation.Name == "" || len(operation.Paths) == 0 || operation.Budget <= 0 || operation.Check == nil {
 		return report, errors.New("controlled reads require ten users, named targets, a budget and result validation")
@@ -172,15 +174,23 @@ func samplePerformanceReads(ctx context.Context, readers []performanceReader, op
 		}
 		identities[reader.Identity] = true
 	}
-	report.Samples = make([]performanceSample, performanceReadsPerOperation)
+	report.Samples = make([]performanceSample, len(first)+performanceReadsPerOperation)
+	for index, sample := range first {
+		if sample.Failure != "" || sample.Status != http.StatusOK || sample.Pending != 0 || sample.Elapsed <= 0 || sample.Elapsed >= time.Second {
+			return report, errors.New("first visit was unsuccessful or exceeded the navigation limit")
+		}
+		report.Samples[index] = performanceSample{First: true, Actor: sample.Target % performanceUsers, Target: sample.Target,
+			Started: sample.Started, Elapsed: sample.Elapsed, Status: sample.Status, Bytes: len(sample.Body)}
+	}
 	start := make(chan struct{})
 	var workers sync.WaitGroup
 	for actor, reader := range readers {
 		workers.Go(func() {
 			<-start
 			for turn := range performanceReadsPerOperation / performanceUsers {
-				index := turn*performanceUsers + actor
-				target := index % len(operation.Paths)
+				turnIndex := turn*performanceUsers + actor
+				index := len(first) + turnIndex
+				target := turnIndex % len(operation.Paths)
 				started := time.Now()
 				sample := performanceSample{Actor: actor, Target: target, Started: started.UTC()}
 				// Bound the whole exchange, including validation and response reads;
@@ -219,10 +229,15 @@ func samplePerformanceReads(ctx context.Context, readers []performanceReader, op
 	}
 	started := time.Now()
 	report.Started = started.UTC()
+	for _, sample := range first {
+		if !sample.Started.IsZero() && sample.Started.Before(report.Started) {
+			report.Started = sample.Started
+		}
+	}
 	close(start)
 	workers.Wait()
 	report.Ended = time.Now().UTC()
-	report.Wall = time.Since(started)
+	report.Wall = report.Ended.Sub(report.Started)
 	durations := make([]time.Duration, len(report.Samples))
 	for index, sample := range report.Samples {
 		durations[index] = sample.Elapsed

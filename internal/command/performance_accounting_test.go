@@ -141,7 +141,7 @@ func TestPerformanceReadyReadAccounting(t *testing.T) {
 		}
 		return nil
 	}}
-	report, err := samplePerformanceReads(t.Context(), readers, operation)
+	report, err := samplePerformanceReads(t.Context(), readers, operation, nil)
 	if err != nil || report.Failures != 0 || report.Latency.Count != 100 || report.Wall <= 0 || report.Invocation <= 0 || report.Ended.Before(report.Started) {
 		t.Fatalf("ready accounting failed: report=%+v err=%v", report, err)
 	}
@@ -150,19 +150,41 @@ func TestPerformanceReadyReadAccounting(t *testing.T) {
 			t.Fatalf("actor %d did not issue exactly ten reads", actor)
 		}
 	}
+	operation.Budget = 500 * time.Millisecond
+	first := make([]performancePreparationSample, 9)
+	for index := range first {
+		first[index] = performancePreparationSample{Target: 0, Status: http.StatusOK, Elapsed: 450 * time.Millisecond}
+		if index < 5 {
+			first[index].Elapsed = 550 * time.Millisecond
+		}
+	}
+	report, err = samplePerformanceReads(t.Context(), readers, operation, first)
+	if err != nil || report.Latency.Count != 109 || report.Latency.Max != 550*time.Millisecond || report.Latency.P95 > operation.Budget || !report.Samples[0].First {
+		t.Fatal("first visits were omitted or the p95 budget became a per-request maximum")
+	}
+	first[5].Elapsed = 550 * time.Millisecond
+	report, err = samplePerformanceReads(t.Context(), readers, operation, first)
+	if err == nil || report.Latency.P95 <= operation.Budget {
+		t.Fatal("slow first visits did not fail the combined p95 budget")
+	}
+	first[0].Elapsed = time.Second
+	if _, err := samplePerformanceReads(t.Context(), readers, operation, first); err == nil {
+		t.Fatal("one-second first visit was hidden in the percentile")
+	}
+	operation.Budget = time.Second
 	operation.Paths = []string{"/pending", "/ready"}
-	report, err = samplePerformanceReads(t.Context(), readers, operation)
+	report, err = samplePerformanceReads(t.Context(), readers, operation, nil)
 	if err == nil || report.Failures != 50 || report.Latency.Count != 100 {
 		t.Fatalf("pending responses were retried or hidden: failures=%d count=%d err=%v", report.Failures, report.Latency.Count, err)
 	}
 	operation.Paths = []string{"/ready"}
 	operation.Check = func(int, []byte) error { return errors.New("malformed provenance") }
-	report, err = samplePerformanceReads(t.Context(), readers, operation)
+	report, err = samplePerformanceReads(t.Context(), readers, operation, nil)
 	if err == nil || report.Failures != 100 || report.Samples[0].Failure != "response_contract" {
 		t.Fatal("successful status hid invalid response data")
 	}
 	readers[1].Identity = readers[0].Identity
-	if _, err := samplePerformanceReads(t.Context(), readers, operation); err == nil {
+	if _, err := samplePerformanceReads(t.Context(), readers, operation, nil); err == nil {
 		t.Fatal("duplicate users accepted as ten-user concurrency")
 	}
 }

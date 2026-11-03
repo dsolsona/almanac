@@ -63,7 +63,7 @@ func performanceRetentionExpiry(ctx context.Context, fleet performanceFleet) (pe
 		report.Failures = append(report.Failures, err.Error())
 		return report, err
 	}
-	reads, err := samplePerformanceReads(ctx, fleet.readers, operation)
+	reads, err := samplePerformanceReads(ctx, fleet.readers, operation, nil)
 	report.Reads = append(report.Reads, reads)
 	if err != nil {
 		report.Failures = append(report.Failures, err.Error())

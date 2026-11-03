@@ -212,6 +212,13 @@ The foundation provides these fixed entry points:
 | `make preview` | Local catalogue on port 5198 |
 | `make verify VERIFY_MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes |
 
+Controlled API distributions include each operation's first visits alongside its
+100 repeat reads, with explicit first-visit markers and retained maxima. Enforce
+SPEC-0019's 200/500 ms **p95** budgets across that complete sample set; do not
+exclude first visits or reinterpret a percentile as a per-request maximum.
+First visits must still complete below one second, and every rendered browser
+sample independently retains its action-specific hard limit.
+
 The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy
 imports in already-open tabs. The production smoke uses port 5199. Checks require completed
