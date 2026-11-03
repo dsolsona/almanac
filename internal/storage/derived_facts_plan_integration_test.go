@@ -125,6 +125,70 @@ func (c *factsQueryCapture) Query(_ context.Context, statement string, arguments
 	return nil, errFactsQueryCaptured
 }
 
+func (c *factsQueryCapture) QueryRow(_ context.Context, statement string, arguments ...any) pgx.Row {
+	c.statement, c.arguments = statement, append([]any(nil), arguments...)
+	return factsCapturedRow{}
+}
+
+type factsCapturedRow struct{}
+
+func (factsCapturedRow) Scan(...any) error { return errFactsQueryCaptured }
+
+func verifyPreparedHistoryLookup(t *testing.T, conn *pgx.Conn, generation string, now time.Time) {
+	t.Helper()
+	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(now)}
+	if err := conn.QueryRow(t.Context(), `SELECT g.slo_id,g.definition_revision,g.measurement_revision,g.source_generation,
+g.evaluated_through,b.range_start,b.range_end,b.burn_window_seconds,g.calculation_version,g.retention_start,b.kind
+FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
+WHERE g.id=$1`, generation).Scan(&key.SloID, &key.DefinitionRevision, &key.MeasurementRevision, &key.SourceGeneration,
+		&key.EvaluatedThrough, &key.RangeStart, &key.RangeEnd, &key.BurnWindowSeconds, &key.CalculationVersion, &key.RetentionStart, &key.Kind); err != nil {
+		t.Fatal(err)
+	}
+	capture := &factsQueryCapture{}
+	if _, err := dbgen.New(capture).FindPreparedSloHistory(t.Context(), key); !errors.Is(err, errFactsQueryCaptured) {
+		t.Fatal("capture prepared history lookup failed", err)
+	}
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_nestloop=off"); err != nil {
+		t.Fatal(err)
+	}
+	var body []byte
+	if err := tx.QueryRow(t.Context(), "EXPLAIN (FORMAT JSON) "+capture.statement, capture.arguments...).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	type node struct {
+		CTE        string `json:"CTE Name"`
+		Filter     string `json:"Filter"`
+		JoinFilter string `json:"Join Filter"`
+		Plans      []node `json:"Plans"`
+	}
+	var plan []struct{ Plan node }
+	if err := json.Unmarshal(body, &plan); err != nil || len(plan) != 1 {
+		t.Fatal("invalid prepared history lookup plan", err)
+	}
+	checks := 0
+	var inspect func(node)
+	inspect = func(n node) {
+		if strings.Contains(n.Filter+n.JoinFilter, "sha256") {
+			if n.CTE != "candidates" {
+				t.Fatal("cache lookup hashes unrelated response payloads before generation/range selection")
+			}
+			checks++
+		}
+		for _, child := range n.Plans {
+			inspect(child)
+		}
+	}
+	inspect(plan[0].Plan)
+	if checks != 1 {
+		t.Fatal("cache lookup omitted bounded payload integrity validation")
+	}
+}
+
 func (c *factsQueryCapture) Exec(_ context.Context, statement string, arguments ...any) (pgconn.CommandTag, error) {
 	c.statement, c.arguments = statement, append([]any(nil), arguments...)
 	return pgconn.CommandTag{}, errFactsQueryCaptured

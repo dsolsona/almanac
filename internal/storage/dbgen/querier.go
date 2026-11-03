@@ -98,6 +98,7 @@ type Querier interface {
 	FindDatasourceDiagnosticReceipt(ctx context.Context, arg FindDatasourceDiagnosticReceiptParams) (FindDatasourceDiagnosticReceiptRow, error)
 	FindDatasourceReceipt(ctx context.Context, arg FindDatasourceReceiptParams) (FindDatasourceReceiptRow, error)
 	FindObjectiveCreateReceipt(ctx context.Context, arg FindObjectiveCreateReceiptParams) (FindObjectiveCreateReceiptRow, error)
+	// Select metadata before detoasting/hashing payloads from unrelated generations.
 	FindPreparedSloHistory(ctx context.Context, arg FindPreparedSloHistoryParams) (FindPreparedSloHistoryRow, error)
 	FindReusableSloOverviewSnapshot(ctx context.Context, arg FindReusableSloOverviewSnapshotParams) (pgtype.UUID, error)
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)

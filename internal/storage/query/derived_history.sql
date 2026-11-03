@@ -1,5 +1,7 @@
 -- name: FindPreparedSloHistory :one
-SELECT b.payload, g.id AS generation_id, g.published_at
+-- Select metadata before detoasting/hashing payloads from unrelated generations.
+WITH candidates AS MATERIALIZED (
+SELECT b.payload, b.payload_digest, g.id AS generation_id, g.published_at
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
 WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
@@ -7,11 +9,13 @@ WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
   AND g.retention_start=sqlc.arg(retention_start)
   AND g.published_at>=sqlc.arg(now)::timestamptz-interval '5 minutes'
   AND g.source_generation=$4 AND g.evaluated_through=$5
-  AND b.payload->'history_preparation' IS NULL
   AND b.range_start=$6 AND b.range_end=$7 AND b.burn_window_seconds=$8
   AND b.kind=sqlc.arg(kind)
-  AND b.payload_digest=sha256(convert_to(b.payload::text,'UTF8'))
-ORDER BY g.published_at DESC LIMIT 1;
+)
+SELECT payload,generation_id,published_at FROM candidates
+WHERE payload->'history_preparation' IS NULL
+  AND payload_digest=sha256(convert_to(payload::text,'UTF8'))
+ORDER BY published_at DESC LIMIT 1;
 
 -- name: DeleteCorruptPreparedSloHistory :execrows
 DELETE FROM public.almanac_slo_history_blocks WHERE generation_id=$1;

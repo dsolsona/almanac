@@ -375,6 +375,7 @@ FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generat
 WHERE g.id=ANY($1::uuid[])`, published).Scan(&invalidMetadata, &cached); err != nil || invalidMetadata != 0 || cached != len(published) {
 		t.Fatalf("published history metadata differs from its immutable payload: invalid=%d cached=%d expected=%d error=%v", invalidMetadata, cached, len(published), err)
 	}
+	verifyPreparedHistoryLookup(t, conn, published[0], input.Now())
 	userID, err := dbgen.New(conn).FindAgentSessionUserID(t.Context(), input.Proof.SessionVerifier[:])
 	if err != nil {
 		t.Fatal(err)

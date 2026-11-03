@@ -52,6 +52,16 @@ pending. See [F3-T08](tasks/F3-T08.md) for evidence and retained failures.
 govern [F3-T08](tasks/F3-T08.md), in progress on `perf/f3-t08-retained-series`
 in `.worktrees/backend-performance`, based on merged main `6d7403d`.
 
+Current run twelve on `935f53b` passes the one-SLO year-history checkpoint and
+ten-SLO 56-day reads/plans, then fails cold graph latency and two database
+admission timeouts after restart. The preserved dataset exposes cache-lookup
+payload hashing before generation/range selection. A metadata-first SQL fix
+passes its reproduced-failure regression and focused storage checks. Thirty-six
+diagnostic cold requests take 163–400 ms, with four connected cache-miss traces
+and exact pinned-table comparisons. These use the existing 56-day dataset, one
+reader and stopped agents; full fleet/year/live/rendered acceptance and matching
+final broad gates remain outstanding.
+
 Earlier product candidate `7078957` passes the complete PostgreSQL/API gate:
 173 cases in 957.340 seconds, including exact retained 14/56-day calculations,
 persisted restart, audited cleanup, authentication, agent and real browser journeys.
