@@ -226,6 +226,31 @@ SELECT $2::uuid,revision,service_id,sli_id,measurement_revision,target,rolling_w
 			t.Fatal("preserve retained fixture series failed", err)
 		}
 	}
+	// Compliance embeds its objective identity in both fine and encoded summaries.
+	if _, err := tx.Exec(fleet.ctx, `UPDATE public.almanac_slo_series_tiles
+SET payload=jsonb_set(payload,'{compliance,slo_id}',to_jsonb($1::text),false)
+WHERE slo_id=$1::uuid AND resolution_seconds=86400 AND jsonb_typeof(payload->'compliance')='object'`, replacement); err != nil {
+		t.Fatal("retarget retained fixture compliance failed", err)
+	}
+	if _, err := tx.Exec(fleet.ctx, `UPDATE public.almanac_slo_series_tiles SET compact_payload=
+jsonb_set(jsonb_set(jsonb_set(jsonb_set(compact_payload,
+ '{wire,compliance}',to_jsonb((payload->'compliance')::text),false),
+ '{fine_wire,compliance}',to_jsonb((payload->'compliance')::text),false),
+ '{tile,compliance}',payload->'compliance',false),
+ '{payload_digest}',to_jsonb(encode(payload_digest,'hex')),true)
+WHERE slo_id=$1::uuid AND resolution_seconds=86400 AND jsonb_typeof(payload->'compliance')='object'
+AND compact_payload IS NOT NULL`, replacement); err != nil {
+		t.Fatal("retarget encoded fixture compliance failed", err)
+	}
+	var incorrect int
+	if err := tx.QueryRow(fleet.ctx, `SELECT count(*) FROM public.almanac_slo_series_tiles
+WHERE slo_id=$1::uuid AND resolution_seconds=86400 AND jsonb_typeof(payload->'compliance')='object'
+AND (payload->'compliance'->>'slo_id' IS DISTINCT FROM $1::text
+ OR compact_payload ? 'wire' AND (compact_payload->'wire'->>'compliance')::jsonb->>'slo_id' IS DISTINCT FROM $1::text
+ OR compact_payload ? 'fine_wire' AND (compact_payload->'fine_wire'->>'compliance')::jsonb->>'slo_id' IS DISTINCT FROM $1::text
+ OR compact_payload IS NOT NULL AND compact_payload->>'payload_digest' IS DISTINCT FROM encode(payload_digest,'hex'))`, replacement).Scan(&incorrect); err != nil || incorrect != 0 {
+		t.Fatal("retained compliance identity or digest differs after fixture renewal", err)
+	}
 	for _, table := range []string{"almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_history_jobs", "almanac_slo_display_blocks", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
 		column := "slo_id"
 		if table == "almanac_slos" {
