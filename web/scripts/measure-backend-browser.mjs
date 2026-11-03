@@ -122,8 +122,10 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     }
     const id = location.pathname.split('/').at(-1);
     const status = documents.get(`/api/v1/slos/${id}/status`)?.value;
-    const history = documents.get(`/api/v1/slos/${id}/operational`);
     const burn = params.get('burn_window') === '21600' ? 21600 : 3600;
+    const period=['7d','90d','1y'].includes(params.get('range'))?params.get('range'):'window';
+    // A restored cached graph belongs to its selected request, not the last fetch.
+    const history=requests.get(requestKey(`/api/v1/slos/${id}/operational`,new URLSearchParams({period,burn_window_seconds:String(burn)})));
     const fact=label=>[...document.querySelectorAll('.app-status-facts>div')].find(row=>row.querySelector('dt')?.textContent===label)?.querySelector('dd')?.textContent;
     const statusReady = status?.slo.id === id && validGeneration(status.generation) && status.generation.evaluated_through===status.current.evaluation_at && visible(document.querySelector('.app-status-facts')) && document.querySelector('[aria-label="Refresh objective status"]')?.getAttribute('aria-busy') !== 'true' && document.querySelector('.app-budget-hero')?.textContent === percent(status.current.performance.remaining_fraction)
       &&fact('Attainment')===percent(status.current.performance.attainment)&&fact('Target')===`${Number(status.slo.target)*100}%`&&fact('Burn 1 h')===multiple(status.burn_1h.performance.burn)&&fact('Burn 6 h')===multiple(status.burn_6h.performance.burn)&&fact('Bad events left')===decimal(status.current.performance.remaining_budget);
@@ -132,7 +134,6 @@ function installMeasurements({ fleetSize, datasourceIDs, serviceID }) {
     const windowDays=Math.max(1,Math.min(365,Math.round(value.objective.rolling_window_seconds/86400)));
     const ranges=['7d',`${windowDays}d`,'90d','1y'],range=ranges.includes(params.get('range'))?params.get('range'):`${windowDays}d`;
     const days=range==='1y'?365:Number.parseInt(range,10),cadence=value.objective.cadence_seconds*1000;
-    const period=['7d','90d','1y'].includes(params.get('range'))?params.get('range'):'window';
     const end=Math.floor(Date.parse(value.requested_at)/cadence)*cadence,start=Math.ceil((end-days*86400000)/cadence)*cadence;
     const rangeReady=history.query.get('period')===period&&!history.query.has('start')&&!history.query.has('end')&&!history.query.has('at')&&Number.isFinite(end)&&Date.parse(value.range.requested_start)===start&&Date.parse(value.range.requested_end)===end&&Date.parse(value.range.effective_start)===start&&Date.parse(value.range.effective_end)===end&&Date.parse(value.generation.evaluated_through)===end&&Date.parse(value.effective_at)===end&&value.generation.definition_revision===value.objective.definition_revision&&value.generation.measurement_revision===value.context.measurement_revision;
     const laneValues=[...document.querySelectorAll('.app-lane-value')].map(node=>node.textContent);
@@ -479,6 +480,7 @@ try {
     }
     report.interactions.push(sample);
     await writeFile(join(output, 'browser-performance.json'), JSON.stringify(report) + '\n', { mode: 0o600 });
+    if(sample.failure)throw new Error('rendered interaction failed');
   }
   report.interaction_resources = await browserTimings(page);
   if (report.interaction_resources.fetches.some(fetch=>fetch.status===503)) report.failures.push('interaction-preparation-wait');
