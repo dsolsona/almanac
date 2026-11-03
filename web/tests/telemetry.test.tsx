@@ -8,19 +8,44 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BrowserTraceOutbox } from '../src/telemetry/outbox.ts';
 import { installTelemetry, telemetrySession, journeyContentReady, traceChartRender, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
 
-const exported = vi.hoisted(() => ({ bodies: [] as string[], failures: [] as unknown[] }));
+const exported = vi.hoisted(() => ({ bodies: [] as string[], failures: [] as unknown[], hold: false, release: [] as (() => void)[] }));
 vi.mock('@opentelemetry/exporter-trace-otlp-http', async () => {
   const { JsonTraceSerializer } = await import('@opentelemetry/otlp-transformer');
   return { OTLPTraceExporter: class {
+    private pending = new Set<Promise<void>>();
     export(spans: ReadableSpan[], callback: (result: { code: number }) => void) {
       try {
         const body = JsonTraceSerializer.serializeRequest(spans);
         exported.bodies.push(new TextDecoder().decode(body));
-        callback({ code: 0 });
+        if (exported.hold) {
+          const pending = new Promise<void>(resolve => exported.release.push(() => { callback({ code: 0 }); resolve(); }));
+          this.pending.add(pending);
+          void pending.then(() => this.pending.delete(pending));
+        } else callback({ code: 0 });
       } catch (error) { exported.failures.push(error); throw error; }
     }
     async shutdown() {}
+    async forceFlush() { await Promise.all(this.pending); }
   } };
+});
+
+it('waits for an automatic export already in flight before confirming a flush', async () => {
+  stop = installTelemetry();
+  telemetrySession({ csrf_token: 'fixture-csrf', session: { user_id: 'fixture-user', restricted: false } });
+  exported.hold = true;
+  for (let index = 0; index < 64; index++) traceChartRender(() => {});
+  expect(exported.release).toHaveLength(1);
+  let settled = false;
+  const flushing = flushTelemetry().then(() => { settled = true; });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(settled, 'flush returned while an automatic export was still pending').toBe(false);
+  } finally {
+    exported.hold = false;
+    for (const release of exported.release.splice(0)) release();
+    await flushing;
+  }
+  expect(settled).toBe(true);
 });
 
 let stop: (() => Promise<void>) | undefined;

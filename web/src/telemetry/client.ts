@@ -243,7 +243,11 @@ export function installTelemetry() {
       batch.onEnd(span);
       if (/^ui\.(?:sli|slo)\.(?:list|detail)$/.test(span.name)) exportEvent([span], (span.spanContext().traceFlags & 1) === 0 ? 'unsampled' : droppedSpans > previousDrops ? 'queue_full' : 'queued');
     },
-    forceFlush: () => batch.forceFlush(),
+    forceFlush: async () => {
+      await batch.forceFlush();
+      // Automatic batches may already be exporting outside the processor queue.
+      await exporter.forceFlush();
+    },
     shutdown: () => batch.shutdown(),
   };
   provider = new TracerProvider({ resource: resourceFromAttributes({ 'service.name': 'almanac-web', 'service.version': new URL(import.meta.url).pathname.split('/').pop() ?? 'unknown', 'deployment.environment.name': import.meta.env.MODE }), sampler: new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(ratio) }), spanLimits: { attributeCountLimit: 16, attributeValueLengthLimit: 128, eventCountLimit: 0, linkCountLimit: 0 }, spanProcessors: [observed] });
