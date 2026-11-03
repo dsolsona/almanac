@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"reflect"
 	"slices"
@@ -11,6 +12,23 @@ import (
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
+
+func TestRetainedDailyReusesTheProtectedGraphRead(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+	day := api.SloDailyComplianceDay{DayStart: start, DayEnd: end, DefinitionRevision: "1", Status: "met"}
+	payload, err := json.Marshal(day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := retainedSeriesReader{parts: []retainedReadPart{{start: start, end: end, resolution: 86400}},
+		stored: []dbgen.ReadRetainedPartsRow{{Ordinal: 1, RangeStart: timestamp(start), RangeEnd: timestamp(end), Ready: true, CompliancePayload: payload}}}
+	// No query handle: a second database read cannot satisfy this cached day.
+	series, summary, err := reader.daily(t.Context(), slo.WindowInput{Cadence: time.Minute}, start, end, end, day.SloId, "1", "0.99", 24*time.Hour, time.Minute)
+	if err != nil || len(series.Days) != 1 || series.Days[0].Status != "met" || !series.Days[0].DayEnd.Equal(end) || summary.MetDays != 1 || summary.EvaluableDays != 1 {
+		t.Fatal("daily compliance did not reuse the coherent graph result", err)
+	}
+}
 
 func TestRetainedDenseYearKeepsExactExtremaAndDisclosesMissingCoverage(t *testing.T) {
 	start := time.Date(2025, 11, 1, 0, 0, 0, 0, time.UTC)

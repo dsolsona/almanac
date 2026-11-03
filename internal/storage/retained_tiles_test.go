@@ -59,7 +59,11 @@ func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 	if json.Unmarshal(body, &summary) != nil || summary.SourceGeneration != 7 || summary.Transitions != ([4]int32{7, 7, 7, 7}) {
 		t.Fatal("summary changed the source or independent quality-transition count")
 	}
-	for _, lane := range [][]api.SloOperationalSample{summary.Tile.Attainment, summary.Tile.Budget, summary.Tile.Burn1h, summary.Tile.Burn6h} {
+	for _, name := range []string{"attainment", "budget", "burn_1h", "burn_6h"} {
+		var lane []api.SloOperationalSample
+		if err := json.Unmarshal([]byte(summary.Wire[name]), &lane); err != nil {
+			t.Fatal("summary wire is invalid", err)
+		}
 		if len(lane) != 3 || !lane[0].EvaluationAt.Equal(start.Add(time.Minute)) || !lane[1].EvaluationAt.Equal(start.Add(10*time.Minute)) || !lane[2].EvaluationAt.Equal(start.Add(24*time.Hour)) {
 			t.Fatal("summary lost the first, last or exact unrounded extrema")
 		}

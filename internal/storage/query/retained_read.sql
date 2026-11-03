@@ -20,7 +20,7 @@ WITH lanes AS (
            sqlc.arg(compliance_only)::boolean AS compliance_only,t.payload AS tile_payload,
            CASE WHEN t.compact_payload->>'payload_digest'=encode(t.payload_digest,'hex')
                   AND t.compact_payload->>'source_generation'=t.source_generation::text
-                THEN t.compact_payload END AS preview,
+                THEN jsonb_strip_nulls(t.compact_payload) END AS preview,
            coalesce(GREATEST(t.source_generation,
                CASE WHEN checkpoint.coherent_through>=to_timestamp(floor(extract(epoch FROM r.range_end)/o.cadence_seconds)*o.cadence_seconds)
                     THEN checkpoint.coherent_source_generation ELSE 0 END),0)::bigint AS source_generation,
@@ -115,7 +115,16 @@ WITH lanes AS (
 ), projected AS MATERIALIZED (
     SELECT s.ordinal,s.range_start,s.range_end,s.resolution,s.source_generation,s.published_at,s.point_count,s.exhausted,s.ready,
       convert_to((CASE WHEN NOT s.ready THEN NULL
-        WHEN s.compliance_only AND s.present_id IS NOT NULL THEN coalesce(coalesce(s.preview->'tile',s.tile_payload)->'compliance','null'::jsonb)
+        WHEN s.compliance_only AND s.present_id IS NOT NULL THEN coalesce(s.preview->'wire'->>'compliance',
+          (coalesce(s.preview->'tile',s.tile_payload)->'compliance')::text,'null')
+        WHEN s.preview ? 'wire' THEN (
+          SELECT '{' || string_agg(to_json(lane.key)::text || ':' ||
+            CASE WHEN n.samples<=1500 AND (s.preview->'transitions'->>lane.lane_index)::integer>0
+                 THEN jsonb_strip_nulls(s.tile_payload->lane.key)::text
+                 ELSE s.preview->'wire'->>lane.key END,',') ||
+            ',"compliance":' || coalesce(s.preview->'wire'->>'compliance','null') || '}'
+          FROM lanes lane JOIN lane_counts n ON n.key=lane.key
+        )
         ELSE jsonb_strip_nulls(coalesce(s.preview->'tile',s.tile_payload) || coalesce(coarse.payload,'{}'::jsonb) ||
           CASE WHEN s.preview IS NOT NULL THEN (
             SELECT jsonb_object_agg(lane.key,
@@ -123,14 +132,18 @@ WITH lanes AS (
                    THEN s.tile_payload->lane.key ELSE coalesce(s.preview->'tile',s.tile_payload)->lane.key END)
             FROM lanes lane
             JOIN lane_counts n ON n.key=lane.key
-          ) ELSE '{}'::jsonb END)
-        END)::text,'UTF8') AS payload
+          ) ELSE '{}'::jsonb END)::text
+        END),'UTF8') AS payload,
+      CASE WHEN s.ready AND s.resolution=86400 AND NOT s.compliance_only THEN
+        convert_to(coalesce(s.preview->'wire'->>'compliance',
+          (coalesce(s.preview->'tile',s.tile_payload)->'compliance')::text,'null'),'UTF8') END AS compliance_payload
     FROM selected s LEFT JOIN coarse_tiles coarse ON coarse.ordinal=s.ordinal
 ), bounded AS (
-SELECT *,coalesce(sum(octet_length(payload)) OVER (),0)::bigint AS payload_bytes FROM projected
+SELECT *,coalesce(sum(octet_length(payload)+coalesce(octet_length(compliance_payload),0)) OVER (),0)::bigint AS payload_bytes FROM projected
 )
 SELECT ordinal,range_start,range_end,resolution,
        CASE WHEN payload_bytes<=20971520 THEN coalesce(payload,'{}'::bytea) ELSE '{}'::bytea END::bytea AS payload,
+       CASE WHEN payload_bytes<=20971520 THEN coalesce(compliance_payload,''::bytea) ELSE ''::bytea END::bytea AS compliance_payload,
        payload_bytes,source_generation,published_at,point_count,exhausted,ready
 FROM bounded ORDER BY ordinal;
 

@@ -14,9 +14,9 @@ import (
 )
 
 type retainedTileSummary struct {
-	SourceGeneration int64            `json:"source_generation"`
-	Transitions      [4]int32         `json:"transitions"`
-	Tile             *retainedSloTile `json:"tile,omitempty"`
+	SourceGeneration int64             `json:"source_generation"`
+	Transitions      [4]int32          `json:"transitions"`
+	Wire             map[string]string `json:"wire,omitempty"`
 }
 
 func marshalRetainedTileSummary(tile retainedSloTile, start, end time.Time, target string, generation int64) ([]byte, error) {
@@ -37,7 +37,14 @@ func marshalRetainedTileSummary(tile retainedSloTile, start, end time.Time, targ
 		if err != nil {
 			return nil, err
 		}
-		summary.Tile = &compact
+		summary.Wire = make(map[string]string, 5)
+		for name, value := range map[string]any{"attainment": compact.Attainment, "budget": compact.Budget, "burn_1h": compact.Burn1h, "burn_6h": compact.Burn6h, "compliance": compact.Compliance} {
+			body, err := json.Marshal(value)
+			if err != nil {
+				return nil, err
+			}
+			summary.Wire[name] = string(body)
+		}
 	}
 	return json.Marshal(summary)
 }

@@ -190,6 +190,10 @@ source generation and payload digest before use. Preserve finer points whenever
 they fit the response limit; missing or stale summaries use the bounded legacy
 read path. Representation upgrades reuse low-priority, bounded background work;
 they neither invalidate ready measurements nor block normal data publication.
+Encode coarse series during publication rather than reconstructing their JSON on
+each read. Reuse completed daily compliance from the same protected graph read,
+fetching only days absent from that read. Include every transferred payload in the
+shared wire budget; retain source, readiness, null and expiry checks during reuse.
 
 Use separate live, interactive and derived/historical connection admission as in
 ADR-0024. Initial interactive pool acquisition timeout is 250 ms, statement timeout

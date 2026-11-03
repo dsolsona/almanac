@@ -41,6 +41,7 @@ sql:
       - internal/storage/migrations/0035_coverage_revision_time_index.sql
       - internal/storage/migrations/0036_retained_coherent_checkpoint.sql
       - internal/storage/migrations/0037_retained_tile_summaries.sql
+      - internal/storage/migrations/0038_retained_summary_wire.sql
     gen:
       go:
         package: dbgen

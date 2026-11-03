@@ -5,8 +5,11 @@ package storage
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
+	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +101,26 @@ ORDER BY range_start DESC LIMIT 1`, params.SloID, params.DefinitionRevision, par
 	for i := range parts {
 		params.Starts[i], params.Ends[i], params.Resolutions[i] = timestamp(start), timestamp(end), 86400
 	}
+	capture := &factsQueryCapture{}
+	if _, err := dbgen.New(capture).ReadRetainedParts(ctx, params); !errors.Is(err, errFactsQueryCaptured) {
+		t.Fatal("capture retained graph query failed", err)
+	}
+	var plan []byte
+	if err := conn.QueryRow(ctx, "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) "+capture.statement, capture.arguments...).Scan(&plan); err != nil {
+		t.Fatal("retained graph projection plan failed", err)
+	}
+	if strings.Contains(string(plan), `"Relation Name": "almanac_sli_coverage`) || strings.Contains(string(plan), `"Relation Name": "almanac_sli_observation_values`) {
+		t.Fatal("ready retained graph query scanned canonical observations")
+	}
+	artifact, err := os.CreateTemp("../../.local", "retained-graph-plan-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = artifact.Write(plan)
+	if err := errors.Join(err, artifact.Close()); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("retained graph projection plan: %s", artifact.Name())
 	rows, err := dbgen.New(conn).ReadRetainedParts(ctx, params)
 	if err != nil || len(rows) != parts {
 		t.Fatalf("bounded coarse wire: %v", err)
@@ -106,7 +129,11 @@ ORDER BY range_start DESC LIMIT 1`, params.SloID, params.DefinitionRevision, par
 	if err := json.Unmarshal(rows[0].Payload, &projected); err != nil {
 		t.Fatal(err)
 	}
-	if rows[0].PayloadBytes != int64(parts*len(rows[0].Payload)) || rows[0].PayloadBytes > 20<<20 || !rows[0].Ready || rows[parts-1].Ordinal != parts {
+	var compliance *api.SloDailyComplianceDay
+	if err := json.Unmarshal(rows[0].CompliancePayload, &compliance); err != nil || !reflect.DeepEqual(compliance, original.Compliance) {
+		t.Fatal("reusable compliance payload changed the stored daily value", err)
+	}
+	if rows[0].PayloadBytes != int64(parts*(len(rows[0].Payload)+len(rows[0].CompliancePayload))) || rows[0].PayloadBytes > 20<<20 || !rows[0].Ready || rows[parts-1].Ordinal != parts {
 		t.Fatal("coarse wire changed actual byte accounting, readiness or ordinals")
 	}
 	for _, lane := range []struct {

@@ -38,11 +38,13 @@ retained in F3-T09's evidence. Container verification used only its separate
 `18086` project; the operator preview's `18088/readyz` remains healthy.
 
 Feature implementation remains paused pending backend stabilization.
-The latest preserved one-SLO/year diagnostic exposes retained-read and admission
-costs: nine of ten concurrent cold requests succeed in 515–672 ms and one returns
-503. Source-aggregate lookup and stored graph summaries are corrected, but this
-does not meet acceptance; larger capacity runs remain pending. See
-[F3-T08](tasks/F3-T08.md) for the matching storage checks and retained failures.
+The latest preserved one-SLO/year diagnostic returns all ten concurrent cold
+requests successfully in 330–438 ms after encoded summaries and coherent daily
+reuse. Exact table values match the graph; matching focused storage checks pass.
+This remains one administrator with warm database cache and stopped collection,
+not distinct-user, fleet or browser acceptance. Larger capacity runs and affected
+final gates remain pending. See [F3-T08](tasks/F3-T08.md) for evidence and retained
+failures.
 
 [ADR-0024](adr/0024-precomputed-operational-reads.md),
 [SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and

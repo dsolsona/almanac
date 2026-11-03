@@ -87,7 +87,7 @@ func (c *retainedSeriesReader) readParts(ctx context.Context, parts []retainedRe
 		if row.PayloadBytes > 20<<20 {
 			return nil, ErrOperationalResource
 		}
-		c.bytes += int64(len(row.Payload))
+		c.bytes += int64(len(row.Payload) + len(row.CompliancePayload))
 		if c.bytes > 20<<20 {
 			return nil, ErrOperationalResource
 		}
@@ -496,9 +496,33 @@ func (c *retainedSeriesReader) daily(ctx context.Context, base slo.WindowInput, 
 	for from := utcDayStart(start); !from.Add(24 * time.Hour).After(last); from = from.Add(24 * time.Hour) {
 		parts = append(parts, retainedReadPart{start: from, end: from.Add(24 * time.Hour), resolution: 86400})
 	}
-	rows, err := c.readParts(ctx, parts, true)
+	known := make(map[time.Time]dbgen.ReadRetainedPartsRow)
+	for index, part := range c.parts {
+		if part.resolution == 86400 {
+			row := c.stored[index]
+			row.Payload = row.CompliancePayload
+			known[part.start] = row
+		}
+	}
+	rows := make([]dbgen.ReadRetainedPartsRow, len(parts))
+	var missing []retainedReadPart
+	for index, part := range parts {
+		if row, ok := known[part.start]; ok && row.RangeEnd.Time.Equal(part.end) {
+			rows[index] = row
+		} else {
+			missing = append(missing, part)
+		}
+	}
+	fetched, err := c.readParts(ctx, missing, true)
 	if err != nil {
 		return series, summary, err
+	}
+	next := 0
+	for index := range rows {
+		if rows[index].Ordinal == 0 {
+			rows[index] = fetched[next]
+			next++
+		}
 	}
 	for index, part := range parts {
 		var day api.SloDailyComplianceDay
