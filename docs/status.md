@@ -11,11 +11,14 @@ The maintainer rejected further deliberate endurance waits. Fresh sustained-load
 clock-aging and physical-cleanup observation, plus 100/1,000-SLO validation, are
 deferred to [F3-T10](tasks/F3-T10.md), not passed. The existing endurance command
 must not run during this finalization. Product budgets remain unchanged.
-The final database/API gate found a mobile verifier assumption after a valid
-empty urgency-filter result; the corrected real journey passes in 73.289 seconds,
-while the failed full receipt remains recorded. Final browser verification passes
-all 126 cases after scoping selectors to the intended catalogue chart. A matching
-final Compose receipt remains pending; no new escalation requests are authorized.
+The separately authorized final parallel gates on `e73886b` complete with Compose
+passing in 522.042 seconds and integration failing in 844.263 seconds. Integration
+passes 166/173 selected cases, fails the agent-lifecycle browser journey while
+reading an HTTP-200 disable response body, and does not reach six later cases.
+The cause remains unresolved; no automatic rerun follows. The earlier corrected
+SLO journey retains its 73.289-second focused pass. Final catalogue/browser
+verification passes all 126 cases. Receipts and failures remain in
+[F3-T08](tasks/F3-T08.md); no new escalation requests are authorized.
 T08 remains in progress until the final verification gaps are closed. No merge
 is authorized. Earlier checkpoints below are historical and do not override this
 current scope/evidence record.
