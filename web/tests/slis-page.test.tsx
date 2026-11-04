@@ -500,8 +500,8 @@ describe('SLI page', () => {
     }));
     render(<SlisPage context={viewer} />);
     await screen.findByRole('heading', { name: 'Request success' });
-    expect(screen.getAllByText('1,234,567.0001').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('1,234,567.5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1,234,567\.0001/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1,234,567\.5/).length).toBeGreaterThan(0);
   });
 
   it('keeps detail controls available when history fails and preserves a dirty draft on refresh', async () => {
