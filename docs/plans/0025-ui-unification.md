@@ -31,7 +31,7 @@ the integrated result of the previous one.
   status band, timeline, definition. Edit SLO page limited to display name (the
   only editable field today). Re-run traced performance acceptance for list and
   detail; Events lane, Mute and revision history deferred.
-- [ ] **F6-T03 SLI list and detail.** Dense table with health filter, last-24 h
+- [ ] **F6-T03 SLI list and detail** ([F6-T03](../tasks/F6-T03.md), in review). Dense table with health filter, last-24 h
   strip reusing `SliRecentStrip`, last sample as ratio, compact SLO links,
   inline "Create SLO"; single-column detail with tiles, measurements chart from
   the observation history, intervals table with outcome filter, definition,

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, type Agent } from '../agents/client.ts';
-import { SliRecentStrip } from '../components/charts/SliRecentStrip.tsx';
-import { Button, MeasurementChoiceCards, Panel, QueryEditor, SelectField, StatusBadge, TextField } from '../components/ui/index.ts';
+import { ModuleView } from '../components/ModuleView.tsx';
+import { SliRecentStrip, type SliRecentSample } from '../components/charts/SliRecentStrip.tsx';
+import { ExactValuesTable, type ExactValueRow } from '../components/charts/ExactValuesTable.tsx';
+import type { TimelineChart, Coverage } from '../components/charts/timelineModel.ts';
+import { Button, Dialog, MeasurementChoiceCards, PageHeader, Pager, Panel, QueryEditor, SearchField, SegmentedControl, SelectField, StatusMark, TextField, Toolbar, type MarkTone } from '../components/ui/index.ts';
 import { createDatasourceClient, type Datasource } from '../datasources/client.ts';
 import { createSliClient, SliFailure, type Sli, type SliCreateRequest, type SliObservation, type SliObservationPage } from './client.ts';
 import './slis.css';
@@ -14,6 +17,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SLI_NAME = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
 const safeError = (error: unknown) => error instanceof SliFailure ? error.message : 'SLI management is temporarily unavailable.';
 const roleCanWrite = (context: AuthContext) => context.session?.role === 'administrator' || context.session?.role === 'editor';
+const clockFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC', hour12: false });
+const loadTimelineChart = () => import('../components/charts/TimelineChartView.tsx').then((module) => ({ default: module.TimelineChartView }));
 
 function suggestName(value: string) {
   return value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/g, '');
@@ -60,6 +65,10 @@ function sliListPath(search: string, datasourceID: string, pageSize = 20, cursor
   return `/slis${query.size ? `?${query}` : ''}`;
 }
 
+function Breadcrumb({ current, parentHref }: { current: string; parentHref: string }) {
+  return <nav className="app-breadcrumbs" aria-label="Breadcrumb"><a href={parentHref} data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{current}</span></nav>;
+}
+
 function PageTitle({ title, subtitle, headingRef, isList = false, parentHref = '/slis' }: { title: string; subtitle?: string; headingRef?: RefObject<HTMLHeadingElement | null>; isList?: boolean; parentHref?: string }) {
   return <div className="sli-page-title"><nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">SLIs</span> : <><a href={parentHref} data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav><h1 ref={headingRef} tabIndex={-1} className="app-page-heading">{title}</h1>{subtitle && <p>{subtitle}</p>}</div>;
 }
@@ -84,6 +93,25 @@ function formatTime(value: string | null): string {
 function shortTime(value: string): string {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC';
 }
+function clockTime(value: string): string {
+  return `${clockFormat.format(new Date(value))} UTC`;
+}
+function relativeAge(value: string, now = Date.now()): string {
+  const seconds = Math.max(0, Math.round((now - Date.parse(value)) / 1000));
+  if (seconds < 90) return `${seconds} s ago`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 172800) return `${Math.round(seconds / 3600)} h ago`;
+  return `${Math.round(seconds / 86400)} d ago`;
+}
+function ratioPercent(good: string, total: string): string {
+  const [g, t] = [Number(good), Number(total)];
+  if (!Number.isFinite(g) || !Number.isFinite(t) || t === 0) return '—';
+  return `${(100 * g / t).toLocaleString(undefined, { maximumFractionDigits: g === t ? 0 : 2 })}%`;
+}
+function count(value: string): string {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toLocaleString() : value;
+}
 
 function sliListHealth(item: Sli): 'healthy' | 'warning' | 'no-data' | 'stale' {
   const latest = item.latest_observation;
@@ -92,11 +120,44 @@ function sliListHealth(item: Sli): 'healthy' | 'warning' | 'no-data' | 'stale' {
   if (latest.outcome === 'failed' || latest.outcome === 'incomplete') return 'warning';
   return 'healthy';
 }
+// ADR-0028 vocabulary for SLIs, from the list projection fields only.
+function sliVocabulary(item: Sli): { tone: MarkTone; label: string; reason: string; attention: boolean } {
+  const latest = item.latest_observation;
+  const agent = item.agent_reachability.replaceAll('_', ' ');
+  if (item.freshness === 'stale') return { tone: 'stale', label: 'Not reporting', reason: item.agent_reachability !== 'connected' ? `agent ${agent}` : item.last_observation_at ? `last sample ${relativeAge(item.last_observation_at)}` : 'no recent sample', attention: true };
+  if (!latest || item.freshness === 'unknown') return { tone: 'none', label: 'Waiting', reason: item.activation_state === 'blocked' || item.collection_progress === 'blocked' ? 'collection blocked' : item.next_expected_execution_at ? `first query ${clockTime(item.next_expected_execution_at)}` : 'first interval pending', attention: item.activation_state === 'blocked' || item.collection_progress === 'blocked' };
+  if (latest.outcome === 'complete_empty' || latest.total_count === '0') return { tone: 'none', label: 'Zero traffic', reason: 'queries return 0 events', attention: false };
+  if (latest.outcome === 'failed') return { tone: 'warning', label: 'Failing', reason: `last query ${latest.error_code ?? 'failed'}`, attention: true };
+  if (latest.outcome === 'incomplete') return { tone: 'warning', label: 'Failing', reason: `missing ${latest.missing_components.join(', ')}`, attention: true };
+  return { tone: 'healthy', label: 'Healthy', reason: item.agent_reachability === 'connected' ? 'agent connected' : `agent ${agent}`, attention: false };
+}
 
 function makeIdempotencyKey(): string {
   if (typeof window.crypto?.randomUUID === 'function') return window.crypto.randomUUID();
   const random = Math.random().toString(36).slice(2);
   return `sli-${Date.now()}-${random}`;
+}
+
+type HistoryFilter = 'all' | 'problems';
+function observationCoverage(row: SliObservation): Coverage {
+  if (row.outcome === 'observed') return row.total_count === '0' ? 'zero-traffic' : 'complete';
+  if (row.outcome === 'complete_empty') return 'known-empty';
+  if (row.outcome === 'incomplete') return 'partial';
+  return 'missing';
+}
+// The chart is built from the loaded observation rows only; it never fabricates a range beyond them.
+function buildHistoryChart(rows: SliObservation[], cadenceSeconds: number): TimelineChart | null {
+  if (rows.length === 0) return null;
+  const ordered = [...rows].sort((a, b) => Date.parse(a.interval_end) - Date.parse(b.interval_end));
+  // Points sit at interval ends; the range end is exclusive, one cadence past the last end.
+  const start = ordered[0]!.interval_start, end = new Date(Date.parse(ordered[ordered.length - 1]!.interval_end) + cadenceSeconds * 1000).toISOString();
+  if (Date.parse(end) <= Date.parse(start)) return null;
+  const points = ordered.map((row) => {
+    const coverage = observationCoverage(row);
+    const value = coverage === 'complete' ? ((100 * Number(row.good_count)) / Number(row.total_count)).toFixed(4) : null;
+    return { timestamp: row.interval_end, value, coverage };
+  }).filter((point, index, all) => index === 0 || point.timestamp !== all[index - 1]!.timestamp);
+  return { title: 'Measurements', summary: `Good ÷ total for each loaded ${cadenceSeconds}-second interval. Failed and incomplete intervals are gaps; zero traffic is marked.`, start, end, stepMs: cadenceSeconds * 1000, fillExpectedGaps: true, timeZone: 'UTC', showLaneNames: false, lanes: [{ id: 'ratio', label: 'good ÷ total', unit: '%', height: 220, series: [{ id: 'ratio-series', label: 'Observed', points }] }] };
 }
 
 export function SlisPage({ context }: { context: AuthContext }) {
@@ -107,6 +168,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [items, setItems] = useState<Sli[]>([]);
   const [sources, setSources] = useState<Datasource[]>([]);
   const [sli, setSli] = useState<Sli | null>(null);
+  const [projection, setProjection] = useState<Sli | null>(null);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentError, setAgentError] = useState(false);
   const [etag, setETag] = useState('');
@@ -133,6 +195,12 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [sourceError, setSourceError] = useState('');
   const [sourceLoading, setSourceLoading] = useState(false);
   const [loadRevision, setLoadRevision] = useState(0);
+  const [updatedAt, setUpdatedAt] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
+  const [chartTableOpen, setChartTableOpen] = useState(false);
+  const [chartTablePage, setChartTablePage] = useState(1);
+  const editTrigger = useRef<HTMLElement>(null);
   useEffect(() => { if (route.kind === 'list' && !loading && !listBusy) journeyContentReady('sli.list', !!error); }, [route.kind, loading, listBusy, items, error]);
   useEffect(() => {
     if (loading) return;
@@ -184,6 +252,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     listAbort.current = null;
     setListBusy(false);
     setSli(null);
+    setProjection(null);
     setAgent(null);
     setAgentError(false);
     setHistory([]);
@@ -193,6 +262,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setListNextCursor('');
     setSources([]);
     setNextCursor('');
+    setEditOpen(false);
+    setHistoryFilter('all');
+    setChartTableOpen(false);
+    setChartTablePage(1);
     const load = async () => {
       try {
         if (route.kind === 'list') {
@@ -211,6 +284,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           if (!current()) return;
           setItems(page.items);
           setListNextCursor(page.next_cursor);
+          setUpdatedAt(clockFormat.format(new Date()));
           setLoading(false);
           void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasources could not be loaded. Try again.'); }).finally(() => { if (current()) setSourceLoading(false); });
         } else if (route.kind === 'create') {
@@ -229,6 +303,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           setSli(resource.sli);
           setDisplayName(resource.sli.display_name);
           setETag(resource.etag);
+          setUpdatedAt(clockFormat.format(new Date()));
           if (context.session?.role === 'administrator' && !context.session.restricted) {
             void agentClient.current!.get(resource.sli.agent_id, { signal: request.signal }).then((value) => { if (current()) setAgent(value.agent); }).catch(() => { if (current() && !request.signal.aborted) setAgentError(true); });
           }
@@ -236,6 +311,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
           setHistoryBusy(true);
           void fetchHistory(route.id, historyID, generation, '', request.signal);
           void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasource names could not be loaded.'); });
+          // The list projection carries the bounded recent strip and linked objectives; the detail read omits them.
+          void slis.list(20, '', request.signal, resource.sli.name, '').then((page) => { if (current()) setProjection(page.items.find((item) => item.id === resource.sli.id) ?? null); }).catch(() => undefined);
         }
       } catch (failure) {
         if (current() && !request.signal.aborted) setError(safeError(failure));
@@ -325,10 +402,12 @@ export function SlisPage({ context }: { context: AuthContext }) {
       setSli(resource.sli);
       setDisplayName((current) => current === sli?.display_name ? resource.sli.display_name : current);
       setETag(resource.etag);
+      setUpdatedAt(clockFormat.format(new Date()));
       void loadSources().then((value) => { if (generation === routeGeneration.current) { setSources(value); setSourceError(''); } }).catch(() => { if (generation === routeGeneration.current) setSourceError('Datasource names could not be loaded. Refresh to try again.'); });
       if (context.session?.role === 'administrator' && !context.session.restricted) {
         void agentClient.current!.get(resource.sli.agent_id).then((value) => { if (generation === routeGeneration.current) { setAgent(value.agent); setAgentError(false); } }).catch(() => { if (generation === routeGeneration.current) setAgentError(true); });
       }
+      void slis.list(20, '', undefined, resource.sli.name, '').then((page) => { if (generation === routeGeneration.current) setProjection(page.items.find((item) => item.id === resource.sli.id) ?? null); }).catch(() => undefined);
       await fetchHistory(route.id, historyID, generation);
     } catch (failure) {
       if (generation === routeGeneration.current) setError(safeError(failure));
@@ -372,6 +451,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       if (generation !== routeGeneration.current || requestID !== listRequest.current) return;
       setItems(page.items);
       setListNextCursor(page.next_cursor);
+      setUpdatedAt(clockFormat.format(new Date()));
     } catch (failure) {
       if (generation === routeGeneration.current && requestID === listRequest.current && !controller.signal.aborted) setError(safeError(failure));
     } finally {
@@ -383,30 +463,32 @@ export function SlisPage({ context }: { context: AuthContext }) {
     await updateListPage(search, datasourceID, listPageSize, '', []);
   }
 
-  async function saveMetadata(event: FormEvent<HTMLFormElement>) {
+  async function saveMetadata(event: FormEvent<HTMLFormElement>): Promise<boolean> {
     event.preventDefault();
-    if (!sli || !canWrite) return;
-    if (!displayName.trim()) { setFormError('Enter a display name.'); return; }
+    if (!sli || !canWrite) return false;
+    if (!displayName.trim()) { setFormError('Enter a display name.'); return false; }
     const generation = routeGeneration.current;
     setPending(true);
     setError('');
     try {
       const updated = await slis.updateMetadata(sli.id, etag, displayName, context);
-      if (generation !== routeGeneration.current) return;
+      if (generation !== routeGeneration.current) return false;
       setSli(updated);
       setETag(`"sli:${updated.id}:${updated.version}"`);
       setFormError('');
-    } catch (failure) { if (generation === routeGeneration.current) setError(safeError(failure)); }
+      return true;
+    } catch (failure) { if (generation === routeGeneration.current) setError(safeError(failure)); return false; }
     finally { if (generation === routeGeneration.current) setPending(false); }
   }
 
-  if (loading) return <><PageTitle isList={route.kind === 'list'} title={route.kind === 'detail' ? 'SLI details' : route.kind === 'create' ? 'Create SLI' : 'SLIs'} subtitle={route.kind === 'list' ? 'Service level indicators collected from assigned agents.' : route.kind === 'create' ? 'Define good and total interval counts from a Prometheus datasource.' : undefined} /><span className="sr-only" role="status">Opening SLIs</span></>;
+  const listHref = sliListPath(listSearch, listDatasourceID, listPageSize, listCursor);
+  if (loading) return <><PageTitle isList={route.kind === 'list'} title={route.kind === 'detail' ? 'SLI details' : route.kind === 'create' ? 'Create SLI' : 'SLIs'} subtitle={route.kind === 'create' ? 'Define good and total interval counts from a Prometheus datasource.' : undefined} /><span className="sr-only" role="status">Opening SLIs</span></>;
   if (error && !sli && route.kind === 'detail') return <><PageTitle title="SLI unavailable" headingRef={titleRef} /><Panel heading="SLI could not be loaded"><p role="alert">{error}</p><Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></Panel></>;
 
   if (route.kind === 'create') {
     const options = [{ value: '', label: 'Select a datasource', disabled: true }, ...sources.map((source) => ({ value: source.id, label: `${source.display_name} · ${source.polling_interval_seconds}s cadence` }))];
     return <>
-      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID, listPageSize, listCursor)} />
+      <PageTitle title="Create SLI" subtitle="Define good and total interval counts from a Prometheus datasource." headingRef={titleRef} parentHref={listHref} />
       {error && <p className="sli-error" role="alert">{error}</p>}
       {!canWrite ? <Panel heading="Access required"><p>Editor or administrator access is required to create SLIs.</p></Panel>
         : sourceError ? <div className="sli-empty"><p role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></div>
@@ -424,7 +506,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
               </div>
               <p className="sli-form-note">Each query must return one aggregate count for an interval. Create saves a result from recent data already in your datasource, then continues at the datasource’s frequency. The first interval can precede creation.</p>
               {formError && <p className="sli-error" role="alert">{formError}</p>}
-              <div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID, listPageSize, listCursor))}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
+              <div className="sli-actions"><Button variant="outline" onClick={() => navigate(listHref)}>Cancel</Button><Button type="submit" pending={pending}>Create SLI</Button></div>
             </Panel>
           </form>}
     </>;
@@ -434,81 +516,144 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const datasource = sources.find((item) => item.id === sli.datasource_id);
     const latest = sli.latest_observation;
     const activatedAt = sli.activated_at;
+    const words = sliVocabulary(sli);
+    const lastGood = history.find((row) => row.outcome === 'observed' && row.total_count !== '0');
+    const observedRows = history.filter((row) => row.outcome === 'observed').length;
+    const failedRows = history.filter((row) => row.outcome === 'failed' || row.outcome === 'incomplete').length;
+    const chart = buildHistoryChart(history, sli.polling_interval_seconds);
+    const chartRows: ExactValueRow[] = [...history].sort((a, b) => Date.parse(b.interval_end) - Date.parse(a.interval_end)).map((row) => ({ timestamp: new Date(row.interval_end).toISOString(), lane: 'good ÷ total', series: outcomeLabel(row.outcome), unit: '%', value: observationCoverage(row) === 'complete' ? ((100 * Number(row.good_count)) / Number(row.total_count)).toFixed(4) : null, coverage: observationCoverage(row), details: row.outcome === 'observed' ? `${row.good_count} good / ${row.total_count} total` : row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—' }));
+    const visibleHistory = historyFilter === 'problems' ? history.filter((row) => row.outcome !== 'observed') : history;
+    const linked = projection?.linked_slos?.items ?? [];
+    const totalLinked = projection?.linked_slos?.total_count ?? 0;
+    const openEdit = () => { editTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setFormError(''); setEditOpen(true); };
     return <>
-      <div className="sli-detail-heading"><PageTitle title={sli.display_name} subtitle={sli.name} headingRef={titleRef} parentHref={sliListPath(listSearch, listDatasourceID, listPageSize, listCursor)} /><div className="sli-actions"><Button variant="outline" onClick={() => navigate(sliListPath(listSearch, listDatasourceID, listPageSize, listCursor))}>Back to SLIs</Button><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button></div></div>
+      <Breadcrumb current={sli.display_name} parentHref={listHref} />
+      <div className="sli-detail-head">
+        <div className="sli-detail-head__copy">
+          <h1 ref={titleRef} tabIndex={-1} className="app-page-heading sli-detail-head__title">{sli.display_name}</h1>
+          <div className="sli-detail-head__status"><StatusMark tone={words.tone} label={`${words.label} · ${words.reason}`} /></div>
+          <p className="sli-detail-head__meta"><code>{sli.name}</code> · Ratio · two queries · {datasource?.display_name ?? 'datasource'} · every {sli.polling_interval_seconds} s</p>
+        </div>
+        <div className="sli-detail-head__actions"><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button>{canWrite && <Button onClick={openEdit}>Edit SLI</Button>}{canWrite && <Button variant="outline" onClick={() => navigate('/slos/new')}>New SLO</Button>}</div>
+      </div>
       {error && <p className="sli-error" role="alert">{error}</p>}
       {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
       {agentError && <p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
-      <Panel heading="Latest result" className="sli-detail-section">
+      <div className="sli-tiles">
+        <section className="sli-tile" aria-labelledby="sli-tile-latest"><h2 id="sli-tile-latest" className="sli-tile__key">Latest result</h2>
           {latest ? <>
-            <p className="sli-interval">{formatTime(latest.interval_start)} – {formatTime(latest.interval_end)}</p>
-            <p className="sli-outcome">{outcomeLabel(latest.outcome)}</p>
+            <p className={`sli-tile__value ${latest.outcome === 'failed' || latest.outcome === 'incomplete' ? 'is-warning' : ''}`}><span className="sli-outcome">{outcomeLabel(latest.outcome)}</span></p>
+            <p className="sli-interval sli-tile__sub">{formatTime(latest.interval_start)} – {formatTime(latest.interval_end)}</p>
             {latest.outcome === 'observed' ? <div className="sli-counts"><div><span>Good</span><strong>{latest.good_count}</strong></div><div><span>Total</span><strong>{latest.total_count}</strong></div></div>
-              : latest.outcome === 'incomplete' ? <p>Missing component: {latest.missing_components.join(', ')}</p>
-                : latest.outcome === 'failed' ? <p>Safe error code: {latest.error_code}</p>
-                  : <p>Queries completed without a count value.</p>}
-          </> : <><p>No observation has been recorded yet; this does not mean the counts are zero. Almanac saves the most recent complete interval, allowing {sli.settling_delay_seconds} seconds for the datasource to finish reporting. This result can cover time before the SLI was created.</p><p>{sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'The assigned agent is unavailable.' : sli.activation_state === 'blocked' || sli.collection_progress === 'blocked' ? 'Collection is blocked. Check the agent and datasource.' : 'The first query runs after the assigned agent receives its configuration and is ready.'}</p></>}
-          <p className="sli-muted">Last attempt: {formatTime(sli.last_attempt_at)} · Last observation: {formatTime(sli.last_observation_at)}</p>
-        </Panel>
-      <Panel heading="Collection" className="sli-detail-section">
-        <div className="sli-state-list">
-          <InlineState label="Activation" value={sli.activation_state} tone={sli.activation_state === 'active' ? 'positive' : sli.activation_state === 'blocked' ? 'attention' : 'neutral'} />
-          <InlineState label="Agent reachability" value={sli.agent_reachability} tone={sli.agent_reachability === 'connected' ? 'positive' : sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'attention' : 'neutral'} />
-          <InlineState label="Collection progress" value={sli.collection_progress} tone={sli.collection_progress === 'running' ? 'positive' : sli.collection_progress === 'blocked' ? 'attention' : 'neutral'} />
-          <InlineState label="Freshness" value={sli.freshness} tone={sli.freshness === 'fresh' ? 'positive' : sli.freshness === 'stale' ? 'attention' : 'neutral'} />
+              : latest.outcome === 'incomplete' ? <p className="sli-tile__sub">Missing component: {latest.missing_components.join(', ')}</p>
+                : latest.outcome === 'failed' ? <p className="sli-tile__sub">Safe error code: {latest.error_code}</p>
+                  : <p className="sli-tile__sub">Queries completed without a count value.</p>}
+          </> : <><p className="sli-tile__value muted">No sample yet</p><p className="sli-tile__sub">No observation has been recorded yet; this does not mean the counts are zero. Almanac saves the most recent complete interval, allowing {sli.settling_delay_seconds} seconds for the datasource to finish reporting. This result can cover time before the SLI was created.</p><p className="sli-tile__sub">{sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'The assigned agent is unavailable.' : sli.activation_state === 'blocked' || sli.collection_progress === 'blocked' ? 'Collection is blocked. Check the agent and datasource.' : 'The first query runs after the assigned agent receives its configuration and is ready.'}</p></>}
+          <p className="sli-muted sli-tile__sub">Last attempt: {formatTime(sli.last_attempt_at)} · Last observation: {formatTime(sli.last_observation_at)}</p>
+        </section>
+        <section className="sli-tile" aria-labelledby="sli-tile-ratio"><h2 id="sli-tile-ratio" className="sli-tile__key">Last good ratio</h2>
+          {lastGood ? <><p className="sli-tile__value">{ratioPercent(lastGood.good_count!, lastGood.total_count!)}</p><p className="sli-tile__sub mono">{count(lastGood.good_count!)} / {count(lastGood.total_count!)} · {clockTime(lastGood.interval_end)}</p></> : <><p className="sli-tile__value muted">—</p><p className="sli-tile__sub">No observed interval with traffic in the loaded history.</p></>}
+        </section>
+        <section className="sli-tile" aria-labelledby="sli-tile-collection"><h2 id="sli-tile-collection" className="sli-tile__key">Collection</h2>
+          <div className="sli-state-list">
+            <InlineState label="Activation" value={sli.activation_state} tone={sli.activation_state === 'active' ? 'positive' : sli.activation_state === 'blocked' ? 'attention' : 'neutral'} />
+            <InlineState label="Agent reachability" value={sli.agent_reachability} tone={sli.agent_reachability === 'connected' ? 'positive' : sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'attention' : 'neutral'} />
+            <InlineState label="Collection progress" value={sli.collection_progress} tone={sli.collection_progress === 'running' ? 'positive' : sli.collection_progress === 'blocked' ? 'attention' : 'neutral'} />
+            <InlineState label="Freshness" value={sli.freshness} tone={sli.freshness === 'fresh' ? 'positive' : sli.freshness === 'stale' ? 'attention' : 'neutral'} />
+          </div>
+          <p className="sli-tile__sub">Next scheduled query: {formatTime(sli.next_expected_execution_at)}</p>
+        </section>
+        <section className="sli-tile" aria-labelledby="sli-tile-loaded"><h2 id="sli-tile-loaded" className="sli-tile__key">Loaded history</h2>
+          <p className="sli-tile__value">{observedRows} / {history.length}</p>
+          <p className="sli-tile__sub">intervals observed · {failedRows} failed or incomplete · {missing.length} missing range{missing.length === 1 ? '' : 's'}{nextCursor ? ' · more available' : ''}</p>
+        </section>
+      </div>
+
+      <section className="sli-card" aria-labelledby="sli-measurements-title">
+        <header><h2 id="sli-measurements-title">Measurements</h2><span className="sli-card__hint">good ÷ total per loaded interval · UTC</span><div className="sli-card__tools"><Button variant="outline" aria-expanded={chartTableOpen} aria-controls="sli-measurements-table" onClick={() => setChartTableOpen((open) => !open)}>▦ Table</Button></div></header>
+        <div className="sli-card__body">
+          {historyBusy && <span className="sr-only" role="status">Refreshing observation history</span>}
+          {chart ? <div className="sli-chart"><ModuleView load={loadTimelineChart} componentProps={{ chart, showHeader: false }} fallback={<p role="status">Loading measurement chart…</p>} /></div>
+            : historyLoaded && !historyError ? <p className="sli-muted">No observations have been loaded yet, so there is nothing to plot.</p> : null}
+          <div id="sli-measurements-table" hidden={!chartTableOpen}>{chartTableOpen && <ExactValuesTable rows={chartRows.slice((chartTablePage - 1) * 50, chartTablePage * 50)} page={chartTablePage} totalRows={chartRows.length} onPageChange={setChartTablePage} />}</div>
         </div>
-        <dl className="sli-facts"><div><dt>Datasource</dt><dd>{sourceError && !datasource ? 'Datasource name unavailable. Refresh to try again.' : <a href={`/datasources/${sli.datasource_id}`} data-app-route>{datasource?.display_name ?? 'View datasource'}</a>}</dd></div><div><dt>Assigned agent</dt><dd>{context.session?.role !== 'administrator' || context.session.restricted ? 'Agent details are available to administrators.' : agentError && agent?.id !== sli.agent_id ? 'Agent name unavailable. Refresh to try again.' : <a href={`/agents?agent=${sli.agent_id}`} data-app-route>{agent?.id === sli.agent_id ? agent.display_name : 'View assigned agent'}</a>}</dd></div><div><dt>Interval</dt><dd>{sli.polling_interval_seconds} seconds</dd></div><div><dt>Source settling delay</dt><dd>{sli.settling_delay_seconds} seconds</dd></div><div><dt>Collection activated</dt><dd>{activatedAt === null ? 'Not activated yet' : formatTime(activatedAt)}</dd></div><div><dt>Next scheduled query</dt><dd>{formatTime(sli.next_expected_execution_at)}</dd></div></dl>
-        <p className="sli-muted">Each result covers a completed {sli.polling_interval_seconds}-second interval. The query runs after a {sli.settling_delay_seconds}-second delay to allow source data to settle.</p>
-      </Panel>
-      <Panel heading="Observation history" className="sli-history-panel">
-        {historyError && <p className="sli-error" role="alert">{historyError}</p>}
-        {historyBusy && <span className="sr-only" role="status">Refreshing observation history</span>}
-        {earliest && <p className="sli-muted">History before {formatTime(earliest)} is unavailable.</p>}
-        {missing.length > 0 && <div><strong>Missing intervals</strong><ul>{missing.map((range) => <li key={range.interval_start}>{formatTime(range.interval_start)} – {formatTime(range.interval_end)}</li>)}</ul></div>}
-        {history.length === 0 ? historyLoaded && !historyError && <p>No observations have been recorded in this range.</p> : <div className="sli-table-scroll" role="region" aria-label="Observation history" tabIndex={0}><table className="sli-table"><thead><tr><th scope="col">Interval start (UTC)</th><th scope="col">Interval end (UTC)</th><th scope="col">Outcome</th><th scope="col">Good count</th><th scope="col">Total count</th><th scope="col">Details</th></tr></thead><tbody>{history.map((row) => <tr key={row.observation_id}><td className="sli-mono">{new Date(row.interval_start).toISOString()}</td><td className="sli-mono">{new Date(row.interval_end).toISOString()}</td><td>{outcomeLabel(row.outcome)}</td><td className="sli-mono">{row.good_count ?? '—'}</td><td className="sli-mono">{row.total_count ?? '—'}</td><td>{row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—'}</td></tr>)}</tbody></table></div>}
-        {nextCursor && <div className="sli-actions"><Button variant="outline" onClick={() => void loadMoreHistory()} pending={historyBusy}>Load more intervals</Button></div>}
-      </Panel>
+      </section>
+
+      <section className="sli-card" aria-labelledby="sli-history-title">
+        <header><h2 id="sli-history-title">Recent intervals</h2><span className="sli-card__hint">exact counts · newest first{earliest ? ` · history before ${formatTime(earliest)} is unavailable` : ''}</span><div className="sli-card__tools"><SegmentedControl size="sm" label="Show intervals" value={historyFilter} onChange={setHistoryFilter} options={[{ value: 'all', label: 'All loaded', count: history.length }, { value: 'problems', label: 'Failed & missing', count: history.length - observedRows }]} /></div></header>
+        {historyError && <p className="sli-error sli-card__alert" role="alert">{historyError}</p>}
+        {earliest && <p className="sli-muted sli-card__note">History before {formatTime(earliest)} is unavailable.</p>}
+        {missing.length > 0 && <div className="sli-card__note"><strong>Missing intervals</strong><ul>{missing.map((range) => <li key={range.interval_start}>{formatTime(range.interval_start)} – {formatTime(range.interval_end)}</li>)}</ul></div>}
+        {history.length === 0 ? historyLoaded && !historyError && <p className="sli-card__note">No observations have been recorded in this range.</p>
+          : visibleHistory.length === 0 ? <p className="sli-card__note">Every loaded interval was observed.</p>
+            : <div className="sli-table-scroll" role="region" aria-label="Observation history" tabIndex={0}><table className="sli-table"><thead><tr><th scope="col">Interval start (UTC)</th><th scope="col">Interval end (UTC)</th><th scope="col">Outcome</th><th scope="col" className="num">Good count</th><th scope="col" className="num">Total count</th><th scope="col" className="num">Ratio</th><th scope="col">Details</th></tr></thead><tbody>{visibleHistory.map((row) => <tr key={row.observation_id}><td className="sli-mono">{new Date(row.interval_start).toISOString()}</td><td className="sli-mono">{new Date(row.interval_end).toISOString()}</td><td><StatusMark tone={row.outcome === 'observed' ? (row.total_count === '0' ? 'none' : 'healthy') : row.outcome === 'complete_empty' ? 'none' : 'warning'} label={outcomeLabel(row.outcome)} /></td><td className="sli-mono num">{row.good_count ?? '—'}</td><td className="sli-mono num">{row.total_count ?? '—'}</td><td className="sli-mono num">{row.outcome === 'observed' ? ratioPercent(row.good_count!, row.total_count!) : '—'}</td><td>{row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—'}</td></tr>)}</tbody></table></div>}
+        {nextCursor && <div className="sli-card__footer"><Button variant="outline" onClick={() => void loadMoreHistory()} pending={historyBusy}>Load more intervals</Button></div>}
+      </section>
+
+      <section className="sli-card" aria-labelledby="sli-definition-title">
+        <header><h2 id="sli-definition-title">Definition</h2><span className="sli-card__hint">revision {sli.measurement_revision} · queries are immutable from this screen</span></header>
+        <div className="sli-card__body sli-defgrid">
+          <div><p className="sli-key">Datasource</p><p className="sli-value">{sourceError && !datasource ? 'Datasource name unavailable. Refresh to try again.' : <a href={`/datasources/${sli.datasource_id}`} data-app-route>{datasource?.display_name ?? 'View datasource'}</a>}</p></div>
+          <div><p className="sli-key">Assigned agent</p><p className="sli-value">{context.session?.role !== 'administrator' || context.session.restricted ? 'Agent details are available to administrators.' : agentError && agent?.id !== sli.agent_id ? 'Agent name unavailable. Refresh to try again.' : <a href={`/agents?agent=${sli.agent_id}`} data-app-route>{agent?.id === sli.agent_id ? agent.display_name : 'View assigned agent'}</a>}</p></div>
+          <div><p className="sli-key">Cadence</p><p className="sli-value">{sli.polling_interval_seconds} s intervals · settles {sli.settling_delay_seconds} s</p></div>
+          <div><p className="sli-key">Values</p><p className="sli-value">Ratio · two queries · event counts per interval</p></div>
+          <div><p className="sli-key">Collection activated</p><p className="sli-value">{activatedAt === null ? 'Not activated yet' : formatTime(activatedAt)}</p></div>
+          <div><p className="sli-key">Next scheduled query</p><p className="sli-value">{formatTime(sli.next_expected_execution_at)}</p></div>
+          <div className="sli-defgrid__query"><p className="sli-key">Good count query</p><pre>{sli.good_query}</pre></div>
+          <div className="sli-defgrid__query"><p className="sli-key">Total count query</p><pre>{sli.total_query}</pre></div>
+        </div>
+        <p className="sli-card__note sli-muted">Each result covers a completed {sli.polling_interval_seconds}-second interval. The query runs after a {sli.settling_delay_seconds}-second delay to allow source data to settle.</p>
+      </section>
+
+      <section className="sli-card" aria-labelledby="sli-objectives-title">
+        <header><h2 id="sli-objectives-title">Objectives</h2><span className="sli-card__hint">{projection ? `${totalLinked} SLO${totalLinked === 1 ? '' : 's'} use${totalLinked === 1 ? 's' : ''} this indicator` : 'linked objectives are loading'}</span>{canWrite && <div className="sli-card__tools"><Button variant="outline" onClick={() => navigate('/slos/new')}>+ New SLO</Button></div>}</header>
+        <div className="sli-card__body">{linked.length ? <ul className="sli-linked">{linked.map((objective) => <li key={objective.id}><a href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a><code>{objective.name}</code></li>)}{totalLinked > linked.length && <li className="sli-muted">Showing {linked.length} of {totalLinked}</li>}</ul> : projection ? <p className="sli-muted">No SLO targets this indicator yet.</p> : <span className="sr-only" role="status">Loading linked objectives</span>}</div>
+      </section>
+
       <details className="sli-settings"><summary>Settings and technical details</summary>
-        <dl className="sli-queries"><div><dt>Good count query</dt><dd><code>{sli.good_query}</code></dd></div><div><dt>Total count query</dt><dd><code>{sli.total_query}</code></dd></div></dl>
         <dl className="sli-facts"><div><dt>SLI ID</dt><dd className="sli-mono">{sli.id}</dd></div><div><dt>Assigned agent ID</dt><dd className="sli-mono">{sli.agent_id}</dd></div><div><dt>Measurement revision</dt><dd>{sli.measurement_revision}</dd></div><div><dt>Resource version</dt><dd>{sli.version}</dd></div></dl>
-        {canWrite && <form className="sli-metadata-form" onSubmit={(event) => void saveMetadata(event)}><TextField id="sli-edit-display-name" label="Display name" value={displayName} onChange={(event) => { setDisplayName(event.target.value); setFormError(''); }} /><Button type="submit" pending={pending}>Save display name</Button></form>}
-        {formError && <p className="sli-error" role="alert">{formError}</p>}
-        <p className="sli-form-note">Measurement queries and history are immutable from this screen.</p>
+        <p className="sli-form-note">Measurement queries and history are immutable from this screen. Rename the SLI with Edit SLI.</p>
       </details>
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} title="Edit SLI" triggerRef={editTrigger}>
+        <form className="sli-metadata-form" onSubmit={(event) => { void saveMetadata(event).then((saved) => { if (saved) setEditOpen(false); }); }}>
+          <p className="sli-muted">Identifier <code>{sli.name}</code> · measurement revision {sli.measurement_revision}. Queries, datasource and cadence are immutable here.</p>
+          <TextField id="sli-edit-display-name" label="Display name" value={displayName} onChange={(event) => { setDisplayName(event.target.value); setFormError(''); }} error={formError || undefined} />
+          <div className="sli-actions"><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button type="submit" pending={pending}>Save display name</Button></div>
+        </form>
+      </Dialog>
     </>;
   }
 
   const datasourceOptions = [{ value: '', label: 'All datasources' }, ...sources.map((source) => ({ value: source.id, label: source.display_name }))];
   const hasListFilters = listSearch.trim() !== '' || listDatasourceID !== '';
+  const attention = items.filter((item) => sliVocabulary(item).attention).length;
+  const paged = Boolean(listCursor || listNextCursor);
+  const summary = <>{items.length} SLI{items.length === 1 ? '' : 's'}{paged ? ' on this page' : ''}{attention ? ` · ${attention} need${attention === 1 ? 's' : ''} attention` : ''} · all times UTC</>;
+  const openCreate = () => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); };
   return <>
-    <div className="sli-list-heading"><PageTitle isList title="SLIs" subtitle="Service level indicators collected from assigned agents." headingRef={titleRef} />{canWrite && items.length > 0 && sources.length > 0 && !sourceError && <Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Add SLI</Button>}</div>
+    <PageHeader title="SLIs" summary={summary} headingRef={titleRef} updatedAt={updatedAt ? `${updatedAt} UTC` : undefined} actions={<><Button variant="outline" aria-label="Refresh" title="Refresh SLIs" disabled={listBusy} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)}>↻ Refresh</Button>{canWrite && sources.length > 0 && !sourceError && <Button onClick={openCreate}>New SLI</Button>}</>} />
     {error && <p className="sli-error" role="alert">{error}</p>}
     {sourceError && <><p className="sli-error" role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></>}
     {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}
-    <div className="sli-list-toolbar"><TextField id="sli-list-search" label="Search SLIs" placeholder="Name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} /><SelectField id="sli-list-datasource" label="Datasource" options={datasourceOptions} value={listDatasourceID} onChange={(event) => void updateListFilters(listSearch, event.target.value)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</div>
+    <Toolbar className="sli-list-toolbar"><SearchField id="sli-list-search" label="Search SLIs" placeholder="Search by name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} shortcut /><SelectField id="sli-list-datasource" label="Datasource" className="sli-list-datasource" options={datasourceOptions} value={listDatasourceID} onChange={(event) => void updateListFilters(listSearch, event.target.value)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</Toolbar>
     {items.length === 0 ? error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
-      {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p>{context.session?.role === 'administrator' && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}</> : <><p>Create your first SLI from a Prometheus datasource.</p><Button onClick={() => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); }}>Create SLI</Button></>}
+      {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p>{context.session?.role === 'administrator' && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}</> : <><p>Create your first SLI from a Prometheus datasource.</p><Button onClick={openCreate}>Create SLI</Button></>}
     </div>
-      : <div className="sli-table-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table"><thead><tr><th scope="col">Health</th><th scope="col">SLI</th><th scope="col">Type</th><th scope="col">Datasource</th><th scope="col">Recent measurements</th><th scope="col">Last sample</th><th scope="col">SLOs</th></tr></thead><tbody>{items.map((item) => {
+      : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table"><thead><tr><th scope="col">Health</th><th scope="col">SLI</th><th scope="col">Type</th><th scope="col">Datasource</th><th scope="col">Last 12 intervals</th><th scope="col">Last sample</th><th scope="col">SLOs</th></tr></thead><tbody>{items.map((item) => {
         const observation = item.latest_observation;
         const linked = item.linked_slos?.items ?? [];
-        const recent = item.recent_measurements ?? [];
+        const recent = (item.recent_measurements ?? []) as SliRecentSample[];
+        const words = sliVocabulary(item);
         return <tr key={item.id}>
-          <td data-label="Health"><StatusBadge status={sliListHealth(item)} /><small className="sli-row-health-context">{item.agent_reachability === 'connected' && !observation ? 'Agent connected · no sample yet' : `Agent ${item.agent_reachability.replaceAll('_', ' ')}`}</small></td>
+          <td data-label="Health"><StatusMark tone={words.tone} label={words.label} reason={words.reason} /><span className="sr-only">{sliListHealth(item)}</span></td>
           <td data-label="SLI" className="sli-list-name"><a href={`/slis/${item.id}`} data-app-route><strong>{item.display_name}</strong></a><small>{item.name}</small></td>
-          <td data-label="Type">{item.measurement_kind === 'event_counts' && item.component_mode === 'interval_count' ? 'Ratio · two queries' : 'Unsupported mode'}</td>
-          <td data-label="Datasource">{item.datasource_display_name ? <a href={`/datasources/${item.datasource_id}`} data-app-route>{item.datasource_display_name}</a> : <span>Datasource name unavailable</span>}</td>
-          <td data-label="Recent measurements"><SliRecentStrip samples={recent} cadenceSeconds={item.polling_interval_seconds} /><small>{recent.length ? `${recent.length} eligible intervals` : 'No eligible samples yet'}</small></td>
-          <td data-label="Last sample">{observation ? <><time dateTime={observation.interval_end}>{shortTime(observation.interval_end)}</time><small>{observation.outcome === 'observed' ? `Latest ${observation.good_count} good / ${observation.total_count} total` : outcomeLabel(observation.outcome)}</small></> : <span>No sample yet</span>}</td>
-          <td data-label="SLOs">{linked.length ? <><div className="sli-list-links">{linked.map((objective) => <a key={objective.id} href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a>)}</div>{item.linked_slos && item.linked_slos.total_count > linked.length && <small>Showing {linked.length} of {item.linked_slos.total_count}</small>}</> : <span>No linked SLOs</span>}</td>
+          <td data-label="Type">{item.measurement_kind === 'event_counts' && item.component_mode === 'interval_count' ? 'Ratio' : 'Unsupported'}</td>
+          <td data-label="Datasource" className="sli-list-source">{item.datasource_display_name ? <a href={`/datasources/${item.datasource_id}`} data-app-route>{item.datasource_display_name}</a> : <span>Datasource name unavailable</span>}</td>
+          <td data-label="Last 12 intervals"><SliRecentStrip samples={recent} cadenceSeconds={item.polling_interval_seconds} /></td>
+          <td data-label="Last sample">{observation ? <><b className={observation.outcome === 'observed' ? '' : 'muted'}>{observation.outcome === 'observed' ? ratioPercent(observation.good_count!, observation.total_count!) : outcomeLabel(observation.outcome).toLowerCase()}</b> <span className="sli-muted">· {relativeAge(observation.interval_end)}</span><small className="mono">{observation.outcome === 'observed' ? `${count(observation.good_count!)} / ${count(observation.total_count!)}` : observation.outcome === 'failed' ? observation.error_code ?? 'failed' : observation.outcome === 'incomplete' ? `missing ${observation.missing_components.join(', ')}` : 'no count value'} · <time dateTime={observation.interval_end} title={shortTime(observation.interval_end)}>{clockTime(observation.interval_end)}</time></small></> : <><b className="muted">no sample yet</b>{item.next_expected_execution_at && <small className="mono">first query {clockTime(item.next_expected_execution_at)}</small>}</>}</td>
+          <td data-label="SLOs">{linked.length ? <><div className="sli-list-links">{linked.map((objective) => <a key={objective.id} href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a>)}</div>{item.linked_slos && item.linked_slos.total_count > linked.length && <small>+{item.linked_slos.total_count - linked.length} more</small>}</> : canWrite ? <a className="sli-list-create" href="/slos/new" data-app-route>+ Create SLO</a> : <span className="sli-muted">No linked SLOs</span>}</td>
         </tr>;
       })}</tbody></table></div>}
-    {(items.length > 0 || listCursor || listNextCursor) && <nav className="sli-page-controls" aria-label="SLI result pages">
-      <SelectField id="sli-page-size" label="SLIs per page" value={String(listPageSize)} options={[{value:'10',label:'10'},{value:'20',label:'20'}]} onChange={event => void updateListPage(listSearch, listDatasourceID, event.target.value === '10' ? 10 : 20, '', [])} />
-      {(listCursor || listNextCursor) && <>
-        <Button variant="outline" disabled={!listCursor || listBusy} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)}>{listCursor && listPreviousCursors.length === 0 ? 'First page' : 'Previous page'}</Button>
-        <Button variant="outline" disabled={!listNextCursor || listBusy} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)}>Next page</Button>
-      </>}
-    </nav>}
+    {(items.length > 0 || listCursor || listNextCursor) && <Pager id="sli-page-size" label="SLI result pages" position={paged ? `Showing ${items.length} on this page` : `Showing ${items.length} of ${items.length}`} pageSize={listPageSize} onPageSizeChange={(size) => void updateListPage(listSearch, listDatasourceID, size, '', [])} hasPrevious={Boolean(listCursor)} hasNext={Boolean(listNextCursor)} busy={listBusy} onPrevious={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)} onNext={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)} />}
   </>;
 }
