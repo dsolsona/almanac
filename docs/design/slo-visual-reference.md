@@ -1,6 +1,6 @@
 # SLI and SLO visual reference
 
-> Proposed supersession, 2026-11-04: the maintainer reviewed the screens built
+> Superseded, 2026-11-04 (ADR-0028 accepted in Crit session `9a46588aaaa4`): the maintainer reviewed the screens built
 > against this reference and approved a new set of [HTML mocks](mocks/README.md)
 > covering SLI, SLO, datasource and agent screens. Under
 > [ADR-0028](../adr/0028-unified-operational-ui.md) those mocks become the

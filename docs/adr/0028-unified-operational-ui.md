@@ -1,9 +1,9 @@
 # ADR-0028: One visual grammar for operational and administration screens
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-04
-- Accepted: pending
-- Approval: pending maintainer approval of this record; the mocks it references were approved in the 2026-11-04 working conversation
+- Accepted: 2026-11-04
+- Approval: Crit session `9a46588aaaa4` approved with no comments, 2026-11-04; the mocks it references were approved in the same day's working conversation
 - Related specs: [SPEC-0012](../specs/0012-user-interface.md), [SPEC-0018](../specs/0018-agent-management-usability.md)
 - Supersedes / superseded by: supersedes the right-rail SLO detail composition and the slo-tracker screenshots as acceptance reference in [the visual reference](../design/slo-visual-reference.md); amends the native-select rule in [the design guide](../../web/DESIGN_SYSTEM.md)
 
@@ -20,7 +20,8 @@ The maintainer then approved a set of HTML mocks, iterated in that conversation,
 as the target for all four areas: [docs/design/mocks](../design/mocks/README.md).
 Several of those decisions change accepted contracts or guidance, which is why
 this record exists. The approved mocks are the authority for composition; this
-record captures the decisions that other documents must follow.
+record captures the decisions that other documents must follow. Accepted; the
+amendments to SPEC-0012, the visual reference and the design guide apply.
 
 ## Decision
 

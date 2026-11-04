@@ -1,7 +1,8 @@
 # UI mocks: unified SLI, SLO, datasource and agent screens
 
-The maintainer reviewed and approved these mocks on 2026-11-04 as the visual and
-interaction reference for Almanac's operational and administration screens. They
+The maintainer reviewed and approved these mocks on 2026-11-04, and accepted
+[ADR-0028](../../adr/0028-unified-operational-ui.md) and [plan 0025](../../plans/0025-ui-unification.md)
+in Crit the same day, making them the visual and interaction reference for Almanac's operational and administration screens. They
 replace the earlier slo-tracker screenshots as the acceptance reference; see
 [ADR-0028](../../adr/0028-unified-operational-ui.md) and the
 [visual reference](../slo-visual-reference.md).

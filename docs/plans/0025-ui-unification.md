@@ -1,6 +1,6 @@
 # UI unification: implement the approved mocks
 
-- State: proposed; awaiting maintainer approval of this plan and [ADR-0028](../adr/0028-unified-operational-ui.md)
+- State: accepted 2026-11-04 (Crit session `9a46588aaaa4`, no comments); F6-T01 in review, F6-T02 next
 - Created: 2026-11-04
 - Scope: UI-only; every element needing backend or contract changes is deferred (see the [mocks README](../design/mocks/README.md))
 - Base: merged `main` at `2f059e7` (PR #53); all earlier PRs merged
