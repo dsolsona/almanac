@@ -339,7 +339,7 @@ try {
   await expect(observedSample.getByRole('cell', { name: 'Observed', exact: true })).toBeVisible();
   await expect(observedSample.getByRole('cell', { name: '99', exact: true })).toBeVisible();
   await expect(observedSample.getByRole('cell', { name: '100', exact: true })).toBeVisible();
-  const searchInput = page.getByRole('textbox', { name: 'Search SLIs', exact: true });
+  const searchInput = page.getByRole('searchbox', { name: 'Search SLIs', exact: true });
   await searchInput.fill('request-success');
   await expect(page).toHaveURL(/q=request-success/);
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();

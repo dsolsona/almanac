@@ -108,9 +108,12 @@ function ratioPercent(good: string, total: string): string {
   if (!Number.isFinite(g) || !Number.isFinite(t) || t === 0) return '—';
   return `${(100 * g / t).toLocaleString(undefined, { maximumFractionDigits: g === t ? 0 : 2 })}%`;
 }
+// Groups the integer digits of an exact decimal string without converting it; every fractional digit is kept.
 function count(value: string): string {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toLocaleString() : value;
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
+  if (!match) return value;
+  const grouped = match[2]!.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${match[1]}${grouped}${match[3] ? `.${match[3]}` : ''}`;
 }
 
 function sliListHealth(item: Sli): 'healthy' | 'warning' | 'no-data' | 'stale' {
@@ -132,6 +135,19 @@ function sliVocabulary(item: Sli): { tone: MarkTone; label: string; reason: stri
   return { tone: 'healthy', label: 'Healthy', reason: item.agent_reachability === 'connected' ? 'agent connected' : `agent ${agent}`, attention: false };
 }
 
+// The list projection is found by following the bounded search pages until the SLI's own ID appears.
+async function findProjection(name: string, id: string, signal?: AbortSignal): Promise<Sli | null> {
+  let cursor = '';
+  for (let page = 0; page < 5; page += 1) {
+    const result = await slis.list(200, cursor, signal, name, '');
+    const match = result.items.find((item) => item.id === id);
+    if (match) return match;
+    cursor = result.next_cursor;
+    if (!cursor) break;
+  }
+  return null;
+}
+
 function makeIdempotencyKey(): string {
   if (typeof window.crypto?.randomUUID === 'function') return window.crypto.randomUUID();
   const random = Math.random().toString(36).slice(2);
@@ -146,9 +162,14 @@ function observationCoverage(row: SliObservation): Coverage {
   return 'missing';
 }
 // The chart is built from the loaded observation rows only; it never fabricates a range beyond them.
+const CHART_INTERVALS = 1440;
+// The chart plots the most recent intervals whose filled span stays within the lane's point budget; the exact table keeps every loaded row.
 function buildHistoryChart(rows: SliObservation[], cadenceSeconds: number): TimelineChart | null {
   if (rows.length === 0) return null;
-  const ordered = [...rows].sort((a, b) => Date.parse(a.interval_end) - Date.parse(b.interval_end));
+  const sorted = [...rows].sort((a, b) => Date.parse(a.interval_end) - Date.parse(b.interval_end));
+  const last = Date.parse(sorted[sorted.length - 1]!.interval_end);
+  const ordered = sorted.filter((row) => (last - Date.parse(row.interval_end)) / 1000 < cadenceSeconds * CHART_INTERVALS);
+  const trimmed = ordered.length < sorted.length;
   // Points sit at interval ends; the range end is exclusive, one cadence past the last end.
   const start = ordered[0]!.interval_start, end = new Date(Date.parse(ordered[ordered.length - 1]!.interval_end) + cadenceSeconds * 1000).toISOString();
   if (Date.parse(end) <= Date.parse(start)) return null;
@@ -157,7 +178,7 @@ function buildHistoryChart(rows: SliObservation[], cadenceSeconds: number): Time
     const value = coverage === 'complete' ? ((100 * Number(row.good_count)) / Number(row.total_count)).toFixed(4) : null;
     return { timestamp: row.interval_end, value, coverage };
   }).filter((point, index, all) => index === 0 || point.timestamp !== all[index - 1]!.timestamp);
-  return { title: 'Measurements', summary: `Good ÷ total for each loaded ${cadenceSeconds}-second interval. Failed and incomplete intervals are gaps; zero traffic is marked.`, start, end, stepMs: cadenceSeconds * 1000, fillExpectedGaps: true, timeZone: 'UTC', showLaneNames: false, lanes: [{ id: 'ratio', label: 'good ÷ total', unit: '%', height: 220, series: [{ id: 'ratio-series', label: 'Observed', points }] }] };
+  return { title: 'Measurements', summary: `Good ÷ total for each loaded ${cadenceSeconds}-second interval${trimmed ? ` (most recent ${CHART_INTERVALS} intervals plotted; the exact table keeps every loaded row)` : ''}. Failed and incomplete intervals are gaps; zero traffic is marked.`, start, end, stepMs: cadenceSeconds * 1000, fillExpectedGaps: true, timeZone: 'UTC', showLaneNames: false, lanes: [{ id: 'ratio', label: 'good ÷ total', unit: '%', height: 220, series: [{ id: 'ratio-series', label: 'Observed', points }] }] };
 }
 
 export function SlisPage({ context }: { context: AuthContext }) {
@@ -169,6 +190,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [sources, setSources] = useState<Datasource[]>([]);
   const [sli, setSli] = useState<Sli | null>(null);
   const [projection, setProjection] = useState<Sli | null>(null);
+  const [projectionMissing, setProjectionMissing] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentError, setAgentError] = useState(false);
   const [etag, setETag] = useState('');
@@ -253,6 +275,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setListBusy(false);
     setSli(null);
     setProjection(null);
+    setProjectionMissing(false);
     setAgent(null);
     setAgentError(false);
     setHistory([]);
@@ -312,7 +335,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           void fetchHistory(route.id, historyID, generation, '', request.signal);
           void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasource names could not be loaded.'); });
           // The list projection carries the bounded recent strip and linked objectives; the detail read omits them.
-          void slis.list(20, '', request.signal, resource.sli.name, '').then((page) => { if (current()) setProjection(page.items.find((item) => item.id === resource.sli.id) ?? null); }).catch(() => undefined);
+          void findProjection(resource.sli.name, resource.sli.id, request.signal).then((found) => { if (current()) { setProjection(found); setProjectionMissing(!found); } }).catch(() => { if (current() && !request.signal.aborted) setProjectionMissing(true); });
         }
       } catch (failure) {
         if (current() && !request.signal.aborted) setError(safeError(failure));
@@ -394,6 +417,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const historyID = ++historyRequest.current;
     setPending(true);
     setHistoryBusy(true);
+    setChartTablePage(1);
     setError('');
     setHistoryError('');
     try {
@@ -407,7 +431,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       if (context.session?.role === 'administrator' && !context.session.restricted) {
         void agentClient.current!.get(resource.sli.agent_id).then((value) => { if (generation === routeGeneration.current) { setAgent(value.agent); setAgentError(false); } }).catch(() => { if (generation === routeGeneration.current) setAgentError(true); });
       }
-      void slis.list(20, '', undefined, resource.sli.name, '').then((page) => { if (generation === routeGeneration.current) setProjection(page.items.find((item) => item.id === resource.sli.id) ?? null); }).catch(() => undefined);
+      void findProjection(resource.sli.name, resource.sli.id).then((found) => { if (generation === routeGeneration.current) { setProjection(found); setProjectionMissing(!found); } }).catch(() => { if (generation === routeGeneration.current) setProjectionMissing(true); });
       await fetchHistory(route.id, historyID, generation);
     } catch (failure) {
       if (generation === routeGeneration.current) setError(safeError(failure));
@@ -477,7 +501,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       setETag(`"sli:${updated.id}:${updated.version}"`);
       setFormError('');
       return true;
-    } catch (failure) { if (generation === routeGeneration.current) setError(safeError(failure)); return false; }
+    } catch (failure) { if (generation === routeGeneration.current) setFormError(safeError(failure)); return false; }
     finally { if (generation === routeGeneration.current) setPending(false); }
   }
 
@@ -606,7 +630,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       </section>
 
       <section className="sli-card" aria-labelledby="sli-objectives-title">
-        <header><h2 id="sli-objectives-title">Objectives</h2><span className="sli-card__hint">{projection ? `${totalLinked} SLO${totalLinked === 1 ? '' : 's'} use${totalLinked === 1 ? 's' : ''} this indicator` : 'linked objectives are loading'}</span>{canWrite && <div className="sli-card__tools"><Button variant="outline" onClick={() => navigate('/slos/new')}>+ New SLO</Button></div>}</header>
+        <header><h2 id="sli-objectives-title">Objectives</h2><span className="sli-card__hint">{projection ? `${totalLinked} SLO${totalLinked === 1 ? '' : 's'} use${totalLinked === 1 ? 's' : ''} this indicator` : projectionMissing ? 'linked objectives could not be read' : 'linked objectives are loading'}</span>{canWrite && <div className="sli-card__tools"><Button variant="outline" onClick={() => navigate('/slos/new')}>+ New SLO</Button></div>}</header>
         <div className="sli-card__body">{linked.length ? <ul className="sli-linked">{linked.map((objective) => <li key={objective.id}><a href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a><code>{objective.name}</code></li>)}{totalLinked > linked.length && <li className="sli-muted">Showing {linked.length} of {totalLinked}</li>}</ul> : projection ? <p className="sli-muted">No SLO targets this indicator yet.</p> : <span className="sr-only" role="status">Loading linked objectives</span>}</div>
       </section>
 

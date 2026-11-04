@@ -488,6 +488,22 @@ describe('SLI page', () => {
     expect(await screen.findByRole('option', { name: /Second source/ })).toBeVisible();
   });
 
+  it('keeps every digit of exact counts in the latest result', async () => {
+    history.replaceState({}, '', `/slis/${sliID}`);
+    const precise = { ...sli(), latest_observation: { ...sli().latest_observation!, good_count: '1234567.0001', total_count: '1234567.5' } };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/observations')) return response(historyPage([precise.latest_observation!]));
+      if (url.startsWith('/api/v1/datasources')) return response({ items: [source()], next_cursor: '' });
+      if (url.startsWith('/api/v1/slis?')) return response({ items: [precise], next_cursor: '' });
+      return response(precise, 200, { ETag: `"sli:${sliID}:2"` });
+    }));
+    render(<SlisPage context={viewer} />);
+    await screen.findByRole('heading', { name: 'Request success' });
+    expect(screen.getAllByText('1,234,567.0001').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1,234,567.5').length).toBeGreaterThan(0);
+  });
+
   it('keeps detail controls available when history fails and preserves a dirty draft on refresh', async () => {
     history.replaceState({}, '', `/slis/${sliID}`);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
