@@ -14,8 +14,8 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 
 | Mock | Screen | Implemented by |
 | --- | --- | --- |
-| `slo-list.html` | SLO list with triage band and urgency groups | planned, F6-T02 |
-| `slo-detail.html` | Single-column SLO detail: status band, timeline, definition | planned, F6-T02 |
+| `slo-list.html` | SLO list with triage band and urgency groups | [F6-T02](../../tasks/F6-T02.md), in review |
+| `slo-detail.html` | Single-column SLO detail: status band, timeline, definition | [F6-T02](../../tasks/F6-T02.md), in review (Events lane, Mute, edit page deferred) |
 | `slo-create.html` | New SLO: Identity → Indicator → Objective → Alerting | planned, F6-T04 |
 | `slo-edit.html` | Edit SLO with revision banner and history | planned, F6-T04 |
 | `sli-list.html` | Dense SLI table with health filter and 24 h strip | planned, F6-T03 |

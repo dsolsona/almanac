@@ -51,8 +51,7 @@ export function SearchField({ id, label, shortcut = false, inputRef, className =
   }, [shortcut, ref]);
   return <label className={`ui-search ${className}`.trim()} htmlFor={id}>
     <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="m12 12 5 5" stroke="currentColor" strokeWidth="1.5"/></svg>
-    <span className="sr-only">{label}</span>
-    <input {...props} ref={ref} id={id} type="search" autoComplete="off" />
+    <input {...props} ref={ref} id={id} type="search" autoComplete="off" aria-label={label} />
     {shortcut && <kbd aria-hidden="true">/</kbd>}
   </label>;
 }

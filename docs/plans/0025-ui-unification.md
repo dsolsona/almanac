@@ -26,7 +26,7 @@ the integrated result of the previous one.
   composition, card inset token, 13 px hint rule, textarea field. Every state in
   the catalogue, both themes, 360/1024/1440. No feature screen changes. Design
   guide updated.
-- [ ] **F6-T02 SLO list and detail.** Triage band, grouped rows with status
+- [ ] **F6-T02 SLO list and detail** ([F6-T02](../tasks/F6-T02.md), in review). Triage band, grouped rows with status
   vocabulary and Target · window column, header refresh; single-column detail with
   status band, timeline, definition. Edit SLO page limited to display name (the
   only editable field today). Re-run traced performance acceptance for list and
