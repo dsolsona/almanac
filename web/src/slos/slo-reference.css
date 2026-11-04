@@ -75,13 +75,26 @@
 .slo-empty p { margin:0; color:var(--text-2); }
 .slo-operational-overview .ui-pager { margin-top:4px; }
 
-@media (max-width:1350px) and (min-width:1001px) {
+/* The seven-column row needs about 772 px. With the 264 px sidebar, the page margins and the card inset that is a
+   1150 px viewport; narrower workspaces use the stacked two-column row so nothing overflows the card. */
+@media (max-width:1350px) and (min-width:1150px) {
   .app-slo-columns,.app-slo-row { grid-template-columns:140px minmax(160px,1fr) 90px 130px 96px 84px 12px; gap:10px; }
   .app-slo-exhaustion-head,.app-slo-exhaustion { display:none; }
 }
+@media (max-width:1149px) {
+  .app-slo-columns { display:none; }
+  .app-slo-row { grid-template-columns:minmax(0,1fr) 92px; gap:6px 12px; padding:12px 0; }
+  .app-slo-status { grid-column:1; grid-row:1; }
+  .app-slo-name { grid-column:1; grid-row:2; }
+  .app-slo-objective { grid-column:1; grid-row:3; }
+  .app-slo-spark { grid-column:1; grid-row:4; }
+  .app-slo-budget { grid-column:2; grid-row:1 / span 2; }
+  .app-slo-burn { grid-column:2; grid-row:3; }
+  .app-slo-exhaustion { grid-column:2; grid-row:4; }
+  .app-slo-chevron { display:none; }
+  .app-slo-name small { flex-wrap:wrap; gap:3px 6px; }
+}
 @media (max-width:1000px) and (min-width:861px) {
-  .app-slo-columns,.app-slo-row { grid-template-columns:130px minmax(150px,1fr) 84px 120px 90px 72px 12px; gap:10px; }
-  .app-slo-exhaustion-head,.app-slo-exhaustion { display:none; }
   .app-slo-triage { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .app-slo-tile--info { grid-column:1 / -1; }
 }
@@ -94,17 +107,6 @@
   .app-slo-tile__why { display:none; }
   .app-slo-tile--info { grid-column:1 / -1; }
   .app-slo-group > header small { flex-basis:100%; }
-  .app-slo-columns { display:none; }
-  .app-slo-row { grid-template-columns:minmax(0,1fr) 92px; gap:6px 12px; padding:12px 0; }
-  .app-slo-status { grid-column:1; grid-row:1; }
-  .app-slo-name { grid-column:1; grid-row:2; }
-  .app-slo-objective { grid-column:1; grid-row:3; }
-  .app-slo-spark { grid-column:1; grid-row:4; }
-  .app-slo-budget { grid-column:2; grid-row:1 / span 2; }
-  .app-slo-burn { grid-column:2; grid-row:3; }
-  .app-slo-exhaustion { grid-column:2; grid-row:4; }
-  .app-slo-chevron { display:none; }
-  .app-slo-name small { flex-wrap:wrap; gap:3px 6px; }
 }
 
 /* ---------- Detail ---------- */

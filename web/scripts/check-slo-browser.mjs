@@ -303,7 +303,8 @@ try {
   const objectiveRow=page.getByRole('row').filter({has:page.getByRole('link',{name:'Checkout availability historical',exact:true})}); await expect.poll(()=>objectiveRow.locator('.slo-reference-status').getAttribute('title')).toContain(expectedReason); await page.getByLabel('Search SLOs').fill('Checkout availability historical'); await page.getByLabel('Search SLOs').press('Enter'); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('q'))).toBe('Checkout availability historical');
   await page.getByLabel('Service',{exact:true}).selectOption(slo.service_id); await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('service_id'))).toBe(slo.service_id);
   stage='filtered overview urgency';
-  await page.getByLabel('Urgency',{exact:true}).selectOption(overviewItem.urgency);
+  // The triage band's urgency tiles replaced the urgency select (F6-T02); pressing one narrows the overview to that group.
+  await page.locator('.app-slo-triage button[aria-pressed]').filter({hasText:({needs_attention:'Needs attention',watch:'Watch',healthy:'Healthy'})[overviewItem.urgency]}).first().click();
   stage='filtered overview urgency URL';
   await expect.poll(()=>page.evaluate(()=>new URLSearchParams(location.search).get('urgency'))).toBe(overviewItem.urgency);
   await assertOverviewMatchesResponse();

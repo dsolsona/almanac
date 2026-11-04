@@ -109,6 +109,7 @@ export function SlosPage({context}:{context:AuthContext}) {
     setLoading(true);
     setBusy(false);
     setError('');
+    setEditOpen(false);
     setSlo(null);
     setService(null);
     const run = async () => {
