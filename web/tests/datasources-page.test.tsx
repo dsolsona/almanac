@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
@@ -55,6 +55,7 @@ describe('datasource page', () => {
       const path = String(input);
       if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West', enabled: true }, { id: target, display_name: 'Replacement', enabled: true }], next_cursor: '' });
       if (path.startsWith('/api/v1/providers')) return response({ items: [] });
+      if (path.startsWith('/api/v1/slis')) return response({ items: [], next_cursor: '' });
       if (init?.method === 'PUT') throw new Error('lost response');
       const first = reads++ === 0; const version = first ? '4' : '5';
       return response({ ...source(), version, ...(first || stillPending ? { reassignment } : {}) }, 200, { ETag: `"datasource:${sourceID}:${version}"` });
@@ -96,16 +97,17 @@ describe('datasource page', () => {
       const path = String(input);
       if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West', enabled: true }, { id: target, display_name: 'Replacement', enabled: true }], next_cursor: '' });
       if (path.startsWith('/api/v1/providers')) return response({ items: [] });
+      if (path.startsWith('/api/v1/slis')) return response({ items: [], next_cursor: '' });
       if (++reads === 1) return response({ ...source(), reassignment: { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T13:00:00Z', state: 'waiting_for_previous_agent' } }, 200, { ETag: `"datasource:${sourceID}:4"` });
       return response({ ...source(), agent_id: target, version: '5' }, 200, { ETag: `"datasource:${sourceID}:5"` });
     }));
     render(<DatasourcesPage context={admin} />);
     expect(await screen.findByText(/Almanac will start Replacement after West stops collecting/)).toBeVisible();
     expect(screen.getByText(/replacement may start later/)).toBeVisible();
-    expect(screen.getByLabelText('Assigned agent')).toHaveValue(agentID);
+    expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('West')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Refresh reassignment' }));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Moving datasource' })).not.toBeInTheDocument());
-    expect(screen.getByLabelText('Assigned agent')).toHaveValue(target);
+    expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('Replacement')).toBeVisible();
   });
   it('shows pending reassignment and cancels with the source and current version', async () => {
     const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
@@ -121,9 +123,9 @@ describe('datasource page', () => {
     });
     vi.stubGlobal('fetch', fetcher); render(<DatasourcesPage context={admin} />);
     expect(await screen.findByRole('heading', { name: 'Moving datasource' })).toBeVisible();
-    expect(screen.getByText(/Replacement.*unavailable/i)).toBeVisible();
+    expect(screen.getByText('Replacement is unavailable. Cancel this reassignment before choosing another collector.')).toBeVisible();
     expect(screen.getByLabelText('Prometheus endpoint')).toBeDisabled();
-    expect(screen.getByLabelText('Assigned agent')).toHaveValue(agentID);
+    expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('West collector')).toBeVisible();
     expect(screen.queryByText('Datasource settings saved.')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel reassignment' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/datasources/${sourceID}`, expect.objectContaining({ method: 'PUT' })));
@@ -179,13 +181,12 @@ describe('datasource page', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('cursor=')
       ? page : response({ items: [source()], next_cursor: 'next' })));
     const user = userEvent.setup(); render(<DatasourcesPage context={viewer} />);
-    await user.click(await screen.findByRole('button', { name: 'Next page' }));
-    expect(screen.getByRole('button', { name: /Production metrics/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    await user.click(await screen.findByRole('button', { name: 'Next ›' }));
+    expect(screen.getByRole('button', { name: 'Next ›' })).toBeDisabled();
     expect(screen.getByText('Refreshing datasources')).toHaveClass('sr-only');
     await act(async () => finish(response({}, 503)));
     expect(await screen.findByRole('alert')).toHaveTextContent('Showing previous results.');
-    expect(screen.getByRole('button', { name: /Production metrics/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Production metrics' })).toBeVisible();
   });
 
   it('does not show an empty datasource state after an initial read fails', async () => {
@@ -201,9 +202,9 @@ describe('datasource page', () => {
     const calls = installFetch();
     render(<DatasourcesPage context={viewer} />);
     expect(await screen.findByText('Production metrics')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Add datasource' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New datasource' })).not.toBeInTheDocument();
     expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
-    expect(screen.getByText('bearer · secret configured')).toBeVisible();
+    expect(screen.getByText('bearer · set')).toBeVisible();
   });
 
   it('keeps First page available while viewing the last page', async () => {
@@ -214,9 +215,9 @@ describe('datasource page', () => {
       : response({ items: [source()], next_cursor: 'after-first' }));
     vi.stubGlobal('fetch', fetcher);
     render(<DatasourcesPage context={viewer} />);
-    await user.click(await screen.findByRole('button', { name: 'Next page' }));
-    expect(await screen.findByRole('button', { name: 'First page' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'First page' }));
+    await user.click(await screen.findByRole('button', { name: 'Next ›' }));
+    expect(await screen.findByRole('button', { name: '‹ Previous' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '‹ Previous' }));
     expect(fetcher.mock.calls.at(-1)?.[0]).not.toContain('cursor=');
   });
 
@@ -226,22 +227,21 @@ describe('datasource page', () => {
     const calls = installFetch();
     render(<DatasourcesPage context={admin} />);
     await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
-    expect(screen.getByLabelText('Name')).toHaveValue('production-metrics');
-    await user.clear(screen.getByLabelText('Name'));
-    await user.type(screen.getByLabelText('Name'), 'metrics-prod');
+    expect(screen.getByLabelText('Identifier')).toHaveValue('production-metrics');
+    await user.clear(screen.getByLabelText('Identifier'));
+    await user.type(screen.getByLabelText('Identifier'), 'metrics-prod');
     await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Updated production metrics');
-    expect(screen.getByLabelText('Name')).toHaveValue('metrics-prod');
+    expect(screen.getByLabelText('Identifier')).toHaveValue('metrics-prod');
     await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Production metrics');
     const endpoint = screen.getByLabelText('Prometheus endpoint');
     await user.type(endpoint, 'http://localhost');
     expect(endpoint).toHaveValue('http://localhost');
-    await user.selectOptions(screen.getByLabelText('Authentication'), 'bearer');
-    await user.selectOptions(screen.getByLabelText('Bearer token secret'), 'replace');
-    await user.type(screen.getByLabelText('Bearer token value'), 'private-token-value');
+    await user.click(screen.getByRole('radio', { name: 'Bearer token' }));
+    await user.type(screen.getByLabelText('Token'), 'private-token-value');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
-    expect(await screen.findByText('Production metrics')).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Production metrics' })).toBeVisible();
     const create = calls.find((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST');
     expect(JSON.parse(String(create?.init?.body)).authentication.token_secret).toEqual({ action: 'replace', value: 'private-token-value' });
     expect(document.body.textContent).not.toContain('private-token-value');
@@ -259,7 +259,7 @@ describe('datasource page', () => {
     const calls = installFetch();
     render(<DatasourcesPage context={admin} />);
     await user.type(await screen.findByLabelText('Display name'), 'Local metrics');
-    const name = screen.getByLabelText('Name');
+    const name = screen.getByLabelText('Identifier');
     expect(name).toHaveValue('local-metrics');
     await user.clear(name);
     await user.type(name, 'Local Metrics');
@@ -275,10 +275,10 @@ describe('datasource page', () => {
     render(<DatasourcesPage context={admin} />);
     const displayName = await screen.findByLabelText('Display name');
     await user.type(displayName, '你好');
-    const name = screen.getByLabelText('Name');
+    const name = screen.getByLabelText('Identifier');
     expect(name).toHaveValue('');
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'http://localhost');
-    await user.selectOptions(screen.getByLabelText('Assigned agent'), agentID);
+    expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('West collector')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
     expect(screen.getByText('Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.')).toBeVisible();
     expect(name).toHaveFocus();
@@ -288,7 +288,7 @@ describe('datasource page', () => {
     await user.type(displayName, 'Local metrics');
     expect(name).toHaveValue('local-metrics');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
-    await screen.findByText('Production metrics');
+    await screen.findByRole('heading', { name: 'Production metrics' });
     const create = calls.find((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST');
     expect(JSON.parse(String(create?.init?.body)).name).toBe('local-metrics');
   });
@@ -298,14 +298,14 @@ describe('datasource page', () => {
     history.replaceState({}, '', '/datasources/new');
     const calls = installFetch(undefined, ['available'], [], undefined, [503, 201]);
     render(<DatasourcesPage context={admin} />);
-    await user.type(await screen.findByLabelText('Name'), 'first-source');
+    await user.type(await screen.findByLabelText('Identifier'), 'first-source');
     await user.type(screen.getByLabelText('Display name'), 'First source');
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://first.example.test');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
     await screen.findByRole('button', { name: 'Retry same create' });
-    await user.click(screen.getByRole('button', { name: 'Back to datasources' }));
-    await user.click(await screen.findByRole('button', { name: 'Add datasource' }));
-    await user.type(await screen.findByLabelText('Name'), 'second-source');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'New datasource' }));
+    await user.type(await screen.findByLabelText('Identifier'), 'second-source');
     await user.type(screen.getByLabelText('Display name'), 'Second source');
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://second.example.test');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
@@ -325,18 +325,18 @@ describe('datasource page', () => {
     const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input) === '/api/v1/datasources' && init?.method === 'POST' ? firstResponse : delegate(input, init));
     vi.stubGlobal('fetch', fetcher);
     render(<DatasourcesPage context={admin} />);
-    await user.type(await screen.findByLabelText('Name'), 'old-source');
+    await user.type(await screen.findByLabelText('Identifier'), 'old-source');
     await user.type(screen.getByLabelText('Display name'), 'Old source');
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://old.example.test');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/datasources', expect.objectContaining({ method: 'POST' })));
-    await user.click(screen.getByRole('button', { name: 'Back to datasources' }));
-    await user.click(await screen.findByRole('button', { name: 'Add datasource' }));
-    await user.type(await screen.findByLabelText('Name'), 'fresh-source');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'New datasource' }));
+    await user.type(await screen.findByLabelText('Identifier'), 'fresh-source');
     await user.type(screen.getByLabelText('Display name'), 'Fresh source');
     resolveFirst(response(source(), 201, { ETag: `"datasource:${sourceID}:4"` }));
     await waitFor(() => expect(location.pathname).toBe('/datasources/new'));
-    expect(screen.getByLabelText('Name')).toHaveValue('fresh-source');
+    expect(screen.getByLabelText('Identifier')).toHaveValue('fresh-source');
     expect(screen.getByLabelText('Display name')).toHaveValue('Fresh source');
     expect(screen.getByRole('button', { name: 'Create datasource' })).toBeEnabled();
   });
@@ -351,16 +351,16 @@ describe('datasource page', () => {
     const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input) === '/api/v1/datasources' && init?.method === 'POST' ? firstResponse : delegate(input, init));
     vi.stubGlobal('fetch', fetcher);
     render(<DatasourcesPage context={admin} />);
-    await user.type(await screen.findByLabelText('Name'), 'old-source');
+    await user.type(await screen.findByLabelText('Identifier'), 'old-source');
     await user.type(screen.getByLabelText('Display name'), 'Old source');
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://old.example.test');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/datasources', expect.objectContaining({ method: 'POST' })));
-    await user.click(screen.getByRole('button', { name: 'Back to datasources' }));
-    await user.click(await screen.findByRole('button', { name: 'Add datasource' }));
-    await user.type(await screen.findByLabelText('Name'), 'fresh-source');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'New datasource' }));
+    await user.type(await screen.findByLabelText('Identifier'), 'fresh-source');
     resolveFirst(response({ code: 'management_unavailable', message: 'safe failure' }, 503));
-    expect(await screen.findByLabelText('Name')).toHaveValue('fresh-source');
+    expect(await screen.findByLabelText('Identifier')).toHaveValue('fresh-source');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retry same create' })).not.toBeInTheDocument();
   });
@@ -376,12 +376,20 @@ describe('datasource page', () => {
     ]);
     render(<DatasourcesPage context={admin} />);
 
-    const assignment = await screen.findByLabelText('Assigned agent');
-    expect(screen.getByRole('option', { name: 'Never connected · capabilities not reported' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: 'Unsupported · diagnostics unsupported' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: 'Disabled · disabled' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: 'Offline capable · offline' })).not.toBeDisabled();
-    expect(assignment).toHaveValue(offlineID);
+    const picker = await screen.findByRole('region', { name: 'Agent' });
+    expect(await within(picker).findByText('Offline capable')).toBeVisible();
+    expect(within(picker).getByText('Unreachable')).toBeVisible();
+    await userEvent.click(within(picker).getByRole('button', { name: 'Change' }));
+    await userEvent.click(screen.getByLabelText('Assigned agent'));
+    expect(screen.getByRole('option', { name: /Never connected/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('option', { name: /Never connected/ })).toHaveTextContent('Never connected');
+    expect(screen.getByRole('option', { name: /Unsupported/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('option', { name: /Unsupported/ })).toHaveTextContent('Diagnostics unsupported');
+    expect(screen.getByRole('option', { name: /Disabled/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('option', { name: /Offline capable/ })).not.toHaveAttribute('aria-disabled');
+    await userEvent.click(screen.getByRole('option', { name: /Offline capable/ }));
+    expect(within(picker).getByText('Offline capable')).toBeVisible();
+    expect(offlineID).toBeTruthy();
     expect(screen.getByText('The assigned agent is offline. Diagnostics require a connected agent.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled();
   });
@@ -501,8 +509,8 @@ describe('datasource page', () => {
     const calls = installFetch(undefined, ['available', 'applying', 'available']);
     render(<DatasourcesPage context={admin} />);
 
-    expect(await screen.findByLabelText('Name')).toHaveValue('metrics-prod');
-    expect(screen.getByLabelText('Name')).toBeDisabled();
+    expect(await screen.findByLabelText('Identifier')).toHaveValue('metrics-prod');
+    expect(screen.getByLabelText('Identifier')).toBeDisabled();
     await user.clear(await screen.findByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Updated metrics');
     await user.click(screen.getByRole('button', { name: 'Save settings' }));
@@ -533,5 +541,89 @@ describe('datasource page', () => {
     const previews = calls.filter((call) => call.url === `/api/v1/datasources/${sourceID}/query-previews` && call.init?.method === 'POST');
     expect(previews.map((call) => JSON.parse(String(call.init?.body)).query)).toEqual(['up', 'up']);
     expect(screen.queryByText(/outcome is unknown/i)).not.toBeInTheDocument();
+  });
+
+  it('lists health, agent and SLI usage for administrators and filters the loaded page', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources');
+    const offlineID = '2e8fa70c-94dc-4cff-b15b-0953521e8ea6';
+    const second = { ...source(), id: 'c2e0739a-3c86-4a7f-b7e5-c15e9626e71c', name: 'staging', display_name: 'Staging metrics', agent_id: offlineID, tls: { insecure_skip_verify: true, ca_pem: null }, authentication: { mode: 'none', username: null, password_configured: false, token_configured: false } };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/v1/agents')) return response({ items: [
+        { id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } },
+        { id: offlineID, name: 'east', display_name: 'East collector', enabled: true, runtime: { reachability: 'unreachable', last_heartbeat_at: new Date(Date.now() - 7200_000).toISOString(), capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } },
+      ], next_cursor: '' });
+      if (url.startsWith('/api/v1/slis')) return response({ items: [{ id: 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c', name: 'request-success', display_name: 'Request success', version: '2', measurement_revision: '1', datasource_id: sourceID, datasource_version: '4', agent_id: agentID, agent_reachability: 'connected', collection_progress: 'idle', measurement_kind: 'event_counts', component_mode: 'interval_count', good_query: 'good', total_query: 'total', polling_interval_seconds: 60, settling_delay_seconds: 60, effective_from: '2026-10-27T12:00:00Z', activated_at: '2026-10-27T12:00:00Z', activation_state: 'active', freshness: 'fresh', latest_observation: null, last_attempt_at: null, last_observation_at: null, next_expected_execution_at: null, created_at: '2026-10-27T12:00:00Z', updated_at: '2026-10-27T12:00:00Z', datasource_display_name: 'Production metrics', recent_measurements: [], linked_slos: { items: [], total_count: 0 } }], next_cursor: '' });
+      return response({ items: [source(), second], next_cursor: '' });
+    }));
+    render(<DatasourcesPage context={admin} />);
+    const table = await screen.findByRole('table', { name: 'Datasources' });
+    expect(screen.getByText('2 datasources · 1 needs attention · all times UTC')).toBeVisible();
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows[0]).toHaveTextContent('Healthy');
+    expect(rows[0]).toHaveTextContent('agent connected');
+    expect(rows[0]).toHaveTextContent('bearer · set');
+    expect(rows[1]).toHaveTextContent('Not collecting');
+    expect(rows[1]).toHaveTextContent('agent unreachable for 2 h');
+    expect(rows[1]).toHaveTextContent('TLS unverified');
+    await waitFor(() => expect(rows[0]).toHaveTextContent('1'));
+    expect(screen.getByRole('radio', { name: 'Unused 1' })).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Needs attention 1' }));
+    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(within(table).getByRole('link', { name: 'Staging metrics' })).toBeVisible();
+    await user.click(screen.getByRole('radio', { name: 'All 2' }));
+    await user.type(screen.getByLabelText('Filter datasources'), 'West');
+    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(within(table).getByRole('link', { name: 'Production metrics' })).toBeVisible();
+    await user.selectOptions(screen.getByLabelText('Agent'), offlineID);
+    expect(screen.getByText('No datasources match these filters on this page.')).toBeVisible();
+  });
+
+  it('switches TLS modes with the segmented control and continues into SLI creation', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources/new');
+    const calls = installFetch();
+    render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://metrics.example.test');
+    expect(screen.queryByLabelText('Custom CA PEM')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Custom CA' }));
+    await user.type(screen.getByLabelText('Custom CA PEM'), '-----BEGIN CERTIFICATE-----');
+    await user.click(screen.getByRole('radio', { name: 'Skip verification' }));
+    expect(screen.getByText(/Insecure: the certificate is not checked/)).toBeVisible();
+    await user.click(screen.getByRole('radio', { name: 'Verify certificate' }));
+    expect(screen.getByRole('radio', { name: '60 s' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByRole('radio', { name: '5 min' }));
+    await user.click(screen.getByRole('button', { name: 'Create and add an SLI' }));
+    await waitFor(() => expect(location.pathname + location.search).toBe(`/slis/new?datasource=${sourceID}`));
+    const create = calls.find((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST');
+    const body = JSON.parse(String(create?.init?.body));
+    expect(body.tls).toEqual({ insecure_skip_verify: false, ca_pem: null });
+    expect(body.polling_interval_seconds).toBe(300);
+  });
+
+  it('shows the detail tiles, the unreachable-agent banner and discards edits', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    installFetch([{ id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'unreachable', last_heartbeat_at: '2026-10-22T08:00:00Z', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } }]);
+    render(<DatasourcesPage context={admin} />);
+    expect(await screen.findByRole('heading', { name: 'Production metrics' })).toBeVisible();
+    expect(screen.getByText(/Not collecting · agent unreachable/)).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Agent unreachable' })).toHaveTextContent('has not sent a heartbeat since 08:00:00 UTC');
+    expect(screen.getByRole('link', { name: 'Open the agent' })).toHaveAttribute('href', `/agents?agent=${agentID}`);
+    expect(screen.getByText('Used by')).toBeVisible();
+    expect(screen.getByText('every 60 s')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toBeDisabled();
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Renamed');
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByLabelText('Display name')).toHaveValue('Production metrics');
+    expect(screen.getByText('Set')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+    expect(screen.getByLabelText('Token')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Keep saved token' }));
+    expect(screen.getByText('Set')).toBeVisible();
   });
 });

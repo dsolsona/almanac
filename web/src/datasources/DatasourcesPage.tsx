@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, SearchField, SegmentedControl, SelectField, StatusMark, TextareaField, TextField, Toolbar, type ComboboxOption, type MarkTone } from '../components/ui/index.ts';
+import { createSliClient } from '../slis/client.ts';
+import { relativeAge } from '../slis/vocabulary.ts';
 import { createDatasourceClient, DatasourceFailure, type Datasource, type DatasourceWrite, type Diagnostic, type Provider } from './client.ts';
 import './datasources.css';
 import { journeyContentReady } from '../telemetry/client.ts';
 
-type Agent = { id: string; name: string; display_name: string; enabled: boolean; runtime?: { reachability?: string; capabilities?: { provider: string; configuration_formats: string[]; operations: string[] }[] } | null };
+type Agent = { id: string; name: string; display_name: string; enabled: boolean; runtime?: { reachability?: string; protocol?: string; software_version?: string; last_heartbeat_at?: string | null; capabilities?: { provider: string; configuration_formats: string[]; operations: string[] }[] } | null };
+type SliUsage = Map<string, { count: number; names: string[] }>;
+type HealthFilter = 'all' | 'attention' | 'unused';
+type TlsMode = 'verify' | 'ca' | 'skip';
 type ProviderReadinessState = Provider['availability'] | 'loading' | 'still_applying' | 'error';
 type Draft = Omit<DatasourceWrite, 'authentication'> & { authMode: 'none' | 'basic' | 'bearer'; username: string; password: string; token: string; passwordAction: 'replace' | 'retain' | 'clear'; tokenAction: 'replace' | 'retain' | 'clear'; passwordConfigured: boolean; tokenConfigured: boolean; nameEdited: boolean };
 type SaveIntent = { input: DatasourceWrite; key: string; etag?: string; isNew: boolean; route: string; cancelReassignment?: boolean };
 
 const client = createDatasourceClient();
+const sliClient = createSliClient();
+const clockFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC', hour12: false });
+const CADENCE_PRESETS = [['15', '15 s'], ['30', '30 s'], ['60', '60 s'], ['300', '5 min']] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DATASOURCE_NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,12 +68,63 @@ function supportsDatasourceDiagnostics(agent: Agent): boolean {
   return state === 'connected' || state === 'offline';
 }
 
-function datasourceAgentLabel(agent: Agent): string {
-  const labels: Record<DatasourceAgentState, string> = {
-    disabled: 'disabled', unreported: 'capabilities not reported', incompatible: 'incompatible protocol',
-    unsupported: 'diagnostics unsupported', offline: 'offline', connected: 'connected',
+// Picker status for an agent, from the same eligibility rules the assignment uses.
+function agentOption(agent: Agent): ComboboxOption {
+  const state = datasourceAgentState(agent);
+  const runtime = agent.runtime ?? undefined;
+  const status: Record<DatasourceAgentState, [MarkTone, string]> = {
+    connected: ['healthy', 'Connected'], offline: ['stale', 'Unreachable'], disabled: ['none', 'Disabled'],
+    unreported: ['none', runtime ? 'Capabilities not reported' : 'Never connected'], incompatible: ['warning', 'Incompatible protocol'], unsupported: ['warning', 'Diagnostics unsupported'],
   };
-  return `${agent.display_name} · ${labels[datasourceAgentState(agent)]}`;
+  const [tone, label] = status[state];
+  const detail = [runtime?.protocol && runtime.software_version ? `${runtime.protocol} · ${runtime.software_version}` : '', runtime?.last_heartbeat_at ? `last heartbeat ${relativeAge(runtime.last_heartbeat_at)}` : '',
+    state === 'connected' ? 'can test & preview' : state === 'offline' ? 'tests wait until it reconnects' : state === 'unreported' && !runtime ? 'start it with its token first' : ''].filter(Boolean).join(' · ');
+  return { id: agent.id, label: agent.display_name, keywords: agent.name, tone, status: label, detail: detail || undefined, disabled: !supportsDatasourceDiagnostics(agent) };
+}
+
+// ADR-0028 vocabulary for a datasource row, from its assignment and the agent's runtime only.
+function datasourceVocabulary(item: Datasource, agents: Agent[]): { tone: MarkTone; label: string; reason: string; attention: boolean } {
+  const byID = (id: string) => agents.find((agent) => agent.id === id)?.display_name ?? 'another agent';
+  if (item.reassignment) {
+    const from = byID(item.reassignment.source_agent_id), to = byID(item.reassignment.target_agent_id);
+    return { tone: 'warning', label: 'Moving', reason: item.reassignment.state === 'replacement_unavailable' ? `${from} → ${to} · ${to} unavailable` : `${from} → ${to} · waiting for ${from}`, attention: true };
+  }
+  const agent = agents.find((candidate) => candidate.id === item.agent_id);
+  if (!agent) return { tone: 'none', label: 'Unknown agent', reason: 'assigned agent not found', attention: true };
+  switch (datasourceAgentState(agent)) {
+    case 'connected': return { tone: 'healthy', label: 'Healthy', reason: 'agent connected', attention: false };
+    case 'offline': return { tone: 'stale', label: 'Not collecting', reason: agent.runtime?.last_heartbeat_at ? `agent unreachable for ${relativeAge(agent.runtime.last_heartbeat_at).replace(' ago', '')}` : 'agent unreachable', attention: true };
+    case 'disabled': return { tone: 'stale', label: 'Not collecting', reason: 'agent disabled', attention: true };
+    case 'unreported': return { tone: 'none', label: 'Waiting', reason: agent.runtime ? 'agent capabilities not reported' : 'agent never connected', attention: false };
+    case 'incompatible': return { tone: 'warning', label: 'Needs attention', reason: 'agent protocol incompatible', attention: true };
+    case 'unsupported': return { tone: 'warning', label: 'Needs attention', reason: 'agent lacks Prometheus diagnostics', attention: true };
+  }
+}
+
+// Best-effort SLI usage per datasource from the bounded SLI list; a few pages at most.
+async function loadSliUsage(signal: AbortSignal, datasourceID = ''): Promise<{ usage: SliUsage; truncated: boolean }> {
+  const usage: SliUsage = new Map();
+  let cursor = '';
+  for (let page = 0; page < 5; page += 1) {
+    const result = await sliClient.list(200, cursor, signal, '', datasourceID);
+    for (const item of result.items) {
+      const entry = usage.get(item.datasource_id) ?? { count: 0, names: [] };
+      entry.count += 1;
+      if (entry.names.length < 3) entry.names.push(item.name);
+      usage.set(item.datasource_id, entry);
+    }
+    cursor = result.next_cursor;
+    if (!cursor) return { usage, truncated: false };
+  }
+  return { usage, truncated: true };
+}
+
+// An empty PEM keeps the Custom CA choice open in the form; it is sent as null.
+function tlsMode(tls: DatasourceWrite['tls']): TlsMode {
+  return tls.insecure_skip_verify ? 'skip' : tls.ca_pem !== null ? 'ca' : 'verify';
+}
+function normalizeTls(tls: DatasourceWrite['tls']): DatasourceWrite['tls'] {
+  return { insecure_skip_verify: tls.insecure_skip_verify, ca_pem: tls.ca_pem ? tls.ca_pem : null };
 }
 
 function datasourceAvailabilityMessage(agent: Agent | undefined, agents: Agent[]): string {
@@ -143,7 +202,7 @@ function asWrite(draft: Draft, isNew: boolean): DatasourceWrite {
   const secret = (action: Draft['passwordAction'], value: string) => action === 'replace' ? { action, value } : { action };
   const passwordAction = draft.authMode === 'basic' ? (isNew && draft.passwordAction === 'retain' ? 'clear' : draft.passwordAction) : 'clear';
   const tokenAction = draft.authMode === 'bearer' ? (isNew && draft.tokenAction === 'retain' ? 'clear' : draft.tokenAction) : 'clear';
-  return { name: draft.name.trim(), display_name: draft.display_name.trim(), provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: draft.endpoint.trim(), tls: draft.tls,
+  return { name: draft.name.trim(), display_name: draft.display_name.trim(), provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: draft.endpoint.trim(), tls: normalizeTls(draft.tls),
       authentication: { mode: draft.authMode, username: draft.authMode === 'basic' ? draft.username : null, password_secret: secret(passwordAction, draft.password), token_secret: secret(tokenAction, draft.token) },
     polling_interval_seconds: Number(draft.polling_interval_seconds), agent_id: draft.agent_id };
 }
@@ -157,7 +216,7 @@ function connectionDraftChanged(draft: Draft, source: Datasource): boolean {
   const authChanged = draft.authMode !== source.authentication.mode
     || (draft.authMode === 'basic' && (draft.username !== (source.authentication.username ?? '') || draft.passwordAction !== 'retain' || draft.password !== ''))
     || (draft.authMode === 'bearer' && (draft.tokenAction !== 'retain' || draft.token !== ''));
-  return draft.endpoint.trim() !== source.endpoint || JSON.stringify(draft.tls) !== JSON.stringify(source.tls)
+  return draft.endpoint.trim() !== source.endpoint || JSON.stringify(normalizeTls(draft.tls)) !== JSON.stringify(normalizeTls(source.tls))
     || draft.agent_id !== source.agent_id || authChanged;
 }
 
@@ -177,6 +236,16 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [items, setItems] = useState<Datasource[]>([]);
   const [cursor, setCursor] = useState('');
   const [nextCursor, setNextCursor] = useState('');
+  const [previousCursors, setPreviousCursors] = useState<string[]>([]);
+  const [pageSize, setPageSize] = useState(20);
+  const [updatedAt, setUpdatedAt] = useState('');
+  const [sliUsage, setSliUsage] = useState<SliUsage | null>(null);
+  const [sliUsageTruncated, setSliUsageTruncated] = useState(false);
+  const [listSearch, setListSearch] = useState('');
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
+  const [agentFilter, setAgentFilter] = useState('');
+  const [createAndAddSli, setCreateAndAddSli] = useState(false);
+  const continueToSli = useRef(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [previewReadiness, setPreviewReadiness] = useState<ProviderReadinessState>('loading');
@@ -243,17 +312,18 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     return () => window.removeEventListener('popstate', changed);
   }, []);
 
-  const loadList = useCallback((next = '') => {
+  const loadList = useCallback((next = '', size = 20) => {
     const request = new AbortController(); const routeAtRequest = locationKeyRef.current; setLoading(true); setError('');
     void (async () => {
       try {
         const [page, agentItems] = await Promise.all([
-          client.list(50, next, request.signal),
+          client.list(size, next, request.signal),
           admin ? loadAgents(request.signal) : Promise.resolve([]),
         ]);
         if (request.signal.aborted || locationKeyRef.current !== routeAtRequest) return;
         listResultKey.current = routeAtRequest;
-        setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setAgents(agentItems);
+        setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setAgents(agentItems); setUpdatedAt(clockFormat.format(new Date()));
+        void loadSliUsage(request.signal).then((result) => { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) { setSliUsage(result.usage); setSliUsageTruncated(result.truncated); } }).catch(() => undefined);
       } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setError(`${safeError(reason)}${listResultKey.current === routeAtRequest ? ' Showing previous results.' : ''}`); }
       finally { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setLoading(false); }
     })();
@@ -264,16 +334,19 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     if (selectedID) {
       const request = new AbortController(); setLoading(true); setError(''); setNotice(''); setReassignmentStale(false);
       setProviders([]); setPreviewReadiness('loading');
+      setSliUsage(null);
+      void loadSliUsage(request.signal, selectedID).then((result) => { if (!request.signal.aborted) setSliUsage(result.usage); }).catch(() => undefined);
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
         if (request.signal.aborted) return [] as Agent[];
-        setSource(datasource); setEtag(tag); setDraft(fromDatasource(datasource));
+        setSource(datasource); setEtag(tag); setDraft(fromDatasource(datasource)); setUpdatedAt(clockFormat.format(new Date()));
         return admin ? loadAgents(request.signal) : Promise.resolve([] as Agent[]);
       }).then((agentItems) => { if (!request.signal.aborted) setAgents(agentItems); })
         .catch((reason: unknown) => { if (!request.signal.aborted) setError(safeError(reason)); }).finally(() => { if (!request.signal.aborted) setLoading(false); });
       return () => request.abort();
     }
     setSource(null); setEtag(''); setDraft(emptyDraft()); setProviders([]); setPreviewReadiness('loading'); setDiagnostic(null);
-    if (!isNew) { const request = loadList(cursor); return () => request.abort(); }
+    setCreateAndAddSli(false); continueToSli.current = false;
+    if (!isNew) { const request = loadList(cursor, pageSize); return () => request.abort(); }
     const request = new AbortController(); setLoading(true);
     void loadAgents(request.signal).then(async (result) => {
       if (request.signal.aborted) return;
@@ -283,6 +356,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     }).catch((reason: unknown) => { if (!request.signal.aborted) setError(safeError(reason)); }).finally(() => { if (!request.signal.aborted) setLoading(false); });
     return () => request.abort();
   // locationKey is the route state; cursor is intentionally retained by Back.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- pageSize changes reload through the pager handler.
   }, [locationKey, selectedID, isNew, loadList, admin, canPreview]);
   useEffect(() => {
     if (!loading) journeyContentReady('management', !!error);
@@ -354,7 +428,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       if (!activeIntent()) return;
       saveIntent.current = null; setUncertainSave(false); setNotice(intent.isNew ? 'Datasource created.' : saved.reassignment ? '' : intent.cancelReassignment ? 'Reassignment canceled.' : 'Datasource settings saved.'); setDiagnostic(null);
       setDraft((current) => ({ ...current, password: '', token: '' }));
-      if (intent.isNew) { setPending(false); navigate(returnToSLI ? `/slis/new?datasource=${encodeURIComponent(saved.id)}` : '/datasources'); }
+      if (intent.isNew) { setPending(false); navigate(returnToSLI || continueToSli.current ? `/slis/new?datasource=${encodeURIComponent(saved.id)}` : `/datasources/${saved.id}`); }
       else {
         setSource(saved); setEtag(`"datasource:${saved.id}:${saved.version}"`); setDraft(fromDatasource(saved));
         setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
@@ -389,7 +463,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     try {
       const [current, agentItems] = await Promise.all([client.get(selectedID, request.signal), admin ? loadAgents(request.signal) : Promise.resolve([])]);
       if (request.signal.aborted || locationKeyRef.current !== route) return;
-      setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource)); setAgents(agentItems); setReassignmentStale(false); setNotice('Datasource status refreshed.');
+      setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource)); setAgents(agentItems); setReassignmentStale(false); setUpdatedAt(clockFormat.format(new Date())); setNotice('Datasource status refreshed.');
     } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === route) setError(safeError(reason)); }
     finally { if (!request.signal.aborted && locationKeyRef.current === route) setPending(false); if (saveController.current === request) saveController.current = null; }
   }
@@ -499,53 +573,170 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     finally { setCancelSubmitting(false); }
   }
 
-  if (loading && (selectedID || isNew || listResultKey.current !== locationKey)) return <><PageTitle headingRef={heading} isList={!selectedID && !isNew} title={isNew ? 'Add datasource' : selectedID ? 'Datasource' : 'Datasources'} /><span className="sr-only" role="status">Opening datasource</span></>;
+  const listCrumb = { label: 'Datasources', href: '/datasources' };
+  const createHeader = <PageHeader title="New datasource" summary="Three steps: name it, say where Prometheus is, pick the agent that can reach it." breadcrumb={{ ...listCrumb, current: 'New datasource' }} headingRef={heading} />;
+  if (loading && (selectedID || isNew || listResultKey.current !== locationKey)) return <>{isNew ? createHeader : <PageTitle headingRef={heading} isList={!selectedID} title={selectedID ? 'Datasource' : 'Datasources'} />}<span className="sr-only" role="status">Opening datasource</span></>;
   if (error && !source && selectedID) return <><PageTitle headingRef={heading} isList={!selectedID} title="Datasources" /><Panel heading="Datasource unavailable"><p ref={errorSummary} role="alert" tabIndex={-1}>{error}</p><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button></Panel></>;
+  const usageOf = (id: string) => sliUsage?.get(id) ?? (sliUsage ? { count: 0, names: [] } : null);
+  const agentName = (id: string) => agents.find((agent) => agent.id === id)?.display_name ?? null;
+
   if (!selectedID && !isNew) {
     const currentItems = listResultKey.current === locationKey ? items : [];
+    const term = listSearch.trim().toLowerCase();
+    const rows = currentItems.map((item) => ({ item, vocabulary: admin ? datasourceVocabulary(item, agents) : null, usage: usageOf(item.id) }));
+    const attention = rows.filter((row) => row.vocabulary?.attention).length;
+    const moving = rows.filter((row) => row.item.reassignment).length;
+    const unused = rows.filter((row) => row.usage?.count === 0).length;
+    const visible = rows.filter((row) => (!term || `${row.item.display_name} ${row.item.name} ${row.item.endpoint} ${agentName(row.item.agent_id) ?? ''}`.toLowerCase().includes(term))
+      && (healthFilter === 'all' || (healthFilter === 'attention' ? row.vocabulary?.attention : row.usage?.count === 0))
+      && (!agentFilter || row.item.agent_id === agentFilter));
+    const summary = [`${currentItems.length} datasource${currentItems.length === 1 ? '' : 's'}${nextCursor || cursor ? ' on this page' : ''}`, admin ? `${attention} need${attention === 1 ? 's' : ''} attention` : '', moving ? `${moving} moving` : '', 'all times UTC'].filter(Boolean).join(' · ');
     return <>
-    <div className="datasource-list-heading"><PageTitle headingRef={heading} isList={!selectedID} title="Datasources" />{admin && <Button onClick={() => navigate('/datasources/new')}>Add datasource</Button>}</div>
-    {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
-    <div className="datasource-toolbar"><p>Prometheus sources assigned to collection agents.</p>{loading && <span className="sr-only" role="status">Refreshing datasources</span>}</div>
-    {currentItems.length === 0 && error && listResultKey.current !== locationKey ? null : currentItems.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <div className="datasource-list" aria-label="Datasources">
-      {currentItems.map((item) => <button className="datasource-row" key={item.id} disabled={loading} onClick={() => navigate(`/datasources/${item.id}`)}><span><strong>{item.display_name}</strong><small>{item.endpoint}</small></span><span className="datasource-row__meta"><small>{item.authentication.mode === 'none' ? 'No authentication' : `${item.authentication.mode} · secret ${item.authentication[ item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured' ] ? 'configured' : 'not configured'}`}</small><small>Version {item.version}</small></span></button>)}
-    </div>}
-    {listResultKey.current === locationKey && (nextCursor || cursor) && <div className="datasource-pagination">{nextCursor && <Button variant="outline" disabled={loading} onClick={() => void loadList(nextCursor)}>Next page</Button>}{cursor && <Button variant="outline" disabled={loading} onClick={() => void loadList('')}>First page</Button>}</div>}
-  </>;
+      <PageHeader title="Datasources" summary={summary} updatedAt={updatedAt} headingRef={heading} actions={<><Button variant="outline" aria-label="Refresh datasources" pending={loading} onClick={() => loadList(cursor, pageSize)}>↻ Refresh</Button>{admin && <Button onClick={() => navigate('/datasources/new')}>New datasource</Button>}</>} />
+      {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
+      {loading && <span className="sr-only" role="status">Refreshing datasources</span>}
+      {currentItems.length === 0 && error && listResultKey.current !== locationKey ? null : currentItems.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <>
+        <Toolbar>
+          <SearchField id="datasource-search" label="Filter datasources" placeholder="Filter by name, endpoint or agent" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
+          <SegmentedControl label="Filter by health" value={healthFilter} onChange={setHealthFilter} options={[{ value: 'all', label: 'All', count: rows.length }, ...(admin ? [{ value: 'attention' as const, label: 'Needs attention', count: attention }] : []), ...(sliUsage ? [{ value: 'unused' as const, label: 'Unused', count: unused }] : [])]} />
+          {admin && agents.length > 0 && <SelectField id="datasource-agent-filter" label="Agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} options={[{ value: '', label: 'All agents' }, ...agents.map((agent) => ({ value: agent.id, label: agent.display_name }))]} />}
+        </Toolbar>
+        {visible.length === 0 ? <p className="datasource-empty-filter">No datasources match these filters on this page.</p> : <table className="ds-table" aria-label="Datasources">
+          <thead><tr>{admin && <th scope="col">Health</th>}<th scope="col">Datasource</th>{admin && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col">Auth</th><th scope="col" className="num">SLIs</th></tr></thead>
+          <tbody>{visible.map(({ item, vocabulary, usage }) => <tr key={item.id} className="ds-row">
+            {admin && vocabulary && <td data-label="Health"><StatusMark tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>}
+            <td data-label="Datasource" className="ds-row__name"><a href={`/datasources/${item.id}`} data-app-route onClick={(event) => { event.preventDefault(); navigate(`/datasources/${item.id}`); }}>{item.display_name}</a><span className="ds-row__sub">Prometheus · {item.endpoint}{item.tls.insecure_skip_verify && <span className="ui-pill ds-pill--warning">TLS unverified</span>}</span></td>
+            {admin && <td data-label="Agent"><StatusMark tone={vocabulary?.tone === 'warning' && !item.reassignment ? 'warning' : item.reassignment ? 'warning' : vocabulary?.tone ?? 'none'} label={item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'} /></td>}
+            <td data-label="Cadence" className="mono">{item.polling_interval_seconds} s</td>
+            <td data-label="Auth" className="ds-row__auth">{item.authentication.mode === 'none' ? 'none' : `${item.authentication.mode} · ${item.authentication[item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured'] ? 'set' : 'not set'}`}</td>
+            <td data-label="SLIs" className="num mono">{usage ? `${usage.count}${sliUsageTruncated ? '+' : ''}` : '—'}</td>
+          </tr>)}</tbody>
+        </table>}
+        <Pager id="datasource-page-size" label="Datasource result pages" position={`Showing ${visible.length} of ${currentItems.length}${nextCursor || cursor ? ' on this page' : ''}`} pageSize={pageSize} onPageSizeChange={(size) => { setPageSize(size); setPreviousCursors([]); loadList('', size); }} hasPrevious={previousCursors.length > 0} hasNext={Boolean(nextCursor)} busy={loading}
+          onPrevious={() => { const previous = previousCursors[previousCursors.length - 1] ?? ''; setPreviousCursors((stack) => stack.slice(0, -1)); loadList(previous, pageSize); }}
+          onNext={() => { setPreviousCursors((stack) => [...stack, cursor]); loadList(nextCursor, pageSize); }} />
+      </>}
+    </>;
   }
 
   const readonly = !admin;
   const formDisabled = readonly || pending || currentUncertainSave || Boolean(source?.reassignment);
-  return <>
-    <PageTitle headingRef={heading} title={isNew ? 'Add datasource' : source?.display_name ?? 'Datasource'} />
-    <div className="datasource-toolbar"><Button variant="outline" onClick={() => navigate(returnToSLI ? '/slis/new' : '/datasources')}>{returnToSLI ? 'Back to SLI' : 'Back to datasources'}</Button>{source && <p>Version {source.version} · assigned agent {agents.find((agent) => agent.id === source.agent_id)?.display_name ?? source.agent_id}</p>}</div>
-    {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
-    {source?.reassignment && <Panel heading="Moving datasource">{source.reassignment.state === 'replacement_unavailable' ? <p>{agents.find((agent) => agent.id === source.reassignment!.target_agent_id)?.display_name ?? 'The replacement collector'} is unavailable. Cancel this reassignment before choosing another collector.</p> : <p>Almanac will start {agents.find((agent) => agent.id === source.reassignment!.target_agent_id)?.display_name ?? 'the replacement collector'} after {agents.find((agent) => agent.id === source.reassignment!.source_agent_id)?.display_name ?? 'the previous collector'} stops collecting.</p>}<p>If the previous agent is offline, this may require waiting until <time dateTime={source.reassignment.authority_expires_at} title={source.reassignment.authority_expires_at}>{displayTime(source.reassignment.authority_expires_at)}</time>. The replacement may start later.</p><div className="datasource-actions"><Button variant="outline" disabled={pending || currentUncertainSave} onClick={() => void refreshReassignment()}>Refresh reassignment</Button>{admin && <Button variant="outline" disabled={pending || currentUncertainSave || reassignmentStale} onClick={() => void cancelReassignment()}>Cancel reassignment</Button>}</div></Panel>}
-    {isNew && admin && !agents.some(supportsDatasourceDiagnostics) && <p className="datasource-alert">{agents.length === 0 ? 'Register and start an Almanac agent before adding a datasource.' : agents.some((agent) => agent.enabled && datasourceAgentState(agent) === 'unreported') ? 'Start your registered agent before assigning this datasource.' : datasourceAvailabilityMessage(undefined, agents)} <Button variant="outline" onClick={() => navigate('/agents')}>View agents</Button></p>}
-    <Panel heading="Connection settings"><form className="datasource-form" onSubmit={(event) => void submit(event)}>
-      <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} onChange={(event) => {
+  const selectedUsage = source ? usageOf(source.id) : null;
+  const vocabulary = source && admin ? datasourceVocabulary(source, agents) : null;
+  const sourceAgent = source ? agents.find((agent) => agent.id === source.agent_id) : undefined;
+  const prometheusProvider = providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1');
+  const dirty = source ? connectionDraftChanged(draft, source) || draft.display_name !== source.display_name || Number(draft.polling_interval_seconds) !== source.polling_interval_seconds : false;
+  const agentOptions = agents.map(agentOption);
+  const agentPicker = <Combobox id="datasource-agent" label="Assigned agent" options={agentOptions} value={draft.agent_id || null} onChange={(id) => selectAgent(id ?? '')} disabled={formDisabled} placeholder="Type an agent name…" hint={source ? 'Moving hands over collection without a gap: the new agent starts after the current one stops, or after its authority expires if it stays offline.' : 'The agent runs every query for this datasource, so it must have network access to the endpoint.'} />;
+  const secretField = (kind: 'password' | 'token') => {
+    const action = kind === 'password' ? draft.passwordAction : draft.tokenAction;
+    const configured = kind === 'password' ? draft.passwordConfigured : draft.tokenConfigured;
+    const value = kind === 'password' ? draft.password : draft.token;
+    const label = kind === 'password' ? 'Password' : 'Token';
+    const setAction = (next: Draft['passwordAction']) => setDraft((current) => kind === 'password' ? { ...current, passwordAction: next, password: '' } : { ...current, tokenAction: next, token: '' });
+    if (configured && action !== 'replace') return <div className="ui-field"><span className="ui-label">{label}</span><div className={`ds-secret ${action === 'clear' ? 'ds-secret--clearing' : ''}`.trim()}>
+      <StatusMark tone={action === 'clear' ? 'warning' : 'healthy'} label={action === 'clear' ? 'Will be cleared on save' : 'Set'} />
+      <span className="ds-secret__sub">{action === 'clear' ? 'the saved value is removed when you save' : `saved ${source ? new Date(source.updated_at).toLocaleDateString(undefined, { dateStyle: 'medium' }) : ''} · never shown`}</span>
+      <span className="ds-secret__actions">{action === 'clear' ? <button type="button" className="ui-summary__action" disabled={formDisabled} onClick={() => setAction('retain')}>Keep saved {label.toLowerCase()}</button> : <><button type="button" className="ui-summary__action" disabled={formDisabled} onClick={() => setAction('replace')}>Replace</button><button type="button" className="ui-summary__action" disabled={formDisabled} onClick={() => setAction('clear')}>Clear</button></>}</span>
+    </div></div>;
+    return <div className="ds-secret-input"><TextField id={`datasource-${kind}`} label={label} type="password" autoComplete="new-password" value={value} disabled={formDisabled} hint={configured ? 'Replaces the saved value when you save. Never shown again.' : 'Encrypted at rest and sent only to the assigned agent. Never shown again.'} onChange={(event) => { const next = event.target.value; setDraft((current) => kind === 'password' ? { ...current, password: next, passwordAction: 'replace' } : { ...current, token: next, tokenAction: 'replace' }); }} />{configured && <button type="button" className="ui-summary__action" disabled={formDisabled} onClick={() => setAction('retain')}>Keep saved {label.toLowerCase()}</button>}</div>;
+  };
+  const connectionFields = <>
+    <div className="ui-form-grid">
+      <TextField id="datasource-display-name" label="Display name" value={draft.display_name} disabled={formDisabled} hint={isNew ? 'Name the system, not the URL.' : undefined} onChange={(event) => {
         const display_name = event.target.value;
         setDraft((current) => ({ ...current, display_name, ...(isNew && !current.nameEdited ? { name: suggestDatasourceName(display_name) } : {}) }));
       }} />
-      <TextField id="datasource-name" label="Name" hint={source ? 'Stable identifier. It cannot be changed after creation.' : 'Stable identifier used in configuration. Suggested from the display name; you can edit it.'} error={(draft.nameEdited || nameValidationAttempted) && !DATASOURCE_NAME.test(draft.name) ? 'Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.' : undefined} value={draft.name} disabled={formDisabled || Boolean(source)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value, nameEdited: true }))} />
-      <TextField id="datasource-endpoint" className="datasource-endpoint" label="Prometheus endpoint" type="url" hint="Use an HTTP or HTTPS URL without embedded credentials." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
-      <SelectField id="datasource-agent" label="Assigned agent" value={draft.agent_id} disabled={formDisabled} onChange={(event) => selectAgent(event.target.value)} options={[{ value: '', label: 'Select an agent', disabled: true }, ...agents.map((agent) => ({ value: agent.id, label: datasourceAgentLabel(agent), disabled: !supportsDatasourceDiagnostics(agent) }))]} />
-      <TextField id="datasource-polling" label="Polling interval (seconds)" type="number" min={15} max={86400} value={draft.polling_interval_seconds} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, polling_interval_seconds: Number(event.target.value) })} />
-      <SelectField id="datasource-auth-mode" label="Authentication" value={draft.authMode} disabled={formDisabled} onChange={(event) => { const authMode = event.target.value as Draft['authMode']; setDraft({ ...draft, authMode, ...(authMode === 'basic' && !draft.passwordConfigured ? { passwordAction: 'replace' as const } : {}), ...(authMode === 'bearer' && !draft.tokenConfigured ? { tokenAction: 'replace' as const } : {}) }); }} options={[{ value: 'none', label: 'None' }, { value: 'basic', label: 'Basic authentication' }, { value: 'bearer', label: 'Bearer token' }]} />
-      {draft.authMode === 'basic' && <><TextField id="datasource-username" label="Username" value={draft.username} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, username: event.target.value })} /><SecretInput id="datasource-password" label="Password" action={draft.passwordAction} configured={draft.passwordConfigured} value={draft.password} disabled={formDisabled} onAction={(passwordAction) => setDraft({ ...draft, passwordAction })} onValue={(password) => setDraft({ ...draft, password })} /></>}
-      {draft.authMode === 'bearer' && <SecretInput id="datasource-token" label="Bearer token" action={draft.tokenAction} configured={draft.tokenConfigured} value={draft.token} disabled={formDisabled} onAction={(tokenAction) => setDraft({ ...draft, tokenAction })} onValue={(token) => setDraft({ ...draft, token })} />}
-      <label className="datasource-check"><input type="checkbox" checked={draft.tls.insecure_skip_verify} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, insecure_skip_verify: event.target.checked } })} />Skip TLS certificate verification <span>Insecure</span></label>
-      <label className="datasource-check datasource-check--wide">Custom CA PEM<textarea rows={4} value={draft.tls.ca_pem ?? ''} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, ca_pem: event.target.value || null } })} /></label>
-      {admin && <div className="datasource-actions"><Button type="submit" pending={pending} disabled={Boolean(source?.reassignment) && !currentUncertainSave}>{currentUncertainSave ? (isNew ? 'Retry same create' : 'Reconcile save') : isNew ? 'Create datasource' : 'Save settings'}</Button><Button type="button" variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || currentUncertainSave || Boolean(source?.reassignment)} onClick={() => void runDiagnostic('connection')}>Test connection</Button><span>{source?.reassignment ? 'Diagnostics are unavailable while the datasource is moving.' : connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents)}</span></div>}
-      {readonly && <p className="datasource-readonly">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}
-    </form></Panel>
-    {source && canPreview && !source.reassignment && <Panel heading="PromQL preview"><p>Runs against this saved datasource through its assigned agent. Results are diagnostic only and do not create observations.</p><p role="status" className={previewReadiness === 'loading' ? 'sr-only' : 'datasource-readiness'}>{providerReadinessMessage(previewReadiness, providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1'))}</p>{previewReadiness !== 'available' && previewReadiness !== 'loading' && <Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button>}<label className="ui-field"><span className="ui-label" id="datasource-query-label">PromQL query</span><textarea aria-labelledby="datasource-query-label" rows={3} value={query} disabled={pending} onChange={(event) => setQuery(event.target.value)} /></label><div className="datasource-actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" pending={cancelSubmitting} disabled={cancelSubmitting} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div></Panel>}
-    {diagnostic && <Panel heading={diagnostic.operation === 'connection_test' ? 'Connection test' : 'Diagnostic result'}><DiagnosticView value={diagnostic} /></Panel>}
+      <TextField id="datasource-name" label="Identifier" hint={source ? 'Fixed after creation.' : 'Used in the API and CLI. Suggested from the display name; fixed after creation.'} error={(draft.nameEdited || nameValidationAttempted) && !DATASOURCE_NAME.test(draft.name) ? 'Use 1–63 characters: start with a lowercase letter, then use lowercase letters, numbers, or hyphens.' : undefined} value={draft.name} disabled={formDisabled || Boolean(source)} autoComplete="off" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value, nameEdited: true }))} />
+    </div>
   </>;
-}
+  const providerChoice = isNew
+    ? <div className="ui-field"><span className="ui-label" id="datasource-provider-label">Provider</span><div role="radiogroup" aria-labelledby="datasource-provider-label" className="ds-providers">
+        <button type="button" role="radio" aria-checked="true" className="ds-provider is-selected"><span className="ds-provider__title">Prometheus</span><span className="ds-provider__text">Also VictoriaMetrics, Mimir, Thanos and anything that speaks the Prometheus HTTP API.</span></button>
+        <button type="button" role="radio" aria-checked="false" disabled className="ds-provider" title="Not available yet"><span className="ds-provider__title">Tempo</span><span className="ds-provider__text">Trace search with TraceQL.</span><span className="ds-provider__note">Not available yet</span></button>
+        <button type="button" role="radio" aria-checked="false" disabled className="ds-provider" title="Not available yet"><span className="ds-provider__title">Loki</span><span className="ds-provider__text">Log metrics with LogQL.</span><span className="ds-provider__note">Not available yet</span></button>
+      </div></div>
+    : <div className="ui-field"><span className="ui-label">Provider</span><div className="ds-provider-fixed"><strong>Prometheus</strong><span>fixed after creation · create a new datasource to use another provider</span></div></div>;
+  const connectionDetails = <>
+    <TextField id="datasource-endpoint" className="datasource-endpoint" label="Prometheus endpoint" type="url" hint="The base URL the agent will call, for example https://prometheus.internal:9090. No credentials in the URL." value={draft.endpoint} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} />
+    <div className="ui-field"><span className="ui-label" id="datasource-auth-label">Authentication</span><div className="ds-authbox">
+      <SegmentedControl label="Authentication" value={draft.authMode} onChange={(authMode) => { if (formDisabled) return; setDraft({ ...draft, authMode, ...(authMode === 'basic' && !draft.passwordConfigured ? { passwordAction: 'replace' as const } : {}), ...(authMode === 'bearer' && !draft.tokenConfigured ? { tokenAction: 'replace' as const } : {}) }); }} options={[{ value: 'none', label: 'None', disabled: formDisabled }, { value: 'basic', label: 'Basic', disabled: formDisabled }, { value: 'bearer', label: 'Bearer token', disabled: formDisabled }]} />
+      {draft.authMode === 'basic' && <div className="ui-form-grid ds-authfields"><TextField id="datasource-username" label="Username" value={draft.username} disabled={formDisabled} autoComplete="off" onChange={(event) => setDraft({ ...draft, username: event.target.value })} />{secretField('password')}</div>}
+      {draft.authMode === 'bearer' && <div className="ui-form-grid ds-authfields">{secretField('token')}</div>}
+    </div></div>
+    <div className="ui-form-grid">
+      <ChoiceChips id="datasource-polling" label="Query every" value={String(draft.polling_interval_seconds)} disabled={formDisabled} onChange={(value) => setDraft({ ...draft, polling_interval_seconds: Number(value) })} options={CADENCE_PRESETS.map(([value, label]) => ({ value, label }))} custom={{ unit: 'seconds', placeholder: 'e.g. 45', inputMode: 'numeric', format: (value) => `${value} s`, validate: (value) => /^\d+$/.test(value) && Number(value) >= 15 && Number(value) <= 86400 ? undefined : 'Enter whole seconds from 15 to 86400.' }} hint={source && selectedUsage?.count ? `Every SLI on this datasource measures one interval of this length; ${selectedUsage.count} SLI${selectedUsage.count === 1 ? '' : 's'} use it.` : 'Every SLI on this datasource measures one interval of this length.'} />
+      <div className="ui-field"><span className="ui-label">TLS</span><SegmentedControl label="TLS" value={tlsMode(draft.tls)} onChange={(mode) => { if (formDisabled) return; setDraft({ ...draft, tls: mode === 'skip' ? { ...draft.tls, insecure_skip_verify: true } : mode === 'ca' ? { insecure_skip_verify: false, ca_pem: draft.tls.ca_pem ?? '' } : { insecure_skip_verify: false, ca_pem: null } }); }} options={[{ value: 'verify', label: 'Verify certificate', disabled: formDisabled }, { value: 'ca', label: 'Custom CA', disabled: formDisabled }, { value: 'skip', label: 'Skip verification', disabled: formDisabled }]} /><p className="ui-hint">{tlsMode(draft.tls) === 'skip' ? 'Insecure: the certificate is not checked and the datasource is marked in lists.' : tlsMode(draft.tls) === 'ca' ? 'Paste the PEM bundle that signs the endpoint’s certificate.' : 'Verifying against the system roots.'}</p></div>
+    </div>
+    {tlsMode(draft.tls) === 'ca' && <TextareaField id="datasource-ca" label="Custom CA PEM" rows={4} value={draft.tls.ca_pem ?? ''} disabled={formDisabled} className="mono" onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, ca_pem: event.target.value } })} />}
+  </>;
+  const testTools = admin && <Button variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || currentUncertainSave || Boolean(source?.reassignment)} onClick={() => void runDiagnostic('connection')}><span aria-hidden="true">▶ </span>Test connection</Button>;
+  const testAvailability = source?.reassignment ? 'Diagnostics are unavailable while the datasource is moving.' : connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents);
+  const diagnosticResult = diagnostic && <div className="ds-preview"><h3>{diagnostic.operation === 'connection_test' ? 'Connection test' : 'Query preview'}</h3><DiagnosticView value={diagnostic} /></div>;
+  const eligibilityAlert = isNew && admin && !agents.some(supportsDatasourceDiagnostics) && <p className="datasource-alert">{agents.length === 0 ? 'Register and start an Almanac agent before adding a datasource.' : agents.some((agent) => agent.enabled && datasourceAgentState(agent) === 'unreported') ? 'Start your registered agent before assigning this datasource.' : datasourceAvailabilityMessage(undefined, agents)} <Button variant="outline" onClick={() => navigate('/agents')}>View agents</Button></p>;
 
-function SecretInput({ id, label, configured, action, value, disabled, onAction, onValue }: { id: string; label: string; configured: boolean; action: Draft['passwordAction']; value: string; disabled: boolean; onAction: (value: Draft['passwordAction']) => void; onValue: (value: string) => void }) {
-  return <div className="datasource-secret"><SelectField id={`${id}-action`} label={`${label} secret`} value={action} disabled={disabled} onChange={(event) => onAction(event.target.value as Draft['passwordAction'])} options={[{ value: 'retain', label: configured ? 'Keep configured secret' : 'No secret configured' }, { value: 'replace', label: 'Replace secret' }, { value: 'clear', label: 'Clear secret' }]} /><TextField id={id} label={`${label} value`} type="password" autoComplete="new-password" value={value} disabled={disabled || action !== 'replace'} hint={configured ? 'Saved values are never displayed.' : 'Secret values are sent only when replacing.'} onChange={(event) => onValue(event.target.value)} /></div>;
+  if (isNew) {
+    return <>
+      {createHeader}
+      {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
+      {readonly ? <Panel heading="Access required"><p>Administrators manage datasources, credentials and assignments.</p></Panel> : <form className="ui-form ds-form" onSubmit={(event) => void submit(event)} noValidate>
+        <FormSection step={1} title="Identity" hint="What is this source?">{connectionFields}</FormSection>
+        <FormSection step={2} title="Connection" hint="Where and how to reach it?">{providerChoice}{connectionDetails}</FormSection>
+        <FormSection step={3} title="Agent" hint="Which agent can reach it?" tools={testTools}>
+          {eligibilityAlert}
+          {agentPicker}
+          <p className="ui-form-note"><span>{testAvailability}</span> Tests run on the agent and do not save anything.</p>
+          {diagnosticResult}
+        </FormSection>
+        <FormActions note="The agent receives the configuration as soon as you save.">
+          <Button variant="outline" onClick={() => navigate(returnToSLI ? '/slis/new' : '/datasources')}>{returnToSLI ? 'Back to SLI' : 'Cancel'}</Button>
+          <Button type="submit" variant={returnToSLI ? 'primary' : 'outline'} pending={pending && !createAndAddSli} disabled={pending && createAndAddSli} onClick={() => { continueToSli.current = false; setCreateAndAddSli(false); }}>{currentUncertainSave ? 'Retry same create' : 'Create datasource'}</Button>
+          {!returnToSLI && !currentUncertainSave && <Button type="submit" pending={pending && createAndAddSli} disabled={pending && !createAndAddSli} onClick={() => { continueToSli.current = true; setCreateAndAddSli(true); }}>Create and add an SLI</Button>}
+        </FormActions>
+      </form>}
+    </>;
+  }
+
+  const reassignment = source?.reassignment;
+  return <>
+    <div className="ds-head">
+      <div className="ds-head__copy">
+        <nav className="app-breadcrumbs" aria-label="Breadcrumb"><a href="/datasources" data-app-route onClick={(event) => { event.preventDefault(); navigate('/datasources'); }}>Datasources</a><span aria-hidden="true">/</span><span aria-current="page">{source?.display_name ?? 'Datasource'}</span></nav>
+        <h1 ref={heading} className="app-page-heading ds-head__title" tabIndex={-1}>{source?.display_name ?? 'Datasource'}</h1>
+        {vocabulary && <p className="ds-head__status"><StatusMark tone={vocabulary.tone} label={`${vocabulary.label} · ${vocabulary.reason}`} /></p>}
+        {source && <p className="ds-head__meta">Prometheus · <span className="mono">{source.endpoint}</span> · every {source.polling_interval_seconds} s{selectedUsage ? ` · ${selectedUsage.count} SLI${selectedUsage.count === 1 ? '' : 's'}` : ''} · version {source.version}</p>}
+      </div>
+      <div className="ds-head__actions">{updatedAt && <span className="ui-page-head__updated">Updated {updatedAt}</span>}<Button variant="outline" aria-label="Refresh datasource" pending={pending} disabled={currentUncertainSave} onClick={() => void refreshReassignment()}>↻ Refresh</Button>{testTools}</div>
+    </div>
+    {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
+    {reassignment && <section className="ds-banner" aria-labelledby="ds-moving-title"><h2 id="ds-moving-title">Moving datasource</h2>{reassignment.state === 'replacement_unavailable' ? <p>{agentName(reassignment.target_agent_id) ?? 'The replacement collector'} is unavailable. Cancel this reassignment before choosing another collector.</p> : <p>Almanac will start {agentName(reassignment.target_agent_id) ?? 'the replacement collector'} after {agentName(reassignment.source_agent_id) ?? 'the previous collector'} stops collecting.</p>}<p>If the previous agent is offline, this may require waiting until <time dateTime={reassignment.authority_expires_at} title={reassignment.authority_expires_at}>{displayTime(reassignment.authority_expires_at)}</time>. The replacement may start later.</p><div className="ds-banner__actions"><Button variant="outline" disabled={pending || currentUncertainSave} onClick={() => void refreshReassignment()}>Refresh reassignment</Button>{admin && <Button variant="outline" disabled={pending || currentUncertainSave || reassignmentStale} onClick={() => void cancelReassignment()}>Cancel reassignment</Button>}</div></section>}
+    {!reassignment && sourceAgent && datasourceAgentState(sourceAgent) === 'offline' && <section className="ds-banner" aria-label="Agent unreachable"><p>The assigned agent <b>{sourceAgent.display_name}</b> has not sent a heartbeat{sourceAgent.runtime?.last_heartbeat_at ? ` since ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC` : ''}. {selectedUsage?.count ? `Its ${selectedUsage.count} SLI${selectedUsage.count === 1 ? ' is' : 's are'} not collecting; intervals since then will show as missing. ` : ''}<a href={`/agents?agent=${sourceAgent.id}`} data-app-route>Open the agent</a> or move this datasource to another agent below.</p></section>}
+    {source && <div className="ds-tiles">
+      <div className="ds-tile"><span className="ds-tile__k">Agent</span><span className="ds-tile__v">{admin ? <StatusMark tone={sourceAgent ? agentOption(sourceAgent).tone ?? 'none' : 'none'} label={sourceAgent?.display_name ?? 'Unknown'} /> : 'Assigned'}</span><span className="ds-tile__s">{admin ? (sourceAgent?.runtime?.last_heartbeat_at ? `last heartbeat ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC · ${relativeAge(sourceAgent.runtime.last_heartbeat_at)}` : sourceAgent ? agentOption(sourceAgent).status : 'assigned agent not found') : 'agent details need administrator access'}</span></div>
+      <div className="ds-tile"><span className="ds-tile__k">Configuration</span><span className="ds-tile__v">{reassignment ? 'moving' : canPreview ? previewReadiness === 'loading' ? 'checking…' : previewReadiness === 'available' ? `applied${prometheusProvider?.applied_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision}` : ''}` : previewReadiness === 'applying' || previewReadiness === 'still_applying' ? `applying${prometheusProvider?.desired_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision ?? '—'} of ${prometheusProvider.desired_configuration_revision}` : ''}` : previewReadiness.replaceAll('_', ' ') : 'not checked'}</span><span className="ds-tile__s">{reassignment ? 'handover in progress' : canPreview ? previewReadiness === 'available' ? 'agent has the current settings' : previewReadiness === 'loading' ? 'reading agent readiness' : 'agent does not confirm the current settings' : 'editor or administrator access required'}</span></div>
+      <div className="ds-tile"><span className="ds-tile__k">Collection</span><span className="ds-tile__v">every {source.polling_interval_seconds} s</span><span className="ds-tile__s">auth {source.authentication.mode}{source.tls.insecure_skip_verify ? ' · TLS unverified' : source.tls.ca_pem ? ' · custom CA' : ''}</span></div>
+      <div className="ds-tile"><span className="ds-tile__k">Used by</span><span className="ds-tile__v">{selectedUsage ? `${selectedUsage.count} SLI${selectedUsage.count === 1 ? '' : 's'}` : '—'}</span><span className="ds-tile__s">{selectedUsage ? selectedUsage.count === 0 ? 'no SLI uses it yet' : `${selectedUsage.names.join(', ')}${selectedUsage.count > selectedUsage.names.length ? `, +${selectedUsage.count - selectedUsage.names.length}` : ''}` : 'reading SLIs'}</span></div>
+    </div>}
+    <form className="ui-form ds-form" onSubmit={(event) => void submit(event)} noValidate>
+      <FormSection title="Connection" hint="Where and how to reach Prometheus">{connectionFields}{providerChoice}{connectionDetails}{readonly && <p className="ui-form-note">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}</FormSection>
+      {admin && <FormSection title="Agent" hint="Which agent runs the queries">{agentPicker}</FormSection>}
+      {source && canPreview && <FormSection title="Test" hint="Runs on the assigned agent · nothing is saved">
+        {admin && <p className="ui-form-note">{testAvailability}</p>}
+        {!reassignment && <>
+          <p role="status" className={previewReadiness === 'loading' ? 'sr-only' : 'datasource-readiness'}>{providerReadinessMessage(previewReadiness, prometheusProvider)}</p>
+          {previewReadiness !== 'available' && previewReadiness !== 'loading' && <div><Button variant="outline" disabled={pending} onClick={() => { setPreviewReadiness('loading'); setError(''); setProviderRefresh((value) => value + 1); }}>Check readiness</Button></div>}
+          <QueryEditor id="datasource-query" label="PromQL query" value={query} disabled={pending} onChange={setQuery} rows={2} />
+          <p className="ui-hint">Returns the latest value per series; use it to check labels before writing SLI queries. Results are diagnostic only and do not create observations.</p>
+          <div className="ds-banner__actions"><Button pending={pending} disabled={pending || previewReadiness !== 'available'} onClick={() => void runDiagnostic('preview')}><span aria-hidden="true">▶ </span>Run preview</Button>{diagnostic && !terminal(diagnostic) && <Button variant="outline" pending={cancelSubmitting} disabled={cancelSubmitting} onClick={() => void cancelDiagnostic()}>Cancel diagnostic</Button>}</div>
+        </>}
+        {diagnosticResult}
+      </FormSection>}
+      {admin && <FormActions note="Saving sends the new settings to the agent; collection continues with the previous ones until it confirms.">
+        <Button variant="outline" disabled={!dirty || pending || currentUncertainSave} onClick={() => { if (source) setDraft(fromDatasource(source)); }}>Discard changes</Button>
+        <Button type="submit" pending={pending} disabled={Boolean(reassignment) && !currentUncertainSave}>{currentUncertainSave ? 'Reconcile save' : 'Save settings'}</Button>
+      </FormActions>}
+    </form>
+  </>;
 }
 
 function DiagnosticView({ value }: { value: Diagnostic }) {
@@ -553,12 +744,13 @@ function DiagnosticView({ value }: { value: Diagnostic }) {
     pending: 'Pending', running: 'Running', succeeded: 'Succeeded', failed: 'Failed',
     canceled: 'Canceled', timed_out: 'Timed out', unknown: 'Unknown',
   };
-  return <div className="diagnostic-result" aria-live="polite"><div><span className={`datasource-diagnostic-status datasource-diagnostic-status--${value.state}`}>{labels[value.state]}</span>{value.result_class && <span className={`datasource-result-class datasource-result-class--${value.result_class}`}>{value.result_class}</span>}</div><p>Deadline {new Date(value.deadline_at).toLocaleTimeString()}</p>{value.message && <p>{value.message}</p>}{value.error_code && <p>Code: <code>{value.error_code}</code></p>}{value.result && <pre>{JSON.stringify(value.result, null, 2)}</pre>}<span className="sr-only">Diagnostic {labels[value.state].toLowerCase()}</span></div>;
+  const tone: Record<Diagnostic['state'], MarkTone> = { pending: 'none', running: 'none', succeeded: 'healthy', failed: 'breached', canceled: 'stale', timed_out: 'breached', unknown: 'stale' };
+  return <div className="diagnostic-result" aria-live="polite"><div><StatusMark tone={tone[value.state]} label={labels[value.state]} />{value.result_class && <span className={`ui-pill datasource-result-class datasource-result-class--${value.result_class}`}>{value.result_class}</span>}<span className="diagnostic-result__deadline">deadline {new Date(value.deadline_at).toLocaleTimeString()}</span></div>{value.message && <p>{value.message}</p>}{value.error_code && <p>Code: <code>{value.error_code}</code></p>}{value.result && <pre>{JSON.stringify(value.result, null, 2)}</pre>}<span className="sr-only">Diagnostic {labels[value.state].toLowerCase()}</span></div>;
 }
 
 function PageTitle({ title, headingRef, isList = false }: { title: string; headingRef: RefObject<HTMLHeadingElement | null>; isList?: boolean }) {
   return <div className="app-page-context">
     <nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">Datasources</span> : <><a href="/datasources" data-app-route>Datasources</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav>
-    <h1 ref={headingRef} className="agents-heading app-page-heading" tabIndex={-1}>{title}</h1>
+    <h1 ref={headingRef} className="app-page-heading" tabIndex={-1}>{title}</h1>
   </div>;
 }

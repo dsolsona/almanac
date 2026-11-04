@@ -41,7 +41,7 @@ the integrated result of the previous one.
   (service type-ahead, existing services only) → Indicator (SLI type-ahead) →
   Objective (chips) → Alerting placeholder. Query test, units toggle, inline
   service creation, budget preview and descriptions deferred.
-- [ ] **F6-T05 Datasources.** List with health derived from agent reachability
+- [ ] **F6-T05 Datasources** ([F6-T05](../tasks/F6-T05.md), in review). List with health derived from agent reachability
   and reassignment state, agent, cadence, auth and SLI count (last query deferred);
   detail with status line, banner, tiles, Connection (auth block, cadence and TLS
   segmented, secret summary card), Agent (summary card, move), Test (connection

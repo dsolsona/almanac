@@ -21,9 +21,9 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 | `sli-list.html` | Dense SLI table with health filter and 24 h strip | [F6-T03](../../tasks/F6-T03.md), in review (health filter deferred) |
 | `sli-detail.html` | Single-column SLI detail: tiles, chart, intervals, definition, objectives | [F6-T03](../../tasks/F6-T03.md), in review (range chips, volume bars, objective status deferred) |
 | `sli-create.html` | New SLI: Identity → Source → Measurement with query test | [F6-T04](../../tasks/F6-T04.md), in review (description, units toggle, query test deferred) |
-| `ds-list.html` | Datasource list with health, agent, cadence, SLI count | planned, F6-T05 |
-| `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | planned, F6-T05 |
-| `ds-create.html` | New datasource: Identity → Connection → Agent with test result | planned, F6-T05 |
+| `ds-list.html` | Datasource list with health, agent, cadence, SLI count | [F6-T05](../../tasks/F6-T05.md), in review (last query deferred) |
+| `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | [F6-T05](../../tasks/F6-T05.md), in review (last test summary, delete deferred) |
+| `ds-create.html` | New datasource: Identity → Connection → Agent with test result | [F6-T05](../../tasks/F6-T05.md), in review |
 | `agents-list.html` | Agent list with heartbeat strip, datasources, collection | planned, F6-T06 |
 | `agent-detail.html` | Agent detail: status, tiles, datasources, credentials, run dialog | planned, F6-T06 |
 | `agent-register.html` | Three-step registration page with live first-heartbeat checklist | planned, F6-T06 |

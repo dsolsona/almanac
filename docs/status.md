@@ -21,7 +21,10 @@ web evidence (35 SLI cases, 139 slo-unit web cases, 48/48 catalogue, web
 stages of `make verify`); its real journey is blocked identically. [F6-T04](tasks/F6-T04.md), the New SLI and New SLO forms with
 the shared form sections, is implemented on `design/f6-t04-forms` (stacked) and
 in review with the same web evidence (142 slo-unit web cases, 48/48 catalogue,
-375 cases and the build in `make verify`); its real journeys are blocked identically.
+375 cases and the build in `make verify`); its real journeys are blocked identically. [F6-T05](tasks/F6-T05.md), the datasource list, detail and
+create pages, is implemented on `design/f6-t05-datasources` (stacked) and in
+review (33 datasource cases, 48/48 catalogue, 378 cases and the build in
+`make verify`); the datasource and Compose journeys are blocked identically.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
