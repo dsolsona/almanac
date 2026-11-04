@@ -1,8 +1,8 @@
 # Delivery status
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
-ten-SLO/year runtime acceptance on `bd9fcfb`; fresh final gates and publication
-are in progress. Both normal and added-100-ms cohorts pass all 342 connected
+ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
+PR #53. Final ordinary and race checks pass. Both normal and added-100-ms cohorts pass all 342 connected
 browser traces. Cold detail maxima are 375.5/754.3 ms. Independent historical,
 late-data, fresh-generation restart, pagination, logical retention and shared-SLI
 checks pass. No new observation import was used. The operator preview is unchanged.
@@ -11,7 +11,12 @@ The maintainer rejected further deliberate endurance waits. Fresh sustained-load
 clock-aging and physical-cleanup observation, plus 100/1,000-SLO validation, are
 deferred to [F3-T10](tasks/F3-T10.md), not passed. The existing endurance command
 must not run during this finalization. Product budgets remain unchanged.
-The approved SSH publication currently fails public-key authentication; no merge
+The final database/API gate found a mobile verifier assumption after a valid
+empty urgency-filter result; the corrected real journey passes in 73.289 seconds,
+while the failed full receipt remains recorded. Final browser verification passes
+all 126 cases after scoping selectors to the intended catalogue chart. A matching
+final Compose receipt remains pending; no new escalation requests are authorized.
+T08 remains in progress until the final verification gaps are closed. No merge
 is authorized. Earlier checkpoints below are historical and do not override this
 current scope/evidence record.
 

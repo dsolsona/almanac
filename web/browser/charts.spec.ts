@@ -8,7 +8,7 @@ test('charts load on demand and render SVG with exact table paging and hover det
   expect(chartRequests).toHaveLength(0);
   await page.getByRole('button', { name: 'Charts' }).click();
   await expect(page.getByRole('heading', { name: 'Aligned charts and exact values' })).toBeVisible();
-  const plot = page.locator('.timeline-chart__plot');
+  const plot = page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot');
   await expect(plot.locator('svg')).toBeVisible();
   const visiblePointMarkers = await plot.locator('svg path[fill]:not([fill="none"])').count();
   expect(visiblePointMarkers).toBeGreaterThanOrEqual(8);
@@ -28,7 +28,7 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await expect(page.getByRole('table').locator('tbody').getByText('99.970000 %', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Complete', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('page 1 of 2')).toBeVisible();
-  await page.locator('.timeline-chart').screenshot({ path: testInfo.outputPath('timeline-panel.png') });
+  await page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).screenshot({ path: testInfo.outputPath('timeline-panel.png') });
   await page.locator('.exact-values').screenshot({ path: testInfo.outputPath('exact-values-page1.png') });
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('page 2 of 2')).toBeVisible();
@@ -40,7 +40,7 @@ test('charts load on demand and render SVG with exact table paging and hover det
   if (!box) throw new Error('Chart plot has no visible bounds');
   const moveToDay = (day: number) => page.mouse.move(box.x + 66 + (day / 60) * (box.width - 86), box.y + box.height * 0.18);
   await moveToDay(4);
-  const tooltip = page.locator('.timeline-chart-tooltip');
+  const tooltip = plot.locator('.timeline-chart-tooltip');
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toContainText('SLI · Example service');
   await expect(tooltip).toContainText('99.960000 % · Partial');
@@ -66,7 +66,7 @@ test('charts load on demand and render SVG with exact table paging and hover det
 test('chart theme updates and keyboard pagination work without page overflow', async ({ page }, testInfo) => {
   await page.goto('/design-system');
   await page.getByRole('navigation', { name: 'Catalogue sections' }).getByRole('button', { name: 'Charts' }).click();
-  const svg = page.locator('.timeline-chart__plot svg');
+  const svg = page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot svg');
   await expect(svg).toBeVisible();
   await page.locator('.timeline-chart__lane-control').first().click();
   const before = await svg.locator('path').first().getAttribute('stroke');
@@ -92,7 +92,7 @@ test('chart theme updates and keyboard pagination work without page overflow', a
 test('chart series colors follow the resolved semantic CSS token', async ({ page }) => {
   await page.goto('/design-system');
   await page.getByRole('button', { name: 'Charts' }).click();
-  const svg = page.locator('.timeline-chart__plot svg');
+  const svg = page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot svg');
   await expect(svg).toBeVisible();
   await page.evaluate(() => document.documentElement.style.setProperty('--s1', '#123456'));
   await expect.poll(() => svg.locator('path[stroke="#123456"]').count()).toBeGreaterThan(0);
@@ -104,8 +104,8 @@ test('chart and table retain their shared layout without catalogue styles', asyn
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.evaluate(() => document.querySelectorAll('style[data-vite-dev-id*="catalogue.css"]').forEach((style) => style.remove()));
   await page.getByRole('button', { name: 'Charts' }).click();
-  const panel = page.locator('.timeline-chart');
-  const plot = page.locator('.timeline-chart__plot');
+  const panel = page.getByRole('region', { name: 'Illustrative timeline chart', exact: true });
+  const plot = panel.locator('.timeline-chart__plot');
   const tableScroll = page.locator('.exact-values__scroll');
   await expect(plot.locator('svg')).toBeVisible();
   await page.locator('.timeline-chart__lane-control').first().click();
@@ -123,7 +123,7 @@ test('chart and table retain their shared layout without catalogue styles', asyn
 test('rendered axis labels meet text contrast in light and dark themes', async ({ page }) => {
   await page.goto('/design-system');
   await page.getByRole('button', { name: 'Charts' }).click();
-  const svg = page.locator('.timeline-chart__plot svg');
+  const svg = page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot svg');
   await expect(svg).toBeVisible();
   for (const dark of [false, true]) {
     await page.evaluate((useDark) => document.documentElement.classList.toggle('dark', useDark), dark);
@@ -183,7 +183,7 @@ test('reopening charts across navigation and theme changes leaves the page error
 
   for (let cycle = 0; cycle < 3; cycle += 1) {
     await charts.click();
-    await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot svg')).toBeVisible();
     const themeToggle = page.locator('.masthead').getByRole('button', { name: /switch to (light|dark) theme/i });
     const isDark = await themeToggle.getAttribute('aria-pressed') === 'true';
     await themeToggle.click();
@@ -225,7 +225,7 @@ test('a failed lazy chart import leaves catalogue controls available and reload 
   await page.getByRole('button', { name: 'Reload catalogue to retry' }).click();
   await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();
   await page.getByRole('button', { name: 'Charts' }).click();
-  await expect(page.locator('.timeline-chart__plot svg')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot svg')).toBeVisible();
   expect(chartChunkRequests).toBe(2);
   expect(pageErrors).toEqual([]);
 });

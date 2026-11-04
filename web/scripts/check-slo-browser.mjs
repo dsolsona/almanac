@@ -146,7 +146,10 @@ try {
   const capture = async (name, chart = false) => {
     await page.evaluate(()=>window.scrollTo(0,0));
     if(chart)await expect(page.getByText('Current status could not refresh. Showing the last confirmed evaluation.',{exact:true})).toHaveCount(0);
-    if(name.startsWith('slo-list-')&&page.viewportSize().width<=680){
+    // Publication can move the fixture out of the selected urgency group.
+    if(name.startsWith('slo-list-')&&page.viewportSize().width<=680&&await page.locator('.app-slo-row').count()===0){
+      await expect(page.getByText('No SLOs match these filters.',{exact:true})).toBeVisible();
+    }else if(name.startsWith('slo-list-')&&page.viewportSize().width<=680){
       await expect.poll(()=>page.locator('.app-slo-row').first().evaluate(row=>{
         const objective=row.querySelector('.app-slo-name').getBoundingClientRect();
         const status=row.querySelector('.app-slo-status').getBoundingClientRect();
