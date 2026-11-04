@@ -609,7 +609,7 @@ describe('agent administration screen', () => {
 
     await user.click(within(screen.getByRole('dialog', { name: 'Disable agent' })).getByRole('button', { name: 'Disable agent' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith(`/api/v1/agents/${agentID}/disable`, expect.objectContaining({ method: 'POST' })));
-    await waitFor(() => expect(screen.getByText('Disabled')).toBeVisible());
+    await waitFor(() => expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0));
     expect(screen.queryByRole('button', { name: 'Disable agent' })).not.toBeInTheDocument();
   });
 

@@ -106,6 +106,7 @@
 .agents-runtime-details > summary { padding: 14px var(--card-inset); font-family: var(--almanac-heading); font-size: 1.3125rem; cursor: pointer; }
 .agents-runtime-details[open] > summary { border-bottom: 1px solid var(--border); }
 .agents-runtime-details .agents-runtime { padding: var(--space-4) var(--card-inset); border: 0; }
+.agents-runtime-details .agents-record { padding: var(--space-4) var(--card-inset) 0; }
 .agents-dangerline { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
 .agents-dangerline__text { flex: 1 1 320px; color: var(--text-3); font: .8125rem/1.6 var(--mono); }
 .agents-dangerline__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
