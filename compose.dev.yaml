@@ -1,0 +1,84 @@
+# Development stack (ADR-0029): the dev container and its PostgreSQL fixture.
+# The checkout is the only host mount. Toolchain caches and node_modules are named
+# volumes. The dev service shares the fixture's network namespace, so the fixed
+# loopback URL on port 15487 works without a published port. No Docker socket.
+name: almanac-dev
+
+services:
+  postgres:
+    image: postgres:18.6@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81
+    environment:
+      POSTGRES_DB: almanac_f1_storage
+      POSTGRES_USER: almanac
+      POSTGRES_PASSWORD: almanac_f1_t05_local_only
+      PGPORT: "15487"
+    # Autovacuum activity is logged so lock conflicts in the suites can be attributed.
+    command: ["postgres", "-c", "log_autovacuum_min_duration=0"]
+    volumes:
+      - type: tmpfs
+        target: /var/lib/postgresql
+        tmpfs:
+          size: 4294967296
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 15487 -U almanac -d almanac_f1_storage"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    restart: "no"
+
+  # The journeys export OpenTelemetry traces to a local VictoriaTraces on loopback
+  # port 19428 and read them back; it shares the fixture namespace like the dev service.
+  victoriatraces:
+    image: victoriametrics/victoria-traces:v0.12.1@sha256:609abddf298c9642496045296f30a3968b5a4b79b678373e2e7ef29c844f5578
+    network_mode: "service:postgres"
+    command:
+      - -httpListenAddr=127.0.0.1:19428
+      - -storageDataPath=/victoria-traces-data
+      - -retentionPeriod=1d
+      - -retention.maxDiskSpaceUsageBytes=1GiB
+      - -memory.allowedBytes=256MiB
+    volumes:
+      - type: tmpfs
+        target: /victoria-traces-data
+        tmpfs:
+          size: 1073741824
+    depends_on:
+      postgres:
+        condition: service_started
+    restart: "no"
+
+  dev:
+    image: ${ALMANAC_DEV_IMAGE:-almanac-dev:latest}
+    build:
+      context: .
+      dockerfile: deploy/dev/Dockerfile
+      args:
+        USER_ID: ${ALMANAC_DEV_UID:-1000}
+        GROUP_ID: ${ALMANAC_DEV_GID:-1000}
+    network_mode: "service:postgres"
+    init: true
+    shm_size: 1g
+    working_dir: /workspace
+    environment:
+      ALMANAC_TEST_DATABASE_URL: postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable
+    volumes:
+      - .:/workspace
+      - go-mod:/cache/go/mod
+      - go-build:/cache/go/build
+      - npm-cache:/cache/npm
+      - web-node-modules:/workspace/web/node_modules
+      - openapi-node-modules:/workspace/tools/openapi/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      victoriatraces:
+        condition: service_started
+    command: ["/bin/bash"]
+
+volumes:
+  go-mod:
+  go-build:
+  npm-cache:
+  web-node-modules:
+  openapi-node-modules:

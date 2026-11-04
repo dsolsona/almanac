@@ -17,9 +17,9 @@ FILES = (
     "deploy/app/Dockerfile",
     "deploy/agent/Dockerfile",
     "compose.yaml",
+    "compose.dev.yaml",
     # Retired with the Linux lane (plan 0026, F7-T02 and F7-T03); kept consistent until then.
     "deploy/verification/Dockerfile",
-    "scripts/setup-database.sh",
     "scripts/verify-linux.sh",
 )
 REFERENCE = re.compile(r"(?P<name>[a-z0-9][a-z0-9._/-]*):(?P<tag>[A-Za-z0-9._-]+)(?:@sha256:(?P<digest>[0-9a-f]{64}))?")

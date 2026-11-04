@@ -189,7 +189,8 @@ windows and exports are subsequent increments; see [delivery status](docs/status
 
 ## Runtime foundation
 
-`make setup` installs the pinned Go and web toolchains. `make build` builds the
+`make setup` builds the development image and warms its caches; `make shell`
+enters it with the PostgreSQL fixture running. Inside it, `make build` builds the
 production web assets and embeds them in `bin/almanac`.
 
 UI-only mode serves the embedded frontend:
@@ -439,18 +440,19 @@ safe status markers, not peer-supplied version values. If a compatible runtime
 already exists, its observed fields remain intact while the newer incompatible
 attempt changes reachability. A successful compatible connection clears that state.
 
-For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
-pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:
+For isolated local storage checks, `compose.dev.yaml` runs the pinned PostgreSQL
+18.6 fixture on loopback port 15487 of the dev container, where
+`ALMANAC_TEST_DATABASE_URL` is preset. Inside `make shell`, run:
 
 ```sh
-make verify VERIFY_MODE=integration GO_PACKAGE=./internal/storage ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration GO_PACKAGE=./internal/storage
 ```
 
 Run `make verify VERIFY_MODE=go` for focused Go checks, `make verify VERIFY_MODE=go-race`
 for race checks, or `make verify` for web and Go verification. Catalogue browser
 checks use `make verify VERIFY_MODE=browser`. The full PostgreSQL integration lane
 also exercises browser onboarding against the built combined HTTPS executable;
-it requires the Chromium installation from `make setup`. Ordinary unit checks do
+it uses the Chromium baked into the development image. Ordinary unit checks do
 not start PostgreSQL or run that browser journey.
 
 See [the web design system guide](web/DESIGN_SYSTEM.md) for the local UI setup,

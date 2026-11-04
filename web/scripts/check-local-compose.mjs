@@ -14,7 +14,8 @@ const fixtureMode = process.argv.length === 3 && process.argv[2] === '--cancella
 if (process.argv.length !== 2 && !fixtureMode) throw new Error('Unsupported arguments');
 mkdirSync(join(root, '.local'), { recursive: true });
 const artifacts = mkdtempSync(join(root, '.local/compose-check-'));
-const buildContext = mkdtempSync('/tmp/almanac-compose-source-');
+mkdirSync(join(root, '.local/tmp'), { recursive: true });
+const buildContext = mkdtempSync(join(root, '.local/tmp/compose-source-'));
 function prepareBuildContext() {
   for (const name of ['.dockerignore', 'deploy/app/Dockerfile', 'deploy/agent/Dockerfile', 'Makefile', 'compose.yaml', 'go.mod', 'go.sum',
     'cmd', 'internal', 'deploy/local', 'scripts/check-image-pins.py', 'scripts/check-local-readiness.sh', 'scripts/local-agent.sh', 'web/assets.go', 'web/index.html', 'web/package.json',

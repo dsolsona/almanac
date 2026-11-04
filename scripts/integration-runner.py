@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ("storage", "authentication", "agentmanagement", "agenthttp", "authhttp", "agentcmd", "command")
 PREFIX = "github.com/dsolsona/almanac/"
 FIXTURE = "postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable"
-GO = ROOT / ".local/bin/go"
+GO = "go"  # from the dev image (ADR-0029)
 FLAGS = ("-json", "-race", "-tags=integration", "-p=1", "-count=1", "-timeout=2m")
 EXCLUDED = {".git", ".local", "node_modules", "__pycache__", "dist"}
 SCRIPT_ROOTS = {
@@ -225,7 +225,7 @@ def import_legacy(controls, graph, cases, environment, cache, destination, fixtu
         return
     record = max(candidates, key=lambda item: item["ended_unix"])
     old_make = entries.get("Makefile", b"")
-    if b".local/bin/go test -json -race -tags=integration -p=1 -run" not in old_make or b"-count=1 -timeout=2m" not in old_make:
+    if b"go test -json -race -tags=integration -p=1 -run" not in old_make or b"-count=1 -timeout=2m" not in old_make:
         print("Legacy reuse unavailable: execution contract differs", flush=True)
         return
     log = controls.RECEIPTS / (record["id"] + ".log")
@@ -289,11 +289,9 @@ def main():
         chosen = [(p, t) for p, t in cases if (selected_package == "all" or selected_package == "./internal/" + p) and (not selected_test or selected_test == t)]
         if not chosen or (selected_test and len(chosen) != 1):
             raise ValueError("integration selector matches zero or ambiguous cases")
-        fixture_id = ""
-        if os.environ.get("ALMANAC_LINUX_VERIFICATION_CONTAINER") == "1":
-            mode = "all"
-        else:
-            fixture_id = subprocess.check_output(["docker", "inspect", "--format", "{{.Id}} {{.State.StartedAt}} {{.Image}}", "almanac-f1-t05-postgres18.6"], text=True).strip()
+        # The fixture identity is its server start time and version: a restarted tmpfs fixture never reuses passes.
+        fixture_id = subprocess.check_output(["psql", "--no-psqlrc", "--set=ON_ERROR_STOP=1", "--tuples-only", "--no-align",
+                                              "--command=SELECT pg_postmaster_start_time()::text || ' ' || version()", FIXTURE], text=True).strip()
         tool = subprocess.check_output([str(GO), "env", "GOVERSION", "GOOS", "GOARCH", "CGO_ENABLED"], cwd=ROOT, text=True)
         environment = digest(json.dumps([fixture_id, tool, FLAGS, os.environ.get("GOFLAGS", "")]).encode())
         path = ROOT / ".local/integration-results.json"

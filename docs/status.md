@@ -1,5 +1,17 @@
 # Delivery status
 
+Current platform work, 2026-11-04: [ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)
+and [plan 0026](plans/0026-platform-agnostic-verification.md) are accepted
+(Crit `d21016424a44`): everything runs under Docker. On
+`design/platform-agnostic-verification` (PR #61), [F7-T01](tasks/F7-T01.md)
+(three Dockerfiles, multi-arch index pins, pin check) and
+[F7-T02](tasks/F7-T02.md) (`compose.dev.yaml` with tmpfs PostgreSQL and
+VictoriaTraces fixtures, `make setup`/`make shell`, toolchains from the dev
+image, lane marker removed) are in review. Inside the dev container on this
+macOS/Colima host the ordinary, integration (173), journey, browser (126) and
+race gates pass; the Linux-host evidence and F7-T03 (`scripts/verify.py`,
+Compose journey socket mode, lane deletion) are next.
+
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
 PR #53. Final ordinary and race checks pass. Both normal and added-100-ms cohorts pass all 342 connected

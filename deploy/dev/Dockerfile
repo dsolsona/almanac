@@ -53,7 +53,7 @@ RUN (getent group "${GROUP_ID}" >/dev/null || groupadd --gid "${GROUP_ID}" dev) 
     && (getent passwd "${USER_ID}" >/dev/null \
         && usermod --login dev --home /home/dev --move-home --shell /bin/bash "$(getent passwd "${USER_ID}" | cut -d: -f1)" \
         || useradd --uid "${USER_ID}" --gid "${GROUP_ID}" --create-home --shell /bin/bash dev) \
-    && mkdir -p /workspace /cache/go/mod /cache/go/build /cache/npm \
+    && mkdir -p /workspace/web/node_modules /workspace/tools/openapi/node_modules /cache/go/mod /cache/go/build /cache/npm \
     && chown -R "${USER_ID}:${GROUP_ID}" /workspace /cache
 USER dev
 WORKDIR /workspace

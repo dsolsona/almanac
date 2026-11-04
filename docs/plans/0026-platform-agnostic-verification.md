@@ -1,6 +1,6 @@
 # Docker-only development, verification and images
 
-- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 in review, F7-T02 next
+- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 and F7-T02 in review, F7-T03 next
 - Created: 2026-11-04
 - Scope: tooling, images, fixtures and documentation; no product behaviour changes
 - Base: `main`; independent of the open UI stack (PRs #54–#60), which still cites the retired modes until merged
@@ -30,10 +30,10 @@ sequential and each branches from the previous one.
   image builds on arm64 and amd64; `docker image inspect` shows the native
   platform on each host; the published images start with `version`; the
   consistency check fails when a pin is changed in only one file.
-- [ ] **F7-T02 Development and fixture Compose file.** `compose.dev.yaml`
+- [ ] **F7-T02 Development and fixture Compose file** ([F7-T02](../tasks/F7-T02.md), in review). `compose.dev.yaml`
   with the `dev` service (checkout at `/workspace`, named cache volumes,
   no socket) sharing the network namespace of a `postgres` fixture (tmpfs,
-  loopback 15487); `make setup` builds or pulls images and checks platforms;
+  loopback 15487) and a `victoriatraces` fixture (tmpfs, loopback 19428); `make setup` builds or pulls images and checks platforms;
   `make shell`; VictoriaMetrics tests use only the baked binary and the lane
   marker is removed; the Compose override files of deployment tests move to
   `.local/tmp`. Evidence: the integration suite and the browser journeys

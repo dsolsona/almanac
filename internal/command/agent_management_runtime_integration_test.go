@@ -5,10 +5,8 @@ package command
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"encoding/pem"
@@ -877,54 +875,7 @@ func validDatasourceRequestID(value string) bool {
 
 func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, certificatePEM []byte) string {
 	t.Helper()
-	endpoint := ""
-	if fixedLinuxVerifierContext(t) {
-		endpoint = startVictoriaMetricsBinary(t, dir, certificatePath, keyPath)
-	} else {
-		digest := sha256.Sum256([]byte(dir))
-		name := "almanac-f2-t20-" + hex.EncodeToString(digest[:6])
-		image := "victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df"
-		start := exec.CommandContext(t.Context(), "docker", "run", "--detach", "--rm", "--name", name,
-			"--publish", "127.0.0.1::8428/tcp",
-			"--mount", "type=bind,src="+certificatePath+",dst=/tls/cert.pem,readonly",
-			"--mount", "type=bind,src="+keyPath+",dst=/tls/key.pem,readonly",
-			image, "-tls", "-tlsCertFile=/tls/cert.pem", "-tlsKeyFile=/tls/key.pem")
-		container, err := start.Output()
-		if err != nil || strings.TrimSpace(string(container)) == "" {
-			var exitError *exec.ExitError
-			if errors.As(err, &exitError) && len(exitError.Stderr) != 0 {
-				message := strings.TrimSpace(string(exitError.Stderr))
-				if len(message) > 512 {
-					message = message[:512]
-				}
-				t.Fatalf("start pinned isolated VictoriaMetrics fixture failed: %s", message)
-			}
-			t.Fatalf("start pinned isolated VictoriaMetrics fixture failed: %v", err)
-		}
-		containerID := strings.TrimSpace(string(container))
-		t.Cleanup(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			stop := exec.CommandContext(ctx, "docker", "stop", containerID)
-			stop.Stdout, stop.Stderr = io.Discard, io.Discard
-			if err := stop.Run(); err != nil {
-				t.Error("stop isolated VictoriaMetrics fixture failed")
-			}
-		})
-		portCommand := exec.CommandContext(t.Context(), "docker", "port", containerID, "8428/tcp")
-		portOutput, err := portCommand.Output()
-		if err != nil {
-			t.Fatal("read isolated VictoriaMetrics port failed")
-		}
-		_, port, err := net.SplitHostPort(strings.TrimSpace(string(portOutput)))
-		if err != nil {
-			t.Fatal("parse isolated VictoriaMetrics port failed")
-		}
-		if _, err := strconv.Atoi(port); err != nil {
-			t.Fatal("isolated VictoriaMetrics port is invalid")
-		}
-		endpoint = "https://localhost:" + port
-	}
+	endpoint := startVictoriaMetricsBinary(t, dir, certificatePath, keyPath)
 	block, _ := pem.Decode(certificatePEM)
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -949,22 +900,6 @@ func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, ce
 	return ""
 }
 
-func fixedLinuxVerifierContext(t *testing.T) bool {
-	t.Helper()
-	value, set := os.LookupEnv("ALMANAC_LINUX_VERIFICATION_CONTAINER")
-	if !set || value == "" {
-		return false
-	}
-	if value != "1" {
-		t.Fatalf("ALMANAC_LINUX_VERIFICATION_CONTAINER has unsupported value %q", value)
-	}
-	marker, err := os.ReadFile("/etc/almanac-linux-verifier")
-	if err != nil || string(bytes.TrimSpace(marker)) != "F2-T22-linux-verifier-v1" {
-		t.Fatal("fixed Linux verifier marker is missing or invalid")
-	}
-	return true
-}
-
 func startVictoriaMetricsBinary(t *testing.T, dir, certificatePath, keyPath string) string {
 	t.Helper()
 	executable := "/usr/local/bin/victoria-metrics-prod"
@@ -985,7 +920,7 @@ func startVictoriaMetricsBinary(t *testing.T, dir, certificatePath, keyPath stri
 		t.Fatal("create VictoriaMetrics stderr artifact failed")
 	}
 	stderr := &boundedStderrWriter{file: stderrFile}
-	t.Logf("fixed verifier VictoriaMetrics stderr artifact: %s", stderrPath)
+	t.Logf("VictoriaMetrics fixture stderr artifact: %s", stderrPath)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		_ = stderr.Close()

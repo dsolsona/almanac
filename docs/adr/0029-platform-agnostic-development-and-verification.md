@@ -71,7 +71,10 @@ Accepted; the Makefile, Dockerfiles, Compose files and guides follow it.
    `compose.dev.yaml` with a tmpfs data directory and no published port; the
    dev service shares its network namespace so the fixed loopback URL keeps
    working. VictoriaMetrics starts as the baked binary; the `docker run`
-   fixture path and the lane marker are removed.
+   fixture path and the lane marker are removed. (F7-T02 finding: the
+   journeys also export and read traces through a VictoriaTraces on loopback
+   port 19428, which the host runs had taken from the operator's local
+   stack; it is a second tmpfs service in the same namespace.)
 6. **Deployment checks are the one Docker-driving mode and run from the dev
    container through the host daemon.** The Compose journey (`MODE=compose`)
    builds and starts the published `app` image through the host's Docker.

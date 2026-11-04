@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
+GO = "go"  # from the dev image (ADR-0029)
 
 
 def receipt_directory(root: Path, receipts_override: str | None = None, state_override: str | None = None) -> Path:
@@ -401,9 +403,9 @@ def execute(mode: str) -> int:
                 except (OSError, ValueError, TypeError, json.JSONDecodeError):
                     pass
             if status == 0:
-                go = str(ROOT / ".local/bin/go")
+                go = GO
                 env = os.environ.copy()
-                env.update(GOTOOLCHAIN="local", GOPROXY="off", GOMODCACHE=str(ROOT / ".local/go/mod"), GOCACHE=str(ROOT / ".local/go/build"))
+                env.update(GOTOOLCHAIN="local", GOPROXY="off")
                 status = ensure_web_assets(artifact, env)
                 if status:
                     with artifact.open("ab") as log:
@@ -437,15 +439,15 @@ def execute(mode: str) -> int:
         elif kind != "tools":
             if not os.environ.get("ALMANAC_TEST_DATABASE_URL"):
                 raise ValueError("ALMANAC_TEST_DATABASE_URL must select the isolated local fixture")
-            if not (ROOT / ".local/bin/go").is_file() or not os.access(ROOT / ".local/bin/go", os.X_OK):
-                raise ValueError("pinned Go is missing; use make setup SETUP_MODE=go")
+            if shutil.which(GO) is None:
+                raise ValueError("Go is missing; run inside the dev container (make shell)")
             test_names = DB_TESTS[mode]
             expected = set(test_names)
             test_pattern = db_test_pattern(mode)
             package = "./internal/storage" if mode == "slo-integration" else "./internal/command"
             env = os.environ.copy()
-            env.update(GOTOOLCHAIN="local", GOPROXY="off", GOMODCACHE=str(ROOT / ".local/go/mod"), GOCACHE=str(ROOT / ".local/go/build"))
-            discovery = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-tags=integration", "-list", test_pattern, package], cwd=ROOT, env=env, text=True, capture_output=True)
+            env.update(GOTOOLCHAIN="local", GOPROXY="off")
+            discovery = subprocess.run([GO, "test", "-tags=integration", "-list", test_pattern, package], cwd=ROOT, env=env, text=True, capture_output=True)
             found = {line.strip() for line in discovery.stdout.splitlines() if line.strip().startswith("Test")}
             if discovery.returncode or found != expected:
                 artifact.write_text(discovery.stdout + discovery.stderr)
@@ -471,7 +473,7 @@ def execute(mode: str) -> int:
                 status = build.returncode
                 raise RuntimeError("candidate build failed")
             with artifact.open("wb") as log:
-                proc = subprocess.run([str(ROOT / ".local/bin/go"), "test", "-json", "-race", "-tags=integration", "-p=1", "-run", test_pattern, "-count=1", "-timeout=2m", package], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+                proc = subprocess.run([GO, "test", "-json", "-race", "-tags=integration", "-p=1", "-run", test_pattern, "-count=1", "-timeout=2m", package], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
                 output = proc.stdout
                 dsn = env.get("ALMANAC_TEST_DATABASE_URL", "").encode()
                 if dsn:
