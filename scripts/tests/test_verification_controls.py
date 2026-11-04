@@ -8,6 +8,7 @@ import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from test_integration_runner import IntegrationRunnerTest
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "verification-controls.py"
 REPO_ROOT = MODULE_PATH.parents[1]
@@ -17,6 +18,22 @@ SPEC.loader.exec_module(vc)
 
 
 class VerificationControlsTest(unittest.TestCase):
+    def test_integration_reuse_report_requires_complete_honest_coverage(self):
+        cases = [{"package": "storage", "test": "TestIntegrationA", "result": "reused", "evidence": {"result": "passed"}},
+                 {"package": "command", "test": "TestIntegrationB", "result": "passed", "evidence": {"result": "passed"}}]
+        report = {"cases": cases, "started_unix": 101, "ended_unix": 102, "full_scope": True,
+                  "discovered": 2, "selected": 2, "executed": 1, "reused": 1}
+        vc.validate_integration_report(report, True, 100)
+        for changes in ({"cases": []}, {"started_unix": 99}, {"discovered": 3}, {"executed": 2},
+                        {"cases": [cases[0], cases[0]]}, {"cases": [cases[0], {**cases[1], "result": "failed"}]}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                vc.validate_integration_report({**report, **changes}, True, 100)
+
+    def test_exact_integration_case_cannot_be_a_full_gate_receipt(self):
+        self.assertFalse(vc.receipt_is_full_scope("integration", {"go_package": "all", "integration_test": "TestIntegrationA"}))
+        self.assertFalse(vc.receipt_is_full_scope("integration", {"go_package": "all", "plan_only": True}))
+        self.assertTrue(vc.receipt_is_full_scope("integration", {"go_package": "all", "integration_selection": "affected"}))
+
     def test_storage_discovery_checks_retained_regressions_early_without_losing_cases(self):
         spec = importlib.util.spec_from_file_location("integration_selection", REPO_ROOT / "scripts/select-integration-tests.py")
         module = importlib.util.module_from_spec(spec)

@@ -1,3 +1,11 @@
+export async function captureResponseJSON(responsePromise, action) {
+  const [captured] = await Promise.all([
+    responsePromise.then(async response => ({ response, body: await readResponseJSON(response) })),
+    action(),
+  ]);
+  return captured;
+}
+
 export async function readResponseJSON(response) {
   try {
     return await response.json();

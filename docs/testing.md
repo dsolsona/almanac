@@ -32,6 +32,28 @@ assert specific tool versions merely because a reference setup uses them.
 
 ## Gate selection
 
+On 2026-11-04 the maintainer replaced repeated full integration execution with
+dependency-based selection and compatible per-case evidence reuse. The default
+integration entry discovers the complete fixed suite, runs failed, missing and
+affected cases, and reuses only actual passes with matching dependency inputs
+and fixture/tool identity. A prior failed full run may still supply valid passes
+for unchanged areas; its failure remains recorded. The report distinguishes fresh
+executions from reused coverage and preserves their original evidence/timestamps.
+One failure does not prevent the other selected cases from executing.
+
+Select one exact discovered case with `INTEGRATION_TEST`, or a fixed package with
+`GO_PACKAGE`; these focused runs do not establish complete-suite coverage. Use
+`INTEGRATION_SELECTION=all` when fresh full execution is required, including
+milestone/release qualification or an investigation of fixture/environment effects.
+The isolated Linux lane always executes its selected cases afresh.
+
+Go changes affect their package and transitive consumers. Browser verifier changes
+affect journeys importing them. Common configuration, contract, fixture or tool
+changes widen selection. Unmapped command journeys conservatively include every
+browser verifier. This is dependency selection, not a claim that individual file
+names prove the absence of indirect effects. Missing/corrupt/failed/interrupted
+evidence is never reused. Approval remains governed by [commands](commands.md).
+
 Inspect a running real page or a single user journey early. This inspection must
 not launch the Compose end-to-end suite, catalogue browser matrix or database/API
 integration suite. Those broad suites run once implementation is complete and the

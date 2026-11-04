@@ -94,6 +94,14 @@ affected gate when the corrected candidate is ready. Keep unaffected evidence. N
 waive a required gate because a narrow check passed. Retain unexplained failures as
 open investigations; a later passing run alone does not establish a fix.
 
+For integration, use the dependency-aware selection described in
+[testing](testing.md): retain matching per-case passes from partial or complete
+runs, execute failed/missing/affected cases, and report reused coverage separately
+from new executions. Inspect the plan when the expected scope is uncertain.
+Do not repeat unchanged passing areas merely to get a fresh aggregate green run.
+Shared dependencies, fixture/tool changes and missing evidence widen selection;
+fresh full execution remains available for release qualification and investigations.
+
 Review the actual diff for correctness, contract fit, test strength, secrets, generated
 sources and scope. The primary agent exercises the integrated user checklist itself,
 including the normal deployment through the isolated Compose check when applicable.

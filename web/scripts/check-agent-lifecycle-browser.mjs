@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect } from '@playwright/test';
-import { readResponseJSON } from './response-read-diagnostics.mjs';
+import { captureResponseJSON } from './response-read-diagnostics.mjs';
 
 export async function runAgentLifecycleJourney({ page, context, fixture, setStage, registration, tokenEvidence }) {
   const origin = new URL(fixture.url).origin;
@@ -29,17 +29,15 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   });
   const submit = async (dialog, suffix) => {
     setStage(`lifecycle ${suffix} response wait`);
-    // Capture the body before click completion can outlive Chromium's response cache.
-    const [captured] = await Promise.all([
-      page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `${agentPath}${suffix}`).then(async response => {
+    return captureResponseJSON(
+      page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `${agentPath}${suffix}`).then(response => {
         setStage(`lifecycle ${suffix} response status ${response.status()}`);
         assert.equal(response.status(), 200);
         setStage(`lifecycle ${suffix} response decoding`);
-        return { response, body: await readResponseJSON(response) };
+        return response;
       }),
-      dialog.getByRole('button', { name: suffix === '/disable' ? 'Disable agent' : suffix === '/credentials/rotate' ? 'Rotate credential' : 'Revoke credential', exact: true }).click(),
-    ]);
-    return captured;
+      () => dialog.getByRole('button', { name: suffix === '/disable' ? 'Disable agent' : suffix === '/credentials/rotate' ? 'Rotate credential' : 'Revoke credential', exact: true }).click(),
+    );
   };
 
   setStage('credential rotation confirmation');

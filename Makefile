@@ -185,65 +185,14 @@ _verify_auth_bench:
 	  .local/bin/go test -run '^$$' -bench '^BenchmarkPassword(Hash|Verify)$$' -benchtime=10x -count=1 -timeout=2m ./internal/identity
 
 _verify_integration: _ensure_web_assets
-	@set -eu; test -x .local/bin/go || { echo 'Go setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  test -x .local/bin/sqlc || { echo 'sqlc setup missing; run make setup SETUP_MODE=go' >&2; exit 2; }; \
-	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-all}" in ./internal/storage|./internal/authentication|./internal/agentmanagement|./internal/agenthttp|./internal/authhttp|./internal/command|all) ;; *) echo 'GO_PACKAGE must select a real database acceptance package or all' >&2; exit 2 ;; esac; \
+	@set -eu; \
 	  export GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build"; \
-	  target="$${GO_PACKAGE:-all}"; \
-	  packages="$$target"; if [ "$$target" = all ]; then packages='./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/agentcmd ./internal/command'; fi; \
-	  test_list=$$(mktemp .local/integration-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! .local/bin/go test -tags=integration -list . $$packages > "$$test_list"; then echo 'integration test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
-	  tests=$$(awk '/^TestIntegration/{n++} END{print n+0}' "$$test_list"); \
-	  test "$$tests" -gt 0 || { echo 'selected integration packages contain zero tests' >&2; exit 1; }; \
-	  command_tests=''; storage_tests=''; selected_packages=''; \
-	  for name in storage command; do \
-	    case " $$packages " in *" ./internal/$$name "*) \
-	      if ! .local/bin/go test -tags=integration -list '^TestIntegration' "./internal/$$name" > "$$test_list"; then echo "$$name integration test discovery failed" >&2; exit 1; fi; \
-	      selected=$$(python3 scripts/select-integration-tests.py "$$name" "$$test_list") || exit 1; \
-	      case "$$name" in storage) storage_tests="$$selected" ;; command) command_tests="$$selected" ;; esac; \
-	      selected_packages="$$selected_packages $$name" ;; esac; \
-	  done; \
-	  echo "Selected PostgreSQL integration tests: $$tests"; \
 	  $(MAKE) _verify_sqlc_generated; \
 	  fixture_check=--check; \
 	  case "$${ALMANAC_LINUX_VERIFICATION_CONTAINER:-}" in '' ) ;; 1) fixture_check=--check-container ;; *) echo 'ALMANAC_LINUX_VERIFICATION_CONTAINER must be unset or 1' >&2; exit 2 ;; esac; \
 	  sh scripts/setup-database.sh "$$fixture_check"; \
 	  $(MAKE) build; \
-	  json_artifact="$(CURDIR)/.local/integration-go-test.jsonl"; exit_artifact="$(CURDIR)/.local/integration-go-test.exit"; \
-	  package_artifacts="$(CURDIR)/.local/integration-test-json"; mkdir -p "$$package_artifacts"; \
-	  : > "$$package_artifacts/selected-packages.txt"; \
-	  for package in $$packages; do printf '%s\n' "$${package##*/}" >> "$$package_artifacts/selected-packages.txt"; done; \
-	  for name in $$selected_packages; do \
-	    case "$$name" in storage) selected="$$storage_tests" ;; command) selected="$$command_tests" ;; esac; \
-	    printf '%s\n' "$$selected" > "$$package_artifacts/$$name-selected.txt"; \
-	    for run in $$selected; do : > "$$package_artifacts/$$name-$$run.jsonl"; printf 'pending\n' > "$$package_artifacts/$$name-$$run.exit"; done; \
-	  done; \
-	  printf 'running\n' > "$$exit_artifact"; : > "$$json_artifact"; \
-	  for package in $$packages; do package_name=$${package##*/}; : > "$$package_artifacts/$$package_name.jsonl"; printf 'pending\n' > "$$package_artifacts/$$package_name.exit"; done; \
-	  for package in $$packages; do \
-	    package_name=$${package##*/}; package_json="$$package_artifacts/$$package_name.jsonl"; \
-	    package_exit="$$package_artifacts/$$package_name.exit"; printf 'running\n' > "$$package_exit"; \
-	    runs=package; case "$$package" in ./internal/storage) runs="$$storage_tests" ;; ./internal/command) runs="$$command_tests" ;; esac; \
-	    for run in $$runs; do \
-	      selector='^TestIntegration'; run_json="$$package_json"; run_exit="$$package_exit"; \
-	      case "$$package" in ./internal/storage|./internal/command) \
-	        selector="^$${run}$$"; run_json="$$package_artifacts/$$package_name-$$run.jsonl"; run_exit="$$package_artifacts/$$package_name-$$run.exit" ;; esac; \
-	      printf 'running\n' > "$$run_exit"; go_status=0; \
-	      .local/bin/go test -json -race -tags=integration -p=1 -run "$$selector" -count=1 -timeout=2m "$$package" > "$$run_json" || go_status=$$?; \
-	      if [ "$$run_json" != "$$package_json" ]; then cat "$$run_json" >> "$$package_json"; fi; \
-	      cat "$$run_json" >> "$$json_artifact"; printf '%s\n' "$$go_status" > "$$run_exit"; \
-	      if [ "$$go_status" -ne 0 ]; then \
-	        printf '%s\n' "$$go_status" > "$$package_exit"; printf '%s\n' "$$go_status" > "$$exit_artifact"; \
-	        summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
-	        exit "$$go_status"; \
-	      fi; \
-	    done; \
-	    printf '0\n' > "$$package_exit"; \
-	  done; \
-	  printf '0\n' > "$$exit_artifact"; \
-	  summary_status=0; python3 scripts/summarize-integration-tests.py || summary_status=$$?; \
-	  exit "$$summary_status"
+	  python3 scripts/integration-runner.py
 
 .PHONY: _verify_performance
 _verify_performance:

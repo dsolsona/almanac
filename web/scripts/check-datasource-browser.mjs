@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
-import { readResponseJSON } from './response-read-diagnostics.mjs';
+import { captureResponseJSON } from './response-read-diagnostics.mjs';
 
 let stage = 'fixture input';
 let fixture;
@@ -47,6 +47,8 @@ stage = 'browser launch';
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
   context.setDefaultTimeout(5000);
   page = await context.newPage();
+  const capture = (method, path, action) => captureResponseJSON(page.waitForResponse(response =>
+    response.request().method() === method && new URL(response.url()).pathname === path), action);
   let pageErrors = 0;
   let apiSequence = 0;
   page.on('pageerror', () => { pageErrors += 1; });
@@ -94,12 +96,9 @@ stage = 'browser launch';
   authenticated = true;
 
   stage = 'saved datasource detail request';
-  const detailResponsePromise = page.waitForResponse((response) => response.request().method() === 'GET'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${fixture.datasource_id}`);
-  await page.goto(new URL(`/datasources/${fixture.datasource_id}`, origin).href);
-  const detailResponse = await detailResponsePromise;
+  const { response: detailResponse, body: source } = await capture('GET', `/api/v1/datasources/${fixture.datasource_id}`,
+    () => page.goto(new URL(`/datasources/${fixture.datasource_id}`, origin).href));
   assert.equal(detailResponse.status(), 200);
-  const source = await detailResponse.json();
   assert.equal(source.id, fixture.datasource_id);
   assert.equal(source.agent_id, fixture.agent_id);
   assert.equal(source.provider, 'prometheus');
@@ -136,12 +135,10 @@ stage = 'browser launch';
   stage = 'datasource create agent field';
   await page.getByLabel('Assigned agent', { exact: true }).selectOption(fixture.agent_id);
   stage = 'datasource create response waiter';
-  const createPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === '/api/v1/datasources');
   stage = 'datasource create submit button';
-  await page.getByRole('button', { name: 'Create datasource', exact: true }).click();
+  const { response: createResponse, body: created } = await capture('POST', '/api/v1/datasources',
+    () => page.getByRole('button', { name: 'Create datasource', exact: true }).click());
   stage = 'datasource create API response';
-  const createResponse = await createPromise;
   assert.equal(createResponse.status(), 201);
   const createRequest = createResponse.request();
   assert.match(createRequest.headers()['idempotency-key'], /^[0-9a-f-]{36}$/);
@@ -151,7 +148,6 @@ stage = 'browser launch';
   assert.equal(createInput.tls.ca_pem, fixture.ca_pem);
   assert.deepEqual(createInput.authentication.password_secret, { action: 'clear' });
   assert.deepEqual(createInput.authentication.token_secret, { action: 'clear' });
-  const created = await createResponse.json();
   const createdID = created.id;
   assert.match(createdID, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(created.name, createdName);
@@ -163,22 +159,17 @@ stage = 'browser launch';
   await expect(page.getByText(createdDisplayName, { exact: true })).toBeVisible();
 
   stage = 'newly created datasource detail';
-  const createdDetailPromise = page.waitForResponse((response) => response.request().method() === 'GET'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${createdID}`);
-  await page.goto(new URL(`/datasources/${createdID}`, origin).href);
-  const createdDetailResponse = await createdDetailPromise;
+  const { response: createdDetailResponse, body: createdDetail } = await capture('GET', `/api/v1/datasources/${createdID}`,
+    () => page.goto(new URL(`/datasources/${createdID}`, origin).href));
   assert.equal(createdDetailResponse.status(), 200);
-  const createdDetail = await createdDetailResponse.json();
   assert.equal(createdDetail.id, createdID);
   assert.equal(createdDetail.version, '1');
 
   stage = 'UI datasource update request';
   const nextName = `${createdDisplayName} updated`;
   await page.getByLabel('Display name', { exact: true }).fill(nextName);
-  const updatePromise = page.waitForResponse((response) => response.request().method() === 'PUT'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${createdID}`);
-  await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-  const updateResponse = await updatePromise;
+  const { response: updateResponse, body: saved } = await capture('PUT', `/api/v1/datasources/${createdID}`,
+    () => page.getByRole('button', { name: 'Save settings', exact: true }).click());
   assert.equal(updateResponse.status(), 200);
   const updateRequest = updateResponse.request();
   assert.equal(updateRequest.headers()['if-match'], createdDetailResponse.headers()['etag']);
@@ -187,7 +178,6 @@ stage = 'browser launch';
   assert.deepEqual(write.authentication.token_secret, { action: 'clear' });
   assert.equal(Object.hasOwn(write.authentication.password_secret, 'value'), false);
   assert.equal(Object.hasOwn(write.authentication.token_secret, 'value'), false);
-  const saved = await readResponseJSON(updateResponse);
   assert.equal(saved.display_name, nextName);
   assert.equal(saved.version, String(BigInt(createdDetail.version) + 1n));
   stage = 'UI datasource update confirmation';
@@ -267,14 +257,11 @@ stage = 'browser launch';
   stage = 'real successful saved-source preview';
   const queryField = page.getByLabel('PromQL query', { exact: true });
   await queryField.fill(fixture.query);
-  const previewPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${createdID}/query-previews`);
-  await page.getByRole('button', { name: 'Run preview', exact: true }).click();
-  const previewResponse = await previewPromise;
+  const { response: previewResponse, body: previewReceipt } = await capture('POST', `/api/v1/datasources/${createdID}/query-previews`,
+    () => page.getByRole('button', { name: 'Run preview', exact: true }).click());
   assert.equal(previewResponse.status(), 202);
   const previewRequest = previewResponse.request();
   assert.equal(previewRequest.postDataJSON().query, fixture.query);
-  const previewReceipt = await previewResponse.json();
   assert.match(previewReceipt.id, /^[0-9a-f-]{36}$/);
   stage = 'successful diagnostic result';
   const resultPre = page.locator('.diagnostic-result pre').last();
@@ -293,12 +280,9 @@ stage = 'browser launch';
 
   stage = 'real failed saved-source preview';
   await queryField.fill('vector(');
-  const invalidPreviewPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${createdID}/query-previews`);
-  await page.getByRole('button', { name: 'Run preview', exact: true }).click();
-  const invalidPreview = await invalidPreviewPromise;
+  const { response: invalidPreview, body: invalidReceipt } = await capture('POST', `/api/v1/datasources/${createdID}/query-previews`,
+    () => page.getByRole('button', { name: 'Run preview', exact: true }).click());
   assert.equal(invalidPreview.status(), 202);
-  const invalidReceipt = await invalidPreview.json();
   assert.match(invalidReceipt.id, /^[0-9a-f-]{36}$/);
   stage = 'safe failed diagnostic result code';
   await expect.poll(async () => page.locator('.diagnostic-result').last().innerText(), { timeout: 15000 }).toContain('query_failed');
@@ -330,29 +314,24 @@ stage = 'browser launch';
     assert.equal(await page.evaluate((values) => Array.from({ length: localStorage.length }, (_, index) => localStorage.getItem(localStorage.key(index) ?? '') ?? '').some((entry) => values.some((value) => entry.includes(value))), [fixture.basic_password, fixture.bearer_token]), false);
   };
   const openSavedDatasource = async (datasourceID) => {
-    const detailPromise = page.waitForResponse((response) => response.request().method() === 'GET'
-      && new URL(response.url()).pathname === `/api/v1/datasources/${datasourceID}`);
-    await page.goto(new URL(`/datasources/${datasourceID}`, origin).href);
-    const detail = await detailPromise;
+    const { response: detail, body: value } = await capture('GET', `/api/v1/datasources/${datasourceID}`,
+      () => page.goto(new URL(`/datasources/${datasourceID}`, origin).href));
     assert.equal(detail.status(), 200);
-    const value = await detail.json();
     assert.equal(value.id, datasourceID);
     assert.equal(detail.headers()['etag'], `"datasource:${datasourceID}:${value.version}"`);
     for (const key of ['password', 'token', 'password_secret', 'token_secret']) {
       assert.equal(Object.hasOwn(value.authentication, key), false);
     }
-    return detail;
+    return { response: detail, body: value };
   };
   const submitSavedConnectionTest = async (datasourceID, expectedVersion) => {
     const path = `/api/v1/datasources/${datasourceID}/connection-tests`;
-    const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === path);
-    await page.getByRole('button', { name: 'Test connection', exact: true }).click();
-    const response = await responsePromise;
+    const { response, body: receipt } = await capture('POST', path,
+      () => page.getByRole('button', { name: 'Test connection', exact: true }).click());
     assert.equal(response.status(), 202);
     assert.equal(response.request().headers()['if-match'], expectedVersion);
     assert.match(response.request().headers()['idempotency-key'], /^[\x21-\x7e]{1,128}$/);
     assert.deepEqual(response.request().postDataJSON(), {});
-    const receipt = await response.json();
     assert.equal(receipt.operation, 'connection_test');
     await waitForDiagnostic('succeeded');
     return receipt;
@@ -360,28 +339,25 @@ stage = 'browser launch';
   stage = 'saved Basic datasource detail';
   const basicDetail = await openSavedDatasource(basicID);
   await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 5000 });
-  assert.equal((await basicDetail.json()).authentication.password_configured, true);
+  assert.equal(basicDetail.body.authentication.password_configured, true);
   stage = 'saved Basic credential connection test';
-  await submitSavedConnectionTest(basicID, basicDetail.headers()['etag']);
+  await submitSavedConnectionTest(basicID, basicDetail.response.headers()['etag']);
   await assertNoCredentialDrafts();
 
   stage = 'saved Bearer datasource detail';
   const bearerDetail = await openSavedDatasource(bearerID);
   await expect(page.getByRole('status').filter({ hasText: 'The assigned agent has applied the datasource settings.' })).toBeVisible({ timeout: 5000 });
-  assert.equal((await bearerDetail.json()).authentication.token_configured, true);
+  assert.equal(bearerDetail.body.authentication.token_configured, true);
   stage = 'saved Bearer credential connection test';
-  await submitSavedConnectionTest(bearerID, bearerDetail.headers()['etag']);
+  await submitSavedConnectionTest(bearerID, bearerDetail.response.headers()['etag']);
   await assertNoCredentialDrafts();
 
   stage = 'running real preview cancellation';
   await page.getByLabel('PromQL query', { exact: true }).fill('block_until_cancel');
   stage = 'cancel preview submission';
-  const slowPreviewPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === `/api/v1/datasources/${bearerID}/query-previews`);
-  await page.getByRole('button', { name: 'Run preview', exact: true }).click();
-  const slowPreview = await slowPreviewPromise;
+  const { response: slowPreview, body: slowReceipt } = await capture('POST', `/api/v1/datasources/${bearerID}/query-previews`,
+    () => page.getByRole('button', { name: 'Run preview', exact: true }).click());
   assert.equal(slowPreview.status(), 202);
-  const slowReceipt = await slowPreview.json();
   activeDiagnosticID = slowReceipt.id;
   latestDiagnostic = { state: 'none', errorCode: 'none', resultClass: 'none' };
   stage = 'cancel button enabled';
@@ -389,15 +365,12 @@ stage = 'browser launch';
   await expect(cancelButton).toBeEnabled();
   stage = 'cancel provider started';
   await expect.poll(async () => readFile(join(fixture.artifacts, 'provider-started'), 'utf8').catch(() => ''), { timeout: 5000 }).toBe('started\n');
-  const cancelPromise = page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === `/api/v1/diagnostics/${slowReceipt.id}/cancel`);
   stage = 'cancel request';
-  await cancelButton.click();
-  const canceledResponse = await cancelPromise;
+  const { response: canceledResponse, body: canceledBody } = await capture('POST', `/api/v1/diagnostics/${slowReceipt.id}/cancel`,
+    () => cancelButton.click());
   stage = 'cancel response status';
   assert.equal(canceledResponse.status(), 200);
   stage = 'cancel response state';
-  const canceledBody = await canceledResponse.json();
   if (['pending', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(canceledBody.state)) cancelResponseState = canceledBody.state;
   assert.equal(canceledBody.state, 'canceled');
   stage = 'cancel result rendering';

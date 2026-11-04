@@ -96,6 +96,30 @@ reporting success; a failed check preserves the running services and volumes.
 Git publication operations must likewise match current approval rules and existing
 user authorization. Do not merge PRs merely because publishing them was authorized.
 
+## Selective integration checks
+
+The existing integration entry defaults to affected-case execution and compatible
+per-case pass reuse. Its fixed selectors accept one discovered test name, a fixed
+package, or explicit full execution; they do not accept arbitrary Go flags,
+regular expressions, commands or database URLs. Normal checks retain the existing
+isolated port-15487 fixture. Example invocations within this entry:
+
+```sh
+make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration INTEGRATION_PLAN=1 ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration INTEGRATION_TEST=TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration INTEGRATION_SELECTION=all ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+```
+
+Every run prints its selection before executing. The latest coverage report is
+`.local/integration-report.json`; immutable per-run reports/Go events live under
+`.local/integration-runs/`. Reused cases retain their original provenance and are
+not counted as new executions or new test time. Interrupted and failed cases run
+again on the next selection. The former aggregate Go artifact remains historical.
+Actual invocation approval still follows the environment's rules above.
+`INTEGRATION_PLAN=1` performs normal preflights and discovery but executes no
+integration cases; its receipt is explicitly `planned`, never a passing gate.
+
 ## Approved controlled capacity entry
 
 Current phase restriction, 2026-11-04: the maintainer rejected further deliberate

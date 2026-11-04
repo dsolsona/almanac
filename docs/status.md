@@ -7,6 +7,17 @@ browser traces. Cold detail maxima are 375.5/754.3 ms. Independent historical,
 late-data, fresh-generation restart, pagination, logical retention and shared-SLI
 checks pass. No new observation import was used. The operator preview is unchanged.
 
+Current verification follow-up: the datasource and lifecycle verifiers now share
+immediate response-body capture, with a deterministic regression and all existing
+assertions retained. Integration selection preserves per-case source/fixture
+evidence, runs failed/missing/affected cases, and continues after failures. The
+corrected datasource journey passes in 65.296 seconds; twelve remaining cases pass
+in 195.765 seconds including setup while 161 compatible passes are reused. An
+unchanged run reuses all 173 passes with zero executions in 10.636 seconds. Final
+ordinary checks pass 362 web/509 Go cases in 29.816 seconds; all 36 tooling tests
+pass. F3-T08 is in review for this bounded phase. Larger/endurance evidence remains
+deferred, and the earlier failed full-run records below are retained history.
+
 The maintainer rejected further deliberate endurance waits. Fresh sustained-load,
 clock-aging and physical-cleanup observation, plus 100/1,000-SLO validation, are
 deferred to [F3-T10](tasks/F3-T10.md), not passed. The existing endurance command
@@ -28,8 +39,7 @@ seconds: 160/173 cases pass, the datasource preview subjourney fails while readi
 an HTTP-202 receipt body, and twelve later cases are not reached. This different
 failure remains unresolved; the saved diagnostic and masked screenshot are linked
 from F3-T08. No further suite is running.
-T08 remains in progress until the final verification gaps are closed. No merge
-is authorized. Earlier checkpoints below are historical and do not override this
+No merge is authorized. Earlier checkpoints below are historical and do not override this
 current scope/evidence record.
 
 The 2026-10-31 [performance and tracing intervention](plans/0023-performance-and-tracing-intervention.md)
