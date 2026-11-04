@@ -29,13 +29,17 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   });
   const submit = async (dialog, suffix) => {
     setStage(`lifecycle ${suffix} response wait`);
-    const [response] = await Promise.all([
-      page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `${agentPath}${suffix}`),
+    // Capture the body before click completion can outlive Chromium's response cache.
+    const [captured] = await Promise.all([
+      page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `${agentPath}${suffix}`).then(async response => {
+        setStage(`lifecycle ${suffix} response status ${response.status()}`);
+        assert.equal(response.status(), 200);
+        setStage(`lifecycle ${suffix} response decoding`);
+        return { response, body: await readResponseJSON(response) };
+      }),
       dialog.getByRole('button', { name: suffix === '/disable' ? 'Disable agent' : suffix === '/credentials/rotate' ? 'Rotate credential' : 'Revoke credential', exact: true }).click(),
     ]);
-    setStage(`lifecycle ${suffix} response status ${response.status()}`);
-    assert.equal(response.status(), 200);
-    return response;
+    return captured;
   };
 
   setStage('credential rotation confirmation');
@@ -46,9 +50,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await rotation.getByLabel('Keep the previous credential valid for', { exact: true }).selectOption('0');
   setStage('credential rotation no premature mutation');
   assert.equal(mutations.length, 0);
-  const rotatedResponse = await submit(rotation, '/credentials/rotate');
-  setStage('credential rotation response decoding');
-  const rotated = await readResponseJSON(rotatedResponse);
+  const { response: rotatedResponse, body: rotated } = await submit(rotation, '/credentials/rotate');
   setStage('credential rotation fresh issuance and target');
   assert.equal(rotated.replayed, false);
   assert.equal(rotated.agent.id, registration.agent_id);
@@ -83,9 +85,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await inspectEmptyDialog(revoke, 'revoke-confirmation');
   await revoke.getByRole('checkbox', { name: 'I understand this action takes effect immediately.' }).check();
   assert.equal(mutations.length, 1);
-  const revokedResponse = await submit(revoke, `/credentials/${replacement.credential_id}/revoke`);
-  setStage('credential revocation response decoding');
-  const revoked = await readResponseJSON(revokedResponse);
+  const { response: revokedResponse, body: revoked } = await submit(revoke, `/credentials/${replacement.credential_id}/revoke`);
   assert.equal(revoked.changed, true);
   assert.equal(revoked.credential.id, replacement.credential_id);
   assert.ok(revoked.credential.revoked_at);
@@ -100,9 +100,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   await inspectEmptyDialog(disable, 'disable-confirmation');
   await disable.getByRole('checkbox', { name: 'I understand this action takes effect immediately.' }).check();
   assert.equal(mutations.length, 2);
-  const disabledResponse = await submit(disable, '/disable');
-  setStage('agent disable response decoding');
-  const disabled = await readResponseJSON(disabledResponse);
+  const { response: disabledResponse, body: disabled } = await submit(disable, '/disable');
   assert.equal(disabled.agent.enabled, false);
   assert.equal((await disabledResponse.request().allHeaders())['if-match'], `"agent:${registration.agent_id}:3"`);
   await expect(disable).not.toBeVisible();

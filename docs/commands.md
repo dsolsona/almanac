@@ -60,6 +60,7 @@ make verification-report
 make verification-handoff
 make verify VERIFY_MODE=compose
 make verify VERIFY_MODE=go-race
+make verify VERIFY_MODE=journey BROWSER_SCENARIO=agents-lifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
 make verify VERIFY_MODE=unit TEST_FILE=tests/agents-client.test.tsx
 make verify VERIFY_MODE=unit TEST_FILE=tests/agents-page.test.tsx
 make verify VERIFY_MODE=unit TEST_FILE=tests/auth-page.test.tsx

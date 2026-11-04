@@ -19,6 +19,10 @@ The cause remains unresolved; no automatic rerun follows. The earlier corrected
 SLO journey retains its 73.289-second focused pass. Final catalogue/browser
 verification passes all 126 cases. Receipts and failures remain in
 [F3-T08](tasks/F3-T08.md); no new escalation requests are authorized.
+The subsequent verifier correction captures lifecycle response JSON before click
+completion; the focused real journey passes in 10.73 seconds with every existing
+assertion retained. The original failure remains unreproduced, and this focused
+pass does not turn the failed full integration receipt into a pass.
 T08 remains in progress until the final verification gaps are closed. No merge
 is authorized. Earlier checkpoints below are historical and do not override this
 current scope/evidence record.
