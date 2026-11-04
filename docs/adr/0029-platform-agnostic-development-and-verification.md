@@ -1,9 +1,9 @@
 # ADR-0029: Build, test and ship only through Docker images
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-04
-- Accepted: pending
-- Approval: the maintainer set the direction in the 2026-11-04 working conversation ("we will run everything under Docker, tests included; a development image, and published images for the app and the agent"); this record is the written form for acceptance
+- Accepted: 2026-11-04
+- Approval: Crit session `d21016424a44` approved 2026-11-04 after one comment (three Dockerfiles instead of one); the maintainer set the direction in the same day's working conversation ("we will run everything under Docker, tests included; a development image, and published images for the app and the agent")
 - Related specs: none; governs [testing](../testing.md), [commands](../commands.md), the Makefile, Dockerfiles and Compose files
 - Supersedes / superseded by: supersedes the isolated Linux lane (F2-T22) and the host toolchain installed by `make setup`
 
@@ -37,19 +37,22 @@ beyond Docker, and the tooling simplified in the process.
 
 ## Decision
 
-Proposal, in the maintainer's stated direction.
+Accepted; the Makefile, Dockerfiles, Compose files and guides follow it.
 
 1. **Docker is the only runtime.** Development, verification and builds run
    inside containers. The host needs Docker (Engine, Desktop or Colima) and
    `make`; no Go, Node, Chromium, generators or fixture binaries are
    installed on it. `make setup` builds or pulls images only.
-2. **Three images from one Dockerfile.** A `dev` stage carries the pinned Go
-   and Node toolchains, the generators, Playwright with Chromium, the
-   PostgreSQL client and the pinned VictoriaMetrics binary. An `app` stage
-   builds the embedded UI and the `almanac` executable onto a minimal
-   runtime. An `agent` stage builds `almanac-agent` onto its own minimal
-   runtime. `app` and `agent` are the published artifacts; `dev` is never
-   published. Toolchain pins exist once, in this file.
+2. **Three images, three Dockerfiles.** `deploy/dev/Dockerfile` builds the
+   development image: the pinned Go and Node toolchains, the generators,
+   Playwright with Chromium, the PostgreSQL client and the pinned
+   VictoriaMetrics binary. `deploy/app/Dockerfile` builds the embedded UI and
+   the `almanac` executable onto a minimal runtime. `deploy/agent/Dockerfile`
+   builds `almanac-agent` onto its own minimal runtime. `app` and `agent` are
+   the published artifacts; `dev` is never published. Each file stays small
+   and readable on its own; the base image digests they share (Go, Node,
+   Debian) are repeated, and `make verify` checks that the three files agree
+   so the pins cannot drift apart.
 3. **Multi-architecture everywhere.** Every base image and fixture image is
    pinned by its multi-arch index digest so the runtime resolves the host
    platform. `make setup` checks that each resolved image matches the host
@@ -100,6 +103,10 @@ Proposal, in the maintainer's stated direction.
 
 ## Alternatives considered
 
+- **One multi-stage Dockerfile for all three images.** Keeps the pins in one
+  place but mixes the development toolchain, the app runtime and the agent
+  runtime in one file that grows with every stage; the maintainer prefers
+  one file per image, with a pin-consistency check instead.
 - **Native toolchains on Linux and macOS with Docker for services only.**
   Works, but keeps two environments to pin and means reimplementing the
   Linux-only packages for macOS. The maintainer prefers one runtime.
@@ -119,7 +126,7 @@ Proposal, in the maintainer's stated direction.
 - Benefits: one environment on every machine; no host installs; native
   images on both architectures; about 1,500 lines of lane and setup code
   removed; the fixture identity defined once; published app and agent images
-  built from the same file that builds the dev image.
+  built from small per-image Dockerfiles with a pin-consistency check.
 - Costs: Docker is mandatory even for a unit test; the first `make setup`
   builds the dev image; headed browser debugging happens inside a container;
   source reads cross virtiofs on macOS (caches do not); the command catalog,

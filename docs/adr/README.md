@@ -54,4 +54,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0026](0026-bounded-cold-operational-rendering.md) | Bound cold operational rendering and start reads before React | proposed |
 | [ADR-0027](0027-bounded-history-quality-display.md) | Keep dense history graphs available at the displayed resolution | accepted |
 
-| [ADR-0029](0029-platform-agnostic-development-and-verification.md) | Build, test and ship only through Docker images | proposed |
+| [ADR-0029](0029-platform-agnostic-development-and-verification.md) | Build, test and ship only through Docker images | accepted |

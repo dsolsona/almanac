@@ -1,6 +1,6 @@
 # Docker-only development, verification and images
 
-- State: draft, awaiting the maintainer's acceptance of [ADR-0029](../adr/0029-platform-agnostic-development-and-verification.md)
+- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 next
 - Created: 2026-11-04
 - Scope: tooling, images, fixtures and documentation; no product behaviour changes
 - Base: `main`; independent of the open UI stack (PRs #54–#60), which still cites the retired modes until merged
@@ -11,21 +11,25 @@
 
 Develop, verify and build the same way on any machine that has Docker
 (Engine, Desktop or Colima) and `make`, with nothing else installed on the
-host, from one Dockerfile that also produces the published `app` and `agent`
-images.
+host, from three small Dockerfiles: a development image, and the published
+`app` and `agent` images.
 
 ## Sequence
 
 Each task is a reviewable outcome with its own record and evidence; tasks are
 sequential and each branches from the previous one.
 
-- [ ] **F7-T01 One Dockerfile, three images.** Add the `dev` stage (Go, Node,
-  generators, Playwright Chromium, PostgreSQL client, VictoriaMetrics
-  binary) and split the runtime into `app` and `agent` stages; repin every
-  base image by multi-arch index digest; `make build` builds the images,
-  `make publish` pushes `app` and `agent` for `linux/amd64` and `linux/arm64`.
-  Evidence: image builds on arm64 and amd64; `docker image inspect` shows the
-  native platform on each host; the published images start with `version`.
+- [ ] **F7-T01 Three Dockerfiles, three images.** Add `deploy/dev/Dockerfile`
+  (Go, Node, generators, Playwright Chromium, PostgreSQL client,
+  VictoriaMetrics binary), `deploy/app/Dockerfile` (embedded UI and the
+  `almanac` executable on a minimal runtime) and `deploy/agent/Dockerfile`
+  (`almanac-agent` on its own minimal runtime), replacing the root
+  Dockerfile; repin every base image by multi-arch index digest; add the
+  pin-consistency check; `make build` builds the images, `make publish`
+  pushes `app` and `agent` for `linux/amd64` and `linux/arm64`. Evidence:
+  image builds on arm64 and amd64; `docker image inspect` shows the native
+  platform on each host; the published images start with `version`; the
+  consistency check fails when a pin is changed in only one file.
 - [ ] **F7-T02 Development and fixture Compose file.** `compose.dev.yaml`
   with the `dev` service (checkout at `/workspace`, named cache volumes,
   no socket) sharing the network namespace of a `postgres` fixture (tmpfs,
@@ -58,8 +62,8 @@ sequential and each branches from the previous one.
   host or runtime configuration.
 - No test or script references a system temp directory in a container mount,
   a single-architecture digest, a host toolchain or the removed lane.
-- The same Dockerfile builds `dev`, `app` and `agent`; only `app` and `agent`
-  are published.
+- Three Dockerfiles with matching pins build `dev`, `app` and `agent`; only
+  `app` and `agent` are published.
 
 ## Out of scope
 
