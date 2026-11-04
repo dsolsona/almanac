@@ -38,6 +38,8 @@ export function ChoiceChips({ id, label, options, value, onChange, custom, hint,
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
 
   useEffect(() => { if (customOpen) input.current?.focus(); }, [customOpen]);
+  // A parent-driven custom value (reset, replay) replaces the typed text so the chip never reapplies stale input.
+  useEffect(() => { if (!isPreset && value !== customText.trim()) setCustomText(value); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function choosePreset(next: string) {
     setCustomOpen(false);
@@ -47,10 +49,10 @@ export function ChoiceChips({ id, label, options, value, onChange, custom, hint,
     setCustomOpen(true);
     if (customText !== '' && customText !== value) onChange(customText);
   }
-  // Applies as typed; validation only reports. The owning form rejects an invalid value on submit.
+  // Applies as typed, including a cleared input; validation only reports. The owning form rejects an invalid or empty value on submit.
   function applyCustom(text: string) {
     setCustomText(text);
-    if (text.trim() !== '') onChange(text.trim());
+    onChange(text.trim());
   }
   function collapse() {
     if (customText.trim() !== '') setCustomOpen(false);

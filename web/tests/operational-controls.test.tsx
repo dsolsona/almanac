@@ -141,4 +141,49 @@ describe('operational controls', () => {
     expect(screen.getByText('Collection starts as soon as you save.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible();
   });
+
+  it('chips hand a cleared custom input to the owner and follow an owner-driven custom value', async () => {
+    const user = userEvent.setup();
+    function Owner() {
+      const [value, setValue] = useState('99.9');
+      return <><ChoiceChips id="t" label="Target" value={value} onChange={setValue} options={[{ value: '99.9', label: '99.9%' }]} custom={{ unit: '%', format: (v) => `${v}%` }} /><output data-testid="value">{value}</output><button type="button" onClick={() => setValue('99.8')}>reset</button></>;
+    }
+    render(<Owner />);
+    await user.click(screen.getByRole('radio', { name: 'Custom…' }));
+    await user.type(screen.getByLabelText('Custom target'), '99.7');
+    expect(screen.getByTestId('value')).toHaveTextContent('99.7');
+    await user.clear(screen.getByLabelText('Custom target'));
+    expect(screen.getByTestId('value')).toHaveTextContent('');
+    await user.click(screen.getByRole('button', { name: 'reset' }));
+    expect(screen.getByLabelText('Custom target')).toHaveValue('99.8');
+    expect(screen.getByRole('radio', { name: 'Custom · 99.8%' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('combobox skips a disabled last option on End, keeps its error when selected and focuses Change after choosing', async () => {
+    const user = userEvent.setup();
+    const options = [{ id: 'a', label: 'alpha' }, { id: 'b', label: 'beta' }, { id: 'c', label: 'gamma', disabled: true }];
+    function Owner() {
+      const [value, setValue] = useState<string | null>(null);
+      return <Combobox id="p" label="Pick" value={value} onChange={setValue} options={options} error={value === 'b' ? 'beta is not allowed here' : undefined} />;
+    }
+    render(<Owner />);
+    const input = screen.getByLabelText('Pick');
+    await user.click(input);
+    await user.keyboard('{End}');
+    expect(input).toHaveAttribute('aria-activedescendant', 'p-option-b');
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus();
+    expect(screen.getByRole('alert')).toHaveTextContent('beta is not allowed here');
+  });
+
+  it('combobox runs the no-match action from a click reached by Tab', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<Combobox id="n" label="Service" value={null} onChange={() => undefined} options={[{ id: 'a', label: 'alpha' }]} noMatch={{ text: () => 'nothing', action: { label: (term) => `Create ${term}`, onSelect } }} />);
+    await user.type(screen.getByLabelText('Service'), 'zeta');
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Create zeta' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledWith('zeta');
+  });
 });

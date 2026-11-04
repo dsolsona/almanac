@@ -51,7 +51,8 @@ export function OperationalControlsSection() {
       </Panel>
       <Panel heading="Preset chips with a custom value">
         <div className="field-stack">
-          <ChoiceChips id="catalogue-target" label="Target" value={target} onChange={setTarget} options={['99', '99.5', '99.9', '99.95', '99.99'].map((value) => ({ value, label: `${value}%` }))} custom={{ unit: '%', placeholder: 'e.g. 99.7', format: percent, validate: validateTarget }} hint={`Error budget is the rest: ${(100 - Number(target)).toFixed(Math.max(1, (target.split('.')[1] ?? '').length))}%.`} />
+          <ChoiceChips id="catalogue-target" label="Target" value={target} onChange={setTarget} options={['99', '99.5', '99.9', '99.95', '99.99'].map((value) => ({ value, label: `${value}%` }))} custom={{ unit: '%', placeholder: 'e.g. 99.7', format: percent, validate: validateTarget }} hint={`Error budget is the rest: ${(100 - Number(target)).toFixed(Math.min(5, Math.max(1, (target.split('.')[1] ?? '').length)))}%.`} />
+          <ChoiceChips id="catalogue-window-disabled" label="Rolling window (disabled)" value="30" onChange={() => undefined} disabled options={[['7', '7 days'], ['30', '30 days']].map(([value, label]) => ({ value: value!, label: label! }))} custom={{ unit: 'days', format: (value) => `${value} days` }} hint="A disabled group keeps its selection visible." />
           <ChoiceChips id="catalogue-window" label="Rolling window" value={windowDays} onChange={setWindowDays} options={[['7', '7 days'], ['28', '28 days'], ['30', '30 days'], ['90', '90 days']].map(([value, label]) => ({ value: value!, label: label! }))} custom={{ unit: 'days', placeholder: 'e.g. 14', format: (value) => `${value} days`, validate: validateDays, inputMode: 'numeric' }} hint={`Every evaluation covers the last ${windowDays} days.`} />
         </div>
       </Panel>
@@ -62,6 +63,8 @@ export function OperationalControlsSection() {
         <div className="field-stack">
           <Combobox id="catalogue-datasource" label="Datasource" value={datasource} onChange={setDatasource} options={datasourceExamples} placeholder="Type a datasource name, provider or agent…" hint="The datasource’s agent runs the queries every minute." badge={() => 'Prometheus'} noMatch={{ text: (term) => `No datasource matches “${term}”.`, action: { label: () => 'Add a datasource', onSelect: (term) => setCreated(`Would open the datasource form prefilled with “${term}”.`) } }} />
           {created && <p className="demo-feedback" role="status">{created}</p>}
+          <Combobox id="catalogue-datasource-invalid" label="Datasource (invalid)" value={null} onChange={() => undefined} options={datasourceExamples} placeholder="Type a datasource name…" error="Choose an existing Prometheus datasource." />
+          <Combobox id="catalogue-datasource-disabled" label="Datasource (disabled)" value="local" onChange={() => undefined} options={datasourceExamples} disabled hint="A disabled picker shows its selection without a Change action." />
         </div>
       </Panel>
       <Panel heading="Selection summary and textarea">
@@ -69,6 +72,7 @@ export function OperationalControlsSection() {
           <SelectionSummary tone="none" status="New service" title="Fulfilment" badge="fulfilment" detail="Will be created with this SLO · you can rename it later from the service page" action={{ label: 'Change', onClick: () => undefined }} />
           <SelectionSummary tone="warning" status="Agent unreachable" title="prod-prometheus-us" badge="Prometheus" variant="warning" detail="30 s intervals · agent us-east-1 unreachable for 2 h" message="You can still create the SLI. The first result arrives when the agent is back." action={{ label: 'Change', onClick: () => undefined }} />
           <TextareaField id="catalogue-description" label="Description" optional rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What counts as “good”? One line is enough." hint="The first line appears in lists; the rest on the detail page." />
+          <TextareaField id="catalogue-description-invalid" label="Description (invalid)" rows={2} value="x" onChange={() => undefined} error="Keep the description under 2,000 characters." />
         </div>
       </Panel>
     </div>

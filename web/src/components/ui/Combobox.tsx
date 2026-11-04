@@ -44,6 +44,9 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
   const [active, setActive] = useState(-1);
   const [restoreFocus, setRestoreFocus] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const wrapper = useRef<HTMLDivElement>(null);
+  const changeButton = useRef<HTMLButtonElement>(null);
+  const [focusChange, setFocusChange] = useState(false);
   const listId = `${id}-listbox`;
   const generated = useId();
   const selected = value === null ? undefined : options.find((option) => option.id === value);
@@ -55,6 +58,10 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
 
   useEffect(() => { if (restoreFocus && !selected) { input.current?.focus(); setRestoreFocus(false); } }, [restoreFocus, selected]);
   useEffect(() => { if (active >= matches.length) setActive(matches.length - 1); }, [matches.length, active]);
+  // Keyboard navigation keeps the highlighted option in view inside the scrolling list.
+  useEffect(() => { if (open && active >= 0 && matches[active]) document.getElementById(optionId(matches[active]))?.scrollIntoView?.({ block: 'nearest' }); }, [open, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // After choosing, focus lands on the summary's Change action so keyboard users keep a visible position.
+  useEffect(() => { if (focusChange && selected) { changeButton.current?.focus(); setFocusChange(false); } }, [focusChange, selected]);
 
   function choose(option: ComboboxOption) {
     if (option.disabled) return;
@@ -62,6 +69,13 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
     setTerm('');
     setOpen(false);
     setActive(-1);
+    setFocusChange(true);
+  }
+  function runNoMatch() {
+    if (!noMatch?.action || !term) return;
+    noMatch.action.onSelect(term);
+    setTerm('');
+    setOpen(false);
   }
   function change() {
     onChange(null);
@@ -88,15 +102,16 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
         detail={selected.summaryDetail ?? selected.detail}
         message={selected.summaryMessage}
         variant={selected.tone === 'warning' || selected.tone === 'stale' ? 'warning' : 'default'}
-        action={disabled ? undefined : { label: 'Change', onClick: change }}
+        action={disabled ? undefined : { label: 'Change', onClick: change, ref: changeButton }}
       />
       {hint && <p className="ui-hint" id={hintId}>{hint}</p>}
+      {error && <p className="ui-error" id={errorId} role="alert">{error}</p>}
     </div>;
   }
 
   return <div className="ui-field">
     <label className="ui-label" htmlFor={id}>{label}</label>
-    <div className="ui-combobox">
+    <div className="ui-combobox" ref={wrapper} onBlur={(event) => { if (event.relatedTarget instanceof Node && wrapper.current?.contains(event.relatedTarget)) return; setOpen(false); setActive(-1); }}>
       <input
         ref={input}
         id={id}
@@ -113,16 +128,15 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
         value={term}
         disabled={disabled}
         onFocus={() => setOpen(true)}
-        onBlur={() => { setOpen(false); setActive(-1); }}
         onChange={(event) => { setTerm(event.target.value); setOpen(true); setActive(-1); }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') { event.preventDefault(); if (!open) setOpen(true); step(1); }
           else if (event.key === 'ArrowUp') { event.preventDefault(); step(-1); }
           else if (event.key === 'Home' && open) { event.preventDefault(); setActive(matches.findIndex((option) => !option.disabled)); }
-          else if (event.key === 'End' && open) { event.preventDefault(); setActive(matches.length - 1); }
+          else if (event.key === 'End' && open) { event.preventDefault(); setActive(matches.reduce((last, option, index) => option.disabled ? last : index, -1)); }
           else if (event.key === 'Enter') {
             if (open && active >= 0 && matches[active]) { event.preventDefault(); choose(matches[active]); }
-            else if (open && matches.length === 0 && term && noMatch?.action) { event.preventDefault(); noMatch.action.onSelect(term); setTerm(''); setOpen(false); }
+            else if (open && matches.length === 0 && term && noMatch?.action) { event.preventDefault(); runNoMatch(); }
           }
           else if (event.key === 'Escape') { event.preventDefault(); setOpen(false); setActive(-1); }
         }}
@@ -146,7 +160,7 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
         </li>)}
         {matches.length === 0 && <li className="ui-combobox__none" id={`${generated}-none`}>
           <span>{noMatch?.text(term) ?? `No match for “${term}”.`}</span>
-          {noMatch?.action && term && <button type="button" className="ui-combobox__action" onMouseDown={(event) => { event.preventDefault(); noMatch.action!.onSelect(term); setTerm(''); setOpen(false); }}>{noMatch.action.label(term)}</button>}
+          {noMatch?.action && term && <button type="button" className="ui-combobox__action" onMouseDown={(event) => event.preventDefault()} onClick={runNoMatch}>{noMatch.action.label(term)}</button>}
         </li>}
       </ul>
     </div>
