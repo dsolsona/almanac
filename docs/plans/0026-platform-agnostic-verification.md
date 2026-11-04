@@ -1,6 +1,6 @@
 # Docker-only development, verification and images
 
-- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 next
+- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 in review, F7-T02 next
 - Created: 2026-11-04
 - Scope: tooling, images, fixtures and documentation; no product behaviour changes
 - Base: `main`; independent of the open UI stack (PRs #54–#60), which still cites the retired modes until merged
@@ -19,7 +19,7 @@ host, from three small Dockerfiles: a development image, and the published
 Each task is a reviewable outcome with its own record and evidence; tasks are
 sequential and each branches from the previous one.
 
-- [ ] **F7-T01 Three Dockerfiles, three images.** Add `deploy/dev/Dockerfile`
+- [ ] **F7-T01 Three Dockerfiles, three images** ([F7-T01](../tasks/F7-T01.md), in review). Add `deploy/dev/Dockerfile`
   (Go, Node, generators, Playwright Chromium, PostgreSQL client,
   VictoriaMetrics binary), `deploy/app/Dockerfile` (embedded UI and the
   `almanac` executable on a minimal runtime) and `deploy/agent/Dockerfile`

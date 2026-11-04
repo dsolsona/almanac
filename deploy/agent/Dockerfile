@@ -20,5 +20,6 @@ RUN apt-get update \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin almanac
 COPY --from=build /out/almanac-agent /usr/local/bin/almanac-agent
 USER 10001:10001
+# The executable has one command: run --backend-url=… --token-file=… [--ca-file=…]; the token file is mounted privately.
 ENTRYPOINT ["/usr/local/bin/almanac-agent"]
-CMD ["version"]
+CMD ["run"]

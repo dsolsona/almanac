@@ -48,10 +48,13 @@ RUN GOPROXY=https://proxy.golang.org GOBIN=/usr/local/bin GOMODCACHE=/tmp/gomod 
 # numeric identity matches the host user so files written into the checkout stay editable.
 ARG USER_ID=1000
 ARG GROUP_ID=1000
-RUN groupadd --gid "${GROUP_ID}" dev \
-    && useradd --uid "${USER_ID}" --gid "${GROUP_ID}" --create-home --shell /bin/bash dev \
+# The host's numeric group (20 on macOS) may already exist in the base image; reuse it when it does.
+RUN (getent group "${GROUP_ID}" >/dev/null || groupadd --gid "${GROUP_ID}" dev) \
+    && (getent passwd "${USER_ID}" >/dev/null \
+        && usermod --login dev --home /home/dev --move-home --shell /bin/bash "$(getent passwd "${USER_ID}" | cut -d: -f1)" \
+        || useradd --uid "${USER_ID}" --gid "${GROUP_ID}" --create-home --shell /bin/bash dev) \
     && mkdir -p /workspace /cache/go/mod /cache/go/build /cache/npm \
-    && chown -R dev:dev /workspace /cache
+    && chown -R "${USER_ID}:${GROUP_ID}" /workspace /cache
 USER dev
 WORKDIR /workspace
 CMD ["/bin/bash"]

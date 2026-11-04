@@ -129,7 +129,7 @@ services:
       dockerfile: deploy/agent/Dockerfile
     profiles: ["agent"]
     network_mode: none
-    command: ["version"]
+    command: ["run"]
     restart: "no"
 
   provider-ready:
