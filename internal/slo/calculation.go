@@ -21,13 +21,9 @@ type OccurrenceResult struct {
 
 // CalculateOccurrences calculates on exact decimal quantities, rounding only for output.
 func CalculateOccurrences(goodText, totalText, targetText string, provisional bool) (OccurrenceResult, error) {
-	good, ok := decimal(goodText, false)
-	if !ok {
-		return OccurrenceResult{}, ErrInvalidCalculation
-	}
-	total, ok := decimal(totalText, false)
-	if !ok || good.Cmp(total) > 0 {
-		return OccurrenceResult{}, ErrInvalidCalculation
+	good, total, err := occurrenceCounts(goodText, totalText)
+	if err != nil {
+		return OccurrenceResult{}, err
 	}
 	target, ok := decimal(targetText, true)
 	if !ok || target.Cmp(big.NewRat(1, 1)) >= 0 {
@@ -37,6 +33,31 @@ func CalculateOccurrences(goodText, totalText, targetText string, provisional bo
 		return OccurrenceResult{}, ErrNoTraffic
 	}
 	return calculateOccurrences(good, total, target, provisional), nil
+}
+
+// ExactAttainment validates occurrence counts and returns their unrounded ratio
+// without calculating or formatting unused budget fields.
+func ExactAttainment(goodText, totalText string) (*big.Rat, error) {
+	good, total, err := occurrenceCounts(goodText, totalText)
+	if err != nil {
+		return nil, err
+	}
+	if total.Sign() == 0 {
+		return nil, ErrNoTraffic
+	}
+	return good.Quo(good, total), nil
+}
+
+func occurrenceCounts(goodText, totalText string) (*big.Rat, *big.Rat, error) {
+	good, ok := decimal(goodText, false)
+	if !ok {
+		return nil, nil, ErrInvalidCalculation
+	}
+	total, ok := decimal(totalText, false)
+	if !ok || good.Cmp(total) > 0 {
+		return nil, nil, ErrInvalidCalculation
+	}
+	return good, total, nil
 }
 
 // Inputs have already been validated. Window sweeps can use their exact totals

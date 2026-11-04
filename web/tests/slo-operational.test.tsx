@@ -13,6 +13,38 @@ beforeEach(()=>{
 
 const sloID='22222222-2222-2222-2222-222222222222';
 const definition:components['schemas']['Slo']={id:sloID,name:'checkout',display_name:'Checkout',version:'1',definition_revision:'1',service_id:'11111111-1111-1111-1111-111111111111',service_display_name:'Checkout service',sli_id:'33333333-3333-3333-3333-333333333333',sli_display_name:'Request success',target:'0.99',rolling_window_seconds:86400,cadence_seconds:60,activated_at:'2026-10-01T00:00:00Z',evaluation_valid_from:'2026-10-01T00:00:00Z',historical_requested_by:null,historical_requested_at:null,created_at:'2026-10-01T00:00:00Z',updated_at:'2026-10-01T00:00:00Z'};
+it('keeps last-known numbers visible with stale status, evaluation time and failed-update context',async()=>{
+ vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
+ const detail=operationalDetail();
+ const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:60};
+ const item:OperationalOverview['items'][number]={slo:definition,current:detail.current,current_state:'stale',generation,urgency:'watch',leading_reason:detail.leading_reason,reasons:detail.reasons,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]};
+ const read=vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ const view=render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
+ expect(await screen.findByText('Stale')).toBeVisible();
+ expect(screen.getByText('99%')).toBeVisible();
+ expect(screen.getByText('0.1×')).toBeVisible();
+ expect(document.querySelector('time')).toHaveAttribute('datetime',detail.current.evaluation_at);
+ expect(document.querySelector('.slo-reference-status')).toHaveAttribute('data-status','stale');
+ read.mockResolvedValue({snapshot_id:sloID,items:[{...item,current_state:'failed'}],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
+ expect(await screen.findByText(/Update failed/)).toBeVisible();
+ expect(screen.getByText('99%')).toBeVisible();
+ view.unmount();
+});
+it('keeps graphs and current status usable while history is incomplete and refreshes progress',async()=>{
+ const detail=operationalDetail();
+ detail.history_preparation={ready_seconds:43200,total_seconds:86400,failed:false};
+ const read=vi.spyOn(sloClient,'operational').mockResolvedValueOnce(detail).mockResolvedValue({...detail,history_preparation:undefined});
+ const stamp={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};
+ vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:stamp});
+ render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ expect(await screen.findByText(/50% of this period’s history is ready/)).toBeVisible();
+ expect(screen.getByText('error budget remaining')).toBeVisible();
+ expect(screen.getByRole('button',{name:'View SLI as table'})).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));
+ await waitFor(()=>expect(screen.queryByText(/of this period’s history is ready/)).not.toBeInTheDocument());
+ expect(read).toHaveBeenCalledTimes(2);
+});
 it('signals timezone-only readiness without refetching history or waiting for a status poll',async()=>{
  const detail=operationalDetail();
  const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};
@@ -52,14 +84,18 @@ it('shows server group counts and sends submitted filters through the operationa
  const updateLocation=vi.fn();
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={updateLocation}/>);
  expect(await screen.findByRole('heading',{name:'Needs attention, 2 SLOs'})).toBeVisible();
+ expect(String(fetcher.mock.calls.find(call=>String(call[0]).includes('/slos/overview'))?.[0])).toContain('limit=20');
+ expect(screen.getByLabelText('SLOs per page')).toHaveValue('20');
  expect(screen.getByRole('heading',{name:'Watch, 3 SLOs'})).toBeVisible();
  expect(screen.getByRole('heading',{name:'Healthy, 4 SLOs'})).toBeVisible();
  fireEvent.change(screen.getByLabelText('Search SLOs'),{target:{value:'checkout'}});
  fireEvent.submit(screen.getByRole('search'));
  await waitFor(()=>expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('q=checkout')));
+ fireEvent.change(screen.getByLabelText('SLOs per page'),{target:{value:'10'}});
+ expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('page_size=10'));
 });
 
-it('bounds first-page preparation refreshes and leaves cursor pages pinned',async()=>{
+it('never polls preparing first pages and leaves cursor pages pinned until explicit navigation',async()=>{
  vi.useFakeTimers();
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({items:[],next_cursor:''}),{status:200})));
  const detail=operationalDetail();
@@ -68,16 +104,17 @@ it('bounds first-page preparation refreshes and leaves cursor pages pinned',asyn
  const view=render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await act(async()=>{});
  expect(read).toHaveBeenCalledTimes(1);
- for(let index=0;index<3;index++)await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
- expect(read).toHaveBeenCalledTimes(4);
  await act(async()=>{await vi.advanceTimersByTimeAsync(60000);});
- expect(read).toHaveBeenCalledTimes(4);
+ expect(read).toHaveBeenCalledTimes(1);
+ fireEvent.click(screen.getByRole('button',{name:/^Refresh$/}));
+ await act(async()=>{});
+ expect(read).toHaveBeenCalledTimes(2);
  view.rerender(<OperationalOverviewView locationKey="/slos?cursor=page-two" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await act(async()=>{});
- expect(read).toHaveBeenCalledTimes(5);
+ expect(read).toHaveBeenCalledTimes(3);
  await act(async()=>{await vi.advanceTimersByTimeAsync(60000);});
- expect(read).toHaveBeenCalledTimes(5);
- expect(read.mock.calls[4]?.[0]).toMatchObject({cursor:'page-two'});
+ expect(read).toHaveBeenCalledTimes(3);
+ expect(read.mock.calls[2]?.[0]).toMatchObject({cursor:'page-two'});
 });
 
 it('opens exact values from the generation displayed by the timeline',async()=>{
@@ -149,7 +186,7 @@ it('keeps retry and range controls available after the first detail read fails, 
  const read=vi.spyOn(sloClient,'operational').mockRejectedValueOnce(new Error('temporary read failure')).mockRejectedValueOnce(new Error('temporary retry failure')).mockImplementation((_id,options)=>Promise.resolve(operationalDetail(options?.start,options?.end)));
  const locationKey=`/slos/${sloID}`;history.replaceState({},'',locationKey);let view!:ReturnType<typeof render>;const onLocationChange=(path:string)=>{history.replaceState({},'',path);view.rerender(<OperationalDetailView id={sloID} definition={definition} locationKey={path} onLocationChange={onLocationChange}/>);};
  view=render(<OperationalDetailView id={sloID} definition={definition} locationKey={locationKey} onLocationChange={onLocationChange}/>);expect(await screen.findByRole('alert')).toHaveTextContent('temporary read failure');expect(screen.getByRole('button',{name:'Refresh objective history'})).toBeEnabled();expect(screen.getByRole('button',{name:'90 d'})).toBeEnabled();expect(screen.getByRole('button',{name:'90 d'})).toBeEnabled();
- fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(await screen.findByRole('alert')).toHaveTextContent('temporary retry failure');fireEvent.click(screen.getByRole('button',{name:'90 d'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(3));expect(read.mock.calls[2]?.[1]).toMatchObject({start:expect.any(String),end:expect.any(String),burn_window_seconds:3600});expect(await screen.findByText('Bad events left')).toBeVisible();expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(await screen.findByRole('alert')).toHaveTextContent('temporary retry failure');fireEvent.click(screen.getByRole('button',{name:'90 d'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(3));expect(read.mock.calls[2]?.[1]).toMatchObject({period:'90d',burn_window_seconds:3600});expect(await screen.findByText('Bad events left')).toBeVisible();expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('marks retained overview values with their last confirmed evaluation after a same-view refresh fails',async()=>{

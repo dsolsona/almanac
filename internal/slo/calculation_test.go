@@ -1,6 +1,34 @@
 package slo
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
+
+func TestExactAttainmentPreservesPrecisionAndCountValidation(t *testing.T) {
+	for _, test := range []struct {
+		good, total, want string
+		err               error
+	}{
+		{"1", "3", "1/3", nil},
+		{"0.000000000001", "0.000000000003", "1/3", nil},
+		{"999999999999999999999999", "1000000000000000000000000", "999999999999999999999999/1000000000000000000000000", nil},
+		{"0", "1", "0", nil},
+		{"0", "0", "", ErrNoTraffic},
+		{"2", "1", "", ErrInvalidCalculation},
+		{"-1", "2", "", ErrInvalidCalculation},
+		{"1/2", "2", "", ErrInvalidCalculation},
+		{"0.0000000000001", "1", "", ErrInvalidCalculation},
+	} {
+		got, err := ExactAttainment(test.good, test.total)
+		if !errors.Is(err, test.err) {
+			t.Fatalf("%s/%s: %v, want %v", test.good, test.total, err, test.err)
+		}
+		if err == nil && got.RatString() != test.want {
+			t.Fatalf("%s/%s: %s, want %s", test.good, test.total, got.RatString(), test.want)
+		}
+	}
+}
 
 func TestOccurrenceCalculation(t *testing.T) {
 	result, err := CalculateOccurrences("999", "1100", "0.99", false)

@@ -78,6 +78,42 @@ func TestNewCombinedRegistersAssetFallback(t *testing.T) {
 	}
 }
 
+func TestTLSBackendNegotiatesHTTP2AndPreservesHTTP1(t *testing.T) {
+	server, roots := newTLSBackendServer(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		server.Close()
+		select {
+		case err := <-done:
+			if !errors.Is(err, http.ErrServerClosed) {
+				t.Errorf("HTTPS server stopped: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Error("HTTPS server did not stop")
+		}
+	})
+	for _, protocol := range []int{2, 1} {
+		t.Run(strconv.Itoa(protocol), func(t *testing.T) {
+			transport := &http.Transport{ForceAttemptHTTP2: protocol == 2, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: "localhost", MinVersion: tls.VersionTLS12}}
+			defer transport.CloseIdleConnections()
+			client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
+			response, err := client.Get("https://" + listener.Addr().String() + "/livez")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK || response.ProtoMajor != protocol || protocol == 2 && response.TLS.NegotiatedProtocol != "h2" {
+				t.Fatalf("HTTPS status=%d protocol=%s ALPN=%q; want HTTP/%d", response.StatusCode, response.Proto, response.TLS.NegotiatedProtocol, protocol)
+			}
+		})
+	}
+}
+
 func TestShutdownClosesTLSHandshakeThatHasNotStartedARequest(t *testing.T) {
 	server, _ := newTLSBackendServer(t)
 	defer server.Close()

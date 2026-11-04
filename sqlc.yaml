@@ -27,6 +27,23 @@ sql:
       - internal/storage/migrations/0021_sli_latest_accepted_receipt_index.sql
       - internal/storage/migrations/0022_derived_operational_data.sql
       - internal/storage/migrations/0023_history_admission_fence.sql
+      - internal/storage/migrations/0024_retained_slo_points.sql
+      - internal/storage/migrations/0025_retained_slo_tiles.sql
+      - internal/storage/migrations/0026_retained_series_repair.sql
+      - internal/storage/migrations/0027_retained_history_response_kind.sql
+      - internal/storage/migrations/0028_remove_unused_interval_work.sql
+      - internal/storage/migrations/0029_slo_list_projection_references.sql
+      - internal/storage/migrations/0030_audited_retention_work.sql
+      - internal/storage/migrations/0031_retained_work_recovery.sql
+      - internal/storage/migrations/0032_coverage_ingestion_generation.sql
+      - internal/storage/migrations/0033_retention_cleanup_progress.sql
+      - internal/storage/migrations/0034_retained_tile_generation_floor.sql
+      - internal/storage/migrations/0035_coverage_revision_time_index.sql
+      - internal/storage/migrations/0036_retained_coherent_checkpoint.sql
+      - internal/storage/migrations/0037_retained_tile_summaries.sql
+      - internal/storage/migrations/0038_retained_summary_wire.sql
+      - internal/storage/migrations/0039_retained_hourly_wire.sql
+      - internal/storage/migrations/0040_history_payload_metadata.sql
     gen:
       go:
         package: dbgen

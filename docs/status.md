@@ -1,12 +1,57 @@
 # Delivery status
 
+Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
+ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
+PR #53. Final ordinary and race checks pass. Both normal and added-100-ms cohorts pass all 342 connected
+browser traces. Cold detail maxima are 375.5/754.3 ms. Independent historical,
+late-data, fresh-generation restart, pagination, logical retention and shared-SLI
+checks pass. No new observation import was used. The operator preview is unchanged.
+
+Current verification follow-up: the datasource and lifecycle verifiers now share
+immediate response-body capture, with a deterministic regression and all existing
+assertions retained. Integration selection preserves per-case source/fixture
+evidence, runs failed/missing/affected cases, and continues after failures. The
+corrected datasource journey passes in 65.296 seconds; twelve remaining cases pass
+in 195.765 seconds including setup while 161 compatible passes are reused. An
+unchanged run reuses all 173 passes with zero executions in 10.636 seconds. Final
+ordinary checks pass 362 web/509 Go cases in 29.816 seconds; all 36 tooling tests
+pass. The maintainer explicitly closed F3-T08's bounded phase on 2026-11-04 and
+will merge PR #53. Older catalogue/Compose receipts remain flagged stale by the
+global handoff fingerprint; this accepted closure does not manufacture fresh
+passes. Larger/endurance evidence remains deferred, and earlier failed full-run
+records below are retained history.
+
+The maintainer rejected further deliberate endurance waits. Fresh sustained-load,
+clock-aging and physical-cleanup observation, plus 100/1,000-SLO validation, are
+deferred to [F3-T10](tasks/F3-T10.md), not passed. The existing endurance command
+must not run during this finalization. Product budgets remain unchanged.
+The separately authorized final parallel gates on `e73886b` complete with Compose
+passing in 522.042 seconds and integration failing in 844.263 seconds. Integration
+passes 166/173 selected cases, fails the agent-lifecycle browser journey while
+reading an HTTP-200 disable response body, and does not reach six later cases.
+The cause remains unresolved; no automatic rerun follows. The earlier corrected
+SLO journey retains its 73.289-second focused pass. Final catalogue/browser
+verification passes all 126 cases. Receipts and failures remain in
+[F3-T08](tasks/F3-T08.md); no new escalation requests are authorized.
+The subsequent verifier correction captures lifecycle response JSON before click
+completion; the focused real journey passes in 10.73 seconds with every existing
+assertion retained. The original failure remains unreproduced, and this focused
+pass does not turn the failed full integration receipt into a pass.
+The maintainer-requested full rerun on `e4c8cff` subsequently fails in 758.599
+seconds: 160/173 cases pass, the datasource preview subjourney fails while reading
+an HTTP-202 receipt body, and twelve later cases are not reached. This different
+failure remains unresolved; the saved diagnostic and masked screenshot are linked
+from F3-T08. No further suite is running.
+No merge is authorized. Earlier checkpoints below are historical and do not override this
+current scope/evidence record.
+
 The 2026-10-31 [performance and tracing intervention](plans/0023-performance-and-tracing-intervention.md)
 was accepted in Crit and takes priority over the previous
 execution order. The maintainer requires accurate calculations, < 1,000 ms
-SLI/SLO lists and < 500 ms detail/range actions at 10/100/1,000 SLOs, without normal navigation
+SLI/SLO lists and detail/range actions (preferred <=500 ms after the 2026-11-01 clarification) at 10/100/1,000 SLOs, without normal navigation
 waiting for background jobs, plus OpenTelemetry journey traces in VictoriaTraces.
-Earlier checkpoints below do not establish those requirements. PR #48 remains
-under review; its four Greptile findings are included in the intervention plan.
+Earlier checkpoints below do not establish those requirements. Earlier PR #48
+feedback is tracked in the intervention plan.
 
 [ADR-0025](adr/0025-fast-operational-journeys-and-tracing.md) records the accepted
 decision. [F3-T09](tasks/F3-T09.md) is complete: tracing implementation, runtime
@@ -24,7 +69,7 @@ wait in the disabled sample, not evidence that instrumentation makes pages faste
 Real exporter-outage evidence separately preserves correct visible values and a
 new canonical observation, with zero invalid values or sequence gaps.
 
-**Page-speed acceptance still fails.** At 4× CPU slowdown, 10 Mbps and 100 ms RTT,
+**Earlier tracing-only baseline:** at 4× CPU slowdown, 10 Mbps and 100 ms RTT,
 actual first-visit browser trace roots take 1,285.1 ms for SLIs, 1,617.9 ms for SLOs
 and 4,580.7 ms for details. The detail trace exposes about two seconds of foreground
 polling while individual server responses remain short. These are baseline
@@ -32,22 +77,124 @@ measurements, not a 10/100/1,000-SLO/year-history capacity claim. Retention,
 pagination, retained series/read correction, scale acceptance and the four PR #48
 findings remain [F3-T08](tasks/F3-T08.md) work.
 
-Latest ordinary verification passes 335 web and 452 Go cases, types/build/generated
+At that checkpoint ordinary verification passed 335 web and 452 Go cases, types/build/generated
 checks and smoke. Earlier failed runtime attempts and all timing records are
 retained in F3-T09's evidence. Container verification used only its separate
 `18086` project; the operator preview's `18088/readyz` remains healthy.
 
-Feature implementation is paused by maintainer direction on 2026-10-30 pending
-backend stabilization. [ADR-0024](adr/0024-precomputed-operational-reads.md),
-[SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and the
-[delivery plan](plans/0022-backend-stabilization.md) define pooled access,
-exact derived data and background preparation with measurable acceptance gates.
-The maintainer accepted the design and plan after Crit review on 2026-10-30.
-[F3-T08](tasks/F3-T08.md) is in progress on `perf/backend-stabilization` in
-`.worktrees/backend-performance`, based on merged `aa548fe`. The uncommitted
-candidate implements owned database pools, exact background aggregates/current
-results, reusable history/display blocks, immutable list snapshots, independent
-browser status/history loading and an internal metrics listener. It is not deployed.
+Feature implementation remains paused pending backend stabilization.
+Earlier preserved-fixture diagnostics returned all ten concurrent cold year
+requests in 412–488 ms and ten cold requests across a ten-SLO fixture in 376–448 ms.
+Exact tables and cache-miss traces match; focused storage checks pass. Controlled
+run eleven passed the one-SLO year checkpoint with ten users, then exposed two
+518-ms ten-SLO reads. The local correction reuses that loaded data for diagnosis.
+Full distinct-user/live/browser/fleet acceptance and affected final gates remain
+pending. See [F3-T08](tasks/F3-T08.md) for evidence and retained failures.
+
+[ADR-0024](adr/0024-precomputed-operational-reads.md),
+[SPEC-0019](specs/0019-backend-performance-and-derived-data.md) and
+[the accepted intervention plan](plans/0023-performance-and-tracing-intervention.md)
+govern [F3-T08](tasks/F3-T08.md), in progress on `perf/f3-t08-retained-series`
+in `.worktrees/backend-performance`, based on merged main `6d7403d`.
+
+On 2026-11-03 the maintainer requested finishing ten SLOs with a year of history
+and deferring larger tests. The 2026-11-04 clarification above supersedes the
+earlier requirement to repeat deliberate endurance observation in T08. Larger
+100/1,000-SLO validation is deferred to [F3-T10](tasks/F3-T10.md), with no larger
+capacity claim or authorization to load those fleets during this phase.
+
+Earlier run twelve on `935f53b` passed the one-SLO year-history checkpoint and
+ten-SLO 56-day reads/plans, then fails cold graph latency and two database
+admission timeouts after restart. The preserved dataset exposes cache-lookup
+payload hashing before generation/range selection. A metadata-first SQL fix
+passes its reproduced-failure regression and focused storage checks. Thirty-six
+diagnostic cold requests take 163–400 ms, with four connected cache-miss traces
+and exact pinned-table comparisons. These use the existing 56-day dataset, one
+reader and stopped agents; full fleet/year/live/rendered acceptance and matching
+final broad gates remain outstanding.
+
+Earlier product candidate `7078957` passes the complete PostgreSQL/API gate:
+173 cases in 957.340 seconds, including exact retained 14/56-day calculations,
+persisted restart, audited cleanup, authentication, agent and real browser journeys.
+Complete hourly summaries now reuse repair's calculated points atomically.
+The revision/time index, source checkpoints, bounded read/cache transactions and
+foreign-key-safe retention preserve accuracy and availability during backfill.
+
+The subsequent verification candidate `868c08c` passes normal isolated Compose
+in 510.749 seconds, including actual SLI/SLO flows, collection, handoff, restart
+and cancellation cleanup. Each network cohort has 73 ready page-load samples:
+181–396 ms normally and 498–789 ms with added 100-ms latency, at normal CPU speed.
+Both unchanged 5% tracing-overhead gates pass; eight connected VictoriaTraces
+captures include representative pages and the slowest enabled SLI repeat.
+This run records two SLIs and nine SLOs. It is not fleet/year acceptance.
+The final ordinary gate passes 357 web and 499 Go cases plus generated/build checks
+and smoke in 27.348 seconds. The full browser matrix subsequently exposed four
+mobile telemetry-test failures: the fixture clicked hidden sidebar links without
+opening the menu. Only those navigation steps are corrected; no product change.
+The corrected full browser matrix passes all 126 cases in 89.584 seconds.
+The final Compose receipt matches the corrected fixture. The formal report now
+accepts ordinary, database/API, browser and Compose receipts; only the capacity
+receipt is missing. T08 remains in progress.
+
+Earlier transport, filtered-journey, overhead and timeout failures remain in the
+task record and timing ledger. A bounded startup transport preflight now precedes
+login/container comparisons; measured navigation and mutations are not retried.
+The measured slowest normal SLI repeat is 260 ms externally versus a 191-ms
+rendered trace. That difference does not explain every earlier failure.
+
+The maintainer approved the fixed 10/100/1,000-SLO, 365-day workload on 2026-11-02.
+Its first execution fails during setup evidence encoding after 30.606 seconds:
+JSON v2 requires explicit formatting for duration values. The capacity evidence
+encoder now preserves their intended nanosecond representation; its focused
+regression, 500 Go cases and tagged compilation pass. The corrected workload
+then exposes a real current-publication defect: serialization conflicts consume
+the calculation-failure budget during concurrent ingestion. Current publication
+now defers SQLSTATE 40001 while preserving genuine failure counts. The deterministic
+PostgreSQL regression fails before the fix and passes afterward in 30.217 seconds,
+including normal recovery. Earlier broad gates describe the preceding product;
+final capacity/integrated verification for this correction remains pending.
+The next retained capacity run reaches maintained 56-day history, but fails graph
+reads. VictoriaTraces attributes 765 ms of a 1,000 ms request to repeated tile
+validation. Candidate `b01ee6c` batches that validation without changing its
+generation/overlap fences: isolated SQL profiling improves from 1,114 to 89 ms,
+and both versions return identical results for all 673 rows. The focused
+PostgreSQL gate passes in 31.080 seconds. Rendered latency on this correction is
+not yet verified. Frequent quality transitions still produce 422 responses;
+[ADR-0027](adr/0027-bounded-history-quality-display.md) now records the maintainer's
+selection of adaptive graph detail and explicit missing coverage. Its retained
+reducer, generated contract, qualified chart/table context and catalogue example
+pass the fast gate; actual rendered/year/fleet acceptance remains outstanding.
+Last-known list values now retain provenance with explicit stale/failed state.
+Capacity run six reaches maintained 56-day history, then fails two cold 28-day
+requests on interactive pool admission. The reader now releases the snapshot
+connection before graph decoding/reduction and rechecks authority afterward.
+The subsequent edge-validation/workspace/transaction correction passes focused
+PostgreSQL verification in 30.217 seconds and the complete fast gate in 28.281
+seconds. Nine concurrent cold requests after restart return coherent data in
+376–473 ms, with connected traces and exact pinned-table comparison. Earlier
+above-budget cohorts remain retained. These diagnostics use one viewer with
+agents stopped; they do not establish full fleet/year or rendered acceptance.
+Capacity run seven subsequently returns data for all requests but fails cold-read
+budgets at 517–599 ms. Daily compliance was unnecessarily decoding every graph
+lane; it now fetches only the daily value with unchanged source and readiness
+checks. Focused PostgreSQL and fast verification pass in 43.249/33.261 seconds.
+Four diagnostic cohorts across 36 cold gzip requests take 191–382 ms, with exact
+daily-table equivalence and connected traces. They still use the 56-day dataset;
+year-history/fleet/rendered acceptance remains pending.
+A further deterministic minute-boundary check exposed graph and generation
+evaluation times disagreeing. Retained calculations now pin one evaluation time
+while keeping publication and authorization expiry on the live clock. Its focused
+PostgreSQL gate passes in 39.181 seconds; the full fast gate passes in 32.016
+seconds. These corrections are not full capacity acceptance.
+No capacity result has passed. T08 stays open until its
+accuracy, storage, freshness, trace and latency requirements are demonstrated.
+[PR #53](https://github.com/dsolsona/almanac/pull/53) is open; its three existing
+Greptile threads are resolved. The maintainer-requested SSH push succeeded and
+GitHub confirmed the retained-read corrections at `42df1f1`. Operator schema 0034, preview,
+stopped imports and parked demo source work remain unchanged; schemas 0035/0036
+and the newer candidate are not deployed there.
+
+Earlier checkpoints, preserved as historical evidence:
 The most recent ordinary checkpoint passed 441 Go and 329 web tests. A subsequent
 fast Go checkpoint passed 442 tests and compiled the integration helpers.
 The corrected focused storage check passes, including snapshot reuse, recovery,

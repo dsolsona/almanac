@@ -483,31 +483,6 @@ func (q *Queries) InsertSliDeliveryReceipt(ctx context.Context, arg InsertSliDel
 	return err
 }
 
-const insertSliDirtyInterval = `-- name: InsertSliDirtyInterval :exec
-INSERT INTO public.almanac_sli_dirty_intervals(sli_id, measurement_revision, interval_start, interval_end, created_at)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (sli_id, measurement_revision, interval_start) DO NOTHING
-`
-
-type InsertSliDirtyIntervalParams struct {
-	SliID               pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	IntervalStart       pgtype.Timestamptz `json:"interval_start"`
-	IntervalEnd         pgtype.Timestamptz `json:"interval_end"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) InsertSliDirtyInterval(ctx context.Context, arg InsertSliDirtyIntervalParams) error {
-	_, err := q.db.Exec(ctx, insertSliDirtyInterval,
-		arg.SliID,
-		arg.MeasurementRevision,
-		arg.IntervalStart,
-		arg.IntervalEnd,
-		arg.CreatedAt,
-	)
-	return err
-}
-
 const insertSliExecutionAttempt = `-- name: InsertSliExecutionAttempt :exec
 INSERT INTO public.almanac_sli_execution_attempts(
     agent_id, execution_id, observation_id, sli_id, measurement_revision,
@@ -928,7 +903,7 @@ LEFT JOIN LATERAL (
            COALESCE(obs.total_count::text, '') AS total_count, coverage.error_code,
            coverage.missing_components, coverage.recorded_at
     FROM (
-        SELECT c.interval_start, c.sli_id, c.measurement_revision, c.interval_end, c.outcome, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.observation_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at FROM public.almanac_sli_coverage AS c
+        SELECT c.interval_start, c.sli_id, c.measurement_revision, c.interval_end, c.outcome, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.observation_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at, c.ingestion_generation FROM public.almanac_sli_coverage AS c
         WHERE c.sli_id = sli.id AND c.interval_start >= $1::timestamptz
         ORDER BY c.interval_start DESC, c.recorded_at DESC
         LIMIT 1

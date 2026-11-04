@@ -6,6 +6,7 @@
 - Approval: maintainer approved the performance/tracing intervention in Crit session `ede9414e6ca5` after its retention, pagination, latency and historical-series amendments
 - Related specs: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0012](../specs/0012-user-interface.md)
 - Supersedes / superseded by: partially supersedes [ADR-0024](0024-precomputed-operational-reads.md)'s foreground preparation/cache policy; replaces provisional 400-day retention with one year as specified below
+- Gap-display amendment: [ADR-0027](0027-bounded-history-quality-display.md) preserves bounded graph availability with explicit coarse coverage when individual transitions cannot fit; arithmetic and latency requirements remain unchanged
 
 ## Context
 
@@ -18,6 +19,13 @@ The accepted requirement is accurate calculations with 10/100/1,000 SLOs and one
 year of data. UI lists display 10 or 20 rows, not every installed objective.
 Lists must become usable in < 1,000 ms, preferably <= 500 ms. Detail and graph
 range/burn changes must complete in < 500 ms, including rendered graphs.
+
+The paragraph above records the original acceptance context. On 2026-11-01 the
+maintainer accepted complete browser journeys under one second, with 500 ms as
+the optimization target, on normal hardware in normal/added-100-ms network
+conditions. Current thresholds are recorded in SPEC-0012 and SPEC-0019. This
+clarification changes neither this tracing/read-path decision nor the API budgets,
+accuracy, year-history and fleet-size requirements.
 
 ## Decision
 

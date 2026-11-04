@@ -1,9 +1,9 @@
 export type Coverage = 'complete' | 'partial' | 'missing' | 'zero-traffic' | 'known-empty' | 'expired' | 'not-applicable' | 'stale';
-export type TimelinePoint = { timestamp: string; value: string | null; coverage: Coverage };
+export type TimelinePoint = { timestamp: string; value: string | null; coverage: Coverage; displayCoverage?: {start:string;end:string;states:Coverage[]} };
 export type TimelineSeries = { id: string; label: string; points: TimelinePoint[] };
 export type TimelineLane = { id: string; label: string; unit: string; series: TimelineSeries[]; extra?: number; height?:number; bars?:boolean; range?:[number,number]; decimals?:number; colors?:('healthy'|'breached')[] };
 export type TimelineChart = { title: string; summary: string; start: string; end: string; stepMs: number; lanes: TimelineLane[]; fillExpectedGaps?: boolean; timeZone?: 'UTC'|'local'; showLaneNames?:boolean; referenceLines?: {lane:string;value:string;label:string}[] };
-export type PlotPoint = { timestamp: number; value: number | null; exact: string | null; coverage: Coverage };
+export type PlotPoint = { timestamp: number; value: number | null; exact: string | null; coverage: Coverage; displayCoverage?: {start:number;end:number;states:Coverage[]} };
 export type PlotSeries = { lane: number; seriesIndex: number; id: string; label: string; data: PlotPoint[]; partial: PlotPoint[]; tooltipData: TimelinePoint[] };
 export type ValidatedTimeline = { timestamps: number[]; series: PlotSeries[]; exactValues: Map<string, string> };
 
@@ -51,9 +51,12 @@ export function validateTimeline(chart: TimelineChart): ValidatedTimeline {
           if (!Number.isFinite(numeric)) throw new Error(`Sample values must be finite numbers: ${point.value}`);
           exactValues.set(new Date(time).toISOString(), point.value);
         }
-        const plot = { timestamp: time, value: numeric, exact: point.value, coverage: point.coverage };
-        points.push(point.coverage === 'complete' || point.coverage === 'stale' ? plot : { ...plot, value: null });
-        if ((point.coverage === 'partial' || point.coverage === 'stale') && numeric !== null) partial.push(plot);
+        const displayCoverage=point.displayCoverage?{start:timestamp(point.displayCoverage.start,'Coverage start'),end:timestamp(point.displayCoverage.end,'Coverage end'),states:point.displayCoverage.states}:undefined;
+        if(displayCoverage&&(displayCoverage.start<start||displayCoverage.end>end||displayCoverage.start>time||displayCoverage.end<time||displayCoverage.start>=displayCoverage.end||displayCoverage.states.length===0||displayCoverage.states.length>8||displayCoverage.states.some(state=>!['complete','partial','missing','zero-traffic','known-empty','expired','not-applicable','stale'].includes(state))))throw new Error('Invalid display coverage bucket');
+        const incomplete=displayCoverage?.states.some(state=>state!=='complete'&&state!=='stale')??false;
+        const plot = { timestamp: time, value: numeric, exact: point.value, coverage: point.coverage,...(displayCoverage?{displayCoverage}:{}) };
+        points.push(!incomplete&&(point.coverage === 'complete' || point.coverage === 'stale') ? plot : { ...plot, value: null });
+        if ((incomplete||point.coverage === 'partial' || point.coverage === 'stale') && numeric !== null) partial.push(plot);
         tooltipData.push(point);
       }
       const expanded: PlotPoint[] = [];

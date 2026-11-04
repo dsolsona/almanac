@@ -15,6 +15,8 @@ import (
 var ErrDerivedPending = errors.New("storage: derived data preparation pending")
 var ErrDerivedSourceFailed = errors.Join(ErrDerivedFailed, errors.New("storage: source aggregate preparation exhausted"))
 
+const derivedWindowBatchLimit = 960
+
 // Whole-hour sums are safe only when both boundaries also lie on the source
 // cadence. The common grid leaves at most 7,200 raw intervals in both edges,
 // even for a cadence that does not divide an hour or exceeds an hour.
@@ -36,6 +38,68 @@ func evaluateDerivedWindow(ctx context.Context, q *dbgen.Queries, sliID pgtype.U
 	if err != nil {
 		return slo.WindowResult{}, operationError(ctx, "storage: exact aggregate window read failed", err)
 	}
+	return evaluateDerivedCounts(ctx, input, counts)
+}
+
+func derivedWindowBatchParams(sliID pgtype.UUID, revision int64, inputs []slo.WindowInput) (dbgen.ReadRetainedWindowBatchParams, error) {
+	if len(inputs) == 0 {
+		return dbgen.ReadRetainedWindowBatchParams{}, slo.ErrInvalidCalculation
+	}
+	if len(inputs) > derivedWindowBatchLimit {
+		return dbgen.ReadRetainedWindowBatchParams{}, ErrOperationalResource
+	}
+	params := dbgen.ReadRetainedWindowBatchParams{SliID: sliID, MeasurementRevision: revision, Now: timestamp(inputs[0].Now)}
+	for _, input := range inputs {
+		if input.Cadence <= 0 || input.Duration <= 0 || input.Duration%input.Cadence != 0 || input.At.IsZero() || !input.Now.Equal(inputs[0].Now) || input.Cadence != inputs[0].Cadence {
+			return params, slo.ErrInvalidCalculation
+		}
+		p := derivedWindowParams(sliID, revision, input)
+		params.WindowEnds = append(params.WindowEnds, p.WindowEnd)
+		params.FullStarts, params.FullEnds = append(params.FullStarts, p.FullStart), append(params.FullEnds, p.FullEnd)
+		a, b, c, d := p.WindowEnd, p.WindowEnd, p.WindowEnd, p.WindowEnd
+		if len(p.EdgeStarts) > 0 {
+			a, b = p.EdgeStarts[0], p.EdgeEnds[0]
+		}
+		if len(p.EdgeStarts) > 1 {
+			c, d = p.EdgeStarts[1], p.EdgeEnds[1]
+		}
+		params.EdgeAStarts, params.EdgeAEnds = append(params.EdgeAStarts, a), append(params.EdgeAEnds, b)
+		params.EdgeBStarts, params.EdgeBEnds = append(params.EdgeBStarts, c), append(params.EdgeBEnds, d)
+	}
+	return params, nil
+}
+
+func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.UUID, revision int64, inputs []slo.WindowInput) ([]slo.WindowResult, error) {
+	if len(inputs) == 0 {
+		return []slo.WindowResult{}, nil
+	}
+	params, err := derivedWindowBatchParams(sliID, revision, inputs)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := q.ReadRetainedWindowBatch(ctx, params)
+	if err != nil {
+		return nil, operationError(ctx, "storage: exact aggregate window batch read failed", err)
+	}
+	if len(counts) != len(inputs) {
+		return nil, slo.ErrOperationalFacts
+	}
+	results := make([]slo.WindowResult, len(inputs))
+	for index, count := range counts {
+		if count.Ordinal != int32(index+1) {
+			return nil, slo.ErrOperationalFacts
+		}
+		results[index], err = evaluateDerivedCounts(ctx, inputs[index], dbgen.ReadDerivedWindowTotalsRow{Good: count.Good, Total: count.Total, Observed: count.Observed,
+			KnownEmpty: count.KnownEmpty, ZeroTraffic: count.ZeroTraffic, FirstObservation: count.FirstObservation,
+			LastObservation: count.LastObservation, LatestReceipt: count.LatestReceipt, Prepared: count.Prepared, Exhausted: count.Exhausted})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return results, nil
+}
+
+func evaluateDerivedCounts(ctx context.Context, input slo.WindowInput, counts dbgen.ReadDerivedWindowTotalsRow) (slo.WindowResult, error) {
 	if counts.Exhausted {
 		return slo.WindowResult{}, ErrDerivedSourceFailed
 	}

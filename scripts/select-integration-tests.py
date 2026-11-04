@@ -19,10 +19,11 @@ def select(source: str, package: str) -> list[str]:
             raise ValueError("unexpected integration discovery output")
     if not names or (package == "command" and "TestIntegrationExecutableBrowserSLICollectionJourney" not in names):
         raise ValueError("integration discovery is empty or missing the SLI journey")
-    priority = "TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict"
-    if package == "storage" and priority in names:
-        names.remove(priority)
-        names.insert(0, priority)
+    if package == "storage":
+        priorities = ("TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict",
+                      "TestIntegrationRetainedMinuteHistoryAndPersistedRestart",
+                      "TestIntegrationRetainedDenseHistoryAndPersistedRestart")
+        names = [name for name in priorities if name in names] + [name for name in names if name not in priorities]
     return names
 
 

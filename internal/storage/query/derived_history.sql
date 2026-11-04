@@ -1,5 +1,7 @@
 -- name: FindPreparedSloHistory :one
-SELECT b.payload, g.id AS generation_id, g.published_at
+-- Select metadata before detoasting/hashing payloads from unrelated generations.
+WITH candidates AS MATERIALIZED (
+SELECT b.payload, b.payload_digest, g.id AS generation_id, g.published_at
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
 WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
@@ -9,8 +11,11 @@ WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
   AND g.source_generation=$4 AND g.evaluated_through=$5
   AND b.range_start=$6 AND b.range_end=$7 AND b.burn_window_seconds=$8
   AND b.kind=sqlc.arg(kind)
-  AND b.payload_digest=sha256(convert_to(b.payload::text,'UTF8'))
-ORDER BY g.published_at DESC LIMIT 1;
+)
+SELECT payload,generation_id,published_at FROM candidates
+WHERE payload->'history_preparation' IS NULL
+  AND payload_digest=sha256(convert_to(payload::text,'UTF8'))
+ORDER BY published_at DESC LIMIT 1;
 
 -- name: DeleteCorruptPreparedSloHistory :execrows
 DELETE FROM public.almanac_slo_history_blocks WHERE generation_id=$1;
@@ -28,7 +33,7 @@ SELECT g.id,g.source_generation,g.definition_revision,g.measurement_revision,
        ),'[]'::jsonb)::jsonb AS page_values
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
-WHERE g.slo_id=sqlc.arg(slo_id) AND g.id=sqlc.arg(generation_id) AND b.kind='detail'
+WHERE g.slo_id=sqlc.arg(slo_id) AND g.id=sqlc.arg(generation_id) AND b.kind IN ('detail','retained_detail')
   AND g.published_at>=sqlc.arg(now)::timestamptz-interval '5 minutes'
   AND b.payload_digest=sha256(convert_to(b.payload::text,'UTF8'))
   AND g.calculation_version=sqlc.arg(calculation_version);
@@ -82,6 +87,7 @@ UPDATE public.almanac_slo_history_jobs target
 SET state='pending',attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,
     next_attempt_at=$3,manual_retried_at=$3,last_error=NULL
 WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
+  AND target.last_error IS DISTINCT FROM 'retention_expired'
   AND (target.manual_retried_at IS NULL OR target.manual_retried_at<=$3::timestamptz-interval '1 minute')
   AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE state<>'failed')<64
   AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$2 AND state<>'failed')<8;
@@ -100,8 +106,8 @@ FROM candidate c WHERE j.id=c.id RETURNING j.*;
 
 -- name: InsertPreparedSloHistory :exec
 INSERT INTO public.almanac_slo_history_blocks
-    (generation_id,range_start,range_end,burn_window_seconds,payload,kind,budget_sparkline,payload_digest)
-VALUES ($1,$2,$3,$4,$5,$6,$7,sha256(convert_to($5::jsonb::text,'UTF8')));
+    (generation_id,range_start,range_end,burn_window_seconds,payload,kind,budget_sparkline)
+VALUES ($1,$2,$3,$4,$5,$6,$7);
 
 -- name: LatestPreparedBudgetSparkline :one
 SELECT (b.payload->'budget_series'->'samples')::jsonb AS budget_sparkline,g.id,g.source_generation,g.definition_revision,g.measurement_revision,

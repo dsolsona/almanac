@@ -12,7 +12,7 @@ WITH dirty AS (
  count(*) FILTER(WHERE g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
  OR g.calculation_version<>$2 OR g.source_generation<>coalesce(source.generation,0)
  OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
- OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)) AS pending
+ OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)) AS pending
  FROM public.almanac_slos s
  JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
  LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
@@ -28,7 +28,10 @@ WITH dirty AS (
  'public.almanac_sli_source_generations','public.almanac_slo_derived_generations','public.almanac_slo_current_projections',
  'public.almanac_slo_current_failures','public.almanac_slo_history_jobs','public.almanac_slo_history_blocks',
  'public.almanac_slo_display_blocks','public.almanac_derived_cache_usage',
- 'public.almanac_slo_overview_snapshots','public.almanac_slo_overview_snapshot_items']) table_name
+ 'public.almanac_slo_overview_snapshots','public.almanac_slo_overview_snapshot_items',
+ 'public.almanac_slo_projection_payloads','public.almanac_slo_series_points',
+ 'public.almanac_slo_series_tiles','public.almanac_slo_series_repair',
+ 'public.almanac_slo_series_tile_work']) table_name
 )
 SELECT dirty.total AS dirty_keys,dirty.failed AS failed_keys,dirty.age AS oldest_dirty_seconds,
  history.total AS history_jobs,history.failed AS failed_history_jobs,history.age AS oldest_history_seconds,

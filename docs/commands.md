@@ -60,6 +60,7 @@ make verification-report
 make verification-handoff
 make verify VERIFY_MODE=compose
 make verify VERIFY_MODE=go-race
+make verify VERIFY_MODE=journey BROWSER_SCENARIO=agents-lifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
 make verify VERIFY_MODE=unit TEST_FILE=tests/agents-client.test.tsx
 make verify VERIFY_MODE=unit TEST_FILE=tests/agents-page.test.tsx
 make verify VERIFY_MODE=unit TEST_FILE=tests/auth-page.test.tsx
@@ -94,6 +95,86 @@ reporting success; a failed check preserves the running services and volumes.
 
 Git publication operations must likewise match current approval rules and existing
 user authorization. Do not merge PRs merely because publishing them was authorized.
+
+## Selective integration checks
+
+The existing integration entry defaults to affected-case execution and compatible
+per-case pass reuse. Its fixed selectors accept one discovered test name, a fixed
+package, or explicit full execution; they do not accept arbitrary Go flags,
+regular expressions, commands or database URLs. Normal checks retain the existing
+isolated port-15487 fixture. Example invocations within this entry:
+
+```sh
+make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration INTEGRATION_PLAN=1 ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration INTEGRATION_TEST=TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify VERIFY_MODE=integration INTEGRATION_SELECTION=all ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+```
+
+Every run prints its selection before executing. The latest coverage report is
+`.local/integration-report.json`; immutable per-run reports/Go events live under
+`.local/integration-runs/`. Reused cases retain their original provenance and are
+not counted as new executions or new test time. Interrupted and failed cases run
+again on the next selection. The former aggregate Go artifact remains historical.
+Actual invocation approval still follows the environment's rules above.
+`INTEGRATION_PLAN=1` performs normal preflights and discovery but executes no
+integration cases; its receipt is explicitly `planned`, never a passing gate.
+
+## Approved controlled capacity entry
+
+Current phase restriction, 2026-11-04: the maintainer rejected further deliberate
+endurance waits and approved bounded T08 final checks. The entry below still
+contains two 15-minute phases and real-clock/maintenance observations. It must
+not run during T08 finalization, directly or through another mode. Retain its
+failed/cancelled receipts; do not report the endurance workload as passed. Further
+execution belongs to explicitly scoped [F3-T10](tasks/F3-T10.md) work. Bounded
+manual checks use the existing isolated fixture and native approved commands,
+record independent expectations/results and append their timing to the manual
+ledger. Final integrated gates remain separate from endurance observation.
+
+On 2026-11-02 the maintainer explicitly approved this exact invocation for F3-T08,
+including reruns only after diagnosing and fixing a failure. Record the failure,
+correction and replan before a rerun. Ordinary, integration and Compose verification
+do not launch this separate workload:
+
+```sh
+make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+```
+
+On 2026-11-03 the maintainer narrowed this phase to ten SLOs with a year of history
+and deferred larger tests to [F3-T10](tasks/F3-T10.md). The same approved invocation
+now requires only that fleet; it must not start the 100/1,000-SLO loads or repeat
+the preliminary one-SLO imports during this phase.
+
+It requires that exact existing isolated fixture, rejects custom test/Go selectors,
+builds the candidate and runs the separately tagged ten-SLO/year capacity entry.
+The workload retains its eight-hour execution bound; the Go process has
+30 additional minutes for setup/cleanup. Existing disk admission, private normal
+Compose deployments, independent numerical checks and VictoriaTraces evidence
+remain mandatory. Required fleet cases must all run and pass, without skips.
+Source-bound receipts and the timing ledger use the existing controls. Go events
+and exit status are retained in `.local/performance-go-test.jsonl` and
+`.local/performance-go-test.exit`; each fleet keeps its own resource/stage report.
+Successful fleets clean up their owned containers, volumes, images and private
+runtime directory. A failed fleet retains its owned deployment and protected
+`.local/backend-performance-runtime-*` directory for diagnosis, including fixture-only
+credentials. Do not publish that directory. Record the project/path and clean up
+only those owned resources after diagnosis; preserve the operator's project/data.
+Compile-only checks in the Go gate do not establish capacity acceptance.
+
+The same fixed entry can reuse an explicitly recorded year dataset through local
+`.local/performance-resume.json` metadata keyed only by `10` for this phase.
+Each record names its original failed report, private runtime directory, owned
+`almanac-perf-` project and five explicit loopback ports. Workspace paths, container
+ownership/bindings, original year import and fleet identities must match before
+reuse. The candidate is rebuilt and migrated normally; source TLS trust is renewed
+through authenticated management, and real agents/readers reconnect. Acceptance
+runs again on the candidate. Previous passing latency evidence is not substituted.
+Required ten-SLO acceptance and the eight-hour limit remain unchanged. Larger
+acceptance is deferred, not passed. There is no command, SQL, test-selector or
+database-URL passthrough.
+Source certificates cover the bounded run plus cleanup; ordinary short fixtures
+retain their existing certificate lifetime and all TLS verification remains enabled.
 
 ## Linux verifier entry points
 

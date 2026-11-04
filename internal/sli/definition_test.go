@@ -124,11 +124,12 @@ func TestObservationIntervalAndRetainedExecutionBoundsAreIndependent(t *testing.
 }
 
 func TestObservationRetentionUsesIntervalStartWithoutProration(t *testing.T) {
-	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	// The accepted year is 365 days, including across a leap day.
+	now := time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
 	item := validObservationItem()
 	item.Outcome = ExecutionOutcome{State: OutcomeObserved, GoodCount: "1", TotalCount: "1"}
 	item.CreatedAt = now
-	item.IntervalStart = now.Add(-ObservationRetention)
+	item.IntervalStart = now.Add(-365 * 24 * time.Hour)
 	item.IntervalEnd = item.IntervalStart.Add(15 * time.Second)
 	if err := item.Validate(15, item.IntervalStart, time.Minute, now); err != nil {
 		t.Fatalf("boundary interval rejected: %v", err)

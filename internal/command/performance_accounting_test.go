@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,73 @@ import (
 	"testing"
 	"time"
 )
+
+func TestPerformanceEvidenceKeepsNanosecondDurationsAndStrictJSON(t *testing.T) {
+	value := struct {
+		Setup time.Duration
+		Read  performanceReadReport
+	}{Setup: time.Second + 7, Read: performanceReadReport{
+		Wall: 11, Invocation: 19, Latency: performanceDistribution{P95: 23},
+		Samples: []performanceSample{{Elapsed: 29}},
+	}}
+	body, err := marshalPerformanceEvidence(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Setup int64
+		Read  struct {
+			Wall       int64 `json:"wall_ns"`
+			Invocation int64 `json:"invocation_ns"`
+			Latency    struct {
+				P95 int64 `json:"p95_ns"`
+			} `json:"latency"`
+			Samples []struct {
+				Elapsed int64 `json:"elapsed_ns"`
+			} `json:"samples"`
+		}
+	}
+	if err := json.Unmarshal(body, &got); err != nil || got.Setup != 1_000_000_007 || got.Read.Wall != 11 || got.Read.Invocation != 19 || got.Read.Latency.P95 != 23 || len(got.Read.Samples) != 1 || got.Read.Samples[0].Elapsed != 29 {
+		t.Fatalf("capacity evidence lost nanosecond values: %s (%v)", body, err)
+	}
+	if _, err := marshalPerformanceEvidence(string([]byte{0xff})); err == nil {
+		t.Fatal("duration compatibility option disabled strict UTF-8 validation")
+	}
+}
+
+func TestPerformancePostgresFailureEvidenceOmitsStatementValues(t *testing.T) {
+	counts := performancePostgresFailureCounts([]byte("ERROR: could not serialize access due to concurrent update\nSTATEMENT: private-fixture-value\nERROR: canceling statement due to lock timeout\nERROR: could not serialize access due to concurrent update"))
+	if counts["could not serialize access"] != 2 || counts["canceling statement due to lock timeout"] != 1 || counts["deadlock detected"] != 0 || len(counts) != 7 {
+		t.Fatalf("incorrect fixed PostgreSQL error counts: %+v", counts)
+	}
+	body, err := marshalPerformanceEvidence(counts)
+	if err != nil || strings.Contains(string(body), "private-fixture-value") {
+		t.Fatal("failure evidence retained statement values")
+	}
+}
+
+func TestPerformanceFirstReadRetainsProblemAndTraceWithoutResponseBody(t *testing.T) {
+	var parent atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parent.Store(r.Header.Get("traceparent"))
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"code":"range_too_dense","message":"private-fixture-value"}`))
+	}))
+	defer server.Close()
+	reader := performanceReader{Client: server.Client(), Request: func(ctx context.Context, path string) (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet, server.URL+path, nil)
+	}}
+	sample := preparePerformanceTarget(t.Context(), reader, performanceOperation{Paths: []string{"/history"}, Budget: time.Second,
+		Check: func(int, []byte) error { t.Fatal("error response passed to success validator"); return nil }}, 0)
+	header, _ := parent.Load().(string)
+	if sample.Status != 422 || sample.ProblemCode != "range_too_dense" || sample.Failure != "normal_navigation_unavailable" || sample.Pending != 0 || len(sample.TraceID) != 32 || !strings.HasPrefix(header, "00-"+sample.TraceID+"-") || !strings.HasSuffix(header, "-01") || len(sample.Body) != 0 {
+		t.Fatalf("first-read failure evidence incomplete: %+v", sample)
+	}
+	body, err := marshalPerformanceEvidence(sample)
+	if err != nil || strings.Contains(string(body), "private-fixture-value") {
+		t.Fatal("first-read evidence retained response text")
+	}
+}
 
 func TestPerformanceNearestRank(t *testing.T) {
 	values := make([]time.Duration, 100)
@@ -73,7 +141,7 @@ func TestPerformanceReadyReadAccounting(t *testing.T) {
 		}
 		return nil
 	}}
-	report, err := samplePerformanceReads(t.Context(), readers, operation)
+	report, err := samplePerformanceReads(t.Context(), readers, operation, nil)
 	if err != nil || report.Failures != 0 || report.Latency.Count != 100 || report.Wall <= 0 || report.Invocation <= 0 || report.Ended.Before(report.Started) {
 		t.Fatalf("ready accounting failed: report=%+v err=%v", report, err)
 	}
@@ -82,19 +150,41 @@ func TestPerformanceReadyReadAccounting(t *testing.T) {
 			t.Fatalf("actor %d did not issue exactly ten reads", actor)
 		}
 	}
+	operation.Budget = 500 * time.Millisecond
+	first := make([]performancePreparationSample, 9)
+	for index := range first {
+		first[index] = performancePreparationSample{Target: 0, Status: http.StatusOK, Elapsed: 450 * time.Millisecond}
+		if index < 5 {
+			first[index].Elapsed = 550 * time.Millisecond
+		}
+	}
+	report, err = samplePerformanceReads(t.Context(), readers, operation, first)
+	if err != nil || report.Latency.Count != 109 || report.Latency.Max != 550*time.Millisecond || report.Latency.P95 > operation.Budget || !report.Samples[0].First {
+		t.Fatal("first visits were omitted or the p95 budget became a per-request maximum")
+	}
+	first[5].Elapsed = 550 * time.Millisecond
+	report, err = samplePerformanceReads(t.Context(), readers, operation, first)
+	if err == nil || report.Latency.P95 <= operation.Budget {
+		t.Fatal("slow first visits did not fail the combined p95 budget")
+	}
+	first[0].Elapsed = time.Second
+	if _, err := samplePerformanceReads(t.Context(), readers, operation, first); err == nil {
+		t.Fatal("one-second first visit was hidden in the percentile")
+	}
+	operation.Budget = time.Second
 	operation.Paths = []string{"/pending", "/ready"}
-	report, err = samplePerformanceReads(t.Context(), readers, operation)
+	report, err = samplePerformanceReads(t.Context(), readers, operation, nil)
 	if err == nil || report.Failures != 50 || report.Latency.Count != 100 {
 		t.Fatalf("pending responses were retried or hidden: failures=%d count=%d err=%v", report.Failures, report.Latency.Count, err)
 	}
 	operation.Paths = []string{"/ready"}
 	operation.Check = func(int, []byte) error { return errors.New("malformed provenance") }
-	report, err = samplePerformanceReads(t.Context(), readers, operation)
+	report, err = samplePerformanceReads(t.Context(), readers, operation, nil)
 	if err == nil || report.Failures != 100 || report.Samples[0].Failure != "response_contract" {
 		t.Fatal("successful status hid invalid response data")
 	}
 	readers[1].Identity = readers[0].Identity
-	if _, err := samplePerformanceReads(t.Context(), readers, operation); err == nil {
+	if _, err := samplePerformanceReads(t.Context(), readers, operation, nil); err == nil {
 		t.Fatal("duplicate users accepted as ten-user concurrency")
 	}
 }

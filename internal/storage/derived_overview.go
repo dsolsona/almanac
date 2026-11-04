@@ -9,6 +9,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -57,22 +58,27 @@ func attachLatestBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOper
 	return nil
 }
 
-func queueVisibleBudgetHistory(ctx context.Context, q *dbgen.Queries, items []api.SloOperationalOverviewItem, now time.Time) error {
-	ids := make([]pgtype.UUID, 0, len(items))
-	for _, item := range items {
-		if item.BudgetHistoryState != nil && *item.BudgetHistoryState == "ready" {
-			continue
-		}
-		ids = append(ids, pgtype.UUID{Bytes: [16]byte(item.Slo.Id), Valid: true})
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	if err := q.LockHistoryAdmission(ctx); err != nil {
+func (r *Runtime) queueDueBudgetHistory(ctx context.Context, now time.Time) error {
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	conn, err := r.Acquire(bounded, DerivedTraffic)
+	if err != nil {
 		return err
 	}
-	_, err := q.QueueVisibleBudgetHistory(ctx, dbgen.QueueVisibleBudgetHistoryParams{CalculationVersion: operationalCalculationVersion, SloIds: ids, Now: timestamp(now)})
-	return err
+	defer conn.Release()
+	tx, err := conn.BeginTx(bounded, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer rollbackTransaction(tx)
+	q := dbgen.New(tx)
+	if err := q.LockHistoryAdmission(bounded); err != nil {
+		return err
+	}
+	if _, err := q.QueueDueBudgetHistory(bounded, dbgen.QueueDueBudgetHistoryParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(now)}); err != nil {
+		return err
+	}
+	return tx.Commit(bounded)
 }
 
 func overviewScopeFilters(input OperationalOverviewInput) (pgtype.UUID, pgtype.Text) {
@@ -83,12 +89,19 @@ func overviewScopeFilters(input OperationalOverviewInput) (pgtype.UUID, pgtype.T
 	return serviceID, pgtype.Text{String: input.Urgency, Valid: input.Urgency != ""}
 }
 
+func canReserveOverview(usage dbgen.SloOverviewSnapshotUsageRow) bool {
+	// Preparing results reserve their maximum size; ready pages charge actual bytes.
+	return usage.SessionBuilds < sloOverviewSessionLimit && usage.InstallationBuilds < sloOverviewInstallationLimit &&
+		usage.SessionBytes <= sloOverviewSessionByteLimit-sloOverviewProjectionByteLimit &&
+		usage.InstallationBytes <= sloOverviewInstallationBytes-sloOverviewProjectionByteLimit
+}
+
 func findReusableOverview(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time, actorID pgtype.UUID, role string) (pgtype.UUID, bool, error) {
 	if input.Runtime == nil {
 		return pgtype.UUID{}, false, nil
 	}
 	fingerprint, err := overviewScopeFingerprint(ctx, q, input, now)
-	if err != nil || !fingerprint.Current || fingerprint.DefinitionCount <= int64(input.Limit) {
+	if err != nil || fingerprint.DefinitionCount <= int64(input.Limit) {
 		return pgtype.UUID{}, false, err
 	}
 	serviceID, urgency := overviewScopeFilters(input)
@@ -100,6 +113,32 @@ func findReusableOverview(ctx context.Context, q *dbgen.Queries, input Operation
 		return pgtype.UUID{}, false, nil
 	}
 	return id, err == nil, err
+}
+
+func unavailableOverviewItem(previous api.SloOperationalOverviewItem, now time.Time, reason string) api.SloOperationalOverviewItem {
+	objective := previous.Slo
+	at := floorSliBoundary(now, time.Duration(objective.CadenceSeconds)*time.Second)
+	start := at.Add(-time.Duration(objective.RollingWindowSeconds) * time.Second)
+	eligible := maxTime(start, objective.EvaluationValidFrom)
+	if eligible.After(at) {
+		eligible = at
+	}
+	history := api.SloOperationalOverviewItemBudgetHistoryState("preparing")
+	if reason != "current_calculation_pending" {
+		history = "unavailable"
+	}
+	value := slo.WindowResult{End: at, RequestedStart: start, EffectiveStart: start, EligibleStart: eligible,
+		RetentionStart: maxTime(eligible, now.Add(-sli.ObservationRetention)), State: "unavailable", Freshness: "unknown", Performance: "unknown", Reason: reason, Provisional: true}
+	current := operationalValue(value)
+	current.Window.ActivatedAt, current.Window.EvaluationValidFrom = objective.ActivatedAt, objective.EvaluationValidFrom
+	current.Window.HistoricalRequestedBy, current.Window.HistoricalRequestedAt = objective.HistoricalRequestedBy, objective.HistoricalRequestedAt
+	burn1h, burn6h := unavailableBurn(3600, at, reason), unavailableBurn(21600, at, reason)
+	urgency := slo.ClassifyOperational(slo.OperationalState{QualityState: "unavailable", Freshness: "unknown", PerformanceState: "unknown", Provisional: true})
+	reasons, leading := operationalReasons(urgency.Reasons)
+	return api.SloOperationalOverviewItem{Slo: objective, CurrentState: new(api.SloOperationalOverviewItemCurrentState("unavailable")), Current: current, Burn1h: burn1h, Burn6h: burn6h,
+		Urgency: api.SloOperationalOverviewItemUrgency(urgency.Group), Reasons: reasons, LeadingReason: leading,
+		Exhaustion: exhaustionValue(value, burn1h, nil), BudgetHistoryState: &history,
+		BudgetSparkline: previous.BudgetSparkline, BudgetHistoryGeneration: previous.BudgetHistoryGeneration}
 }
 
 func overviewScopeFingerprint(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) (dbgen.OperationalScopeFingerprintRow, error) {

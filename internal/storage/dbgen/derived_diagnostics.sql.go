@@ -32,6 +32,18 @@ WITH objective AS (
     SELECT d.id,'aggregate','failed',d.attempts,d.next_attempt_at,coalesce(d.last_error,'aggregate_lease_expired')
     FROM public.almanac_derived_dirty_ranges d JOIN objective o ON d.sli_id=o.sli_id AND d.measurement_revision=o.measurement_revision
     WHERE d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$3::timestamptz)
+    UNION ALL
+    SELECT w.id,'history',CASE WHEN w.attempts>=5 THEN 'failed' WHEN w.lease_until>$3::timestamptz THEN 'running' ELSE 'pending' END,
+           w.attempts,w.next_attempt_at,coalesce(w.last_error,'')
+    FROM public.almanac_slo_series_tile_work w JOIN objective o ON w.slo_id=o.id
+      AND w.definition_revision=o.revision AND w.measurement_revision=o.measurement_revision
+    WHERE w.calculation_version=$2 AND w.exclusion_revision=0
+    UNION ALL
+    SELECT w.id,'history',CASE WHEN w.attempts>=5 THEN 'failed' WHEN w.lease_until>$3::timestamptz THEN 'running' ELSE 'pending' END,
+           w.attempts,w.next_attempt_at,coalesce(w.last_error,'')
+    FROM public.almanac_slo_series_repair w JOIN objective o ON w.slo_id=o.id
+      AND w.definition_revision=o.revision AND w.measurement_revision=o.measurement_revision
+    WHERE w.calculation_version=$2 AND w.cursor_at<w.end_at
 )
 SELECT id,stage,state,attempts,next_attempt_at,last_error FROM jobs
 ORDER BY (state='failed') DESC,next_attempt_at,id LIMIT 101
@@ -109,12 +121,83 @@ func (q *Queries) RetryCurrentSloPreparation(ctx context.Context, arg RetryCurre
 	return result.RowsAffected(), nil
 }
 
+const retryRetainedRepair = `-- name: RetryRetainedRepair :execrows
+UPDATE public.almanac_slo_series_repair
+SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=$1::timestamptz,
+    manual_retried_at=$1::timestamptz,last_error=NULL
+WHERE id=$2 AND slo_id=$3
+  AND definition_revision=$4 AND measurement_revision=$5
+  AND calculation_version=$6 AND cursor_at<end_at AND attempts>=5
+  AND (lease_until IS NULL OR lease_until<=$1::timestamptz)
+  AND (manual_retried_at IS NULL OR manual_retried_at<=$1::timestamptz-interval '1 minute')
+`
+
+type RetryRetainedRepairParams struct {
+	Now                 pgtype.Timestamptz `json:"now"`
+	JobID               pgtype.UUID        `json:"job_id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+}
+
+func (q *Queries) RetryRetainedRepair(ctx context.Context, arg RetryRetainedRepairParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retryRetainedRepair,
+		arg.Now,
+		arg.JobID,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retryRetainedTile = `-- name: RetryRetainedTile :execrows
+UPDATE public.almanac_slo_series_tile_work
+SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=$1::timestamptz,
+    manual_retried_at=$1::timestamptz,last_error=NULL
+WHERE id=$2 AND slo_id=$3
+  AND definition_revision=$4 AND measurement_revision=$5
+  AND calculation_version=$6 AND exclusion_revision=0 AND attempts>=5
+  AND (lease_until IS NULL OR lease_until<=$1::timestamptz)
+  AND (manual_retried_at IS NULL OR manual_retried_at<=$1::timestamptz-interval '1 minute')
+`
+
+type RetryRetainedTileParams struct {
+	Now                 pgtype.Timestamptz `json:"now"`
+	JobID               pgtype.UUID        `json:"job_id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+}
+
+func (q *Queries) RetryRetainedTile(ctx context.Context, arg RetryRetainedTileParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retryRetainedTile,
+		arg.Now,
+		arg.JobID,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const retrySourceAggregate = `-- name: RetrySourceAggregate :execrows
 UPDATE public.almanac_derived_dirty_ranges d
 SET attempts=0,lease_until=NULL,lease_epoch=d.lease_epoch+1,next_attempt_at=$1::timestamptz,
     manual_retried_at=$1::timestamptz,last_error=NULL
 WHERE d.id=$2 AND d.sli_id=$3 AND d.measurement_revision=$4
   AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$1::timestamptz)
+  AND d.last_error IS DISTINCT FROM 'retention_expired'
   AND (d.manual_retried_at IS NULL OR d.manual_retried_at<=$1::timestamptz-interval '1 minute')
 `
 

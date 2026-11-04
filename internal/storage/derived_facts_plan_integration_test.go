@@ -6,12 +6,16 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var errFactsQueryCaptured = errors.New("test: operational facts query captured")
@@ -24,9 +28,219 @@ type factsQueryCapture struct {
 	arguments []any
 }
 
+func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, now time.Time) {
+	t.Helper()
+	q := dbgen.New(conn)
+	row, err := q.GetSlo(t.Context(), mustPGUUID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture := &factsQueryCapture{}
+	_, err = buildRetainedRepairPoints(t.Context(), dbgen.New(capture), row, source, start, end, now)
+	// Production error sanitization strips the capture marker; verify the actual SQL.
+	if err == nil || !strings.HasPrefix(capture.statement, "-- name: ReadRetainedWindowBatch :many\n") {
+		t.Fatal("capture retained repair query failed", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `ANALYZE public.almanac_sli_coverage; ANALYZE public.almanac_sli_observation_values; ANALYZE public.almanac_sli_hourly_aggregates`); err != nil {
+		t.Fatal("analyze retained fixture before query-plan acceptance", err)
+	}
+	var plan []byte
+	if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) "+capture.statement, capture.arguments...).Scan(&plan); err != nil {
+		t.Fatal("retained repair plan failed", err)
+	}
+	path := filepath.Join("..", "..", ".local", "retained-repair-plan-"+id+".json")
+	if err := os.WriteFile(path, plan, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var decoded []struct {
+		Plan      map[string]any `json:"Plan"`
+		Planning  float64        `json:"Planning Time"`
+		Execution float64        `json:"Execution Time"`
+	}
+	if err := json.Unmarshal(plan, &decoded); err != nil || len(decoded) != 1 {
+		t.Fatal("invalid retained repair plan", err)
+	}
+	type work struct {
+		Node, Relation               string
+		Rows, Loops, Removed, Visits float64
+	}
+	var expensive []work
+	var coverageBlocks float64
+	var inspect func(map[string]any)
+	inspect = func(node map[string]any) {
+		name, _ := node["Node Type"].(string)
+		relation, _ := node["Relation Name"].(string)
+		if strings.HasPrefix(relation, "almanac_sli_coverage") {
+			hits, _ := node["Shared Hit Blocks"].(float64)
+			reads, _ := node["Shared Read Blocks"].(float64)
+			coverageBlocks += hits + reads
+		}
+		rows, _ := node["Actual Rows"].(float64)
+		loops, _ := node["Actual Loops"].(float64)
+		removed, _ := node["Rows Removed by Join Filter"].(float64)
+		expensive = append(expensive, work{name, relation, rows, loops, removed, (rows + removed) * loops})
+		if children, ok := node["Plans"].([]any); ok {
+			for _, child := range children {
+				if next, ok := child.(map[string]any); ok {
+					inspect(next)
+				}
+			}
+		}
+	}
+	inspect(decoded[0].Plan)
+	slices.SortFunc(expensive, func(a, b work) int {
+		if a.Visits > b.Visits {
+			return -1
+		}
+		if a.Visits < b.Visits {
+			return 1
+		}
+		return 0
+	})
+	t.Logf("retained repair plan planning=%.3fms execution=%.3fms coverage_blocks=%.0f expensive=%+v artifact=%s", decoded[0].Planning, decoded[0].Execution, coverageBlocks, expensive[:min(8, len(expensive))], path)
+	// Four windows share bounded raw edges across the batch's evaluation points.
+	// Allow index/heap overhead without allowing a retained-table scan per edge.
+	points := int64(end.Sub(start) / (time.Duration(row.CadenceSeconds) * time.Second))
+	if bound := float64(32 * (4*points + 1)); coverageBlocks > bound {
+		t.Fatalf("retained repair coverage access grows beyond bounded edges: %.0f blocks > %.0f", coverageBlocks, bound)
+	}
+}
+
 func (c *factsQueryCapture) Query(_ context.Context, statement string, arguments ...any) (pgx.Rows, error) {
 	c.statement, c.arguments = statement, append([]any(nil), arguments...)
 	return nil, errFactsQueryCaptured
+}
+
+func (c *factsQueryCapture) QueryRow(_ context.Context, statement string, arguments ...any) pgx.Row {
+	c.statement, c.arguments = statement, append([]any(nil), arguments...)
+	return factsCapturedRow{}
+}
+
+type factsCapturedRow struct{}
+
+func (factsCapturedRow) Scan(...any) error { return errFactsQueryCaptured }
+
+func verifyPreparedHistoryLookup(t *testing.T, conn *pgx.Conn, generation string, now time.Time) {
+	t.Helper()
+	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(now)}
+	if err := conn.QueryRow(t.Context(), `SELECT g.slo_id,g.definition_revision,g.measurement_revision,g.source_generation,
+g.evaluated_through,b.range_start,b.range_end,b.burn_window_seconds,g.calculation_version,g.retention_start,b.kind
+FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
+WHERE g.id=$1`, generation).Scan(&key.SloID, &key.DefinitionRevision, &key.MeasurementRevision, &key.SourceGeneration,
+		&key.EvaluatedThrough, &key.RangeStart, &key.RangeEnd, &key.BurnWindowSeconds, &key.CalculationVersion, &key.RetentionStart, &key.Kind); err != nil {
+		t.Fatal(err)
+	}
+	capture := &factsQueryCapture{}
+	if _, err := dbgen.New(capture).FindPreparedSloHistory(t.Context(), key); !errors.Is(err, errFactsQueryCaptured) {
+		t.Fatal("capture prepared history lookup failed", err)
+	}
+	tx, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_nestloop=off"); err != nil {
+		t.Fatal(err)
+	}
+	var body []byte
+	if err := tx.QueryRow(t.Context(), "EXPLAIN (FORMAT JSON) "+capture.statement, capture.arguments...).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	type node struct {
+		CTE        string `json:"CTE Name"`
+		Filter     string `json:"Filter"`
+		JoinFilter string `json:"Join Filter"`
+		Plans      []node `json:"Plans"`
+	}
+	var plan []struct{ Plan node }
+	if err := json.Unmarshal(body, &plan); err != nil || len(plan) != 1 {
+		t.Fatal("invalid prepared history lookup plan", err)
+	}
+	checks := 0
+	var inspect func(node)
+	inspect = func(n node) {
+		if strings.Contains(n.Filter+n.JoinFilter, "sha256") {
+			if n.CTE != "candidates" {
+				t.Fatal("cache lookup hashes unrelated response payloads before generation/range selection")
+			}
+			checks++
+		}
+		for _, child := range n.Plans {
+			inspect(child)
+		}
+	}
+	inspect(plan[0].Plan)
+	if checks != 1 {
+		t.Fatal("cache lookup omitted bounded payload integrity validation")
+	}
+}
+
+func (c *factsQueryCapture) Exec(_ context.Context, statement string, arguments ...any) (pgconn.CommandTag, error) {
+	c.statement, c.arguments = statement, append([]any(nil), arguments...)
+	return pgconn.CommandTag{}, errFactsQueryCaptured
+}
+
+func verifyDerivedBatchValueLookup(t *testing.T, tx pgx.Tx, batch dbgen.RebuildDerivedBatchParams) {
+	t.Helper()
+	capture := &factsQueryCapture{}
+	if err := dbgen.New(capture).RebuildDerivedBatch(t.Context(), batch); !errors.Is(err, errFactsQueryCaptured) {
+		t.Fatal("capture source aggregate query failed", err)
+	}
+	// Exercise the hash-join alternative without loading a year merely to change planner statistics.
+	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_nestloop=off"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := tx.Exec(t.Context(), "RESET enable_nestloop"); err != nil {
+			t.Error(err)
+		}
+	}()
+	var body []byte
+	if err := tx.QueryRow(t.Context(), "EXPLAIN (FORMAT JSON) "+capture.statement, capture.arguments...).Scan(&body); err != nil {
+		t.Fatal("source aggregate plan failed", err)
+	}
+	var plan []struct {
+		Plan map[string]any `json:"Plan"`
+	}
+	if err := json.Unmarshal(body, &plan); err != nil || len(plan) != 1 {
+		t.Fatal("invalid source aggregate plan", err)
+	}
+	lookups := 0
+	var inspect func(map[string]any)
+	inspect = func(node map[string]any) {
+		if relation, _ := node["Relation Name"].(string); strings.HasPrefix(relation, "almanac_sli_observation_values") {
+			condition, _ := node["Index Cond"].(string)
+			if !strings.Contains(condition, "c.interval_start") {
+				t.Fatalf("source aggregate can scan retained values instead of the outer interval: %s; plan=%s", condition, body)
+			}
+			lookups++
+		}
+		if children, ok := node["Plans"].([]any); ok {
+			for _, child := range children {
+				if next, ok := child.(map[string]any); ok {
+					inspect(next)
+				}
+			}
+		}
+	}
+	inspect(plan[0].Plan)
+	if lookups == 0 {
+		t.Fatal("source aggregate plan omitted value lookup evidence")
+	}
 }
 
 func logRetainedFactsPlan(t *testing.T, conn *pgx.Conn, id string, start, end time.Time, cadence int) {

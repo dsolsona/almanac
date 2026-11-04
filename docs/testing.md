@@ -32,6 +32,28 @@ assert specific tool versions merely because a reference setup uses them.
 
 ## Gate selection
 
+On 2026-11-04 the maintainer replaced repeated full integration execution with
+dependency-based selection and compatible per-case evidence reuse. The default
+integration entry discovers the complete fixed suite, runs failed, missing and
+affected cases, and reuses only actual passes with matching dependency inputs
+and fixture/tool identity. A prior failed full run may still supply valid passes
+for unchanged areas; its failure remains recorded. The report distinguishes fresh
+executions from reused coverage and preserves their original evidence/timestamps.
+One failure does not prevent the other selected cases from executing.
+
+Select one exact discovered case with `INTEGRATION_TEST`, or a fixed package with
+`GO_PACKAGE`; these focused runs do not establish complete-suite coverage. Use
+`INTEGRATION_SELECTION=all` when fresh full execution is required, including
+milestone/release qualification or an investigation of fixture/environment effects.
+The isolated Linux lane always executes its selected cases afresh.
+
+Go changes affect their package and transitive consumers. Browser verifier changes
+affect journeys importing them. Common configuration, contract, fixture or tool
+changes widen selection. Unmapped command journeys conservatively include every
+browser verifier. This is dependency selection, not a claim that individual file
+names prove the absence of indirect effects. Missing/corrupt/failed/interrupted
+evidence is never reused. Approval remains governed by [commands](commands.md).
+
 Inspect a running real page or a single user journey early. This inspection must
 not launch the Compose end-to-end suite, catalogue browser matrix or database/API
 integration suite. Those broad suites run once implementation is complete and the
@@ -204,12 +226,20 @@ The foundation provides these fixed entry points:
 | `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication, source-secret, Prometheus datasource and diagnostic unit race checks |
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
 | `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths. Preserves per-package Go JSON events under `.local/integration-test-json/`, the combined event stream at `.local/integration-go-test.jsonl`, the numeric Go test status at `.local/integration-go-test.exit`, and a slowest-test summary. |
+| `make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL=...` | Separately tagged ten-SLO/year endurance entry; deferred from current T08 finalization by the maintainer on 2026-11-04. It contains two 15-minute phases and real-clock/maintenance waits. Do not run it as a short check or hide it in another gate. Bounded T08 evidence and final integrated gates are recorded separately. See [command discipline](commands.md). |
 | `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | Focused browser journey invocation in [command discipline](commands.md) | Real HTTPS/PostgreSQL journey with the current built candidate; fails if the selected named journey does not execute and pass |
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
 | `make verify VERIFY_MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes |
+
+Controlled API distributions include each operation's first visits alongside its
+100 repeat reads, with explicit first-visit markers and retained maxima. Enforce
+SPEC-0019's 200/500 ms **p95** budgets across that complete sample set; do not
+exclude first visits or reinterpret a percentile as a per-request maximum.
+First visits must still complete below one second, and every rendered browser
+sample independently retains its action-specific hard limit.
 
 The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy
@@ -250,6 +280,13 @@ requires every selected package; partial artifacts are not a passing gate.
 Name integration-tagged tests with the `TestIntegration` prefix: that is the lane's
 execution selector. Pure unit cases belong in ordinary test files so the fast lane
 runs them. Discovery alone does not prove a test was executed.
+The retained-history datasets have separate mandatory top-level integration tests:
+`TestIntegrationRetainedDenseHistoryAndPersistedRestart` and
+`TestIntegrationRetainedMinuteHistoryAndPersistedRestart`. The full integration
+discovery includes both, with their original datasets, assertions and per-test
+timeout. They no longer run inside the small overview/burn-window test selected
+by `slo-integration`; a focused pagination pass does not establish retained-history
+or recovery acceptance.
 The Go portability mode only compiles test binaries; it does not execute Darwin
 tests or prove runtime behavior on macOS. Its target platform, architecture,
 CGO setting, cache, and output paths are fixed in the Makefile.

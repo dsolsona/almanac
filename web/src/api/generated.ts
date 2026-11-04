@@ -584,7 +584,7 @@ export interface paths {
         };
         /**
          * Read a snapshot-paginated operational SLO overview
-         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four live snapshots per actor/session and 64 per installation are admitted. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
          */
         get: operations["getSloOperationalOverview"];
         put?: never;
@@ -684,7 +684,7 @@ export interface paths {
         };
         /**
          * Read current operational evaluation and bounded history
-         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. If those constraints cannot fit, return 422 range_too_dense with narrower-range guidance. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
          */
         get: operations["getSloOperationalDetail"];
         put?: never;
@@ -916,6 +916,11 @@ export interface components {
             exhaustion: components["schemas"]["SloExhaustionEstimate"];
         };
         SloOperationalOverviewItem: {
+            /**
+             * @description State of the current calculation at snapshot creation. Stale/failed rows retain compatible last-known values and their original generation/evaluation time; observation freshness remains separate. Never infer current Healthy status from those values.
+             * @enum {string}
+             */
+            current_state?: "ready" | "stale" | "failed" | "unavailable";
             generation?: components["schemas"]["DerivedGeneration"];
             budget_history_generation?: components["schemas"]["DerivedGeneration"];
             /**
@@ -999,6 +1004,14 @@ export interface components {
             reason?: string | null;
         };
         SloOperationalDetail: {
+            /** @description Present while selected history is incomplete. Ready values remain usable; unfinished intervals have unavailable quality and no numerical values. Progress describes calculated graph coverage, not imported observation counts or an ETA. */
+            history_preparation?: {
+                /** Format: int64 */
+                ready_seconds: number;
+                /** Format: int64 */
+                total_seconds: number;
+                failed: boolean;
+            };
             generation?: components["schemas"]["DerivedGeneration"];
             /** Format: uuid */
             evaluation_id: string;
@@ -1139,6 +1152,13 @@ export interface components {
              */
             received_at: string | null;
             retained_extrema: ("first" | "last" | "minimum" | "maximum")[];
+            /** @description Present when fine quality transitions were reduced. Presence sets apply to this sample's bucket bounds; the sample's own values and quality remain exact. */
+            display_coverage?: components["schemas"]["SloDisplayCoverage"];
+        };
+        SloDisplayCoverage: {
+            states: ("observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable" | "partial" | "stale")[];
+            quality_states: ("complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_yet_eligible" | "not_applicable" | "unavailable")[];
+            freshness: ("unknown" | "fresh" | "stale")[];
         };
         SloEvaluation: {
             /** Format: uuid */
@@ -4036,6 +4056,8 @@ export interface operations {
                 start?: string;
                 end?: string;
                 burn_window_seconds?: 3600 | 21600;
+                /** @description Server-aligned display period; cannot be combined with start or end. */
+                period?: "window" | "7d" | "90d" | "1y";
             };
             header?: never;
             path: {

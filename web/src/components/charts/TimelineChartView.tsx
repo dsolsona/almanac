@@ -23,30 +23,45 @@ function readTimelinePalette(): TimelinePalette {
   };
 }
 
-export function TimelineChartView({ chart, showHeader = true }: { chart: TimelineChartData; showHeader?: boolean }) {
+export function TimelineChartView({ chart, showHeader = true, generation }: { chart: TimelineChartData; showHeader?: boolean; generation?: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const instanceRef = useRef<ECharts | null>(null);
-  const latestRef = useRef({ chart, model: null as ReturnType<typeof validateTimeline> | null });
+  const latestRef = useRef({ chart, generation, model: null as ReturnType<typeof validateTimeline> | null });
   const applyRef = useRef<() => void>(() => undefined);
   const result = useMemo(() => {
     try { return { model: validateTimeline(chart), error: null }; }
     catch (cause) { return { model: null, error: cause instanceof Error ? cause.message : 'Timeline data is invalid' }; }
   }, [chart]);
-  latestRef.current = { chart, model: result.model };
+  latestRef.current = { chart, generation, model: result.model };
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !result.model) return;
     const instance = init(host, undefined, { renderer: 'svg' });
     instanceRef.current = instance;
+    let appliedGeneration='',appliedZone='UTC';
+    instance.on('finished',()=>{
+      host.dataset.renderedGeneration=appliedGeneration;
+      host.dataset.renderedZone=appliedZone;
+      host.dataset.chartReady='true';
+    });
     const update = () => {
       const latest = latestRef.current;
-      if (latest.model) traceChartRender(() => instance.setOption(buildTimelineOption(latest.chart, latest.model!, readTimelinePalette(),host.clientHeight), true));
+      if (latest.model) {
+        host.dataset.chartReady='false';
+        appliedGeneration=latest.generation??'';appliedZone=latest.chart.timeZone??'UTC';
+        traceChartRender(() => instance.setOption(buildTimelineOption(latest.chart, latest.model!, readTimelinePalette(),host.clientHeight), true));
+      }
     };
     applyRef.current = update;
-    update();
-    const resize = new ResizeObserver(() => {instance.resize();update();});
+    let width=host.clientWidth,height=host.clientHeight;
+    const resize = new ResizeObserver(() => {
+      const nextWidth=host.clientWidth,nextHeight=host.clientHeight;
+      if(nextWidth===width&&nextHeight===height)return;
+      width=nextWidth;height=nextHeight;
+      instance.resize();update();
+    });
     resize.observe(host);
     const theme = new MutationObserver(update);
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
@@ -59,7 +74,7 @@ export function TimelineChartView({ chart, showHeader = true }: { chart: Timelin
     };
   }, [Boolean(result.model)]);
 
-  useEffect(() => { applyRef.current(); }, [chart, result]);
+  useEffect(() => { applyRef.current(); }, [chart, result, generation]);
 
   const extraHeight=chart.lanes.reduce((sum,lane)=>sum+(lane.extra??0),0);
   const explicitHeight=chart.lanes.every(lane=>lane.height!==undefined)?chart.lanes.reduce((sum,lane)=>sum+lane.height!+(lane.extra??0),0):undefined;

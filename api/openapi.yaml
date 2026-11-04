@@ -639,8 +639,13 @@ paths:
         Results are globally ordered by urgency rank, lower(name), then UUID.
         A PostgreSQL projection snapshot freezes definitions and calculated values
         across pages; it is bound to the actor, current session, role, filters and
-        limit, expires after two minutes, and is not renewable. At most four live
-        snapshots per actor/session and 64 per installation are admitted. A
+        limit, expires after two minutes, and is not renewable. At most four
+        snapshots per actor/session and 64 per installation may be building
+        concurrently. Ready snapshots are charged by payload size, with a minimum
+        16 KiB metadata charge each. Building snapshots reserve 16 MiB each.
+        Combined reservations and ready charges are bounded to 64 MiB per
+        actor/session and 1 GiB per installation; exceeding these bounds returns
+        503 resource_limit without evicting an unexpired cursor. A
         snapshot may contain at most 10,000 matching objectives and 16 MiB of
         projection payload; exceeding either returns 503 resource_limit and asks
         the client to narrow q or service_id. No observation receipt timestamp is
@@ -761,6 +766,10 @@ paths:
         supplied together, are UTC and cadence aligned, have end no later than
         effective at, and span a positive interval of at most 365 days. If omitted,
         end is the cadence-aligned effective time and start is seven days earlier.
+        Alternatively, period selects window, 7d, 90d or 1y without start/end.
+        Window rounds the objective window to the nearest whole day (half up),
+        clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns
+        down and start up to cadence boundaries, using server now unless at is supplied.
         Any aligned range within the supported horizon is allowed. 400 is returned
         for invalid range/window parameters; 503 resource_limit indicates actual
         canonical coverage rows exceed 2,500,000 across distinct SLI/revision
@@ -768,8 +777,10 @@ paths:
         computed arithmetically, not expanded into absent ticks. Each series has
         at most 1,500 samples. Reduced samples retain actual first/last/min/max
         evaluations and disclose bucket bounds, resolution and reduction; gaps and
-        revision/validity boundaries are never bridged. If those constraints cannot
-        fit, return 422 range_too_dense with narrower-range guidance. Exact-table
+        revision/validity boundaries are never bridged. When fine quality transitions
+        exceed the point bound, display_coverage reports the states present in each
+        bucket; render it conservatively and request a narrower range for finer gaps.
+        Quality-transition density alone cannot reject a supported graph. Exact-table
         values are the exact represented response samples; use another bounded
         operational range request to drill into a reduced region. No full interval
         timeline is embedded. Detail context includes existing authorized SLI
@@ -781,6 +792,7 @@ paths:
         - {name: start, in: query, required: false, schema: {type: string, format: date-time}}
         - {name: end, in: query, required: false, schema: {type: string, format: date-time}}
         - {name: burn_window_seconds, in: query, required: false, schema: {type: integer, enum: [3600, 21600], default: 3600}}
+        - {name: period, in: query, required: false, schema: {type: string, enum: [window, 7d, 90d, 1y]}, description: Server-aligned display period; cannot be combined with start or end.}
       responses:
         '200': {description: Current operational summary and bounded historical series, content: {application/json: {schema: {$ref: '#/components/schemas/SloOperationalDetail'}}}}
         '400': {description: Invalid timestamp, range, cadence alignment or burn duration, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
@@ -1090,6 +1102,7 @@ components:
       type: object
       required: [slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion, budget_sparkline]
       properties:
+        current_state: {type: string, enum: [ready, stale, failed, unavailable], description: State of the current calculation at snapshot creation. Stale/failed rows retain compatible last-known values and their original generation/evaluation time; observation freshness remains separate. Never infer current Healthy status from those values.}
         generation: {$ref: '#/components/schemas/DerivedGeneration'}
         budget_history_generation: {$ref: '#/components/schemas/DerivedGeneration'}
         budget_history_state: {type: string, enum: [ready, preparing, unavailable], description: Retained budget history is labelled preparing until it matches the current published generation.}
@@ -1158,6 +1171,14 @@ components:
       type: object
       required: [evaluation_id, requested_at, effective_at, calculation_version, snapshot_kind, objective, context, current, urgency, leading_reason, reasons, burn_1h, burn_6h, exhaustion, range, attainment_series, budget_series, burn_series, compliance_series, compliance_summary]
       properties:
+        history_preparation:
+          type: object
+          description: Present while selected history is incomplete. Ready values remain usable; unfinished intervals have unavailable quality and no numerical values. Progress describes calculated graph coverage, not imported observation counts or an ETA.
+          required: [ready_seconds, total_seconds, failed]
+          properties:
+            ready_seconds: {type: integer, format: int64, minimum: 0}
+            total_seconds: {type: integer, format: int64, minimum: 1}
+            failed: {type: boolean}
         generation: {$ref: '#/components/schemas/DerivedGeneration'}
         evaluation_id: {type: string, format: uuid}
         requested_at: {type: string, format: date-time}
@@ -1274,6 +1295,31 @@ components:
         burn: {type: string, nullable: true}
         received_at: {type: string, format: date-time, nullable: true, description: Receipt metadata only.}
         retained_extrema: {type: array, items: {type: string, enum: [first, last, minimum, maximum]}}
+        display_coverage:
+          $ref: '#/components/schemas/SloDisplayCoverage'
+          description: Present when fine quality transitions were reduced. Presence sets apply to this sample's bucket bounds; the sample's own values and quality remain exact.
+    SloDisplayCoverage:
+      type: object
+      required: [states, quality_states, freshness]
+      properties:
+        states:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale]}
+        quality_states:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable]}
+        freshness:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, enum: [unknown, fresh, stale]}
     SloEvaluation:
       type: object
       required: [evaluation_id, requested_at, effective_end, calculation_version, snapshot_kind, objective, window, quality, performance, timeline]

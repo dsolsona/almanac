@@ -5,13 +5,9 @@ package command
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -19,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -878,29 +873,6 @@ func validDatasourceRequestID(value string) bool {
 		index++
 	}
 	return true
-}
-
-func datasourceTestCertificate() ([]byte, []byte, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(20261027), Subject: pkix.Name{CommonName: "localhost"},
-		NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, IsCA: true, BasicConstraintsValid: true,
-		DNSNames: []string{"localhost"},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	if err != nil {
-		return nil, nil, err
-	}
-	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER}), nil
 }
 
 func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, certificatePEM []byte) string {

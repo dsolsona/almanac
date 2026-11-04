@@ -414,7 +414,7 @@ describe('SLI page', () => {
     const search = await screen.findByLabelText('Search SLIs');
     await user.type(search, 'Search target');
     expect(await screen.findByRole('link', { name: 'Search target' })).toHaveAttribute('href', `/slis/${sliID}`);
-    expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=50&q=Search+target', expect.anything());
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=20&q=Search+target', expect.anything());
     expect(screen.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
     await user.click(screen.getByText('Exact values · 6'));
     const values = screen.getByRole('table', { name: 'Exact counts for recent 15-second intervals' });
@@ -436,17 +436,41 @@ describe('SLI page', () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith('/api/v1/datasources')) return response({ items: [source()], next_cursor: '' });
-      if (url === '/api/v1/slis?limit=50') return response({ items: [sli()], next_cursor: 'next-cursor' });
-      if (url === '/api/v1/slis?limit=50&cursor=next-cursor') return response({ items: [next], next_cursor: '' });
+      if (url === '/api/v1/slis?limit=20') return response({ items: [sli()], next_cursor: 'next-cursor' });
+      if (url === '/api/v1/slis?limit=20&cursor=next-cursor') return response({ items: [next], next_cursor: '' });
       return response({ code: 'not_found' }, 404);
     });
     vi.stubGlobal('fetch', fetcher);
     render(<SlisPage context={viewer} />);
     expect(await screen.findByText('Request success')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Load more SLIs' }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
     expect(await screen.findByText('Checkout success')).toBeVisible();
-    expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=50&cursor=next-cursor', expect.anything());
-    expect(screen.queryByRole('button', { name: 'Load more SLIs' })).not.toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=20&cursor=next-cursor', expect.anything());
+    expect(screen.queryByText('Request success')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    expect(new URL(window.location.href).searchParams.get('cursor')).toBe('next-cursor');
+    await user.click(screen.getByRole('button', { name: 'Previous page' }));
+    expect(await screen.findByText('Request success')).toBeVisible();
+    expect(screen.queryByText('Checkout success')).not.toBeInTheDocument();
+    expect(new URL(window.location.href).searchParams.has('cursor')).toBe(false);
+  });
+
+  it('resets the bounded list cursor when page size or search changes', async () => {
+    history.replaceState({}, '', '/slis?cursor=old-cursor');
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => String(input).startsWith('/api/v1/datasources')
+      ? response({ items: [source()], next_cursor: '' }) : response({ items: [sli()], next_cursor: 'next-cursor' }));
+    vi.stubGlobal('fetch', fetcher);
+    const user = userEvent.setup();
+    render(<SlisPage context={viewer} />);
+    await user.selectOptions(await screen.findByLabelText('SLIs per page'), '10');
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=10', expect.anything()));
+    expect(new URL(window.location.href).searchParams.get('page_size')).toBe('10');
+    expect(new URL(window.location.href).searchParams.has('cursor')).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=10&cursor=next-cursor', expect.anything()));
+    await user.type(screen.getByLabelText('Search SLIs'), 'target');
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=10&q=target', expect.anything()));
+    expect(new URL(window.location.href).searchParams.has('cursor')).toBe(false);
   });
 
   it('loads later datasource pages for creation', async () => {

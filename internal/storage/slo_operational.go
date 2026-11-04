@@ -37,6 +37,9 @@ const (
 	sloOperationalFactsLimit       = 2_500_000
 	sloOverviewDefinitionLimit     = 10_000
 	sloOverviewProjectionByteLimit = 16 << 20
+	sloOverviewMinimumBytes        = 16 << 10
+	sloOverviewSessionByteLimit    = sloOverviewSessionLimit * sloOverviewProjectionByteLimit
+	sloOverviewInstallationBytes   = sloOverviewInstallationLimit * sloOverviewProjectionByteLimit
 	sloOperationalSeriesLimit      = 1500
 	sloOperationalReadAttempts     = 3
 )
@@ -87,19 +90,23 @@ type OperationalOverviewInput struct {
 }
 
 type OperationalDetailInput struct {
-	displayCache   *sloDisplayCache
-	currentOnly    bool
-	overviewOnly   bool
-	Runtime        *Runtime
-	Proof          DatasourceProof
-	ID             string
-	At, Start, End *time.Time
-	BurnWindow     int
-	Now            func() time.Time
+	displayCache       *sloDisplayCache
+	retainedReader     *retainedSeriesReader
+	historyPublication *retainedHistoryPublication
+	releaseSnapshot    func() error
+	currentOnly        bool
+	overviewOnly       bool
+	Runtime            *Runtime
+	Proof              DatasourceProof
+	ID                 string
+	At, Start, End     *time.Time
+	BurnWindow         int
+	Period             string
+	Now                func() time.Time
 }
 
-// ReadSloOperationalDetail computes summary windows and reduced history in one
-// authorized repeatable-read snapshot.
+// ReadSloOperationalDetail loads one authorized repeatable-read snapshot, then
+// reduces retained history without holding its connection and rechecks authority.
 func ReadSloOperationalDetail(ctx context.Context, databaseURL string, input OperationalDetailInput) (api.SloOperationalDetail, error) {
 	var result api.SloOperationalDetail
 	err := retryOperationalRead(ctx, func() error {
@@ -127,6 +134,12 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
+	if input.Runtime != nil {
+		// The bounded 20-MiB payload must fit each materialization/sort workspace.
+		if _, err := tx.Exec(ctx, "SET LOCAL work_mem = '32MB'"); err != nil {
+			return api.SloOperationalDetail{}, readTransactionError(ctx, "storage: operational read memory setup failed", err)
+		}
+	}
 	row, err := q.GetSlo(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.SloOperationalDetail{}, ErrObjectiveNotFound
@@ -142,10 +155,19 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 		return api.SloOperationalDetail{}, ErrObjectiveInvalid
 	}
 	var result api.SloOperationalDetail
-	prepared := true
+	released := false
 	if input.Runtime != nil {
-		result, prepared, err = loadOrQueueSloHistory(ctx, q, row, input)
-		if err == nil && prepared {
+		input.releaseSnapshot = func() error {
+			if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+				return err
+			}
+			closeInitialOwnerConnection(conn)
+			released = true
+			return nil
+		}
+		input.historyPublication = new(retainedHistoryPublication)
+		result, err = loadRetainedSloHistory(ctx, q, row, contextRow, input)
+		if err == nil {
 			result.Context.SliDisplayName = contextRow.SliDisplayName
 			result.Context.DatasourceDisplayName = contextRow.DatasourceDisplayName
 		}
@@ -155,11 +177,34 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
+	publication := input.historyPublication != nil && input.historyPublication.generation.SloID.Valid
+	if released || publication {
+		readStarted := started
+		if !released {
+			if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+				return api.SloOperationalDetail{}, err
+			}
+			closeInitialOwnerConnection(conn)
+		}
+		// Recheck authority after assembling the detached snapshot.
+		conn, q, tx, user, installation, session, started, err = beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, "administrator", "editor", "viewer")
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		defer closeInitialOwnerConnection(conn)
+		defer rollbackTransaction(tx)
+		if started.Before(readStarted) {
+			return api.SloOperationalDetail{}, ErrInvalidSession
+		}
+	}
+	if publication {
+		result, err = publishRetainedHistory(input.Runtime.Bind(ctx), q, result, *input.historyPublication)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalDetail{}, err
-	}
-	if !prepared {
-		return api.SloOperationalDetail{}, ErrDerivedPending
 	}
 	return result, nil
 }
@@ -214,23 +259,8 @@ func buildDailyCompliance(ctx context.Context, base slo.WindowInput, rangeStart,
 		if evalErr != nil {
 			return api.SloDailyComplianceSeries{}, api.SloDailyComplianceSummary{}, evalErr
 		}
-		status, explanation := dailyComplianceStatus(result, evaluationAt, base.ValidFrom, window, cadence)
-		quality, performance := operationalQuality(result), operationalPerformance(result)
-		if status == api.SloDailyComplianceDayStatusUnknown {
-			if performance.ObservedState == nil && (performance.State == "met" || performance.State == "violated") {
-				observed := api.SloEvaluationPerformanceObservedState(performance.State)
-				performance.ObservedState = &observed
-			}
-			performance.State = "unknown"
-			performance.Provisional = true
-			reason := explanation
-			performance.Reason, quality.Reason = &reason, &reason
-		}
-		series.Days[index] = api.SloDailyComplianceDay{UtcDate: openapi_types.Date{Time: end.Add(-24 * time.Hour)},
-			DayStart: end.Add(-24 * time.Hour), DayEnd: end, RequestedAt: end, EffectiveAt: result.End, SloId: sloID,
-			DefinitionRevision: definitionRevision, Target: target, Quality: quality, Performance: performance,
-			Status: status, Explanation: explanation}
-		switch status {
+		series.Days[index] = operationalComplianceDay(result, end, base.ValidFrom, sloID, definitionRevision, target, window, cadence)
+		switch series.Days[index].Status {
 		case api.SloDailyComplianceDayStatusMet:
 			summary.MetDays++
 		case api.SloDailyComplianceDayStatusViolated:
@@ -243,6 +273,23 @@ func buildDailyCompliance(ctx context.Context, base slo.WindowInput, rangeStart,
 	}
 	summary.EvaluableDays = summary.MetDays + summary.ViolatedDays
 	return series, summary, nil
+}
+
+func operationalComplianceDay(result slo.WindowResult, end, validFrom time.Time, sloID uuid.UUID, revision, target string, window, cadence time.Duration) api.SloDailyComplianceDay {
+	status, explanation := dailyComplianceStatus(result, result.End, validFrom, window, cadence)
+	quality, performance := operationalQuality(result), operationalPerformance(result)
+	if status == api.SloDailyComplianceDayStatusUnknown {
+		if performance.ObservedState == nil && (performance.State == "met" || performance.State == "violated") {
+			observed := api.SloEvaluationPerformanceObservedState(performance.State)
+			performance.ObservedState = &observed
+		}
+		performance.State, performance.Provisional = "unknown", true
+		performance.Reason, quality.Reason = &explanation, &explanation
+	}
+	return api.SloDailyComplianceDay{UtcDate: openapi_types.Date{Time: end.Add(-24 * time.Hour)},
+		DayStart: end.Add(-24 * time.Hour), DayEnd: end, RequestedAt: end, EffectiveAt: result.End, SloId: sloID,
+		DefinitionRevision: revision, Target: sli.NormalizeDecimal(target), Quality: quality, Performance: performance,
+		Status: status, Explanation: explanation}
 }
 
 func utcDayStart(value time.Time) time.Time {
@@ -619,15 +666,14 @@ func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input O
 		}
 		return uuid.UUID(id.Bytes), user.Role, true, nil
 	}
-	sessionCount, err := q.CountLiveSloOverviewSnapshotsForSession(ctx, dbgen.CountLiveSloOverviewSnapshotsForSessionParams{ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], ExpiresAt: timestamp(now)})
+	usage, err := q.SloOverviewSnapshotUsage(ctx, dbgen.SloOverviewSnapshotUsageParams{
+		ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], Now: timestamp(now),
+		ReservedBytes: sloOverviewProjectionByteLimit, MinimumBytes: sloOverviewMinimumBytes,
+	})
 	if err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview session admission failed", err)
+		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview resource accounting failed", err)
 	}
-	installationCount, err := q.CountLiveSloOverviewSnapshots(ctx, timestamp(now))
-	if err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview installation admission failed", err)
-	}
-	if sessionCount >= sloOverviewSessionLimit || installationCount >= sloOverviewInstallationLimit {
+	if !canReserveOverview(usage) {
 		return uuid.Nil, "", false, ErrOperationalResource
 	}
 	id, err := uuid.NewRandom()
@@ -672,13 +718,44 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 		return ErrAgentForbidden
 	}
 	now := normalizedAgentNow(input.Now)
+	if input.Runtime != nil {
+		reservation, err := q.GetSloOverviewSnapshot(ctx, uuidToPG(snapshotID))
+		if err != nil {
+			return readTransactionError(ctx, "storage: overview reservation read failed", err)
+		}
+		if reservation.ActorID != user.ID || !slices.Equal(reservation.SessionVerifier, input.Proof.SessionVerifier[:]) || reservation.Role != user.Role || !now.Before(reservation.ExpiresAt.Time) || reservation.State != "preparing" {
+			return ErrOperationalSnapshotOld
+		}
+		serviceID, urgency := overviewScopeFilters(input)
+		stats, err := q.MaterializeSloOverviewReferences(ctx, dbgen.MaterializeSloOverviewReferencesParams{SnapshotID: uuidToPG(snapshotID),
+			CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ServiceID: serviceID,
+			QueryText: pgtype.Text{String: input.Query, Valid: input.Query != ""}, Urgency: urgency})
+		if err != nil {
+			if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "23503" && failure.ConstraintName == "almanac_slo_overview_snapshot_items_projection_digest_fkey" {
+				return errReadSerialization
+			}
+			return readTransactionError(ctx, "storage: overview reference publication failed", err)
+		}
+		if stats.Definitions > sloOverviewDefinitionLimit || stats.PayloadBytes > sloOverviewProjectionByteLimit || stats.Finished != 1 {
+			return ErrOperationalResource
+		}
+		if stats.SelectedCount > int64(input.Limit) {
+			fingerprint, err := overviewScopeFingerprint(ctx, q, input, now)
+			if err != nil {
+				return err
+			}
+			if err := q.SetSloOverviewFingerprint(ctx, dbgen.SetSloOverviewFingerprintParams{ID: uuidToPG(snapshotID), PublicationFingerprint: fingerprint.Fingerprint}); err != nil {
+				return readTransactionError(ctx, "storage: overview fingerprint persistence failed", err)
+			}
+		}
+		return finishAgentRead(ctx, tx, input.Now, started, user, installation, session)
+	}
 	candidates, err := loadOverviewCandidates(ctx, q, input, now)
 	if err != nil {
 		return err
 	}
 	items := make([]api.SloOperationalOverviewItem, 0, len(candidates))
 	counts := api.SloUrgencyCounts{}
-	selectedBytes := 0
 	for _, item := range candidates {
 		switch item.Urgency {
 		case "needs_attention":
@@ -692,14 +769,6 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 		}
 		if input.Urgency != "" && string(item.Urgency) != input.Urgency {
 			continue
-		}
-		encoded, marshalErr := json.Marshal(item)
-		if marshalErr != nil {
-			return errors.New("storage: overview projection serialization failed")
-		}
-		selectedBytes, err = addProjectionPayloadBytes(selectedBytes, len(encoded))
-		if err != nil {
-			return err
 		}
 		items = append(items, item)
 	}
@@ -728,14 +797,23 @@ func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, inp
 	if err != nil {
 		return errors.New("storage: overview counts serialization failed")
 	}
-	for ordinal, item := range items {
+	batch := dbgen.InsertSloOverviewSnapshotItemsParams{SnapshotID: uuidToPG(snapshotID)}
+	selectedBytes := 0
+	for _, item := range items {
 		encoded, marshalErr := json.Marshal(item)
 		if marshalErr != nil {
 			return errors.New("storage: overview projection serialization failed")
 		}
-		if err = q.InsertSloOverviewSnapshotItem(ctx, dbgen.InsertSloOverviewSnapshotItemParams{SnapshotID: uuidToPG(snapshotID), Ordinal: int32(ordinal), Urgency: string(item.Urgency), Payload: encoded, PayloadBytes: int32(len(encoded))}); err != nil {
-			return readTransactionError(ctx, "storage: overview projection persistence failed", err)
+		selectedBytes, err = addProjectionPayloadBytes(selectedBytes, len(encoded))
+		if err != nil {
+			return err
 		}
+		batch.Urgencies = append(batch.Urgencies, string(item.Urgency))
+		batch.Payloads = append(batch.Payloads, string(encoded))
+		batch.PayloadSizes = append(batch.PayloadSizes, int32(len(encoded)))
+	}
+	if err := q.InsertSloOverviewSnapshotItems(ctx, batch); err != nil {
+		return readTransactionError(ctx, "storage: overview projection persistence failed", err)
 	}
 	if err = q.FinishSloOverviewSnapshot(ctx, dbgen.FinishSloOverviewSnapshotParams{ID: uuidToPG(snapshotID), PayloadBytes: int32(selectedBytes)}); err != nil {
 		return readTransactionError(ctx, "storage: overview snapshot finalization failed", err)
@@ -824,12 +902,29 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 		if json.Unmarshal(row.Payload, &item) != nil || !item.Urgency.Valid() {
 			return api.SloOperationalOverviewPage{}, errors.New("storage: invalid overview snapshot item")
 		}
-		items = append(items, item)
-	}
-	if input.Runtime != nil {
-		if err := queueVisibleBudgetHistory(ctx, q, items, now); err != nil {
-			return api.SloOperationalOverviewPage{}, err
+		item.Slo.Target = sli.NormalizeDecimal(item.Slo.Target)
+		if row.ProjectionCurrent {
+			if item.Generation != nil {
+				item.CurrentState = new(api.SloOperationalOverviewItemCurrentState("ready"))
+			}
+		} else if row.ProjectionValid && item.Generation != nil && item.CurrentState != nil && (*item.CurrentState == "stale" || *item.CurrentState == "failed") {
+			boundary := floorSliBoundary(snapshotRow.CreatedAt.Time.UTC(), time.Duration(item.Slo.CadenceSeconds)*time.Second)
+			item.Generation.CalculationLagSeconds = float32(max(0, boundary.Sub(item.Generation.EvaluatedThrough).Seconds()))
+			history := api.SloOperationalOverviewItemBudgetHistoryState("preparing")
+			if *item.CurrentState == "failed" {
+				history = "unavailable"
+			}
+			item.BudgetHistoryState = &history
+		} else {
+			reason := "current_calculation_pending"
+			if row.PreparationFailed {
+				reason = "current_calculation_failed"
+			} else if row.SourceFailed {
+				reason = "source_aggregate_failed"
+			}
+			item = unavailableOverviewItem(item, snapshotRow.CreatedAt.Time.UTC(), reason)
 		}
+		items = append(items, item)
 	}
 	next := ""
 	previous := ""
@@ -1491,7 +1586,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	defer span.End()
 	now := normalizedAgentNow(input.Now)
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
-	bound, err := resolveOperationalBounds(input, cadence)
+	bound, err := resolveOperationalBounds(input, cadence, row.RollingWindowSeconds)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
@@ -1501,7 +1596,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	factStart := operationalFactsStart(effectiveAt, window, 6*time.Hour,
 		rangeStart, window, time.Duration(input.BurnWindow)*time.Second, row.EvaluationValidFrom.Time.UTC(), row.SliValidFrom.Time.UTC(), retentionStart, cadence)
 	var rows []slo.Observation
-	if !input.currentOnly && input.displayCache == nil {
+	if !input.currentOnly && input.displayCache == nil && input.retainedReader == nil {
 		loaded, factsCount, loadErr := loadOperationalFacts(ctx, q, operationalStreamKey(row.SliID.String(), row.MeasurementRevision), operationalStream{cadence: row.CadenceSeconds}, factStart, effectiveAt, sloOperationalFactsLimit+1)
 		if loadErr != nil {
 			return api.SloOperationalDetail{}, loadErr
@@ -1519,6 +1614,9 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	if input.displayCache != nil {
 		rolling, attainment, daily = input.displayCache.rolling, input.displayCache.attainment, input.displayCache.daily
 	}
+	if input.retainedReader != nil {
+		rolling, attainment, daily = input.retainedReader.rolling, input.retainedReader.attainment, input.retainedReader.daily
+	}
 	if input.overviewOnly {
 		samples, err := rolling(ctx, base, rangeStart, rangeEnd, window, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", 30)
 		if err != nil {
@@ -1527,22 +1625,59 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
 			BudgetSeries: api.SloOperationalSeries{Kind: "rolling_budget", Samples: samples}}, nil
 	}
-	evaluate := func(at time.Time, duration time.Duration) (slo.WindowResult, error) {
-		if !input.currentOnly && input.displayCache == nil {
-			return evaluateOperationalAt(ctx, base, at, duration)
+	var currentWindows map[time.Duration]slo.WindowResult
+	if input.currentOnly || input.displayCache != nil || input.retainedReader != nil {
+		currentWindows = make(map[time.Duration]slo.WindowResult)
+		durations := []time.Duration{window}
+		if time.Hour%cadence == 0 {
+			durations = append(durations, time.Hour)
 		}
-		value := base
-		value.At, value.Duration = at, duration
-		return evaluateDerivedWindow(ctx, q, row.SliID, row.MeasurementRevision, value)
+		if 6*time.Hour%cadence == 0 {
+			durations = append(durations, 6*time.Hour)
+		}
+		var inputs []slo.WindowInput
+		for _, duration := range durations {
+			if _, exists := currentWindows[duration]; exists {
+				continue
+			}
+			value := base
+			value.At, value.Duration = effectiveAt, duration
+			inputs = append(inputs, value)
+			currentWindows[duration] = slo.WindowResult{}
+		}
+		values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
+		if input.retainedReader != nil && (errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed)) {
+			input.retainedReader.pending = true
+			input.retainedReader.failed = errors.Is(err, ErrDerivedSourceFailed)
+			values = make([]slo.WindowResult, len(inputs))
+			for index, value := range inputs {
+				values[index] = slo.WindowResult{End: value.At, RequestedStart: value.At.Add(-value.Duration),
+					EffectiveStart: value.At.Add(-value.Duration), EligibleStart: maxTime(value.At.Add(-value.Duration), value.ValidFrom, value.SliValidFrom), RetentionStart: value.RetentionStart,
+					State: "unavailable", Freshness: "unknown", Performance: "unknown", Reason: "history_preparing"}
+			}
+			err = nil
+		}
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		for index, value := range values {
+			currentWindows[inputs[index].Duration] = value
+		}
 	}
-	currentResult, err := evaluate(effectiveAt, time.Duration(row.RollingWindowSeconds)*time.Second)
+	evaluate := func(duration time.Duration) (slo.WindowResult, error) {
+		if currentWindows != nil {
+			return currentWindows[duration], nil
+		}
+		return evaluateOperationalAt(ctx, base, effectiveAt, duration)
+	}
+	currentResult, err := evaluate(window)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	burn1h := unavailableBurn(3600, effectiveAt, "cadence_mismatch")
 	var burn1hResult *slo.WindowResult
 	if time.Hour%cadence == 0 {
-		result, evalErr := evaluate(effectiveAt, time.Hour)
+		result, evalErr := evaluate(time.Hour)
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
@@ -1551,7 +1686,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 	}
 	burn6h := unavailableBurn(21600, effectiveAt, "cadence_mismatch")
 	if 6*time.Hour%cadence == 0 {
-		result, evalErr := evaluate(effectiveAt, 6*time.Hour)
+		result, evalErr := evaluate(6 * time.Hour)
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
@@ -1572,6 +1707,23 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), RequestedAt: requestedAt, EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
 			Current: current, Urgency: api.SloOperationalDetailUrgency(urgency.Group), LeadingReason: leading, Reasons: reasons,
 			Burn1h: burn1h, Burn6h: burn6h, Exhaustion: exhaustionValue(currentResult, burn1h, burn1hResult)}, nil
+	}
+	if reader := input.retainedReader; reader != nil && input.releaseSnapshot != nil {
+		if err := reader.read(ctx, base, rangeStart, rangeEnd); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		if err := reader.readFirst(ctx, base, rangeStart, cadence); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		days, summary, err := daily(ctx, base, rangeStart, rangeEnd, effectiveAt,
+			uuid.UUID(row.ID.Bytes), strconv.FormatInt(row.DefinitionRevision, 10), sli.NormalizeDecimal(row.Target), window, cadence)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		reader.days, reader.daySummary = &days, summary
+		if err := input.releaseSnapshot(); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
 	}
 	budgetSamples, err := rolling(ctx, base, rangeStart, rangeEnd, time.Duration(row.RollingWindowSeconds)*time.Second, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", sampleBucketLimit(rangeStart, rangeEnd, cadence))
 	if err != nil {
@@ -1615,13 +1767,17 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		BudgetSeries:     api.SloOperationalSeries{Kind: "rolling_budget", Samples: budgetSamples},
 		BurnSeries:       api.SloOperationalSeries{Kind: "burn", BurnWindowSeconds: new(api.SloOperationalSeriesBurnWindowSeconds(input.BurnWindow)), Samples: burnSamples},
 		ComplianceSeries: complianceSeries, ComplianceSummary: complianceSummary}
+	if reader := input.retainedReader; reader != nil && reader.pending {
+		result.HistoryPreparation = &struct {
+			Failed       bool  `json:"failed"`
+			ReadySeconds int64 `json:"ready_seconds"`
+			TotalSeconds int64 `json:"total_seconds"`
+		}{Failed: reader.failed, ReadySeconds: reader.readySeconds, TotalSeconds: max(1, reader.totalSeconds)}
+	}
 	return result, nil
 }
 
 func loadOverviewCandidates(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) ([]api.SloOperationalOverviewItem, error) {
-	if input.Runtime != nil {
-		return loadPublishedOverview(ctx, q, input, now)
-	}
 	defs, streams, err := loadOperationalDefinitions(ctx, q, input, now)
 	if err != nil {
 		return nil, err

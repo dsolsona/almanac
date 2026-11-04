@@ -164,3 +164,36 @@ func (q *Queries) LockAgentSessionRead(ctx context.Context, verifier []byte) (Al
 	)
 	return i, err
 }
+
+const lockSessionUserRead = `-- name: LockSessionUserRead :one
+SELECT id, login, role, password_verifier, enabled, must_change_password,
+       credential_revision
+FROM public.almanac_users
+WHERE id = $1
+FOR SHARE
+`
+
+type LockSessionUserReadRow struct {
+	ID                 pgtype.UUID `json:"id"`
+	Login              string      `json:"login"`
+	Role               string      `json:"role"`
+	PasswordVerifier   pgtype.Text `json:"password_verifier"`
+	Enabled            bool        `json:"enabled"`
+	MustChangePassword bool        `json:"must_change_password"`
+	CredentialRevision int64       `json:"credential_revision"`
+}
+
+func (q *Queries) LockSessionUserRead(ctx context.Context, userID pgtype.UUID) (LockSessionUserReadRow, error) {
+	row := q.db.QueryRow(ctx, lockSessionUserRead, userID)
+	var i LockSessionUserReadRow
+	err := row.Scan(
+		&i.ID,
+		&i.Login,
+		&i.Role,
+		&i.PasswordVerifier,
+		&i.Enabled,
+		&i.MustChangePassword,
+		&i.CredentialRevision,
+	)
+	return i, err
+}

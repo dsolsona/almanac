@@ -5,7 +5,7 @@
 - Accepted: 2026-10-30; amended 2026-10-31 after maintainer approval of the performance/tracing intervention in Crit
 - Approval: maintainer explicitly replied "approved" after the combined Crit review of this spec, ADR-0024 and the stabilization plan
 - Implementation: in progress
-- Verification: acceptance evidence remains outstanding, tracked in [F3-T08](../tasks/F3-T08.md)
+- Verification: bounded ten-SLO/year runtime evidence and dependency-selected integration coverage are recorded in [F3-T08](../tasks/F3-T08.md); larger/endurance validation is deferred to [F3-T10](../tasks/F3-T10.md)
 - Related ADRs: [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md), [ADR-0024](../adr/0024-precomputed-operational-reads.md), [ADR-0005](../adr/0005-measurement-semantics.md), [ADR-0007](../adr/0007-postgresql-and-storage-boundaries.md), [ADR-0023](../adr/0023-slo-operational-urgency.md)
 - Plan: [Backend stabilization](../plans/0022-backend-stabilization.md)
 - Supersedes / superseded by: amends the existing contracts in the table below
@@ -66,6 +66,15 @@ first/last/min/max and missing-region transitions remain available. Exact tables
 return the actual selected point and its source counts, not a value reconstructed
 from a plotted pixel or rounded percentage.
 
+Under [ADR-0027](../adr/0027-bounded-history-quality-display.md), dense quality
+transitions cannot reject an otherwise supported graph. Preserve individual
+transitions when they fit; otherwise attach the distinct sample, quality and
+freshness states present in each display bucket as `display_coverage`. These
+presence sets do not change selected-point values or imply exact interval counts.
+Render incomplete buckets conservatively, retain qualified numeric markers and
+use narrower ranges for finer gap locations. Compose presence from retained
+transitions/summaries and exact bounded edges, without a new preparation job.
+
 Late data dirties all endpoints in which that interval contributes. For an interval
 ending at t and a rolling window W, schedule the enclosing affected endpoint range
 through t+W, clipped to retained/evaluable time; include relevant burn windows,
@@ -80,6 +89,18 @@ version, evaluated-through boundary and publication time. Report source-observat
 freshness separately from calculation lag. A new generation does not make old
 observations fresh. A current revision mismatch is invalidation, not mere cache age.
 
+On 2026-11-02 the maintainer approved showing last known values with explicit
+staleness instead of blanking them during updates. Operational list rows report
+`current_state`: `ready`, `stale`, `failed` or `unavailable`. Retain compatible,
+intact last-published values and their generation while newer source inputs or
+clock boundaries await publication; show their evaluation time and mark them
+stale, or failed when the update has exhausted its budget. This calculation state
+is separate from the original observations' freshness. Never show an unconfirmed
+Healthy badge/group: retain prior Needs attention, otherwise use Watch. Definition,
+measurement or calculation-version mismatches, corrupt payloads and values older
+than the retained horizon remain unavailable. Pinned pages preserve their selected
+values/state as of snapshot creation. Currentness and all latency gates still apply.
+
 Under the controlled workload, p95 time from accepted commit to its affected current
 summary becoming visible is at most 10 seconds. Clock-driven status must advance
 within 10 seconds after its required cadence boundary. Large historical rebuilding
@@ -92,6 +113,15 @@ and restart with retained data are ordinary reads, not exempt preparation phases
 Explicit import/repair/disaster recovery may expose preparation/failure metadata;
 it is distinct from source no-data, zero traffic, not-applicable eligibility,
 expired history and database failures. Never fabricate current success.
+
+Backfill never gates an unaffected selected range behind a whole-history repair
+cursor. Read availability follows source changes within each calculation's input
+window. Preserve ready graph intervals and current status while other intervals
+are unfinished; uncalculated intervals have unavailable quality and null values,
+not missing source observations or zero values. Initial preparation reports selected
+graph coverage (ready/total seconds) and failures without inventing an ETA or
+claiming paused processing is running. Partial responses do not become reusable
+ready caches. Exact-value pages remain pinned to their response generation.
 
 Current attainment, remaining budget and supported burn windows are maintained on
 affected ingestion and due window/freshness boundaries. Persist their historical
@@ -115,6 +145,27 @@ or versioned during the API contract review; do not silently alter generated typ
 
 ### Browser behavior
 
+Pagination admission clarification accepted by the maintainer on 2026-11-01:
+completed list versions remain immutable for two minutes and do not consume
+concurrent build slots. Admit at most four building snapshots per actor/session
+and 64 per installation. Reserve 16 MiB per building snapshot; charge completed
+snapshots their payload size with a 16-KiB minimum metadata charge. Combined
+usage is bounded to 64 MiB per actor/session and 1 GiB per installation, retaining
+the previous worst-case storage budgets. Keep the 16-MiB/10,000-objective per-result
+limits, scope binding and unexpired cursors. Lists must not automatically poll
+preparing history or consume new versions without an explicit user action.
+This replaces the former cap of four/64 completed and building versions together.
+
+On 2026-11-01 the maintainer clarified that the acceptance device is reasonably
+capable, without artificial CPU slowdown. Record real hardware and measure the
+complete journey with separate normal-network and added-100-ms-latency cohorts,
+without an artificial bandwidth cap. In the same conversation the maintainer
+accepted complete journeys under 1,000 ms in both conditions, retaining <=500 ms
+as the optimization target. This replaces the earlier 500-ms detail/graph hard
+limit; API budgets, accuracy and the 10/100/1,000-objective year-history
+requirements remain unchanged. Keep the existing renderer while investigating
+smaller improvements; no rendering-architecture change was approved.
+
 Share identical in-flight reads; cache definitions and confirmed history for up to
 30 seconds with at most 100 retained query entries and five minutes of inactivity.
 Mutations invalidate affected entries immediately; sign-out/authorization failure
@@ -123,7 +174,32 @@ responses. Show status without waiting for history. Lists use bounded backend
 projections, not per-row detail requests. Cache hits retain their disclosed evaluation
 time; they do not extend freshness or invalidate the mutation fencing above.
 
+The maintainer approved server-selected `period=window|7d|90d|1y` bounds on
+2026-11-01 under [the parallel-read plan](../plans/0024-parallel-operational-detail-reads.md).
+Definition, status and history start independently after authentication; history
+does not wait for a definition or browser clock. The additive selector preserves
+explicit timestamp callers and the existing seven-day API default. Its selected
+period, server alignment and unchanged calculation/response contracts are defined
+in the API source and approved plan.
+
 ### Work and resource budgets
+
+Write bounded graph summaries alongside retained fine tiles, preserving exact
+numeric extrema and coverage information. Validate each summary against the tile's
+source generation and payload digest before use. Preserve finer points whenever
+they fit the response limit; missing or stale summaries use the bounded legacy
+read path. Representation upgrades reuse low-priority, bounded background work;
+they neither invalidate ready measurements nor block normal data publication.
+Encode coarse series during publication rather than reconstructing their JSON on
+each read. Reuse completed daily compliance from the same protected graph read,
+fetching only days absent from that read. Include every transferred payload in the
+shared wire budget; retain source, readiness, null and expiry checks during reuse.
+Hourly tiles also retain encoded finer lanes; daily tiles do not duplicate those
+larger fine representations. Recent edges first use source-validated maintained
+points, with bounded exact calculation when those points are missing or outdated.
+An immutable response derives its digest and canonical byte count together at
+insertion. Cache accounting reuses that exact count, including legacy-row fallback;
+payload edits retain the previous digest so corruption remains detectable.
 
 Use separate live, interactive and derived/historical connection admission as in
 ADR-0024. Initial interactive pool acquisition timeout is 250 ms, statement timeout
@@ -132,6 +208,13 @@ to 100 dirty keys, at most two database workers. Tune batch size down if isolati
 fails; changing acceptance targets requires explicit review. No sleeping worker
 holds a database transaction or connection. Bound queue scans and retain dirty work
 durably across outages. Expose exhausted errors rather than retrying forever.
+
+Retained detail transactions set local PostgreSQL `work_mem` to 32 MiB so each
+bounded 20-MiB payload can remain in memory during materialization and sorting.
+The retained query has four payload workspaces, approximately 128 MiB per active
+read and 1 GiB across the eight interactive connections, in addition to database
+and application overhead. This is transaction-local, not a global database setting;
+wire limits, pool admission, timeouts and acceptance budgets remain unchanged.
 
 ## Failure and recovery
 
@@ -179,7 +262,7 @@ without charging preparation as an ordinary ready-data latency or hiding it.
 For the production browser fixture, record at least 20 first/cold and repeat
 loads per critical page and 50 interactions. Every SLI/SLO list sample must become
 usable in < 1,000 ms, preferably <= 500 ms; every SLO-detail and range/burn change
-must complete in < 500 ms. Include rendered graphs, not just API completion or a
+must complete in < 1,000 ms, preferably <=500 ms. Include rendered graphs, not just API completion or a
 loading shell. Keep the existing <= 200 ms feedback/chart-update budgets and
 SPEC-0012's CPU/network settings. Report p50/p95/max and retain every failure;
 percentiles do not exempt samples exceeding the action-specific limit.
@@ -202,7 +285,7 @@ Do not increase pool sizes, timeouts or retry counts to hide unbounded query wor
 ## Acceptance criteria
 
 - AC-01: Actual SLI/SLO lists load in < 1,000 ms and detail/range/burn actions in
-  < 500 ms at 10/100/1,000 SLOs with one year of history; first visits, response-cache
+  < 1,000 ms, preferably <=500 ms, at 10/100/1,000 SLOs with one year of history; first visits, response-cache
   misses and ordinary restart/time-boundary loads are included. API budgets also apply.
 - AC-02: Canonical versus aggregate/cached output matches exactly for fractional
   and maximum counts, equality thresholds, negative budgets, partial/empty/gapped
@@ -243,10 +326,17 @@ coding; the detailed wire contract remains subject to that checkpoint's review.
 
 ## Verification evidence
 
-Implementation is in progress in [F3-T08](../tasks/F3-T08.md). Its fast unit and
-compile checks do not establish these workload budgets. Integrated performance
-acceptance remains outstanding, and known page latency failures remain open.
-This document does not claim measured capacity.
+Bounded ten-SLO/year runtime acceptance is recorded in [F3-T08](../tasks/F3-T08.md):
+normal and added-100-ms rendered journeys pass all 342 connected trace checks,
+alongside independent arithmetic, repair/restart, pagination, logical expiry and
+shared-source checks. The integration follow-up covers all 173 cases through
+thirteen corrected/previously unexecuted cases and 160 source-matched reused
+passes, with fresh and reused execution reported separately. Earlier failed runs
+remain recorded in F3-T08. This does not establish the deferred larger-installation
+or endurance criteria.
+On 2026-11-04 the maintainer deferred further deliberate endurance observation
+and larger installations to [F3-T10](../tasks/F3-T10.md). The product criteria above
+remain unchanged; this is not a larger-installation or fresh endurance capacity claim.
 
 ## Change notes
 

@@ -24,6 +24,35 @@ const chart: TimelineChart = {
 const palette = { axis: '#111111', labelText: '#444444', grid: '#222222', crosshair: '#333333', series: ['#123456', '#654321'] as const, surface: '#fafafa', surfaceBorder: '#bbbbbb', text: '#101010' };
 
 describe('timeline model and options', () => {
+  it('breaks coarse incomplete periods while keeping exact selected values and coverage context',()=>{
+    const displayCoverage={start:chart.start,end:chart.end,states:['complete','missing'] as Coverage[]};
+    const fixture:TimelineChart={...chart,fillExpectedGaps:false,lanes:[{...chart.lanes[0]!,height:162,series:[{id:'coarse',label:'Observed',points:[{timestamp:chart.start,value:'99.970000',coverage:'complete',displayCoverage},{timestamp:'2026-01-01T00:03:00Z',value:'98.123456789',coverage:'complete',displayCoverage}]}]}]};
+    const model=validateTimeline(fixture);
+    expect(model.series[0]!.data.map(point=>point.value)).toEqual([null,null]);
+    expect(model.series[0]!.partial.map(point=>point.exact)).toEqual(['99.970000','98.123456789']);
+    expect(model.series[0]!.tooltipData.map(point=>point.coverage)).toEqual(['complete','complete']);
+    const option=buildTimelineOption(fixture,model,palette);
+    const line=(option.series as Array<{type:string;markArea?:{data:unknown[]}}>).find(series=>series.type==='line')!;
+    expect(line.markArea?.data).toHaveLength(1);
+    const tooltip=(option.tooltip as {formatter:(value:unknown)=>string}).formatter([{axisValue:Date.parse(chart.start)}]);
+    expect(tooltip).toContain('Displayed period contains: Complete, Missing');
+    expect(tooltip).toContain('99.970000');
+    const sparkline=buildBudgetSparklineOption([{remaining_fraction:'0.9',state:'observed',display_coverage:{states:['observed','missing']}}],'Coarse budget','#123456');
+    expect(sparkline.series[0]!.data).toEqual([[0,null]]);
+    expect(sparkline.series[1]!.data).toEqual([[0,90]]);
+  });
+  it('preserves reference and catalogue tick labels in UTC and local time',()=>{
+    const value=Date.parse('2026-01-01T12:34:00Z'),date=new Date(value);
+    for(const reference of [false,true])for(const local of [false,true])for(const short of [false,true]){
+      const fixture:TimelineChart={...chart,end:short?chart.end:'2026-01-08T00:00:00Z',timeZone:local?'local':'UTC',lanes:[{...chart.lanes[0]!,...(reference?{height:162}:{})}]};
+      const option=buildTimelineOption(fixture,validateTimeline(fixture),palette);
+      const formatter=(option.xAxis as Array<{axisLabel:{formatter:(value:number)=>string}}>)[0]!.axisLabel.formatter;
+      const expected=reference?date.toLocaleString('en-US',{month:'short',day:'numeric',...(short?{hour:'2-digit',minute:'2-digit',hour12:false}:{}),...(local?{}:{timeZone:'UTC'})})
+        : local?(short?date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):date.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'}))
+          : short?'12:34 UTC':'2026-01-01 UTC';
+      expect(formatter(value)).toBe(expected);
+    }
+  });
   it('keeps range and sampling metadata in the collapsed chart details',()=>{
     render(<TimelineChartHeader chart={{...chart,fillExpectedGaps:false}}/>);
     expect(screen.getByRole('heading',{name:'Synthetic'})).toBeVisible();

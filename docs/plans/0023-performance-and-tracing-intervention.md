@@ -1,6 +1,7 @@
 # Performance, accuracy and tracing intervention
 
 - State: accepted; implementation in progress
+- Current checkpoint: the maintainer closed [F3-T08](../tasks/F3-T08.md) on 2026-11-04 with its recorded verification caveats; deferred validation remains in [F3-T10](../tasks/F3-T10.md)
 - Accepted: 2026-10-31, explicit maintainer approval after Crit session `ede9414e6ca5`; all five comments resolved
 - Created: 2026-10-31
 - Priority: replaces the current execution order; unrelated feature delivery stays paused
@@ -9,6 +10,31 @@
 - Governing records to amend: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [ADR-0024](../adr/0024-precomputed-operational-reads.md), [previous plan](0022-backend-stabilization.md)
 
 ## Required outcome
+
+Validation clarification, 2026-11-04: the maintainer rejected further deliberate
+endurance waits and approved bounded T08 checks followed by final integrated
+verification within a one-hour finalization budget. Ten-SLO/year rendered latency,
+independent numeric accuracy and recovery remain required. Fresh sustained-load,
+clock-aging and physical-cleanup observation, together with larger fleets, move to
+[F3-T10](../tasks/F3-T10.md). Keep these deferred results unverified; do not weaken
+product performance, accuracy, freshness or retention requirements. This supersedes
+the earlier requirement to repeat the full ten-SLO endurance matrix in T08.
+
+Phase scope clarification, 2026-11-03: the maintainer explicitly requested finishing
+the ten-SLO/year verification and deferring larger tests. F3-T08 completion therefore
+requires the full ten-SLO/year live, browser, accuracy, recovery and final integrated
+checks. The 100- and 1,000-SLO workloads are deferred to [F3-T10](../tasks/F3-T10.md)
+and must not run during this phase. Their performance targets remain unchanged;
+passing the ten-SLO fixture does not establish larger-installation acceptance.
+
+Hardware clarification, 2026-11-01: the maintainer requires a reasonably capable
+device without artificial CPU throttling. Measure normal networking and an added
+100 ms latency separately, without an artificial bandwidth cap. Use the updated
+SPEC-0012 fixture and record the actual machine. This replaces the earlier weak-device assumption.
+The maintainer subsequently accepted complete journeys under 1,000 ms in both
+network conditions, with <=500 ms as the optimization target. Separate API
+budgets, accuracy and year/scale requirements remain unchanged. Keep the current
+renderer and investigate smaller improvements before considering architectural changes.
 
 An accurate SLO application that feels fast when people use it, with a year of
 history and 10, 100 or 1,000 SLOs in the installation. Retention is one year; the
@@ -27,13 +53,13 @@ and urgency grouping still cover the full filtered result, not just the page.
 | --- | --- | --- | --- |
 | Open, paginate or filter the SLO list | < 1,000 ms | <= 500 ms | Up to 20 matching rows, urgency groups and global filtered counts are visible and usable |
 | Open, paginate or filter the SLI list | < 1,000 ms | <= 500 ms | Up to 20 matching rows and their summaries are visible and usable |
-| Open an SLO detail page | < 500 ms | Required, not aspirational | Definition, status and the requested graphs are rendered and usable |
-| Change graph range/burn window | < 500 ms | Required, not aspirational | The requested result is visible; retain the existing <= 200 ms feedback/chart-update budgets |
+| Open an SLO detail page | < 1,000 ms | <= 500 ms | Definition, status and the requested graphs are rendered and usable |
+| Change graph range/burn window | < 1,000 ms | <= 500 ms | The requested result is visible; retain the existing <= 200 ms feedback/chart-update budgets |
 
 Measure from navigation/click through usable content, including network, backend,
 JSON parsing, JavaScript loading and chart rendering. A shell, spinner, placeholder,
 HTTP 200 or prepared-response percentile is not page-load acceptance. Record every
-observed sample: a list sample >= 1,000 ms, or detail/range/burn sample >= 500 ms,
+observed sample: any list/detail/range/burn sample >= 1,000 ms
 fails that run. Report p50/p95/max as well; do not turn the requirement into a
 percentile that hides a slow first visit.
 
@@ -214,7 +240,7 @@ acceptance. Tracing acceptance does not complete this intervention.
 
 - Amend SPEC-0019's 2.5-second detail budget, ready-only measurement and 100-SLO-only
   scale fixture. Add the table above, 10/100/1,000 installation scale, 10/20-row UI
-  pagination, required < 500 ms detail/range loads, and first-visit/no-job-wait
+  pagination, required < 1,000 ms detail/range loads (preferred <=500 ms), and first-visit/no-job-wait
   acceptance. Amend SPEC-0007 and ingestion/storage retention contracts to one year
   with an explicit cutoff and impact review. Keep mathematical, security and
   collection guarantees. Preserve existing non-UI client pagination compatibility
@@ -277,7 +303,7 @@ management, authentication, ingestion and failure paths, not only SLO endpoints.
 - Capture 100% of local acceptance journeys with parent-based consistent sampling;
   production sampling is configurable and must be disclosed in reports. Measure
   instrumentation enabled versus disabled; proposed p95 overhead allowance is <= 5%
-  and it may never push a journey past its table-specific 500/1,000 ms limit.
+  and it may never push a journey past its 1,000 ms limit.
 
 Deliverable: retrieve one complete browser -> HTTP -> database/calculation trace
 from VictoriaTraces, show where the time went, and retrieve an agent -> ingestion
@@ -309,7 +335,7 @@ Merely sending spans, or looking only at a server root, does not satisfy this st
   expected values, including late data and non-hour edges. Traces establish time,
   not mathematical correctness.
 
-Deliverable: lists load in < 1,000 ms and detail/range/burn actions in < 500 ms
+Deliverable: lists load in < 1,000 ms and detail/range/burn actions in < 1,000 ms, preferably <=500 ms
 on the current deployment and isolated candidate. No implementation-complete claim
 before these action-specific requirements are demonstrated.
 
@@ -377,7 +403,7 @@ missing traces or failed checks remain failures/gaps, not green placeholders.
    critical journeys and the feature's changed path; compare trace timings and
    independent expected values against the source-bound baseline. Proposed warm
    replay budget: <= 90 seconds, with setup outside that budget. Retain the required
-   < 1,000 ms list and < 500 ms detail/range limits; flag > 10% p95 regressions for
+   < 1,000 ms list/detail/range limits (preferred <=500 ms); flag > 10% p95 regressions for
    investigation even below the relevant limit.
 4. **At the completed candidate/PR boundary:** run the relevant database/concurrency,
    protocol and Compose suites once. Reuse matching passes for publication. After

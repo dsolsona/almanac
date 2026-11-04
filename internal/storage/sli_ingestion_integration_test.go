@@ -675,7 +675,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("known-empty refreshed numerical observation: %+v %v", staleEvaluation.Quality, err)
 	}
 	longStart := record.EffectiveFrom
-	longInput := CreateObjectiveInput{Proof: proof, Name: "retention-window", DisplayName: "Retention window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 401 * 86400, EvaluationValidFrom: &longStart, IdempotencyKey: "retention-window", RequestID: "retention-window", Now: clock}
+	longInput := CreateObjectiveInput{Proof: proof, Name: "retention-window", DisplayName: "Retention window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 366 * 86400, EvaluationValidFrom: &longStart, IdempotencyKey: "retention-window", RequestID: "retention-window", Now: clock}
 	_, longSlo, err := CreateObjective(t.Context(), f.databaseURL, longInput, true)
 	if err != nil {
 		t.Fatalf("create retention SLO: %v", err)
@@ -694,16 +694,28 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
-	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_history_admission, public.almanac_slo_history_jobs, public.almanac_slo_current_failures, public.almanac_slo_display_blocks`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_sli_coverage_revision_time_idx`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_derived_cache_usage; DROP FUNCTION public.almanac_account_derived_cache() CASCADE`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_retention_work`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_archive_current_slo_projection ON public.almanac_slo_current_projections; DROP FUNCTION public.almanac_archive_slo_projection(); DROP TABLE public.almanac_slo_projection_payloads CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_slo_series_invalidation ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_invalidate_slo_series(); DROP FUNCTION public.almanac_retained_tile_digest() CASCADE; DROP TABLE public.almanac_slo_series_repair, public.almanac_slo_series_tile_work, public.almanac_slo_series_tiles, public.almanac_slo_series_points, public.almanac_slo_history_admission, public.almanac_slo_history_jobs, public.almanac_slo_current_failures, public.almanac_slo_display_blocks`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_derived_cache_usage; DROP FUNCTION public.almanac_account_derived_cache() CASCADE; DROP FUNCTION public.almanac_history_payload_metadata() CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_measurements DROP COLUMN last_attempted_interval_end`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_sli_derived_dirty ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_mark_derived_dirty(); DROP TABLE public.almanac_slo_history_blocks, public.almanac_slo_current_projections, public.almanac_slo_derived_generations, public.almanac_sli_hourly_aggregates, public.almanac_derived_dirty_ranges, public.almanac_sli_source_generations; DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version >= 16`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_coverage DROP COLUMN ingestion_generation`); err != nil {
 		t.Fatal(err)
 	}
 	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
@@ -794,7 +806,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("month boundary preparation count=%d err=%v", partitions, err)
 	}
 	// Keep durable grant evidence beyond the delivery window to isolate replay
-	// expiry from the independent 400-day observation cutoff.
+	// expiry from the independent 365-day observation cutoff.
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_agent_execution_grants SET retain_until=$1 WHERE lease_id=$2`, now.Add(10*24*time.Hour), grant.LeaseID); err != nil {
 		t.Fatal(err)
 	}

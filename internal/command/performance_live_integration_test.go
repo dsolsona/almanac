@@ -210,8 +210,7 @@ func collectPerformanceCollectionTiming(t *testing.T, fleet performanceFleet, st
 	t.Helper()
 	// Omit boundary intervals still settling or in flight; disclose the exact
 	// complete comparison range rather than counting them as missing samples.
-	first := start.Truncate(time.Minute).Add(time.Minute)
-	last := end.Truncate(time.Minute).Add(-time.Minute)
+	first, last := performanceCollectionBounds(start, end)
 	report := performanceCollectionReport{Start: first, End: last}
 	if !last.After(first) {
 		return report

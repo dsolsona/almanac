@@ -44,6 +44,13 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   let reservedBefore=0;
   let referenceTop=0;
   const referenceLayout=chart.lanes.every(lane=>lane.height!==undefined);
+  const short=Date.parse(chart.end)-Date.parse(chart.start)<=(referenceLayout?2:1)*86_400_000;
+  // ECharts formats each tick repeatedly while laying out all four axes.
+  const dateFormat=referenceLayout
+    ? new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',...(short?{hour:'2-digit',minute:'2-digit',hour12:false}:{}),...(chart.timeZone==='local'?{}:{timeZone:'UTC'})})
+    : chart.timeZone==='local'
+      ? new Intl.DateTimeFormat(undefined,short?{hour:'2-digit',minute:'2-digit'}:{year:'numeric',month:'2-digit',day:'2-digit'})
+      : null;
   const grids = chart.lanes.map((lane, index) => {
     if(referenceLayout){const geometry={left:46,right:26,top:referenceTop+20,height:lane.height!-52};referenceTop+=lane.height!+(lane.extra??0);return geometry;}
     const geometry=extraHeight>0&&baseHeight!==undefined&&baseHeight>0
@@ -57,9 +64,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     axisLine: { show:!referenceLayout||index===lanes-1,lineStyle: { color: axis } }, axisTick: { show: !referenceLayout&&index === lanes - 1 },
     axisLabel: { show: index === lanes - 1, color: labelText, hideOverlap: true,...(referenceLayout?{fontFamily:'monospace',fontSize:11}:{}), formatter: (value: number) => {
       const date = new Date(value);
-      const short = Date.parse(chart.end) - Date.parse(chart.start) <= (referenceLayout?2:1)*86_400_000;
-      if(referenceLayout)return date.toLocaleString('en-US',{month:'short',day:'numeric',...(short?{hour:'2-digit',minute:'2-digit',hour12:false}:{}),...(chart.timeZone==='local'?{}:{timeZone:'UTC'})});
-      if(chart.timeZone==='local') return short ? date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}) : date.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'});
+      if(dateFormat)return dateFormat.format(date);
       return short ? `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')} UTC` : `${date.toISOString().slice(0, 10)} UTC`;
     } }, splitLine: { show: referenceLayout,lineStyle:{color:grid} }, axisPointer: { show: true, label: { show: false } },
   }));
@@ -95,8 +100,19 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
     // converts missing coverage into a successful line segment.
     const gaps:Array<[{xAxis:number;itemStyle:unknown},{xAxis:number}]>=[];
     if(referenceLayout&&!lane.bars){
+      const coarse=new Set<string>();
+      for(const point of item.data){
+        const bucket=point.displayCoverage;
+        if(!bucket||!bucket.states.some(state=>state!=='complete'&&state!=='stale'))continue;
+        const key=`${bucket.start}:${bucket.end}`;
+        if(!coarse.has(key)){coarse.add(key);gaps.push([{xAxis:bucket.start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:bucket.end}]);}
+      }
       let start:number|undefined;
       for(const point of item.data){
+        if(point.displayCoverage){
+          if(start!==undefined){gaps.push([{xAxis:start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:point.displayCoverage.start}]);start=undefined;}
+          continue;
+        }
         const unavailable=point.coverage!=='complete'&&point.coverage!=='stale';
         if(unavailable&&start===undefined)start=point.timestamp;
         if(!unavailable&&start!==undefined){gaps.push([{xAxis:start,itemStyle:{color:palette.muted??palette.surface,opacity:.65,decal:{symbol:'rect',dashArrayX:[1,0],dashArrayY:[2,4],rotation:-Math.PI/4,color:labelText}}},{xAxis:point.timestamp}]);start=undefined;}
@@ -145,6 +161,7 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
           const label = coverageLabel(point.coverage);
           const display = point.value === null ? label : `${escapeHTML(point.value)} ${escapeHTML(lane.unit)} · ${label}`;
           rows.push(`<div>${escapeHTML(lane.label)} · ${escapeHTML(item.label)}: <strong>${display}</strong></div>`);
+          if(point.displayCoverage)rows.push(`<div>Displayed period contains: ${point.displayCoverage.states.map(state=>escapeHTML(coverageLabel(state))).join(', ')}. Choose a shorter range for finer detail.</div>`);
         }
         const label = chart.timeZone==='local' ? new Date(time).toLocaleString() : `${exactTime.slice(0, 16).replace('T', ' ')} UTC`;
         return `<div><strong>${label}</strong>${rows.join('') || '<div>No sample at this timestamp</div>'}</div>`;

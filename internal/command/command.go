@@ -285,6 +285,7 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 	defer metrics.close()
 	derivedDone := make(chan struct{})
 	currentDone := make(chan struct{})
+	maintenanceDone := make(chan struct{})
 	go func() {
 		defer close(derivedDone)
 		storageRuntime.RunDerived(lifeCtx, logger)
@@ -293,10 +294,15 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 		defer close(currentDone)
 		storageRuntime.RunHistory(lifeCtx, logger)
 	}()
+	go func() {
+		defer close(maintenanceDone)
+		storageRuntime.RunDerivedMaintenance(lifeCtx, logger)
+	}()
 	defer func() {
 		cancelLife(context.Canceled)
 		<-derivedDone
 		<-currentDone
+		<-maintenanceDone
 	}()
 	server.RegisterOnShutdown(func() {
 		logger.Info("component draining", "component", "backend")

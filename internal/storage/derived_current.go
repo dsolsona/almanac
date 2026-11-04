@@ -12,7 +12,9 @@ import (
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -36,7 +38,8 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	row, err := q.GetPublishedCurrentProjection(ctx, dbgen.GetPublishedCurrentProjectionParams{SloID: id, Now: timestamp(normalizedAgentNow(input.Now)), CalculationVersion: operationalCalculationVersion})
+	now := normalizedAgentNow(input.Now)
+	row, err := q.GetPublishedCurrentProjection(ctx, dbgen.GetPublishedCurrentProjectionParams{SloID: id, Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.SloCurrentStatus{}, ErrObjectiveNotFound
 	}
@@ -55,7 +58,6 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		if err != nil {
 			return api.SloCurrentStatus{}, err
 		}
-		now := normalizedAgentNow(input.Now)
 		failed, err := hasFailedSourceAt(ctx, q, definition, now, floorSliBoundary(now, time.Duration(definition.CadenceSeconds)*time.Second))
 		if err != nil {
 			return api.SloCurrentStatus{}, err
@@ -63,7 +65,15 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		if failed {
 			return api.SloCurrentStatus{}, ErrDerivedSourceFailed
 		}
-		return api.SloCurrentStatus{}, ErrDerivedPending
+		// A clock boundary must not turn a bounded current read into a job wait.
+		result, err := readCurrentSloFromAggregates(ctx, q, definition, now)
+		if err != nil {
+			return api.SloCurrentStatus{}, err
+		}
+		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+			return api.SloCurrentStatus{}, err
+		}
+		return result, nil
 	}
 	var item api.SloOperationalOverviewItem
 	if err := json.Unmarshal(row.Payload, &item); err != nil {
@@ -82,71 +92,29 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 	return result, nil
 }
 
-func loadPublishedOverview(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) ([]api.SloOperationalOverviewItem, error) {
-	serviceID := pgtype.UUID{}
-	if input.ServiceID != "" {
-		var valid bool
-		serviceID, valid = canonicalUUID(input.ServiceID)
-		if !valid {
-			return nil, ErrObjectiveInvalid
-		}
-	}
-	rows, err := q.ListPublishedOperationalProjections(ctx, dbgen.ListPublishedOperationalProjectionsParams{
-		CalculationVersion: operationalCalculationVersion,
-		Now:                timestamp(now), QueryText: pgtype.Text{String: strings.TrimSpace(input.Query), Valid: strings.TrimSpace(input.Query) != ""}, ServiceID: serviceID, RowLimit: sloOverviewDefinitionLimit + 1,
-	})
+func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time) (api.SloCurrentStatus, error) {
+	source, err := q.GetSloOperationalContext(ctx, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
 	if err != nil {
-		return nil, err
+		return api.SloCurrentStatus{}, err
 	}
-	if len(rows) > sloOverviewDefinitionLimit {
-		return nil, ErrOperationalResource
-	}
-	var pending []pgtype.UUID
-	for _, row := range rows {
-		if !row.Current || !row.GenerationID.Valid {
-			pending = append(pending, row.ID)
-		}
-	}
-	if len(pending) > 0 {
-		return nil, overviewPreparationError(ctx, q, pending, now)
-	}
-	items := make([]api.SloOperationalOverviewItem, 0, len(rows))
-	for _, row := range rows {
-		var item api.SloOperationalOverviewItem
-		if err := json.Unmarshal(row.Payload, &item); err != nil || !item.Urgency.Valid() {
-			return nil, errors.New("storage: invalid published SLO projection")
-		}
-		items = append(items, item)
-	}
-	return items, nil
-}
-
-func overviewPreparationError(ctx context.Context, q *dbgen.Queries, ids []pgtype.UUID, now time.Time) error {
-	rows, err := q.ListCurrentPreparationStates(ctx, dbgen.ListCurrentPreparationStatesParams{SloIds: ids, CalculationVersion: operationalCalculationVersion})
+	detail, err := buildSloOperationalDetail(ctx, q, row, source, OperationalDetailInput{currentOnly: true, Now: func() time.Time { return now }, BurnWindow: 3600})
 	if err != nil {
-		return err
+		return api.SloCurrentStatus{}, err
 	}
-	params := dbgen.AnyExhaustedDerivedSourcesParams{Now: timestamp(now)}
-	for _, row := range rows {
-		if row.Exhausted {
-			return ErrDerivedFailed
-		}
-		definition := dbgen.GetSloRow{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, CadenceSeconds: row.CadenceSeconds,
-			RollingWindowSeconds: row.RollingWindowSeconds, EvaluationValidFrom: row.EvaluationValidFrom, SliValidFrom: row.SliValidFrom}
-		bounds := failedSourceParams(definition, now, floorSliBoundary(now, time.Duration(row.CadenceSeconds)*time.Second))
-		params.SliIds = append(params.SliIds, bounds.SliID)
-		params.Revisions = append(params.Revisions, bounds.MeasurementRevision)
-		params.Starts = append(params.Starts, bounds.FullStart)
-		params.Ends = append(params.Ends, bounds.FullEnd)
+	generation, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
+	if errors.Is(err, pgx.ErrNoRows) {
+		generation = 0
+	} else if err != nil {
+		return api.SloCurrentStatus{}, err
 	}
-	failed, err := q.AnyExhaustedDerivedSources(ctx, params)
+	id, err := uuid.NewRandom()
 	if err != nil {
-		return err
+		return api.SloCurrentStatus{}, err
 	}
-	if failed {
-		return ErrDerivedSourceFailed
-	}
-	return ErrDerivedPending
+	stamp := generationStamp(pgtype.UUID{Bytes: id, Valid: true}, generation, row.DefinitionRevision, row.MeasurementRevision,
+		detail.CalculationVersion, detail.EffectiveAt, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
+	return api.SloCurrentStatus{Slo: detail.Objective, Current: detail.Current, Urgency: api.SloCurrentStatusUrgency(detail.Urgency),
+		LeadingReason: detail.LeadingReason, Reasons: detail.Reasons, Burn1h: detail.Burn1h, Burn6h: detail.Burn6h, Exhaustion: detail.Exhaustion, Generation: stamp}, nil
 }
 
 func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() time.Time) (resultErr error) {
@@ -207,11 +175,16 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
-		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) {
+		conflict, isPostgres := errors.AsType[*pgconn.PgError](resultErr)
+		serialization := isPostgres && conflict.Code == "40001"
+		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) || serialization {
 			err := dbgen.New(conn).DeferCurrentPreparation(cleanup, dbgen.DeferCurrentPreparationParams{
 				SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 				CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock()),
 			})
+			if serialization {
+				resultErr = errors.Join(ErrDerivedPending, resultErr)
+			}
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
@@ -234,6 +207,9 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	if errors.Is(err, pgx.ErrNoRows) {
 		sourceGeneration = 0
 	} else if err != nil {
+		return err
+	}
+	if err := publishRetainedCurrent(bounded, q, row, contextRow, detail, sourceGeneration, now); err != nil {
 		return err
 	}
 	generationID, err := q.InsertDerivedGeneration(bounded, dbgen.InsertDerivedGenerationParams{
@@ -262,5 +238,9 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	if err := q.ClearCurrentPreparationFailure(bounded, id); err != nil {
 		return err
 	}
-	return tx.Commit(bounded)
+	if err := tx.Commit(bounded); err != nil {
+		return err
+	}
+	recordCurrentPublication(span, generationID.String(), sourceGeneration, detail.EffectiveAt)
+	return nil
 }

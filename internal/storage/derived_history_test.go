@@ -11,6 +11,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+func TestOperationalPeriodsUseServerBoundsAndPreserveExplicitRequests(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 34, 56, 0, time.UTC)
+	cadence := 7 * time.Minute
+	end := floorSliBoundary(now, cadence)
+	for _, test := range []struct {
+		period string
+		window int64
+		days   int
+	}{
+		{"7d", 0, 7}, {"90d", 0, 90}, {"1y", 0, 365},
+		{"window", 60, 1}, {"window", 28*86400 + 43199, 28},
+		{"window", 28*86400 + 43200, 29}, {"window", 400 * 86400, 365},
+	} {
+		t.Run(test.period+"/"+time.Duration(test.window*int64(time.Second)).String(), func(t *testing.T) {
+			input := OperationalDetailInput{Period: test.period, Now: func() time.Time { return now }}
+			got, err := resolveOperationalBounds(input, cadence, test.window)
+			start := ceilSliBoundary(end.Add(-time.Duration(test.days)*24*time.Hour), cadence)
+			if err != nil || !got.requestedAt.Equal(now) || !got.end.Equal(end) || !got.start.Equal(start) || got.end.Sub(got.start) > 365*24*time.Hour {
+				t.Fatalf("period %q: %+v, %v", test.period, got, err)
+			}
+			input.Period, input.Start, input.End = "", &start, &end
+			if explicit, err := resolveOperationalBounds(input, cadence, test.window); err != nil || explicit != got {
+				t.Fatalf("explicit bounds differ: %+v, %v", explicit, err)
+			}
+		})
+	}
+	base := OperationalDetailInput{Now: func() time.Time { return now }}
+	legacy, err := resolveOperationalBounds(base, cadence, 0)
+	if err != nil || !legacy.start.Equal(floorSliBoundary(end.Add(-7*24*time.Hour), cadence)) {
+		t.Fatalf("legacy default changed: %+v, %v", legacy, err)
+	}
+	for _, invalid := range []OperationalDetailInput{
+		{Now: base.Now, Period: "invalid"}, {Now: base.Now, Period: "window"},
+		{Now: base.Now, Period: "7d", Start: &end},
+		{Now: base.Now, Period: "7d", Start: &legacy.start, End: &end},
+		{Now: base.Now, Period: "7d", At: new(now.Add(time.Second))},
+	} {
+		if _, err := resolveOperationalBounds(invalid, cadence, 0); err == nil {
+			t.Fatalf("invalid selector accepted: %+v", invalid)
+		}
+	}
+}
+
 func TestDerivedFailureCodesDoNotExposeDatabaseDiagnostics(t *testing.T) {
 	for _, test := range []struct {
 		err  error

@@ -12,6 +12,7 @@ export type OperationalDetail = components['schemas']['SloOperationalDetail'];
 export type CurrentStatus = components['schemas']['SloCurrentStatus'];
 export type HistoryValuePage = components['schemas']['SloHistoryValuePage'];
 export type HistoryLane = HistoryValuePage['lane'];
+export type ServerClock = { time: number; receivedAt: number };
 export function sameDerivedInputs(first:components['schemas']['DerivedGeneration'],second:components['schemas']['DerivedGeneration']):boolean {
   return (['source_generation','measurement_revision','definition_revision','exclusion_revision','calculation_version','evaluated_through','retention_start'] as const).every(field=>first[field]===second[field]);
 }
@@ -69,6 +70,16 @@ function validOperationalValue(value:unknown):boolean {
 function validOperationalSample(value:unknown):boolean {
   if(!record(value)||!utcTimestamp(value.bucket_start)||!utcTimestamp(value.bucket_end)||!utcTimestamp(value.evaluation_at)||!validOperationalQuality(value.quality)||typeof value.revision!=='string' || !Array.isArray(value.retained_extrema)) return false;
   if(!['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale'].includes(String(value.state))) return false;
+  if(value.display_coverage!==undefined){
+    const coverage=value.display_coverage;
+    if(!record(coverage)||Date.parse(value.bucket_start as string)>=Date.parse(value.bucket_end as string))return false;
+    const allowed={states:['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale'],quality_states:['complete','partial','no_data','zero_traffic','expired_history','not_yet_eligible','not_applicable','unavailable'],freshness:['unknown','fresh','stale']};
+    for(const [key,states] of Object.entries(allowed)){
+      const actual=coverage[key];
+      if(!Array.isArray(actual)||actual.length===0||actual.length>states.length||new Set(actual).size!==actual.length||actual.some(state=>typeof state!=='string'||!states.includes(state)))return false;
+    }
+    if(!(coverage.states as string[]).includes(String(value.state))||!(coverage.quality_states as string[]).includes(String((value.quality as Record<string,unknown>).state))||!(coverage.freshness as string[]).includes(String((value.quality as Record<string,unknown>).freshness)))return false;
+  }
   return ['good','total','attainment','allowed_budget','remaining_budget','remaining_fraction','burn'].every(k=>decimal(value[k])) &&
     value.retained_extrema.every(v=>['first','last','minimum','maximum'].includes(String(v)));
 }
@@ -117,6 +128,11 @@ function validOperationalOverview(value:unknown):boolean {
     if(!record(item)||!validSlo(item.slo)||!['needs_attention','watch','healthy'].includes(String(item.urgency))||!validUrgency(item.leading_reason)||!Array.isArray(item.reasons)||item.reasons.length>14||!item.reasons.every(validUrgency)||!validOperationalValue(item.current)||
       ![item.burn_1h,item.burn_6h].every(v=>record(v)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))||
       !record(item.exhaustion)||!Array.isArray(item.budget_sparkline)||item.budget_sparkline.length>120||!item.budget_sparkline.every(validOperationalSample)) return false;
+    if(item.current_state!==undefined){
+      if(!['ready','stale','failed','unavailable'].includes(String(item.current_state)))return false;
+      if(item.current_state!=='unavailable'&&(!record(item.generation)||!utcTimestamp(item.generation.evaluated_through)||item.generation.evaluated_through!==(item.current as Record<string,unknown>).evaluation_at||item.generation.definition_revision!==(item.slo as Record<string,unknown>).definition_revision))return false;
+      if((item.current_state==='stale'||item.current_state==='failed')&&item.urgency==='healthy')return false;
+    }
     const exhaustion=item.exhaustion;
     return ['estimated','exhausted','unavailable'].includes(String(exhaustion.state))&&['remaining_events','bad_events_per_hour','hours_until_exhaustion'].every(k=>decimal(exhaustion[k]))&&validOperationalQuality(exhaustion.current_quality)&&validOperationalQuality(exhaustion.one_hour_quality)&&Array.isArray(exhaustion.assumptions)&&exhaustion.assumptions.every(v=>typeof v==='string');
   });
@@ -126,6 +142,8 @@ function validOperationalDetail(value:unknown,pathID:string):boolean {
     !validSlo(value.objective)||value.objective.id!==pathID||!record(value.context)||!validOperationalValue(value.current)||!['needs_attention','watch','healthy'].includes(String(value.urgency))||!validUrgency(value.leading_reason)||!Array.isArray(value.reasons)||!value.reasons.every(validUrgency)||
     !record(value.range)) return false;
   const c=value.context,range=value.range,exhaustion=value.exhaustion;
+  const preparation=value.history_preparation;
+  if(preparation!==undefined&&(!record(preparation)||!nonnegativeInteger(preparation.ready_seconds)||!nonnegativeInteger(preparation.total_seconds)||preparation.total_seconds===0||Number(preparation.ready_seconds)>Number(preparation.total_seconds)||typeof preparation.failed!=='boolean'))return false;
   if(!['requested_start','requested_end','effective_start','effective_end'].every(k=>utcTimestamp(range[k]))||!nonnegativeInteger(range.source_cadence_seconds)||!nonnegativeInteger(range.resolution_seconds)||typeof range.reduced!=='boolean'||range.max_samples_per_series!==1500||range.bucket_bounds!=='half_open') return false;
   if(typeof c.sli_id!=='string'||typeof c.sli_name!=='string'||typeof c.sli_display_name!=='string'||typeof c.datasource_id!=='string'||typeof c.datasource_display_name!=='string'||typeof c.measurement_revision!=='string'||!nonnegativeInteger(c.polling_interval_seconds)||!nonnegativeInteger(c.settling_delay_seconds)||typeof c.good_query!=='string'||typeof c.total_query!=='string') return false;
   return [value.burn_1h,value.burn_6h].every(v=>record(v)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))&&
@@ -176,7 +194,7 @@ const fieldMessages: Record<string, string> = {
   'timeline_start:timeline_range_invalid': 'Choose both aligned timeline bounds within the objective window, with at most 1,500 intervals.',
   'at:evaluation_time_invalid': 'Choose a valid evaluation time that is not in the future.',
 };
-async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
+async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   if (mutation) {
     clearQueryCache();
     try { return await requestUncached<T>(path, init, mutation, responseLimit); }
@@ -192,10 +210,11 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
     }
   }, init.signal, path.startsWith('/api/v1/slos/overview')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
-async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string }> {
+async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch { throw new SloFailure(mutation ? 'The request may have succeeded. Check the list before deliberately retrying the same request.' : 'Almanac could not be reached.', mutation); }
+  const receivedAt=performance.now();
   let data: unknown;
   try {
     if (!response.body || Number(response.headers.get('Content-Length')) > responseLimit) throw new Error('large response');
@@ -209,8 +228,10 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     const code = typeof data === 'object' && data !== null && 'code' in data && typeof data.code === 'string' ? data.code : '';
     const errors = record(data) && Array.isArray(data.field_errors) && data.field_errors.length <= 16 ? data.field_errors : [];
     const guidance = errors.filter(record).map(item => fieldMessages[`${item.field}:${item.code}`]).filter(Boolean).join(' ');
+    const listLimit=code==='resource_limit'&&path.split('?')[0]==='/api/v1/slos/overview'
+      ? 'The SLO list is temporarily at its resource limit. Try Refresh shortly.' : '';
     if(response.status===401 || response.status===403)clearQueryCache(false);
-    throw new SloFailure(guidance || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
+    throw new SloFailure(guidance || listLimit || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
   }
   const expected = init.method === 'POST' ? 201 : 200;
   if (response.status !== expected) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);
@@ -249,7 +270,8 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
       throw new SloFailure(mutation ? 'The request may have succeeded, but its version could not be confirmed. Check the record before retrying.' : 'The record version could not be confirmed.', mutation, response.status);
   }
   const serverTime=response.headers.get('Date');
-  return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}) };
+  const time=Date.parse(serverTime??'');
+  return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}),...(Number.isFinite(time)?{serverClock:{time,receivedAt}}:{}) };
 }
 function write(context: AuthContext, body: unknown, key?: string, etag?: string): RequestInit {
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
@@ -263,7 +285,10 @@ export const sloClient = {
   updateService: (id: string, name: string, etag: string, context: AuthContext) => request<Service>(`/api/v1/services/${id}`, write(context, {display_name:name}, undefined, etag), true),
   list: (cursor = '', signal?: AbortSignal) => request<{items:Slo[]; next_cursor:string}>(`/api/v1/slos?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),
   get: (id: string, signal?: AbortSignal) => request<Slo>(`/api/v1/slos/${id}`, {signal}),
-  serverTime: async (id:string,signal?:AbortSignal) => {
+  serverTime: async (id:string,signal?:AbortSignal,clock?:ServerClock) => {
+    if(signal?.aborted)throw new DOMException('The read was cancelled.','AbortError');
+    const elapsed=clock?performance.now()-clock.receivedAt:-1;
+    if(clock&&Number.isFinite(clock.time)&&elapsed>=0&&elapsed<30_000)return clock.time+elapsed;
     const result=await requestUncached<Slo>(`/api/v1/slos/${id}`,{signal});
     const timestamp=Date.parse(result.serverTime??'');
     if(!Number.isFinite(timestamp))throw new SloFailure('The server time could not be confirmed. Refresh to try again.');
@@ -281,11 +306,12 @@ export const sloClient = {
     if(filters.cursor) params.set('cursor',filters.cursor);
     return request<OperationalOverview>(`/api/v1/slos/overview?${params}`,{signal},false,20*1024*1024).then(x=>x.value);
   },
-  operational: (id:string, options:{at?:string;start?:string;end?:string;burn_window_seconds?:3600|21600}={}, signal?:AbortSignal) => {
+  operational: (id:string, options:{at?:string;start?:string;end?:string;period?:'window'|'7d'|'90d'|'1y';burn_window_seconds?:3600|21600}={}, signal?:AbortSignal) => {
     const params=new URLSearchParams();
     if(options.at) params.set('at',options.at);
     if(options.start) params.set('start',options.start);
     if(options.end) params.set('end',options.end);
+    if(options.period) params.set('period',options.period);
     if(options.burn_window_seconds) params.set('burn_window_seconds',String(options.burn_window_seconds));
     return request<OperationalDetail>(`/api/v1/slos/${id}/operational?${params}`,{signal},false,20*1024*1024).then(x=>x.value);
   },

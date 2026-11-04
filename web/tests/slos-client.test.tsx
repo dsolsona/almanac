@@ -47,12 +47,39 @@ it('keeps exact-value pages on the requested generation and rejects cross-genera
  clearQueryCache();page.generation.generation_id=id;
  await expect(sloClient.values(id,generation,'budget',0)).rejects.toThrow('invalid response');
 });
+it('requests a server-selected display period without a client timestamp',async()=>{
+ const fetcher=vi.fn().mockResolvedValue(new Response(JSON.stringify(operationalDetail()),{status:200}));
+ vi.stubGlobal('fetch',fetcher);
+ await sloClient.operational(id,{period:'window',burn_window_seconds:21600});
+ const params=new URL(String(fetcher.mock.calls[0]?.[0]),'https://localhost').searchParams;
+ expect([...params]).toEqual([['period','window'],['burn_window_seconds','21600']]);
+});
+
 it('uses the lightweight definition response Date for server-anchored history bounds',async()=>{
  const fetcher=vi.fn(async(_input:RequestInfo|URL)=>new Response(JSON.stringify(operationalDetail().objective),{status:200,headers:{ETag:`"slo:${id}:1"`,Date:'Thu, 29 Oct 2026 12:00:00 GMT'}}));
  vi.stubGlobal('fetch',fetcher);
  await expect(sloClient.serverTime(id)).resolves.toBe(Date.parse(instant));
  expect(fetcher.mock.calls).toHaveLength(1);
  expect(String(fetcher.mock.calls[0]?.[0])).toBe(`/api/v1/slos/${id}`);
+});
+it('reuses the definition response clock and advances it without trusting the browser wall clock',async()=>{
+ clearQueryCache();
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify(operationalDetail().objective),{headers:{ETag:`"slo:${id}:1"`,Date:'Thu, 29 Oct 2026 12:00:00 GMT'}}));
+ vi.stubGlobal('fetch',fetcher);
+ const monotonic=vi.spyOn(performance,'now').mockReturnValue(1000);
+ const wall=vi.spyOn(Date,'now').mockReturnValue(0);
+ try{
+  const definition=await sloClient.get(id);
+  monotonic.mockReturnValue(2500);
+  expect(await sloClient.serverTime(id,undefined,definition.serverClock)).toBe(Date.parse(instant)+1500);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  monotonic.mockReturnValue(31_000);
+  expect(await sloClient.serverTime(id,undefined,definition.serverClock)).toBe(Date.parse(instant));
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const abort=new AbortController();abort.abort();
+  await expect(sloClient.serverTime(id,abort.signal,definition.serverClock)).rejects.toThrow('cancelled');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+ }finally{monotonic.mockRestore();wall.mockRestore();clearQueryCache();}
 });
 it('rejects malformed list and evaluation responses rather than treating them as empty',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({items:'not a page'}),{status:200}))); await expect(sloClient.list()).rejects.toThrow('invalid response');
@@ -125,4 +152,11 @@ it('cancels an operational response when its streamed body exceeds the fixed 20 
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(body,{status:200})));
  await expect(sloClient.overview()).rejects.toThrow('invalid response');
  expect(cancelled).toBe(true);
+});
+
+it('describes list resource failures without suggesting a graph range and never retries the quota',async()=>{
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({code:'resource_limit'}),{status:503}));
+ vi.stubGlobal('fetch',fetcher);
+ await expect(sloClient.overview({q:'demo'})).rejects.toThrow('The SLO list is temporarily at its resource limit. Try Refresh shortly.');
+ expect(fetcher).toHaveBeenCalledOnce();
 });

@@ -14,27 +14,37 @@ import (
 )
 
 type performanceCurrentnessSample struct {
-	Kind       string        `json:"kind"`
-	SloID      string        `json:"slo_id"`
-	Through    time.Time     `json:"through"`
-	Source     int64         `json:"source_generation"`
-	EarliestAt time.Time     `json:"earliest_at"`
-	VisibleAt  time.Time     `json:"visible_at"`
-	UpperBound time.Duration `json:"lag_upper_bound_ns"`
+	Measurement   string        `json:"measurement"`
+	Kind          string        `json:"kind"`
+	SloID         string        `json:"slo_id"`
+	Through       time.Time     `json:"through"`
+	Source        int64         `json:"source_generation"`
+	EarliestAt    time.Time     `json:"earliest_at"`
+	VisibleAt     time.Time     `json:"visible_at"`
+	UpperBound    time.Duration `json:"lag_upper_bound_ns"`
+	LowerBound    time.Duration `json:"lag_lower_bound_ns"`
+	PreviousProbe *time.Time    `json:"previous_probe_started_at,omitempty"`
 }
 
 type performanceCurrentness struct {
-	mu        sync.Mutex
-	started   time.Time
-	nextClock time.Time
-	seen      map[string]time.Time
-	pending   map[string][]performanceCurrentnessSample
-	completed []performanceCurrentnessSample
+	mu          sync.Mutex
+	started     time.Time
+	measurement string
+	nextClock   time.Time
+	seen        map[string]int64
+	probed      map[string]performanceCurrentnessProbe
+	pending     map[string][]performanceCurrentnessSample
+	completed   []performanceCurrentnessSample
 }
 
-func newPerformanceCurrentness(now time.Time) *performanceCurrentness {
+type performanceCurrentnessProbe struct {
+	started, through time.Time
+	source           int64
+}
+
+func newPerformanceCurrentness(now time.Time, measurement string) *performanceCurrentness {
 	return &performanceCurrentness{started: now.UTC(), nextClock: now.UTC().Truncate(time.Minute).Add(time.Minute),
-		seen: make(map[string]time.Time), pending: make(map[string][]performanceCurrentnessSample)}
+		measurement: measurement, seen: make(map[string]int64), probed: make(map[string]performanceCurrentnessProbe), pending: make(map[string][]performanceCurrentnessSample)}
 }
 
 func (c *performanceCurrentness) discover(ctx context.Context, db *pgx.Conn, objectives []string, now time.Time) error {
@@ -72,21 +82,22 @@ JOIN LATERAL (
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, sample := range discovered {
-		if sample.Through.After(c.seen[sample.SloID]) {
-			c.seen[sample.SloID] = sample.Through
+		if sample.Source > c.seen[sample.SloID] {
+			c.seen[sample.SloID] = sample.Source
+			sample.Measurement = c.measurement
 			c.pending[sample.SloID] = append(c.pending[sample.SloID], sample)
 		}
 	}
 	for !c.nextClock.After(now) {
 		for _, id := range objectives {
-			c.pending[id] = append(c.pending[id], performanceCurrentnessSample{Kind: "clock", SloID: id, Through: c.nextClock, EarliestAt: c.nextClock})
+			c.pending[id] = append(c.pending[id], performanceCurrentnessSample{Measurement: c.measurement, Kind: "clock", SloID: id, Through: c.nextClock, EarliestAt: c.nextClock})
 		}
 		c.nextClock = c.nextClock.Add(time.Minute)
 	}
 	return nil
 }
 
-func (c *performanceCurrentness) observe(status api.SloCurrentStatus, now time.Time) error {
+func (c *performanceCurrentness) observe(status api.SloCurrentStatus, probeStarted, now time.Time) error {
 	if checkPerformanceGeneration(status.Generation) != nil || !status.Current.EvaluationAt.Equal(status.Generation.EvaluatedThrough) {
 		return errors.New("currentness response has inconsistent provenance")
 	}
@@ -94,20 +105,69 @@ func (c *performanceCurrentness) observe(status api.SloCurrentStatus, now time.T
 	if err != nil {
 		return errors.New("currentness response has invalid source generation")
 	}
+	c.observeProgress(status.Slo.Id.String(), source, status.Generation.EvaluatedThrough, probeStarted, now)
+	return nil
+}
+
+func (c *performanceCurrentness) observeProgress(id string, source int64, through, probeStarted, now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	id := status.Slo.Id.String()
 	pending := c.pending[id]
 	retained := pending[:0]
 	for _, sample := range pending {
-		if source >= sample.Source && !status.Generation.EvaluatedThrough.Before(sample.Through) {
-			sample.VisibleAt, sample.UpperBound = now.UTC(), now.Sub(sample.EarliestAt)
+		if source >= sample.Source && !through.Before(sample.Through) {
+			previous := c.probed[id]
+			sample.VisibleAt = now.UTC()
+			sample.LowerBound, sample.UpperBound = performanceLagBounds(sample.EarliestAt, now, previous.started, previous.source >= sample.Source && !previous.through.Before(sample.Through))
+			if !previous.started.IsZero() {
+				sample.PreviousProbe = new(previous.started.UTC())
+			}
 			c.completed = append(c.completed, sample)
 		} else {
 			retained = append(retained, sample)
 		}
 	}
 	c.pending[id] = retained
+	c.probed[id] = performanceCurrentnessProbe{started: probeStarted, source: source, through: through}
+}
+
+func (c *performanceCurrentness) observePublished(ctx context.Context, db *pgx.Conn, objectives []string) error {
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	started := time.Now()
+	rows, err := db.Query(bounded, `SELECT p.slo_id::text,g.source_generation,g.evaluated_through
+FROM public.almanac_slo_current_projections p
+JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
+JOIN public.almanac_slos s ON s.id=p.slo_id
+JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+WHERE p.slo_id=ANY($1::uuid[]) AND g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision`, objectives)
+	if err != nil {
+		return errors.New("observe published current generations failed")
+	}
+	defer rows.Close()
+	type progress struct {
+		id      string
+		source  int64
+		through time.Time
+	}
+	var published []progress
+	for rows.Next() {
+		var value progress
+		if err := rows.Scan(&value.id, &value.source, &value.through); err != nil {
+			return errors.New("decode published current generations failed")
+		}
+		if value.source <= 0 || value.through.IsZero() {
+			return errors.New("publication observer found invalid generation provenance")
+		}
+		published = append(published, value)
+	}
+	if rows.Err() != nil || len(published) != len(objectives) {
+		return errors.New("publication observer omitted maintained objectives")
+	}
+	observed := time.Now()
+	for _, value := range published {
+		c.observeProgress(value.id, value.source, value.through, started, observed)
+	}
 	return nil
 }
 
@@ -116,7 +176,11 @@ func (c *performanceCurrentness) evidence(now time.Time) ([]performanceCurrentne
 	defer c.mu.Unlock()
 	completed := append([]performanceCurrentnessSample(nil), c.completed...)
 	durations := map[string][]time.Duration{"receipt": {}, "clock": {}}
+	var resultErr error
 	for _, sample := range completed {
+		if sample.UpperBound < 0 || sample.LowerBound < 0 || sample.LowerBound > sample.UpperBound {
+			resultErr = errors.New("currentness clock/probe bounds are inconsistent")
+		}
 		durations[sample.Kind] = append(durations[sample.Kind], sample.UpperBound)
 	}
 	unfinished := 0
@@ -128,7 +192,6 @@ func (c *performanceCurrentness) evidence(now time.Time) ([]performanceCurrentne
 		}
 	}
 	distributions := make(map[string]performanceDistribution)
-	var resultErr error
 	for _, kind := range []string{"receipt", "clock"} {
 		distribution := performancePercentiles(durations[kind])
 		distributions[kind] = distribution

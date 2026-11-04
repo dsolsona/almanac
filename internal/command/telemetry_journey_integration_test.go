@@ -29,26 +29,6 @@ type traceLookup struct {
 	Connected bool  `json:"connected"`
 }
 
-type journeyTraceDocument struct {
-	Data []struct {
-		TraceID string `json:"traceID"`
-		Spans   []struct {
-			TraceID    string `json:"traceID"`
-			SpanID     string `json:"spanID"`
-			Operation  string `json:"operationName"`
-			Duration   int64  `json:"duration"`
-			ProcessID  string `json:"processID"`
-			References []struct {
-				TraceID string `json:"traceID"`
-				SpanID  string `json:"spanID"`
-			} `json:"references"`
-		} `json:"spans"`
-		Processes map[string]struct {
-			Service string `json:"serviceName"`
-		} `json:"processes"`
-	} `json:"data"`
-}
-
 // Retrieve complete traces from the real local sink. The fixture's UI and
 // independently checked counts remain the acceptance path; tracing adds evidence
 // to that same journey without introducing another browser matrix.

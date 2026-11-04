@@ -6,6 +6,7 @@ import { resolve, join, dirname } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { get, request } from 'node:https';
 import { chromium, expect } from '@playwright/test';
+import { browserTransportReady } from './browser-readiness.mjs';
 import { checkTelemetryRuntime } from './check-telemetry-runtime.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -274,6 +275,7 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     env.ALMANAC_TELEMETRY_DISABLED=value?'false':'true';
     await compose(['up','-d','--no-deps','app']);
     await expect.poll(async()=>{try{return (await servedHTML()).includes(sourceMarker);}catch{return false;}},{timeout:15_000}).toBe(true);
+    await browserTransportReady(browser,url);
     enabled=value;
   };
   const sampleRuntime=async()=>{
@@ -281,6 +283,13 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     assert.match(appID,/^[0-9a-f]{12,64}$/);
     const sample=JSON.parse(await command('docker',['stats','--no-stream','--format','{{json .}}',appID],{timeout:5000}));
     return {cpu_percent:sample.CPUPerc,memory_usage:sample.MemUsage,pids:sample.PIDs};
+  };
+  const captureFailure=async directory=>{
+    const container=(await compose(['ps','-aq','app'])).trim();
+    assert.match(container,/^[a-f0-9]{12,64}$/);
+    const logs=redact(await compose(['logs','--no-color','--tail','80','app']));
+    assert.ok(Buffer.byteLength(logs)<=256*1024&&!containsFixtureSecret(logs),'unsafe or oversized failure diagnostics');
+    writeFileSync(join(directory,'failure-runtime.json'),JSON.stringify({container,backend_sha256:backendSHA,logs}),{mode:0o600});
   };
   const snapshotDataset=async()=>JSON.parse((await compose(['exec','-T','postgres','psql','-U','almanac','-d','almanac','-Atc',
     `SELECT json_build_object('slis',(SELECT count(*) FROM public.almanac_slis),'slos',(SELECT count(*) FROM public.almanac_slos),'observations',(SELECT count(*) FROM public.almanac_sli_coverage),'source_generation',(SELECT max(generation)::text FROM public.almanac_sli_source_generations WHERE sli_id='${objective.sli_id}'),'measurement_revision',(SELECT d.measurement_revision::text FROM public.almanac_slos s JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision WHERE s.id='${objective.slo_id}'))`])).trim());
@@ -294,8 +303,22 @@ async function checkComposeTelemetryRuntime(objectiveArtifact='slo-journey.json'
     await expect(page.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
     const storageState=await context.storageState();
     await context.close();
-    await checkTelemetryRuntime({browser,url,storageState,sliID:objective.sli_id,sloID:objective.slo_id,
-      artifacts,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,precedingFailure});
+    const comparisons=[];
+    let firstFailure;
+    for(const networkLatency of [0,100]){
+      const directory=join(artifacts,`network-${networkLatency}ms`);
+      mkdirSync(directory,{mode:0o700});
+      try{
+        await checkTelemetryRuntime({browser,url,storageState,sliID:objective.sli_id,sloID:objective.slo_id,
+          artifacts:directory,backendSHA,traceURL:'http://'+tracePort,setEnabled,containsSecret:containsFixtureSecret,sampleRuntime,snapshotDataset,captureFailure,precedingFailure,networkLatency});
+        comparisons.push({added_latency_ms:networkLatency,result:'passed',artifacts:directory});
+      }catch(error){
+        firstFailure??=error;
+        comparisons.push({added_latency_ms:networkLatency,result:'failed',artifacts:directory});
+      }
+    }
+    writeFileSync(join(artifacts,'network-comparison.json'),JSON.stringify({cpu_slowdown:1,bandwidth_cap:null,comparisons}),{mode:0o600});
+    if(firstFailure)throw firstFailure;
   } finally {
     activeBrowser=undefined;
     await browser.close();
@@ -1197,6 +1220,16 @@ async function checkLocalAgentRegistration() {
     assert.equal(intentionalReloadCounts.document_navigation_requests, 1);
     assert.equal(intentionalReloadCounts.auth_context_requests, 1);
     const collection = await checkCollectedSLI(page, result.agent.id);
+    const collectorToken=collection.oldAgent.token;
+    await stopAgent(collection.oldAgent);
+    stage='real Compose tracing baseline, time boundary and enabled/disabled overhead';
+    await checkComposeTelemetryRuntime();
+    activeBrowser=browser;
+    collection.oldAgent=await startAgent(page,result.agent.id,collectorToken);
+    await expect.poll(()=>page.evaluate(async id=>{
+      const response=await fetch(`/api/v1/agents/${id}`);
+      return response.ok?(await response.json()).runtime?.collection_explanation:null;
+    },result.agent.id),{timeout:15_000}).toBe('none');
     await checkAgentRetirement(page, result, collection);
     writeFileSync(join(artifacts, 'local-agent-registration.json'), JSON.stringify({
       name: 'local', display_name: 'Local', create_requests: requests.length,
@@ -1430,8 +1463,6 @@ try {
   await checkPermanentLogin();
   stage = 'real Compose browser registration with Local display name';
   await checkLocalAgentRegistration();
-  stage = 'real Compose tracing baseline, time boundary and enabled/disabled overhead';
-  await checkComposeTelemetryRuntime();
   stage = 'logs exclude credentials';
   const logs = await compose(['logs', '--no-color']);
   const agentLogs = launcherLogs;

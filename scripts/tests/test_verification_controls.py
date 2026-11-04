@@ -8,6 +8,7 @@ import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from test_integration_runner import IntegrationRunnerTest
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "verification-controls.py"
 REPO_ROOT = MODULE_PATH.parents[1]
@@ -17,6 +18,32 @@ SPEC.loader.exec_module(vc)
 
 
 class VerificationControlsTest(unittest.TestCase):
+    def test_integration_reuse_report_requires_complete_honest_coverage(self):
+        cases = [{"package": "storage", "test": "TestIntegrationA", "result": "reused", "evidence": {"result": "passed"}},
+                 {"package": "command", "test": "TestIntegrationB", "result": "passed", "evidence": {"result": "passed"}}]
+        report = {"cases": cases, "started_unix": 101, "ended_unix": 102, "full_scope": True,
+                  "discovered": 2, "selected": 2, "executed": 1, "reused": 1}
+        vc.validate_integration_report(report, True, 100)
+        for changes in ({"cases": []}, {"started_unix": 99}, {"discovered": 3}, {"executed": 2},
+                        {"cases": [cases[0], cases[0]]}, {"cases": [cases[0], {**cases[1], "result": "failed"}]}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                vc.validate_integration_report({**report, **changes}, True, 100)
+
+    def test_exact_integration_case_cannot_be_a_full_gate_receipt(self):
+        self.assertFalse(vc.receipt_is_full_scope("integration", {"go_package": "all", "integration_test": "TestIntegrationA"}))
+        self.assertFalse(vc.receipt_is_full_scope("integration", {"go_package": "all", "plan_only": True}))
+        self.assertTrue(vc.receipt_is_full_scope("integration", {"go_package": "all", "integration_selection": "affected"}))
+
+    def test_storage_discovery_checks_retained_regressions_early_without_losing_cases(self):
+        spec = importlib.util.spec_from_file_location("integration_selection", REPO_ROOT / "scripts/select-integration-tests.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        names = ["TestIntegrationOther", "TestIntegrationRetainedDenseHistoryAndPersistedRestart",
+                 "TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict", "TestIntegrationRetainedMinuteHistoryAndPersistedRestart"]
+        got = module.select("\n".join(names), "storage")
+        self.assertEqual(got, [names[2], names[3], names[1], names[0]])
+        self.assertCountEqual(got, names)
+
     def test_forward_and_backward_clock_steps_do_not_change_test_duration(self):
         for wall_end in (488, -288):
             evidence = vc.elapsed_evidence(100, wall_end, 20, 38.929)
@@ -95,6 +122,27 @@ class VerificationControlsTest(unittest.TestCase):
         events.write_text(json.dumps({"Action": "run", "Test": sorted(names)[0]}))
         with self.assertRaises(ValueError):
             vc.counted_go_events(events, names)
+
+    def test_performance_requires_ten_slo_scope_and_excludes_deferred_fleets(self):
+        name = "TestIntegrationControlledBackendPerformance"
+        names = [name, f"{name}/independent-10"]
+        events = self.put(".local/performance-go-test.jsonl", "\n".join(json.dumps({"Action": action, "Test": case}) for case in names for action in ("run", "pass")))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(vc.performance_evidence(), 0)
+        for action in ("skip", "fail"):
+            events.write_text("\n".join(json.dumps({"Action": outcome, "Test": case}) for case in names for outcome in ("run", action if case == names[-1] else "pass")))
+            with self.assertRaises(ValueError):
+                vc.performance_evidence()
+        events.write_text("\n".join(json.dumps({"Action": action, "Test": case}) for case in names[:-1] for action in ("run", "pass")))
+        with self.assertRaises(ValueError):
+            vc.performance_evidence()
+        events.write_text("\n".join(json.dumps({"Action": action, "Test": case}) for case in names for action in ("run", "pass")) + "\n" + json.dumps({"Action": "run", "Test": f"{name}/independent-1000"}))
+        with self.assertRaises(ValueError):
+            vc.performance_evidence()
+        self.assertNotIn("performance", vc.MODES)
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        ordinary = makefile.split("_verify_all:\n", 1)[1].split("\n_verify_web:", 1)[0]
+        self.assertNotIn("performance", ordinary)
 
     def test_timing_ledger_deduplicates_runs_marks_unknown_and_unions_overlap(self):
         records = [

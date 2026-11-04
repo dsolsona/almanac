@@ -2,16 +2,25 @@
 WITH scope AS (
     SELECT s.id,s.version,s.display_name,service.display_name AS service_name,measurement.display_name AS sli_name,
            d.revision,d.measurement_revision,p.generation_id,p.payload_digest,
+           coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
+             AND g.calculation_version=sqlc.arg(calculation_version)
+             AND g.source_generation<=coalesce(source.generation,0)
+             AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days'
+             AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS usable,
            coalesce(source.generation,0) AS source_generation,
+           coalesce(f.attempts>=5,false) AS current_failed,
+           EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges dirty WHERE dirty.sli_id=d.sli_id
+             AND dirty.measurement_revision=d.measurement_revision AND dirty.attempts>=5
+             AND (dirty.lease_until IS NULL OR dirty.lease_until<=sqlc.arg(now)::timestamptz)) AS source_failed,
            EXISTS(SELECT 1 FROM public.almanac_slo_history_jobs j WHERE j.slo_id=s.id AND j.definition_revision=d.revision
              AND j.measurement_revision=d.measurement_revision AND j.calculation_version=sqlc.arg(calculation_version)
              AND j.kind='overview' AND j.state='failed') AS budget_failed,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
              AND g.calculation_version=sqlc.arg(calculation_version)
              AND g.source_generation=coalesce(source.generation,0)
-             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds)
+             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-             AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8')),false) AS current
+             AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS current
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     JOIN public.almanac_services service ON service.id=d.service_id
@@ -19,12 +28,14 @@ WITH scope AS (
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
+    LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision
+      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=sqlc.arg(calculation_version)
     WHERE (sqlc.narg(query_text)::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower(sqlc.narg(query_text)::text))>0)
       AND (sqlc.narg(service_id)::uuid IS NULL OR d.service_id=sqlc.narg(service_id)::uuid)
     ORDER BY s.id LIMIT 10001
 )
 SELECT sha256(convert_to(coalesce(jsonb_agg(jsonb_build_array(id,version,display_name,service_name,sli_name,
-           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
+           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed,current,usable,current_failed,source_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
        count(*)::bigint AS definition_count,coalesce(bool_and(current),true)::boolean AS current
 FROM scope;
 
@@ -44,16 +55,17 @@ SELECT EXISTS(SELECT 1 FROM public.almanac_slo_history_jobs j
 WHERE j.slo_id=$1 AND j.definition_revision=$2 AND j.measurement_revision=$3
   AND j.calculation_version=$4 AND j.kind='overview' AND j.state='failed');
 
--- name: QueueVisibleBudgetHistory :execrows
+-- name: QueueDueBudgetHistory :execrows
 WITH wanted AS (
     SELECT s.id, d.revision, d.measurement_revision, coalesce(source.generation,0) AS source_generation,
            to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at,
            to_timestamp(floor((floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds-604800)/d.cadence_seconds)*d.cadence_seconds) AS start
-           ,to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '400 days'))/d.cadence_seconds)*d.cadence_seconds) AS retention_start
-    FROM unnest(sqlc.arg(slo_ids)::uuid[]) requested(id)
-    JOIN public.almanac_slos s ON s.id=requested.id
+           ,to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds) AS retention_start
+    FROM public.almanac_slos s
+    JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
+    WHERE p.budget_history_state<>'ready'
 )
 INSERT INTO public.almanac_slo_history_jobs
     (slo_id,definition_revision,measurement_revision,source_generation,evaluated_through,range_start,range_end,burn_window_seconds,state,next_attempt_at,created_at,kind,calculation_version,retention_start)
@@ -70,6 +82,13 @@ AND NOT EXISTS (
     SELECT 1 FROM public.almanac_slo_history_jobs failed WHERE failed.slo_id=w.id AND failed.definition_revision=w.revision
     AND failed.measurement_revision=w.measurement_revision AND failed.kind='overview' AND failed.state='failed'
     AND failed.calculation_version=sqlc.arg(calculation_version)
+)
+AND NOT EXISTS (
+    SELECT 1 FROM public.almanac_slo_history_jobs queued
+    WHERE queued.slo_id=w.id AND queued.definition_revision=w.revision AND queued.measurement_revision=w.measurement_revision
+      AND queued.source_generation=w.source_generation AND queued.evaluated_through=w.at
+      AND queued.kind='overview' AND queued.calculation_version=sqlc.arg(calculation_version)
+      AND queued.retention_start=w.retention_start
 )
 AND (SELECT count(*) FROM public.almanac_slo_history_jobs queued WHERE queued.slo_id=w.id)<8
 ORDER BY w.id

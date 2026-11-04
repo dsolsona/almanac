@@ -6,24 +6,59 @@ import { AgentsPage } from '../src/agents/AgentsPage.tsx';
 import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BrowserTraceOutbox } from '../src/telemetry/outbox.ts';
-import { installTelemetry, telemetrySession, journeyContentReady, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
+import { installTelemetry, telemetrySession, journeyContentReady, traceChartRender, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
 
-const exported = vi.hoisted(() => ({ bodies: [] as string[], failures: [] as unknown[] }));
+const exported = vi.hoisted(() => ({ bodies: [] as string[], failures: [] as unknown[], hold: false, release: [] as (() => void)[] }));
 vi.mock('@opentelemetry/exporter-trace-otlp-http', async () => {
   const { JsonTraceSerializer } = await import('@opentelemetry/otlp-transformer');
   return { OTLPTraceExporter: class {
+    private pending = new Set<Promise<void>>();
     export(spans: ReadableSpan[], callback: (result: { code: number }) => void) {
       try {
         const body = JsonTraceSerializer.serializeRequest(spans);
         exported.bodies.push(new TextDecoder().decode(body));
-        callback({ code: 0 });
+        if (exported.hold) {
+          const pending = new Promise<void>(resolve => exported.release.push(() => { callback({ code: 0 }); resolve(); }));
+          this.pending.add(pending);
+          void pending.then(() => this.pending.delete(pending));
+        } else callback({ code: 0 });
       } catch (error) { exported.failures.push(error); throw error; }
     }
     async shutdown() {}
+    async forceFlush() { await Promise.all(this.pending); }
   } };
 });
 
+it('waits for an automatic export already in flight before confirming a flush', async () => {
+  stop = installTelemetry();
+  telemetrySession({ csrf_token: 'fixture-csrf', session: { user_id: 'fixture-user', restricted: false } });
+  exported.hold = true;
+  for (let index = 0; index < 64; index++) traceChartRender(() => {});
+  expect(exported.release).toHaveLength(1);
+  let settled = false;
+  const flushing = flushTelemetry().then(() => { settled = true; });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(settled, 'flush returned while an automatic export was still pending').toBe(false);
+  } finally {
+    exported.hold = false;
+    for (const release of exported.release.splice(0)) release();
+    await flushing;
+  }
+  expect(settled).toBe(true);
+});
+
 let stop: (() => Promise<void>) | undefined;
+
+it('releases the unused telemetry response body before completing an upload', async () => {
+  const cancel = vi.fn();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream({ cancel }), { status: 202 })));
+  stop = installTelemetry();
+  const response = await fetch('/api/v1/telemetry/traces', { method: 'POST', body: '{}' });
+  expect(response.status).toBe(202);
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
 async function expectReadyJourney(action: () => void) {
   let ready = false;
   const listener = (event: Event) => { if ((event as CustomEvent).detail?.result === 'ready') ready = true; };
@@ -61,6 +96,35 @@ it.each(['agents', 'datasources'] as const)('ends a successful %s page journey a
     expect(await screen.findByText(page === 'agents' ? 'No agents have been registered.' : 'No datasources are available to your account.')).toBeVisible();
     await flushTelemetry();
     expect(exported.bodies.some(body => body.includes('ui.management') && body.includes('ready'))).toBe(true);
+  } finally { window.removeEventListener('almanac:journey', completed); }
+});
+
+it.each([null, { restricted: true }])('starts a fresh authenticated detail trace after sign-in or password entry (%j)', async session => {
+  history.replaceState({}, '', '/slos/12345678-1234-1234-1234-123456789abc');
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));
+  const completed = vi.fn();
+  window.addEventListener('almanac:journey', completed);
+  try {
+    stop = installTelemetry();
+    telemetrySession({ csrf_token: 'fixture-csrf', session });
+    expect(completed).toHaveBeenCalledTimes(1);
+    expect(completed.mock.calls[0][0].detail.result).toBe('cancelled');
+    const cancelledTrace = completed.mock.calls[0][0].detail.traceId;
+    journeyContentReady('slo.detail');
+    traceChartRender(() => {});
+    expect(completed).toHaveBeenCalledTimes(1);
+    telemetrySession({ csrf_token: 'fixture-csrf', session: { restricted: false } });
+    const response = await fetch('/api/v1/slos/12345678-1234-1234-1234-123456789abc/status');
+    traceJSON(response, await response.text());
+    await expectReadyJourney(() => { journeyContentReady('slo.detail'); traceChartRender(() => {}); });
+    expect(completed).toHaveBeenCalledTimes(2);
+    expect(completed.mock.calls[1][0].detail.traceId).not.toBe(cancelledTrace);
+    await flushTelemetry();
+    const spans = exported.bodies.flatMap(body => JSON.parse(body).resourceSpans.flatMap((resource: { scopeSpans: { spans: { name: string; traceId: string }[] }[] }) => resource.scopeSpans.flatMap(scope => scope.spans)));
+    const readyRoot = spans.find(span => span.name === 'ui.slo.detail' && span.traceId !== cancelledTrace)!;
+    expect(readyRoot).toBeDefined();
+    expect(spans.find(span => span.name.endsWith('/status'))?.traceId).toBe(readyRoot.traceId);
   } finally { window.removeEventListener('almanac:journey', completed); }
 });
 

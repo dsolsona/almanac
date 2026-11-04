@@ -5,13 +5,17 @@ package command
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/dsolsona/almanac/internal/testpostgres"
 )
 
 type performanceControlledReport struct {
@@ -35,6 +39,22 @@ func runControlledBackendPerformance(t *testing.T) {
 	defer stop()
 	ctx, cancel := context.WithTimeout(signals, 8*time.Hour)
 	defer cancel()
+	retained := retainedPerformanceFixtures(t)
+	for _, size := range []int{10} {
+		if !t.Run(fmt.Sprintf("independent-%d", size), func(t *testing.T) {
+			var saved *performanceRetainedFixture
+			if fixture, found := retained[strconv.Itoa(size)]; found {
+				saved = &fixture
+			}
+			runControlledBackendPerformanceFleet(t, ctx, size, saved)
+		}) {
+			return
+		}
+	}
+}
+
+func runControlledBackendPerformanceFleet(t *testing.T, ctx context.Context, size int, retainedFixture *performanceRetainedFixture) {
+	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal("resolve controlled performance workspace failed")
@@ -44,9 +64,10 @@ func runControlledBackendPerformance(t *testing.T) {
 		t.Fatal("create controlled performance evidence directory failed")
 	}
 	report := performanceControlledReport{SchemaVersion: 1, Started: time.Now().UTC(), Result: "running", Stages: make(map[string]jsontext.Value)}
+	var fleet performanceFleet
 	write := func() {
 		t.Helper()
-		body, err := json.Marshal(report)
+		body, err := marshalPerformanceEvidence(report)
 		if err != nil || os.WriteFile(filepath.Join(artifacts, "performance.json"), append(body, '\n'), 0o600) != nil {
 			t.Error("persist controlled performance evidence failed")
 		}
@@ -67,12 +88,26 @@ func runControlledBackendPerformance(t *testing.T) {
 		report.ActiveStage = name
 		write()
 		t.Logf("controlled performance stage=%s", name)
+		if !strings.HasPrefix(name, "production-browser-365-days-") || strings.HasSuffix(name, "-response-eviction") {
+			renewed, elapsed := renewPerformanceReaders(t, fleet)
+			if renewed > 0 {
+				body, err := marshalPerformanceEvidence(struct {
+					Readers int           `json:"readers"`
+					Elapsed time.Duration `json:"setup_ns"`
+				}{renewed, elapsed})
+				if err != nil {
+					t.Fatal("encode reader authentication setup failed")
+				}
+				report.Stages[name+"-authentication"] = jsontext.Value(body)
+				write()
+			}
+		}
 	}
 	record := func(name string, result any, resultErr error) bool {
 		t.Helper()
-		body, err := json.Marshal(result)
+		body, err := marshalPerformanceEvidence(result)
 		if err != nil {
-			t.Fatal("encode controlled performance stage evidence failed")
+			t.Fatalf("encode controlled performance stage evidence %T failed: %v", result, err)
 		}
 		report.Stages[name] = jsontext.Value(body)
 		if resultErr != nil {
@@ -83,44 +118,152 @@ func runControlledBackendPerformance(t *testing.T) {
 		return resultErr == nil
 	}
 	stage("fleet-setup")
-	fleet := newPerformanceFleet(t, ctx)
+	fleet = newPerformanceFleet(t, ctx, size, retainedFixture)
 	record("fleet-setup", struct {
 		SLIs, SLOs, Agents, Users int
 		Setup                     time.Duration
-	}{len(fleet.slis), len(fleet.objectives), len(fleet.agents), len(fleet.readers), fleet.setup}, nil)
+		ReservedDetail            string `json:"reserved_detail_slo_id"`
+	}{len(fleet.slis), len(fleet.objectives), len(fleet.agents), len(fleet.readers), fleet.setup, fleet.objectives[len(fleet.objectives)-1]}, nil)
 	stage("environment")
 	record("environment", performanceEnvironmentEvidence(t, fleet), nil)
-	stage("seed-56-days")
-	record("disk-admission-56-days", performanceFixtureDisk(t, ctx, performanceDiskReserve), nil)
-	seeded := seedPerformanceHistory(t, fleet, 56)
-	record("seed-56-days", seeded, nil)
-	stage("ready-56-days")
-	ready, err := runPerformanceReadyPhase(ctx, fleet, "ready-56-days", time.Now().UTC().Truncate(time.Minute))
-	if !record("ready-56-days", ready, err) {
+	stage("query-bind-preflight")
+	record("query-bind-preflight", performanceQueryPlans(t, fleet, false), nil)
+	if fleet.resumed {
+		record("retained-year-fixture", retainedFixture, nil)
+		stage("retained-year-preparation")
+		maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+		if !record("retained-year-preparation", maintenance, err) {
+			return
+		}
+		if size == 1 {
+			fleet.reserveDetail = false
+			stage("one-slo-retained-year-reads")
+			reads, err := runPerformanceReadyPhase(ctx, fleet, "one-slo-retained-year", time.Now().UTC().Truncate(time.Minute))
+			record("one-slo-retained-year-reads", reads, err)
+			return
+		}
+	}
+	if !fleet.resumed {
+		if size == 1 {
+			fleet.reserveDetail = false
+			previousDays := 0
+			for _, days := range []int{90, 180, 365} {
+				label := fmt.Sprintf("one-slo-%d-days", days)
+				stage(label + "-import")
+				performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve)
+				record(label+"-import", seedPerformanceHistory(t, fleet, days, previousDays), nil)
+				stage(label + "-maintenance")
+				maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+				if !record(label+"-maintenance", maintenance, err) {
+					return
+				}
+				stage(label + "-reads")
+				reads, err := runPerformanceReadyPhase(ctx, fleet, label, time.Now().UTC().Truncate(time.Minute))
+				if !record(label+"-reads", reads, err) {
+					return
+				}
+				previousDays = days
+			}
+			return
+		}
+		stage("seed-56-days")
+		record("disk-admission-56-days", performanceFixtureDisk(t, ctx, fleet, performanceDiskReserve), nil)
+		seeded := seedPerformanceHistory(t, fleet, 56, 0)
+		record("seed-56-days", seeded, nil)
+		stage("automatic-maintenance-56-days")
+		maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+		if !record("automatic-maintenance-56-days", maintenance, err) {
+			return
+		}
+		storageObserver := testpostgres.Connect(t, fleet.fixture.databaseURL)
+		var maintainedDatabaseBytes int64
+		err = storageObserver.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&maintainedDatabaseBytes)
+		closePerformanceObserver(storageObserver)
+		if !record("maintained-storage-56-days", struct {
+			DatabaseBytes int64 `json:"database_bytes"`
+		}{maintainedDatabaseBytes}, err) {
+			return
+		}
+		stage("ready-56-days")
+		ready, err := runPerformanceReadyPhase(ctx, fleet, "ready-56-days", time.Now().UTC().Truncate(time.Minute))
+		if !record("ready-56-days", ready, err) {
+			return
+		}
+		stage("query-plans-56-days")
+		record("query-plans-56-days", performanceQueryPlans(t, fleet, true), nil)
+		stage("persisted-restart-56-days")
+		restart, err := restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
+		if !record("persisted-restart-56-days", restart, err) {
+			return
+		}
+		stage("source-and-response-cache-rebuild-56-days")
+		rebuild, err := restartPerformancePhase(t, fleet, true, time.Now().UTC().Truncate(time.Minute))
+		if !record("source-and-response-cache-rebuild-56-days", rebuild, err) {
+			return
+		}
+		previousDays := 56
+		if size == 10 {
+			for _, days := range []int{90, 180} {
+				label := fmt.Sprintf("ten-slos-%d-days", days)
+				stage(label + "-import")
+				record(label+"-import", seedPerformanceHistory(t, fleet, days, previousDays), nil)
+				stage(label + "-maintenance")
+				maintenance, err := awaitPerformanceHistory(t, ctx, fleet)
+				if !record(label+"-maintenance", maintenance, err) {
+					return
+				}
+				stage(label + "-reads")
+				reads, err := runPerformanceReadyPhase(ctx, fleet, label, time.Now().UTC().Truncate(time.Minute))
+				if !record(label+"-reads", reads, err) {
+					return
+				}
+				previousDays = days
+			}
+		}
+		stage("seed-365-days")
+		required, err := performanceDiskRequired(maintainedDatabaseBytes, seeded.CanonicalRows, 365*24*60*int64(size)-seeded.NominalSlots)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record("disk-admission-365-days", performanceFixtureDisk(t, ctx, fleet, required), nil)
+		record("seed-365-days", seedPerformanceHistory(t, fleet, 365, previousDays), nil)
+		stage("automatic-maintenance-365-days")
+		maintenance, err = awaitPerformanceHistory(t, ctx, fleet)
+		if !record("automatic-maintenance-365-days", maintenance, err) {
+			return
+		}
+	}
+	stage("imported-prefix-source-watermarks")
+	observer := testpostgres.Connect(t, fleet.fixture.databaseURL)
+	fleet.seedSources, err = performanceSourceVersions(ctx, observer, fleet.slis)
+	closePerformanceObserver(observer)
+	if !record("imported-prefix-source-watermarks", fleet.seedSources, err) {
 		return
 	}
-	stage("query-plans-56-days")
-	record("query-plans-56-days", performanceQueryPlans(t, fleet), nil)
-	stage("persisted-restart-56-days")
+	stage("full-acceptance-tracing")
+	sampling := enablePerformanceFullTracing(t, fleet.fixture)
+	record("full-acceptance-tracing", sampling, nil)
+	stage("persisted-restart-365-days")
 	restart, err := restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
-	if !record("persisted-restart-56-days", restart, err) {
+	if !record("persisted-restart-365-days", restart, err) {
 		return
 	}
-	stage("blank-derived-rebuild-56-days")
-	rebuild, err := restartPerformancePhase(t, fleet, true, time.Now().UTC().Truncate(time.Minute))
-	if !record("blank-derived-rebuild-56-days", rebuild, err) {
+	stage("query-plans-365-days")
+	record("query-plans-365-days", performanceQueryPlans(t, fleet, true), nil)
+	// Fail browser readiness before the two mandatory fifteen-minute live windows.
+	if !measurePerformanceBrowsers(t, ctx, fleet, stage, record) {
 		return
 	}
-	stage("ingestion-only-baseline")
-	baseline, err := measurePerformanceLiveWindow(t, fleet, "ingestion-only-baseline", nil)
-	if !record("ingestion-only-baseline", baseline, err) {
+	stage("ingestion-only-baseline-365-days")
+	baseline, err := measurePerformanceLiveWindow(t, fleet, "ingestion-only-baseline-365-days", nil)
+	if !record("ingestion-only-baseline-365-days", baseline, err) {
 		return
 	}
-	stage("live-historical-saturation")
+	stage("live-historical-saturation-365-days")
 	saturation := newPerformanceSaturation(t, fleet)
-	loaded, err := measurePerformanceLiveWindow(t, fleet, "live-historical-saturation", saturation.run)
-	record("saturation-traffic-and-currentness", saturation.evidence(), nil)
-	if !record("live-historical-saturation", loaded, err) {
+	loaded, err := measurePerformanceLiveWindow(t, fleet, "live-historical-saturation-365-days", saturation.run)
+	record("saturation-traffic-and-currentness-365-days", saturation.evidence(), nil)
+	if !record("live-historical-saturation-365-days", loaded, err) {
 		return
 	}
 	if err := checkPerformanceLiveIsolation(baseline, loaded); err != nil {
@@ -128,30 +271,25 @@ func runControlledBackendPerformance(t *testing.T) {
 		return
 	}
 	record("live-isolation-gate", struct{ Result string }{"passed"}, nil)
-	stage("production-browser")
-	browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
-	browserArtifacts, err := runPerformanceBrowser(t, browserContext, fleet)
-	stopBrowser()
-	if !record("production-browser", struct{ Artifacts string }{browserArtifacts}, err) {
+	stage("independent-concurrent-current-365-days")
+	current, err := performanceConcurrentCurrent(t, ctx, fleet)
+	if !record("independent-concurrent-current-365-days", current, err) {
 		return
 	}
-	stage("seed-400-days")
-	required, err := performanceDiskRequired(seeded.DatabaseBytes, seeded.CanonicalRows, 400*24*60*100-seeded.NominalSlots)
-	if err != nil {
-		t.Fatal(err)
-	}
-	record("disk-admission-400-days", performanceFixtureDisk(t, ctx, required), nil)
-	record("seed-400-days", seedPerformanceHistory(t, fleet, 400), nil)
-	stage("ready-400-days")
-	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-400-days", time.Now().UTC().Truncate(time.Minute))
-	if !record("ready-400-days", retained, err) {
+	fleet.reserveDetail = false
+	stage("independent-accuracy-365-days")
+	accuracy, err := runPerformanceAccuracy(ctx, fleet)
+	if !record("independent-accuracy-365-days", accuracy, err) {
 		return
 	}
-	stage("query-plans-400-days")
-	record("query-plans-400-days", performanceQueryPlans(t, fleet), nil)
-	stage("persisted-restart-400-days")
-	restart, err = restartPerformancePhase(t, fleet, false, time.Now().UTC().Truncate(time.Minute))
-	if !record("persisted-restart-400-days", restart, err) {
+	stage("ready-365-days")
+	retained, err := runPerformanceReadyPhase(ctx, fleet, "ready-365-days", time.Now().UTC().Truncate(time.Minute))
+	if !record("ready-365-days", retained, err) {
+		return
+	}
+	stage("late-correction-and-retained-restart")
+	late, err := performanceLateCorrection(t, ctx, fleet)
+	if !record("late-correction-and-retained-restart", late, err) {
 		return
 	}
 	stage("retention-expiry")
@@ -159,6 +297,44 @@ func runControlledBackendPerformance(t *testing.T) {
 	if !record("retention-expiry", expiry, err) {
 		return
 	}
+	stage("populated-retention-cleanup")
+	cleanup, err := performanceRetentionCleanup(t, ctx, fleet)
+	if !record("populated-retention-cleanup", cleanup, err) {
+		return
+	}
+	stage("supplemental-shared-source")
+	shared, err := performanceSharedSource(t, ctx, fleet)
+	if !record("supplemental-shared-source", shared, err) {
+		return
+	}
+	stage("clock-only-current-and-global-urgency")
+	clock, err := performanceClockOnly(t, ctx, fleet, shared, late)
+	if !record("clock-only-current-and-global-urgency", clock, err) {
+		return
+	}
+	stage("matched-background-work-traces")
+	workTraces, err := capturePerformanceWork(t, ctx, fleet, clock, sampling)
+	if !record("matched-background-work-traces", workTraces, err) {
+		return
+	}
 	stage("completed")
 	t.Logf("controlled performance evidence: %s", artifacts)
+}
+
+func measurePerformanceBrowsers(t *testing.T, ctx context.Context, fleet performanceFleet, stage func(string), record func(string, any, error) bool) bool {
+	t.Helper()
+	for _, latency := range []int{0, 100} {
+		label := fmt.Sprintf("production-browser-365-days-%dms", latency)
+		stage(label + "-response-eviction")
+		browserRestart := restartPerformanceForBrowser(t, fleet, latency == 0)
+		record(label+"-response-eviction", browserRestart, nil)
+		stage(label)
+		browserContext, stopBrowser := context.WithTimeout(ctx, 25*time.Minute)
+		browserArtifacts, browserErr := runPerformanceBrowser(t, browserContext, fleet, browserRestart, latency)
+		stopBrowser()
+		if !record(label, struct{ Artifacts string }{browserArtifacts}, browserErr) {
+			return false
+		}
+	}
+	return true
 }

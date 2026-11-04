@@ -14,6 +14,7 @@ let current: Journey | undefined;
 let provider: TracerProvider | undefined;
 let csrf = '';
 let authenticated = false;
+let awaitingAuthentication = false;
 let enabled = true;
 let installed = false;
 let exportFailures = 0;
@@ -63,6 +64,17 @@ export function telemetrySession(value: { csrf_token: string; session: unknown }
   if (value?.session && typeof value.session === 'object' && 'user_id' in value.session && typeof value.session.user_id === 'string') {
     outbox?.authenticate(value.session.user_id);
     replayPending?.();
+  }
+  if (!value) return;
+  const restricted = !!value.session && typeof value.session === 'object' && 'restricted' in value.session && value.session.restricted === true;
+  if (value.session === null || restricted) {
+    awaitingAuthentication = true;
+    if (current && !current.ended) endJourney(current, 'cancelled');
+  } else if (awaitingAuthentication) {
+    // Human sign-in/password entry is outside the authenticated page journey.
+    awaitingAuthentication = false;
+    if (current && !current.ended) endJourney(current, 'cancelled');
+    beginJourney();
   }
 }
 
@@ -206,7 +218,7 @@ export function installTelemetry() {
     export(spans, callback) {
       if (!authenticated || !csrf || !enabled) { droppedBatches++; exportEvent(spans, !enabled ? 'disabled' : 'unauthenticated'); callback({ code: 0 }); return; }
       try {
-        exporter.export(spans, result => { if (result.code !== 0) exportFailures++; else outbox?.acknowledge(spans); exportEvent(spans, result.code === 0 ? 'exported' : 'failed'); callback(result); });
+        exporter.export(spans, result => { if (result.code !== 0) exportFailures++; else outbox?.acknowledge(spans); exportEvent(spans, result.code === 0 ? 'exported' : 'failed', result.error); callback(result); });
       } catch (error) {
         // Serialization may throw before the SDK invokes its result callback.
         // Always settle the processor, count the loss and retain only a fixed
@@ -231,7 +243,11 @@ export function installTelemetry() {
       batch.onEnd(span);
       if (/^ui\.(?:sli|slo)\.(?:list|detail)$/.test(span.name)) exportEvent([span], (span.spanContext().traceFlags & 1) === 0 ? 'unsampled' : droppedSpans > previousDrops ? 'queue_full' : 'queued');
     },
-    forceFlush: () => batch.forceFlush(),
+    forceFlush: async () => {
+      await batch.forceFlush();
+      // Automatic batches may already be exporting outside the processor queue.
+      await exporter.forceFlush();
+    },
     shutdown: () => batch.shutdown(),
   };
   provider = new TracerProvider({ resource: resourceFromAttributes({ 'service.name': 'almanac-web', 'service.version': new URL(import.meta.url).pathname.split('/').pop() ?? 'unknown', 'deployment.environment.name': import.meta.env.MODE }), sampler: new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(ratio) }), spanLimits: { attributeCountLimit: 16, attributeValueLengthLimit: 128, eventCountLimit: 0, linkCountLimit: 0 }, spanProcessors: [observed] });
@@ -239,7 +255,13 @@ export function installTelemetry() {
   beginJourney(location.pathname + location.search, true);
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
-    if (url.origin !== location.origin || !url.pathname.startsWith('/api/') || url.pathname.startsWith('/api/v1/telemetry/')) return upstream(input, init);
+    if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return upstream(input, init);
+    if (url.pathname.startsWith('/api/v1/telemetry/')) {
+      const response = await upstream(input, init);
+      // The SDK reads only status/headers; release its unused upload response.
+      await response.body?.cancel().catch(() => undefined);
+      return response;
+    }
     const observeCapability = (response: Response) => {
       const capability = response.headers.get('X-Almanac-Tracing');
       // Observe explicit changes while capture is off, too. Missing metadata
@@ -298,6 +320,7 @@ export function installTelemetry() {
     provider = undefined;
     current = undefined;
     authenticated = false;
+    awaitingAuthentication = false;
     csrf = '';
     installed = false;
     enabled = true;

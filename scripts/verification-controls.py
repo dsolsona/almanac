@@ -38,7 +38,7 @@ MODE_PATHS = {
     "slo-integration": GO_PRODUCTION + ("internal/storage", "sqlc.yaml") + CONTROL_INPUTS,
     "slo-journey": GO_PRODUCTION + WEB_PRODUCTION + ("internal/command/objectives_journey_integration_test.go",) + CONTROL_INPUTS,
     "agent-lifecycle": GO_PRODUCTION + ("internal/command", "internal/agentmanagement", "internal/agenthttp", "internal/authentication", "internal/authhttp", "internal/backendhttp", "internal/sli", "internal/storage") + CONTROL_INPUTS,
-    "verification-tools": ("Makefile", "scripts/verification-controls.py", "scripts/tests/test_verification_controls.py"),
+    "verification-tools": ("Makefile", "scripts/verification-controls.py", "scripts/integration-runner.py", "scripts/select-integration-tests.py", "scripts/tests"),
 }
 MODES = {"slo-unit": ("web", MODE_PATHS["slo-unit"]), "slo-integration": ("db", MODE_PATHS["slo-integration"]), "slo-journey": ("journey", MODE_PATHS["slo-journey"]), "agent-lifecycle": ("db", MODE_PATHS["agent-lifecycle"]), "verification-tools": ("tools", MODE_PATHS["verification-tools"])}
 WEB_TESTS = ("tests/slos-client.test.tsx", "tests/slos-page.test.tsx", "tests/slo-operational.test.tsx", "tests/charts.test.tsx", "tests/controls.test.tsx", "tests/slis-client.test.tsx", "tests/slis-page.test.tsx")
@@ -48,7 +48,7 @@ DB_TESTS = {
     "slo-journey": ("TestIntegrationExecutableFirstObjectiveJourney",),
     "agent-lifecycle": ("TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle",),
 }
-BROAD_MODES = {"ordinary", "linux", "linux-sli", "go", "go-portability", "go-race", "auth-bench", "integration", "journey", "compose", "providers", "smoke", "unit", "browser"}
+BROAD_MODES = {"ordinary", "linux", "linux-sli", "go", "go-portability", "go-race", "auth-bench", "integration", "performance", "journey", "compose", "providers", "smoke", "unit", "browser"}
 BROAD_INPUTS = {
     "ordinary": GO_PRODUCTION + WEB_PRODUCTION + ("web/tests", "sqlc.yaml", "scripts", "Makefile"),
     "linux": GO_PRODUCTION + WEB_PRODUCTION + ("web/tests", "sqlc.yaml", "scripts", "Makefile"),
@@ -57,7 +57,8 @@ BROAD_INPUTS = {
     "go-portability": GO_PRODUCTION + ("web/src", "scripts", "Makefile"),
     "go-race": GO_PRODUCTION + ("scripts", "Makefile"),
     "auth-bench": ("internal/identity", "go.mod", "go.sum", "Makefile", "scripts"),
-    "integration": GO_PRODUCTION + ("sqlc.yaml", "scripts", "Makefile"),
+    "integration": GO_PRODUCTION + WEB_PRODUCTION + ("web/public", "web/assets.go", "deploy/local", "sqlc.yaml", "scripts", "Makefile"),
+    "performance": GO_PRODUCTION + WEB_PRODUCTION + ("compose.yaml", "Dockerfile", ".dockerignore", "deploy", "sqlc.yaml", "scripts", "Makefile"),
     "journey": GO_PRODUCTION + WEB_PRODUCTION + ("web/tests", "sqlc.yaml", "scripts", "Makefile"),
     "compose": GO_PRODUCTION + ("compose.yaml", "Dockerfile", ".dockerignore", "deploy") + WEB_PRODUCTION + ("web/tests", "web/browser", "scripts", "Makefile"),
     "unit": ("web/src", "web/tests", "web/package.json", "web/package-lock.json", "web/vitest.config.ts", "Makefile", "scripts/verification-controls.py"),
@@ -123,11 +124,26 @@ def effective_scope(gate: str) -> tuple[dict, bool]:
         return {"go_package": package or "./..."}, not package or package == "./..."
     if gate == "integration":
         package = os.environ.get("GO_PACKAGE", "")
-        return {"go_package": package or "all"}, not package or package == "all"
+        test = os.environ.get("INTEGRATION_TEST", "")
+        selection = os.environ.get("INTEGRATION_SELECTION", "affected")
+        plan_only = os.environ.get("INTEGRATION_PLAN", "0") == "1"
+        return {"go_package": package or "all", "integration_test": test, "integration_selection": selection, "plan_only": plan_only}, (not package or package == "all") and not test and not plan_only
     if gate == "journey":
         scenario = os.environ.get("BROWSER_SCENARIO", "onboarding")
         return {"browser_scenario": scenario}, True
     return {"selection": "fixed-full-gate"}, True
+
+
+def validate_integration_report(report: dict, full_scope: bool, started: float) -> None:
+    cases = report.get("cases", [])
+    if (not cases or report.get("started_unix", 0) < started or not report.get("ended_unix") or
+        report.get("full_scope") is not full_scope or report.get("selected") != len(cases) or
+        (full_scope and report.get("discovered") != len(cases)) or
+        len({(item.get("package"), item.get("test")) for item in cases}) != len(cases) or
+        any(item.get("result") not in {"passed", "reused"} or item.get("evidence", {}).get("result") != "passed" for item in cases) or
+        report.get("executed") != sum(item.get("result") == "passed" for item in cases) or
+        report.get("reused") != sum(item.get("result") == "reused" for item in cases)):
+        raise ValueError("integration coverage is missing, incomplete, failed or from another run")
 
 
 def receipt_is_full_scope(mode: str, selectors: dict) -> bool:
@@ -136,7 +152,7 @@ def receipt_is_full_scope(mode: str, selectors: dict) -> bool:
     if mode == "go":
         return selectors.get("go_package") in {"", "./..."}
     if mode == "integration":
-        return selectors.get("go_package") in {"", "all"}
+        return selectors.get("go_package") in {"", "all"} and not selectors.get("integration_test") and not selectors.get("plan_only")
     if mode == "journey":
         return selectors.get("browser_scenario") in {"onboarding", "lost-login", "lost-password", "agents", "agents-close", "agents-lost", "agents-unavailable", "agents-lifecycle", "slis"}
     return selectors == {"selection": "fixed-full-gate"}
@@ -152,6 +168,7 @@ def run_broad(gate: str) -> int:
         "go-race": [["make", "_verify_go_race"]],
         "auth-bench": [["make", "_verify_auth_bench"]],
         "integration": [["make", "_verify_integration"]],
+        "performance": [["make", "_verify_performance"]],
         "journey": [["make", "_verify_journey"]],
         "compose": [["python3", "scripts/local-agent-tty-test.py"], ["node", "scripts/check-local-agent.mjs"], ["node", "scripts/check-local-compose.mjs"], ["node", "scripts/check-local-compose-cancellation.mjs"]],
         "providers": [["node", "scripts/check-local-providers.mjs"]],
@@ -171,6 +188,12 @@ def run_broad(gate: str) -> int:
                 raise ValueError("Unknown BROWSER_PROJECT")
             command.extend(["--project", project])
         commands["browser"] = [command]
+    if gate == "integration":
+        test = os.environ.get("INTEGRATION_TEST", "")
+        if os.environ.get("INTEGRATION_PLAN", "0") not in {"0", "1"} or os.environ.get("INTEGRATION_SELECTION", "affected") not in {"affected", "all"} or (test and not re.fullmatch(r"TestIntegration[A-Za-z0-9_]+", test)):
+            raise ValueError("integration requires affected/all or one exact test name")
+        if os.environ.get("GO_PACKAGE", "all") not in {"all", "./internal/storage", "./internal/authentication", "./internal/agentmanagement", "./internal/agenthttp", "./internal/authhttp", "./internal/agentcmd", "./internal/command"}:
+            raise ValueError("integration package is outside the fixed catalog")
     token_proc = subprocess.run([sys.executable, str(Path(__file__)), "broad-start", gate], cwd=ROOT, text=True, capture_output=True)
     if token_proc.returncode:
         sys.stderr.write(token_proc.stderr)
@@ -242,6 +265,23 @@ def counted_go_events(path: Path, expected: set[str]) -> int:
     if run != expected or passed != expected or failed or skipped:
         raise ValueError(f"Go selected tests did not all run and pass (expected {len(expected)}, ran {len(run)}, passed {len(passed)}, failed {len(failed)}, skipped {len(skipped)})")
     return len(expected)
+
+
+def performance_evidence() -> int:
+    name = "TestIntegrationControlledBackendPerformance"
+    expected = {name, f"{name}/independent-10"}
+    path = ROOT / ".local/performance-go-test.jsonl"
+    count = counted_go_events(path, expected)
+    for line in path.read_text().splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        test = event.get("Test", "")
+        if event.get("Action") == "run" and isinstance(test, str) and test.startswith(name + "/independent-") and test not in expected:
+            raise ValueError("deferred capacity fleet executed outside the ten-SLO phase")
+    print(f"Controlled performance: {count} required cases ran and passed")
+    return 0
 
 
 def go_run_count(path: Path, expected: set[str]) -> int:
@@ -531,8 +571,23 @@ def guard(action: str, args: argparse.Namespace | None = None) -> int:
         status = args.exit_code
         if pending["fingerprint"] != end_fingerprint and status == 0:
             status = 1
+        plan_only = pending.get("selectors", {}).get("plan_only", False)
+        if pending["mode"] == "integration" and not plan_only:
+            report_path = ROOT / ".local/integration-report.json"
+            try:
+                integration_report = json.loads(report_path.read_text())
+                if status == 0:
+                    validate_integration_report(integration_report, pending["full_scope"], pending["started_unix"])
+                if integration_report.get("started_unix", 0) >= pending["started_unix"]:
+                    name = args.run_id + "-integration.json"
+                    atomic_json(RECEIPTS / name, integration_report, immutable=True)
+                    pending["artifacts"].append(name)
+                    pending.update(selected_count=integration_report.get("selected"), executed_count=integration_report.get("executed"), reused_count=integration_report.get("reused"))
+            except (OSError, ValueError, TypeError, AttributeError):
+                if status == 0:
+                    status = 1
         ended = time.time()
-        pending.update({"ended_unix": ended, "elapsed_seconds": ended - pending["started_unix"], "fingerprint_at_end": end_fingerprint, "exit_code": status, "result": "passed" if status == 0 else "failed"})
+        pending.update({"ended_unix": ended, "elapsed_seconds": ended - pending["started_unix"], "fingerprint_at_end": end_fingerprint, "exit_code": status, "result": "planned" if status == 0 and plan_only else "passed" if status == 0 else "failed"})
         if isinstance(pending.get("started_monotonic"), (int, float)):
             pending.update(elapsed_evidence(pending["started_unix"], ended, pending["started_monotonic"], time.monotonic()))
         else:
@@ -941,10 +996,15 @@ def report() -> int:
         if not runs:
             missing.append(mode)
             continue
-        latest_path, latest = runs[-1]
+        eligible = [(path, record) for path, record in runs
+                    if record.get("result") != "planned" and (mode not in BROAD_MODES or record.get("full_scope") is True)]
+        if not eligible:
+            missing.append(mode)
+            continue
+        latest_path, latest = eligible[-1]
         unresolved_same_source_failure = latest.get("result") == "passed" and any(
             old.get("result") == "failed" and old.get("fingerprint") == latest.get("fingerprint")
-            for _, old in runs[:-1]
+            for old_path, old in runs if old_path != latest_path
         )
         if unresolved_same_source_failure or not receipt_valid(latest_path.name, state):
             missing.append(mode)
@@ -964,10 +1024,12 @@ def main_for_test(argv=None) -> int:
     gate = sub.add_parser("run-gate"); gate.add_argument("gate", choices=sorted(BROAD_MODES))
     sub.add_parser("handoff")
     sub.add_parser("report")
+    sub.add_parser("performance-evidence")
     args = p.parse_args(argv)
     if args.command == "run": return execute(args.mode)
     if args.command == "run-gate": return run_broad(args.gate)
     if args.command == "report": return report()
+    if args.command == "performance-evidence": return performance_evidence()
     return guard(args.command, args)
 
 

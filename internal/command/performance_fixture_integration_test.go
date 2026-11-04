@@ -25,22 +25,37 @@ import (
 // gate, not the ordinary two-minute integration catalog. All external resources
 // are owned by the existing isolated executable fixture and its cleanup stack.
 type performanceFleet struct {
-	ctx        context.Context
-	fixture    objectiveJourneyFixture
-	agents     []connectedAgentJourney
-	readers    []performanceReader
-	slis       []string
-	objectives []string
-	setup      time.Duration
-	historyEnd time.Time
+	ctx           context.Context
+	fixture       objectiveJourneyFixture
+	agents        []connectedAgentJourney
+	readers       []performanceReader
+	slis          []string
+	objectives    []string
+	datasources   []string
+	serviceID     string
+	setup         time.Duration
+	historyEnd    time.Time
+	traceURL      string
+	reserveDetail bool
+	seedSources   map[string]int64
+	resumed       bool
 }
 
-func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
+func newPerformanceFleet(t *testing.T, ctx context.Context, size int, retained *performanceRetainedFixture) performanceFleet {
 	t.Helper()
+	if size != 1 && size != 10 && size != 100 && size != 1000 {
+		t.Fatal("controlled performance requires 1,10,100 or1000 independent measurements/objectives")
+	}
+	if retained != nil {
+		return resumePerformanceFleet(t, ctx, size, *retained)
+	}
 	started := time.Now()
-	f := startObjectiveJourneyFixtureWithMetrics(t, true)
-	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour)}
-	for index := range 10 {
+	f := startPerformanceComposeFixture(t)
+	traceURL := "http://127.0.0.1:" + f.backend.deployment.tracesPort
+	configurePerformanceTracing(t, traceURL)
+	fleet := performanceFleet{ctx: ctx, fixture: f, historyEnd: started.UTC().Truncate(time.Hour), traceURL: traceURL, reserveDetail: true}
+	agentCount := min(size, 10)
+	for index := range agentCount {
 		if ctx.Err() != nil {
 			t.Fatal("controlled performance fleet setup cancelled")
 		}
@@ -51,8 +66,9 @@ func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
 		agent := runNamedConnectedSLIAgentJourney(t, f.databaseURL, f.binary, dir, f.baseURL, f.certFile, f.password, fmt.Sprintf("performance-agent-%02d", index))
 		fleet.agents = append(fleet.agents, agent)
 		datasourceID := createSLIJourneyDatasourceWithCadence(t, f.binary, dir, agent, f.sourceEndpoint, f.sourceCA, fmt.Sprintf("performance-metrics-%02d", index), 60)
-		for offset := range 10 {
-			name := fmt.Sprintf("performance-%03d", index*10+offset)
+		fleet.datasources = append(fleet.datasources, datasourceID)
+		for offset := range size / agentCount {
+			name := fmt.Sprintf("performance-%04d", index*(size/agentCount)+offset)
 			var measurement api.Sli
 			performanceCreateCLI(t, f, agent.profile, "slis", name, map[string]any{
 				"name": name, "display_name": name, "datasource_id": datasourceID,
@@ -67,17 +83,13 @@ func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
 	var service api.Service
 	profile := fleet.agents[0].profile
 	performanceCreateCLI(t, f, profile, "services", "performance-service", map[string]string{"name": "performance-service", "display_name": "Performance service"}, &service, "service")
+	fleet.serviceID = service.Id.String()
 	for index, sliID := range fleet.slis {
-		// Ten objectives share measurements with the first ten. All 100 SLIs
-		// continue collecting, so sharing cannot reduce the ingestion workload.
-		if index >= 90 {
-			sliID = fleet.slis[index-90]
-		}
 		name := fmt.Sprintf("performance-%03d", index)
 		var objective api.Slo
 		performanceCreateCLI(t, f, profile, "slos", name, map[string]any{
 			"name": name, "display_name": name, "service_id": service.Id.String(), "sli_id": sliID,
-			"target": "0.995", "rolling_window_seconds": 28 * 86400,
+			"target": "0.995", "rolling_window_seconds": int(performanceOracleRollingWindow((index+1)%10) / time.Second),
 		}, &objective, "slo")
 		if !validCLIUUID(objective.Id.String()) {
 			t.Fatal("performance fleet SLO response has no identity")
@@ -89,6 +101,11 @@ func newPerformanceFleet(t *testing.T, ctx context.Context) performanceFleet {
 	// creates neither sessions directly nor a bypass of permission enforcement.
 	db := testpostgres.Connect(t, f.databaseURL)
 	defer closePerformanceObserver(db)
+	var database, user string
+	var version int
+	if err := db.QueryRow(t.Context(), `SELECT current_database(),current_user,current_setting('server_version_num')::integer`).Scan(&database, &user, &version); err != nil || database != "almanac" || user != "almanac" || version != 180006 {
+		t.Fatal("normal capacity deployment database differs from its pinned PostgreSQL identity")
+	}
 	for index := range performanceUsers {
 		login := fmt.Sprintf("performance-reader-%02d", index)
 		var identity string
@@ -98,53 +115,133 @@ SELECT $1,password_verifier,'viewer',true,false,CURRENT_TIMESTAMP,CURRENT_TIMEST
 FROM public.almanac_users WHERE login='sli-owner' RETURNING id::text`, login).Scan(&identity); err != nil {
 			t.Fatal("provision distinct performance reader failed")
 		}
-		readerProfile := filepath.Join(f.dir, fmt.Sprintf("reader-%02d.json", index))
-		command := exec.CommandContext(t.Context(), f.binary, "auth", "login", "--profile-file="+readerProfile, "--backend-url="+f.baseURL,
-			"--login="+login, "--password-file="+fleet.agents[0].passwordPath, "--ca-file="+f.certFile)
-		command.Stdout, command.Stderr = io.Discard, io.Discard
-		if err := command.Run(); err != nil {
-			t.Fatal("authenticate distinct performance reader failed")
-		}
-		locked, err := cliprofile.Open(t.Context(), readerProfile, false)
-		if err != nil {
-			t.Fatal("open protected performance reader profile failed")
-		}
-		record, exists, loadErr := locked.Load()
-		closeErr := locked.Close()
-		if loadErr != nil || closeErr != nil || !exists || record.Session == "" {
-			t.Fatal("read protected performance reader session failed")
-		}
-		fleet.readers = append(fleet.readers, performanceReader{Identity: identity, Client: f.apiClient,
-			Request: func(ctx context.Context, path string) (*http.Request, error) {
-				request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+path, nil)
-				if err == nil {
-					request.AddCookie(&http.Cookie{Name: "__Host-almanac-session", Value: record.Session})
-				}
-				return request, err
-			}})
+		fleet.readers = append(fleet.readers, loginPerformanceReader(t, fleet, index, identity))
 	}
 	fleet.setup = time.Since(started)
 	return fleet
 }
 
-type performanceHistorySetup struct {
-	Days            int           `json:"days"`
-	Start           time.Time     `json:"start"`
-	End             time.Time     `json:"end"`
-	NominalSlots    int64         `json:"nominal_slots"`
-	CanonicalRows   int64         `json:"canonical_rows"`
-	GapSlots        int64         `json:"gap_slots"`
-	KnownEmptyRows  int64         `json:"known_empty_rows"`
-	ZeroTrafficRows int64         `json:"zero_traffic_rows"`
-	Setup           time.Duration `json:"setup_ns"`
-	DatabaseBytes   int64         `json:"database_bytes"`
-	WALBytes        string        `json:"wal_bytes"`
+func configurePerformanceTracing(t *testing.T, traceURL string) {
+	t.Helper()
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", traceURL+"/insert/opentelemetry/v1/traces")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_SDK_DISABLED", "false")
+	// Agent/CLI parents are captured fully; bulk-seed backend roots sample separately.
+	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "1")
+	t.Setenv("ALMANAC_ENVIRONMENT", "acceptance")
 }
 
-func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) performanceHistorySetup {
+func loginPerformanceReader(t *testing.T, fleet performanceFleet, index int, identity string) performanceReader {
 	t.Helper()
-	if (days != 56 && days != 400) || len(fleet.slis) != 100 || len(fleet.agents) != 10 || len(fleet.objectives) != 100 {
-		t.Fatal("historical performance fixture must use the accepted fleet and 56/400-day bounds")
+	f := fleet.fixture
+	profile := filepath.Join(f.dir, fmt.Sprintf("reader-%02d.json", index))
+	command := exec.CommandContext(fleet.ctx, f.binary, "auth", "login", "--profile-file="+profile, "--backend-url="+f.baseURL,
+		"--login="+fmt.Sprintf("performance-reader-%02d", index), "--password-file="+fleet.agents[0].passwordPath, "--ca-file="+f.certFile)
+	command.Stdout, command.Stderr = io.Discard, io.Discard
+	if err := command.Run(); err != nil {
+		t.Fatal("authenticate distinct performance reader failed")
+	}
+	locked, err := cliprofile.Open(fleet.ctx, profile, false)
+	if err != nil {
+		t.Fatal("open protected performance reader profile failed")
+	}
+	record, exists, loadErr := locked.Load()
+	closeErr := locked.Close()
+	if loadErr != nil || closeErr != nil || !exists || record.Session == "" {
+		t.Fatal("read protected performance reader session failed")
+	}
+	if index == 0 {
+		if err := os.WriteFile(filepath.Join(f.dir, "diagnostic-headers"), []byte("Cookie: __Host-almanac-session="+record.Session+"\n"), 0o600); err != nil {
+			t.Fatal("save protected fixture-only diagnostic session failed")
+		}
+	}
+	return performanceReader{Identity: identity, Client: f.apiClient, AuthenticatedAt: time.Now(),
+		Request: func(ctx context.Context, path string) (*http.Request, error) {
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+path, nil)
+			if err == nil {
+				request.AddCookie(&http.Cookie{Name: "__Host-almanac-session", Value: record.Session})
+			}
+			return request, err
+		}}
+}
+
+// Long setup is not user activity; authenticate outside measured read cohorts.
+func renewPerformanceReaders(t *testing.T, fleet performanceFleet) (int, time.Duration) {
+	t.Helper()
+	started, renewed := time.Now(), 0
+	for index, reader := range fleet.readers {
+		if time.Since(reader.AuthenticatedAt) < 5*time.Minute {
+			continue
+		}
+		before, err := reader.Request(fleet.ctx, "/api/v1/slis?limit=20")
+		if err != nil {
+			t.Fatal("create prior reader identity proof failed")
+		}
+		oldCookie, err := before.Cookie("__Host-almanac-session")
+		if err != nil {
+			t.Fatal("prior reader has no session")
+		}
+		profile := filepath.Join(fleet.fixture.dir, fmt.Sprintf("reader-%02d.json", index))
+		logout := exec.CommandContext(fleet.ctx, fleet.fixture.binary, "auth", "logout", "--profile-file="+profile)
+		logout.Stdout, logout.Stderr = io.Discard, io.Discard
+		if err := logout.Run(); err != nil {
+			t.Fatal("sign out previous performance reader session failed")
+		}
+		next := loginPerformanceReader(t, fleet, index, reader.Identity)
+		after, err := next.Request(fleet.ctx, "/api/v1/slis?limit=20")
+		if err != nil {
+			t.Fatal("create renewed reader identity proof failed")
+		}
+		newCookie, err := after.Cookie("__Host-almanac-session")
+		if err != nil || newCookie.Value == oldCookie.Value {
+			t.Fatal("reader reauthentication did not issue a new session")
+		}
+		fleet.readers[index] = next
+		renewed++
+	}
+	return renewed, time.Since(started)
+}
+
+func reauthenticatePerformanceManager(t *testing.T, ctx context.Context, fleet performanceFleet, index int) time.Duration {
+	t.Helper()
+	started := time.Now()
+	for _, operation := range []string{"logout", "login"} {
+		args := []string{"auth", operation, "--profile-file=" + fleet.agents[index].profile}
+		if operation == "login" {
+			args = append(args, "--backend-url="+fleet.fixture.baseURL, "--login=sli-owner",
+				"--password-file="+fleet.agents[index].passwordPath, "--ca-file="+fleet.fixture.certFile)
+		}
+		command := exec.CommandContext(ctx, fleet.fixture.binary, args...)
+		command.Stdout, command.Stderr = io.Discard, io.Discard
+		if err := command.Run(); err != nil {
+			t.Fatal("reauthenticate owned fixture management profile failed")
+		}
+	}
+	return time.Since(started)
+}
+
+type performanceHistorySetup struct {
+	PreviouslyRetainedDays int           `json:"previously_retained_days"`
+	Days                   int           `json:"days"`
+	Start                  time.Time     `json:"start"`
+	End                    time.Time     `json:"end"`
+	NominalSlots           int64         `json:"nominal_slots"`
+	CanonicalRows          int64         `json:"canonical_rows"`
+	GapSlots               int64         `json:"gap_slots"`
+	KnownEmptyRows         int64         `json:"known_empty_rows"`
+	ZeroTrafficRows        int64         `json:"zero_traffic_rows"`
+	Setup                  time.Duration `json:"setup_ns"`
+	DatabaseBytes          int64         `json:"database_bytes"`
+	WALBytes               string        `json:"wal_bytes"`
+}
+
+func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days, previousDays int) performanceHistorySetup {
+	t.Helper()
+	size := len(fleet.slis)
+	if (days != 56 && days != 90 && days != 180 && days != 365) || previousDays < 0 || previousDays >= days || (size != 1 && size != 10 && size != 100 && size != 1000) || len(fleet.agents) != min(size, 10) || len(fleet.objectives) != size {
+		t.Fatal("historical performance fixture requires a bounded incremental 1/10/100/1000-SLO history")
 	}
 	started := time.Now()
 	f := fleet.fixture
@@ -157,11 +254,11 @@ func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) perf
 		if err := db.QueryRow(t.Context(), `SELECT count(DISTINCT sli_id) FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND outcome='observed'`, fleet.slis).Scan(&count); err != nil {
 			t.Fatal("read live performance fleet coverage failed")
 		}
-		if count == 100 {
+		if count == size {
 			break
 		}
 		if time.Since(started) > 2*time.Minute {
-			t.Fatalf("performance agents did not establish live coverage for all measurements: %d/100", count)
+			t.Fatalf("performance agents did not establish live coverage for all measurements: %d/%d", count, size)
 		}
 		select {
 		case <-t.Context().Done():
@@ -170,7 +267,7 @@ func seedPerformanceHistory(t *testing.T, fleet performanceFleet, days int) perf
 		}
 	}
 	if _, err := db.Exec(t.Context(), `CREATE TEMP TABLE performance_proofs AS
-SELECT row_number() OVER(ORDER BY sli_id) AS ordinal, proof.* FROM (
+SELECT array_position($1::uuid[],sli_id)::bigint AS ordinal, proof.* FROM (
  SELECT DISTINCT ON (sli_id) sli_id,measurement_revision,agent_id,session_generation,configuration_revision,lease_id
  FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND outcome='observed'
  ORDER BY sli_id,interval_start DESC
@@ -203,12 +300,14 @@ SELECT row_number() OVER(ORDER BY sli_id) AS ordinal, proof.* FROM (
 	if err := db.QueryRow(t.Context(), `SELECT pg_current_wal_lsn()::text`).Scan(&initialLSN); err != nil {
 		t.Fatal("read fixture WAL baseline failed")
 	}
-	for hour := start; hour.Before(end); hour = hour.Add(time.Hour) {
+	// Extend the existing prefix; do not replay already imported hours.
+	importEnd := end.Add(-time.Duration(previousDays) * 24 * time.Hour)
+	for hour := start; hour.Before(importEnd); hour = hour.Add(time.Hour) {
 		if fleet.ctx.Err() != nil {
 			t.Fatal("controlled retained-history setup cancelled")
 		}
 		if int(hour.Sub(start)/time.Hour)%24 == 0 {
-			performanceFixtureDisk(t, fleet.ctx, 8<<30)
+			performanceFixtureDisk(t, fleet.ctx, fleet, 8<<30)
 		}
 		ctx, cancel := context.WithTimeout(fleet.ctx, 30*time.Second)
 		tx, err := db.Begin(ctx)
@@ -223,20 +322,22 @@ SELECT row_number() OVER(ORDER BY sli_id) AS ordinal, proof.* FROM (
 (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,
  execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
 SELECT point,sli_id,measurement_revision,point+interval '1 minute',
- CASE WHEN ordinal%10=2 AND extract(minute FROM point)=0 THEN 'complete_empty' ELSE 'observed' END,
+ CASE WHEN ordinal%10=2 AND extract(minute FROM point AT TIME ZONE 'UTC')=0 THEN 'complete_empty' ELSE 'observed' END,
  decode(repeat('ab',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),agent_id,
  session_generation,configuration_revision,lease_id,point,point+interval '1 minute'
 FROM performance_proofs CROSS JOIN generate_series($1::timestamptz,$1::timestamptz+interval '59 minutes',interval '1 minute') point
-WHERE NOT (ordinal%10=1 AND extract(minute FROM point)=17)
+WHERE NOT (ordinal%10=1 AND extract(minute FROM point AT TIME ZONE 'UTC')=17)
 ORDER BY sli_id,point ON CONFLICT DO NOTHING`, hour)
 		if err == nil {
 			_, err = tx.Exec(ctx, `INSERT INTO public.almanac_sli_observation_values
 (interval_start,sli_id,measurement_revision,good_count,total_count)
 SELECT c.interval_start,c.sli_id,c.measurement_revision,
- CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start)=0 THEN 0
+ CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=0 THEN 0
       WHEN p.ordinal%10=4 THEN 99999999999999999999999999.999999999998
-      WHEN extract(hour FROM c.interval_start) IN (3,4) THEN 97.125 ELSE 99.999 END,
- CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start)=0 THEN 0
+      WHEN p.ordinal%10=5 AND extract(hour FROM c.interval_start AT TIME ZONE 'UTC')=0
+        AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=31 THEN 0
+      WHEN extract(hour FROM c.interval_start AT TIME ZONE 'UTC') IN (3,4) THEN 97.125 ELSE 99.999 END,
+ CASE WHEN p.ordinal%10=3 AND extract(minute FROM c.interval_start AT TIME ZONE 'UTC')=0 THEN 0
       WHEN p.ordinal%10=4 THEN 99999999999999999999999999.999999999999 ELSE 100.125 END
 FROM public.almanac_sli_coverage c JOIN performance_proofs p USING(sli_id,measurement_revision)
 WHERE c.interval_start >= $1 AND c.interval_start < $1::timestamptz+interval '1 hour' AND c.outcome='observed'
@@ -252,7 +353,7 @@ ORDER BY c.sli_id,c.interval_start ON CONFLICT DO NOTHING`, hour)
 			t.Fatalf("seed bounded performance history hour failed: %v", err)
 		}
 	}
-	report := performanceHistorySetup{Days: days, Start: start, End: end, NominalSlots: int64(days) * 24 * 60 * 100}
+	report := performanceHistorySetup{Days: days, PreviouslyRetainedDays: previousDays, Start: start, End: end, NominalSlots: int64(days) * 24 * 60 * int64(size)}
 	if err := db.QueryRow(t.Context(), `SELECT count(*),count(*) FILTER(WHERE outcome='complete_empty')
 FROM public.almanac_sli_coverage WHERE sli_id=ANY($1::uuid[]) AND interval_start >= $2 AND interval_start < $3`, fleet.slis, start, end).Scan(&report.CanonicalRows, &report.KnownEmptyRows); err != nil {
 		t.Fatal("count actual retained performance coverage failed")
@@ -262,7 +363,7 @@ WHERE sli_id=ANY($1::uuid[]) AND interval_start >= $2 AND interval_start < $3 AN
 		t.Fatal("count retained performance zero-traffic intervals failed")
 	}
 	report.GapSlots = report.NominalSlots - report.CanonicalRows
-	if report.GapSlots != int64(days)*24*10 || report.KnownEmptyRows != int64(days)*24*10 || report.ZeroTrafficRows != int64(days)*24*10 {
+	if report.GapSlots != int64(days)*24*int64((size+9)/10) || report.KnownEmptyRows != int64(days)*24*int64((size+8)/10) || report.ZeroTrafficRows != int64(days)*24*int64((size+7)/10) {
 		t.Fatal("retained performance fixture lost its deliberate gaps, empty or zero-traffic intervals")
 	}
 	if err := db.QueryRow(t.Context(), `SELECT pg_database_size(current_database()),pg_wal_lsn_diff(pg_current_wal_lsn(),$1::pg_lsn)::text`, initialLSN).Scan(&report.DatabaseBytes, &report.WALBytes); err != nil {

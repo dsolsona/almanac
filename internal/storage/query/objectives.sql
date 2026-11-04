@@ -137,12 +137,18 @@ WITH expired AS (
 )
 DELETE FROM public.almanac_slo_overview_snapshots s USING expired e WHERE s.id=e.id;
 
--- name: CountLiveSloOverviewSnapshotsForSession :one
-SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots
-WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3;
-
--- name: CountLiveSloOverviewSnapshots :one
-SELECT count(*)::bigint FROM public.almanac_slo_overview_snapshots WHERE expires_at>$1;
+-- name: SloOverviewSnapshotUsage :one
+WITH charged AS (
+    SELECT actor_id=sqlc.arg(actor_id) AND session_verifier=sqlc.arg(session_verifier) AS own_session,
+           state='preparing' AS preparing,
+           CASE WHEN state='preparing' THEN sqlc.arg(reserved_bytes)::bigint
+                ELSE greatest(payload_bytes::bigint,sqlc.arg(minimum_bytes)::bigint) END AS bytes
+    FROM public.almanac_slo_overview_snapshots WHERE expires_at>sqlc.arg(now)
+)
+SELECT count(*) FILTER (WHERE preparing AND own_session)::bigint AS session_builds,
+       count(*) FILTER (WHERE preparing)::bigint AS installation_builds,
+       coalesce(sum(bytes) FILTER (WHERE own_session),0)::bigint AS session_bytes,
+       coalesce(sum(bytes),0)::bigint AS installation_bytes FROM charged;
 
 -- name: InsertSloOverviewSnapshot :exec
 INSERT INTO public.almanac_slo_overview_snapshots
@@ -154,16 +160,29 @@ SELECT id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urg
        group_counts,state,payload_bytes,created_at,expires_at
 FROM public.almanac_slo_overview_snapshots WHERE id=$1 FOR UPDATE;
 
--- name: InsertSloOverviewSnapshotItem :exec
+-- name: InsertSloOverviewSnapshotItems :exec
+WITH items AS (
+    SELECT unnest(sqlc.arg(urgencies)::text[]) AS urgency,
+           unnest(sqlc.arg(payloads)::text[]) AS payload,
+           unnest(sqlc.arg(payload_sizes)::integer[]) AS payload_bytes,
+           generate_series(0,cardinality(sqlc.arg(urgencies)::text[])-1) AS ordinal
+)
 INSERT INTO public.almanac_slo_overview_snapshot_items(snapshot_id,ordinal,urgency,payload,payload_bytes)
-VALUES ($1,$2,$3,$4,$5);
+SELECT sqlc.arg(snapshot_id)::uuid,ordinal,urgency,payload::jsonb,payload_bytes FROM items;
 
 -- name: FinishSloOverviewSnapshot :exec
 UPDATE public.almanac_slo_overview_snapshots SET state='ready',payload_bytes=$2 WHERE id=$1 AND state='preparing';
 
 -- name: ListSloOverviewSnapshotItems :many
-SELECT ordinal, payload FROM public.almanac_slo_overview_snapshot_items
-WHERE snapshot_id=$1 AND ordinal >= $2 ORDER BY ordinal LIMIT $3;
+SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
+       coalesce(a.digest=sha256(convert_to(a.payload::text,'UTF8')),false)::boolean AS projection_valid,
+       (i.projection_current AND (i.projection_digest IS NULL OR
+           a.digest=sha256(convert_to(a.payload::text,'UTF8'))))::boolean AS projection_current,
+       coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
+       coalesce((i.payload->>'_source_failed')::boolean,false)::boolean AS source_failed
+FROM public.almanac_slo_overview_snapshot_items i
+LEFT JOIN public.almanac_slo_projection_payloads a ON a.digest=i.projection_digest
+WHERE i.snapshot_id=$1 AND i.ordinal >= $2 ORDER BY i.ordinal LIMIT $3;
 
 -- name: DeleteSloOverviewSnapshot :exec
 DELETE FROM public.almanac_slo_overview_snapshots WHERE id=$1;
