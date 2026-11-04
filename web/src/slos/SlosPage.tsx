@@ -36,7 +36,7 @@ function percentTarget(value: string): string | null {
   const [whole] = value.split('.'); if (BigInt(whole!) >= 100n) return null;
   return shift(value, -2);
 }
-const validateTarget = (value: string) => percentTarget(value) !== null && Number(value) > 0 ? undefined : 'Target must be above 0% and below 100%.';
+const validateTarget = (value: string) => percentTarget(value) !== null ? undefined : 'Target must be from 0% up to but not including 100%.';
 const validateDays = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 ? undefined : 'Enter a whole number of days.';
 // Remaining share after the target, shown with the target's own precision.
 function budgetRest(target: string): string {
@@ -117,6 +117,7 @@ export function SlosPage({context}:{context:AuthContext}) {
     setLoading(true);
     setBusy(false);
     setError('');
+    setEditOpen(false);
     setSlo(null);
     setService(null);
     const run = async () => {
@@ -337,7 +338,7 @@ export function SlosPage({context}:{context:AuthContext}) {
       <TextField id="slo-name" label="Identifier" value={name} autoComplete="off" onChange={e=>{setNameEdited(true);
       setName(e.target.value);}} hint="Suggested from the display name. Lowercase letters, numbers and hyphens; fixed after creation."/>
       </div>
-      <Combobox id="slo-service" label="Service" options={serviceOptions} value={serviceID||null} onChange={value=>{setServiceID(value??'');setFormError('');}} disabled={loading} placeholder={loading?'Loading services…':'Type a service name, or a new one to create it…'} hint="Services group SLOs by owner. Pick an existing one, or type a new name and create it without leaving this form." noMatch={{text:term=>`No service matches “${term}”.`,action:{label:term=>`Create service “${term}”`,onSelect:term=>{setServiceDisplay(term.trim());setServiceName(suggest(term));setServiceNameEdited(false);setAddingService(true);setFormError('');}}}}/>
+      <Combobox id="slo-service" label="Service" options={serviceOptions} value={serviceID||null} onChange={value=>{setServiceID(value??'');setFormError('');}} disabled={loading||serviceFrozen} placeholder={loading?'Loading services…':'Type a service name, or a new one to create it…'} hint="Services group SLOs by owner. Pick an existing one, or type a new name and create it without leaving this form." noMatch={{text:term=>`No service matches “${term}”.`,action:{label:term=>`Create service “${term}”`,onSelect:term=>{setServiceDisplay(term.trim());setServiceName(suggest(term));setServiceNameEdited(false);setAddingService(true);setFormError('');}}}}/>
       {addingService&&<div className="slo-new-service" role="group" aria-label="New service" onKeyDown={e=>{if(e.key==='Enter'&&e.target instanceof HTMLInputElement){e.preventDefault();void createService();}}}>
       <div className="ui-form-grid">
       <TextField id="service-display" label="Service display name" value={serviceDisplay} disabled={serviceFrozen} onChange={e=>{setServiceDisplay(e.target.value);
