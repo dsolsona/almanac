@@ -166,6 +166,7 @@ empty-state, wording and visual acceptance failures under the existing contracts
 
 [F3-T09](F3-T09.md) provides application tracing and the measured initial baseline
 under the [performance and tracing intervention](../plans/0023-performance-and-tracing-intervention.md).
-[F3-T08](F3-T08.md) remains responsible for correcting operational reads and meeting
-the accepted page-speed and accuracy requirements with ten SLOs and a year of data.
-The maintainer deferred larger capacity tests to [F3-T10](F3-T10.md).
+[F3-T08](F3-T08.md) is closed by the maintainer for the ten-SLO/year operational
+reads, page-speed, accuracy and selective-integration phase. Its verification
+caveats remain recorded. Larger capacity and endurance validation remain deferred
+to [F3-T10](F3-T10.md).

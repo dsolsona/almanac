@@ -1,6 +1,7 @@
 # Performance, accuracy and tracing intervention
 
 - State: accepted; implementation in progress
+- Current checkpoint: the maintainer closed [F3-T08](../tasks/F3-T08.md) on 2026-11-04 with its recorded verification caveats; deferred validation remains in [F3-T10](../tasks/F3-T10.md)
 - Accepted: 2026-10-31, explicit maintainer approval after Crit session `ede9414e6ca5`; all five comments resolved
 - Created: 2026-10-31
 - Priority: replaces the current execution order; unrelated feature delivery stays paused

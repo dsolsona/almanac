@@ -15,8 +15,11 @@ corrected datasource journey passes in 65.296 seconds; twelve remaining cases pa
 in 195.765 seconds including setup while 161 compatible passes are reused. An
 unchanged run reuses all 173 passes with zero executions in 10.636 seconds. Final
 ordinary checks pass 362 web/509 Go cases in 29.816 seconds; all 36 tooling tests
-pass. F3-T08 is in review for this bounded phase. Larger/endurance evidence remains
-deferred, and the earlier failed full-run records below are retained history.
+pass. The maintainer explicitly closed F3-T08's bounded phase on 2026-11-04 and
+will merge PR #53. Older catalogue/Compose receipts remain flagged stale by the
+global handoff fingerprint; this accepted closure does not manufacture fresh
+passes. Larger/endurance evidence remains deferred, and earlier failed full-run
+records below are retained history.
 
 The maintainer rejected further deliberate endurance waits. Fresh sustained-load,
 clock-aging and physical-cleanup observation, plus 100/1,000-SLO validation, are
