@@ -97,6 +97,16 @@ user authorization. Do not merge PRs merely because publishing them was authoriz
 
 ## Approved controlled capacity entry
 
+Current phase restriction, 2026-11-04: the maintainer rejected further deliberate
+endurance waits and approved bounded T08 final checks. The entry below still
+contains two 15-minute phases and real-clock/maintenance observations. It must
+not run during T08 finalization, directly or through another mode. Retain its
+failed/cancelled receipts; do not report the endurance workload as passed. Further
+execution belongs to explicitly scoped [F3-T10](tasks/F3-T10.md) work. Bounded
+manual checks use the existing isolated fixture and native approved commands,
+record independent expectations/results and append their timing to the manual
+ledger. Final integrated gates remain separate from endurance observation.
+
 On 2026-11-02 the maintainer explicitly approved this exact invocation for F3-T08,
 including reruns only after diagnosing and fixing a failure. Record the failure,
 correction and replan before a rerun. Ordinary, integration and Compose verification

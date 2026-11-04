@@ -10,6 +10,15 @@
 
 ## Required outcome
 
+Validation clarification, 2026-11-04: the maintainer rejected further deliberate
+endurance waits and approved bounded T08 checks followed by final integrated
+verification within a one-hour finalization budget. Ten-SLO/year rendered latency,
+independent numeric accuracy and recovery remain required. Fresh sustained-load,
+clock-aging and physical-cleanup observation, together with larger fleets, move to
+[F3-T10](../tasks/F3-T10.md). Keep these deferred results unverified; do not weaken
+product performance, accuracy, freshness or retention requirements. This supersedes
+the earlier requirement to repeat the full ten-SLO endurance matrix in T08.
+
 Phase scope clarification, 2026-11-03: the maintainer explicitly requested finishing
 the ten-SLO/year verification and deferring larger tests. F3-T08 completion therefore
 requires the full ten-SLO/year live, browser, accuracy, recovery and final integrated

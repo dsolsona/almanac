@@ -5,7 +5,7 @@
 - Accepted: 2026-10-30; amended 2026-10-31 after maintainer approval of the performance/tracing intervention in Crit
 - Approval: maintainer explicitly replied "approved" after the combined Crit review of this spec, ADR-0024 and the stabilization plan
 - Implementation: in progress
-- Verification: acceptance evidence remains outstanding, tracked in [F3-T08](../tasks/F3-T08.md)
+- Verification: bounded ten-SLO/year runtime evidence is recorded in [F3-T08](../tasks/F3-T08.md); final gates/publication are pending and larger/endurance validation is deferred to [F3-T10](../tasks/F3-T10.md)
 - Related ADRs: [ADR-0025](../adr/0025-fast-operational-journeys-and-tracing.md), [ADR-0024](../adr/0024-precomputed-operational-reads.md), [ADR-0005](../adr/0005-measurement-semantics.md), [ADR-0007](../adr/0007-postgresql-and-storage-boundaries.md), [ADR-0023](../adr/0023-slo-operational-urgency.md)
 - Plan: [Backend stabilization](../plans/0022-backend-stabilization.md)
 - Supersedes / superseded by: amends the existing contracts in the table below
@@ -326,10 +326,13 @@ coding; the detailed wire contract remains subject to that checkpoint's review.
 
 ## Verification evidence
 
-Implementation is in progress in [F3-T08](../tasks/F3-T08.md). Its fast unit and
-compile checks do not establish these workload budgets. Integrated performance
-acceptance remains outstanding, and known page latency failures remain open.
-This document does not claim measured capacity.
+Bounded ten-SLO/year runtime acceptance is recorded in [F3-T08](../tasks/F3-T08.md):
+normal and added-100-ms rendered journeys pass all 342 connected trace checks,
+alongside independent arithmetic, repair/restart, pagination, logical expiry and
+shared-source checks. Final integrated gates and publication remain pending.
+On 2026-11-04 the maintainer deferred further deliberate endurance observation
+and larger installations to [F3-T10](../tasks/F3-T10.md). The product criteria above
+remain unchanged; this is not a larger-installation or fresh endurance capacity claim.
 
 ## Change notes
 

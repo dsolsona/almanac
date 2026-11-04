@@ -1,5 +1,20 @@
 # Delivery status
 
+Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
+ten-SLO/year runtime acceptance on `bd9fcfb`; fresh final gates and publication
+are in progress. Both normal and added-100-ms cohorts pass all 342 connected
+browser traces. Cold detail maxima are 375.5/754.3 ms. Independent historical,
+late-data, fresh-generation restart, pagination, logical retention and shared-SLI
+checks pass. No new observation import was used. The operator preview is unchanged.
+
+The maintainer rejected further deliberate endurance waits. Fresh sustained-load,
+clock-aging and physical-cleanup observation, plus 100/1,000-SLO validation, are
+deferred to [F3-T10](tasks/F3-T10.md), not passed. The existing endurance command
+must not run during this finalization. Product budgets remain unchanged.
+The approved SSH publication currently fails public-key authentication; no merge
+is authorized. Earlier checkpoints below are historical and do not override this
+current scope/evidence record.
+
 The 2026-10-31 [performance and tracing intervention](plans/0023-performance-and-tracing-intervention.md)
 was accepted in Crit and takes priority over the previous
 execution order. The maintainer requires accurate calculations, < 1,000 ms
@@ -38,7 +53,7 @@ retained in F3-T09's evidence. Container verification used only its separate
 `18086` project; the operator preview's `18088/readyz` remains healthy.
 
 Feature implementation remains paused pending backend stabilization.
-The latest preserved-fixture diagnostics return all ten concurrent cold year
+Earlier preserved-fixture diagnostics returned all ten concurrent cold year
 requests in 412–488 ms and ten cold requests across a ten-SLO fixture in 376–448 ms.
 Exact tables and cache-miss traces match; focused storage checks pass. Controlled
 run eleven passed the one-SLO year checkpoint with ten users, then exposed two
@@ -53,12 +68,12 @@ govern [F3-T08](tasks/F3-T08.md), in progress on `perf/f3-t08-retained-series`
 in `.worktrees/backend-performance`, based on merged main `6d7403d`.
 
 On 2026-11-03 the maintainer requested finishing ten SLOs with a year of history
-and deferring larger tests. Current T08 acceptance retains its complete ten-user,
-live/browser/accuracy/recovery and final integrated checks for that fleet. Larger
+and deferring larger tests. The 2026-11-04 clarification above supersedes the
+earlier requirement to repeat deliberate endurance observation in T08. Larger
 100/1,000-SLO validation is deferred to [F3-T10](tasks/F3-T10.md), with no larger
 capacity claim or authorization to load those fleets during this phase.
 
-Current run twelve on `935f53b` passes the one-SLO year-history checkpoint and
+Earlier run twelve on `935f53b` passed the one-SLO year-history checkpoint and
 ten-SLO 56-day reads/plans, then fails cold graph latency and two database
 admission timeouts after restart. The preserved dataset exposes cache-lookup
 payload hashing before generation/range selection. A metadata-first SQL fix
