@@ -580,6 +580,25 @@ describe('datasource page', () => {
     expect(screen.getByText('No datasources match these filters on this page.')).toBeVisible();
   });
 
+  it('rejects an out-of-range custom cadence and a malformed endpoint before any request', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/datasources/new');
+    const calls = installFetch();
+    render(<DatasourcesPage context={admin} />);
+    await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'not a url');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('HTTP or HTTPS URL');
+    expect(screen.getByRole('alert')).toHaveFocus();
+    await user.clear(screen.getByLabelText('Prometheus endpoint'));
+    await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://metrics.example.test');
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Query every' })).getByRole('radio', { name: 'Custom…' }));
+    await user.type(screen.getByLabelText('Custom query every'), '4');
+    await user.click(screen.getByRole('button', { name: 'Create datasource' }));
+    await waitFor(() => expect(screen.getAllByRole('alert').some((alert) => /from 15 to 86400/.test(alert.textContent ?? ''))).toBe(true));
+    expect(calls.some((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST')).toBe(false);
+  });
+
   it('switches TLS modes with the segmented control and continues into SLI creation', async () => {
     const user = userEvent.setup();
     history.replaceState({}, '', '/datasources/new');

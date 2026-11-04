@@ -158,8 +158,9 @@ stage = 'browser launch';
   assert.equal(created.version, '1');
   assert.equal('password' in created.authentication, false);
   assert.equal('token' in created.authentication, false);
-  stage = 'new UI datasource in real list';
-  await expect(page.getByText(createdDisplayName, { exact: true })).toBeVisible();
+  stage = 'new UI datasource detail after creation';
+  // Creation opens the detail, where the breadcrumb and the title both carry the name; assert the title.
+  await expect(page.getByRole('heading', { name: createdDisplayName, exact: true })).toBeVisible();
 
   stage = 'newly created datasource detail';
   const { response: createdDetailResponse, body: createdDetail } = await capture('GET', `/api/v1/datasources/${createdID}`,

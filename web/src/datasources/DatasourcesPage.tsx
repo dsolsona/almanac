@@ -120,6 +120,20 @@ async function loadSliUsage(signal: AbortSignal, datasourceID = ''): Promise<{ u
 }
 
 // An empty PEM keeps the Custom CA choice open in the form; it is sent as null.
+// Field checks the browser no longer performs for us (the forms use noValidate), so invalid settings never reach a save.
+function validateDraft(draft: Draft): { field: string; message: string } | null {
+  let endpoint: URL | null = null;
+  try { endpoint = new URL(draft.endpoint.trim()); } catch { endpoint = null; }
+  if (!endpoint || !['http:', 'https:'].includes(endpoint.protocol)) return { field: 'datasource-endpoint', message: 'Enter the Prometheus endpoint as an HTTP or HTTPS URL.' };
+  if (endpoint.username || endpoint.password) return { field: 'datasource-endpoint', message: 'Remove credentials from the endpoint URL; use the authentication settings instead.' };
+  const cadence = Number(draft.polling_interval_seconds);
+  if (!Number.isInteger(cadence) || cadence < 15 || cadence > 86400) return { field: 'datasource-polling', message: 'Query every must be a whole number of seconds from 15 to 86400.' };
+  if (draft.authMode === 'basic' && !draft.username.trim()) return { field: 'datasource-username', message: 'Enter the username for basic authentication.' };
+  if (draft.authMode === 'basic' && draft.passwordAction === 'replace' && !draft.password) return { field: 'datasource-password', message: 'Enter the password, or keep the saved one.' };
+  if (draft.authMode === 'bearer' && draft.tokenAction === 'replace' && !draft.token) return { field: 'datasource-token', message: 'Enter the bearer token, or keep the saved one.' };
+  return null;
+}
+
 function tlsMode(tls: DatasourceWrite['tls']): TlsMode {
   return tls.insecure_skip_verify ? 'skip' : tls.ca_pem !== null ? 'ca' : 'verify';
 }
@@ -312,8 +326,10 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     return () => window.removeEventListener('popstate', changed);
   }, []);
 
-  const loadList = useCallback((next = '', size = 20) => {
+  // The previous-cursor trail changes only once the page it describes has loaded; usage counts are re-read for the list scope.
+  const loadList = useCallback((next = '', size = 20, trailAfter?: string[]) => {
     const request = new AbortController(); const routeAtRequest = locationKeyRef.current; setLoading(true); setError('');
+    setSliUsage(null); setSliUsageTruncated(false);
     void (async () => {
       try {
         const [page, agentItems] = await Promise.all([
@@ -323,6 +339,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         if (request.signal.aborted || locationKeyRef.current !== routeAtRequest) return;
         listResultKey.current = routeAtRequest;
         setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setAgents(agentItems); setUpdatedAt(clockFormat.format(new Date()));
+        if (trailAfter) setPreviousCursors(trailAfter);
         void loadSliUsage(request.signal).then((result) => { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) { setSliUsage(result.usage); setSliUsageTruncated(result.truncated); } }).catch(() => undefined);
       } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setError(`${safeError(reason)}${listResultKey.current === routeAtRequest ? ' Showing previous results.' : ''}`); }
       finally { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setLoading(false); }
@@ -334,8 +351,8 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     if (selectedID) {
       const request = new AbortController(); setLoading(true); setError(''); setNotice(''); setReassignmentStale(false);
       setProviders([]); setPreviewReadiness('loading');
-      setSliUsage(null);
-      void loadSliUsage(request.signal, selectedID).then((result) => { if (!request.signal.aborted) setSliUsage(result.usage); }).catch(() => undefined);
+      setSliUsage(null); setSliUsageTruncated(false);
+      void loadSliUsage(request.signal, selectedID).then((result) => { if (!request.signal.aborted) { setSliUsage(result.usage); setSliUsageTruncated(result.truncated); } }).catch(() => undefined);
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
         if (request.signal.aborted) return [] as Agent[];
         setSource(datasource); setEtag(tag); setDraft(fromDatasource(datasource)); setUpdatedAt(clockFormat.format(new Date()));
@@ -412,6 +429,8 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       document.getElementById('datasource-name')?.focus();
       return;
     }
+    const problem = validateDraft(draft);
+    if (problem) { setError(problem.message); document.getElementById(problem.field)?.focus(); return; }
     const intent = { input: asWrite(draft, isNew), key: crypto.randomUUID(), ...(isNew ? {} : { etag }), isNew, route: locationKey } satisfies SaveIntent;
     saveIntent.current = intent;
     await executeSave(intent);
@@ -464,6 +483,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       const [current, agentItems] = await Promise.all([client.get(selectedID, request.signal), admin ? loadAgents(request.signal) : Promise.resolve([])]);
       if (request.signal.aborted || locationKeyRef.current !== route) return;
       setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource)); setAgents(agentItems); setReassignmentStale(false); setUpdatedAt(clockFormat.format(new Date())); setNotice('Datasource status refreshed.');
+      setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
     } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === route) setError(safeError(reason)); }
     finally { if (!request.signal.aborted && locationKeyRef.current === route) setPending(false); if (saveController.current === request) saveController.current = null; }
   }
@@ -577,7 +597,9 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const createHeader = <PageHeader title="New datasource" summary="Three steps: name it, say where Prometheus is, pick the agent that can reach it." breadcrumb={{ ...listCrumb, current: 'New datasource' }} headingRef={heading} />;
   if (loading && (selectedID || isNew || listResultKey.current !== locationKey)) return <>{isNew ? createHeader : <PageTitle headingRef={heading} isList={!selectedID} title={selectedID ? 'Datasource' : 'Datasources'} />}<span className="sr-only" role="status">Opening datasource</span></>;
   if (error && !source && selectedID) return <><PageTitle headingRef={heading} isList={!selectedID} title="Datasources" /><Panel heading="Datasource unavailable"><p ref={errorSummary} role="alert" tabIndex={-1}>{error}</p><Button variant="outline" onClick={() => navigate('/datasources')}>Back to datasources</Button></Panel></>;
-  const usageOf = (id: string) => sliUsage?.get(id) ?? (sliUsage ? { count: 0, names: [] } : null);
+  // A datasource missing from a complete read has no SLIs; missing from a truncated read it is unknown.
+  const usageOf = (id: string) => sliUsage?.get(id) ?? (sliUsage && !sliUsageTruncated ? { count: 0, names: [] } : null);
+  const usageCount = (usage: { count: number }) => `${usage.count}${sliUsageTruncated ? '+' : ''}`;
   const agentName = (id: string) => agents.find((agent) => agent.id === id)?.display_name ?? null;
 
   if (!selectedID && !isNew) {
@@ -609,12 +631,12 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
             {admin && <td data-label="Agent"><StatusMark tone={vocabulary?.tone === 'warning' && !item.reassignment ? 'warning' : item.reassignment ? 'warning' : vocabulary?.tone ?? 'none'} label={item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'} /></td>}
             <td data-label="Cadence" className="mono">{item.polling_interval_seconds} s</td>
             <td data-label="Auth" className="ds-row__auth">{item.authentication.mode === 'none' ? 'none' : `${item.authentication.mode} · ${item.authentication[item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured'] ? 'set' : 'not set'}`}</td>
-            <td data-label="SLIs" className="num mono">{usage ? `${usage.count}${sliUsageTruncated ? '+' : ''}` : '—'}</td>
+            <td data-label="SLIs" className="num mono">{usage ? usageCount(usage) : '—'}</td>
           </tr>)}</tbody>
         </table>}
-        <Pager id="datasource-page-size" label="Datasource result pages" position={`Showing ${visible.length} of ${currentItems.length}${nextCursor || cursor ? ' on this page' : ''}`} pageSize={pageSize} onPageSizeChange={(size) => { setPageSize(size); setPreviousCursors([]); loadList('', size); }} hasPrevious={previousCursors.length > 0} hasNext={Boolean(nextCursor)} busy={loading}
-          onPrevious={() => { const previous = previousCursors[previousCursors.length - 1] ?? ''; setPreviousCursors((stack) => stack.slice(0, -1)); loadList(previous, pageSize); }}
-          onNext={() => { setPreviousCursors((stack) => [...stack, cursor]); loadList(nextCursor, pageSize); }} />
+        <Pager id="datasource-page-size" label="Datasource result pages" position={`Showing ${visible.length} of ${currentItems.length}${nextCursor || cursor ? ' on this page' : ''}`} pageSize={pageSize} onPageSizeChange={(size) => { setPageSize(size); loadList('', size, []); }} hasPrevious={previousCursors.length > 0} hasNext={Boolean(nextCursor)} busy={loading}
+          onPrevious={() => { const previous = previousCursors[previousCursors.length - 1] ?? ''; loadList(previous, pageSize, previousCursors.slice(0, -1)); }}
+          onNext={() => loadList(nextCursor, pageSize, [...previousCursors, cursor])} />
       </>}
     </>;
   }
@@ -704,7 +726,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         <nav className="app-breadcrumbs" aria-label="Breadcrumb"><a href="/datasources" data-app-route onClick={(event) => { event.preventDefault(); navigate('/datasources'); }}>Datasources</a><span aria-hidden="true">/</span><span aria-current="page">{source?.display_name ?? 'Datasource'}</span></nav>
         <h1 ref={heading} className="app-page-heading ds-head__title" tabIndex={-1}>{source?.display_name ?? 'Datasource'}</h1>
         {vocabulary && <p className="ds-head__status"><StatusMark tone={vocabulary.tone} label={`${vocabulary.label} · ${vocabulary.reason}`} /></p>}
-        {source && <p className="ds-head__meta">Prometheus · <span className="mono">{source.endpoint}</span> · every {source.polling_interval_seconds} s{selectedUsage ? ` · ${selectedUsage.count} SLI${selectedUsage.count === 1 ? '' : 's'}` : ''} · version {source.version}</p>}
+        {source && <p className="ds-head__meta">Prometheus · <span className="mono">{source.endpoint}</span> · every {source.polling_interval_seconds} s{selectedUsage ? ` · ${usageCount(selectedUsage)} SLI${selectedUsage.count === 1 ? '' : 's'}` : ''} · version {source.version}</p>}
       </div>
       <div className="ds-head__actions">{updatedAt && <span className="ui-page-head__updated">Updated {updatedAt}</span>}<Button variant="outline" aria-label="Refresh datasource" pending={pending} disabled={currentUncertainSave} onClick={() => void refreshReassignment()}>↻ Refresh</Button>{testTools}</div>
     </div>
@@ -715,7 +737,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       <div className="ds-tile"><span className="ds-tile__k">Agent</span><span className="ds-tile__v">{admin ? <StatusMark tone={sourceAgent ? agentOption(sourceAgent).tone ?? 'none' : 'none'} label={sourceAgent?.display_name ?? 'Unknown'} /> : 'Assigned'}</span><span className="ds-tile__s">{admin ? (sourceAgent?.runtime?.last_heartbeat_at ? `last heartbeat ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC · ${relativeAge(sourceAgent.runtime.last_heartbeat_at)}` : sourceAgent ? agentOption(sourceAgent).status : 'assigned agent not found') : 'agent details need administrator access'}</span></div>
       <div className="ds-tile"><span className="ds-tile__k">Configuration</span><span className="ds-tile__v">{reassignment ? 'moving' : canPreview ? previewReadiness === 'loading' ? 'checking…' : previewReadiness === 'available' ? `applied${prometheusProvider?.applied_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision}` : ''}` : previewReadiness === 'applying' || previewReadiness === 'still_applying' ? `applying${prometheusProvider?.desired_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision ?? '—'} of ${prometheusProvider.desired_configuration_revision}` : ''}` : previewReadiness.replaceAll('_', ' ') : 'not checked'}</span><span className="ds-tile__s">{reassignment ? 'handover in progress' : canPreview ? previewReadiness === 'available' ? 'agent has the current settings' : previewReadiness === 'loading' ? 'reading agent readiness' : 'agent does not confirm the current settings' : 'editor or administrator access required'}</span></div>
       <div className="ds-tile"><span className="ds-tile__k">Collection</span><span className="ds-tile__v">every {source.polling_interval_seconds} s</span><span className="ds-tile__s">auth {source.authentication.mode}{source.tls.insecure_skip_verify ? ' · TLS unverified' : source.tls.ca_pem ? ' · custom CA' : ''}</span></div>
-      <div className="ds-tile"><span className="ds-tile__k">Used by</span><span className="ds-tile__v">{selectedUsage ? `${selectedUsage.count} SLI${selectedUsage.count === 1 ? '' : 's'}` : '—'}</span><span className="ds-tile__s">{selectedUsage ? selectedUsage.count === 0 ? 'no SLI uses it yet' : `${selectedUsage.names.join(', ')}${selectedUsage.count > selectedUsage.names.length ? `, +${selectedUsage.count - selectedUsage.names.length}` : ''}` : 'reading SLIs'}</span></div>
+      <div className="ds-tile"><span className="ds-tile__k">Used by</span><span className="ds-tile__v">{selectedUsage ? `${usageCount(selectedUsage)} SLI${selectedUsage.count === 1 ? '' : 's'}` : '—'}</span><span className="ds-tile__s">{selectedUsage ? selectedUsage.count === 0 ? 'no SLI uses it yet' : `${selectedUsage.names.join(', ')}${selectedUsage.count > selectedUsage.names.length ? `, +${selectedUsage.count - selectedUsage.names.length}` : ''}` : 'reading SLIs'}</span></div>
     </div>}
     <form className="ui-form ds-form" onSubmit={(event) => void submit(event)} noValidate>
       <FormSection title="Connection" hint="Where and how to reach Prometheus">{connectionFields}{providerChoice}{connectionDetails}{readonly && <p className="ui-form-note">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}</FormSection>

@@ -508,6 +508,7 @@ describe('SLI page', () => {
     expect(screen.getByLabelText('Display name')).toHaveAccessibleDescription(/Enter a display name/);
     expect(screen.getByLabelText('Datasource')).toHaveAccessibleDescription(/Choose an existing Prometheus datasource/);
     expect(screen.getByText('Enter a good events query.')).toBeVisible();
+    expect(screen.getByLabelText('Good events')).toHaveAccessibleDescription(/Enter a good events query/);
     await user.type(screen.getByLabelText('Display name'), 'Request success');
     expect(screen.getByLabelText('Display name')).not.toHaveAccessibleDescription(/Enter a display name/);
     await user.click(screen.getByLabelText('Datasource'));
@@ -518,6 +519,22 @@ describe('SLI page', () => {
     fireEvent.change(screen.getByLabelText('Total events'), { target: { value: 'sum(increase(total[1m]))' } });
     await user.click(screen.getByRole('button', { name: 'Create SLI and add an SLO' }));
     await waitFor(() => expect(location.pathname + location.search).toBe(`/slos/new?sli=${sliID}`));
+  });
+
+  it('keeps every digit of exact counts in the latest result', async () => {
+    history.replaceState({}, '', `/slis/${sliID}`);
+    const precise = { ...sli(), latest_observation: { ...sli().latest_observation!, good_count: '1234567.0001', total_count: '1234567.5' } };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/observations')) return response(historyPage([precise.latest_observation!]));
+      if (url.startsWith('/api/v1/datasources')) return response({ items: [source()], next_cursor: '' });
+      if (url.startsWith('/api/v1/slis?')) return response({ items: [precise], next_cursor: '' });
+      return response(precise, 200, { ETag: `"sli:${sliID}:2"` });
+    }));
+    render(<SlisPage context={viewer} />);
+    await screen.findByRole('heading', { name: 'Request success' });
+    expect(screen.getAllByText(/1,234,567\.0001/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1,234,567\.5/).length).toBeGreaterThan(0);
   });
 
   it('keeps detail controls available when history fails and preserves a dirty draft on refresh', async () => {

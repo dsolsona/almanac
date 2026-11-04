@@ -171,7 +171,7 @@ test('operational controls: picker, chips and segmented filter work by keyboard 
   const section = page.locator('#operational');
   await section.scrollIntoViewIfNeeded();
   const picker = section.locator('.ui-panel').filter({ hasText: 'Type-ahead picker' });
-  const input = picker.getByRole('combobox', { name: 'Datasource' });
+  const input = picker.getByRole('combobox', { name: 'Datasource', exact: true });
   await input.click();
   await expect(section.getByRole('listbox')).toBeVisible();
   await input.fill('prod');
@@ -179,10 +179,10 @@ test('operational controls: picker, chips and segmented filter work by keyboard 
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(picker.getByRole('button', { name: 'Change' })).toBeVisible();
-  await expect(picker.getByText('prod-prometheus-eu')).toBeVisible();
+  await expect(picker.locator('.ui-summary').getByText('prod-prometheus-eu')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath(`operational-selected-${testInfo.project.name}.png`), fullPage: false, animations: 'disabled' });
   await picker.getByRole('button', { name: 'Change' }).click();
-  await expect(picker.getByRole('combobox', { name: 'Datasource' })).toBeFocused();
+  await expect(picker.getByRole('combobox', { name: 'Datasource', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   const custom = section.getByRole('radio', { name: 'Custom…' }).first();
   await custom.click();

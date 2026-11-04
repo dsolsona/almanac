@@ -229,6 +229,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   const soonest=page?.items.filter(item=>item.exhaustion.state==='estimated'&&item.exhaustion.hours_until_exhaustion!==null).sort((a,b)=>Number(a.exhaustion.hours_until_exhaustion)-Number(b.exhaustion.hours_until_exhaustion))[0];
   const exhausted=page?.items.filter(item=>item.exhaustion.state==='exhausted')??[];
   const notReporting=page?.items.filter(item=>item.reasons.some(reason=>reason.code==='stale_observations'))??[];
+  const withoutData=page?.items.filter(item=>!item.reasons.some(reason=>reason.code==='stale_observations')&&item.reasons.some(reason=>['no_data','expired_history','evaluation_unavailable'].includes(reason.code)))??[];
   const scope=page?.next_cursor||hasPrevious?' on this page':'';
   const summary=page?<span className="app-slo-list-sub">{matchingCount} SLO{matchingCount===1?'':'s'}{urgency?` · ${groups.find(([value])=>value===urgency)?.[1].toLowerCase()}`:attention?` · ${attention} need${attention===1?'s':''} attention`:''} · all times UTC</span>:<span className="app-slo-list-sub">Loading SLOs…</span>;
   return <section className="slo-operational-overview" aria-label="Operational SLO overview">
@@ -247,7 +248,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
         <span className="app-slo-tile__key">Soonest exhaustion{scope}</span>
         <span className="app-slo-tile__value">{exhausted.length?<><b>exhausted</b> · {exhausted.length===1?exhausted[0]!.slo.display_name:`${exhausted.length} SLOs`}</>:soonest?<><b>{shortExhaustion(soonest.exhaustion)}</b> · {soonest.slo.display_name}{soonest.burn_1h.performance.burn!==null&&` · burning ${multiple(soonest.burn_1h.performance.burn)}`}</>:'none estimated'}</span>
         <span className="app-slo-tile__key">Not reporting{scope}</span>
-        <span className="app-slo-tile__value">{notReporting.length?<>{notReporting.length===1?notReporting[0]!.slo.display_name:`${notReporting.length} SLOs`} · last sample {lastEvaluationFormat.format(new Date(notReporting[0]!.current.quality.last_observation_at??notReporting[0]!.current.evaluation_at))} UTC</>:'all SLIs reporting'}</span>
+        <span className="app-slo-tile__value">{notReporting.length?<>{notReporting.length===1?notReporting[0]!.slo.display_name:`${notReporting.length} SLOs`} · last sample {lastEvaluationFormat.format(new Date(notReporting[0]!.current.quality.last_observation_at??notReporting[0]!.current.evaluation_at))} UTC</>:withoutData.length?<>{withoutData.length===1?withoutData[0]!.slo.display_name:`${withoutData.length} SLOs`} · no evaluable data</>:'no stale observations'}</span>
       </div>
     </div>}
     {page&&<div className="app-slo-groups">{groups.map(([group,label,explanation])=>{
