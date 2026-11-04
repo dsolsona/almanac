@@ -29,6 +29,23 @@ setup:
 	  *) echo 'SETUP_MODE must be all, web, go, database, or verification' >&2; exit 2 ;; \
 	esac
 
+# Container images (ADR-0029): the published app and agent images and the never-published dev image.
+# IMAGE_REGISTRY and IMAGE_TAG select the publish destination; publish builds linux/amd64 and linux/arm64.
+IMAGE_TAG ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+
+.PHONY: images publish
+images:
+	docker build --file deploy/app/Dockerfile --tag almanac:$(IMAGE_TAG) --tag almanac-local:dev .
+	docker build --file deploy/agent/Dockerfile --tag almanac-agent:$(IMAGE_TAG) --tag almanac-local-agent:dev .
+	docker build --file deploy/dev/Dockerfile --build-arg USER_ID=$$(id -u) --build-arg GROUP_ID=$$(id -g) --tag almanac-dev:$(IMAGE_TAG) --tag almanac-dev:latest .
+
+publish:
+	@test -n "$${IMAGE_REGISTRY:-}" || { echo 'IMAGE_REGISTRY must name the registry prefix, for example ghcr.io/dsolsona' >&2; exit 2; }
+	python3 scripts/check-image-pins.py
+	docker buildx build --platform $(IMAGE_PLATFORMS) --file deploy/app/Dockerfile --tag "$(IMAGE_REGISTRY)/almanac:$(IMAGE_TAG)" --push .
+	docker buildx build --platform $(IMAGE_PLATFORMS) --file deploy/agent/Dockerfile --tag "$(IMAGE_REGISTRY)/almanac-agent:$(IMAGE_TAG)" --push .
+
 build:
 	cd web && npm run typecheck && npm run build
 	GOTOOLCHAIN=local GOPROXY=off GOMODCACHE="$(CURDIR)/.local/go/mod" GOCACHE="$(CURDIR)/.local/go/build" .local/bin/go build -o bin/almanac ./cmd/almanac
@@ -102,6 +119,7 @@ verify:
 
 .PHONY: _verify_all
 _verify_all:
+	python3 scripts/check-image-pins.py
 	$(MAKE) _verify_web
 	$(MAKE) _verify_go
 

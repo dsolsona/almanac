@@ -16,8 +16,8 @@ mkdirSync(join(root, '.local'), { recursive: true });
 const artifacts = mkdtempSync(join(root, '.local/compose-check-'));
 const buildContext = mkdtempSync('/tmp/almanac-compose-source-');
 function prepareBuildContext() {
-  for (const name of ['.dockerignore', 'Dockerfile', 'Makefile', 'compose.yaml', 'go.mod', 'go.sum',
-    'cmd', 'internal', 'deploy/local', 'scripts/check-local-readiness.sh', 'scripts/local-agent.sh', 'web/assets.go', 'web/index.html', 'web/package.json',
+  for (const name of ['.dockerignore', 'deploy/app/Dockerfile', 'deploy/agent/Dockerfile', 'Makefile', 'compose.yaml', 'go.mod', 'go.sum',
+    'cmd', 'internal', 'deploy/local', 'scripts/check-image-pins.py', 'scripts/check-local-readiness.sh', 'scripts/local-agent.sh', 'web/assets.go', 'web/index.html', 'web/package.json',
     'web/package-lock.json', 'web/tsconfig.json', 'web/vite.config.ts', 'web/src', 'web/public']) {
     const destination = join(buildContext, name);
     const source = join(root, name);
@@ -1373,15 +1373,15 @@ try {
   const unchangedRun = await command('make', ['run'], { timeout: 600_000, cwd: buildContext });
   assert.match(unchangedRun, /CACHED|Using cache/i);
   stage = 'build failure leaves the healthy app serving the old image';
-  const dockerfile = readFileSync(join(buildContext, 'Dockerfile'), 'utf8');
+  const dockerfile = readFileSync(join(buildContext, 'deploy/app/Dockerfile'), 'utf8');
   try {
-    writeFileSync(join(buildContext, 'Dockerfile'), `${dockerfile}\nINVALID STARTUP TEST INSTRUCTION\n`);
+    writeFileSync(join(buildContext, 'deploy/app/Dockerfile'), `${dockerfile}\nINVALID STARTUP TEST INSTRUCTION\n`);
     await assert.rejects(command('make', ['run'], { timeout: 600_000, cwd: buildContext }));
     assert.ok(!`${lastFailure.stdout}\n${lastFailure.stderr}`.includes('Almanac is ready'));
     writeFileSync(join(artifacts, 'failed-build.json'), JSON.stringify({ status: lastFailure.status,
       stderr: redact(lastFailure.stderr) }, null, 2), { mode: 0o600 });
     lastFailure = undefined;
-  } finally { writeFileSync(join(buildContext, 'Dockerfile'), dockerfile); }
+  } finally { writeFileSync(join(buildContext, 'deploy/app/Dockerfile'), dockerfile); }
   assert.ok((await servedHTML()).includes(sourceMarker), 'build failure should leave the existing app available');
   stage = 'bootstrap performs one cached build';
   const bootstrap = await checkMake('bootstrap');
@@ -1481,7 +1481,7 @@ try {
     harnessSHA256: Object.fromEntries(['check-local-compose.mjs', 'check-local-compose-cancellation.mjs']
       .map((name) => [name, createHash('sha256').update(readFileSync(join(root, 'web/scripts', name))).digest('hex')])),
     candidateDiffSHA256: createHash('sha256').update(await command('git', ['diff', 'HEAD', '--',
-      'Dockerfile', '.dockerignore', 'compose.yaml', 'Makefile', 'deploy/local', 'scripts/check-local-readiness.sh', 'web/scripts/check-local-compose.mjs'])).digest('hex'),
+      'deploy/app/Dockerfile', 'deploy/agent/Dockerfile', '.dockerignore', 'compose.yaml', 'Makefile', 'deploy/local', 'scripts/check-local-readiness.sh', 'web/scripts/check-local-compose.mjs'])).digest('hex'),
     checks: ['initializer boundaries', 'real browser onboarding', 'stop/run persistence', 'repeat bootstrap persistence',
       'real browser agent registration with visible Local identifier suggestion and one-time token',
       'real agent collection, persisted 15-second 99/100 interval, browser and API/CLI parity',

@@ -5,7 +5,7 @@ services:
     image: ${COMPOSE_PROJECT_NAME:-almanac-local}:dev
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/app/Dockerfile
     user: "0:0"
     network_mode: none
     command: ["/bin/sh", "/usr/local/lib/almanac/init.sh"]
@@ -15,7 +15,7 @@ services:
       - postgres-secret:/run/postgres-secret
 
   postgres:
-    image: postgres:18.6@sha256:9770878138a2e83abcb10856d30cc3f24dae0d317bb956db6ab9159de6c3c80d
+    image: postgres:18.6@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81
     environment:
       POSTGRES_DB: almanac
       POSTGRES_USER: almanac
@@ -120,6 +120,17 @@ services:
     ports:
       - "127.0.0.1:${ALMANAC_TRACES_PORT:-19428}:10428"
     restart: unless-stopped
+
+  # The local agent image; `make agent` builds it and starts a container on the app's network.
+  agent:
+    image: ${COMPOSE_PROJECT_NAME:-almanac-local}-agent:dev
+    build:
+      context: .
+      dockerfile: deploy/agent/Dockerfile
+    profiles: ["agent"]
+    network_mode: none
+    command: ["version"]
+    restart: "no"
 
   provider-ready:
     image: curlimages/curl:8.19.0@sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c

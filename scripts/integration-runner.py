@@ -125,7 +125,7 @@ def case_inputs(root, graph, package, test):
     for name in ("go.mod", "go.sum", "api", "sqlc.yaml", "Makefile", "scripts/setup-database.sh"):
         paths.update(files_under(root, name))
     if package == "command":
-        for name in ("cmd", "web/assets.go", "web/src", "web/public", "web/package.json", "web/package-lock.json", "web/tsconfig.json", "web/vite.config.ts", "deploy/local", "docs/design", "Dockerfile", "compose.yaml"):
+        for name in ("cmd", "web/assets.go", "web/src", "web/public", "web/package.json", "web/package-lock.json", "web/tsconfig.json", "web/vite.config.ts", "deploy/local", "deploy/app", "deploy/agent", "docs/design", "compose.yaml"):
             paths.update(files_under(root, name))
         roots = SCRIPT_ROOTS.get(test)
         if roots is None:

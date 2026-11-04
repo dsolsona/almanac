@@ -217,6 +217,8 @@ The foundation provides these fixed entry points:
 | `make setup SETUP_MODE=database` | Isolated PostgreSQL18.6 fixture bound to loopback; validates existing fixture before reuse |
 | `make setup SETUP_MODE=verification` | Network-capable build of the pinned Linux verifier image and PostgreSQL18.6 image; cache fingerprint binds Go, web and OpenAPI lockfiles plus verifier tooling |
 | `make build` | Typecheck, production assets and embedded Go executable; size report |
+| `make images` | Builds the published `app` and `agent` images and the never-published `dev` image from `deploy/*/Dockerfile` for the host platform (ADR-0029) |
+| `make publish IMAGE_REGISTRY=<prefix>` | Runs the image pin check, then builds and pushes `almanac` and `almanac-agent` for `linux/amd64` and `linux/arm64` |
 | `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
 | `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
 | `make verify VERIFY_MODE=linux` | Offline Linux candidate gate: snapshots tracked and safe untracked source changes, attests a SHA256, then runs the full gate, race gate, real PostgreSQL/browser integration suite and catalogue Chromium matrix in order; exports sanitized logs and acceptance screenshots under `.local/linux-verification.*` |

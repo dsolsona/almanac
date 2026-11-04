@@ -15,7 +15,7 @@ if [ "$#" -gt 0 ]; then
 	esac
 fi
 
-image='postgres:18.6@sha256:9770878138a2e83abcb10856d30cc3f24dae0d317bb956db6ab9159de6c3c80d'
+image='postgres:18.6@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81'
 container='almanac-f1-t05-postgres18.6'
 port='15487'
 database='almanac_f1_storage'

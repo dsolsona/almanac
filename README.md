@@ -56,6 +56,18 @@ The current app supports administrator onboarding, agent and datasource manageme
 agent-collected event-count SLIs, and request-count SLOs with fixed rolling windows.
 Calendar reports, OpenSLO import, annotations and alerting remain under development.
 
+### Images
+
+Three Dockerfiles build three images ([ADR-0029](docs/adr/0029-platform-agnostic-development-and-verification.md)):
+`deploy/app/Dockerfile` for the published `almanac` application image,
+`deploy/agent/Dockerfile` for the published `almanac-agent` image, and
+`deploy/dev/Dockerfile` for the development image that carries every toolchain
+and is never published. Base images are pinned by multi-architecture index
+digests, so each host builds and runs its native platform. `make images` builds
+all three locally; `make publish IMAGE_REGISTRY=ghcr.io/example` builds and
+pushes the two published images for `linux/amd64` and `linux/arm64`.
+`make verify` starts by checking that every file pins each image to one digest.
+
 ### Start a local agent
 
 After `make run`, register an agent in Almanac and copy its one-time credential.
