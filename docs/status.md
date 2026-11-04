@@ -1,5 +1,12 @@
 # Delivery status
 
+Current checkpoint, 2026-11-04 (later): PR #53 is merged; `main` is `2f059e7`.
+The maintainer reviewed the SLI, SLO, datasource and agent screens and approved
+replacement [mocks](design/mocks/README.md). [ADR-0028](adr/0028-unified-operational-ui.md)
+and the [UI unification plan](plans/0025-ui-unification.md) are drafted for
+approval on branch `design/ui-unification`; the first round is UI-only and
+backend-dependent mock elements are deferred. No implementation has started.
+
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
 PR #53. Final ordinary and race checks pass. Both normal and added-100-ms cohorts pass all 342 connected

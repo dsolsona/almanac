@@ -1,0 +1,86 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · Create SLO</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="slos"><main>
+<div class="crumbs"><a>SLOs</a><span>/</span>New SLO</div>
+<div class="page-head"><div><h1>New SLO</h1><div class="sub">Name the objective, pick an indicator, set a target.</div></div></div>
+
+<form class="form">
+<section class="section" id="identity">
+  <header><span class="step">1</span><h2>Identity</h2><span class="hint">How it appears in lists and who owns it</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field"><label for="dn">Display name</label><input id="dn" placeholder="e.g. Checkout availability"><div class="hint">Shown in lists and on the detail page. If you leave it empty, Almanac suggests one from the SLI and window.</div></div>
+      <div class="field"><label for="id">Identifier</label><input id="id" placeholder="checkout-availability-30d"><div class="hint">Suggested from the display name. Lowercase letters, numbers and hyphens; fixed after creation.</div></div>
+    </div>
+    <div class="field"><label for="svc-input">Service</label>
+      <div id="svc-field"><div class="combo">
+        <input id="svc-input" role="combobox" aria-expanded="false" aria-controls="svc-list" autocomplete="off" placeholder="Type a service name, or a new one to create it…">
+        <ul id="svc-list" role="listbox" class="combo-list" hidden></ul>
+      </div>
+      <div class="hint">Services group SLOs by owner. Pick an existing one, or type a new name and create it without leaving this form.</div></div>
+      <div id="svc-selected" hidden></div>
+    </div>
+    <div class="field"><label for="desc">Description <span class="muted" style="font-weight:400">optional</span></label><textarea id="desc" rows="3" placeholder="What does this objective promise, and to whom? e.g. Checkout requests that did not fail with a 5xx, measured at the edge. Agreed with the Payments team for Q4."></textarea><div class="hint">The first line appears in lists; the rest on the detail page. Say what “good” means and who agreed the target.</div></div>
+  </div>
+</section>
+
+<section class="section">
+  <header><span class="step">2</span><h2>Indicator</h2><span class="hint">What are we measuring?</span></header>
+  <div class="body">
+    <div class="field"><label>SLI</label>
+    <div class="dscard">
+      <span class="st good"><i></i>Healthy</span>
+      <span class="nm">Checkout availability <span class="pill">checkout-availability</span></span>
+      <button type="button" class="change">Change</button>
+      <span class="sm">local-victoriametrics · 60 s cadence · 1 SLO already (28 d) · last sample 40 s ago</span>
+    </div>
+    <div class="hint">Type-ahead: search by name, datasource or service; only SLIs with collected data are selectable.</div></div>
+      </div>
+</section>
+
+<section class="section">
+  <header><span class="step">3</span><h2>Objective</h2><span class="hint">Target over a rolling window</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field"><label>Target</label>
+        <div class="chips" role="radiogroup" aria-label="Target" id="target-chips">
+          <button type="button" role="radio" aria-checked="false" data-v="99">99%</button>
+          <button type="button" role="radio" aria-checked="false" data-v="99.5">99.5%</button>
+          <button type="button" role="radio" aria-checked="true" data-v="99.9">99.9%</button>
+          <button type="button" role="radio" aria-checked="false" data-v="99.95">99.95%</button>
+          <button type="button" role="radio" aria-checked="false" data-v="99.99">99.99%</button>
+          <button type="button" role="radio" aria-checked="false" data-custom class="custom">Custom…</button>
+        </div>
+        <div class="custom-input" id="target-custom" hidden><input inputmode="decimal" placeholder="e.g. 99.7" aria-label="Custom target in percent"><span class="unit">%</span></div>
+        <div class="hint" id="target-hint">Share of events that must be good over the window. Error budget is the rest: <b>0.1%</b>.</div></div>
+      <div class="field"><label>Rolling window</label>
+        <div class="chips" role="radiogroup" aria-label="Rolling window" id="window-chips">
+          <button type="button" role="radio" aria-checked="false" data-v="7">7 days</button>
+          <button type="button" role="radio" aria-checked="false" data-v="28">28 days</button>
+          <button type="button" role="radio" aria-checked="true" data-v="30">30 days</button>
+          <button type="button" role="radio" aria-checked="false" data-v="90">90 days</button>
+          <button type="button" role="radio" aria-checked="false" data-custom class="custom">Custom…</button>
+        </div>
+        <div class="custom-input" id="window-custom" hidden><input inputmode="numeric" placeholder="e.g. 14" aria-label="Custom window in days"><span class="unit">days</span></div>
+        <div class="hint" id="window-hint">The window rolls forward continuously; every evaluation covers the last <b>30 days</b>.</div></div>
+    </div>
+    <div class="preview">
+      <h3>What this target means <span class="ok">from the last 7 days of this SLI</span></h3>
+      <div class="budget">
+        <div><span class="k">Error budget</span><div class="v">≈ 57,400 bad events</div><span class="s">0.1% of ≈ 57.4 M events per 30 d</span></div>
+        <div><span class="k">Full outage allowance</span><div class="v">≈ 43 min</div><span class="s">of complete failure per window</span></div>
+        <div><span class="k">Would be today</span><div class="v" style="color:var(--status-healthy)">83% left</div><span class="s">attainment 99.983% over the last 28 d</span></div>
+      </div>
+      <p class="annot" style="margin:0">Estimates use recent traffic and are not a prediction. The objective is evaluated on exact event counts.</p>
+    </div>
+    <div class="check"><input type="checkbox" checked><div>Apply this target to measurements already collected<p>History is available from 27 Oct 2026 12:00 UTC. Missing intervals stay unknown; nothing is backfilled.</p></div></div>
+  </div>
+</section>
+
+<section class="section" style="background:var(--surface-2)">
+  <header><span class="step">4</span><h2>Alerting</h2><span class="hint">Not available yet · arrives with alert policies</span></header>
+  <div class="body" style="padding-top:12px"><p class="annot" style="margin:0">Burn-rate alert policies (fast · medium · slow burn) will be selectable here. Nothing is configured today.</p></div>
+</section>
+
+<div class="actions"><div class="left"><span class="updated">Evaluation starts immediately from collected measurements. You can change the target or window later.</span></div><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Create SLO</button></div>
+</form>
+</main><script src="mock.js"></script><script src="service-picker.js"></script><script src="chips.js"></script></body></html>

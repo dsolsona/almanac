@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · New SLI</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="slis"><main>
+<div class="crumbs"><a>SLIs</a><span>/</span>New SLI</div>
+<div class="page-head"><div><h1>New SLI</h1><div class="sub">Three steps: name it, choose where the data lives, write the two queries.</div></div></div>
+
+<form class="form">
+<section class="section">
+  <header><span class="step">1</span><h2>Identity</h2><span class="hint">What is this indicator?</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field"><label for="dn">Display name</label><input id="dn" value="Checkout availability"><div class="hint">Name what you measure, not the query.</div></div>
+      <div class="field"><label for="id">Identifier</label><input id="id" value="checkout-availability"><div class="hint">Used in the API and CLI. Fixed after creation.</div></div>
+    </div>
+    <div class="field"><label for="desc">Description <span class="muted" style="font-weight:400">optional</span></label><textarea id="desc" rows="2">Checkout requests that did not fail with a 5xx. Counts every HTTP request to the checkout service; a request is good when its status is not 5xx.</textarea><div class="hint">What counts as “good”? One line is enough.</div></div>
+  </div>
+</section>
+
+<section class="section" id="source">
+  <header><span class="step">2</span><h2>Source</h2><span class="hint">Where does the data live?</span></header>
+  <div class="body">
+    <!-- Variant A: type-ahead combobox -->
+    <div id="variant-a">
+      <div class="field"><label for="ds-input">Datasource</label>
+        <div id="ds-field"><div class="combo">
+          <input id="ds-input" role="combobox" aria-expanded="false" aria-controls="ds-list" autocomplete="off" placeholder="Type a datasource name, provider or agent…">
+          <ul id="ds-list" role="listbox" class="combo-list" hidden></ul>
+        </div>
+        <div class="hint">The datasource’s agent runs the queries every minute.</div></div>
+        <div id="ds-selected" hidden></div>
+      </div>
+    </div>
+    <!-- Variant B: selectable cards -->
+    <div id="variant-b" hidden>
+      <div class="field"><label>Datasource</label><div class="dscards" id="ds-cards"></div><div class="hint">Queries run on the agent assigned to the datasource you pick.</div></div>
+      <div id="ds-selected-b" hidden></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <header><span class="step">3</span><h2>Measurement</h2>
+    <span class="seg" style="margin-left:16px"><button type="button" aria-pressed="true">Ratio · two queries</button><button type="button" aria-pressed="false" disabled title="Not available yet · needs collector support">Single fraction</button><button type="button" aria-pressed="false" disabled title="Not available yet · needs collector support">Threshold</button></span>
+    <span class="hint">What is good, what is total?</span></header>
+  <div class="body">
+    <p class="annot" style="margin:-4px 0 0">The SLI is <b>good ÷ total</b> for every minute. Write a PromQL query for each; both must return one number per minute, and good must be a subset of total.</p>
+    <div class="qgrid">
+      <div class="field"><div class="qhead"><label for="good">Good events</label><span class="lang">PromQL</span></div><div class="qbox"><div class="ln">1<br>2</div><div class="code" id="good">sum(increase(http_requests_total{service="checkout", code!~"5.."}[1m]))</div></div></div>
+      <div class="field"><div class="qhead"><label for="total">Total events</label><span class="lang">PromQL</span></div><div class="qbox"><div class="ln">1<br>2</div><div class="code" id="total">sum(increase(http_requests_total{service="checkout"}[1m]))</div></div></div>
+    </div>
+    <div class="qfoot">
+      <span class="hint" style="margin:0">Returns more than one series? Wrap it in <span class="mono">sum()</span>.</span>
+      <span class="qunits"><span class="hint" style="margin:0">Queries return</span><span class="seg" style="height:32px;padding:2px"><button type="button" aria-pressed="true" title="increase(), sum_over_time(): values are stored as they are">events per interval</button><button type="button" aria-pressed="false" title="rate(), irate(): multiplied by the 60 s interval">events per second</button></span></span>
+    </div>
+
+    <div class="preview">
+      <h3>Test result <span class="ok">✓ both queries returned one series</span><span class="updated" style="margin-left:auto">ran on agent Local · 10:00:41 UTC · 0.4 s</span></h3>
+      <table><tr><th>Interval (UTC)</th><th>Good</th><th>Total</th><th>Ratio</th></tr>
+        <tr><td>09:55 – 09:56</td><td>1,994</td><td>1,996</td><td>99.90%</td></tr>
+        <tr><td>09:54 – 09:55</td><td>2,041</td><td>2,044</td><td>99.85%</td></tr>
+        <tr><td>09:53 – 09:54</td><td>1,978</td><td>1,978</td><td>100%</td></tr>
+        <tr><td>09:52 – 09:53</td><td>2,003</td><td>2,006</td><td>99.85%</td></tr>
+        <tr><td>09:51 – 09:52</td><td>1,967</td><td>1,970</td><td>99.85%</td></tr></table>
+      <p class="warnline" style="color:var(--status-healthy)">✓ Values look like per-interval counts (thousands per minute). Good never exceeds total.</p>
+      <div><button type="button" class="btn sm">▶ Run test again</button> <span class="updated">Tests use the last 5 completed intervals and do not save anything.</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="actions"><div class="left"><span class="updated">Collection starts as soon as you save.</span></div><button type="button" class="btn">Cancel</button><button type="button" class="btn">Create SLI</button><button type="button" class="btn primary">Create SLI and add an SLO →</button></div>
+</form>
+</main><script src="mock.js"></script><script src="picker.js"></script></body></html>

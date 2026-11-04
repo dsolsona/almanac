@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · Register agent</title><link rel="stylesheet" href="mock.css">
+<style>
+.steps { display:flex; gap:0; margin:0 0 20px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); overflow:hidden; }
+.steps > div { flex:1; padding:10px 16px; font:13px var(--mono); color:var(--text-3); border-right:1px solid var(--border); display:flex; gap:10px; align-items:center; }
+.steps > div:last-child { border-right:0; }
+.steps > div.done { color:var(--status-healthy); } .steps > div.now { background:var(--surface); color:var(--text); font-weight:600; }
+.steps i { width:20px; height:20px; border-radius:50%; border:1px solid currentColor; display:inline-grid; place-items:center; font-style:normal; font-size:11px; }
+.steps .now i { background:var(--selection); border-color:var(--selection); color:var(--selection-foreground); }
+.token { padding:14px 16px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--surface-2); font:15px/1.5 var(--mono); word-break:break-all; user-select:all; }
+.wait { display:grid; gap:10px; padding:18px 20px; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); }
+.wait .pulse { width:12px; height:12px; border-radius:50%; border:2px solid var(--status-stale); display:inline-block; }
+.wait .row { display:flex; align-items:center; gap:10px; font-size:14px; }
+.wait .row small { font:12px var(--mono); color:var(--text-3); margin-left:auto; }
+.state { font:12px var(--mono); color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; margin:36px 0 10px; }
+</style></head>
+<body data-current="agents"><main>
+<div class="crumbs"><a>Agents</a><span>/</span>Register agent</div>
+<div class="page-head"><div><h1>Register agent</h1><div class="sub">Three steps: name it, copy its token, start it where it can reach your metrics.</div></div></div>
+
+<p class="state">Step 1</p>
+<div class="steps"><div class="now"><i>1</i>Name</div><div><i>2</i>Token</div><div><i>3</i>Start</div></div>
+<form class="form">
+<section class="section">
+  <header><h2>Name</h2><span class="hint">What is this agent?</span></header>
+  <div class="body">
+    <p class="annot" style="margin:-4px 0 0">An agent is a small process you run inside your network. It pulls its configuration from Almanac and runs the SLI queries against your datasources, so nothing in Almanac needs inbound access to your metrics.</p>
+    <div class="grid2">
+      <div class="field"><label for="dn">Display name</label><input id="dn" value="eu-west-1"><div class="hint">Where it runs: a region, cluster or host.</div></div>
+      <div class="field"><label for="id">Identifier</label><input id="id" value="eu-west-1"><div class="hint">Used in the API and CLI. Fixed after registration.</div></div>
+    </div>
+    <div class="field"><label>Credential expires after</label><div class="chips"><button type="button" role="radio" aria-checked="false">30 days</button><button type="button" role="radio" aria-checked="true">90 days</button><button type="button" role="radio" aria-checked="false">1 year</button><button type="button" role="radio" aria-checked="false" class="custom">Custom…</button></div><div class="hint">The agent stops authenticating when the credential expires. You can rotate it any time from the agent page; Almanac warns a week before.</div></div>
+  </div>
+</section>
+<div class="actions"><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Register and show token →</button></div>
+</form>
+
+<p class="state">Step 2 · same page after registering</p>
+<div class="steps"><div class="done"><i>✓</i>Name · eu-west-1</div><div class="now"><i>2</i>Token</div><div><i>3</i>Start</div></div>
+<section class="section">
+  <header><h2>Token</h2><span class="hint">Shown once · copy it now</span></header>
+  <div class="body">
+    <div class="banner" style="margin:0">This token is shown <b>once</b>. If you leave this page without copying it, rotate the credential from the agent page to get a new one.</div>
+    <div class="field"><label>Agent token for eu-west-1 <span class="muted" style="font-weight:400">· expires 02 Feb 2027</span></label><div class="token">alm_agt_7Qk3xN9vLp2WbR8sT4yHc6mJ1fD0eG5aZuVoXi</div><div style="display:flex;gap:10px;margin-top:10px;align-items:center"><button type="button" class="btn">Copy token</button><span class="updated">Copied ✓ · 10:01:12</span></div></div>
+  </div>
+</section>
+<div class="actions"><div class="left"><span class="updated">You can come back to step 3 later from the agent page (“How to run”).</span></div><button type="button" class="btn primary">I have copied it · Start the agent →</button></div>
+
+<p class="state">Step 3 · stays open until the agent connects</p>
+<div class="steps"><div class="done"><i>✓</i>Name · eu-west-1</div><div class="done"><i>✓</i>Token copied</div><div class="now"><i>3</i>Start</div></div>
+<section class="section">
+  <header><h2>Start</h2><span class="hint">Run it where it can reach your metrics</span></header>
+  <div class="body">
+    <div class="dscard">
+      <span class="st none"><i></i>Never connected</span>
+      <span class="nm">eu-west-1 <span class="pill">eu-west-1</span></span>
+      <span class="updated">registered 10:01:08 UTC</span>
+      <span class="sm">credential issued · expires 02 Feb 2027 · no datasource yet</span>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="field"><label>Run eu-west-1</label>
+          <span class="seg" style="height:32px;padding:2px;margin-bottom:8px"><button type="button" aria-pressed="true">Local (Compose)</button><button type="button" aria-pressed="false">Docker</button><button type="button" aria-pressed="false">Helm</button><button type="button" aria-pressed="false">Binary</button></span>
+          <pre class="q" style="margin:0;font-size:13px">make agent
+# paste the token at the private prompt</pre>
+          <div class="hint">Starts the packaged agent in a container next to the local app and verifies the backend certificate. Ctrl-C stops it.</div></div>
+        <div class="field" style="margin-top:16px"><label>Then</label><div class="hint" style="margin:0">Assign a datasource to <b>eu-west-1</b>. The agent applies the configuration within seconds and collection starts on the next interval.</div></div>
+      </div>
+      <div class="wait">
+        <div class="row"><span class="pulse"></span><b>Waiting for eu-west-1’s first heartbeat…</b><small>listening since 10:01:20</small></div>
+        <div class="row" style="color:var(--text-2)"><span class="st good" style="font-size:13px"><i></i></span>Registered · credential issued<small>10:01:08</small></div>
+        <div class="row" style="color:var(--text-3)"><span class="st none" style="font-size:13px"><i></i></span>Agent authenticated<small>—</small></div>
+        <div class="row" style="color:var(--text-3)"><span class="st none" style="font-size:13px"><i></i></span>Configuration applied<small>—</small></div>
+        <div class="row" style="color:var(--text-3)"><span class="st none" style="font-size:13px"><i></i></span>First query succeeded<small>needs a datasource</small></div>
+        <p class="annot" style="margin:6px 0 0">This updates automatically. If nothing happens within a minute, check that the host can reach <span class="mono">https://almanac.internal</span> and that the token was pasted whole.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="actions"><div class="left"><span class="updated">Leaving this page is fine; the agent connects on its own.</span></div><button type="button" class="btn">Open agent page</button><button type="button" class="btn primary">Assign a datasource →</button></div>
+</main><script src="mock.js"></script></body></html>

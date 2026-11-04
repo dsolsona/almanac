@@ -1,0 +1,62 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · New datasource</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="datasources"><main>
+<div class="crumbs"><a>Datasources</a><span>/</span>New datasource</div>
+<div class="page-head"><div><h1>New datasource</h1><div class="sub">Three steps: name it, say where Prometheus is, pick the agent that can reach it.</div></div></div>
+
+<form class="form">
+<section class="section">
+  <header><span class="step">1</span><h2>Identity</h2><span class="hint">What is this source?</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field"><label for="dn">Display name</label><input id="dn" value="prod-prometheus-eu"><div class="hint">Name the system, not the URL.</div></div>
+      <div class="field"><label for="id">Identifier</label><input id="id" value="prod-prometheus-eu"><div class="hint">Used in the API and CLI. Fixed after creation.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <header><span class="step">2</span><h2>Connection</h2><span class="hint">Where and how to reach it?</span></header>
+  <div class="body">
+    <div class="field"><label>Provider</label>
+      <div class="cards3">
+        <label class="choice sel"><span class="t"><span class="rad"></span>Prometheus</span><p>Also VictoriaMetrics, Mimir, Thanos and anything that speaks the Prometheus HTTP API.</p></label>
+        <label class="choice off"><span class="t"><span class="rad"></span>Tempo</span><p>Trace search with TraceQL.</p><span class="off-note">Not available yet</span></label>
+        <label class="choice off"><span class="t"><span class="rad"></span>Loki</span><p>Log metrics with LogQL.</p><span class="off-note">Not available yet</span></label>
+      </div></div>
+    <div class="field"><label for="ep">Endpoint</label><input id="ep" value="https://prometheus.eu-west-1.internal:9090" class="mono"><div class="hint">The base URL the agent will call, e.g. <span class="mono">https://prometheus.internal:9090</span>. No credentials in the URL.</div></div>
+    <div class="field"><label>Authentication</label>
+      <div class="authbox">
+        <span class="seg"><button type="button" aria-pressed="false">None</button><button type="button" aria-pressed="false">Basic</button><button type="button" aria-pressed="true">Bearer token</button></span>
+        <div class="authfields">
+          <div class="field"><label for="tok">Token</label><input id="tok" type="password" value="••••••••••••••••••••••••" class="mono"><div class="hint">Encrypted at rest and sent only to the assigned agent. Never shown again.</div></div>
+        </div>
+      </div></div>
+    <div class="grid2">
+      <div class="field"><label>Query every</label><span class="seg"><button type="button" aria-pressed="false">15 s</button><button type="button" aria-pressed="true">30 s</button><button type="button" aria-pressed="false">60 s</button><button type="button" aria-pressed="false">5 min</button></span><div class="hint">Every SLI on this datasource measures one interval of this length.</div></div>
+      <div class="field"><label>TLS</label><span class="seg"><button type="button" aria-pressed="true">Verify certificate</button><button type="button" aria-pressed="false">Custom CA</button><button type="button" aria-pressed="false">Skip verification</button></span><div class="hint">Default verifies against the system roots. Choose Custom CA to paste a PEM bundle; Skip is insecure and marks the datasource in lists.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <header><span class="step">3</span><h2>Agent</h2><span class="hint">Which agent can reach it?</span></header>
+  <div class="body">
+    <div class="field"><label for="ag">Assigned agent</label>
+      <div class="combo"><input id="ag" role="combobox" placeholder="Type an agent name…" value=""><ul class="combo-list" role="listbox" style="position:static;margin-top:6px">
+        <li role="option" aria-selected="true"><span class="st good"><i></i></span><span class="nm">eu-west-1</span><span class="st good" style="color:var(--text-3);font-weight:500">Connected</span><span class="sm">almanac-agent/2 · 0.9.2 · 1 datasource · can test &amp; preview</span></li>
+        <li role="option"><span class="st good"><i></i></span><span class="nm">Local</span><span class="st good" style="color:var(--text-3);font-weight:500">Connected</span><span class="sm">almanac-agent/2 · 0.9.3 · 1 datasource · can test &amp; preview</span></li>
+        <li role="option"><span class="st stale"><i></i></span><span class="nm">us-east-1</span><span class="st stale" style="color:var(--text-3);font-weight:500">Unreachable</span><span class="sm">last heartbeat 2 h ago · 1 datasource · tests wait until it reconnects</span></li>
+        <li role="option" class="off"><span class="st none"><i></i></span><span class="nm">staging</span><span class="st none" style="color:var(--text-3);font-weight:500">Never connected</span><span class="sm">registered 03 Nov · start it with its token first</span></li>
+      </ul></div>
+      <div class="hint">The agent runs every query for this datasource, so it must have network access to the endpoint.</div></div>
+    <div class="preview">
+      <h3>Connection test <span class="ok">✓ reached Prometheus 2.54.1 via eu-west-1</span><span class="updated" style="margin-left:auto">10:00:41 UTC · 0.2 s</span></h3>
+      <table><tr><th>Check</th><th>Result</th></tr><tr><td>TLS</td><td>valid · expires 14 Mar 2027</td></tr><tr><td>Authentication</td><td>accepted</td></tr><tr><td>Series available</td><td>12,418</td></tr><tr><td>Sample query <span class="mono">up</span></td><td>37 series · 0.08 s</td></tr></table>
+      <div><button type="button" class="btn sm">▶ Test again</button> <span class="updated">Tests run on the agent and do not save anything.</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="actions"><div class="left"><span class="updated">The agent receives the configuration as soon as you save.</span></div><button type="button" class="btn">Cancel</button><button type="button" class="btn">Create datasource</button><button type="button" class="btn primary">Create and add an SLI →</button></div>
+</form>
+</main><script src="mock.js"></script></body></html>

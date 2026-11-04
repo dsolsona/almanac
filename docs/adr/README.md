@@ -53,3 +53,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0025](0025-fast-operational-journeys-and-tracing.md) | Serve fast operational journeys from retained time series | accepted |
 | [ADR-0026](0026-bounded-cold-operational-rendering.md) | Bound cold operational rendering and start reads before React | proposed |
 | [ADR-0027](0027-bounded-history-quality-display.md) | Keep dense history graphs available at the displayed resolution | accepted |
+| [ADR-0028](0028-unified-operational-ui.md) | One visual grammar for operational and administration screens | proposed |

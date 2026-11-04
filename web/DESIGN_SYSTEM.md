@@ -76,7 +76,9 @@ Import controls from `src/components/ui/` and prefer native semantics:
   It defaults to
   `type="button"`; pending actions are disabled and announced as busy.
 - `TextField` and `SelectField` require an id and visible label; hints and errors
-  are programmatically associated. Select options are native options.
+  are programmatically associated. Select options are native options for fixed
+  small choices; pickers that need state context use the type-ahead `Combobox`
+  proposed in [ADR-0028](../docs/adr/0028-unified-operational-ui.md) once delivered.
 - `StatusBadge` pairs a readable status with a distinct mark for healthy, warning,
   breached, no-data and stale states.
 - `Panel` is a semantic section with a heading and content, not a nested card.
