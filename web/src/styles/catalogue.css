@@ -51,3 +51,6 @@
   .charts-section__states { grid-template-columns: minmax(0, 1fr); }
 }
 .measurement-demo { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.operational-list-demo { display: grid; gap: var(--space-2); }
+.operational-marks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-4); }
+#operational .form-grid { margin-top: var(--space-4); }

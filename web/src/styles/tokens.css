@@ -29,7 +29,9 @@
   --selection: var(--almanac-teal); --selection-foreground: #ffffff;
   --shadow: 0 4px 16px rgb(36 43 44 / 8%);
   --radius: 4px; --radius-sm: 3px;
+  --card-inset: 24px;
 }
+@media (max-width: 860px) { :root { --card-inset: 14px; } }
 :root.dark {
   --bg: #202725; --surface: #27302d; --surface-2: #323c37; --surface-3: #455047;
   --text: #f8f6ee; --text-2: #d0cdbf; --text-3: #adb6a9;
