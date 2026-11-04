@@ -24,7 +24,11 @@ in review with the same web evidence (142 slo-unit web cases, 48/48 catalogue,
 375 cases and the build in `make verify`); its real journeys are blocked identically. [F6-T05](tasks/F6-T05.md), the datasource list, detail and
 create pages, is implemented on `design/f6-t05-datasources` (stacked) and in
 review (33 datasource cases, 48/48 catalogue, 378 cases and the build in
-`make verify`); the datasource and Compose journeys are blocked identically.
+`make verify`); the datasource and Compose journeys are blocked identically. [F6-T06](tasks/F6-T06.md), the agent list and detail, is
+implemented on `design/f6-t06-agents` (stacked) and in review (59 agent
+cases, 48/48 catalogue, 378 cases and the build in `make verify`); the
+registration page is deferred with a reason in the task and the agent journeys
+are blocked identically.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on

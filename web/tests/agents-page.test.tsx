@@ -310,6 +310,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Back to agents' }));
     expect(await screen.findByRole('button', { name: 'west-1' })).toBeVisible();
     expect(location.search).toBe('');
+
   });
 
   it('ignores an old access warning after a newer page read succeeds', async () => {
@@ -366,7 +367,7 @@ describe('agent administration screen', () => {
     expect(location.search).toContain(`agent=${agentID}`);
     expect(screen.getByText('Scheduled retirement (UTC)')).toBeVisible();
     expect(screen.getByText('2026-10-22 12:00:00.987654Z')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await waitFor(() => expect(location.search).toBe(''));
   });
 
@@ -381,6 +382,7 @@ describe('agent administration screen', () => {
     }));
     render(<AuthPage client={makeAuth()} />);
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByText('Runtime details'));
     const panel = await screen.findByRole('region', { name: 'Agent runtime' });
     expect(panel).toHaveTextContent('2026-10-22 13:13:30Z');
     expect(panel).not.toHaveTextContent('No datasources are assigned to this agent.');
@@ -399,6 +401,7 @@ describe('agent administration screen', () => {
     vi.stubGlobal('fetch', fetcher);
     render(<AuthPage client={makeAuth()} />);
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByText('Runtime details'));
     const panel = await screen.findByRole('region', { name: 'Agent runtime' });
     expect(panel.querySelector('.agents-runtime__state')).toHaveTextContent('Connected');
     expect(panel).toHaveTextContent('almanac-agent/1');
@@ -430,6 +433,7 @@ describe('agent administration screen', () => {
     }));
     render(<AuthPage client={makeAuth()} />);
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByText('Runtime details'));
     const panel = await screen.findByRole('region', { name: 'Agent runtime' });
     expect(panel.querySelector('.agents-runtime__state')).toHaveTextContent(expected);
     if (expected === 'Never connected') expect(panel).toHaveTextContent('No heartbeat has been received');
@@ -447,6 +451,7 @@ describe('agent administration screen', () => {
     }));
     render(<AuthPage client={makeAuth()} />);
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await user.click(await screen.findByText('Runtime details'));
     expect(await screen.findByText('No provider capabilities were reported.')).toBeVisible();
   });
 
@@ -654,9 +659,9 @@ describe('agent administration screen', () => {
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Register agent' })).toBeDisabled();
     await user.click(await screen.findByRole('button', { name: 'Abandon command' }));
-    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'east-1' }));
-    expect(await screen.findByText('East collector', { selector: 'dd' })).toBeVisible();
+    expect(await screen.findByText('East collector', { selector: 'h1' })).toBeVisible();
     await act(async () => { resolveRotation(response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'late-secret' }, 200)); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(screen.queryByText('late-secret')).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Agent token' })).not.toBeInTheDocument();
@@ -713,7 +718,7 @@ describe('agent administration screen', () => {
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/sign-out could not be confirmed/i);
-    expect(screen.getByRole('heading', { name: 'Agent details' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'West collector' })).toBeVisible();
     await act(async () => { resolveRotation(response({ agent: agent(), credential: credential(), previous_credential: null, replayed: false, secret_state: 'issued', token: 'late-after-logout' }, 200)); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(screen.queryByText('late-after-logout')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
@@ -740,7 +745,7 @@ describe('agent administration screen', () => {
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     await user.click(within(registration).getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByRole('button', { name: 'Keep request' }));
-    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     expect(await screen.findByRole('button', { name: 'Rotate credential' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Revoke credential' })).toBeDisabled();
@@ -847,7 +852,7 @@ describe('agent administration screen', () => {
 
     await user.click(within(retryDialog).getByRole('button', { name: 'Revoke credential' }));
     await waitFor(() => expect(screen.getAllByRole('alert').some((alert) => /protected agent records were cleared/i.test(alert.textContent ?? ''))).toBe(true));
-    expect(screen.queryByRole('heading', { name: 'Agent details' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'West collector' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Check session' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Abandon command' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Check session' }));
@@ -1070,7 +1075,7 @@ describe('agent administration screen', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/wait 30 seconds/i);
-    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     const retry = await screen.findByRole('button', { name: /Retry rotate credential/i });
     expect(retry).toBeDisabled();
@@ -1088,9 +1093,9 @@ describe('agent administration screen', () => {
     expect(await screen.findByRole('dialog', { name: 'Revoke credential' })).toBeVisible();
     await user.click(within(screen.getByRole('dialog', { name: 'Revoke credential' })).getByRole('button', { name: 'Close dialog' }));
     expect(screen.queryByRole('dialog', { name: 'Revoke credential' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
-    expect(await screen.findByText('West collector', { selector: 'dd' })).toBeVisible();
+    expect(await screen.findByText('West collector', { selector: 'h1' })).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'Revoke credential' })).not.toBeInTheDocument();
     expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(expect.stringContaining('/revoke'), expect.anything());
   });
@@ -1106,8 +1111,8 @@ describe('agent administration screen', () => {
     });
     vi.stubGlobal('fetch', fetcher);
     render(<AuthPage client={makeAuth()} />);
-    expect(await screen.findByRole('button', { name: 'Next agents' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Next agents' }));
+    expect(await screen.findByRole('button', { name: 'Next ›' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Next ›' }));
     expect(await screen.findByRole('button', { name: 'east-1' })).toBeVisible();
     expect(location.search).toContain('agents_cursor=agent-page-2');
     await user.click(screen.getByRole('button', { name: 'east-1' }));
@@ -1187,7 +1192,7 @@ describe('agent administration screen', () => {
     expect(screen.getByText(/No response was received from Almanac/)).toBeVisible();
     expect(screen.getByText(/refresh agent records before deciding/i)).toBeVisible();
     expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('link', { name: 'Agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Agents' }));
     expect(screen.getByRole('heading', { name: 'Registration not confirmed' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Retry registration' }));
     await user.click(screen.getAllByRole('button', { name: 'Retry registration' })[1]!);
@@ -1330,7 +1335,7 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await waitFor(() => expect(location.search).toContain(`agent=${agentID}`));
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Back to agents' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await waitFor(() => expect(location.search).toContain(`agent=${agentID}`));
     await waitFor(() => expect(finishOld).toBeTypeOf('function'));

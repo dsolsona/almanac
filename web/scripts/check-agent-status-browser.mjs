@@ -87,6 +87,8 @@ try {
   assert.equal(runtime.next_expected_execution_at, null);
 
   stage = 'agent runtime panel rendering';
+  // Runtime details are collapsed under a disclosure on the unified detail (F6-T06).
+  await page.getByText('Runtime details', { exact: true }).click();
   const panel = page.getByRole('region', { name: 'Agent runtime', exact: true });
   await expect(panel).toBeVisible();
   stage = 'agent runtime connected label';

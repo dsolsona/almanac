@@ -47,7 +47,7 @@ the integrated result of the previous one.
   segmented, secret summary card), Agent (summary card, move), Test (connection
   test and preview as today), delete section; create page with provider cards and
   agent type-ahead.
-- [ ] **F6-T06 Agents.** List with status, name, datasources by name, collection
+- [ ] **F6-T06 Agents** ([F6-T06](../tasks/F6-T06.md), in review; registration page deferred, see the task). List with status, name, datasources by name, collection
   state (heartbeat strip and query ratio deferred); detail with status line,
   banner, tiles, datasources table, credentials table, "How to run" dialog,
   collapsed runtime details, quiet disable/delete line; registration page with
