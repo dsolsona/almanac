@@ -23,6 +23,11 @@ The subsequent verifier correction captures lifecycle response JSON before click
 completion; the focused real journey passes in 10.73 seconds with every existing
 assertion retained. The original failure remains unreproduced, and this focused
 pass does not turn the failed full integration receipt into a pass.
+The maintainer-requested full rerun on `e4c8cff` subsequently fails in 758.599
+seconds: 160/173 cases pass, the datasource preview subjourney fails while reading
+an HTTP-202 receipt body, and twelve later cases are not reached. This different
+failure remains unresolved; the saved diagnostic and masked screenshot are linked
+from F3-T08. No further suite is running.
 T08 remains in progress until the final verification gaps are closed. No merge
 is authorized. Earlier checkpoints below are historical and do not override this
 current scope/evidence record.
