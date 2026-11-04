@@ -16,7 +16,7 @@ test('SLI form controls align and fit the viewport', async ({ page }, testInfo) 
   await page.route('**/api/v1/datasources?*', (route) => route.fulfill({ json: { items: [datasource], next_cursor: '' } }));
   await page.goto('/slis/new');
   const displayName = page.getByLabel('Display name', { exact: true });
-  const name = page.getByLabel('SLI name', { exact: true });
+  const name = page.getByLabel('Identifier', { exact: true });
   await expect(displayName).toBeVisible();
   await displayName.fill('Request success');
   await expect(name).toHaveValue('request-success');

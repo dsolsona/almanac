@@ -128,6 +128,12 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   the input.
 - `SelectionSummary` shows status, title, badge, detail, optional message and
   action; the warning variant uses the warning wash.
+- `FormSection` and `FormActions` compose create and edit forms as numbered
+  steps: a heading row with the step, the title, an optional control (such as the
+  measurement kind) and a right-aligned mono hint, then a body that stacks fields
+  and `ui-form-grid` two-column rows. `FormActions` closes the form with a mono
+  note on the left and the buttons on the right. Forms use the full content width;
+  a muted section marks a step that cannot be configured yet.
 - `PageHeader`, `Toolbar`, `SearchField` and `Pager` compose every list: Bevan
   title with a mono summary and “Updated hh:mm:ss UTC” beside the actions; search
   with a `/` shortcut that does not fire while typing elsewhere; a pager that always

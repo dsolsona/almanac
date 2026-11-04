@@ -16,11 +16,11 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 | --- | --- | --- |
 | `slo-list.html` | SLO list with triage band and urgency groups | [F6-T02](../../tasks/F6-T02.md), in review |
 | `slo-detail.html` | Single-column SLO detail: status band, timeline, definition | [F6-T02](../../tasks/F6-T02.md), in review (Events lane, Mute, edit page deferred) |
-| `slo-create.html` | New SLO: Identity → Indicator → Objective → Alerting | planned, F6-T04 |
-| `slo-edit.html` | Edit SLO with revision banner and history | planned, F6-T04 |
+| `slo-create.html` | New SLO: Identity → Indicator → Objective → Alerting | [F6-T04](../../tasks/F6-T04.md), in review (description, budget preview deferred) |
+| `slo-edit.html` | Edit SLO with revision banner and history | deferred (revision contract); display-name dialog from F6-T02 |
 | `sli-list.html` | Dense SLI table with health filter and 24 h strip | [F6-T03](../../tasks/F6-T03.md), in review (health filter deferred) |
 | `sli-detail.html` | Single-column SLI detail: tiles, chart, intervals, definition, objectives | [F6-T03](../../tasks/F6-T03.md), in review (range chips, volume bars, objective status deferred) |
-| `sli-create.html` | New SLI: Identity → Source → Measurement with query test | planned, F6-T04 |
+| `sli-create.html` | New SLI: Identity → Source → Measurement with query test | [F6-T04](../../tasks/F6-T04.md), in review (description, units toggle, query test deferred) |
 | `ds-list.html` | Datasource list with health, agent, cadence, SLI count | planned, F6-T05 |
 | `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | planned, F6-T05 |
 | `ds-create.html` | New datasource: Identity → Connection → Agent with test result | planned, F6-T05 |

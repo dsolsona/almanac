@@ -36,7 +36,7 @@ the integrated result of the previous one.
   inline "Create SLO"; single-column detail with tiles, measurements chart from
   the observation history, intervals table with outcome filter, definition,
   objectives. Description deferred.
-- [ ] **F6-T04 SLI and SLO forms.** New SLI with Identity → Source (type-ahead)
+- [ ] **F6-T04 SLI and SLO forms** ([F6-T04](../tasks/F6-T04.md), in review). New SLI with Identity → Source (type-ahead)
   → Measurement (segmented kind, side-by-side editors); New SLO with Identity
   (service type-ahead, existing services only) → Indicator (SLI type-ahead) →
   Objective (chips) → Alerting placeholder. Query test, units toggle, inline

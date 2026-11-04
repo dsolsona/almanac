@@ -1,8 +1,9 @@
 import { Component, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { journeyContentReady } from '../telemetry/client.ts';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, Dialog, Panel, SelectField, TextField } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, Dialog, FormActions, FormSection, PageHeader, Panel, TextField, type ComboboxOption } from '../components/ui/index.ts';
 import { createSliClient, type Sli } from '../slis/client.ts';
+import { relativeAge, sliVocabulary } from '../slis/vocabulary.ts';
 import { OperationalDetailView, OperationalOverviewView } from './OperationalViews.tsx';
 import { sloClient, SloFailure, type CreateSlo, type Service, type Slo } from './client.ts';
 import './slos.css';
@@ -34,6 +35,14 @@ function percentTarget(value: string): string | null {
   if (!/^(?:\d+)(?:\.\d{1,10})?$/.test(value)) return null;
   const [whole] = value.split('.'); if (BigInt(whole!) >= 100n) return null;
   return shift(value, -2);
+}
+const validateTarget = (value: string) => percentTarget(value) !== null && Number(value) > 0 ? undefined : 'Target must be above 0% and below 100%.';
+const validateDays = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 ? undefined : 'Enter a whole number of days.';
+// Remaining share after the target, shown with the target's own precision.
+function budgetRest(target: string): string {
+  if (percentTarget(target) === null) return 'the rest';
+  const decimals = (target.split('.')[1] ?? '').length;
+  return `${(100 - Number(target)).toFixed(Math.max(1, decimals))}%`;
 }
 function Heading({title, list=false}:{title:string; list?:boolean}) { return <div>
       <nav className="app-breadcrumbs" aria-label="Breadcrumb">{list ? <span aria-current="page">SLOs</span> : <>
@@ -68,7 +77,6 @@ export function SlosPage({context}:{context:AuthContext}) {
   const [sliID,setSliID]=useState('');
   const [target,setTarget]=useState('99.9');
   const [duration,setDuration]=useState('30');
-  const [unit,setUnit]=useState('days');
   const [historical,setHistorical]=useState(false);
   const [bound,setBound]=useState('');
   const [boundError,setBoundError]=useState('');
@@ -120,7 +128,11 @@ export function SlosPage({context}:{context:AuthContext}) {
             allPages(cursor => sloClient.services(cursor, abort.signal)),
             allPages(cursor => sliClient.list(200, cursor, abort.signal)),
           ]);
-          if (active) { setServices(availableServices); setSlis(availableSlis); }
+          if (active) {
+            setServices(availableServices); setSlis(availableSlis);
+            const wanted = new URLSearchParams(location.search).get('sli');
+            if (wanted && availableSlis.some(item => item.id === wanted)) setSliID(wanted);
+          }
         } else if (id && isService) {
           const data = await sloClient.service(id, abort.signal);
           if (active) { setService(data.value); setMetadata(data.value.display_name); setEtag(data.etag); }
@@ -165,7 +177,7 @@ export function SlosPage({context}:{context:AuthContext}) {
   }, [sliID, boundRevision]);
 
   const selectedSli = slis.find(item => item.id === sliID);
-  const seconds = Number(duration) * ({ minutes: 60, hours: 3600, days: 86400, weeks: 604800 }[unit] ?? 0);
+  const seconds = Number(duration) * 86400;
   const historyStart = useMemo(() => {
     if (!bound || !selectedSli || !Number.isSafeInteger(seconds) || seconds <= 0) return '';
     const cadence = selectedSli.polling_interval_seconds * 1000;
@@ -176,8 +188,8 @@ export function SlosPage({context}:{context:AuthContext}) {
   const frozen = Boolean(sloIntent.current?.uncertain);
   const serviceFrozen = Boolean(serviceIntent.current?.uncertain);
 
-  async function createService(event: FormEvent) {
-    event.preventDefault();
+  async function createService(event?: { preventDefault(): void }) {
+    event?.preventDefault();
     setFormError('');
     if (!namePattern.test(serviceName) || !serviceDisplay.trim()) {
       setFormError('Enter a display name and a lowercase service identifier.');
@@ -216,7 +228,7 @@ export function SlosPage({context}:{context:AuthContext}) {
         : !selectedSli ? 'Select an SLI.'
         : targetFraction === null ? 'Target must be from 0% up to but not including 100%.'
         : !/^\d+$/.test(duration) || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 2147483647
-          ? 'Enter a positive whole window within the supported limit.'
+          ? 'Enter a whole number of days within the supported limit.'
         : seconds % selectedSli.polling_interval_seconds !== 0
           ? `The window must be a multiple of the ${selectedSli.polling_interval_seconds}-second collection interval.`
         : historical && !historyStart ? 'Measurement history is unavailable. Retry loading history before including it.' : '';
@@ -297,61 +309,73 @@ export function SlosPage({context}:{context:AuthContext}) {
       if (current === generation.current) setBusy(false);
     }
   }
-  const title=isList?'SLOs':isNew?'Create SLO':isService?(service?.display_name??'Service details'):(slo?.display_name??'SLO details');
+  const serviceOptions: ComboboxOption[] = services.map(item => ({ id: item.id, label: item.display_name, keywords: item.name, tone: 'none', status: 'Service', detail: item.name }));
+  const sliOptions: ComboboxOption[] = slis.map(item => {
+    const vocabulary = sliVocabulary(item);
+    const linked = item.linked_slos?.total_count ?? 0;
+    const detail = [item.datasource_display_name ?? 'datasource', `${item.polling_interval_seconds} s cadence`, linked ? `${linked} SLO${linked === 1 ? '' : 's'} already` : 'no SLO yet', item.last_observation_at ? `last sample ${relativeAge(item.last_observation_at)}` : vocabulary.reason].join(' · ');
+    return { id: item.id, label: item.display_name, keywords: `${item.name} ${item.datasource_display_name ?? ''}`, tone: vocabulary.tone, status: vocabulary.label, detail };
+  });
+  const title=isList?'SLOs':isNew?'New SLO':isService?(service?.display_name??'Service details'):(slo?.display_name??'SLO details');
   return <div className="slos-page" ref={heading}>
-      {!isList&&(!id||isService)&&<div className="slo-title">
-      <Heading title={title} list={isList}/>{id&&isService&&<Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button>}</div>}
+      {isNew&&<PageHeader title="New SLO" summary="Name the objective, pick an indicator, set a target." breadcrumb={{label:'SLOs',href:'/slos',current:'New SLO'}}/>}
+      {id&&isService&&<div className="slo-title">
+      <Heading title={title} list={isList}/><Button variant="outline" onClick={()=>void refresh()} pending={busy}>Refresh</Button></div>}
     {loading&&!isNew&&<span className="sr-only" role="status">Opening {isService?'service':'SLOs'}</span>}{error&&<p className="slo-error" role="alert">{error}</p>}
     {!loading&&isList&&<OperationalOverviewView locationKey={locationKey} canWrite={canWrite} onCreate={()=>navigate('/slos/new')} onLocationChange={navigate}/>}
     {isNew&&(!canWrite?<p>Editor or administrator access is required to create SLOs.</p>:<>
-      <p>Set a target for an existing SLI.</p>{!loading&&slis.length===0&&!frozen?<div className="slo-empty">
+      {!loading&&slis.length===0&&!frozen?<div className="slo-empty">
       <p>Create an SLI before creating an objective.</p>
       <a href="/slis" data-app-route>Go to SLIs</a>
-      </div>:<>
-      {addingService?<form onSubmit={e=>void createService(e)}>
-      <Panel heading="Create service">
-      <div className="slo-form-grid">
-      <TextField id="service-display" label="Service display name" value={serviceDisplay} disabled={serviceFrozen||busy} onChange={e=>{setServiceDisplay(e.target.value);
-      if(!serviceNameEdited)setServiceName(suggest(e.target.value));}}/>
-      <TextField id="service-name" label="Service identifier" value={serviceName} disabled={serviceFrozen||busy} onChange={e=>{setServiceNameEdited(true);
-      setServiceName(e.target.value);}} hint="Lowercase letters, numbers and hyphens."/>
-      </div>{formError&&<p role="alert" className="slo-error">{formError}</p>}<div className="slo-actions">
-      <Button variant="outline" disabled={serviceFrozen} onClick={()=>{setAddingService(false);
-      setFormError('');}}>Cancel</Button>
-      <Button type="submit" pending={busy}>{serviceFrozen?'Retry same service request':'Create service'}</Button>
-      </div>
-      </Panel>
-      </form>:<form onSubmit={e=>void create(e)} noValidate>
-      <Panel heading="Objective">
+      </div>:<form className="ui-form slo-form" onSubmit={e=>void create(e)} noValidate>
       {loading&&<p role="status" className="slo-choice-loading">Loading services and SLIs. You can enter the objective while they load.</p>}
       <fieldset disabled={frozen||busy} className="slo-fields">
-      <div className="slo-form-grid">
-      <TextField id="slo-display" label="Display name" value={display} onChange={e=>{setDisplay(e.target.value);
-      if(!nameEdited)setName(suggest(e.target.value));}}/>
-      <TextField id="slo-name" label="SLO identifier" value={name} onChange={e=>{setNameEdited(true);
-      setName(e.target.value);}} hint="Lowercase letters, numbers and hyphens."/>
-      <SelectField id="slo-service" label="Service" value={serviceID} disabled={loading} onChange={e=>setServiceID(e.target.value)} options={[{value:'',label:loading?'Loading services…':'Select a service',disabled:true},...services.map(x=>({value:x.id,label:x.display_name}))]}/>
-      <div className="slo-add-service">
-      <Button variant="outline" disabled={loading} onClick={()=>{setAddingService(true);
-      setFormError('');}}>Create service</Button>
+      <FormSection step={1} title="Identity" hint="How it appears in lists and who owns it">
+      <div className="ui-form-grid">
+      <TextField id="slo-display" label="Display name" value={display} placeholder="e.g. Checkout availability" onChange={e=>{setDisplay(e.target.value);
+      if(!nameEdited)setName(suggest(e.target.value));}} hint="Shown in lists and on the detail page."/>
+      <TextField id="slo-name" label="Identifier" value={name} autoComplete="off" onChange={e=>{setNameEdited(true);
+      setName(e.target.value);}} hint="Suggested from the display name. Lowercase letters, numbers and hyphens; fixed after creation."/>
       </div>
-      <div className="slo-sli-field"><SelectField id="slo-sli" label="SLI" value={sliID} disabled={loading} onChange={e=>setSliID(e.target.value)} options={[{value:'',label:loading?'Loading SLIs…':'Select an SLI',disabled:true},...slis.map(x=>({value:x.id,label:x.display_name}))]}/></div>
-      <div className="slo-preset-field"><TextField id="slo-target" label="Target (%)" inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} hint="From 0 up to but not including 100%."/><div className="slo-presets" aria-label="Common target presets">{['99','99.5','99.9','99.95','99.99'].map(value=><Button key={value} variant={target===value?'selected':'outline'} aria-pressed={target===value} onClick={()=>setTarget(value)}>{value}%</Button>)}</div></div>
-      <div className="slo-preset-field slo-window-field"><div className="slo-duration-pair"><TextField id="slo-duration" label="Rolling window" inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/>
-      <SelectField id="slo-unit" label="Window unit" value={unit} onChange={e=>setUnit(e.target.value)} options={['minutes','hours','days','weeks'].map(x=>({value:x,label:x}))}/></div>
-      <div className="slo-presets" aria-label="Common rolling window presets">{[['7d',7],['28d',28],['30d',30],['90d',90]].map(([label,days])=><Button key={label} variant={Number(duration)===days&&unit==='days'?'selected':'outline'} aria-pressed={Number(duration)===days&&unit==='days'} onClick={()=>{setDuration(String(days));setUnit('days');}}>{label}</Button>)}</div></div>
+      <Combobox id="slo-service" label="Service" options={serviceOptions} value={serviceID||null} onChange={value=>{setServiceID(value??'');setFormError('');}} disabled={loading} placeholder={loading?'Loading services…':'Type a service name, or a new one to create it…'} hint="Services group SLOs by owner. Pick an existing one, or type a new name and create it without leaving this form." noMatch={{text:term=>`No service matches “${term}”.`,action:{label:term=>`Create service “${term}”`,onSelect:term=>{setServiceDisplay(term.trim());setServiceName(suggest(term));setServiceNameEdited(false);setAddingService(true);setFormError('');}}}}/>
+      {addingService&&<div className="slo-new-service" role="group" aria-label="New service" onKeyDown={e=>{if(e.key==='Enter'&&e.target instanceof HTMLInputElement){e.preventDefault();void createService();}}}>
+      <div className="ui-form-grid">
+      <TextField id="service-display" label="Service display name" value={serviceDisplay} disabled={serviceFrozen} onChange={e=>{setServiceDisplay(e.target.value);
+      if(!serviceNameEdited)setServiceName(suggest(e.target.value));}}/>
+      <TextField id="service-name" label="Service identifier" value={serviceName} disabled={serviceFrozen} autoComplete="off" onChange={e=>{setServiceNameEdited(true);
+      setServiceName(e.target.value);}} hint="Lowercase letters, numbers and hyphens."/>
+      </div>
+      <div className="ui-form-actions__buttons">
+      <Button variant="outline" disabled={serviceFrozen} onClick={()=>{setAddingService(false);
+      setFormError('');}}>Cancel</Button>
+      <Button pending={busy} onClick={()=>void createService()}>{serviceFrozen?'Retry same service request':'Create service'}</Button>
+      </div>
+      </div>}
+      </FormSection>
+      <FormSection step={2} title="Indicator" hint="What are we measuring?">
+      <Combobox id="slo-sli" label="SLI" options={sliOptions} value={sliID||null} onChange={value=>{setSliID(value??'');setFormError('');}} disabled={loading} placeholder={loading?'Loading SLIs…':'Type an SLI name or its datasource…'} hint="The objective is evaluated on this SLI’s good ÷ total at its cadence." badge={option=>slis.find(item=>item.id===option.id)?.name}/>
+      </FormSection>
+      <FormSection step={3} title="Objective" hint="Target over a rolling window">
+      <div className="ui-form-grid">
+      <ChoiceChips id="slo-target" label="Target" value={target} onChange={value=>{setTarget(value);setFormError('');}} options={['99','99.5','99.9','99.95','99.99'].map(value=>({value,label:`${value}%`}))} custom={{unit:'%',placeholder:'e.g. 99.7',format:value=>`${value}%`,validate:validateTarget,inputMode:'decimal'}} hint={`Share of events that must be good over the window. Error budget is the rest: ${budgetRest(target)}.`}/>
+      <ChoiceChips id="slo-window" label="Rolling window" value={duration} onChange={value=>{setDuration(value);setFormError('');}} options={[['7','7 days'],['28','28 days'],['30','30 days'],['90','90 days']].map(([value,label])=>({value:value!,label:label!}))} custom={{unit:'days',placeholder:'e.g. 14',format:value=>`${value} days`,validate:validateDays,inputMode:'numeric'}} hint={`The window rolls forward continuously; every evaluation covers the last ${/^\d+$/.test(duration)?`${duration} days`:'window'}.`}/>
       </div>
       {sliID&&<div className="slo-history">
-      <label>
-      <input type="checkbox" checked={historical} disabled={!historyStart} onChange={e=>setHistorical(e.target.checked)}/> Apply this target to earlier SLI measurements{historyStart?` from ${date(historyStart)}`:''}</label>
-      <p>Uses measurements already collected for this SLI. Missing intervals remain unknown.</p>
-      {boundError&&<p role="alert">{boundError}</p>}
+      <label className="ui-form-check">
+      <input type="checkbox" checked={historical} disabled={!historyStart} onChange={e=>setHistorical(e.target.checked)}/><span>Apply this target to earlier SLI measurements{historyStart?` from ${date(historyStart)}`:''}<span className="slo-history__note">Uses measurements already collected for this SLI. Missing intervals remain unknown.</span></span></label>
+      {boundError&&<p role="alert" className="slo-error">{boundError}</p>}
       {boundError&&<Button variant="outline" onClick={() => setBoundRevision(value => value + 1)}>Retry loading history</Button>}
-      </div>}</fieldset>{formError&&<p role="alert" className="slo-error">{formError}</p>}<div className="slo-actions">
+      </div>}
+      </FormSection>
+      <FormSection step={4} title="Alerting" hint="Not available yet · arrives with alert policies" muted>
+      <p className="ui-form-note">Burn-rate alert policies (fast, medium and slow burn) will be selectable here. Nothing is configured today.</p>
+      </FormSection>
+      </fieldset>{formError&&<p role="alert" className="slo-error">{formError}</p>}
+      <FormActions note="Evaluation starts immediately from collected measurements. You can rename the SLO later.">
       <Button variant="outline" disabled={frozen} onClick={()=>navigate('/slos')}>Cancel</Button>
       <Button type="submit" disabled={loading} pending={busy}>{frozen?'Retry same SLO request':'Create SLO'}</Button>
-      </div>{frozen&&<p>Check the SLO list before retrying. The original request and key are retained.</p>}</Panel>
-      </form>}</>}</>)}
+      </FormActions>{frozen&&<p className="slo-muted">Check the SLO list before retrying. The original request and key are retained.</p>}
+      </form>}</>)}
     {!loading&&isService&&service&&<>
       <Panel heading="Service">
       <p>{service.display_name}</p>

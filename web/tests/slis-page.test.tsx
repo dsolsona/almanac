@@ -125,7 +125,7 @@ describe('SLI page', () => {
     act(() => { history.pushState({}, '', '/slis'); window.dispatchEvent(new PopStateEvent('popstate')); });
     await waitFor(() => expect(screen.getByRole('heading', { name: 'SLIs' })).toHaveFocus());
     await userEvent.click(await screen.findByRole('button', { name: 'New SLI' }));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Create SLI' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'New SLI' })).toHaveFocus());
   });
 
   it('shows existing SLIs while datasource names are still being fetched', async () => {
@@ -144,14 +144,15 @@ describe('SLI page', () => {
     history.replaceState({}, '', `/slis/new?datasource=${sourceID}`);
     vi.stubGlobal('fetch', vi.fn(async () => response({ items: [source()], next_cursor: '' })));
     const user = userEvent.setup(); render(<SlisPage context={admin} />);
-    expect(await screen.findByLabelText('Datasource')).toHaveValue(sourceID);
+    expect(await screen.findByRole('button', { name: 'Change' })).toBeVisible();
+    expect(screen.getByText('Production metrics')).toBeVisible();
     expect(screen.getByText(/first interval can precede creation/i)).toBeVisible();
     await user.type(screen.getByLabelText('Display name'), 'Request success');
-    expect(screen.getByLabelText('SLI name')).toHaveValue('request-success');
-    await user.clear(screen.getByLabelText('SLI name'));
-    await user.type(screen.getByLabelText('SLI name'), 'custom-name');
+    expect(screen.getByLabelText('Identifier')).toHaveValue('request-success');
+    await user.clear(screen.getByLabelText('Identifier'));
+    await user.type(screen.getByLabelText('Identifier'), 'custom-name');
     await user.type(screen.getByLabelText('Display name'), ' updated');
-    expect(screen.getByLabelText('SLI name')).toHaveValue('custom-name');
+    expect(screen.getByLabelText('Identifier')).toHaveValue('custom-name');
   });
 
   it.each(['empty', 'observed', 'error'] as const)('shows loading until initial history settles: %s', async (outcome) => {
@@ -263,11 +264,11 @@ describe('SLI page', () => {
     });
     vi.stubGlobal('fetch', fetcher);
     render(<SlisPage context={editor} />);
-    await user.type(await screen.findByLabelText('SLI name'), 'request-success');
+    await user.type(await screen.findByLabelText('Identifier'), 'request-success');
     await user.type(screen.getByLabelText('Display name'), 'Request success');
-    await user.selectOptions(screen.getByLabelText('Datasource'), sourceID);
-    fireEvent.change(screen.getByLabelText('Good count query'), { target: { value: 'sum(rate(requests_total{status=~"2.."}[1m]))' } });
-    fireEvent.change(screen.getByLabelText('Total count query'), { target: { value: 'sum(rate(requests_total[1m]))' } });
+    expect(await screen.findByRole('button', { name: 'Change' })).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Good events'), { target: { value: 'sum(increase(requests_total{status=~"2.."}[1m]))' } });
+    fireEvent.change(screen.getByLabelText('Total events'), { target: { value: 'sum(increase(requests_total[1m]))' } });
     await user.click(screen.getByRole('button', { name: 'Create SLI' }));
 
     expect(await screen.findByRole('heading', { name: 'Request success' })).toBeVisible();
@@ -485,7 +486,38 @@ describe('SLI page', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('cursor=next')
       ? response({ items: [second], next_cursor: '' }) : response({ items: [source()], next_cursor: 'next' })));
     render(<SlisPage context={editor} />);
+    await userEvent.click(await screen.findByLabelText('Datasource'));
     expect(await screen.findByRole('option', { name: /Second source/ })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+  });
+
+  it('reports every missing field under its control and continues to the SLO form after creating', async () => {
+    const user = userEvent.setup();
+    history.replaceState({}, '', '/slis/new');
+    const second = { ...source(), id: 'c2e0739a-3c86-4a7f-b7e5-c15e9626e71c', name: 'second-source', display_name: 'Second source' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith('/api/v1/datasources')) return response({ items: [source(), second], next_cursor: '' });
+      if (url.startsWith('/api/v1/agents')) return response({ items: [{ id: sli().agent_id, name: 'local', display_name: 'Local agent', enabled: true, version: '3', created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z', runtime: { reachability: 'unreachable', protocol: 'almanac-agent/2', software_version: '0.9.3', capabilities: [], last_heartbeat_at: null, desired_configuration_revision: '1', applied_configuration_revision: '1', scheduler_health: 'stopped', collection_progress: 'blocked', configuration_failure_code: null, configuration_failure_revision: null, last_attempt_at: null, last_successful_query_at: null, next_expected_execution_at: null, collection_explanation: 'none' } }], next_cursor: '' });
+      if (url === '/api/v1/slis' && init?.method === 'POST') return response(sli(), 201, { ETag: `"sli:${sliID}:2"` });
+      return response({ items: [], next_cursor: '' });
+    }));
+    render(<SlisPage context={admin} />);
+    await user.click(await screen.findByRole('button', { name: 'Create SLI' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a display name.');
+    expect(screen.getByLabelText('Display name')).toHaveAccessibleDescription(/Enter a display name/);
+    expect(screen.getByLabelText('Datasource')).toHaveAccessibleDescription(/Choose an existing Prometheus datasource/);
+    expect(screen.getByText('Enter a good events query.')).toBeVisible();
+    await user.type(screen.getByLabelText('Display name'), 'Request success');
+    expect(screen.getByLabelText('Display name')).not.toHaveAccessibleDescription(/Enter a display name/);
+    await user.click(screen.getByLabelText('Datasource'));
+    expect(await screen.findByRole('option', { name: /Production metrics/ })).toHaveTextContent('Agent unreachable');
+    await user.click(screen.getByRole('option', { name: /Production metrics/ }));
+    expect(screen.getByText('You can still create the SLI. Collection starts when the agent reconnects.')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Good events'), { target: { value: 'sum(increase(good[1m]))' } });
+    fireEvent.change(screen.getByLabelText('Total events'), { target: { value: 'sum(increase(total[1m]))' } });
+    await user.click(screen.getByRole('button', { name: 'Create SLI and add an SLO' }));
+    await waitFor(() => expect(location.pathname + location.search).toBe(`/slos/new?sli=${sliID}`));
   });
 
   it('keeps detail controls available when history fails and preserves a dirty draft on refresh', async () => {

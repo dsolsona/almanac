@@ -18,7 +18,10 @@ pass; the real-stack SLO journey and traced timings are blocked by the same
 missing Go toolchain. [F6-T03](tasks/F6-T03.md), the SLI list and detail,
 is implemented on `design/f6-t03-sli` (stacked) and in review with the same
 web evidence (35 SLI cases, 139 slo-unit web cases, 48/48 catalogue, web
-stages of `make verify`); its real journey is blocked identically.
+stages of `make verify`); its real journey is blocked identically. [F6-T04](tasks/F6-T04.md), the New SLI and New SLO forms with
+the shared form sections, is implemented on `design/f6-t04-forms` (stacked) and
+in review with the same web evidence (142 slo-unit web cases, 48/48 catalogue,
+375 cases and the build in `make verify`); its real journeys are blocked identically.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on

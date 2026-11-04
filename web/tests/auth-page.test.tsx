@@ -50,8 +50,9 @@ describe('authentication page', () => {
     await user.type(await screen.findByLabelText('Display name'), 'Production metrics');
     await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://metrics.example.test');
     await user.click(screen.getByRole('button', { name: 'Create datasource' }));
-    expect(await screen.findByRole('heading', { name: 'Create SLI' })).toBeVisible();
-    expect(await screen.findByLabelText('Datasource')).toHaveValue(sourceID);
+    expect(await screen.findByRole('heading', { name: 'New SLI' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Change' })).toBeVisible();
+    expect(screen.getByText('Production metrics')).toBeVisible();
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('heading', { name: 'Add datasource' })).not.toBeInTheDocument();
     expect(push).toHaveBeenCalledTimes(1);
@@ -61,7 +62,7 @@ describe('authentication page', () => {
     const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new?return=slis');
     render(<AuthPage client={clientFor(signedIn)} />);
     await user.click(await screen.findByRole('button', { name: 'Back to SLI' }));
-    expect(await screen.findByRole('heading', { name: 'Create SLI' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'New SLI' })).toBeVisible();
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
   });
 
