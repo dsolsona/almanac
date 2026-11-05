@@ -10,8 +10,10 @@ VictoriaTraces fixtures, `make setup`/`make shell`, toolchains from the dev
 image, lane marker removed) are in review. [F7-T03](tasks/F7-T03.md)
 (`scripts/verify.py`, thin `make verify MODE=…` entry, socket overlay for the
 Compose modes, lane deleted) is in progress: every mode but `compose` is green
-from the host; `compose` fixed two verifier defects and then failed on a host
-out of disk and memory, so it still needs a green run. The Linux-host
+from the host; `compose` fixed three verifier defects and, on the recovered host, now
+passes every stage except the 5 % p95 tracing-overhead allowance (measured
++6 to +10 % because pages load faster inside the VM), which is the
+maintainer's decision. The Linux-host
 evidence and F7-T04 (docs, command catalog) follow.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
