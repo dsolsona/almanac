@@ -1,6 +1,5 @@
 # Start from an empty context and allow only build inputs.
 **
-!Dockerfile
 !go.mod
 !go.sum
 !cmd/
@@ -29,6 +28,12 @@ deploy/*
 deploy/local/*
 !deploy/local/init.sh
 !deploy/local/init-test.sh
+!deploy/app/
+deploy/app/*
+!deploy/app/Dockerfile
+!deploy/agent/
+deploy/agent/*
+!deploy/agent/Dockerfile
 
 # Secret exclusions come after all allowlist rules.
 .env

@@ -56,6 +56,18 @@ The current app supports administrator onboarding, agent and datasource manageme
 agent-collected event-count SLIs, and request-count SLOs with fixed rolling windows.
 Calendar reports, OpenSLO import, annotations and alerting remain under development.
 
+### Images
+
+Three Dockerfiles build three images ([ADR-0029](docs/adr/0029-platform-agnostic-development-and-verification.md)):
+`deploy/app/Dockerfile` for the published `almanac` application image,
+`deploy/agent/Dockerfile` for the published `almanac-agent` image, and
+`deploy/dev/Dockerfile` for the development image that carries every toolchain
+and is never published. Base images are pinned by multi-architecture index
+digests, so each host builds and runs its native platform. `make images` builds
+all three locally; `make publish IMAGE_REGISTRY=ghcr.io/example` builds and
+pushes the two published images for `linux/amd64` and `linux/arm64`.
+`make verify` starts by checking that every file pins each image to one digest.
+
 ### Start a local agent
 
 After `make run`, register an agent in Almanac and copy its one-time credential.
@@ -134,10 +146,11 @@ export failures, plus browser-intake drops/export failures. Queue metrics come f
 the pinned Go SDK's self-observation feature, enabled by the application. Export
 uses bounded batches and a two-second network timeout; application requests never
 wait for a successful export. Spans exclude credentials, raw queries, SQL arguments
-and response bodies. Runtime journey and overhead acceptance is tracked in
-[F3-T09](docs/tasks/F3-T09.md).
+and response bodies. Runtime journey acceptance is tracked in
+[F3-T09](docs/tasks/F3-T09.md); tracing's own overhead is not an acceptance
+check ([ADR-0030](docs/adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)).
 
-After developer tooling setup, `make verify VERIFY_MODE=providers` starts an isolated
+After `make setup`, `make verify MODE=providers` starts an isolated
 provider project, inserts synthetic metrics and spans, checks exact query results
 before and after restart, and removes only its test-owned containers and volumes.
 It does not populate or reset your normal local sources.
@@ -177,8 +190,10 @@ windows and exports are subsequent increments; see [delivery status](docs/status
 
 ## Runtime foundation
 
-`make setup` installs the pinned Go and web toolchains. `make build` builds the
-production web assets and embeds them in `bin/almanac`.
+`make setup` builds the development image and warms its caches; `make shell`
+enters it with the fixtures running, and `make verify` enters it by itself.
+Inside it, `make build` builds the production web assets and embeds them in
+`bin/almanac`.
 
 UI-only mode serves the embedded frontend:
 
@@ -427,18 +442,20 @@ safe status markers, not peer-supplied version values. If a compatible runtime
 already exists, its observed fields remain intact while the newer incompatible
 attempt changes reachability. A successful compatible connection clears that state.
 
-For isolated local storage checks, `make setup SETUP_MODE=database` provisions the
-pinned PostgreSQL 18.6 fixture on loopback port 15487. Run:
+For isolated local storage checks, `compose.dev.yaml` runs the pinned PostgreSQL
+18.6 fixture on loopback port 15487 of the dev container, where
+`ALMANAC_TEST_DATABASE_URL` is preset. From the host, run:
 
 ```sh
-make verify VERIFY_MODE=integration GO_PACKAGE=./internal/storage ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify MODE=integration GO_PACKAGE=./internal/storage
 ```
 
-Run `make verify VERIFY_MODE=go` for focused Go checks, `make verify VERIFY_MODE=go-race`
-for race checks, or `make verify` for web and Go verification. Catalogue browser
-checks use `make verify VERIFY_MODE=browser`. The full PostgreSQL integration lane
+Run `make verify MODE=go` for focused Go checks, `make verify MODE=go-race`
+for race checks, or `make verify` for web and Go verification; every mode enters
+the development container by itself. Catalogue browser checks use
+`make verify MODE=browser`. The full PostgreSQL integration suite
 also exercises browser onboarding against the built combined HTTPS executable;
-it requires the Chromium installation from `make setup`. Ordinary unit checks do
+it uses the Chromium baked into the development image. Ordinary unit checks do
 not start PostgreSQL or run that browser journey.
 
 See [the web design system guide](web/DESIGN_SYSTEM.md) for the local UI setup,

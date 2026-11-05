@@ -1,5 +1,36 @@
 # Delivery status
 
+Current platform work, 2026-11-04: [ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)
+and [plan 0026](plans/0026-platform-agnostic-verification.md) are accepted
+(Crit `d21016424a44`): everything runs under Docker. On
+`design/platform-agnostic-verification` (PR #61), [F7-T01](tasks/F7-T01.md)
+(three Dockerfiles, multi-arch index pins, pin check) and
+[F7-T02](tasks/F7-T02.md) (`compose.dev.yaml` with tmpfs PostgreSQL and
+VictoriaTraces fixtures, `make setup`/`make shell`, toolchains from the dev
+image, lane marker removed) are in review. [F7-T03](tasks/F7-T03.md)
+(`scripts/verify.py`, thin `make verify MODE=…` entry, socket overlay for the
+Compose modes, lane deleted) is in review: every mode is green from the host,
+including `compose` after three verifier fixes and the retirement of the
+enabled/disabled tracing-overhead gate by
+[ADR-0030](adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
+(the maintainer: browser tracing in its current form is a measurement aid,
+not a product feature with a budget). [F7-T04](tasks/F7-T04.md) (guides,
+AGENTS.md command rules and the command catalog) is done; the maintainer
+approved the catalog on 2026-11-05. The registry for `make publish` is not
+yet decided. Retired with plan 0026: the
+`slo-unit`, `slo-integration`, `slo-journey`, `agent-lifecycle`,
+`verification-tools`, `linux`, `linux-sli` and `go-portability` modes, the host
+toolchain (`scripts/setup-go.sh`, `.local/bin`), `scripts/setup-database.sh`,
+`scripts/verify-linux.sh` and `deploy/verification/`; their selections are
+`unit`, `integration INTEGRATION_TEST=…` and `journey BROWSER_SCENARIO=…`.
+The Linux-host evidence for the plan's acceptance is still open.
+
+Update, 2026-11-05: the UI unification stack (PRs #54, #55, #57, #58, #59
+and #60, F6-T01 to F6-T06) is merged into `main`; its real-stack journeys
+were not run on the host and now run through `make verify MODE=integration`
+in the development container (plan 0026, PR #61). The per-task "blocked"
+notes below are retained history.
+
 Current checkpoint, 2026-11-04 (later): PR #53 is merged; `main` is `2f059e7`.
 The maintainer reviewed the SLI, SLO, datasource and agent screens and approved
 replacement [mocks](design/mocks/README.md). [ADR-0028](adr/0028-unified-operational-ui.md)

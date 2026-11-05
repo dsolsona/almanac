@@ -17,21 +17,46 @@ These rules apply to the coordinator and every implementer, including future ses
 - A sandbox failure does not justify inventing a new wrapper. Check existing allowed
   invocations first. If execution cannot proceed within them, defer that operation.
 
+## The development container
+
+Everything runs under Docker ([ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)).
+`make setup` builds the development image for the current user, pulls the fixture
+images, fails when an image's platform differs from the daemon's, and warms the
+Go module and npm caches in named volumes; it is the only network-capable step.
+`make shell` starts the tmpfs PostgreSQL and VictoriaTraces fixtures from
+`compose.dev.yaml` and opens a shell in the container (`CMD='…'` runs one
+command; Make expands `$`, so write `$$` for a literal dollar sign).
+`make stop-dev` removes the fixtures; the caches stay.
+
+`make verify [MODE=…]` from the host enters the container and runs
+`python3 scripts/verify.py gate MODE`; inside the container it runs the script
+directly. The database URL is preset in the container and is never passed on the
+command line. `MODE=compose` and `MODE=providers` add `compose.dev.socket.yaml`,
+which mounts the daemon socket, the checkout at its host path and the daemon
+host's network; no other mode receives the socket. `VERIFY_MODE` remains an
+accepted alias of `MODE`.
+
 ## Recorded verification invocations
 
-On 2026-10-29 the maintainer approved a closed verification catalog: the fixed
-`verification-tools`, `slo-unit`, `slo-integration`, `slo-journey` and
-`agent-lifecycle` modes, plus local `verification-init`, `verification-report` and
-`verification-handoff` targets with validated task-plan/replan metadata. Database
-checks use the existing isolated fixture below. Reuse this approval throughout the
-authorized task. Other selectors and command forms retain the exact-invocation rule.
+On 2026-10-29 the maintainer approved a closed catalog of host-side modes
+(`verification-tools`, `slo-unit`, `slo-integration`, `slo-journey`,
+`agent-lifecycle`, the `linux` lane and the host toolchain setup). Plan 0026
+retired those modes and the host toolchain on 2026-11-05; their selections are
+now `unit`, `integration INTEGRATION_TEST=…` and `journey BROWSER_SCENARIO=…`.
+The invocations below are the approved set for the Docker-only workflow: the
+maintainer approved this catalog on 2026-11-05 in the working conversation
+("the catalog in docs/commands.md is approved"). Reuse it throughout
+authorized work; other selectors and command forms retain the exact-invocation
+rule. `make publish` stays unused until the maintainer names a registry.
 
-The controls live in `scripts/verification-controls.py`. An active local
+The controls live in `scripts/verify.py`. An active local
 `.local/verification/task.json` enables task-wide budgets; worker checkouts share
 the same state through a symlink. Source-bound pass/fail receipts are retained in
-the canonical task state's `receipts/` directory. Missing, failed, stale or
-incomplete evidence prevents a ready handoff. The local files remain editable;
-the guard prevents accidental loops and does not establish a security boundary.
+the canonical task state's `receipts/` directory, and every receipt records the
+platform it ran on (OS, architecture, dev image id, Git revision with a dirty
+flag). Missing, failed, stale or incomplete evidence prevents a ready handoff.
+The local files remain editable; the guard prevents accidental loops and does
+not establish a security boundary.
 
 Every completed verification run refreshes the canonical project-root
 `.local/verification/timing-ledger.json` and `timing-ledger.md`, including runs
@@ -45,51 +70,62 @@ For checks outside these targets, append a record to the fixed local
 `started_unix`, `ended_unix` and `elapsed_seconds`; use null for unknown timings.
 This file records evidence only and never executes its command text.
 
-These invocations have been approved in the current development environment. Recheck
-availability in a new environment; do not extrapolate to other selectors or paths.
-
 ```sh
+make setup
+make shell
+make shell CMD='go version'
+make stop-dev
 make verify
-make verify VERIFY_MODE=verification-tools
-make verify VERIFY_MODE=slo-unit
-make verify VERIFY_MODE=slo-integration ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-make verify VERIFY_MODE=slo-journey ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-make verify VERIFY_MODE=agent-lifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify MODE=unit
+make verify MODE=unit TEST_FILE=tests/agents-client.test.tsx
+make verify MODE=browser
+make verify MODE=browser TEST_FILE=browser/catalogue.spec.ts
+make verify MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark
+make verify MODE=go
+make verify MODE=go GO_PACKAGE=./internal/storage
+make verify MODE=go-race
+make verify MODE=auth-bench
+make verify MODE=smoke
+make verify MODE=integration
+make verify MODE=integration INTEGRATION_PLAN=1
+make verify MODE=integration INTEGRATION_TEST=TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle
+make verify MODE=integration INTEGRATION_SELECTION=all
+make verify MODE=integration GO_PACKAGE=./internal/storage
+make verify MODE=journey BROWSER_SCENARIO=onboarding
+make verify MODE=journey BROWSER_SCENARIO=agents-lifecycle
+make verify MODE=journey BROWSER_SCENARIO=slis
+make verify MODE=providers
+make verify MODE=compose
 make verification-init VERIFICATION_PLAN=.local/verification-plan.json
 make verification-report
 make verification-handoff
-make verify VERIFY_MODE=compose
-make verify VERIFY_MODE=go-race
-make verify VERIFY_MODE=journey BROWSER_SCENARIO=agents-lifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-make verify VERIFY_MODE=unit TEST_FILE=tests/agents-client.test.tsx
-make verify VERIFY_MODE=unit TEST_FILE=tests/agents-page.test.tsx
-make verify VERIFY_MODE=unit TEST_FILE=tests/auth-page.test.tsx
-make verify VERIFY_MODE=browser TEST_FILE=browser/catalogue.spec.ts
+make generate GENERATE_MODE=api
 make generate GENERATE_MODE=go-guidelines
 make generate GENERATE_MODE=format
 make generate GENERATE_MODE=sqlc
+make build
+make images
+make publish IMAGE_REGISTRY=<prefix>
 python3 scripts/check-docs.py
-/usr/bin/bash -c 'make verify > .local/full-verification.log 2>&1'
-/usr/bin/bash -lc 'make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-/usr/bin/bash -lc 'make verify VERIFY_MODE=journey BROWSER_SCENARIO=onboarding ALMANAC_TEST_DATABASE_URL=postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+python3 scripts/check-image-pins.py
 ```
 
-The onboarding invocation selects a real HTTPS/PostgreSQL browser journey. It passed
-on the F2-T16 candidate and checks that the named journey actually executed; it does
-not replace the full required integration gate.
-Fixture credentials above belong only to the isolated local acceptance database.
-Keep real credentials out of commands, logs and published artifacts.
+`make generate`, `make build` and the Go-guideline listing run inside the dev
+container (`make shell CMD='make generate GENERATE_MODE=go-guidelines'`);
+`make verify` enters it by itself. `make publish` needs a registry prefix the
+maintainer names. The journey selectors are the documented browser journeys
+(`onboarding`, `lost-login`, `lost-password`, `agents`, `agents-close`,
+`agents-lost`, `agents-unavailable`, `agents-lifecycle`, `slis`); a journey run
+fails when the selected named journey does not execute and pass, and it does not
+replace the full integration gate. Fixture credentials belong only to the isolated
+fixture database inside the container. Keep real credentials out of commands,
+logs and published artifacts.
 
-Make suppresses an inherited `GOROOT` so the pinned `.local/bin/go` driver cannot
-select another installation's compiler. The Go gate prints both versions before
-test discovery. This corrected a reproduced 1.27.3-driver/1.27.1-compiler mismatch;
-the subsequent Go and ordinary gates passed without deleting caches.
+Make suppresses an inherited `GOROOT` so the dev image's Go driver cannot select
+another installation's compiler; the Go gate prints both versions before test
+discovery.
 
-The focused tooling and SLO checks above have executed successfully. Report and
-handoff commands have also been verified to refuse the active task while required
-evidence or a recorded replan is missing. A deliberate guard refusal runs no tests.
-
-Local Compose startup requires host curl as well as Docker Compose and Make. It
+Local Compose startup (`make run`) requires host Docker Compose, Make and curl. It
 checks host HTTPS readiness with the application's public certificate before
 reporting success; a failed check preserves the running services and volumes.
 
@@ -98,27 +134,22 @@ user authorization. Do not merge PRs merely because publishing them was authoriz
 
 ## Selective integration checks
 
-The existing integration entry defaults to affected-case execution and compatible
-per-case pass reuse. Its fixed selectors accept one discovered test name, a fixed
-package, or explicit full execution; they do not accept arbitrary Go flags,
-regular expressions, commands or database URLs. Normal checks retain the existing
-isolated port-15487 fixture. Example invocations within this entry:
-
-```sh
-make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-make verify VERIFY_MODE=integration INTEGRATION_PLAN=1 ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-make verify VERIFY_MODE=integration INTEGRATION_TEST=TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-make verify VERIFY_MODE=integration INTEGRATION_SELECTION=all ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
-```
+The integration entry defaults to affected-case execution and compatible per-case
+pass reuse. Its fixed selectors accept one discovered test name, a fixed package,
+or explicit full execution; they do not accept arbitrary Go flags, regular
+expressions, commands or database URLs. Every run checks the fixture's identity
+on the live server (fixed database, role, PostgreSQL 18.6, loopback port 15487)
+and reuses a pass only while the fixture's start time, the toolchain and every
+input file of the case are unchanged; a restarted tmpfs fixture executes
+everything afresh.
 
 Every run prints its selection before executing. The latest coverage report is
-`.local/integration-report.json`; immutable per-run reports/Go events live under
-`.local/integration-runs/`. Reused cases retain their original provenance and are
-not counted as new executions or new test time. Interrupted and failed cases run
-again on the next selection. The former aggregate Go artifact remains historical.
-Actual invocation approval still follows the environment's rules above.
-`INTEGRATION_PLAN=1` performs normal preflights and discovery but executes no
-integration cases; its receipt is explicitly `planned`, never a passing gate.
+`.local/integration-report.json`; immutable per-run reports and per-case Go events
+live under `.local/integration-runs/`. Reused cases retain their original
+provenance and are not counted as new executions or new test time. Interrupted and
+failed cases run again on the next selection. `INTEGRATION_PLAN=1` performs normal
+preflights and discovery but executes no integration cases; its receipt is
+explicitly `planned`, never a passing gate.
 
 ## Approved controlled capacity entry
 
@@ -132,13 +163,14 @@ manual checks use the existing isolated fixture and native approved commands,
 record independent expectations/results and append their timing to the manual
 ledger. Final integrated gates remain separate from endurance observation.
 
-On 2026-11-02 the maintainer explicitly approved this exact invocation for F3-T08,
-including reruns only after diagnosing and fixing a failure. Record the failure,
-correction and replan before a rerun. Ordinary, integration and Compose verification
-do not launch this separate workload:
+On 2026-11-02 the maintainer explicitly approved this entry for F3-T08, including
+reruns only after diagnosing and fixing a failure; its invocation is now the one
+below, inside the dev container, approved with the catalog above.
+Record the failure, correction and replan before a rerun. Ordinary, integration
+and Compose verification do not launch this separate workload:
 
 ```sh
-make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL='postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable'
+make verify MODE=performance
 ```
 
 On 2026-11-03 the maintainer narrowed this phase to ten SLOs with a year of history
@@ -146,7 +178,7 @@ and deferred larger tests to [F3-T10](tasks/F3-T10.md). The same approved invoca
 now requires only that fleet; it must not start the 100/1,000-SLO loads or repeat
 the preliminary one-SLO imports during this phase.
 
-It requires that exact existing isolated fixture, rejects custom test/Go selectors,
+It requires the fixture of `compose.dev.yaml`, rejects custom test/Go selectors,
 builds the candidate and runs the separately tagged ten-SLO/year capacity entry.
 The workload retains its eight-hour execution bound; the Go process has
 30 additional minutes for setup/cleanup. Existing disk admission, private normal
@@ -175,27 +207,3 @@ acceptance is deferred, not passed. There is no command, SQL, test-selector or
 database-URL passthrough.
 Source certificates cover the bounded run plus cleanup; ordinary short fixtures
 retain their existing certificate lifetime and all TLS verification remains enabled.
-
-## Linux verifier entry points
-
-The project defines these fixed-purpose commands for the isolated Linux lane. Their
-presence here does not grant execution approval; check the active environment's exact
-command approval before running them.
-
-```sh
-make setup SETUP_MODE=verification
-make verify VERIFY_MODE=linux
-make verify VERIFY_MODE=linux-sli
-```
-
-Setup may download pinned tool and browser dependencies into a local Docker image.
-Verification is offline and rejects a stale setup fingerprint. It does not accept
-command passthrough, environment forwarding, a custom database URL, or a host Docker
-socket mount. The catalogue browser matrix and real integration journeys are part of
-the fixed sequence; the existing host Compose journey remains separately selectable.
-The focused SLI browser journey uses the fixed `BROWSER_SCENARIO=slis` selector,
-which maps to `TestIntegrationExecutableBrowserSLICollectionJourney` in the integrated
-candidate. The `linux-sli` mode uses the same isolated database fixture, candidate
-snapshot, image fingerprint, cleanup and sanitized artifact export as the full Linux
-lane, but executes only that real journey. It is focused evidence and does not replace
-the full gate. These selector descriptions do not approve a new invocation.

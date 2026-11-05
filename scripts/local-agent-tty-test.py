@@ -19,6 +19,7 @@ printf '%s\\n' "$*" >> "$FAKE_LOG"
 case "$1 $2" in
   "compose -f") case "$*" in *" ps "*) echo abc123;; *" exec "*) echo public-certificate;; esac ;;
   "inspect --format") case "$3" in *Health*) echo healthy;; *) echo sha256:abc;; esac ;;
+  "image inspect") echo sha256:abc ;;
   "create -i") echo owned-id ;;
   "start --attach") exec sleep 30 ;;
   "rm -f") : ;;

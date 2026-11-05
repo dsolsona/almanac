@@ -45,7 +45,7 @@ Select one exact discovered case with `INTEGRATION_TEST`, or a fixed package wit
 `GO_PACKAGE`; these focused runs do not establish complete-suite coverage. Use
 `INTEGRATION_SELECTION=all` when fresh full execution is required, including
 milestone/release qualification or an investigation of fixture/environment effects.
-The isolated Linux lane always executes its selected cases afresh.
+A restarted fixture or a changed toolchain executes every selected case afresh.
 
 Go changes affect their package and transitive consumers. Browser verifier changes
 affect journeys importing them. Common configuration, contract, fixture or tool
@@ -213,26 +213,25 @@ The foundation provides these fixed entry points:
 
 | Command | Scope |
 | --- | --- |
-| `make setup` | Pinned Go/generators, locked web dependencies and Chromium; explicit network-capable setup; optional SETUP_MODE=go/web |
-| `make setup SETUP_MODE=database` | Isolated PostgreSQL18.6 fixture bound to loopback; validates existing fixture before reuse |
-| `make setup SETUP_MODE=verification` | Network-capable build of the pinned Linux verifier image and PostgreSQL18.6 image; cache fingerprint binds Go, web and OpenAPI lockfiles plus verifier tooling |
+| `make setup` | Builds the dev image for the host user, pulls the PostgreSQL 18.6 fixture image, fails when either image's platform differs from the daemon's, and warms the Go module and npm caches in named volumes inside the dev container; network-capable; `UPDATE_LOCK=1` refreshes the web lockfiles first (ADR-0029) |
+| `make shell` | Starts the tmpfs PostgreSQL and VictoriaTraces fixtures from `compose.dev.yaml` and opens a shell in the dev container, where `ALMANAC_TEST_DATABASE_URL` is preset; `CMD='…'` runs one command instead (make expands `$`, so write `$$` for a literal dollar sign). Every `build`, `generate` and `verify` target below runs inside it |
+| `make stop-dev` | Removes the dev fixtures (tmpfs PostgreSQL and VictoriaTraces); the cache volumes stay. `make stop` keeps stopping only the local application stack |
 | `make build` | Typecheck, production assets and embedded Go executable; size report |
+| `make images` | Builds the published `app` and `agent` images and the never-published `dev` image from `deploy/*/Dockerfile` for the host platform (ADR-0029) |
+| `make publish IMAGE_REGISTRY=<prefix>` | Runs the image pin check, then builds and pushes `almanac` and `almanac-agent` for `linux/amd64` and `linux/arm64` |
 | `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
-| `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
-| `make verify VERIFY_MODE=linux` | Offline Linux candidate gate: snapshots tracked and safe untracked source changes, attests a SHA256, then runs the full gate, race gate, real PostgreSQL/browser integration suite and catalogue Chromium matrix in order; exports sanitized logs and acceptance screenshots under `.local/linux-verification.*` |
-| `make verify VERIFY_MODE=linux-sli` | Offline focused Linux journey: runs only the real SLI browser journey in the same isolated PostgreSQL fixture and exports the same sanitized evidence; does not replace the full Linux gate |
-| `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
-| `make verify VERIFY_MODE=go-portability` | Compile-only `internal/command` test binaries for fixed `darwin/amd64`, with ordinary and integration tags, CGO disabled and the pinned offline Go toolchain; ignored outputs and a distinct build cache live under `.local/` |
-| `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication, source-secret, Prometheus datasource and diagnostic unit race checks |
-| `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
-| `make verify VERIFY_MODE=integration ALMANAC_TEST_DATABASE_URL=...` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths. Preserves per-package Go JSON events under `.local/integration-test-json/`, the combined event stream at `.local/integration-go-test.jsonl`, the numeric Go test status at `.local/integration-go-test.exit`, and a slowest-test summary. |
-| `make verify VERIFY_MODE=performance ALMANAC_TEST_DATABASE_URL=...` | Separately tagged ten-SLO/year endurance entry; deferred from current T08 finalization by the maintainer on 2026-11-04. It contains two 15-minute phases and real-clock/maintenance waits. Do not run it as a short check or hide it in another gate. Bounded T08 evidence and final integrated gates are recorded separately. See [command discipline](commands.md). |
-| `make verify VERIFY_MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
+| `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion, binary smoke and the verification tooling tests; `MODE=…` selects the modes below (`VERIFY_MODE` is an accepted alias) |
+| `make verify MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
+| `make verify MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication, source-secret, Prometheus datasource and diagnostic unit race checks |
+| `make verify MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
+| `make verify MODE=integration` | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths. Preserves per-case Go JSON events and per-run reports under `.local/integration-runs/` and the latest coverage report in `.local/integration-report.json`. |
+| `make verify MODE=performance` | Separately tagged ten-SLO/year endurance entry; deferred from current T08 finalization by the maintainer on 2026-11-04. It contains two 15-minute phases and real-clock/maintenance waits. Do not run it as a short check or hide it in another gate. Bounded T08 evidence and final integrated gates are recorded separately. See [command discipline](commands.md). |
+| `make verify MODE=smoke` | Existing binary, real HTTP and SIGTERM smoke with bounded waits |
 | Focused browser journey invocation in [command discipline](commands.md) | Real HTTPS/PostgreSQL journey with the current built candidate; fails if the selected named journey does not execute and pass |
-| `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
-| `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
+| `make verify MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
+| `make verify MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
-| `make verify VERIFY_MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes |
+| `make verify MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes. Runs from the dev container through the host Docker socket (`compose.dev.socket.yaml`); `providers` uses the same entry |
 
 Controlled API distributions include each operation's first visits alongside its
 100 repeat reads, with explicit first-visit markers and retained maxima. Enforce
@@ -245,31 +244,30 @@ The browser matrix owns port 5200 and refuses an existing server. Keep the
 maintainer's preview on port 5198 running during checks; stopping it breaks lazy
 imports in already-open tabs. The production smoke uses port 5199. Checks require completed
 setup and never install dependencies. Unknown modes and empty test selections fail.
-The Linux verifier setup is separate from offline verification: verification rejects
-a missing or stale image fingerprint and never pulls images or installs dependencies.
-It uses a local Docker context, a read-only source snapshot, and a private network
-namespace shared only with its invocation-owned PostgreSQL fixture. The database check
-queries the live server and requires the fixed database, role, PostgreSQL 18.6,
-127.0.0.1 address and port 15487 before integration tests run. It does not mount the
-Docker socket, publish a host port, reuse the host fixture, or mount operator data.
-The existing Compose journey remains a separate host-side check.
-The fixed SLI journey selector is `BROWSER_SCENARIO=slis`; it requires the integrated
-candidate containing `TestIntegrationExecutableBrowserSLICollectionJourney`. The
-Linux lane runs that test as part of the full database integration suite.
+Every mode runs inside the development container; `make verify` enters it from
+the host ([ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)).
+The database check queries the live fixture and requires the fixed database, role,
+PostgreSQL 18.6, 127.0.0.1 address and port 15487 before integration tests run.
+Only `compose` and `providers` receive the host Docker socket; they run the
+deployment under test through the host daemon and reach it on the daemon host's
+network. The fixed SLI journey selector is `BROWSER_SCENARIO=slis`; it requires the
+integrated candidate containing `TestIntegrationExecutableBrowserSLICollectionJourney`,
+which the full integration suite also runs.
 Go tests exercise real loopback upstreams and embedded assets.
 Go and race checks build missing embedded assets before
 test discovery; focused config/storage unit checks do not need a web build. Existing
 assets are reused for a fast Go-only loop. After web source changes, use `make build`
 or the full `make verify` gate to refresh them. Integration checks build the binary
 and its assets after the selected integration packages' test discovery.
-The process smoke owns an ephemeral port. Generation/build/tests use local pinned tools and offline
+The process smoke owns an ephemeral port. Generation/build/tests use the dev image's pinned tools and offline
 Go module settings. PostgreSQL checks run separately from the ordinary unit loop.
 They require the matching local fixture, use a fresh disposable database per test,
 and fail for unavailable infrastructure or an empty integration-test selection.
-The integration gate runs storage first and command/browser acceptance last, and stops at the first
-failed package. It records Go JSON events in `.local/integration-go-test.jsonl`,
-per-package files under `.local/integration-test-json/`, and the numeric Go exit in
-`.local/integration-go-test.exit`; `running` means completion has not been recorded.
+The integration gate runs storage first and command/browser acceptance last and
+continues after a failed case so the report is complete. It records per-case Go
+JSON events and a per-run report under `.local/integration-runs/` and the latest
+coverage report in `.local/integration-report.json`; a `running` entry in
+`.local/integration-results.json` means completion has not been recorded.
 The storage and command packages run each discovered top-level integration test
 serially with the existing two-minute Go timeout per invocation. Shared invocations
 hit that bound as cumulative test time grew. The gate checks that discovery is valid
@@ -284,18 +282,14 @@ The retained-history datasets have separate mandatory top-level integration test
 `TestIntegrationRetainedDenseHistoryAndPersistedRestart` and
 `TestIntegrationRetainedMinuteHistoryAndPersistedRestart`. The full integration
 discovery includes both, with their original datasets, assertions and per-test
-timeout. They no longer run inside the small overview/burn-window test selected
-by `slo-integration`; a focused pagination pass does not establish retained-history
-or recovery acceptance.
-The Go portability mode only compiles test binaries; it does not execute Darwin
-tests or prove runtime behavior on macOS. Its target platform, architecture,
-CGO setting, cache, and output paths are fixed in the Makefile.
+timeout. A focused `INTEGRATION_TEST` selection of the overview or burn-window
+cases does not establish retained-history or recovery acceptance.
 The authentication service and real TLS authentication handlers are covered here,
 including bounded upload rejection and cookie/security boundaries. Executable backend
 lifecycle, noninteractive setup and browser authentication run through actual TLS
 and PostgreSQL. The command integration suite launches a disposable combined runtime
-for initial setup, lost-login and lost-password-response journeys. It requires the
-installed Chromium from `make setup`, uses ephemeral ECDSA certificates and scoped
+for initial setup, lost-login and lost-password-response journeys. It uses the
+Chromium baked into the development image, ephemeral ECDSA certificates and scoped
 browser certificate trust, and never disables application authentication. Lost
 responses follow actual committed backend operations, with subsequent deliberate
 sign-in and database assertions. An unreachable session created by a lost rotation
@@ -306,7 +300,7 @@ stage diagnostics and screenshots of empty or masked fields live under ignored
 and the remaining product journeys are still future work.
 
 For browser iteration, select a file and a single viewport/theme, for example
-`make verify VERIFY_MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.
+`make verify MODE=browser TEST_FILE=browser/controls.spec.ts BROWSER_PROJECT=mobile-dark`.
 Both selectors are validated; absent files and unknown projects fail. Omit them
 for the complete matrix. This focused controls check currently runs three tests
 in about 2.5 seconds with dependencies ready; it does not replace the full

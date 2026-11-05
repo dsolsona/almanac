@@ -1,0 +1,16 @@
+# Overlay for the Docker-driving modes only (`make verify MODE=compose|providers`, ADR-0029
+# decision 6): the dev container gets the daemon socket, the checkout at its host path so
+# build contexts and paths resolve on the host, and the daemon host's network so the
+# published loopback ports of the deployment under test are reachable as `localhost`.
+services:
+  dev:
+    network_mode: host
+    group_add:
+      - "${ALMANAC_DOCKER_GID:?set by make}"
+    working_dir: ${ALMANAC_HOST_CHECKOUT:?set by make}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${ALMANAC_HOST_CHECKOUT:?set by make}:${ALMANAC_HOST_CHECKOUT:?set by make}
+      - web-node-modules:${ALMANAC_HOST_CHECKOUT:?set by make}/web/node_modules
+      - openapi-node-modules:${ALMANAC_HOST_CHECKOUT:?set by make}/tools/openapi/node_modules
+    depends_on: !reset []

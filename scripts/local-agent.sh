@@ -10,8 +10,9 @@ app=$(docker compose -f compose.yaml ps --status running -q app) || fail 'cannot
 [ -n "$app" ] || fail 'the selected Compose app is not running; start it with make run'
 health=$(docker inspect --format '{{.State.Health.Status}}' "$app") || fail 'cannot inspect the selected Compose app'
 [ "$health" = healthy ] || fail 'the selected Compose app is not healthy; check make logs'
-image=$(docker inspect --format '{{.Image}}' "$app") || fail 'cannot inspect the selected Compose image'
-case "$image" in sha256:*) ;; *) fail 'the selected Compose image is unavailable' ;; esac
+docker compose -f compose.yaml --profile agent build --quiet agent >/dev/null 2>&1 || fail 'cannot build the local agent image'
+image="${COMPOSE_PROJECT_NAME:-almanac-local}-agent:dev"
+docker image inspect --format '{{.Id}}' "$image" >/dev/null 2>&1 || fail 'the local agent image is unavailable'
 
 mkdir -p .local || fail 'cannot create local temporary directory'
 directory=$(mktemp -d "$(pwd)/.local/almanac-agent.XXXXXXXX") || fail 'cannot create private temporary directory'
