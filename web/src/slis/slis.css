@@ -10,27 +10,23 @@
 .sli-list-scroll { max-width: 100%; overflow: auto; }
 /* Lists are not boxed (ADR-0031): only the top rule, like the datasource and agent lists. */
 .sli-table-scroll.sli-list-scroll { border: 0; border-radius: 0; }
-.sli-list-table { width: 100%; min-width: 960px; border-collapse: collapse; border-top: 1px solid var(--border); table-layout: fixed; font-size: .875rem; }
+.sli-list-table { width: 100%; border-collapse: collapse; border-top: 1px solid var(--border); font-size: .875rem; }
 .sli-list-table > thead > tr > th { padding: 10px 8px; border-bottom: 1px solid var(--border); color: var(--text-2); font: 600 11px var(--mono); text-align: start; white-space: nowrap; }
 .sli-list-table > tbody > tr > td { padding: 12px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow-wrap: anywhere; }
 .sli-list-table > tbody > tr:hover > td { background: var(--surface-2); }
-/* Column widths by name, not position (ADR-0031 reorder): the SLI name takes the remaining width. */
-.sli-list-table th.sli-col-health { width: 190px; }
-.sli-list-table th.sli-col-recent { width: 160px; }
-.sli-list-table th.sli-col-sample { width: 190px; }
-.sli-list-table th.sli-col-slos { width: 220px; }
+/* Column sizing and alignment come from the shared .ui-list-table rule (ADR-0032). */
 .sli-list-name > a { display: block; color: var(--text); text-decoration: none; }
 .sli-list-name > a:hover strong { text-decoration: underline; }
 .sli-list-name strong { font-size: .875rem; font-weight: 600; }
 .sli-list-name small, .sli-list-table > tbody > tr > td > small { display: block; margin-top: 2px; color: var(--text-2); font-size: .75rem; }
 .sli-list-name small { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sli-list-source a, .sli-list-links a { color: var(--text); text-decoration: none; }
-.sli-list-source a:hover, .sli-list-links a:hover { text-decoration: underline; }
+.sli-list-source a, .sli-list-count { color: var(--text-2); text-decoration: none; }
+.sli-list-source a:hover, .sli-list-count:hover { color: var(--accent-ink); text-decoration: underline; }
+.sli-list-count { font-family: var(--mono); font-size: .8125rem; }
 .sli-list-source { color: var(--text-2); }
-.sli-list-links { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.sli-list-links small { flex: none; margin: 0; color: var(--text-3); font-size: .75rem; }
-.sli-list-links a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sli-list-create { display: inline-block; padding: 1px 8px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent-ink); font: 11px var(--mono); text-decoration: none; }
+.sli-list-create { color: var(--accent-ink); font-size: .8125rem; text-decoration: none; }
+.sli-list-create:hover { text-decoration: underline; }
+.sli-list-table td.mono { font-size: .8125rem; }
 .sli-list-table b { font-weight: 700; }
 .sli-list-table b.muted, .sli-tile__value.muted { color: var(--text-3); font-weight: 500; }
 .sli-list-table .mono { font-family: var(--mono); }

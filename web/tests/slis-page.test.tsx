@@ -429,18 +429,14 @@ describe('SLI page', () => {
     expect(await screen.findByRole('link', { name: 'Search target' })).toHaveAttribute('href', `/slis/${sliID}`);
     expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=20&q=Search+target', expect.anything());
     expect(screen.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
-    await user.click(screen.getByText('Exact values · 6'));
-    const values = screen.getByRole('table', { name: 'Exact counts for recent 15-second intervals' });
-    expect(within(values).getByText('98')).toBeVisible();
-    expect(within(values).getByText('Zero traffic')).toBeVisible();
-    expect(within(values).getByText('Known empty')).toBeVisible();
-    expect(within(values).getByText('Missing')).toBeVisible();
-    expect(within(values).getByText('Partial')).toBeVisible();
-    expect(within(values).getByText('Failed')).toBeVisible();
-    // One line per row: the first linked SLO and a count of the rest (six linked).
-    expect(screen.getByText('+5 more')).toBeVisible();
+    // ADR-0032: the list shows the strip alone (exact counts are on the SLI page) and the linked SLOs as a count
+    // that opens the SLI's objectives, with the names in its tooltip.
+    expect(screen.queryByText(/^Exact values/)).toBeNull();
+    const linkedCount = screen.getByRole('link', { name: /^6 SLOs: Objective 0/ });
+    expect(linkedCount).toHaveTextContent(/^6 SLOs$/);
+    expect(linkedCount).toHaveAttribute('href', `/slis/${sliID}`);
+    expect(linkedCount.getAttribute('title')).toMatch(/^Objective 0, .*, and 1 more$/);
     expect(screen.getByRole('link', { name: 'Production metrics' })).toHaveAttribute('href', `/datasources/${sourceID}`);
-    expect(screen.getByRole('link', { name: 'Objective 0' })).toHaveAttribute('href', '/slos/c2e07390-3c86-4a7f-b7e5-c15e9626e71c');
   });
 
   it('loads the next bounded SLI list page from its cursor', async () => {

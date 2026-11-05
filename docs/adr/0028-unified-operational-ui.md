@@ -5,7 +5,7 @@
 - Accepted: 2026-11-04
 - Approval: Crit session `9a46588aaaa4` approved with no comments, 2026-11-04; the mocks it references were approved in the same day's working conversation
 - Related specs: [SPEC-0012](../specs/0012-user-interface.md), [SPEC-0018](../specs/0018-agent-management-usability.md)
-- Supersedes / superseded by: supersedes the right-rail SLO detail composition and the slo-tracker screenshots as acceptance reference in [the visual reference](../design/slo-visual-reference.md); amends the native-select rule in [the design guide](../../web/DESIGN_SYSTEM.md)
+- Supersedes / superseded by: supersedes the right-rail SLO detail composition and the slo-tracker screenshots as acceptance reference in [the visual reference](../design/slo-visual-reference.md); amends the native-select rule in [the design guide](../../web/DESIGN_SYSTEM.md); SLI vocabulary in decision 3 and right-aligned numerics in decision 1 amended by [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md)
 
 ## Context
 
@@ -40,7 +40,7 @@ amendments to SPEC-0012, the visual reference and the design guide apply.
    facts), then the timeline, then the definition. This supersedes the right-rail
    composition in SPEC-0012 and the visual reference. The rail's content is kept;
    only its placement changes.
-3. **Status vocabulary.** Status marks are a shape plus a label that names the
+3. **Status vocabulary.** (SLI labels amended by [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md): Up to date, Stale, Waiting for data, Query error, Partial data, Zero traffic.) Status marks are a shape plus a label that names the
    reason: Breached, Burning fast, Low budget, Not reporting, No data yet, Healthy
    for SLOs; Healthy, Failing, Not reporting, Zero traffic, Waiting for SLIs;
    Healthy, Not collecting, Moving for datasources; Connected, Unreachable, Never

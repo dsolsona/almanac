@@ -64,7 +64,9 @@ their `--space-*` semantic aliases; `--space-5` is the 20 px gap between form
 section cards and below page heads, as in the approved mocks; `--space-12` and `--space-16` are 48 and
 64 px). Controls are 38 px high on fine pointers and 44 px on coarse pointers.
 Controls and panels use 3 px corners (`--radius-sm`); the general radius is 4
-px. Focus is visible with a 3 px semantic outline. Motion uses `--motion` (120
+px. Focus is visible: buttons, links and other controls show a 3 px semantic outline; text
+inputs, selects, the search field, filter pills and query editors show one accent border on
+the field itself instead, with no offset ring ([ADR-0032](../docs/adr/0032-centred-list-tables-and-data-state-vocabulary.md)). Motion uses `--motion` (120
 ms, reduced to 0 ms by the preference rule). Dialogs use `--layer-dialog` (20)
 and the shared `--dialog-scrim` token.
 
@@ -114,7 +116,8 @@ Import controls from `src/components/ui/` and prefer native semantics:
   scroll-synchronized, screen-reader-hidden line numbers.
 - `SliRecentStrip` plots the bounded interval states without assigning an SLO
   target classification. Its native details table exposes exact counts, interval
-  timestamps and coverage labels from the same list projection.
+  timestamps and coverage labels from the same list projection; lists pass
+  `exactValues={false}` and leave exact counts to the SLI page.
 
 Operational controls (ADR-0028), demonstrated in the catalogue's Operational section:
 
@@ -122,7 +125,9 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   shape carries the tone: filled circle healthy, triangle warning, square breached,
   open circle stale, dashed circle none. The label names the reason (Breached,
   Burning fast, Not reporting) and must never contradict the group containing it.
-  Marks go on a status line under a heading, never inside it.
+  Marks go on a status line under a heading, never inside it. SLI health names
+  the state of the data, not a verdict: Up to date, Stale, Waiting for data, Query
+  error, Partial data, Zero traffic. Only SLOs judge (ADR-0032).
 - `SegmentedControl` is a radiogroup of buttons for one choice among a few fixed
   options, with optional counts, disabled options carrying a title, roving tabindex
   and arrow keys.
@@ -153,7 +158,15 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   tooltip holds the last refresh time; failed refreshes are reported by the page's
   notice. Rows lead with the name as the link; health is a `StatusChip` in the
   second column whose reason appears only when the state needs attention; "UTC"
-  sits in the header of a column that shows times. The pager always shows
+  sits in the header of a column that shows times. List tables carry
+  `ui-list-table` ([ADR-0032](../docs/adr/0032-centred-list-tables-and-data-state-vocabulary.md)):
+  the name column is left-aligned and takes the spare width; every other column
+  is as wide as its widest item, centred, with equal side padding, so neighbouring
+  columns are evenly spaced; cells align to the name's first line (24 px). Each
+  cell answers one question: one value, with exact counts, times and reasons in
+  its tooltip; secondary lines use `ui-list-table__sub`. The SLO urgency groups
+  apply the same rule through one grid shared by subgrid rows; a row opens on
+  click unless text was selected or an inner link was used, with no overlay. The pager always shows
   position, per-page and previous/next. Detail pages use a breadcrumb line above
   the title, the actions on the title line and a quiet refresh.
 - Hints, errors and sublines are 13 px minimum; 12 px is reserved for labels, axis

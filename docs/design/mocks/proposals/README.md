@@ -18,6 +18,7 @@ text looks narrower than in a Mac browser.
 | `sli-list.html` | Same grammar; secondary filters as filter chips in the toolbar row; type and datasource folded into the name subline. |
 | `slo-list.html` | Same head and toolbar; urgency groups and triage tiles kept; name-first rows with status chips. |
 | `buttons.html` | Button roles: primary, secondary, quiet, inline, destructive, confirm destructive, selected; when to use each. |
+| `tables-v2.html` | SLI and SLO tables after the 2026-11-05 review ([ADR-0032](../../../adr/0032-centred-list-tables-and-data-state-vocabulary.md)): one value per cell with details in tooltips, SLI data-state health words, a separate 7-day budget column, a name column on the left with every other column centred and evenly spaced, selectable SLO rows, and one focus border on fields. Renders in `png/tables-v2.png` and `png/tables-v2-dark.png`. |
 
 ## Decisions for the maintainer
 

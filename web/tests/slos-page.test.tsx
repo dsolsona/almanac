@@ -163,7 +163,7 @@ it('persists range, timezone and burn selection in URL state and anchors long ra
 });
 it('preselects the SLI named in the URL and shows its state in the summary',async()=>{
  history.replaceState({},'','/slos/new?sli='+sli.id);mocks.services.mockResolvedValue({items:[service],next_cursor:''});mocks.list.mockResolvedValue({items:[sli],next_cursor:''});mocks.observations.mockResolvedValue({earliest_queryable_interval_start:'2026-10-01T00:00:00Z'});
- render(<SlosPage context={admin}/>);expect(await screen.findByText('Requests')).toBeVisible();expect(screen.getByText('Waiting')).toBeVisible();expect(screen.getByText('requests')).toBeVisible();expect(screen.queryByLabelText('SLI')).not.toBeInTheDocument();expect(await screen.findByLabelText(/Apply this target to earlier SLI measurements/)).toBeInTheDocument();
+ render(<SlosPage context={admin}/>);expect(await screen.findByText('Requests')).toBeVisible();expect(screen.getByText('Waiting for data')).toBeVisible();expect(screen.getByText('requests')).toBeVisible();expect(screen.queryByLabelText('SLI')).not.toBeInTheDocument();expect(await screen.findByLabelText(/Apply this target to earlier SLI measurements/)).toBeInTheDocument();
 });
 it('submits a custom window in whole days and reports a non-numeric custom window',async()=>{
  history.replaceState({},'','/slos/new');mocks.services.mockResolvedValue({items:[service],next_cursor:''});mocks.list.mockResolvedValue({items:[sli],next_cursor:''});mocks.observations.mockResolvedValue({earliest_queryable_interval_start:'2026-10-01T00:00:00Z'});mocks.create.mockResolvedValue({id:'33333333-3333-3333-3333-333333333333'});mocks.get.mockRejectedValue(new Error('unavailable'));

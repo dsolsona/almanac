@@ -1,0 +1,81 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Proposal · SLI and SLO tables v2</title><link rel="stylesheet" href="../mock.css"><link rel="stylesheet" href="proposal.css">
+<style>
+.focus-demo { display:flex; gap:24px; align-items:center; flex-wrap:wrap; margin:8px 0 4px; }
+.search.ring { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.search.old { outline:3px solid var(--accent); outline-offset:2px; }
+/* Budget left reads left to right under its header: the value in a fixed slot (right-aligned so the
+   numbers share an edge), then its 7-day trend. Header, values and trends start at the same x. */
+/* Columns fit their widest item; every column has the same side padding, so the space between
+   neighbouring columns is the same everywhere. The name column takes the remaining width. */
+.tbl.fit th:not(:first-child), .tbl.fit td:not(:first-child) { width:1%; white-space:nowrap; padding-left:16px; padding-right:16px; }
+/* Data columns are centred: header, chip, reason, value and graph share the column's centre line. */
+.tbl.fit th:not(:first-child), .tbl.fit td:not(:first-child) { text-align:center; }
+.tbl.fit td:not(:first-child) > svg { margin:0 auto; }
+.tbl.fit .hc-reason { display:block; text-align:center; }
+.tbl td.trend svg { display:block; width:140px; height:24px; }
+.spark-cell { display:grid; grid-template-columns:64px 56px; align-items:center; column-gap:12px; justify-content:start; }
+.spark-cell svg { display:block; width:56px; height:18px; }
+.spark-cell > b, .spark-cell > span { text-align:right; font-variant-numeric:tabular-nums; }
+.tbl tr.clickrow td { cursor:pointer; }
+.tbl .muted-link { color:var(--text-2); }
+</style></head>
+<body data-current="slis"><main>
+<div class="p-head"><h1>Tables v2</h1></div>
+<p style="max-width:76ch;color:var(--text-2);margin:0 0 8px">Answers to the 2026-11-05 review of the SLI and SLO tables. Each cell answers one question; anything else moves to a tooltip or the detail page.</p>
+
+<p class="section-title">SLIs</p>
+<div class="p-toolbar">
+  <label class="search ring"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search name or datasource" value="request"><kbd>/</kbd></label>
+  <button class="p-filter">Datasource <b>Any</b> ▾</button>
+  <span class="spacer"></span>
+  <button class="p-refresh" aria-label="Refresh SLIs"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+<table class="tbl responsive rows-top fit">
+  <thead><tr><th>SLI</th><th>Health</th><th>Last 12 intervals</th><th>Last sample</th><th class="num">SLOs</th></tr></thead>
+  <tbody>
+    <tr><td><a class="rowname" href="#">Request success</a><span class="desc">SLI Journey Metrics</span></td><td><span class="hc good"><i></i>Up to date</span></td><td><svg viewBox="0 -2 140 24" width="140" height="24"><path class="line" d="M0,6 L140,6"/></svg></td><td class="mono" title="99 / 100 good · interval ending 13:19:45 UTC">99% · 15 s ago</td><td class="num mono"><a class="muted-link" href="#" title="Reference SLO 1, Reference SLO 2, … (6)">6 SLOs</a></td></tr>
+    <tr><td><a class="rowname" href="#">Payment authorisation</a><span class="desc">prod-prometheus-eu</span></td><td><span class="hc warn"><i></i>Query error</span><span class="hc-reason">last query timed out</span></td><td><svg viewBox="0 -2 140 24" width="140" height="24"><path class="line" d="M0,6 L105,6"/><path class="gap" d="M105,10 L140,10"/></svg></td><td class="mono muted" title="Last value 931 / 1,000 good at 13:18:30 UTC; the query at 13:19:45 UTC timed out">no value · 1 min ago</td><td class="num mono"><a class="muted-link" href="#">1 SLO</a></td></tr>
+    <tr><td><a class="rowname" href="#">Search latency</a><span class="desc">local-victoriametrics</span></td><td><span class="hc stale"><i></i>Stale</span><span class="hc-reason">agent unreachable</span></td><td><svg viewBox="0 -2 140 24" width="140" height="24"><path class="line" d="M0,7 L30,7"/><path class="gap" d="M30,10 L140,10"/></svg></td><td class="mono" title="200 / 200 good · interval ending 11:20:00 UTC">100% · 2 h ago</td><td class="num"><a href="#" style="color:var(--accent-ink)">Create SLO</a></td></tr>
+  </tbody>
+</table>
+
+<p class="section-title">SLOs · one urgency group</p>
+<section class="group">
+  <header><h2>Needs attention</h2><span class="count">3</span><span class="sort">sorted by when the budget runs out</span></header>
+  <table class="tbl rows-top fit">
+    <thead><tr><th>SLO</th><th>Status</th><th>Objective</th><th>Budget · 7 d</th><th class="num">Budget left</th><th class="num">Burn rate</th><th class="num">Budget runs out</th></tr></thead>
+    <tbody>
+      <tr class="clickrow"><td><a class="rowname" href="#">Refund processing &lt; 2 s</a><span class="desc">Core · refund-fast</span></td><td><span class="hc crit"><i></i>Breached</span></td><td class="mono">99.9% · 30 d</td><td class="trend"><svg viewBox="0 0 130 24" preserveAspectRatio="none"><path class="area crit" d="M0,6 L92,8 L101,20 L130,20 L130,24 L0,24 Z"/><path class="line crit" d="M0,6 L92,8 L101,20 L130,20"/></svg></td><td class="num mono"><b style="color:var(--status-breached)">−20.5%</b></td><td class="num mono" title="6 h: 0.36×">0.44×</td><td class="num mono" style="color:var(--status-breached)">exhausted</td></tr>
+      <tr class="clickrow"><td><a class="rowname" href="#">Payment authorisation success</a><span class="desc">Core · payment-auth-success</span></td><td><span class="hc warn"><i></i>Burning fast</span></td><td class="mono">99.9% · 30 d</td><td class="trend"><svg viewBox="0 0 130 24" preserveAspectRatio="none"><path class="area" d="M0,5 L112,6 L130,13 L130,24 L0,24 Z"/><path class="line" d="M0,5 L112,6 L130,13"/></svg></td><td class="num mono"><b>59%</b></td><td class="num mono" title="6 h: 21×"><b style="color:var(--status-warning)">18×</b></td><td class="num mono">in ≈ 2 h</td></tr>
+      <tr class="clickrow"><td><a class="rowname" href="#">CI pipeline success on main</a><span class="desc">Delivery · ci-main</span></td><td><span class="hc stale"><i></i>Not reporting</span></td><td class="mono">95% · 7 d</td><td class="trend" title="No evaluation: observations are stale"><svg viewBox="0 0 130 24" preserveAspectRatio="none"><path class="gap" d="M0,12 L130,12"/></svg></td><td class="num mono muted" title="No evaluation: observations are stale">—</td><td class="num mono muted">—</td><td class="num mono muted" title="No estimate while not reporting">—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<p class="section-title">Focused input · one ring instead of two</p>
+<div class="focus-demo">
+  <div><div class="mono" style="font-size:11px;color:var(--text-3);margin-bottom:6px">today: field ring plus wrapper ring</div><label class="search old" style="width:280px"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input value="request"></label></div>
+  <div><div class="mono" style="font-size:11px;color:var(--text-3);margin-bottom:6px">proposed: accent border, no offset</div><label class="search ring" style="width:280px"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input value="request"></label></div>
+</div>
+
+<div class="anno"><h3>SLI table</h3><ul>
+<li><b>Exact values</b> leave the table. The strip stays as the at-a-glance view; exact counts live on the SLI detail page, where the disclosure has room.</li>
+<li><b>Last sample</b>: one value, the good ratio and its age ("99% · 2 h ago"). The counts and the exact UTC time move to the tooltip, so the header no longer needs "UTC".</li>
+<li><b>SLOs</b>: a count ("6 SLOs") that links to the SLO list searched for this SLI, with the names in its tooltip. It reads the same with 1 or 50 SLOs. With none, it offers "Create SLO". No chips: they would not fit five names and would compete with the health chip.</li>
+<li><b>Health names the data, not a verdict</b>: an SLI is a measurement; only its SLOs judge it. Up to date, Stale, Waiting for data, Query error, Partial data, Zero traffic replace Healthy, Not reporting, Waiting and Failing (ADR-0028 decision 3 is amended).</li>
+<li><b>SLI column</b>: the display name and only its datasource. The identifier repeats the name and every SLI is a ratio today, so both go (they stay on the detail page).</li>
+</ul></div>
+<div class="anno"><h3>SLO table</h3><ul>
+<li><b>Status</b>: the chip only. The reason ("observations stale · +4 more") moves to the chip's tooltip and the detail page; the group heading already says why rows are here.</li>
+<li><b>Objective</b> replaces "Target · window": one value, "99.9% · 30 d".</li>
+<li><b>Budget · 7 d</b> and <b>Budget left</b> replace "Budget · last 7 d" and "Remaining": the trend chart has its own column and starts under its header; the current value follows in its own column.</li>
+<li><b>Column spacing</b>: each column is as wide as its widest item, and every column has the same side padding, so neighbouring columns are always the same distance apart. The name column takes the remaining width.</li>
+<li><b>Alignment</b>: the name column is left-aligned; every other column is centred, so its header, chips, values and graph share one centre line between the column boundaries.</li>
+<li><b>Burn rate</b> replaces "Burn 1 h · 6 h": the one-hour rate only; the six-hour rate is in its tooltip.</li>
+<li><b>Budget runs out</b> replaces "Exhaustion": when the budget would run out at the current rate ("in ≈ 2 h", "exhausted"), or "—" with the reason in the tooltip. No second caption line.</li>
+<li><b>Selecting text</b>: rows stay clickable, but the whole-row link overlay goes. Clicking anywhere opens the SLO unless text was selected or a link inside the row was clicked; the name stays a real link for keyboard and middle-click.</li>
+</ul></div>
+<div class="anno"><h3>Focus</h3><ul>
+<li>Text inputs and selects show one accent border on the field itself instead of a 3 px ring offset around the wrapper. Buttons and links keep the outline ring, which keyboard users rely on.</li>
+</ul></div>
+</main><script src="../mock.js"></script></body></html>

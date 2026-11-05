@@ -90,7 +90,7 @@ try {
     const urgency=new URLSearchParams(new URL(page.url()).search).get('urgency');
     const rows=observed.body.items.filter(item=>!urgency||item.urgency===urgency).map(item=>`/slos/${item.slo.id}`).sort();
     stage='filtered overview matching rows';
-    await expect.poll(()=>page.locator('.app-slo-name>a.app-slo-hitarea').evaluateAll(links=>links.map(link=>new URL(link.href).pathname).sort())).toEqual(rows);
+    await expect.poll(()=>page.locator('.app-slo-name>a.app-slo-link').evaluateAll(links=>links.map(link=>new URL(link.href).pathname).sort())).toEqual(rows);
     const count=urgency?observed.body.group_counts[urgency]:Object.values(observed.body.group_counts).reduce((sum,value)=>sum+value,0);
     stage='filtered overview matching count';
     // No count subline or Updated line on lists (ADR-0031); the triage tiles carry the counts.
@@ -393,7 +393,7 @@ try {
       return {overview:{settled:state?.settled,failed:state?.failed,status:state?.status},filters_open:document.querySelector('.app-slo-filters')?.open,
         filters:['q','service_id','urgency','cursor'].map(key=>({key,same:(requested.get(key)??'')===(current.get(key)??''),requested_present:requested.has(key),current_present:current.has(key)})),
         groups:state?.body?.group_counts,items:state?.body?.items?.map(item=>({id:item.slo.id,urgency:item.urgency})),
-        rows:Array.from(document.querySelectorAll('.app-slo-name>a.app-slo-hitarea')).map(link=>new URL(link.href).pathname),
+        rows:Array.from(document.querySelectorAll('.app-slo-name>a.app-slo-link')).map(link=>new URL(link.href).pathname),
         alerts:Array.from(document.querySelectorAll('[role="alert"]')).map(node=>node.textContent?.slice(0,1000))};
     }).catch(()=>null);
     if(diagnostics)await writeFile(join(fixture.artifacts,'refresh-cancellation.json'),JSON.stringify(diagnostics)+'\n',{mode:0o600}).catch(()=>{});

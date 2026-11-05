@@ -38,6 +38,13 @@ export function OperationalControlsSection() {
           <ToolbarSpacer /><RefreshButton label="Refresh SLOs" lastRefreshed="10:00:20" onClick={() => setRefreshes((value) => value + 1)} />
         </Toolbar>
         <div className="catalogue-chip-row" aria-label="Health chips">{(['healthy', 'warning', 'breached', 'stale', 'none'] as const).map((tone) => <StatusChip key={tone} tone={tone} label={{ healthy: 'Healthy', warning: 'Burning fast', breached: 'Breached', stale: 'Not reporting', none: 'No data yet' }[tone]} reason={tone === 'healthy' ? 'never shown when healthy' : 'one-line reason'} />)}</div>
+        <table className="ui-list-table catalogue-list-table" aria-label="List table example">
+          <thead><tr><th scope="col">SLI</th><th scope="col">Health</th><th scope="col">Last sample</th><th scope="col">SLOs</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#controls">Request success</a><small className="ui-list-table__sub">SLI Journey Metrics</small></td><td><StatusChip tone="healthy" label="Up to date" /></td><td className="mono" title="99 / 100 good · interval ending 13:19:45 UTC">99% · 15 s ago</td><td><a href="#controls">6 SLOs</a></td></tr>
+            <tr><td><a href="#controls">Payment authorisation</a><small className="ui-list-table__sub">prod-prometheus-eu</small></td><td><StatusChip tone="warning" label="Query error" reason="last query timed out" /></td><td className="mono">no value · 1 min ago</td><td><a href="#controls">1 SLO</a></td></tr>
+          </tbody>
+        </table>
         <div className="catalogue-chip-row" aria-label="Button roles"><Button>Save changes</Button><Button variant="outline">Cancel</Button><Button variant="ghost">Copy</Button><Button variant="link">Change</Button><Button variant="danger-outline">Delete…</Button><Button variant="danger">Delete agent</Button></div>
         <p className="demo-feedback" role="status">Filter: {filter}. Service: {service || 'any'}. Refreshed {refreshes} times.</p>
         <Pager id="catalogue-page-size" label="Example result pages" position="Page 1 · showing 10 of 10" pageSize={pageSize} onPageSizeChange={setPageSize} hasPrevious={false} hasNext={false} />

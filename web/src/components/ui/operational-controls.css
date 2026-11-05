@@ -86,7 +86,27 @@
 .ui-filter { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-height); padding: 0 4px 0 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); color: var(--text-2); font-family: var(--mono); font-size: .8125rem; }
 .ui-filter--on { border-style: solid; background: var(--surface); }
 .ui-filter select { min-height: calc(var(--control-height) - 2px); padding: 0 6px; border: 0; background: transparent; color: var(--text); font: 600 .8125rem var(--mono); }
-.ui-filter:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.ui-filter:focus-within { border-style: solid; border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+.ui-filter select:focus-visible { outline: none; }
+/* List tables (ADR-0032). The name column is left-aligned and takes the spare width. Every other column is as
+   wide as its widest item, centred, with the same side padding, so neighbouring columns are evenly spaced.
+   Cells align to the row's first line (24 px), so chips, values and charts sit on the name line. Narrow
+   screens keep each page's stacked layout. */
+@media (min-width: 861px) {
+  .ui-list-table > thead > tr > th, .ui-list-table > tbody > tr > td { vertical-align: top; }
+  .ui-list-table > thead > tr > th { vertical-align: bottom; }
+  .ui-list-table > thead > tr > th:not(:first-child), .ui-list-table > tbody > tr > td:not(:first-child) { width: 1%; padding-left: 16px; padding-right: 16px; text-align: center; white-space: nowrap; }
+  .ui-list-table > tbody > tr > td { line-height: 24px; }
+  .ui-list-table > tbody > tr > td > :first-child:is(a, button) { line-height: 24px; }
+  .ui-list-table .ui-list-table__sub, .ui-list-table .ui-status-chip__reason { line-height: 1.45; }
+  .ui-list-table .ui-status-chip-cell { justify-items: center; }
+  /* A percentage cap would not widen a content-sized column, so the reason would be cut; cap it in pixels. */
+  .ui-list-table .ui-status-chip__reason { max-width: 260px; }
+  .ui-list-table td:not(:first-child) > svg, .ui-list-table td:not(:first-child) > .sli-recent-strip { margin-left: auto; margin-right: auto; justify-items: center; }
+}
+@media (min-width: 861px) and (max-width: 1200px) {
+  .ui-list-table > thead > tr > th:not(:first-child), .ui-list-table > tbody > tr > td:not(:first-child) { padding-left: 10px; padding-right: 10px; }
+}
 /* Health chip (StatusChip). */
 .ui-status-chip-cell { display: grid; justify-items: start; gap: 4px; min-width: 0; max-width: 100%; }
 .ui-status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 9px 0 8px; border: 1px solid transparent; border-radius: 999px; font-size: .75rem; font-weight: 600; line-height: 1; white-space: nowrap; }
@@ -106,7 +126,7 @@
 .ui-search svg { width: 16px; height: 16px; flex: none; color: var(--text-3); }
 .ui-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
 .ui-search input::-webkit-search-decoration, .ui-search input::-webkit-search-cancel-button { appearance: none; }
-.ui-search:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.ui-search:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 .ui-search kbd { padding: 0 5px; border: 1px solid var(--border); border-radius: 2px; color: var(--text-3); font-family: var(--mono); font-size: .6875rem; }
 .ui-pager { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-3); color: var(--text-3); font-family: var(--mono); font-size: .75rem; }
 .ui-pager__position { margin-right: auto; }

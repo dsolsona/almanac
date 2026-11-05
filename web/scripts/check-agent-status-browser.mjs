@@ -152,6 +152,31 @@ try {
         fullPage: true, animations: 'disabled' });
     }
   }
+  // ADR-0032 list grammar: the name column is left-aligned and every other column is centred, so each header and
+  // its cells share one centre line. Checked on the real list in both themes, then captured with the detail page.
+  stage = 'agent list centred columns';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Agents', exact: true }).click();
+  await expect(page.locator('table.agents-table--list > tbody > tr').first()).toBeVisible();
+  for (const width of [1440, 1024, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ['light', 'dark']) {
+      await selectTheme(theme);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth
+        && document.body.scrollWidth <= window.innerWidth), true);
+      if (width > 860) {
+        const offsets = await page.locator('table.agents-table--list').evaluate((table) => [...table.rows].flatMap((row) => [...row.cells].slice(1).flatMap((cell) => {
+          const box = cell.getBoundingClientRect(), style = getComputedStyle(cell);
+          const middle = box.left + parseFloat(style.paddingLeft) + (box.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) / 2;
+          const items = [...cell.querySelectorAll('.ui-status-chip, b, .ui-list-table__sub')];
+          if (!items.length) { const range = document.createRange(); range.selectNodeContents(cell); items.push(range); }
+          return items.map((item) => { const rect = item.getBoundingClientRect(); return rect.width ? Math.abs((rect.left + rect.right) / 2 - middle) : 0; });
+        })));
+        assert.ok(Math.max(0, ...offsets) <= 1, `agent list columns are centred (worst offset ${Math.max(0, ...offsets)} px)`);
+      }
+      await page.screenshot({ path: join(fixture.artifacts, `agents-list-${width}-${theme}.png`), fullPage: true, animations: 'disabled' });
+    }
+  }
   assert.equal(pageErrors, 0);
   await context.close();
   await browser.close();

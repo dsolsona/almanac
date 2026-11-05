@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { ModuleView } from '../components/ModuleView.tsx';
 import type { components } from '../api/generated.ts';
 import { Button, FilterSelect, PageHeader, Pager, RefreshButton, SearchField, StatusChip, StatusMark, Toolbar, ToolbarSpacer, type MarkTone } from '../components/ui/index.ts';
@@ -144,25 +144,37 @@ async function allServices(signal:AbortSignal) {
   return result;
 }
 
-function OverviewRow({item,onChartReady}:{item:OverviewItem;onChartReady:(item:OverviewItem,ready:boolean)=>void}) {
+// A row opens its SLO on click unless the click selected text or hit a link inside the row (ADR-0032); the name
+// stays a real link for keyboard, middle-click and screen readers, and there is no overlay, so text can be selected.
+function opensRow(event:ReactMouseEvent<HTMLElement>):boolean {
+  if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return false;
+  if(event.target instanceof Element&&event.target.closest('a,button,input,select,textarea,summary'))return false;
+  return !window.getSelection()?.toString();
+}
+function OverviewRow({item,onChartReady,onOpen}:{item:OverviewItem;onChartReady:(item:OverviewItem,ready:boolean)=>void;onOpen:(path:string)=>void}) {
   useEffect(()=>()=>onChartReady(item,false),[item]);
   const lastKnown=item.current_state==='stale'||item.current_state==='failed';
   const slo=item.slo,p=item.current.performance,q=item.current.quality,status=lastKnown?'stale':statusFor(item.current);
   const reasons=item.reasons.map(reason=>reasonLabel(reason.code)+(reason.provisional?' · observed only':'')).join('; ');
-  const title=lastKnown?`Last known values; current calculation ${item.current_state}. ${reasons}`:reasons;
   const words=vocabulary(item.urgency,item.leading_reason,lastKnown,item.current_state);
+  const asOf=`${lastEvaluationFormat.format(new Date(item.current.evaluation_at))} UTC`;
+  // The status cell is the chip only; its reason, the other reasons and any last-known time are in the tooltip.
+  const statusTitle=lastKnown?`Last known values as of ${asOf}; current calculation ${item.current_state}. ${reasons}`:reasons||words.reason;
   const partial=p.provisional||q.state==='partial';
   const budget=p.remaining_fraction===null?null:Number(p.remaining_fraction),burn=item.burn_1h.performance.burn;
-  const caption=lastKnown?'last known rate':status==='stale'?'not reporting':partial?'partial window':status==='no-data'?'no samples':'at 1 h rate';
-  const extra=item.reasons.length>1?` · +${item.reasons.length-1} more`:'';
-  return <article className="app-slo-row" role="row">
-    <div className="app-slo-name" role="cell"><a data-app-route className="app-slo-hitarea" href={`/slos/${slo.id}`} title={slo.display_name}>{slo.display_name}</a><small><a data-app-route href={`/services/${slo.service_id}`}>{slo.service_display_name}</a><span>·</span><a data-app-route className="app-slo-indicator" href={`/slis/${slo.sli_id}`}>{slo.sli_display_name}</a></small></div>
-    <div className="app-slo-status" role="cell"><span className="slo-reference-status" data-status={status} title={title}><StatusChip tone={words.tone} label={words.label} reason={lastKnown?undefined:words.reason+extra}/>{lastKnown&&<span className="ui-mark__reason">{item.current_state==='failed'?'Update failed · ':''}as of <time dateTime={item.current.evaluation_at} title={item.current.evaluation_at}>{lastEvaluationFormat.format(new Date(item.current.evaluation_at))} UTC</time></span>}</span><span className="sr-only">{reasons}</span></div>
-    <div className="app-slo-objective" role="cell"><b>{shift(slo.target,2)}%</b> · {windowDuration(slo.rolling_window_seconds)}<span className="sr-only">Target {shift(slo.target,2)}% over {windowDuration(slo.rolling_window_seconds)}</span></div>
+  const estimateNote=lastKnown?'last known rate':status==='stale'?'No estimate while not reporting':partial?'Partial window':status==='no-data'?'No samples':'';
+  const exhaustionTitle=[formatExhaustion(item.exhaustion),estimateNote].filter(Boolean).join(' · ');
+  const burnTitle=[`6 h: ${item.burn_6h.performance.burn===null?'no samples':multiple(item.burn_6h.performance.burn)}`,qualityWarning(item.burn_1h.quality)].filter(Boolean).join(' · ');
+  const runsOut=shortExhaustion(item.exhaustion);
+  const path=`/slos/${slo.id}`;
+  return <article className="app-slo-row" role="row" onClick={event=>{if(opensRow(event))onOpen(path);}}>
+    <div className="app-slo-name" role="cell"><a data-app-route className="app-slo-link" href={path} title={slo.display_name}>{slo.display_name}</a><small><a data-app-route href={`/services/${slo.service_id}`}>{slo.service_display_name}</a><span>·</span><a data-app-route className="app-slo-indicator" href={`/slis/${slo.sli_id}`}>{slo.sli_display_name}</a></small></div>
+    <div className="app-slo-status" role="cell"><span className="slo-reference-status" data-status={status} title={statusTitle}><StatusChip tone={words.tone} label={words.label}/></span><span className="sr-only">{lastKnown?<>{item.current_state==='failed'?'Update failed · ':''}last known values as of <time dateTime={item.current.evaluation_at}>{asOf}</time>. {reasons}</>:statusTitle}</span></div>
+    <div className="app-slo-objective" role="cell">{shift(slo.target,2)}% · {windowDuration(slo.rolling_window_seconds)}<span className="sr-only">Target {shift(slo.target,2)}% over {windowDuration(slo.rolling_window_seconds)}</span></div>
     <div className="app-slo-spark" role="cell" title={item.budget_history_generation?`History evaluated through ${item.budget_history_generation.evaluated_through}`:undefined}>{item.budget_sparkline.length===0&&item.budget_history_state?<span className="app-slo-history-empty">{item.budget_history_state==='unavailable'?'History unavailable':item.budget_history_state==='preparing'?'Preparing history…':'No budget history'}</span>:<SloBudgetSparkline samples={item.budget_sparkline} label={`${slo.display_name} rolling remaining budget`} onReady={()=>onChartReady(item,true)}/>} {item.budget_sparkline.length>0&&item.budget_history_state==='preparing'&&<small>Updating history</small>}{item.budget_sparkline.length>0&&item.budget_history_state==='unavailable'&&<small>History may be out of date</small>}</div>
-    <div className="app-slo-budget" role="cell" title={partial?'Observed only; collection coverage is incomplete':undefined}><b className={budget===null||lastKnown?'muted':budget<0?'crit':budget<.2?'warn':''} title={p.remaining_fraction===null?undefined:`${shift(p.remaining_fraction,2)}%`}>{budgetPercent(p.remaining_fraction,1)}</b><span className="slo-reference-meter" role="progressbar" aria-label={`${slo.display_name} budget remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={budget===null?undefined:meterFraction(p.remaining_fraction)*100} aria-valuetext={budget===null?'Unavailable':budgetPercent(p.remaining_fraction)}><span style={{width:`${meterFraction(p.remaining_fraction)*100}%`,backgroundColor:`var(--status-${status})`}}/></span><span className="sr-only">{partial?'Observed only; ':''}{p.remaining_budget===null?'Budget unavailable':`${decimal(p.remaining_budget)} bad events left`}</span></div>
-    <div className="app-slo-burn" role="cell" title={qualityWarning(item.burn_1h.quality)}><b className={burn!==null&&Number(burn)>=10?'hot':burn!==null&&Number(burn)>=2?'warm':''}>{multiple(burn)}</b><small>{item.burn_6h.performance.burn===null?'no samples':`6 h ${multiple(item.burn_6h.performance.burn)}`}</small></div>
-    <div className="app-slo-exhaustion" role="cell" title={formatExhaustion(item.exhaustion)}><b className={item.exhaustion.state==='exhausted'||(item.exhaustion.hours_until_exhaustion!==null&&Number(item.exhaustion.hours_until_exhaustion)<24)?'hot':''}>{shortExhaustion(item.exhaustion)}</b><small>{caption}</small></div><span className="app-slo-chevron" role="cell" aria-hidden="true">›</span>
+    <div className="app-slo-budget" role="cell" title={[p.remaining_fraction===null?'':`${shift(p.remaining_fraction,2)}%`,partial?'Observed only; collection coverage is incomplete':'',p.remaining_budget===null?'':`${decimal(p.remaining_budget)} bad events left`].filter(Boolean).join(' · ')||undefined}><b className={budget===null||lastKnown?'muted':budget<0?'crit':budget<.2?'warn':''}>{budgetPercent(p.remaining_fraction,1)}</b><span className="sr-only">{partial?'Observed only; ':''}{p.remaining_budget===null?'Budget unavailable':`${decimal(p.remaining_budget)} bad events left`}</span></div>
+    <div className="app-slo-burn" role="cell" title={burnTitle}><b className={burn===null?'muted':Number(burn)>=10?'hot':Number(burn)>=2?'warm':''}>{multiple(burn)}</b><span className="sr-only">{burnTitle}</span></div>
+    <div className="app-slo-exhaustion" role="cell" title={exhaustionTitle}><b className={runsOut==='—'?'muted':item.exhaustion.state==='exhausted'||(item.exhaustion.hours_until_exhaustion!==null&&Number(item.exhaustion.hours_until_exhaustion)<24)?'hot':''}>{runsOut==='—'||runsOut==='exhausted'?runsOut:`in ${runsOut}`}</b><span className="sr-only">{exhaustionTitle}</span></div><span className="app-slo-chevron" role="cell" aria-hidden="true">›</span>
   </article>;
 }
 
@@ -254,7 +266,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
       if(!items.length||urgency&&group!==urgency)return null;
       return <section className="app-slo-group" key={group} aria-labelledby={`slo-group-${group}`}>
         <header><h2 id={`slo-group-${group}`} aria-label={`${label}, ${count} SLOs`}>{label}</h2><span>{count}</span><small>{explanation}</small></header>
-        <div role="table" aria-label={`${label} SLOs`}><div role="row" className="app-slo-columns"><span role="columnheader">SLO</span><span role="columnheader">Status</span><span role="columnheader">Target · window</span><span role="columnheader">Budget · last 7 d</span><span role="columnheader">Remaining</span><span role="columnheader">Burn 1 h · 6 h</span><span role="columnheader" className="app-slo-exhaustion-head">Exhaustion</span><span role="columnheader"><span className="sr-only">Open</span></span></div><div className="app-slo-rows" role="rowgroup">{items.map(item=><OverviewRow item={item} key={item.slo.id} onChartReady={chartReady}/>)}</div></div>
+        <div role="table" className="app-slo-table" aria-label={`${label} SLOs`}><div role="row" className="app-slo-columns"><span role="columnheader">SLO</span><span role="columnheader">Status</span><span role="columnheader">Objective</span><span role="columnheader">Budget · 7 d</span><span role="columnheader">Budget left</span><span role="columnheader">Burn rate</span><span role="columnheader" className="app-slo-exhaustion-head">Budget runs out</span><span role="columnheader"><span className="sr-only">Open</span></span></div><div className="app-slo-rows" role="rowgroup">{items.map(item=><OverviewRow item={item} key={item.slo.id} onChartReady={chartReady} onOpen={onLocationChange}/>)}</div></div>
       </section>;
     })}</div>}
     {page&&!page.items.length&&<div className="slo-empty">{!query&&!serviceID&&!urgency&&matchingCount===0?<><h2>No SLOs yet</h2><p>Create an SLO from an existing SLI to start tracking its target.</p></>:<p>{matchingCount===0?'No SLOs match these filters.':'No SLOs are on this page.'}</p>}</div>}

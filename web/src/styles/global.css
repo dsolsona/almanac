@@ -85,6 +85,8 @@ a { color: var(--accent-ink); }
 .ui-label { font-weight: 650; }
 .ui-control { width: 100%; min-height: var(--control-height); padding: 0 var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--mono); font-size: .875rem; }
 .ui-control--invalid { border-color: var(--status-breached); }
+/* Focused fields show one accent border on the field itself (no offset ring around it); buttons and links keep the ring. */
+.ui-control:focus-visible { outline: none; border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 .ui-hint, .ui-error { margin: 0; font-size: .875rem; line-height: 1.45; }
 .ui-hint { color: var(--text-2); }
 .ui-error { color: var(--crit-text); font-weight: 600; }

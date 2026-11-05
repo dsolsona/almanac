@@ -5,7 +5,7 @@
 - Accepted: 2026-11-05
 - Approval: the maintainer reviewed the proposal mocks in [docs/design/mocks/proposals](../design/mocks/proposals/README.md) on 2026-11-05 and answered "Yes, I like this, please apply it everywhere", accepting the four recommendations: health as a chip column, no count subline or "Updated" line, no datasource Agent filter or Auth column, and the button roles
 - Related specs: [SPEC-0012](../specs/0012-user-interface.md)
-- Supersedes / superseded by: supersedes the list header and row order in decision 1 of [ADR-0028](0028-unified-operational-ui.md) (mono count subline, "Updated hh:mm:ss UTC" beside the actions, status as the first column); the rest of ADR-0028 stands
+- Supersedes / superseded by: supersedes the list header and row order in decision 1 of [ADR-0028](0028-unified-operational-ui.md) (mono count subline, "Updated hh:mm:ss UTC" beside the actions, status as the first column); the rest of ADR-0028 stands. Table details of decision 3 amended by [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md)
 
 ## Context
 

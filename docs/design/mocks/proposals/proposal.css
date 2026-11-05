@@ -92,3 +92,11 @@ html.dark .btn.danger-fill { color:#202725; }
 /* Table cell type: one size for data, no wrapping of short values. */
 .tbl td.mono { font:13px var(--mono); white-space:nowrap; }
 .tbl td.num { white-space:nowrap; }
+
+/* Row alignment: every cell's first line shares the name's line (as in the agents table).
+   Cells align to the top and each first line is 24 px: names, chips, values and strips. */
+.tbl.rows-top td { vertical-align: top; }
+.tbl.rows-top a.rowname { display: block; line-height: 24px; }
+.tbl.rows-top td.mono, .tbl.rows-top td.num { line-height: 24px; }
+.tbl.rows-top .hc { vertical-align: top; }
+.tbl.rows-top td > svg { display: block; height: 24px; }

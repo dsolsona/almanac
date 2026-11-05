@@ -201,7 +201,7 @@ it('marks retained overview values with their last confirmed evaluation after a 
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const path=new URL(String(input),'https://localhost').pathname;if(path==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});reads++;if(reads===1)return new Response(JSON.stringify({snapshot_id:id,items:[item],group_counts:{needs_attention:1,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as unknown as OperationalOverview),{status:200});return new Response(JSON.stringify({message:'refresh failed'}),{status:503});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const props={canWrite:false,onCreate:()=>undefined,onLocationChange:vi.fn()};
  render(<OperationalOverviewView {...props} locationKey="/slos"/>);expect(await screen.findByRole('link',{name:/^Checkout$/})).toBeVisible();expect(document.querySelector('.slo-reference-status')).toHaveAttribute('title','Observations are stale; Complete window is below target');fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));
- expect(document.querySelector('.app-slo-status')).toHaveTextContent('+1 more');expect(screen.getByText('Observations are stale; Complete window is below target')).toBeInTheDocument();
+ expect(document.querySelector('.app-slo-status .ui-status-chip')).toHaveTextContent(/^Not reporting$/);expect(screen.getByText('Observations are stale; Complete window is below target')).toBeInTheDocument();
  await waitFor(()=>expect(screen.getAllByRole('alert').some(alert=>alert.textContent?.includes('request could not be completed'))).toBe(true));const alert=screen.getAllByRole('alert').find(value=>value.textContent?.includes('request could not be completed'));expect(alert).toHaveTextContent(`Last confirmed evaluation: ${evaluatedAt}`);expect(screen.getByRole('link',{name:/^Checkout$/})).toBeVisible();
 });
 
@@ -233,5 +233,27 @@ it('names the status from the leading reason and keeps every reason in the title
  const statuses=[...document.querySelectorAll('.app-slo-row .slo-reference-status')];
  expect(statuses.map(node=>node.querySelector('.ui-status-chip')?.textContent)).toEqual(['Burning fast','Breached','Not reporting','Low budget']);
  expect(statuses[0]).toHaveAttribute('title','1 h burn is at least 1×; Less than half of budget remains');
- expect(statuses[0]).toHaveTextContent('+1 more');
+ // ADR-0032: the status cell is the chip only; the reasons stay in its tooltip.
+ expect(statuses[0]?.textContent).toBe('Burning fast');
+});
+it('opens an SLO from anywhere on its row unless text is selected or an inner link is clicked',async()=>{
+ const detail=operationalDetail();
+ const item={slo:definition,current:detail.current,urgency:'watch' as const,leading_reason:detail.leading_reason,reasons:detail.reasons,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]} as unknown as OperationalOverview['items'][number];
+ vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
+ vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ const open=vi.fn();
+ render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={open}/>);
+ await screen.findByRole('link',{name:'Checkout'});
+ const objective=document.querySelector('.app-slo-objective')!;
+ fireEvent.click(objective);
+ expect(open).toHaveBeenLastCalledWith(`/slos/${sloID}`);
+ open.mockClear();
+ const selection=vi.spyOn(window,'getSelection').mockReturnValue({toString:()=>'99.9%'} as Selection);
+ fireEvent.click(objective);
+ expect(open).not.toHaveBeenCalled();
+ selection.mockRestore();
+ fireEvent.click(screen.getByRole('link',{name:'Checkout service'}));
+ expect(open).not.toHaveBeenCalled();
+ fireEvent.click(objective,{metaKey:true});
+ expect(open).not.toHaveBeenCalled();
 });
