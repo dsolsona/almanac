@@ -11,6 +11,11 @@ design-system foundation, is implemented and in review: new shared controls,
 catalogue section and design-guide update; 7 new unit cases, 48/48 catalogue
 browser checks and the web stages of `make verify` pass. The Go stages were not
 run because the pinned toolchain is not installed in this checkout.
+[F6-T02](tasks/F6-T02.md), the SLO list and detail, is implemented on
+`design/f6-t02-slo` (stacked) and in review: 15/24 SLO unit cases, 139
+slo-unit web cases, 48/48 catalogue checks and the web stages of `make verify`
+pass; the real-stack SLO journey and traced timings are blocked by the same
+missing Go toolchain.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on

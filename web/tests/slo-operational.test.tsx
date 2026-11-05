@@ -21,14 +21,14 @@ it('keeps last-known numbers visible with stale status, evaluation time and fail
  const read=vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
  const view=render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  expect(await screen.findByText('Stale')).toBeVisible();
- expect(screen.getByText('99%')).toBeVisible();
- expect(screen.getByText('0.1×')).toBeVisible();
+ expect(document.querySelector('.app-slo-budget b')).toHaveTextContent('99%');
+ expect(document.querySelector('.app-slo-burn b')).toHaveTextContent('0.1×');
  expect(document.querySelector('time')).toHaveAttribute('datetime',detail.current.evaluation_at);
  expect(document.querySelector('.slo-reference-status')).toHaveAttribute('data-status','stale');
  read.mockResolvedValue({snapshot_id:sloID,items:[{...item,current_state:'failed'}],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
  fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
  expect(await screen.findByText(/Update failed/)).toBeVisible();
- expect(screen.getByText('99%')).toBeVisible();
+ expect(document.querySelector('.app-slo-budget b')).toHaveTextContent('99%');
  view.unmount();
 });
 it('keeps graphs and current status usable while history is incomplete and refreshes progress',async()=>{
@@ -85,13 +85,13 @@ it('shows server group counts and sends submitted filters through the operationa
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={updateLocation}/>);
  expect(await screen.findByRole('heading',{name:'Needs attention, 2 SLOs'})).toBeVisible();
  expect(String(fetcher.mock.calls.find(call=>String(call[0]).includes('/slos/overview'))?.[0])).toContain('limit=20');
- expect(screen.getByLabelText('SLOs per page')).toHaveValue('20');
+ expect(screen.getByLabelText('Per page')).toHaveValue('20');
  expect(screen.getByRole('heading',{name:'Watch, 3 SLOs'})).toBeVisible();
  expect(screen.getByRole('heading',{name:'Healthy, 4 SLOs'})).toBeVisible();
  fireEvent.change(screen.getByLabelText('Search SLOs'),{target:{value:'checkout'}});
  fireEvent.submit(screen.getByRole('search'));
  await waitFor(()=>expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('q=checkout')));
- fireEvent.change(screen.getByLabelText('SLOs per page'),{target:{value:'10'}});
+ fireEvent.change(screen.getByLabelText('Per page'),{target:{value:'10'}});
  expect(updateLocation).toHaveBeenCalledWith(expect.stringContaining('page_size=10'));
 });
 
@@ -171,8 +171,8 @@ it('uses the signed previous cursor from the same server snapshot',async()=>{
  const id='11111111-1111-1111-1111-111111111111';
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const query=new URL(String(input),'http://localhost').searchParams;const second=query.get('cursor')==='next-token';return new Response(JSON.stringify({snapshot_id:id,items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:second?'':'next-token',previous_cursor:second?'signed-first-page-token':''}),{status:200});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const onLocationChange=vi.fn();const props={canWrite:false,onCreate:()=>undefined,onLocationChange};
- const view=render(<OperationalOverviewView {...props} locationKey="/slos"/>);await screen.findByRole('heading',{name:'No SLOs yet'});expect(screen.getByRole('button',{name:'Previous page'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Next page'}));expect(onLocationChange).toHaveBeenCalledWith('/slos?cursor=next-token');
- view.rerender(<OperationalOverviewView {...props} locationKey="/slos?cursor=next-token"/>);await waitFor(()=>expect(screen.getByRole('button',{name:'Previous page'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Previous page'}));expect(onLocationChange).toHaveBeenLastCalledWith('/slos?cursor=signed-first-page-token');
+ const view=render(<OperationalOverviewView {...props} locationKey="/slos"/>);await screen.findByRole('heading',{name:'No SLOs yet'});expect(screen.getByRole('button',{name:'‹ Previous'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Next ›'}));expect(onLocationChange).toHaveBeenCalledWith('/slos?cursor=next-token');
+ view.rerender(<OperationalOverviewView {...props} locationKey="/slos?cursor=next-token"/>);await waitFor(()=>expect(screen.getByRole('button',{name:'‹ Previous'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'‹ Previous'}));expect(onLocationChange).toHaveBeenLastCalledWith('/slos?cursor=signed-first-page-token');
 });
 
 it('refreshes a later overview page from a fresh first-page snapshot and retains active filters',async()=>{
@@ -201,6 +201,37 @@ it('marks retained overview values with their last confirmed evaluation after a 
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const path=new URL(String(input),'https://localhost').pathname;if(path==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});reads++;if(reads===1)return new Response(JSON.stringify({snapshot_id:id,items:[item],group_counts:{needs_attention:1,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as unknown as OperationalOverview),{status:200});return new Response(JSON.stringify({message:'refresh failed'}),{status:503});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const props={canWrite:false,onCreate:()=>undefined,onLocationChange:vi.fn()};
  render(<OperationalOverviewView {...props} locationKey="/slos"/>);expect(await screen.findByRole('link',{name:/^Checkout$/})).toBeVisible();expect(document.querySelector('.slo-reference-status')).toHaveAttribute('title','Observations are stale; Complete window is below target');fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
- const disclosure=screen.getByText('Reasons (2)').closest('details');expect(disclosure).not.toBeNull();disclosure!.open=true;expect(screen.getByText('Complete window is below target')).toBeVisible();
+ expect(document.querySelector('.app-slo-status')).toHaveTextContent('+1 more');expect(screen.getByText('Observations are stale; Complete window is below target')).toBeInTheDocument();
  await waitFor(()=>expect(screen.getAllByRole('alert').some(alert=>alert.textContent?.includes('request could not be completed'))).toBe(true));const alert=screen.getAllByRole('alert').find(value=>value.textContent?.includes('request could not be completed'));expect(alert).toHaveTextContent(`Last confirmed evaluation: ${evaluatedAt}`);expect(screen.getByRole('link',{name:/^Checkout$/})).toBeVisible();
+});
+
+it('triage tiles show server group counts, toggle the urgency filter and never label a last-known row Healthy',async()=>{
+ const detail=operationalDetail();
+ const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:60};
+ const item:OperationalOverview['items'][number]={slo:definition,current:detail.current,current_state:'stale',generation,urgency:'watch',leading_reason:{code:'budget_below_half',provisional:false},reasons:[{code:'budget_below_half',provisional:false}],burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]};
+ vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
+ vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:2,watch:1,healthy:4},next_cursor:'',previous_cursor:''});
+ const updateLocation=vi.fn();
+ render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={updateLocation}/>);
+ const tiles=await screen.findByRole('group',{name:'Filter by urgency'});
+ expect(tiles).toHaveTextContent('2');expect(tiles).toHaveTextContent('Needs attention');
+ fireEvent.click(screen.getByRole('button',{name:/^2\s*Needs attention/}));
+ expect(updateLocation).toHaveBeenCalledWith('/slos?urgency=needs_attention');
+ expect(document.querySelector('.app-slo-status')).toHaveTextContent('Stale');
+ expect(document.querySelector('.app-slo-status')).not.toHaveTextContent('Healthy');
+ expect(document.querySelector('.app-slo-objective')).toHaveTextContent('99% · 1 d');
+});
+it('names the status from the leading reason and keeps every reason in the title',async()=>{
+ const detail=operationalDetail();
+ const items=[
+  {code:'high_1h_burn',label:'Burning fast'},{code:'complete_window_violation',label:'Breached'},{code:'stale_observations',label:'Not reporting'},{code:'low_observed_budget',label:'Low budget'},
+ ].map((entry,index)=>({slo:{...definition,id:`11111111-1111-1111-1111-11111111111${index}`,display_name:`SLO ${index}`},current:detail.current,urgency:'needs_attention' as const,leading_reason:{code:entry.code as never,provisional:false},reasons:[{code:entry.code as never,provisional:false},{code:'budget_below_half' as const,provisional:false}],burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]}));
+ vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
+ vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items,group_counts:{needs_attention:4,watch:0,healthy:0},next_cursor:'',previous_cursor:''});
+ render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
+ await screen.findByRole('link',{name:'SLO 0'});
+ const statuses=[...document.querySelectorAll('.app-slo-row .slo-reference-status')];
+ expect(statuses.map(node=>node.querySelector('.ui-mark__row')?.textContent)).toEqual(['Burning fast','Breached','Not reporting','Low budget']);
+ expect(statuses[0]).toHaveAttribute('title','1 h burn is at least 1×; Less than half of budget remains');
+ expect(statuses[0]).toHaveTextContent('+1 more');
 });

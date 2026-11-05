@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { journeyContentReady } from '../telemetry/client.ts';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, Panel, SelectField, TextField } from '../components/ui/index.ts';
+import { Button, Dialog, Panel, SelectField, TextField } from '../components/ui/index.ts';
 import { createSliClient, type Sli } from '../slis/client.ts';
 import { OperationalDetailView, OperationalOverviewView } from './OperationalViews.tsx';
 import { sloClient, SloFailure, type CreateSlo, type Service, type Slo } from './client.ts';
@@ -82,6 +82,8 @@ export function SlosPage({context}:{context:AuthContext}) {
   const generation=useRef(0);
   const loadedPath=useRef('');
   const heading=useRef<HTMLDivElement>(null);
+  const editTrigger=useRef<HTMLElement>(null);
+  const [editOpen,setEditOpen]=useState(false);
   const canWrite = !context.session?.restricted && ['administrator','editor'].includes(context.session?.role ?? '');
   const path=locationKey.split('?')[0]!;
   const id=path.match(/^\/(?:slos|services)\/([0-9a-f-]{36})$/)?.[1];
@@ -107,6 +109,7 @@ export function SlosPage({context}:{context:AuthContext}) {
     setLoading(true);
     setBusy(false);
     setError('');
+    setEditOpen(false);
     setSlo(null);
     setService(null);
     const run = async () => {
@@ -274,20 +277,23 @@ export function SlosPage({context}:{context:AuthContext}) {
     }
   }
 
-  async function saveMetadata(event: FormEvent) {
+  async function saveMetadata(event: FormEvent): Promise<boolean> {
     event.preventDefault();
-    if (!id || !metadata.trim()) return;
+    if (!id) return false;
+    if (!metadata.trim()) { setFormError('Enter a display name.'); return false; }
     const current = generation.current;
     setBusy(true); setFormError('');
     try {
       const result = isService
         ? await sloClient.updateService(id, metadata.trim(), etag, context)
         : await sloClient.update(id, metadata.trim(), etag, context);
-      if (current !== generation.current) return;
+      if (current !== generation.current) return false;
       setEtag(result.etag);
       if (isService) setService(result.value as Service); else setSlo(result.value as Slo);
+      return true;
     } catch (failure) {
       if (current === generation.current) setFormError(message(failure));
+      return false;
     } finally {
       if (current === generation.current) setBusy(false);
     }
@@ -356,13 +362,14 @@ export function SlosPage({context}:{context:AuthContext}) {
       <Button type="submit" pending={busy}>Save display name</Button>
       </form>}{formError&&<p role="alert">{formError}</p>}</>}
     {!isService&&!isNew&&id&&!error&&<>
-      <OperationalDetailView id={id} definition={slo?.id===id?slo:undefined} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}}/>{slo?.id===id&&<details>
-      <summary>Settings and technical details</summary>
-      <p>Identifier: {slo.name} · Definition revision: {slo.definition_revision} · Resource version: {slo.version}</p>
-      <p>Activated: {date(slo.activated_at)} · Evaluation valid from: {date(slo.evaluation_valid_from)}</p>{slo.historical_requested_at&&<p>This target was explicitly applied to earlier measurements on {date(slo.historical_requested_at)}.</p>}{canWrite&&<form onSubmit={e=>void saveMetadata(e)}>
-      <TextField id="slo-rename" label="Display name" value={metadata} onChange={e=>setMetadata(e.target.value)}/>
-      <Button type="submit" pending={busy}>Save display name</Button>
-      </form>}{formError&&<p role="alert">{formError}</p>}</details>}
+      <OperationalDetailView id={id} definition={slo?.id===id?slo:undefined} locationKey={locationKey} onLocationChange={navigate} onSessionFailure={()=>{setSlo(null);setError('Your session can no longer access this SLO. Sign in again to continue.');}} onEdit={canWrite&&slo?.id===id?()=>{editTrigger.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setFormError('');setEditOpen(true);}:undefined}/>
+      {slo?.id===id&&<Dialog open={editOpen} onClose={()=>setEditOpen(false)} title="Edit SLO" triggerRef={editTrigger}>
+        <form className="slo-edit-form" onSubmit={e=>{void saveMetadata(e).then(saved=>{if(saved)setEditOpen(false);});}}>
+        <p className="slo-muted">Identifier <code>{slo.name}</code> · revision {slo.definition_revision} · activated {date(slo.activated_at)}{slo.historical_requested_at&&` · applied to earlier measurements on ${date(slo.historical_requested_at)}`}. Target and window changes arrive with definition revisions.</p>
+        <TextField id="slo-rename" label="Display name" value={metadata} onChange={e=>{setMetadata(e.target.value);setFormError('');}} error={formError||undefined}/>
+        <div className="slo-actions"><Button variant="outline" onClick={()=>setEditOpen(false)}>Cancel</Button><Button type="submit" pending={busy}>Save display name</Button></div>
+        </form>
+      </Dialog>}
       </>}
   </div>;
 }
