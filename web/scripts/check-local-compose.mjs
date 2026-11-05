@@ -552,17 +552,18 @@ async function checkCollectedSLI(page, agentID) {
   assert.match(datasource.body.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(datasource.body.polling_interval_seconds, 15);
   await expect(page).toHaveURL((current) => current.pathname === '/slis/new' && current.searchParams.get('datasource') === datasource.body.id);
-  await expect(page.getByLabel('Datasource', { exact: true })).toHaveValue(datasource.body.id);
+  const selectedDatasource = page.locator('.ui-summary').filter({ hasText: 'Compose metrics' });
+  await expect(selectedDatasource).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/datasources\/new\?return=slis$/);
   await page.goForward();
-  await expect(page.getByLabel('Datasource', { exact: true })).toHaveValue(datasource.body.id);
+  await expect(selectedDatasource).toBeVisible();
   await page.getByLabel('Display name', { exact: true }).fill('First journey');
-  await expect(page.getByLabel('SLI name', { exact: true })).toHaveValue('first-journey');
+  await expect(page.getByLabel('Identifier', { exact: true })).toHaveValue('first-journey');
   await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Enter a good count query');
-  await page.getByLabel('Good count query', { exact: true }).fill('vector(99)');
-  await page.getByLabel('Total count query', { exact: true }).fill('vector(100)');
+  await expect(page.getByRole('alert')).toContainText('Enter a good events query');
+  await page.getByLabel('Good events', { exact: true }).fill('vector(99)');
+  await page.getByLabel('Total events', { exact: true }).fill('vector(100)');
   await page.screenshot({ path: join(artifacts, 'sli-return-from-datasource.png'), fullPage: true, animations: 'disabled' });
   const sliCreated = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/slis');
   await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
@@ -914,9 +915,10 @@ async function checkDefaultCadenceSLI(page, agentID) {
   stage = 'real Compose default cadence SLI creation';
   await page.goto(`${url}/slis/new`);
   await page.getByLabel('Display name', { exact: true }).fill('Demo request success');
-  await page.getByLabel('Datasource', { exact: true }).selectOption(source.id);
-  await page.getByLabel('Good count query', { exact: true }).fill('vector(99)');
-  await page.getByLabel('Total count query', { exact: true }).fill('vector(100)');
+  if (await page.getByLabel('Datasource', { exact: true }).count()) { await page.getByLabel('Datasource', { exact: true }).click(); await page.locator(`#sli-datasource-option-${source.id}`).click(); }
+  await expect(page.locator('.ui-summary').filter({ hasText: source.display_name })).toBeVisible();
+  await page.getByLabel('Good events', { exact: true }).fill('vector(99)');
+  await page.getByLabel('Total events', { exact: true }).fill('vector(100)');
   const creationStarted = performance.now();
   const createdResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/slis');
   await page.getByRole('button', { name: 'Create SLI', exact: true }).click();

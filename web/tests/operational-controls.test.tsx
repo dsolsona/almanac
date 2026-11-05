@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChoiceChips, Combobox, Pager, SearchField, SegmentedControl, StatusMark, TextareaField, type ComboboxOption } from '../src/components/ui/index.ts';
+import { ChoiceChips, Combobox, Pager, SearchField, SegmentedControl, StatusMark, TextareaField, type ComboboxOption, FormSection, FormActions } from '../src/components/ui/index.ts';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -129,6 +129,17 @@ describe('operational controls', () => {
     expect(screen.getByRole('button', { name: '‹ Previous' })).toBeEnabled();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Per page' }), '20');
     expect(size).toHaveBeenCalledWith(20);
+  });
+
+  it('form section labels its region by its heading, shows the step and hint, and the actions row keeps its note', () => {
+    render(<form className="ui-form"><FormSection step={2} title="Source" hint="Where does the data live?" tools={<span>tool</span>}><p>body</p></FormSection><FormActions note="Collection starts as soon as you save."><button type="button">Cancel</button></FormActions></form>);
+    const section = screen.getByRole('region', { name: 'Source' });
+    expect(section).toHaveTextContent('2');
+    expect(section).toHaveTextContent('Where does the data live?');
+    expect(section).toHaveTextContent('tool');
+    expect(screen.getByRole('heading', { level: 2, name: 'Source' })).toBeVisible();
+    expect(screen.getByText('Collection starts as soon as you save.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible();
   });
 
   it('chips hand a cleared custom input to the owner and follow an owner-driven custom value', async () => {

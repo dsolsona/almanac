@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ChoiceChips, Combobox, Pager, PageHeader, Panel, SearchField, SegmentedControl, SelectionSummary, StatusMark, TextareaField, Toolbar, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, FormActions, FormSection, Pager, PageHeader, Panel, SearchField, SegmentedControl, SelectionSummary, StatusMark, TextareaField, TextField, Toolbar, type ComboboxOption } from '../components/ui/index.ts';
 
 // Local catalogue data only; never application records.
 const datasourceExamples: ComboboxOption[] = [
@@ -17,6 +17,8 @@ export function OperationalControlsSection() {
   const [created, setCreated] = useState('');
   const [pageSize, setPageSize] = useState(20);
   const [description, setDescription] = useState('');
+  const [kind, setKind] = useState('ratio');
+  const [sectionName, setSectionName] = useState('');
   const percent = (value: string) => `${value}%`;
   const validateTarget = (value: string) => /^\d+(?:\.\d{1,5})?$/.test(value) && Number(value) > 0 && Number(value) < 100 ? undefined : 'Target must be above 0% and below 100%.';
   const validateDays = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 365 ? undefined : 'Enter whole days from 1 to 365.';
@@ -74,5 +76,26 @@ export function OperationalControlsSection() {
         </div>
       </Panel>
     </div>
+
+    <Panel heading="Form sections and actions">
+      <div className="ui-form operational-form-demo">
+        <FormSection step={1} title="Identity" hint="What is this indicator?">
+          <div className="ui-form-grid">
+            <TextField id="catalogue-section-name" label="Display name" value={sectionName} onChange={(event) => setSectionName(event.target.value)} hint="Name what you measure, not the query." />
+            <TextField id="catalogue-section-id" label="Identifier" value={sectionName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')} readOnly hint="Suggested from the display name. Fixed after creation." />
+          </div>
+        </FormSection>
+        <FormSection step={2} title="Measurement" hint="What is good, what is total?" tools={<SegmentedControl size="sm" label="Measurement kind" value={kind} onChange={setKind} options={[{ value: 'ratio', label: 'Ratio · two queries' }, { value: 'fraction', label: 'Single fraction', disabled: true, title: 'Not available yet' }]} />}>
+          <p className="ui-form-note">A section heading can carry one control beside its title; the mono hint stays on the right.</p>
+        </FormSection>
+        <FormSection step={3} title="Alerting" hint="Not available yet" muted>
+          <p className="ui-form-note">A muted section marks a step that exists in the journey but cannot be configured yet.</p>
+        </FormSection>
+        <FormActions note="Collection starts as soon as you save.">
+          <Button variant="outline">Cancel</Button>
+          <Button>Create</Button>
+        </FormActions>
+      </div>
+    </Panel>
   </section>;
 }

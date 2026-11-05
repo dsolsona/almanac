@@ -25,3 +25,4 @@ export type { ComboboxOption } from './Combobox.tsx';
 export { SelectionSummary } from './SelectionSummary.tsx';
 export { TextareaField } from './TextareaField.tsx';
 export { PageHeader, SearchField, Toolbar, Pager } from './ListComposition.tsx';
+export { FormSection, FormActions } from './FormSection.tsx';

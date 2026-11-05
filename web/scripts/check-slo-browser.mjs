@@ -185,17 +185,16 @@ try {
     await writeFile(join(fixture.artifacts,'visual-comparison.html'),`<!doctype html><meta charset="utf-8"><title>SLO visual comparison</title><style>body{font:16px system-ui;margin:24px;background:#eee}h1{font-size:24px}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:16px}figure{margin:0;min-width:0}figcaption{padding:12px;background:white}img{width:100%;display:block}section{margin:32px 0}</style><h1>SLO reference comparison</h1><p>Actual pages use real API/database data. Content, observation history and browser scale differ. Compare layout and controls; these captures do not establish pixel identity.</p>${sections}`,{mode:0o600});
   };
   const checkFormAlignment = async () => {
-    for (const [left,right] of [['Display name','SLO identifier'],['Target (%)','Rolling window']]) {
-      await expect.poll(async () => {
-        const first=await page.getByLabel(left,{exact:true}).boundingBox();
-        const second=await page.getByLabel(right,{exact:true}).boundingBox();
-        return first && second ? Math.max(Math.abs(first.y-second.y),Math.abs(first.height-second.height)) : Infinity;
-      }).toBeLessThanOrEqual(1);
-    }
+    await expect.poll(async () => {
+      const first=await page.getByLabel('Display name',{exact:true}).boundingBox();
+      const second=await page.getByLabel('Identifier',{exact:true}).boundingBox();
+      return first && second ? Math.max(Math.abs(first.y-second.y),Math.abs(first.height-second.height)) : Infinity;
+    }).toBeLessThanOrEqual(1);
+    // Target and window chip groups share one row and top edge in the two-column objective grid.
     await expect.poll(async()=>{
-      const target=await page.getByRole('button',{name:'99%',exact:true}).locator('..').boundingBox();
-      const window=await page.getByRole('button',{name:'7d',exact:true}).locator('..').boundingBox();
-      return target&&window?Math.abs(target.y+target.height-window.y-window.height):Infinity;
+      const target=await page.getByRole('radiogroup',{name:'Target',exact:true}).boundingBox();
+      const window=await page.getByRole('radiogroup',{name:'Rolling window',exact:true}).boundingBox();
+      return target&&window?Math.abs(target.y-window.y):Infinity;
     }).toBeLessThanOrEqual(1);
   };
   const checkOverviewToolbarAlignment = async () => {
@@ -236,19 +235,20 @@ try {
   };
   stage='login'; await page.goto(fixture.url); await page.getByLabel('Login',{exact:true}).fill(fixture.login); await page.getByLabel('Password',{exact:true}).fill(fixture.password); await page.getByLabel('Password',{exact:true}).press('Enter'); fixture.password=''; await expect(page.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
   stage='create'; await openPreparedOverview(); await page.getByLabel('Search SLOs').fill('no-objective-matches-this-query'); await page.getByLabel('Search SLOs').press('Enter'); await expect(page.getByText('No SLOs match these filters.',{exact:true})).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0); await expect(page.getByRole('navigation',{name:'SLO result pages'})).toHaveCount(0); await page.getByLabel('Search SLOs').fill(''); await page.getByLabel('Search SLOs').press('Enter'); const createStarted=performance.now(); await page.getByRole('button',{name:'New SLO',exact:true}).click(); await expect(page.getByLabel('Display name',{exact:true})).toBeEditable(); const formReadyMs=performance.now()-createStarted;
-  await page.getByRole('button',{name:'Create service',exact:true}).click(); const choicesReadyMs=performance.now()-createStarted; await writeFile(join(fixture.artifacts,'slo-create-timing.json'),JSON.stringify({form_ready_ms:formReadyMs,choices_ready_ms:choicesReadyMs})+'\n',{mode:0o600}); await page.getByLabel('Service display name').fill('Checkout'); await page.getByRole('button',{name:'Create service',exact:true}).click();
-  await page.getByLabel('Display name',{exact:true}).fill('Checkout availability'); await page.getByLabel('SLI',{exact:true}).selectOption(fixture.sli_id); await expect(page.getByText('Uses measurements already collected for this SLI. Missing intervals remain unknown.',{exact:true})).toBeVisible(); await expect(page.getByRole('button',{name:'Retry loading history',exact:true})).toHaveCount(0); await expect(page.getByText(/A day is 24 hours/)).toHaveCount(0);
-  stage='presets'; for(const value of ['99','99.5','99.9','99.95','99.99']) {const preset=page.getByRole('button',{name:`${value}%`,exact:true}); await preset.click(); await expect(preset).toHaveAttribute('aria-pressed','true'); await expect(page.getByLabel('Target (%)')).toHaveValue(value);} for(const value of ['7d','28d','30d','90d']) {const preset=page.getByRole('button',{name:value,exact:true}); await preset.click(); await expect(preset).toHaveAttribute('aria-pressed','true');} await page.getByRole('button',{name:'99.9%',exact:true}).click(); await page.getByRole('button',{name:'30d',exact:true}).click();
-  await page.getByLabel('Target (%)').focus(); await expect(page.getByLabel('Target (%)')).toBeFocused();
-  for(const value of ['99%','99.5%','99.9%','99.95%','99.99%']) { await page.keyboard.press('Tab'); await expect(page.getByRole('button',{name:value,exact:true})).toBeFocused(); }
-  await page.keyboard.press('Tab'); await expect(page.getByRole('textbox',{name:'Rolling window',exact:true})).toBeFocused();
-  await page.keyboard.press('Tab'); await expect(page.getByLabel('Window unit',{exact:true})).toBeFocused();
-  for(const value of ['7d','28d','30d','90d']) { await page.keyboard.press('Tab'); await expect(page.getByRole('button',{name:value,exact:true})).toBeFocused(); }
-  for(const value of ['30d','28d','7d']) { await page.keyboard.press('Shift+Tab'); await expect(page.getByRole('button',{name:value,exact:true})).toBeFocused(); }
-  await page.keyboard.press('Shift+Tab'); await expect(page.getByLabel('Window unit',{exact:true})).toBeFocused();
-  await page.keyboard.press('Shift+Tab'); await expect(page.getByRole('textbox',{name:'Rolling window',exact:true})).toBeFocused();
-  for(const value of ['99.99%','99.95%','99.9%','99.5%','99%']) { await page.keyboard.press('Shift+Tab'); await expect(page.getByRole('button',{name:value,exact:true})).toBeFocused(); }
-  await page.keyboard.press('Shift+Tab'); await expect(page.getByLabel('Target (%)')).toBeFocused();
+  await expect(page.getByLabel('Service',{exact:true})).toBeEditable(); const choicesReadyMs=performance.now()-createStarted; await writeFile(join(fixture.artifacts,'slo-create-timing.json'),JSON.stringify({form_ready_ms:formReadyMs,choices_ready_ms:choicesReadyMs})+'\n',{mode:0o600});
+  // The service picker offers inline creation when nothing matches; the new service collapses into the picker summary.
+  // A name that matches no seeded service (the CLI journey leaves “CLI Checkout Updated”), so the picker offers inline creation.
+  await page.getByLabel('Service',{exact:true}).fill('Browser checkout'); await page.getByRole('button',{name:'Create service “Browser checkout”',exact:true}).click(); await expect(page.getByLabel('Service display name',{exact:true})).toHaveValue('Browser checkout'); await page.getByRole('button',{name:'Create service',exact:true}).click(); await expect(page.locator('.ui-summary').filter({hasText:'Browser checkout'})).toBeVisible();
+  const pickOption=async(id,label,optionID)=>{await page.getByLabel(label,{exact:true}).click(); await page.locator(`#${id}-option-${optionID}`).click(); await expect(page.getByLabel(label,{exact:true})).toHaveCount(0);};
+  await page.getByLabel('Display name',{exact:true}).fill('Checkout availability'); await pickOption('slo-sli','SLI',fixture.sli_id); await expect(page.getByText('Uses measurements already collected for this SLI. Missing intervals remain unknown.',{exact:true})).toBeVisible(); await expect(page.getByRole('button',{name:'Retry loading history',exact:true})).toHaveCount(0); await expect(page.getByText(/A day is 24 hours/)).toHaveCount(0);
+  stage='presets'; for(const value of ['99','99.5','99.9','99.95','99.99']) {const preset=page.getByRole('radio',{name:`${value}%`,exact:true}); await preset.click(); await expect(preset).toHaveAttribute('aria-checked','true'); await expect(page.getByText(`Error budget is the rest: ${(100-Number(value)).toFixed(Math.max(1,(value.split('.')[1]??'').length))}%.`)).toBeVisible();} for(const value of ['7 days','28 days','30 days','90 days']) {const preset=page.getByRole('radio',{name:value,exact:true}); await preset.click(); await expect(preset).toHaveAttribute('aria-checked','true');} await page.getByRole('radio',{name:'99.9%',exact:true}).click(); await page.getByRole('radio',{name:'30 days',exact:true}).click();
+  // Chips are roving radiogroups: one tab stop each, arrows move and select, Tab leaves the group.
+  await page.getByRole('radio',{name:'99.9%',exact:true}).focus(); await expect(page.getByRole('radio',{name:'99.9%',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowRight'); await expect(page.getByRole('radio',{name:'99.95%',exact:true})).toBeFocused(); await expect(page.getByRole('radio',{name:'99.95%',exact:true})).toHaveAttribute('aria-checked','true');
+  await page.keyboard.press('Tab'); await expect(page.getByRole('radio',{name:'30 days',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowLeft'); await expect(page.getByRole('radio',{name:'28 days',exact:true})).toBeFocused(); await expect(page.getByRole('radio',{name:'28 days',exact:true})).toHaveAttribute('aria-checked','true');
+  await page.keyboard.press('Shift+Tab'); await expect(page.getByRole('radio',{name:'99.95%',exact:true})).toBeFocused();
+  await page.getByRole('radio',{name:'99.9%',exact:true}).click(); await page.getByRole('radio',{name:'30 days',exact:true}).click();
   await checkFormAlignment(); await capture('slo-form-light-desktop.png'); await page.setViewportSize({width:1024,height:900}); await checkFormAlignment(); await capture('slo-form-light-intermediate.png');
   await page.setViewportSize({width:360,height:844}); await capture('slo-form-light-mobile.png');
   await page.setViewportSize({width:1440,height:900}); await page.getByRole('button',{name:'Switch to dark theme'}).click();
@@ -256,13 +256,13 @@ try {
   await page.setViewportSize({width:1024,height:900}); await checkFormAlignment(); await capture('slo-form-dark-intermediate.png');
   await page.setViewportSize({width:360,height:844}); await capture('slo-form-dark-mobile.png');
   await page.setViewportSize({width:1440,height:900}); await page.getByRole('button',{name:'Switch to light theme'}).click();
-  await page.getByLabel('Target (%)').fill('100'); await page.getByLabel('Target (%)').press('Enter'); await expect(page.getByRole('alert')).toContainText('not including 100%'); await expect(page.getByLabel('Display name',{exact:true})).toHaveValue('Checkout availability');
-  await page.getByLabel('Target (%)').fill('99.9');
+  await page.getByRole('radiogroup',{name:'Target',exact:true}).getByRole('radio',{name:'Custom…',exact:true}).click(); await page.getByLabel('Custom target',{exact:true}).fill('100'); await page.getByLabel('Custom target',{exact:true}).press('Enter'); await page.getByRole('button',{name:'Create SLO',exact:true}).click(); await expect(page.getByText(/not including 100%/)).toBeVisible(); await expect(page.getByLabel('Display name',{exact:true})).toHaveValue('Checkout availability');
+  await page.getByRole('radio',{name:'99.9%',exact:true}).click();
   stage='normal create without retrospective history'; const normalPost=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/slos'); await page.getByRole('button',{name:'Create SLO',exact:true}).click(); const normalResponse=await normalPost; assert.equal(normalResponse.status(),201); const normalSlo=await normalResponse.json(); assert.ok(normalSlo.evaluation_valid_from); assert.equal(normalSlo.historical_requested_by,null);
   await expect.poll(()=>operationalRequests.get(normalSlo.id)).toBeTruthy(); const normalDetail=await readPreparedJSON(operationalRequests.get(normalSlo.id)); assert.equal(normalDetail.status,200,'new non-retrospective objective should open operational detail without failing on pre-validity measurements'); assert.ok(normalDetail.body.current.quality); await expect(page.getByText('This evaluation does not apply to the selected range.',{exact:true})).toHaveCount(0); if(normalDetail.body.current.quality.state==='not_applicable'&&Date.parse(normalDetail.body.current.window.end)<Date.parse(normalDetail.body.current.window.evaluation_valid_from))await expect(page.getByText('Waiting for the first SLO evaluation.',{exact:true})).toBeVisible(); if(normalDetail.body.current.performance.remaining_fraction===null)await expect(page.locator('.app-budget-hero')).toHaveText('—');
   await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await expect(page.getByRole('heading',{name:'SLOs',exact:true})).toBeVisible(); await page.getByRole('button',{name:'New SLO',exact:true}).click();
-  await page.getByLabel('Display name',{exact:true}).fill('Checkout availability historical'); await page.getByLabel('Service',{exact:true}).selectOption(normalSlo.service_id);
-  await page.getByLabel('SLI',{exact:true}).selectOption(normalSlo.sli_id); await page.getByLabel('Target (%)').fill('99.9'); await page.getByRole('button',{name:'30d',exact:true}).click(); await page.getByLabel('Apply this target to earlier SLI measurements').check();
+  await page.getByLabel('Display name',{exact:true}).fill('Checkout availability historical'); await pickOption('slo-service','Service',normalSlo.service_id);
+  await pickOption('slo-sli','SLI',normalSlo.sli_id); await page.getByRole('radio',{name:'99.9%',exact:true}).click(); await page.getByRole('radio',{name:'30 days',exact:true}).click(); await page.getByLabel('Apply this target to earlier SLI measurements').check();
   stage='lost historical create response'; let original, committed, forwardingFailed=false;
   await page.route('**/api/v1/slos',async route=>{try {const incoming=route.request(); original={body:incoming.postData(),key:incoming.headers()['idempotency-key']}; const response=await forwardMutation(route); assert.equal(response.status,201); committed=JSON.parse(response.body.toString('utf8'));} catch {forwardingFailed=true;} finally {await route.abort('failed');}},{times:1});
   await page.getByRole('button',{name:'Create SLO',exact:true}).click(); await expect(page.getByRole('button',{name:'Retry same SLO request'})).toBeVisible(); assert.equal(forwardingFailed,false,'forwarding the historical create failed'); assert.ok(committed.evaluation_valid_from);
@@ -370,7 +370,7 @@ try {
     dispatchEvent(new Event('almanac:telemetry-flush'));
   }));
   await writeFile(join(fixture.artifacts,'telemetry-stats.json'),JSON.stringify(telemetryStats)+'\n',{mode:0o600});
-  stage='delayed create after sign-out'; await page.setViewportSize({width:1440,height:900}); await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await page.getByRole('button',{name:'New SLO',exact:true}).click(); await page.getByLabel('Display name',{exact:true}).fill('Delayed objective'); await page.getByLabel('Service',{exact:true}).selectOption(slo.service_id); await page.getByLabel('SLI',{exact:true}).selectOption(fixture.sli_id); await page.getByLabel('Apply this target to earlier SLI measurements').uncheck();
+  stage='delayed create after sign-out'; await page.setViewportSize({width:1440,height:900}); await page.getByRole('link',{name:/^(SLOs|← All SLOs)$/}).first().click(); await page.getByRole('button',{name:'New SLO',exact:true}).click(); await page.getByLabel('Display name',{exact:true}).fill('Delayed objective'); await pickOption('slo-service','Service',slo.service_id); await pickOption('slo-sli','SLI',fixture.sli_id); await page.getByLabel('Apply this target to earlier SLI measurements').uncheck();
   let release, received=false; const held=new Promise(resolve=>{release=resolve;});
   await page.route('**/api/v1/slos',async route=>{try {const delayed=await forwardMutation(route); assert.equal(delayed.status,201); received=true; await held; await route.fulfill(delayed);} catch {forwardingFailed=true; await route.abort('failed');}},{times:1});
   try {
