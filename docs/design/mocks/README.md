@@ -1,0 +1,54 @@
+# UI mocks: unified SLI, SLO, datasource and agent screens
+
+The maintainer reviewed and approved these mocks on 2026-11-04, and accepted
+[ADR-0028](../../adr/0028-unified-operational-ui.md) and [plan 0025](../../plans/0025-ui-unification.md)
+in Crit the same day, making them the visual and interaction reference for Almanac's operational and administration screens. They
+replace the earlier slo-tracker screenshots as the acceptance reference; see
+[ADR-0028](../../adr/0028-unified-operational-ui.md) and the
+[visual reference](../slo-visual-reference.md).
+
+Open any `*.html` file in a browser. Append `?theme=dark` for the dark theme and
+narrow the window for the mobile layout. `mock.css` copies the production tokens;
+`mock.js` draws the shared shell. Pickers and chips are interactive. The `png/`
+folder holds desktop light renders for quick comparison; the HTML is the reference.
+
+| Mock | Screen | Implemented by |
+| --- | --- | --- |
+| `slo-list.html` | SLO list with triage band and urgency groups | [F6-T02](../../tasks/F6-T02.md), in review |
+| `slo-detail.html` | Single-column SLO detail: status band, timeline, definition | [F6-T02](../../tasks/F6-T02.md), in review (Events lane, Mute, edit page deferred) |
+| `slo-create.html` | New SLO: Identity → Indicator → Objective → Alerting | [F6-T04](../../tasks/F6-T04.md), in review (description, budget preview deferred) |
+| `slo-edit.html` | Edit SLO with revision banner and history | deferred (revision contract); display-name dialog from F6-T02 |
+| `sli-list.html` | Dense SLI table with health filter and 24 h strip | [F6-T03](../../tasks/F6-T03.md), in review (health filter deferred) |
+| `sli-detail.html` | Single-column SLI detail: tiles, chart, intervals, definition, objectives | [F6-T03](../../tasks/F6-T03.md), in review (range chips, volume bars, objective status deferred) |
+| `sli-create.html` | New SLI: Identity → Source → Measurement with query test | [F6-T04](../../tasks/F6-T04.md), in review (description, units toggle, query test deferred) |
+| `ds-list.html` | Datasource list with health, agent, cadence, SLI count | [F6-T05](../../tasks/F6-T05.md), in review (last query deferred) |
+| `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | [F6-T05](../../tasks/F6-T05.md), in review (last test summary, delete deferred) |
+| `ds-create.html` | New datasource: Identity → Connection → Agent with test result | [F6-T05](../../tasks/F6-T05.md), in review |
+| `agents-list.html` | Agent list with heartbeat strip, datasources, collection | [F6-T06](../../tasks/F6-T06.md), in review (heartbeat strip, row datasources deferred) |
+| `agent-detail.html` | Agent detail: status, tiles, datasources, credentials, run dialog | [F6-T06](../../tasks/F6-T06.md), in review |
+| `agent-register.html` | Three-step registration page with live first-heartbeat checklist | deferred by [F6-T06](../../tasks/F6-T06.md): the token and uncertain-intent flows are built on the registration dialog; needs its own task |
+
+## Deferred elements
+
+The first implementation round (plan [0025](../../plans/0025-ui-unification.md))
+is UI-only. The following mock elements need backend or contract changes and are
+deferred to a later round; implement the screen without them and keep the mock as
+the target.
+
+| Element | Mock | Needs |
+| --- | --- | --- |
+| Description field | SLI and SLO forms, lists, details | `description` on SLI and SLO resources |
+| "Queries return: per interval / per second" toggle | `sli-create.html` | SLI measurement unit and collector conversion |
+| Query test panel before saving | `sli-create.html` | Unsaved-query diagnostic endpoint reusing the datasource preview path |
+| SLO edit as a definition revision with reason and history | `slo-edit.html` | Revision write and history read |
+| Inline service creation from the service picker | `slo-create.html` | Create request accepting a new service, or transactional two-step |
+| Events lane with annotations, revisions and maintenance | `slo-detail.html` | SPEC-0017 annotations and later F4 domains |
+| Budget preview ("what this target means") | `slo-create.html` | Recent-traffic estimate read |
+| Datasource health, last query time and duration, last successful test | `ds-list.html`, `ds-detail.html` | List projection and persisted diagnostic summary |
+| Heartbeat strip, query success ratio, credential expiry on rows | `agents-list.html`, `agent-detail.html` | Heartbeat history and list projection |
+| Live first-heartbeat checklist | `agent-register.html` | Polling read of runtime status during registration (runtime status exists; wiring is UI work and is in scope) |
+| Provider cards for Tempo and Loki | `ds-create.html` | Later providers; shown disabled in scope |
+| "Mute" action on SLO detail | `slo-detail.html` | F4 alerting; shown disabled in scope |
+
+Where a column's value cannot be computed from today's API, omit the column rather
+than show a placeholder. Record each omission in the implementing task.

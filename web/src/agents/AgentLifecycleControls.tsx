@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { AgentFailure, createAgentClient, type Agent, type AgentCredential, type AgentDetail, type RotationIssuance } from './client.ts';
 import type { AgentLifecycleIntent, SessionRecheck } from './AgentsPage.tsx';
 import { DurationControl, describeDuration } from './DurationControl.tsx';
 import { Button, Dialog } from '../components/ui/index.ts';
 
-type Props = { agent: Agent | null; detail: AgentDetail | null; credentials: AgentCredential[]; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; selectedAgentID: string; navigationScope: string; actionAvailable: boolean; intent: AgentLifecycleIntent | null; onIntentChange: (intent: AgentLifecycleIntent | null) => void; busy: boolean; onBusyChange: (busy: boolean) => void; refresh: () => Promise<void>; revokeRequest: { credentialID: string; sequence: number } | null; onRevokeRequestHandled: (sequence: number) => void; mutationLock: { current: boolean }; onForbidden: () => void; onDeleted: () => void; onRegisterReplacement: () => void };
+type Props = { agent: Agent | null; detail: AgentDetail | null; credentials: AgentCredential[]; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; selectedAgentID: string; navigationScope: string; actionAvailable: boolean; intent: AgentLifecycleIntent | null; onIntentChange: (intent: AgentLifecycleIntent | null) => void; busy: boolean; onBusyChange: (busy: boolean) => void; refresh: () => Promise<void>; revokeRequest: { credentialID: string; sequence: number } | null; onRevokeRequestHandled: (sequence: number) => void; mutationLock: { current: boolean }; onForbidden: () => void; onDeleted: () => void; onRegisterReplacement: () => void; layout?: (parts: { rotate: ReactNode; disable: ReactNode; remove: ReactNode; status: ReactNode }) => ReactNode };
 const safeFailure = 'The credential action could not be completed. Check the session and try again.';
 
-export function AgentLifecycleControls({ agent, detail, credentials, context, recheckSession, suspended, selectedAgentID, navigationScope, actionAvailable, intent, onIntentChange, busy, onBusyChange, refresh, revokeRequest, onRevokeRequestHandled, mutationLock, onForbidden, onDeleted, onRegisterReplacement }: Props) {
+export function AgentLifecycleControls({ agent, detail, credentials, context, recheckSession, suspended, selectedAgentID, navigationScope, actionAvailable, intent, onIntentChange, busy, onBusyChange, refresh, revokeRequest, onRevokeRequestHandled, mutationLock, onForbidden, onDeleted, onRegisterReplacement, layout }: Props) {
   const clientRef = useRef<ReturnType<typeof createAgentClient> | null>(null);
   if (!clientRef.current) clientRef.current = createAgentClient();
   const client = clientRef.current;
@@ -168,14 +168,16 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
   function closeToken() { setToken(null); setCopyNotice(''); requestAnimationFrame(() => document.querySelector<HTMLElement>('.agents-heading')?.focus()); }
   function abandon() { generation.current++; onIntentChange(null); setKind(null); setConfirm(false); setError(''); setNotice(''); }
 
-  return <>
-    {agent && <div className="agents-actions">
-      <Button ref={trigger} variant="outline" onClick={() => open('rotate')} disabled={suspended || busy || Boolean(intent) || !actionAvailable || !strongDetail || !agent.enabled}>Rotate credential</Button>
-      <Button variant="danger" onClick={() => open('delete')} disabled={suspended || busy || Boolean(intent) || !actionAvailable || !strongDetail}>Delete agent</Button>
-      {agent.enabled && <Button variant="danger" onClick={() => open('disable')} disabled={suspended || busy || Boolean(intent) || !actionAvailable || !strongDetail}>Disable agent</Button>}
-    </div>}
+  // The owner can place the three actions and the status block in its own layout (ADR-0028 detail head and danger line).
+  const rotate = agent && <Button ref={trigger} variant="outline" onClick={() => open('rotate')} disabled={suspended || busy || Boolean(intent) || !actionAvailable || !strongDetail || !agent.enabled}>Rotate credential</Button>;
+  const remove = agent && <Button variant="danger" onClick={() => open('delete')} disabled={suspended || busy || Boolean(intent) || !actionAvailable || !strongDetail}>Delete agent</Button>;
+  const disable = agent?.enabled && <Button variant="danger" onClick={() => open('disable')} disabled={suspended || busy || Boolean(intent) || !actionAvailable || !strongDetail}>Disable agent</Button>;
+  const status = <>
     {currentIntent && <section className="agents-unknown" aria-labelledby="lifecycle-outcome-title"><h3 id="lifecycle-outcome-title">{currentIntent.retryRejected === 'conflict' || currentIntent.outcome === 'conflict' ? 'Credential action needs reconciliation' : currentIntent.outcome === 'rejected' ? 'Credential action was rejected' : 'Credential action outcome unknown'}</h3><p>{error || (currentIntent.retryRejected === 'conflict' || currentIntent.outcome === 'conflict' ? 'The server reported a conflict after an earlier uncertain attempt. Reconcile the current record and history, then abandon this command before starting a new one.' : currentIntent.retryRejected === 'session' ? 'The last retry had stale session proof. Check the session to retry with the same command key.' : currentIntent.retryRejected === 'permission' ? 'The last retry was rejected for lack of permission. Confirm administrator authority before retrying the original command.' : currentIntent.outcome === 'rejected' ? 'The request was rejected. Check your session and retry with the original command key.' : 'The command may have completed. A retry uses the same command key, original resource version and target.')}</p>{retryUntil > now && <p role="status">Try this command again in {Math.ceil((retryUntil - now) / 1000)} seconds.</p>}{proofUnavailable && <Button variant="outline" disabled={busy} onClick={() => void checkCurrentSession()}>Check session</Button>}{currentIntent.outcome !== 'conflict' && currentIntent.retryRejected !== 'conflict' && !proofUnavailable && <Button variant="outline" disabled={busy || retryUntil > now || !scope.current.administrator || scope.current.suspended} onClick={() => { setKind(currentIntent.kind); setCredentialID(currentIntent.credentialID ?? ''); setConfirm(false); setError(''); }}>Retry {title(currentIntent.kind).toLowerCase()}</Button>}<Button variant="ghost" onClick={abandon}>Abandon command</Button></section>}
     {notice && <p role="status">{notice}</p>}
+  </>;
+  return <>
+    {layout ? layout({ rotate, disable, remove, status }) : <>{agent && <div className="agents-actions">{rotate}{remove}{disable}</div>}{status}</>}
     <Dialog open={kind !== null} onClose={close} title={kind ? title(kind) : 'Credential action'} triggerRef={trigger}>
       {kind && <form className="agents-form" noValidate onSubmit={(event) => void submit(event)}>
         {kind === 'rotate' && <><p>The replacement credential serves the same agent identity.</p>{currentIntent?.kind === 'rotate' ? <><p>This retry keeps the original target, resource version, and rotation options. To change them, abandon this command and reconcile its outcome first.</p><dl><dt>New credential expires after</dt><dd>{describeDuration(currentIntent.lifetimeSeconds ?? 7776000)}</dd><dt>Keep the previous credential valid for</dt><dd>{describeDuration(currentIntent.overlapSeconds ?? 600)}</dd></dl></> : <><DurationControl id="agent-rotation-lifetime" label="New credential expires after" value={lifetime} onChange={setLifetime} disabled={busy} /><DurationControl id="agent-rotation-overlap" label="Keep the previous credential valid for" value={overlap} onChange={setOverlap} grace disabled={busy} /></>}</>}

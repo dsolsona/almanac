@@ -252,7 +252,7 @@ _verify_generated:
 	  cmp internal/api/generated.go "$$temp_dir/generated.go"; cmp web/src/api/generated.ts "$$temp_dir/generated.ts"
 
 _verify_smoke:
-	@test -x bin/almanac || { echo 'binary missing; run make build or make verify VERIFY_MODE=go' >&2; exit 2; }
+	@test -x bin/almanac || { echo 'binary missing; run make build or make verify MODE=go' >&2; exit 2; }
 	sh scripts/smoke-ui.sh
 
 _report_sizes:

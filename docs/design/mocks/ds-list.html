@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · Datasources</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="datasources"><main>
+<div class="page-head">
+  <div><h1>Datasources</h1><div class="sub">4 datasources · 1 needs attention · 1 moving · all times UTC</div></div>
+  <span class="spacer"></span>
+  <div class="head-actions"><span class="updated">Updated 10:00:20 UTC</span><button class="btn">↻ Refresh</button><button class="btn primary">New datasource</button></div>
+</div>
+<div class="toolbar">
+  <label class="search"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search by name, endpoint or agent"><kbd>/</kbd></label>
+  <span class="seg"><button aria-pressed="true">All <span class="n">4</span></button><button>Needs attention <span class="n">1</span></button><button>Unused <span class="n">1</span></button></span>
+  <span class="ctl">Agent <b>All</b> ▾</span>
+</div>
+
+<table class="tbl responsive">
+  <thead><tr><th style="width:170px">Health</th><th>Datasource</th><th style="width:130px">Agent</th><th style="width:80px">Cadence</th><th style="width:110px">Auth</th><th class="num" style="width:60px">SLIs</th><th style="width:130px">Last query</th></tr></thead>
+  <tbody>
+    <tr><td><span class="st good"><i></i>Healthy</span><span class="reason">agent connected · queries succeeding</span></td><td class="full sli"><span class="name">local-victoriametrics</span><span class="desc mono">Prometheus · http://victoriametrics:8428</span></td><td><span class="st good" style="font-size:13px"><i></i>Local</span></td><td class="mono hide-m">60 s</td><td class="hide-m muted">none</td><td class="num mono">9</td><td><b>40 s ago</b><span class="desc mono">ok · 0.4 s</span></td></tr>
+    <tr><td><span class="st good"><i></i>Healthy</span><span class="reason">agent connected · queries succeeding</span></td><td class="full sli"><span class="name">prod-prometheus-eu</span><span class="desc mono">Prometheus · https://prometheus.eu-west-1.internal:9090</span></td><td><span class="st good" style="font-size:13px"><i></i>eu-west-1</span></td><td class="mono hide-m">30 s</td><td class="hide-m muted">bearer · set</td><td class="num mono">14</td><td><b>12 s ago</b><span class="desc mono">ok · 0.2 s</span></td></tr>
+    <tr><td><span class="st stale"><i></i>Not collecting</span><span class="reason">agent unreachable for 2 h</span></td><td class="full sli"><span class="name">prod-prometheus-us</span><span class="desc mono">Prometheus · https://prometheus.us-east-1.internal:9090</span></td><td><span class="st stale" style="font-size:13px"><i></i>us-east-1</span></td><td class="mono hide-m">30 s</td><td class="hide-m muted">basic · set</td><td class="num mono">6</td><td><b class="muted">2 h ago</b><span class="desc mono">6 SLIs waiting</span></td></tr>
+    <tr><td><span class="st warn"><i></i>Moving</span><span class="reason">staging → eu-west-1 · waiting for staging</span></td><td class="full sli"><span class="name">staging-mimir</span><span class="desc mono">Prometheus · https://mimir.staging.internal/prometheus <span class="pill" style="color:var(--status-warning);border-color:var(--status-warning)">TLS unverified</span></span></td><td><span class="st warn" style="font-size:13px"><i></i>staging → eu-west-1</span></td><td class="mono hide-m">60 s</td><td class="hide-m muted">none</td><td class="num mono">0</td><td><b class="muted">never</b><span class="desc mono">no SLI uses it</span></td></tr>
+  </tbody>
+</table>
+<div class="pager" style="margin-top:12px"><span>Page 1 · showing 4 of 4</span><span class="spacer"></span><label>Per page <select><option>20</option><option>10</option></select></label><button class="btn sm" disabled>‹ Previous</button><button class="btn sm" disabled>Next ›</button></div>
+</main><script src="mock.js"></script></body></html>

@@ -25,6 +25,42 @@ toolchain (`scripts/setup-go.sh`, `.local/bin`), `scripts/setup-database.sh`,
 `unit`, `integration INTEGRATION_TEST=…` and `journey BROWSER_SCENARIO=…`.
 The Linux-host evidence for the plan's acceptance is still open.
 
+Update, 2026-11-05: the UI unification stack (PRs #54, #55, #57, #58, #59
+and #60, F6-T01 to F6-T06) is merged into `main`; its real-stack journeys
+were not run on the host and now run through `make verify MODE=integration`
+in the development container (plan 0026, PR #61). The per-task "blocked"
+notes below are retained history.
+
+Current checkpoint, 2026-11-04 (later): PR #53 is merged; `main` is `2f059e7`.
+The maintainer reviewed the SLI, SLO, datasource and agent screens and approved
+replacement [mocks](design/mocks/README.md). [ADR-0028](adr/0028-unified-operational-ui.md)
+and the [UI unification plan](plans/0025-ui-unification.md) were accepted in
+Crit session `9a46588aaaa4` with no comments, published as
+[PR #54](https://github.com/dsolsona/almanac/pull/54) from `design/ui-unification`; the first round is UI-only and
+backend-dependent mock elements are deferred. [F6-T01](tasks/F6-T01.md), the
+design-system foundation, is implemented and in review: new shared controls,
+catalogue section and design-guide update; 7 new unit cases, 48/48 catalogue
+browser checks and the web stages of `make verify` pass. The Go stages were not
+run because the pinned toolchain is not installed in this checkout.
+[F6-T02](tasks/F6-T02.md), the SLO list and detail, is implemented on
+`design/f6-t02-slo` (stacked) and in review: 15/24 SLO unit cases, 139
+slo-unit web cases, 48/48 catalogue checks and the web stages of `make verify`
+pass; the real-stack SLO journey and traced timings are blocked by the same
+missing Go toolchain. [F6-T03](tasks/F6-T03.md), the SLI list and detail,
+is implemented on `design/f6-t03-sli` (stacked) and in review with the same
+web evidence (35 SLI cases, 139 slo-unit web cases, 48/48 catalogue, web
+stages of `make verify`); its real journey is blocked identically. [F6-T04](tasks/F6-T04.md), the New SLI and New SLO forms with
+the shared form sections, is implemented on `design/f6-t04-forms` (stacked) and
+in review with the same web evidence (142 slo-unit web cases, 48/48 catalogue,
+375 cases and the build in `make verify`); its real journeys are blocked identically. [F6-T05](tasks/F6-T05.md), the datasource list, detail and
+create pages, is implemented on `design/f6-t05-datasources` (stacked) and in
+review (33 datasource cases, 48/48 catalogue, 378 cases and the build in
+`make verify`); the datasource and Compose journeys are blocked identically. [F6-T06](tasks/F6-T06.md), the agent list and detail, is
+implemented on `design/f6-t06-agents` (stacked) and in review (59 agent
+cases, 48/48 catalogue, 378 cases and the build in `make verify`); the
+registration page is deferred with a reason in the task and the agent journeys
+are blocked identically.
+
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
 PR #53. Final ordinary and race checks pass. Both normal and added-100-ms cohorts pass all 342 connected

@@ -1,0 +1,59 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · Edit SLO</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="slos"><main>
+<div class="crumbs"><a>SLOs</a><span>/</span><a>Refund processing &lt; 2 s</a><span>/</span>Edit</div>
+<div class="page-head"><div><h1>Edit SLO</h1><div class="sub">Refund processing &lt; 2 s · revision 2 · evaluated since 12 Oct 2026</div></div></div>
+
+<form class="form">
+<div class="banner">Changing the <b>target</b> or <b>window</b> applies from the moment you save. Past results are not recalculated: they keep the target that was in force at the time, and the timeline marks where the change happened.</div>
+
+<section class="section">
+  <header><h2>Identity</h2><span class="hint">Safe to change at any time</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field"><label for="dn">Display name</label><input id="dn" value="Refund processing < 2 s"></div>
+      <div class="field"><label for="id">Identifier</label><input id="id" value="refund-processing-30d" disabled><div class="hint">Fixed after creation; used by the API and CLI.</div></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="svc">Service</label><select id="svc"><option>Core</option></select></div>
+      <div class="field"><label for="desc">Description</label><textarea id="desc" rows="2">Refunds that complete within two seconds</textarea></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <header><h2>Objective</h2><span class="hint">Creates a new revision</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field invalid"><label>Target</label>
+        <div class="chips" role="radiogroup" aria-label="Target">
+          <button type="button" role="radio" aria-checked="false">99%</button><button type="button" role="radio" aria-checked="false">99.5%</button><button type="button" role="radio" aria-checked="false">99.9%</button><button type="button" role="radio" aria-checked="false">99.95%</button><button type="button" role="radio" aria-checked="false">99.99%</button><button type="button" role="radio" aria-checked="true" class="custom">Custom · 100%</button>
+        </div>
+        <div class="custom-input"><input inputmode="decimal" value="100" aria-label="Custom target in percent"><span class="unit">%</span></div>
+        <div class="err">Target must be below 100%. A 100% target leaves no error budget.</div></div>
+      <div class="field"><label>Rolling window</label>
+        <div class="chips" role="radiogroup" aria-label="Rolling window">
+          <button type="button" role="radio" aria-checked="false">7 days</button><button type="button" role="radio" aria-checked="false">28 days</button><button type="button" role="radio" aria-checked="true">30 days</button><button type="button" role="radio" aria-checked="false">90 days</button><button type="button" role="radio" aria-checked="false" class="custom">Custom…</button>
+        </div>
+        <div class="hint">Unchanged from revision 2.</div></div>
+    </div>
+    <div class="field"><label for="why">Reason for the change <span class="muted" style="font-weight:400">optional</span></label><input id="why" placeholder="e.g. Agreed with Payments on 12 Oct: tighten to 99.95% after the Q4 migration"><div class="hint">Recorded with the revision and shown on the timeline.</div></div>
+    <div class="preview">
+      <h3>Revision history</h3>
+      <table><tr><th>Revision</th><th>Target</th><th>Window</th><th>From</th><th>By</th></tr><tr><td>2 · current</td><td>99.9%</td><td>30 d</td><td>12 Oct 2026</td><td>admin</td></tr><tr><td>1</td><td>99.5%</td><td>30 d</td><td>01 Oct 2026</td><td>admin</td></tr></table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <header><h2>Indicator</h2><span class="hint">Cannot change · create a new SLO instead</span></header>
+  <div class="body"><div class="slicard"><span class="st good"><i></i>Healthy</span><div><div class="nm">Refund processing &lt; 2 s <span class="pill">refund-fast</span></div><div class="sm">local-victoriametrics · 60 s cadence · last sample 40 s ago</div></div><a href="#" style="font:12px var(--mono);color:var(--accent-ink);text-decoration:underline">View SLI</a></div></div>
+</section>
+
+<section class="section" style="border-color:var(--status-breached)">
+  <header><h2 style="color:var(--status-breached)">Delete this SLO</h2><span class="hint">Removes the objective, its revisions and calculated history. The SLI and its measurements stay.</span></header>
+  <div class="body" style="padding-top:12px"><div><button type="button" class="btn danger">Delete SLO…</button></div></div>
+</section>
+
+<div class="actions"><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Save as revision 3</button></div>
+</form>
+</main><script src="mock.js"></script></body></html>

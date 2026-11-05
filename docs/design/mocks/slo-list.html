@@ -1,0 +1,128 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · SLO list</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="slos"><main>
+<div class="page-head">
+  <div><h1>SLOs</h1><div class="sub">10 SLOs · 4 need attention · all times UTC</div></div>
+  <span class="spacer"></span>
+  <div class="head-actions"><span class="updated">Updated 10:00:20 UTC</span><button class="btn">↻ Refresh</button><button class="btn primary">New SLO</button></div>
+</div>
+<div class="toolbar">
+  <label class="search"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search by name, service or SLI"><kbd>/</kbd></label>
+  <span class="ctl">Service <b>All</b> ▾</span>
+  <span class="ctl">Sort <b>Most urgent</b> ▾</span>
+  
+</div>
+
+<div class="triage" role="group" aria-label="Filter by urgency">
+  <button class="tile crit" aria-pressed="false"><span class="big">4</span><span class="lbl"><span class="st crit"><i></i></span>Needs attention</span><span class="why">1 breached · 1 burning fast · 1 low budget · 1 not reporting</span></button>
+  <button class="tile warn" aria-pressed="false"><span class="big">2</span><span class="lbl"><span class="st warn"><i></i></span>Watch</span><span class="why">1 below half budget · 1 partial window</span></button>
+  <button class="tile good" aria-pressed="false"><span class="big">4</span><span class="lbl"><span class="st good"><i></i></span>Healthy</span><span class="why">on track, burn below 1×</span></button>
+  <div class="tile info"><span class="k">Soonest exhaustion</span><span class="v"><b>≈ 2 h</b> · Payment authorisation success · burning 18×</span><span class="k" style="margin-top:6px">Not reporting</span><span class="v">CI pipeline success on main · last sample 26 h ago</span></div>
+</div>
+
+<section class="group">
+  <header><h2>Needs attention</h2><span class="count">4</span><small>breached, burning fast, low on budget, or not reporting</small><span class="sort">sorted by exhaustion, then remaining budget</span></header>
+  <div class="cols"><span>Status</span><span>SLO</span><span>Target · window</span><span>Budget · last 7 d</span><span class="r">Remaining</span><span class="r">Burn 1 h · 6 h</span><span class="r">Exhaustion</span><span></span></div>
+  <div class="row">
+    <div class="c-st"><span class="st crit"><i></i>Breached</span><span class="reason">window below target</span></div>
+    <div class="c-name"><div class="name">Refund processing &lt; 2 s</div><div class="ctx">Core · <a>refund-fast</a></div></div>
+    <div class="c-obj obj"><b>99.9%</b> · 30 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,10 L120,13 L128,30 L160,30 L160,38 L0,38 Z"/><path class="line crit" d="M0,10 L120,13 L128,30 L160,30"/><line class="ref" x1="0" y1="27" x2="160" y2="27"/></svg></div>
+    <div class="c-rem rem crit r"><b>−20.5%</b><span class="meter crit"><i style="width:0"></i></span></div>
+    <div class="c-burn pair r"><b>0.44×</b><small>6 h 0.36×</small></div>
+    <div class="c-exh pair r"><b class="hot">exhausted</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st warn"><i></i>Burning fast</span><span class="reason">burn 18× · 59% left</span></div>
+    <div class="c-name"><div class="name">Payment authorisation success</div><div class="ctx">Core · <a>payment-auth-success</a></div></div>
+    <div class="c-obj obj"><b>99.9%</b> · 30 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,6 L140,8 L160,18 L160,38 L0,38 Z"/><path class="line" d="M0,6 L140,8 L160,18"/></svg></div>
+    <div class="c-rem rem r"><b>59%</b><span class="meter"><i style="width:59%"></i></span></div>
+    <div class="c-burn pair r"><b class="hot">18×</b><small>6 h 21×</small></div>
+    <div class="c-exh pair r"><b class="hot">≈ 2 h</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st warn"><i></i>Low budget</span><span class="reason">under 20% left</span></div>
+    <div class="c-name"><div class="name">Search latency p99 &lt; 800 ms</div><div class="ctx">Search · <a>search-latency</a></div></div>
+    <div class="c-obj obj"><b>99.5%</b> · 28 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,6 L80,22 L136,26 L160,24 L160,38 L0,38 Z"/><path class="line" d="M0,6 L80,22 L136,26 L160,24"/></svg></div>
+    <div class="c-rem rem warn r"><b>17.9%</b><span class="meter warn"><i style="width:18%"></i></span></div>
+    <div class="c-burn pair r"><b>0.32×</b><small>6 h 0.43×</small></div>
+    <div class="c-exh pair r"><b>≈ 26 h</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st stale"><i></i>Not reporting</span><span class="reason">last sample 26 h ago</span></div>
+    <div class="c-name"><div class="name">CI pipeline success on main</div><div class="ctx">CI · <a>ci-main-green</a></div></div>
+    <div class="c-obj obj"><b>95%</b> · 7 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,10 L95,20 L95,38 L0,38 Z"/><path class="line" d="M0,10 L95,20"/><path class="gap" d="M95,20 L160,20"/></svg></div>
+    <div class="c-rem rem muted r"><b>31%</b><span class="meter stale"><i style="width:31%"></i></span><span class="reason">as of 03 Nov 08:00</span></div>
+    <div class="c-burn pair r"><b class="muted">—</b><small>no samples</small></div>
+    <div class="c-exh pair r"><b class="muted">—</b><small>unknown</small></div><span class="chev">›</span>
+  </div>
+</section>
+
+<section class="group">
+  <header><h2>Watch</h2><span class="count">2</span><small>under half the budget left, burning above 1×, or a partial window</small></header>
+  <div class="cols"><span>Status</span><span>SLO</span><span>Target · window</span><span>Budget · last 7 d</span><span class="r">Remaining</span><span class="r">Burn 1 h · 6 h</span><span class="r">Exhaustion</span><span></span></div>
+  <div class="row">
+    <div class="c-st"><span class="st good"><i></i>Healthy</span><span class="reason">under half left</span></div>
+    <div class="c-name"><div class="name">Checkout latency</div><div class="ctx">Payments · <a>checkout-latency</a></div></div>
+    <div class="c-obj obj"><b>99%</b> · 28 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,16 L160,22 L160,38 L0,38 Z"/><path class="line" d="M0,16 L160,22"/></svg></div>
+    <div class="c-rem rem r"><b>41%</b><span class="meter"><i style="width:41%"></i></span></div>
+    <div class="c-burn pair r"><b>0.89×</b><small>6 h 0.89×</small></div>
+    <div class="c-exh pair r"><b>≈ 21 h</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st none"><i></i>No data yet</span><span class="reason">first interval pending</span></div>
+    <div class="c-name"><div class="name">Public API availability</div><div class="ctx">Core · <a>api-availability</a></div></div>
+    <div class="c-obj obj"><b>99.9%</b> · 30 d</div>
+    <div class="c-spark spark"><div class="empty">no history yet</div></div>
+    <div class="c-rem rem muted r"><b>—</b><span class="meter stale"><i style="width:0"></i></span></div>
+    <div class="c-burn pair r"><b class="muted">—</b><small>no samples</small></div>
+    <div class="c-exh pair r"><b class="muted">—</b><small>no samples</small></div><span class="chev">›</span>
+  </div>
+</section>
+
+<section class="group">
+  <header><h2>Healthy</h2><span class="count">4</span><small>on track</small></header>
+  <div class="cols"><span>Status</span><span>SLO</span><span>Target · window</span><span>Budget · last 7 d</span><span class="r">Remaining</span><span class="r">Burn 1 h · 6 h</span><span class="r">Exhaustion</span><span></span></div>
+  <div class="row">
+    <div class="c-st"><span class="st good"><i></i>Healthy</span><span class="reason">on track</span></div>
+    <div class="c-name"><div class="name">Worker jobs completed</div><div class="ctx">Batch jobs · <a>worker-job-success</a></div></div>
+    <div class="c-obj obj"><b>99%</b> · 30 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,14 L160,10 L160,38 L0,38 Z"/><path class="line" d="M0,14 L160,10"/></svg></div>
+    <div class="c-rem rem r"><b>80.3%</b><span class="meter"><i style="width:80%"></i></span></div>
+    <div class="c-burn pair r"><b>0.02×</b><small>6 h 0.02×</small></div>
+    <div class="c-exh pair r"><b>≈ 77 d</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st good"><i></i>Healthy</span><span class="reason">on track</span></div>
+    <div class="c-name"><div class="name">Checkout availability</div><div class="ctx">Payments · <a>checkout-availability</a></div></div>
+    <div class="c-obj obj"><b>99.9%</b> · 28 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,10 C40,14 80,6 120,10 S150,12 160,10 L160,38 L0,38 Z"/><path class="line" d="M0,10 C40,14 80,6 120,10 S150,12 160,10"/></svg></div>
+    <div class="c-rem rem r"><b>83.2%</b><span class="meter"><i style="width:83%"></i></span></div>
+    <div class="c-burn pair r"><b>0.1×</b><small>6 h 0.1×</small></div>
+    <div class="c-exh pair r"><b>≈ 16 d</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st good"><i></i>Healthy</span><span class="reason">on track</span></div>
+    <div class="c-name"><div class="name">Search availability</div><div class="ctx">Search · <a>search-availability</a></div></div>
+    <div class="c-obj obj"><b>99.9%</b> · 30 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,9 L160,9 L160,38 L0,38 Z"/><path class="line" d="M0,9 L160,9"/></svg></div>
+    <div class="c-rem rem r"><b>87.2%</b><span class="meter"><i style="width:87%"></i></span></div>
+    <div class="c-burn pair r"><b>0.2×</b><small>6 h 0.2×</small></div>
+    <div class="c-exh pair r"><b>≈ 9 d</b><small>at 1 h rate</small></div><span class="chev">›</span>
+  </div>
+  <div class="row">
+    <div class="c-st"><span class="st good"><i></i>Healthy</span><span class="reason">no bad events</span></div>
+    <div class="c-name"><div class="name">Worker queue below ten jobs</div><div class="ctx">Batch jobs · <a>worker-queue-depth</a></div></div>
+    <div class="c-obj obj"><b>99%</b> · 30 d</div>
+    <div class="c-spark spark"><svg viewBox="0 0 160 38" preserveAspectRatio="none"><path class="area" d="M0,4 L160,4 L160,38 L0,38 Z"/><path class="line" d="M0,4 L160,4"/></svg></div>
+    <div class="c-rem rem r"><b>100%</b><span class="meter"><i style="width:100%"></i></span></div>
+    <div class="c-burn pair r"><b>0×</b><small>6 h 0×</small></div>
+    <div class="c-exh pair r"><b>—</b><small>no bad events</small></div><span class="chev">›</span>
+  </div>
+</section>
+
+<div class="pager"><span>Page 1 · showing 10 of 10</span><span class="spacer"></span><label>Per page <select><option>20</option><option>10</option></select></label><button class="btn sm" disabled>‹ Previous</button><button class="btn sm" disabled>Next ›</button></div>
+</main><script src="mock.js"></script></body></html>

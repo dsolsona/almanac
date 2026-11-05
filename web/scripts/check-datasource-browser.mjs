@@ -115,25 +115,28 @@ stage = 'browser launch';
   assert.equal(page.url().includes(source.endpoint), false);
 
   stage = 'datasource create back to list';
-  await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Datasources', exact: true }).click();
   stage = 'datasource create list heading';
   await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
   stage = 'datasource create open form';
-  await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
+  await page.getByRole('button', { name: 'New datasource', exact: true }).click();
   stage = 'datasource create form heading';
-  await expect(page.getByRole('heading', { name: 'Add datasource', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New datasource', exact: true })).toBeVisible();
   const createdName = `browser-${fixture.datasource_id.slice(0, 8)}`;
   const createdDisplayName = `Browser datasource ${fixture.datasource_id.slice(0, 8)}`;
   stage = 'datasource create name field';
-  await page.getByLabel('Name', { exact: true }).fill(createdName);
+  await page.getByLabel('Identifier', { exact: true }).fill(createdName);
   stage = 'datasource create display name field';
   await page.getByLabel('Display name', { exact: true }).fill(createdDisplayName);
   stage = 'datasource create endpoint field';
   await page.getByLabel('Prometheus endpoint', { exact: true }).fill(source.endpoint);
   stage = 'datasource create CA field';
+  await page.getByRole('radio', { name: 'Custom CA', exact: true }).click();
   await page.getByLabel('Custom CA PEM', { exact: true }).fill(fixture.ca_pem);
   stage = 'datasource create agent field';
-  await page.getByLabel('Assigned agent', { exact: true }).selectOption(fixture.agent_id);
+  // The agent picker preselects the first eligible agent; otherwise pick the fixture's agent through the type-ahead.
+  if (await page.getByLabel('Assigned agent', { exact: true }).count()) { await page.getByLabel('Assigned agent', { exact: true }).click(); await page.locator(`#datasource-agent-option-${fixture.agent_id}`).click(); }
+  await expect(page.getByRole('region', { name: 'Agent', exact: true }).locator('.ui-summary')).toBeVisible();
   stage = 'datasource create response waiter';
   stage = 'datasource create submit button';
   const { response: createResponse, body: created } = await capture('POST', '/api/v1/datasources',
@@ -155,8 +158,9 @@ stage = 'browser launch';
   assert.equal(created.version, '1');
   assert.equal('password' in created.authentication, false);
   assert.equal('token' in created.authentication, false);
-  stage = 'new UI datasource in real list';
-  await expect(page.getByText(createdDisplayName, { exact: true })).toBeVisible();
+  stage = 'new UI datasource detail after creation';
+  // Creation opens the detail, where the breadcrumb and the title both carry the name; assert the title.
+  await expect(page.getByRole('heading', { name: createdDisplayName, exact: true })).toBeVisible();
 
   stage = 'newly created datasource detail';
   const { response: createdDetailResponse, body: createdDetail } = await capture('GET', `/api/v1/datasources/${createdID}`,

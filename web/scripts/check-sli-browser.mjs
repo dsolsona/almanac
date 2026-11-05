@@ -103,12 +103,14 @@ try {
 
   stage = 'open create SLI flow';
   await page.goto(new URL('/slis/new', origin).href);
-  await expect(page.getByRole('heading', { name: 'Create SLI', exact: true })).toBeFocused();
-  await page.getByLabel('SLI name', { exact: true }).fill('request-success');
+  await expect(page.getByRole('heading', { name: 'New SLI', exact: true })).toBeFocused();
+  await page.getByLabel('Identifier', { exact: true }).fill('request-success');
   await page.getByLabel('Display name', { exact: true }).fill('Request success');
-  await page.getByLabel('Datasource', { exact: true }).selectOption(fixture.datasource_id);
-  await page.getByLabel('Good count query', { exact: true }).fill('vector(99)');
-  await page.getByLabel('Total count query', { exact: true }).fill('vector(100)');
+  // One datasource is preselected; otherwise pick the fixture's through the type-ahead.
+  if (await page.getByLabel('Datasource', { exact: true }).count()) { await page.getByLabel('Datasource', { exact: true }).click(); await page.locator(`#sli-datasource-option-${fixture.datasource_id}`).click(); }
+  await expect(page.locator('.ui-summary')).toBeVisible();
+  await page.getByLabel('Good events', { exact: true }).fill('vector(99)');
+  await page.getByLabel('Total events', { exact: true }).fill('vector(100)');
 
   stage = 'submit SLI from the browser form';
   const createPromise = page.waitForResponse((response) => response.request().method() === 'POST'
@@ -317,7 +319,7 @@ try {
   await expect(page.getByRole('heading', { name: 'SLIs', exact: true })).toBeFocused();
   await expect(page.getByRole('alert')).toContainText('Datasources could not be loaded');
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add SLI', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New SLI', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(detailURL);
 
@@ -329,7 +331,7 @@ try {
   await expect(listRow).toBeVisible();
   const listNavigationMs=performance.now()-listNavigationStarted;
   await expect(listRow.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
-  await expect(listRow).toContainText('5 of 6');
+  await expect(listRow).toContainText('+1 more');
   await expect(listRow.getByRole('link', { name: 'Reference SLO 1' })).toHaveAttribute('href', new RegExp('^/slos/[0-9a-f-]{36}$'));
   await listRow.getByText(/^Exact values ·/).click();
   const recentTable = listRow.getByRole('table', { name: `Exact counts for recent ${created.polling_interval_seconds}-second intervals` });
@@ -339,7 +341,7 @@ try {
   await expect(observedSample.getByRole('cell', { name: 'Observed', exact: true })).toBeVisible();
   await expect(observedSample.getByRole('cell', { name: '99', exact: true })).toBeVisible();
   await expect(observedSample.getByRole('cell', { name: '100', exact: true })).toBeVisible();
-  const searchInput = page.getByRole('textbox', { name: 'Search SLIs', exact: true });
+  const searchInput = page.getByRole('searchbox', { name: 'Search SLIs', exact: true });
   await searchInput.fill('request-success');
   await expect(page).toHaveURL(/q=request-success/);
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
@@ -371,14 +373,15 @@ try {
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
 
   stage = 'capture populated editor and list layout matrix';
-  await page.getByRole('button', { name: 'Add SLI', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Create SLI', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'New SLI', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'New SLI', exact: true })).toBeFocused();
   await page.getByLabel('Display name', { exact: true }).fill('Reference editor preview');
-  await page.getByLabel('Datasource', { exact: true }).selectOption(fixture.datasource_id);
-  await page.getByLabel('Good count query', { exact: true }).fill('sum(\n  vector(99)\n)');
-  await page.getByLabel('Total count query', { exact: true }).fill('sum(\n  vector(100)\n)');
-  await expect(page.getByLabel('Good count query', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Total count query', { exact: true })).toBeVisible();
+  if (await page.getByLabel('Datasource', { exact: true }).count()) { await page.getByLabel('Datasource', { exact: true }).click(); await page.locator(`#sli-datasource-option-${fixture.datasource_id}`).click(); }
+  await expect(page.locator('.ui-summary')).toBeVisible();
+  await page.getByLabel('Good events', { exact: true }).fill('sum(\n  vector(99)\n)');
+  await page.getByLabel('Total events', { exact: true }).fill('sum(\n  vector(100)\n)');
+  await expect(page.getByLabel('Good events', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Total events', { exact: true })).toBeVisible();
   assert.deepEqual(await page.locator('.query-editor__line-numbers').evaluateAll((gutters) => gutters.map((gutter) => gutter.textContent)), ['123', '123']);
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -395,7 +398,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Request success', exact: true })).toHaveAttribute('href', `/slis/${created.id}`);
-  await expect(page.getByRole('row').filter({ hasText: '5 of 6' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: '+1 more' })).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 1440, height: 900 });
     if (theme === 'dark' && await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).count()) {

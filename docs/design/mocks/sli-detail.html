@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · SLI detail</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="slis"><main>
+<a class="back" href="#">← All SLIs</a>
+<div class="detail-head">
+  <div>
+    <h1>Search latency p99 &lt; 800 ms</h1>
+    <div class="status-line"><span class="st warn"><i></i>Failing · 3 of the last 12 queries timed out</span></div>
+    <div class="meta"><span class="mono">search-latency</span> · Ratio · two queries · <a>local-victoriametrics</a> · 60 s cadence · Search requests served within 800 ms (p99)</div>
+  </div>
+  <div class="actions"><button class="btn">↻ Refresh</button><button class="btn primary">Edit SLI</button><button class="btn">+ New SLO</button></div>
+</div>
+
+<div class="sumtiles">
+  <div class="tile"><span class="k">Latest interval</span><span class="v" style="color:var(--status-warning)">Failed</span><span class="s">09:58–09:59 UTC · timeout · 40 s ago</span></div>
+  <div class="tile"><span class="k">Last good ratio</span><span class="v">92.4%</span><span class="s">1,846 / 1,998 · 09:50 UTC</span></div>
+  <div class="tile"><span class="k">Collection</span><span class="v"><span class="st good" style="font-size:16px"><i></i>Active</span></span><span class="s">agent Local connected · next query 10:00:20</span></div>
+  <div class="tile"><span class="k">Last 24 h</span><span class="v">1,392 / 1,440</span><span class="s">intervals observed · 37 failed · 11 missing</span></div>
+</div>
+
+<section class="card">
+    <header><h2>Measurements</h2><span class="hint">good ÷ total per interval · bars are total events</span>
+      <div class="tools"><span class="seg" style="height:32px"><button>1 h</button><button>6 h</button><button aria-pressed="true">24 h</button><button>7 d</button></span><span class="seg" style="height:32px"><button aria-pressed="true">UTC</button><button>Local</button></span><button class="btn sm">▦ Table</button></div>
+    </header>
+    <div class="body" style="padding:12px 18px 8px 0">
+      <svg viewBox="0 0 820 220" style="width:100%;display:block;max-height:300px">
+        <g class="gridline"><line x1="56" y1="20" x2="800" y2="20"/><line x1="56" y1="70" x2="800" y2="70"/><line x1="56" y1="120" x2="800" y2="120"/><line x1="56" y1="170" x2="800" y2="170"/></g>
+        <text class="axis" x="50" y="24" text-anchor="end">100%</text><text class="axis" x="50" y="74" text-anchor="end">95%</text><text class="axis" x="50" y="124" text-anchor="end">90%</text><text class="axis" x="50" y="174" text-anchor="end">85%</text>
+        <g class="vol"><rect x="56" y="150" width="28" height="20"/><rect x="88" y="140" width="28" height="30"/><rect x="120" y="135" width="28" height="35"/><rect x="152" y="120" width="28" height="50"/><rect x="184" y="110" width="28" height="60"/><rect x="216" y="100" width="28" height="70"/><rect x="248" y="90" width="28" height="80"/><rect x="280" y="92" width="28" height="78"/><rect x="312" y="96" width="28" height="74"/><rect x="344" y="94" width="28" height="76"/><rect x="376" y="98" width="28" height="72"/><rect x="408" y="104" width="28" height="66"/><rect x="440" y="110" width="28" height="60"/><rect x="472" y="112" width="28" height="58"/><rect x="504" y="118" width="28" height="52"/><rect x="536" y="120" width="28" height="50"/><rect x="568" y="124" width="28" height="46"/><rect x="600" y="130" width="28" height="40"/><rect x="664" y="140" width="28" height="30"/><rect x="696" y="146" width="28" height="24"/><rect x="760" y="150" width="28" height="20"/></g>
+        <path class="line" d="M60,30 L200,32 L300,36 L400,44 L480,60 L540,80 L600,96"/><path class="gap" d="M600,96 L664,110"/><path class="line" d="M664,110 L700,116"/><path class="gap" d="M700,116 L760,120"/><path class="line" d="M760,120 L790,124"/>
+        <g style="fill:var(--crit)"><rect x="632" y="196" width="28" height="4"/><rect x="728" y="196" width="28" height="4"/></g><g style="fill:var(--neutral)"><rect x="696" y="196" width="28" height="4" opacity=".6"/></g>
+        <text class="axis" x="60" y="214">10:00</text><text class="axis" x="240" y="214">16:00</text><text class="axis" x="420" y="214">22:00</text><text class="axis" x="600" y="214">04:00</text><text class="axis" x="770" y="214">10:00</text>
+      </svg>
+      <div class="legend" style="padding:6px 0 0 56px"><span><i></i>good ÷ total</span><span><i class="v"></i>total events</span><span><i class="g"></i>missing</span><span><i style="background:var(--crit);height:4px"></i>failed interval</span></div>
+    </div>
+  </section>
+
+<section class="card" style="margin-top:20px">
+  <header><h2>Recent intervals</h2><span class="hint">exact counts · newest first · history before 27 Oct 12:00 UTC is unavailable</span><div class="tools"><span class="ctl" style="height:32px">Show <b>Failed &amp; missing only</b> ▾</span></div></header>
+  <table class="tbl" style="border-top:0">
+    <thead><tr><th>Interval (UTC)</th><th>Outcome</th><th class="num">Good</th><th class="num">Total</th><th class="num">Ratio</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">04 Nov 09:58 – 09:59</td><td><span class="st warn"><i></i>Failed</span></td><td class="num mono">—</td><td class="num mono">—</td><td class="num mono">—</td><td class="muted">timeout after 10 s · good query</td></tr>
+      <tr><td class="mono">04 Nov 09:51 – 09:52</td><td><span class="st warn"><i></i>Failed</span></td><td class="num mono">—</td><td class="num mono">—</td><td class="num mono">—</td><td class="muted">timeout after 10 s · good query</td></tr>
+      <tr><td class="mono">04 Nov 09:29 – 09:31</td><td><span class="st none"><i></i>Missing</span></td><td class="num mono">—</td><td class="num mono">—</td><td class="num mono">—</td><td class="muted">2 intervals · agent reconnecting</td></tr>
+      <tr><td class="mono">04 Nov 09:50 – 09:51</td><td><span class="st good"><i></i>Observed</span></td><td class="num mono">1,846</td><td class="num mono">1,998</td><td class="num mono">92.4%</td><td class="muted"></td></tr>
+      <tr><td class="mono">04 Nov 09:49 – 09:50</td><td><span class="st good"><i></i>Observed</span></td><td class="num mono">1,873</td><td class="num mono">2,001</td><td class="num mono">93.6%</td><td class="muted"></td></tr>
+    </tbody>
+  </table>
+  <div class="pager" style="padding:10px 18px"><span>1–50 of 1,440 in the last 24 h</span><span class="spacer"></span><button class="btn sm" disabled>‹ Newer</button><button class="btn sm">Older ›</button></div>
+</section>
+
+<section class="card" style="margin-top:20px">
+  <header><h2>Definition</h2><span class="hint">revision 1 · since 27 Oct 2026 · identifier search-latency</span></header>
+  <div class="body defgrid">
+    <div><p class="qlabel" style="margin:0 0 4px">Datasource</p><a href="#" style="color:var(--accent-ink);text-decoration:underline">local-victoriametrics</a> · Prometheus</div>
+    <div><p class="qlabel" style="margin:0 0 4px">Agent</p><a href="#" style="color:var(--accent-ink);text-decoration:underline">Local</a> · connected · next query 10:00:20</div>
+    <div><p class="qlabel" style="margin:0 0 4px">Cadence</p>60 s intervals · settles 60 s</div>
+    <div><p class="qlabel" style="margin:0 0 4px">Values</p>Ratio · two queries · event counts per interval</div>
+    <div class="span2"><p class="qlabel" style="margin:0">Good events</p><pre class="q">sum(increase(http_request_duration_seconds_bucket{service="search",le="0.8"}[1m]))</pre></div>
+    <div class="span2"><p class="qlabel" style="margin:0">Total events</p><pre class="q">sum(increase(http_request_duration_seconds_count{service="search"}[1m]))</pre></div>
+  </div>
+</section>
+
+<section class="card" style="margin-top:20px">
+  <header><h2>Objectives</h2><span class="hint">1 SLO uses this indicator</span><div class="tools"><button class="btn sm">+ New SLO</button></div></header>
+  <table class="tbl responsive" style="border-top:0">
+    <thead><tr><th style="width:150px">Status</th><th>SLO</th><th style="width:140px">Target · window</th><th class="num" style="width:120px">Remaining</th><th class="num" style="width:120px">Burn 1 h</th><th class="num" style="width:120px">Exhaustion</th></tr></thead>
+    <tbody><tr><td><span class="st warn"><i></i>Low budget</span><span class="reason">under 20% left</span></td><td><b>Search latency p99 &lt; 800 ms</b><span class="desc">Search · search-latency-7d</span></td><td class="mono">99.5% · 28 d</td><td class="num mono" style="color:var(--status-warning);font-weight:700">17.9%</td><td class="num mono">0.32×</td><td class="num mono">≈ 26 h</td></tr></tbody>
+  </table>
+</section>
+</main><script src="mock.js"></script></body></html>

@@ -1,5 +1,13 @@
 # SPEC-0012: User interface
 
+> Accepted amendment, 2026-11-04 (Crit session `9a46588aaaa4`): [ADR-0028](../adr/0028-unified-operational-ui.md)
+> replaces the slo-tracker screenshots with the approved [mocks](../design/mocks/README.md)
+> as the AC-11 side-by-side reference, makes SLI and SLO detail pages single
+> column with a leading status band, unifies list/detail/form composition across
+> SLI, SLO, datasource and agent screens, and adopts type-ahead pickers and preset
+> chips. Deferred mock elements needing backend work are listed in the mocks README.
+> Where the composition paragraphs below describe a right rail or native selects
+> for pickers, the mocks and ADR-0028 take precedence.
 > Accepted amendment, 2026-10-30: Operational screens share bounded in-flight/cached reads and load current status independently from history. Previous results retain explicit stale/preparing labels. Existing composition, exact tables, extrema/gaps, point limits and frontend budgets remain required.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the

@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · Agent</title><link rel="stylesheet" href="mock.css">
+<style>
+.dangerline { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:28px; padding-top:16px; border-top:1px solid var(--border); }
+.dangerline .updated { flex:1 1 420px; }
+.dangerline .updated { margin-right:auto; }
+.dlg { border:1px solid var(--border-strong); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); }
+.dlg > header { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.dlg > header h2 { font:400 24px/1.3 var(--almanac-heading); }
+.dlg > header .x { margin-left:auto; border:0; background:none; font-size:20px; cursor:pointer; color:var(--text-3); }
+.dlg .body { padding:20px 24px; display:grid; gap:18px; }
+.dlg .foot { padding:14px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+.statelbl { font:12px var(--mono); color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; }
+</style></head>
+<body data-current="agents"><main>
+<a class="back" href="#">← All agents</a>
+<div class="detail-head">
+  <div>
+    <h1>us-east-1</h1>
+    <div class="status-line"><span class="st stale"><i></i>Unreachable · no heartbeat for 2 h</span></div>
+    <div class="meta"><span class="mono">us-east-1</span> · almanac-agent/2 · 0.9.3 · registered 22 Oct 2026 · 1 datasource · 6 SLIs</div>
+  </div>
+  <div class="actions"><button class="btn">↻ Refresh</button><button class="btn">? How to run</button><button class="btn">Rotate credential</button><button class="btn">⋯</button></div>
+</div>
+
+<div class="banner">The agent last reported at <b>08:00:12 UTC</b>; the backend has heard nothing for 2 hours. Its 6 SLIs are not collecting. If the process is down, restart it with its current credential; it replaces the old process immediately. If the host is gone, <a href="#" style="color:inherit;text-decoration:underline">move its datasource</a> to another agent.</div>
+
+<div class="sumtiles">
+  <div class="tile"><span class="k">Connection</span><span class="v"><span class="st stale" style="font-size:16px"><i></i>Unreachable</span></span><span class="s">last heartbeat 08:00:12 · 2 h ago</span></div>
+  <div class="tile"><span class="k">Configuration</span><span class="v">rev 14 applied</span><span class="s">matches desired · nothing pending</span></div>
+  <div class="tile"><span class="k">Collection</span><span class="v" style="color:var(--status-warning)">stopped</span><span class="s">last query 07:59:30 · next unknown</span></div>
+  <div class="tile"><span class="k">Credential</span><span class="v">valid · 78 d left</span><span class="s">issued 22 Oct · expires 08 Jan 2027</span></div>
+</div>
+
+<section class="card">
+  <header><h2>Datasources</h2><span class="hint">collection this agent is responsible for</span><div class="tools"><a href="#" style="font:13px var(--mono);color:var(--accent-ink);text-decoration:underline">New datasource on this agent</a></div></header>
+  <table class="tbl responsive" style="border-top:0">
+    <thead><tr><th style="width:170px">Health</th><th>Datasource</th><th style="width:90px">Cadence</th><th class="num" style="width:70px">SLIs</th><th style="width:170px">Last query</th><th style="width:140px"></th></tr></thead>
+    <tbody><tr><td><span class="st stale"><i></i>Not collecting</span><span class="reason">agent unreachable</span></td><td class="full sli"><span class="name">prod-prometheus-us</span><span class="desc mono">https://prometheus.us-east-1.internal:9090</span></td><td class="mono">30 s</td><td class="num mono">6</td><td><b class="muted">2 h ago</b><span class="desc mono">07:59:30 · ok</span></td><td class="r"><a href="#" style="font:12px var(--mono);color:var(--accent-ink);text-decoration:underline">Move to another agent</a></td></tr></tbody>
+  </table>
+</section>
+
+<section class="card" style="margin-top:20px">
+  <header><h2>Credentials</h2><span class="hint">tokens this agent can authenticate with · values are never shown</span><div class="tools"><button class="btn sm">Rotate credential</button></div></header>
+  <table class="tbl responsive" style="border-top:0">
+    <thead><tr><th style="width:150px">State</th><th>Credential</th><th style="width:170px">Issued</th><th style="width:170px">Expires</th><th style="width:200px">Retires</th><th style="width:120px"></th></tr></thead>
+    <tbody>
+      <tr><td><span class="st good"><i></i>Current</span></td><td class="full"><span class="mono">…00000952</span><span class="desc">In use by the running process</span></td><td class="mono">22 Oct 09:05</td><td class="mono">08 Jan 2027 <span class="muted">· 78 d</span></td><td class="mono muted">—</td><td class="r"><button class="btn sm danger">Revoke…</button></td></tr>
+      <tr><td><span class="st none"><i></i>Revoked</span></td><td class="full"><span class="mono">…00000953</span><span class="desc">Revoked 20 Oct by admin</span></td><td class="mono">10 Oct 12:00</td><td class="mono muted">—</td><td class="mono muted">—</td><td></td></tr>
+    </tbody>
+  </table>
+  <p class="note" style="padding-bottom:14px">Rotation issues a new token and keeps the current one valid for a grace period so you can restart the agent without a gap. Revoking takes effect immediately.</p>
+</section>
+
+<details class="card" style="margin-top:20px"><summary style="padding:14px var(--card-inset);cursor:pointer;font:400 21px/1.3 var(--almanac-heading)">Runtime details</summary>
+  <div class="body"><dl class="def" style="grid-template-columns:200px minmax(0,1fr)">
+    <dt>Protocol</dt><dd>almanac-agent/2</dd><dt>Software</dt><dd>0.9.3</dd><dt>Desired · applied revision</dt><dd>14 · 14</dd><dt>Scheduler</dt><dd>stopped</dd><dt>Collection progress</dt><dd>blocked</dd>
+    <dt>Last attempt</dt><dd>2026-11-04 08:00:00Z</dd><dt>Last successful query</dt><dd>2026-11-04 07:59:30Z</dd><dt>Next expected</dt><dd>not reported</dd>
+    <dt>Capabilities</dt><dd>prometheus · prometheus-http-v1 · connection_test, query_preview, live_query</dd><dt>Agent ID</dt><dd class="mono">00000904-0000-4000-8000-000000000904</dd>
+  </dl></div>
+</details>
+
+<div class="dangerline">
+  <span class="updated"><b>Disable</b> stops the agent and revokes its credentials; <b>delete</b> also removes it. Blocked until prod-prometheus-us is moved.</span>
+  <button type="button" class="btn sm danger" disabled title="Move prod-prometheus-us first">Disable…</button><button type="button" class="btn sm danger" disabled title="Move prod-prometheus-us first">Delete…</button>
+</div>
+
+<div class="dlg-overlay-note"><p class="statelbl" style="margin:28px 0 8px">“How to run” opens this dialog</p>
+<div class="dlg" role="dialog" aria-labelledby="h1" style="margin:0 0 0 auto;max-width:640px">
+  <header><h2 id="h1">Run us-east-1</h2><button class="x" type="button" aria-label="Close">×</button></header>
+  <div class="body">
+    <p class="annot" style="margin:0">A restarted process replaces the previous one as soon as it authenticates. You do not need to stop the old one first. The token is only shown at registration or rotation; if you no longer have it, rotate the credential.</p>
+    <div class="field"><label>Start the agent</label>
+      <span class="seg" style="height:32px;padding:2px;margin-bottom:8px"><button type="button" aria-pressed="true">Local (Compose)</button><button type="button" aria-pressed="false">Docker</button><button type="button" aria-pressed="false">Helm</button></span>
+      <pre class="q" style="margin:0">make agent
+# paste the token at the private prompt</pre></div>
+    <div class="field"><label>Expected</label><div class="hint" style="margin:0">Within a few seconds the agent shows <b>Connected</b> here, applies configuration rev 14, and collection resumes on the next 30 s interval.</div></div>
+  </div>
+  <div class="foot"><button type="button" class="btn">Close</button></div>
+</div></div>
+</main><script src="mock.js"></script></body></html>
