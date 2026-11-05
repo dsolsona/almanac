@@ -150,7 +150,7 @@ and response bodies. Runtime journey acceptance is tracked in
 [F3-T09](docs/tasks/F3-T09.md); tracing's own overhead is not an acceptance
 check ([ADR-0030](docs/adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)).
 
-After developer tooling setup, `make verify VERIFY_MODE=providers` starts an isolated
+After `make setup`, `make verify MODE=providers` starts an isolated
 provider project, inserts synthetic metrics and spans, checks exact query results
 before and after restart, and removes only its test-owned containers and volumes.
 It does not populate or reset your normal local sources.
@@ -191,8 +191,9 @@ windows and exports are subsequent increments; see [delivery status](docs/status
 ## Runtime foundation
 
 `make setup` builds the development image and warms its caches; `make shell`
-enters it with the PostgreSQL fixture running. Inside it, `make build` builds the
-production web assets and embeds them in `bin/almanac`.
+enters it with the fixtures running, and `make verify` enters it by itself.
+Inside it, `make build` builds the production web assets and embeds them in
+`bin/almanac`.
 
 UI-only mode serves the embedded frontend:
 
@@ -443,15 +444,16 @@ attempt changes reachability. A successful compatible connection clears that sta
 
 For isolated local storage checks, `compose.dev.yaml` runs the pinned PostgreSQL
 18.6 fixture on loopback port 15487 of the dev container, where
-`ALMANAC_TEST_DATABASE_URL` is preset. Inside `make shell`, run:
+`ALMANAC_TEST_DATABASE_URL` is preset. From the host, run:
 
 ```sh
-make verify VERIFY_MODE=integration GO_PACKAGE=./internal/storage
+make verify MODE=integration GO_PACKAGE=./internal/storage
 ```
 
-Run `make verify VERIFY_MODE=go` for focused Go checks, `make verify VERIFY_MODE=go-race`
-for race checks, or `make verify` for web and Go verification. Catalogue browser
-checks use `make verify VERIFY_MODE=browser`. The full PostgreSQL integration lane
+Run `make verify MODE=go` for focused Go checks, `make verify MODE=go-race`
+for race checks, or `make verify` for web and Go verification; every mode enters
+the development container by itself. Catalogue browser checks use
+`make verify MODE=browser`. The full PostgreSQL integration suite
 also exercises browser onboarding against the built combined HTTPS executable;
 it uses the Chromium baked into the development image. Ordinary unit checks do
 not start PostgreSQL or run that browser journey.

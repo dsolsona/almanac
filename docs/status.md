@@ -14,8 +14,15 @@ including `compose` after three verifier fixes and the retirement of the
 enabled/disabled tracing-overhead gate by
 [ADR-0030](adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
 (the maintainer: browser tracing in its current form is a measurement aid,
-not a product feature with a budget). The Linux-host
-evidence and F7-T04 (docs, command catalog) follow.
+not a product feature with a budget). [F7-T04](tasks/F7-T04.md) (guides,
+AGENTS.md command rules and the recorded command catalog) is in review; the
+catalog awaits the maintainer's re-approval. Retired with plan 0026: the
+`slo-unit`, `slo-integration`, `slo-journey`, `agent-lifecycle`,
+`verification-tools`, `linux`, `linux-sli` and `go-portability` modes, the host
+toolchain (`scripts/setup-go.sh`, `.local/bin`), `scripts/setup-database.sh`,
+`scripts/verify-linux.sh` and `deploy/verification/`; their selections are
+`unit`, `integration INTEGRATION_TEST=…` and `journey BROWSER_SCENARIO=…`.
+The Linux-host evidence for the plan's acceptance is still open.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on

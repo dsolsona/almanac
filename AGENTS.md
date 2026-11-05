@@ -88,9 +88,10 @@ These documents govern applicable work; read them before that work begins.
   consumers. Review reused code/tests against Almanac's contracts. Explain added
   dependencies; architectural dependencies require an ADR. Preserve license notices.
 - Before Go edits, read the complete applicable Modern Go guideline list for the
-  version in `go.mod` and relevant explanations. Use the installed
-  `.local/bin/go-modern-guidelines` CLI; setup and command details are in the linked
-  guides. Report unavailable tooling rather than assuming another version.
+  version in `go.mod` and relevant explanations. Use the `go-modern-guidelines`
+  CLI of the development image (`make generate GENERATE_MODE=go-guidelines`);
+  setup and command details are in the linked guides. Report unavailable tooling
+  rather than assuming another version.
 - Keep calculations deterministic with explicit time inputs. Define units,
   precision, boundaries and aggregation; distinguish missing, stale, partial and
   zero-traffic data. Missing observations must never appear successful.
@@ -130,7 +131,10 @@ These documents govern applicable work; read them before that work begins.
   cumulative invocation time and occupied wall time separately, retaining failures
   and unknown timings. Keep the maintainer's data, credentials and preview available;
   verification owns separate fixtures, ports and artifacts.
-- Use `make bootstrap` for initial local setup, `make run`/`make start` for daily
-  startup and `make stop` to preserve data. Verify host HTTPS readiness before
+- Everything builds, tests and ships through Docker (ADR-0029): `make setup` once,
+  then `make verify [MODE=…]` from the host enters the development container,
+  `make shell` opens it. Use `make bootstrap` for initial local setup of the
+  application stack, `make run`/`make start` for daily startup and `make stop`
+  to preserve data. Verify host HTTPS readiness before
   announcing availability. Disclose the initial password only via `make credentials`.
   Exact setup/build/generation/verification commands live in the linked guides.
