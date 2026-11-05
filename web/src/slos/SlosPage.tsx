@@ -255,9 +255,12 @@ export function SlosPage({context}:{context:AuthContext}) {
     try {
       const result = await sloClient.create(JSON.parse(intent.body) as CreateSlo, context, intent.key);
       if (sloIntent.current === intent) sloIntent.current = null;
-      // The next New SLO starts empty; carrying this SLO's service and SLI over invites near-duplicates.
-      setDisplay(''); setName(''); setNameEdited(false); setServiceID(''); setSliID(''); setTarget('99.9'); setDuration('30'); setHistorical(false); setFormError('');
-      if (current === generation.current) navigate(`/slos/${result.id}`);
+      if (current === generation.current) {
+        // The next New SLO starts empty; carrying this SLO's service and SLI over invites near-duplicates.
+        // Only the form that submitted resets: a response arriving after navigation must not erase a newer draft.
+        setDisplay(''); setName(''); setNameEdited(false); setServiceID(''); setSliID(''); setTarget('99.9'); setDuration('30'); setHistorical(false); setFormError('');
+        navigate(`/slos/${result.id}`);
+      }
     } catch (failure) {
       if (failure instanceof SloFailure && failure.uncertain && sloIntent.current === intent) intent.uncertain = true;
       if (current === generation.current) {
