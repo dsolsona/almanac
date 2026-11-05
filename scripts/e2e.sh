@@ -15,7 +15,8 @@ export E2E_BASE_URL="https://localhost:${ALMANAC_PORT}"
 export E2E_METRICS_URL="http://localhost:${ALMANAC_METRICS_PORT}"
 export E2E_TRACES_URL="http://localhost:${ALMANAC_TRACES_PORT}"
 
-compose() { docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml "$@"; }
+# compose.e2e.yaml keeps the stack's data in memory, so runs do not grow the Docker disk.
+compose() { docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml -f compose.e2e.yaml "$@"; }
 
 down() {
   # Agents started by the suite carry this label; they are not Compose services.
@@ -28,6 +29,8 @@ up() {
   down
   compose build --quiet
   compose --profile agent build --quiet agent
+  # A rebuild leaves the previous images untagged; remove this project's, never anyone else's.
+  docker image prune --force --filter label=com.docker.compose.project="$COMPOSE_PROJECT_NAME" >/dev/null
   compose up --detach --wait --wait-timeout 120 app
 }
 

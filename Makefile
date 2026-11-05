@@ -1,4 +1,4 @@
-.PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets
+.PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
 
 # Go comes from the dev image's PATH. An inherited GOROOT can make that driver
 # execute a different installation's compiler, despite GOTOOLCHAIN=local.
@@ -113,11 +113,22 @@ check verify: test test-integration test-browser
 # End-to-end and performance suites drive the host's Docker daemon, so they enter with the socket.
 # ARGS passes Playwright arguments, for example ARGS='--project onboarding' or ARGS='-g agent'.
 test-e2e:
-	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="sh scripts/e2e.sh $(ARGS)"
+	@$(MAKE) --no-print-directory _disk_check
+	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="sh scripts/e2e.sh $(ARGS)"; status=$$?; $(MAKE) --no-print-directory _disk_trim; exit $$status
 
 # PERF_DAYS sets the history length (default 35) and PERF_RUNS the loads per page (default 10).
 test-perf:
-	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="E2E_CONFIG=playwright.perf.config.ts PERF_DAYS=$${PERF_DAYS:-35} PERF_RUNS=$${PERF_RUNS:-10} sh scripts/e2e.sh $(ARGS)"
+	@$(MAKE) --no-print-directory _disk_check
+	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="E2E_CONFIG=playwright.perf.config.ts PERF_DAYS=$${PERF_DAYS:-35} PERF_RUNS=$${PERF_RUNS:-10} sh scripts/e2e.sh $(ARGS)"; status=$$?; $(MAKE) --no-print-directory _disk_trim; exit $$status
+
+# The suites build images on the host's Docker disk. Refuse to start with less than E2E_MIN_FREE_GB
+# free on the host (default 10), and afterwards return freed blocks of Colima's disk file to macOS.
+E2E_MIN_FREE_GB ?= 10
+_disk_check:
+	@free=$$(df -Pk "$(CURDIR)" | awk 'NR==2 {print int($$4 / 1048576)}'); \
+	  if [ "$$free" -lt "$(E2E_MIN_FREE_GB)" ]; then echo "Only $$free GB free on the host disk; the suite needs $(E2E_MIN_FREE_GB) GB (E2E_MIN_FREE_GB). Free space first." >&2; exit 1; fi
+_disk_trim:
+	@if command -v colima >/dev/null 2>&1 && colima status >/dev/null 2>&1; then colima ssh -- sudo fstrim /var/lib/docker >/dev/null 2>&1 || true; fi
 
 GO_TEST := GOTOOLCHAIN=local GOPROXY=off $(GO) test $(if $(RACE),-race)
 

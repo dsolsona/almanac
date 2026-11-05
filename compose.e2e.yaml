@@ -1,0 +1,23 @@
+# Overlay for the end-to-end and performance stacks (scripts/e2e.sh, ADR-0033): their data lives in
+# memory, like the dev fixtures, so a run never grows the Docker disk (on macOS, Colima's disk file
+# only shrinks after a trim) and removing the stack frees everything it wrote.
+services:
+  postgres:
+    volumes: !override
+      - postgres-secret:/run/postgres-secret:ro
+      - type: tmpfs
+        target: /var/lib/postgresql
+        tmpfs:
+          size: 6442450944
+  victoriametrics:
+    volumes: !override
+      - type: tmpfs
+        target: /storage
+        tmpfs:
+          size: 1073741824
+  victoriatraces:
+    volumes: !override
+      - type: tmpfs
+        target: /victoria-traces-data
+        tmpfs:
+          size: 1073741824

@@ -12,7 +12,7 @@ function docker(args: string[], input?: string): string {
 }
 
 export function compose(...args: string[]): string {
-  return docker(['compose', '-p', project, '-f', '../compose.yaml', ...args]);
+  return docker(['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml', ...args]);
 }
 
 export function initialPassword(): string {
@@ -24,7 +24,7 @@ export function initialPassword(): string {
 // Runs SQL in the stack's PostgreSQL as its owner (local socket inside the container). Only the
 // performance fixture uses this, to write retained history that would take weeks to collect.
 export function psql(sql: string): string {
-  return docker(['compose', '-p', project, '-f', '../compose.yaml', 'exec', '-T', 'postgres', 'psql', '--no-psqlrc', '--quiet',
+  return docker(['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml', 'exec', '-T', 'postgres', 'psql', '--no-psqlrc', '--quiet',
     '--tuples-only', '--no-align', '-v', 'ON_ERROR_STOP=1', '-U', 'almanac', '-d', 'almanac', '-f', '-'], sql).trim();
 }
 
