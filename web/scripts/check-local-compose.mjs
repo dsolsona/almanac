@@ -542,8 +542,9 @@ async function checkCollectedSLI(page, agentID) {
   await expect(page).toHaveURL(/\/datasources\/new\?return=slis$/);
   await page.getByLabel('Display name', { exact: true }).fill('Compose metrics');
   await page.getByLabel('Prometheus endpoint', { exact: true }).fill('http://victoriametrics:8428');
-  await page.getByLabel('Assigned agent', { exact: true }).selectOption(agentID);
-  await page.getByLabel('Polling interval (seconds)', { exact: true }).fill('15');
+  if (await page.getByLabel('Assigned agent', { exact: true }).count()) { await page.getByLabel('Assigned agent', { exact: true }).click(); await page.locator(`#datasource-agent-option-${agentID}`).click(); }
+  await expect(page.getByRole('region', { name: 'Agent', exact: true }).locator('.ui-summary')).toBeVisible();
+  await page.getByRole('radio', { name: '15 s', exact: true }).click();
   const created = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/datasources');
   await page.getByRole('button', { name: 'Create datasource', exact: true }).click();
   const response = await created;
@@ -809,7 +810,7 @@ async function checkAgentRetirement(page, original, collection) {
   stage = 'real Compose blocked datasource link uses app navigation';
   await sourceLink.click();
   await expect(page).toHaveURL(`${url}/datasources/${collection.datasource.id}`);
-  await expect(page.getByLabel('Assigned agent', { exact: true })).toHaveValue(original.agent.id);
+  await expect(page.getByRole('region', { name: 'Agent', exact: true }).locator('.ui-summary')).toContainText(original.agent.display_name);
   await page.goBack();
   await expect(page).toHaveURL(agentURL);
   await page.getByRole('button', { name: 'Delete agent', exact: true }).click();
@@ -843,8 +844,11 @@ async function checkAgentRetirement(page, original, collection) {
   const replacementAgent = await startAgent(page, replacement.agent.id, replacementToken);
   stage = 'real Compose reassign actual datasource';
   await page.goto(`${url}/datasources/${collection.datasource.id}`);
-  await expect.poll(async () => page.getByLabel('Assigned agent', { exact: true }).locator(`option[value="${replacement.agent.id}"]`).isEnabled(), { timeout: 25_000 }).toBe(true);
-  await page.getByLabel('Assigned agent', { exact: true }).selectOption(replacement.agent.id);
+  // Open the picker from the current assignment, wait until the replacement is eligible, pick it.
+  await page.getByRole('region', { name: 'Agent', exact: true }).getByRole('button', { name: 'Change', exact: true }).click();
+  await page.getByLabel('Assigned agent', { exact: true }).click();
+  await expect.poll(async () => page.locator(`#datasource-agent-option-${replacement.agent.id}`).getAttribute('aria-disabled'), { timeout: 25_000 }).toBeNull();
+  await page.locator(`#datasource-agent-option-${replacement.agent.id}`).click();
   const saved = page.waitForResponse((response) => response.request().method() === 'PUT' && new URL(response.url()).pathname === `/api/v1/datasources/${collection.datasource.id}`);
   await page.getByRole('button', { name: 'Save settings', exact: true }).click();
   const savedResponse = await saved;
@@ -902,9 +906,13 @@ async function checkDefaultCadenceSLI(page, agentID) {
   await page.goto(`${url}/datasources/new`);
   await page.getByLabel('Display name', { exact: true }).fill('VictoriaMetrics');
   await page.getByLabel('Prometheus endpoint', { exact: true }).fill('http://victoriametrics:8428');
-  await expect.poll(async () => page.getByLabel('Assigned agent', { exact: true }).locator(`option[value="${agentID}"]`).isEnabled(), { timeout: 25_000 }).toBe(true);
-  await page.getByLabel('Assigned agent', { exact: true }).selectOption(agentID);
-  await expect(page.getByLabel('Polling interval (seconds)', { exact: true })).toHaveValue('60');
+  if (await page.getByLabel('Assigned agent', { exact: true }).count()) {
+    await page.getByLabel('Assigned agent', { exact: true }).click();
+    await expect.poll(async () => page.locator(`#datasource-agent-option-${agentID}`).getAttribute('aria-disabled'), { timeout: 25_000 }).toBeNull();
+    await page.locator(`#datasource-agent-option-${agentID}`).click();
+  }
+  await expect(page.getByRole('region', { name: 'Agent', exact: true }).locator('.ui-summary')).toBeVisible();
+  await expect(page.getByRole('radio', { name: '60 s', exact: true })).toHaveAttribute('aria-checked', 'true');
   const datasourceResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/datasources');
   await page.getByRole('button', { name: 'Create datasource', exact: true }).click();
   const sourceResponse = await datasourceResponse;
@@ -1034,8 +1042,8 @@ async function checkLocalAgentRegistration() {
         await navigateWorkspace(page, viewportName, 'Datasources');
         await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
         stage = `real Compose ${theme} ${viewportName} Add datasource navigation`;
-        await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
-        await expect(page.getByRole('heading', { name: 'Add datasource', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'New datasource', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'New datasource', exact: true })).toBeVisible();
         stage = `real Compose ${theme} ${viewportName} datasource endpoint literal input`;
         const endpoint = page.locator('#datasource-endpoint');
         await endpoint.fill('http://localhost');
@@ -1060,7 +1068,7 @@ async function checkLocalAgentRegistration() {
         });
         datasourceCaptures.push(`datasource-add-${viewportName}-${theme}.png`);
         stage = `real Compose ${theme} ${viewportName} datasource back navigation`;
-        await page.getByRole('button', { name: 'Back to datasources', exact: true }).click();
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
         await expect(page.getByRole('heading', { name: 'Datasources', exact: true })).toBeVisible();
         stage = `real Compose ${theme} ${viewportName} Datasources to Agents navigation`;
         await navigateWorkspace(page, viewportName, 'Agents');

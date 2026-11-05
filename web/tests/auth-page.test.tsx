@@ -54,7 +54,7 @@ describe('authentication page', () => {
     expect(await screen.findByRole('button', { name: 'Change' })).toBeVisible();
     expect(screen.getByText('Production metrics')).toBeVisible();
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.queryByRole('heading', { name: 'Add datasource' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'New datasource' })).not.toBeInTheDocument();
     expect(push).toHaveBeenCalledTimes(1);
   });
 
