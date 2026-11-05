@@ -29,6 +29,11 @@ from the existing external-SLI contract. Backfill and repair remain in F4.
 > suite counts cannot substitute. Use focused risk-based checks during edits and
 > relevant broad database/Compose gates at completed candidates, reusing matching passes.
 
+> Accepted amendment, 2026-11-05 ([ADR-0033](../adr/0033-simple-test-suite.md)): the gates are
+> `make check` and `make test-e2e`, run in full on every pull request by CI; passes are no longer
+> reused. Rendered journey timings of the four main pages come from `make test-perf`, which runs
+> nightly; traces in VictoriaTraces remain the tool for locating cost.
+
 ## Purpose
 
 Reach a working application through complete demonstrable increments. Specifications

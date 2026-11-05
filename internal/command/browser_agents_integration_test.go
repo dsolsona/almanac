@@ -13,12 +13,14 @@ import (
 )
 
 func TestIntegrationExecutableBrowserAgentRegistration(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"agents", "agents-close", "agents-lost", "agents-unavailable"} {
 		t.Run(scenario, func(t *testing.T) { testBrowserAuthentication(t, scenario) })
 	}
 }
 
 func TestIntegrationExecutableBrowserAgentLifecycle(t *testing.T) {
+	t.Parallel()
 	testBrowserAuthentication(t, "agents-lifecycle")
 }
 

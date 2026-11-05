@@ -18,6 +18,7 @@ import (
 )
 
 func TestIntegrationReassignmentRetryPaginationDoesNotStarveLaterMoves(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	source, err := CreateAgent(t.Context(), f.databaseURL, f.input("pagination-source", "pagination-source"))
 	if err != nil {
@@ -80,6 +81,7 @@ func TestIntegrationReassignmentRetryPaginationDoesNotStarveLaterMoves(t *testin
 }
 
 func TestIntegrationNewGenerationDoesNotInheritTransitionLease(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	credential, agent := createOwnershipAgent(t, f, "generation-transition")
 	now := f.base.Add(5 * time.Second)
@@ -112,6 +114,7 @@ func TestIntegrationNewGenerationDoesNotInheritTransitionLease(t *testing.T) {
 }
 
 func TestIntegrationExpiryCompletesLastV2MoveAndUnguardsSource(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	sourceCredential, source := createOwnershipAgent(t, f, "expiry-source")
 	targetCredential, target := createOwnershipAgent(t, f, "expiry-target")
@@ -211,6 +214,7 @@ func TestIntegrationExpiryCompletesLastV2MoveAndUnguardsSource(t *testing.T) {
 }
 
 func TestIntegrationDatasourceReassignmentWaitsForV2DrainAndPreservesEpochs(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	sourceCredential, sourceAgent := createOwnershipAgent(t, f, "handoff-source")
 	targetCredential, targetAgent := createOwnershipAgent(t, f, "handoff-target")
@@ -438,6 +442,7 @@ func hasMeasurementGrantJSON(encoded []byte, id string) bool {
 }
 
 func TestIntegrationLegacyReassignmentWaitsForRecordedExpiry(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	_, source := createOwnershipAgent(t, f, "legacy-source")
 	targetCredential, target := createOwnershipAgent(t, f, "legacy-target")
@@ -490,6 +495,7 @@ func TestIntegrationLegacyReassignmentWaitsForRecordedExpiry(t *testing.T) {
 }
 
 func TestIntegrationPendingTargetAndDeleteSerialize(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	sourceCredential, source := createOwnershipAgent(t, f, "race-source")
 	targetCredential, target := createOwnershipAgent(t, f, "race-target")
@@ -528,6 +534,7 @@ func TestIntegrationPendingTargetAndDeleteSerialize(t *testing.T) {
 }
 
 func TestIntegrationOfflineV2WithUnappliedConfigurationUsesExpiryHandoff(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	sourceCredential, source := createOwnershipAgent(t, f, "offline-v2-source")
 	targetCredential, target := createOwnershipAgent(t, f, "offline-v2-target")

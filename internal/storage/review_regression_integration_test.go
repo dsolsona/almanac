@@ -8,6 +8,7 @@ import (
 )
 
 func TestIntegrationMonthEndPartitionsAndLeaseIndexes(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)

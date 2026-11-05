@@ -11,6 +11,7 @@ import (
 )
 
 func TestIntegrationRuntimeReservesLiveCapacityWhenInteractivePoolIsFull(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	runtime, err := OpenRuntime(t.Context(), f.databaseURL)
 	if err != nil {
@@ -50,6 +51,7 @@ func TestIntegrationRuntimeReservesLiveCapacityWhenInteractivePoolIsFull(t *test
 }
 
 func TestIntegrationRuntimeReusesReleasedDatabaseConnection(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	runtime, err := OpenRuntime(t.Context(), f.databaseURL)
 	if err != nil {
@@ -73,6 +75,7 @@ func TestIntegrationRuntimeReusesReleasedDatabaseConnection(t *testing.T) {
 }
 
 func TestIntegrationFullLiveAdmissionDoesNotCloseKnownSchemaGate(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	runtime, err := OpenRuntime(t.Context(), f.databaseURL)
 	if err != nil {
@@ -103,6 +106,7 @@ func TestIntegrationFullLiveAdmissionDoesNotCloseKnownSchemaGate(t *testing.T) {
 }
 
 func TestIntegrationReadinessRecoversSchemaGateWithoutAnotherConnection(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	runtime, err := OpenRuntime(t.Context(), f.databaseURL)
 	if err != nil {

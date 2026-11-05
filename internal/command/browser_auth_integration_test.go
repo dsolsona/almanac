@@ -34,6 +34,7 @@ import (
 // Each scenario owns its database and process. Browser assertions are kept out of
 // the ordinary unit lane and run against the same executable built for this lane.
 func TestIntegrationExecutableBrowserAuthentication(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"onboarding", "lost-login", "lost-password"} {
 		t.Run(scenario, func(t *testing.T) { testBrowserAuthentication(t, scenario) })
 	}

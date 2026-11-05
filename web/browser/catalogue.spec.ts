@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('catalogue foundations and shared controls work at this viewport and theme', async ({ page }, testInfo) => {
+test('catalogue foundations and shared controls work at this viewport and theme', { tag: '@matrix' }, async ({ page }, testInfo) => {
   await page.goto('/design-system');
   await expect(page.getByRole('heading', { name: 'Clear signals. Steady decisions.' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Catalogue sections' })).toBeVisible();
@@ -50,7 +50,7 @@ test('catalogue foundations and shared controls work at this viewport and theme'
   await expect(page.getByRole('button', { name: 'Pending' })).toBeDisabled();
 });
 
-test('application shell preview keeps navigation available at each viewport and theme', async ({ page }, testInfo) => {
+test('application shell preview keeps navigation available at each viewport and theme', { tag: '@matrix' }, async ({ page }, testInfo) => {
   await page.goto('/design-system');
   const preview = page.locator('#application-shell');
   await preview.scrollIntoViewIfNeeded();
@@ -166,7 +166,7 @@ test('coarse pointer controls use the 44px target size', async ({ browser, baseU
   }
 });
 
-test('operational controls: picker, chips and segmented filter work by keyboard and fit the viewport', async ({ page }, testInfo) => {
+test('operational controls: picker, chips and segmented filter work by keyboard and fit the viewport', { tag: '@matrix' }, async ({ page }, testInfo) => {
   await page.goto('/design-system#operational');
   const section = page.locator('#operational');
   await section.scrollIntoViewIfNeeded();

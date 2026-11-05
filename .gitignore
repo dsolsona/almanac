@@ -41,3 +41,7 @@ web/dist/
 web/test-results/
 web/playwright-report/
 bin/
+
+# End-to-end suite: saved session and results (ADR-0033).
+web/e2e/.auth/
+web/perf/.fleet.json

@@ -265,6 +265,7 @@ func safeBrowserFailureMarker(output string) string {
 }
 
 func TestIntegrationSafeBrowserFailureMarkerPreservesBoundedCancellationEvidence(t *testing.T) {
+	t.Parallel()
 	marker := "FAIL browser-datasources stage=cancel_response_state network=ERR_CONNECTION_RESET class=assertion source_line=401 assert_actual=succeeded assert_expected=canceled cancel_response_state=succeeded api_status=200 request_id=00000000-0000-4000-8000-000000000001 api_code=none diagnostic_state=running diagnostic_error_code=none diagnostic_result_class=none"
 	got := safeBrowserFailureMarker(marker)
 	for _, want := range []string{"stage=cancel_response_state", "class=assertion", "source_line=401", "assert_actual=succeeded", "assert_expected=canceled", "cancel_response_state=succeeded", "diagnostic_state=running"} {

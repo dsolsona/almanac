@@ -58,3 +58,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0030](0030-browser-tracing-overhead-is-not-an-acceptance-check.md) | Browser tracing overhead is not an acceptance check | accepted |
 | [ADR-0031](0031-list-grammar-and-button-roles.md) | Name-first lists, quiet freshness and button roles | accepted |
 | [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md) | Centred list tables, one value per cell and SLI data-state vocabulary | accepted |
+| [ADR-0033](0033-simple-test-suite.md) | A simple test suite: fast tests, one parallel integration run, Playwright journeys and four page timings | accepted |

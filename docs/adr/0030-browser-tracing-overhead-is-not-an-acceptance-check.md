@@ -5,7 +5,7 @@
 - Accepted: 2026-11-05
 - Approval: the maintainer, in the 2026-11-05 working conversation: the current browser tracing exists to measure the application against its speed goals, its own overhead is not a product requirement, the final product will not ship this incarnation of browser tracing, and tests of that overhead make no sense
 - Related specs: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md) (page-speed budgets and trace evidence remain)
-- Supersedes / superseded by: supersedes the "enabled/disabled tracing" measurement clause in the consequences of [ADR-0025](0025-fast-operational-journeys-and-tracing.md); the rest of ADR-0025 stands
+- Supersedes / superseded by: decision 2 superseded by [ADR-0033](0033-simple-test-suite.md); supersedes the "enabled/disabled tracing" measurement clause in the consequences of [ADR-0025](0025-fast-operational-journeys-and-tracing.md); the rest of ADR-0025 stands
 
 ## Context
 

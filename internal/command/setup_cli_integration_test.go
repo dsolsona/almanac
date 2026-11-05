@@ -28,10 +28,12 @@ import (
 )
 
 func TestIntegrationExecutableSetupCLICompletesPersistsAndRefusesReplay(t *testing.T) {
+	t.Parallel()
 	testExecutableSetupCLICompletesPersistsAndRefusesReplay(t, "backend")
 }
 
 func TestIntegrationExecutableCombinedSetupCLICompletesPersistsAndRefusesReplay(t *testing.T) {
+	t.Parallel()
 	testExecutableSetupCLICompletesPersistsAndRefusesReplay(t, "ui,backend")
 }
 

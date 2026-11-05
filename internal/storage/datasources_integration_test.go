@@ -22,6 +22,7 @@ import (
 )
 
 func TestIntegrationDatasourceCRUDSecretRotationAndConfigurationRevision(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "datasource-crud")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"connection_test", "query_preview"}}})
@@ -452,6 +453,7 @@ func verifyConcurrentDatasourceRevisionWrites(t *testing.T, f agentFixture, agen
 }
 
 func TestIntegrationDatasourceConfigurationSnapshotIsCoherentDuringEdit(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "datasource-config-coherence")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
@@ -773,6 +775,7 @@ func waitForDiagnosticUpdateLock(t *testing.T, observer *pgx.Conn) error {
 }
 
 func TestIntegrationDatasourceAssignmentCountLimitRollsBackOverLimitWrite(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "datasource-assignment-count")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
@@ -852,6 +855,7 @@ func TestIntegrationDatasourceAssignmentCountLimitRollsBackOverLimitWrite(t *tes
 }
 
 func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrite(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "datasource-config-byte-limit")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
@@ -1017,6 +1021,7 @@ func TestIntegrationDatasourceSecretConfigurationByteLimitRollsBackOverLimitWrit
 }
 
 func TestIntegrationDatasourceDiagnosticCapacitySerializesAcrossActors(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "diagnostic-capacity")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"connection_test"}}})
@@ -1144,6 +1149,7 @@ func TestIntegrationDatasourceDiagnosticCapacitySerializesAcrossActors(t *testin
 }
 
 func TestIntegrationDatasourceDiagnosticRetentionUsesReceiptExpiry(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "diagnostic-retention")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"connection_test"}}})
@@ -1226,6 +1232,7 @@ func TestIntegrationDatasourceDiagnosticRetentionUsesReceiptExpiry(t *testing.T)
 }
 
 func TestIntegrationConcurrentSavedPreviewDoesNotUpgradeInstallationLock(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "diagnostic-installation-lock")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"connection_test", "query_preview"}}})

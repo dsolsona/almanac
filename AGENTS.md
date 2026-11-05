@@ -108,18 +108,17 @@ These documents govern applicable work; read them before that work begins.
   visits and cache misses, at the specified scale. UI lists show 10/20 rows and
   must load in < 1,000 ms, including SLO details and range/burn changes; <= 500 ms
   remains the preferred target under the maintainer's 2026-11-01 clarification.
-  Normal navigation cannot wait for preparation jobs. Capture full OTEL journey
-  traces in VictoriaTraces and independent expected values; API-only timings,
-  warmed responses and passing test counts cannot substitute. Instrumentation
-  still being implemented must be reported as missing evidence.
-- Follow [command discipline](docs/commands.md): approval applies to the actual
-  invocation. Reuse exact approved commands or the approved closed verification
-  catalog within its validated scope. Never bypass restrictions with wrappers,
-  passthrough targets or another tool. Do not request new approvals during unattended
-  work; leave unavailable operations pending. Pass these restrictions to subagents.
-- Follow [testing](docs/testing.md): focused checks while editing, one real journey
-  early, required broad gates on the completed integrated candidate. Reuse evidence
-  only for matching inputs; diagnose failures before rerunning affected gates.
+  Normal navigation cannot wait for preparation jobs. `make test-perf` measures
+  the four main pages in the browser on a seeded fleet with independent expected
+  values (ADR-0033); API-only timings and warmed responses cannot substitute.
+  Traces in VictoriaTraces locate cost; missing instrumentation is reported.
+- Follow [command discipline](docs/commands.md): use the catalog's targets as
+  written. Never bypass restrictions with wrappers, passthrough targets or another
+  tool. Do not request new approvals during unattended work; leave unavailable
+  operations pending. Pass these restrictions to subagents.
+- Follow [testing](docs/testing.md): `make test` while editing, the affected
+  suite early, `make check` and `make test-e2e` on the finished change (CI runs
+  them on every PR). Diagnose a failure before rerunning; never retry into green.
 - Reproduce reported steps/values before fixes. Exercise the integrated user journey
   and normal isolated container deployment; mocks, screenshots and suite counts
   cannot replace real API/database/agent or usability evidence. UI acceptance includes
@@ -127,14 +126,13 @@ These documents govern applicable work; read them before that work begins.
 - Preserve failures and unresolved investigations. Never weaken checks, disable
   auth, increase timeouts or rerun to manufacture green. Only mark integrated,
   verified work done; report checks actually run and unverified gaps.
-- Keep the persistent timing ledger required by the command/testing guides. Report
-  cumulative invocation time and occupied wall time separately, retaining failures
-  and unknown timings. Keep the maintainer's data, credentials and preview available;
-  verification owns separate fixtures, ports and artifacts.
+- Report the checks you ran, their results and duration, and any left unrun. Keep
+  the maintainer's data, credentials and preview available; the test suites own
+  separate fixtures, ports and artifacts (the `almanac-e2e` stack).
 - Everything builds, tests and ships through Docker (ADR-0029): `make setup` once,
-  then `make verify [MODE=…]` from the host enters the development container,
+  then the `make test…` targets enter the development container from the host,
   `make shell` opens it. Use `make bootstrap` for initial local setup of the
   application stack, `make run`/`make start` for daily startup and `make stop`
   to preserve data. Verify host HTTPS readiness before
   announcing availability. Disclose the initial password only via `make credentials`.
-  Exact setup/build/generation/verification commands live in the linked guides.
+  Exact setup/build/generation/test commands live in the linked guides.

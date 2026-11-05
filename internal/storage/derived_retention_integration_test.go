@@ -22,10 +22,12 @@ type retainedHistoryFixture struct {
 }
 
 func TestIntegrationRetainedDenseHistoryAndPersistedRestart(t *testing.T) {
+	t.Parallel()
 	verifyDerivedRetainedHistoryRegression(t, retainedHistoryFixture{"dense-fourteen-days", 15, 14})
 }
 
 func TestIntegrationRetainedMinuteHistoryAndPersistedRestart(t *testing.T) {
+	t.Parallel()
 	verifyDerivedRetainedHistoryRegression(t, retainedHistoryFixture{"minute-fifty-six-days", 60, 56})
 }
 

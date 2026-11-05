@@ -15,6 +15,7 @@ import (
 )
 
 func TestIntegrationAgentRotationSchedulesRetirementAndReplaysSafeHistory(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-agent", "rotate-create"))
 	if err != nil {
@@ -106,6 +107,7 @@ func TestIntegrationAgentRotationSchedulesRetirementAndReplaysSafeHistory(t *tes
 }
 
 func TestIntegrationAgentRotationRejectsTwoActiveAndRecoversAfterExplicitRevocation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-active-agent", "rotate-active-create"))
 	if err != nil {
@@ -137,6 +139,7 @@ func TestIntegrationAgentRotationRejectsTwoActiveAndRecoversAfterExplicitRevocat
 }
 
 func TestIntegrationAgentRotationUsesMinimumExistingCutoffAndExactExpiry(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-cutoff-agent", "rotate-cutoff-create"))
 	if err != nil {
@@ -190,6 +193,7 @@ func TestIntegrationAgentRotationUsesMinimumExistingCutoffAndExactExpiry(t *test
 }
 
 func TestIntegrationAgentRotationCandidateCollisionEpochRecoveryAndDisabledTargets(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-epoch-agent", "rotate-epoch-create"))
 	if err != nil {
@@ -231,6 +235,7 @@ func TestIntegrationAgentRotationCandidateCollisionEpochRecoveryAndDisabledTarge
 }
 
 func TestIntegrationAgentRotationMaxVersionConflictsWithoutOverflow(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-max-version-agent", "rotate-max-version-create"))
 	if err != nil {
@@ -249,6 +254,7 @@ func TestIntegrationAgentRotationMaxVersionConflictsWithoutOverflow(t *testing.T
 }
 
 func TestIntegrationAgentRotationRejectsClockRegressionAfterAgentLock(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-clock-regression-agent", "rotate-clock-regression-create"))
 	if err != nil {
@@ -295,6 +301,7 @@ func TestIntegrationAgentRotationRejectsClockRegressionAfterAgentLock(t *testing
 }
 
 func TestIntegrationAgentRotationDefaultAndExplicitOverlapReplayEquivalently(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	creation := f.input("rotate-default-agent", "rotate-default-create")
 	creation.CredentialID = "abcdefab-cdef-4abc-8def-abcdefabcdea"
@@ -322,6 +329,7 @@ func TestIntegrationAgentRotationDefaultAndExplicitOverlapReplayEquivalently(t *
 }
 
 func TestIntegrationAgentRotationReceiptExpiresAtExact24HoursWithFreshSession(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-expired-receipt-agent", "rotate-expired-receipt-create"))
 	if err != nil {
@@ -370,6 +378,7 @@ func TestIntegrationAgentRotationReceiptExpiresAtExact24HoursWithFreshSession(t 
 }
 
 func TestIntegrationAgentRotationReceiptIsScopedByActorAndOperationAndRechecksAuthority(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-isolation-agent", "rotate-isolation-create"))
 	if err != nil {
@@ -411,6 +420,7 @@ func TestIntegrationAgentRotationReceiptIsScopedByActorAndOperationAndRechecksAu
 }
 
 func TestIntegrationAgentRotationSerializesDifferentAdministratorsAtSharedVersion(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-admin-race-agent", "rotate-admin-race-create"))
 	if err != nil {
@@ -457,6 +467,7 @@ func TestIntegrationAgentRotationSerializesDifferentAdministratorsAtSharedVersio
 }
 
 func TestIntegrationAgentRotationRechecksFreshProofAndSessionAfterTargetLockWait(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, lock, pattern string }{
 		{"agent lock", "SELECT id FROM public.almanac_agents WHERE id=$1 FOR UPDATE", "%FROM public.almanac_agents%"},
 		{"credential lock", "SELECT id FROM public.almanac_agent_credentials WHERE id=$1 FOR UPDATE", "%FROM public.almanac_agent_credentials%"},
@@ -525,6 +536,7 @@ func TestIntegrationAgentRotationRechecksFreshProofAndSessionAfterTargetLockWait
 }
 
 func TestIntegrationAgentRotationRejectsProofAtExactExpiryWhileSessionRemainsLive(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-proof-expiry-agent", "rotate-proof-expiry-create"))
 	if err != nil {
@@ -582,6 +594,7 @@ func TestIntegrationAgentRotationRejectsProofAtExactExpiryWhileSessionRemainsLiv
 }
 
 func TestIntegrationAgentRotationCancellationDuringTargetLockLeavesNoMutation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("rotate-cancel-agent", "rotate-cancel-create"))
 	if err != nil {
@@ -632,6 +645,7 @@ func TestIntegrationAgentRotationCancellationDuringTargetLockLeavesNoMutation(t 
 }
 
 func TestIntegrationAgentRotationOrdersAgainstDisableAndRevoke(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name        string
 		firstAction string
@@ -751,6 +765,7 @@ func TestIntegrationAgentRotationOrdersAgainstDisableAndRevoke(t *testing.T) {
 }
 
 func TestIntegrationAgentRotationAuditAndReceiptFailuresRollbackRetirement(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"audit", "receipt"} {
 		t.Run(failure, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -813,6 +828,7 @@ func TestIntegrationAgentRotationAuditAndReceiptFailuresRollbackRetirement(t *te
 }
 
 func TestIntegrationRetirementMigrationPreservesExistingAgentAndIdentityRows(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	migrations, err := LoadMigrations(embeddedMigrations)
 	if err != nil {

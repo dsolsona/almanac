@@ -1,18 +1,8 @@
-.PHONY: setup shell stop-dev build verify _enter preview generate bootstrap run start stop logs credentials agent verification-init verification-report verification-handoff _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets
 
 # Go comes from the dev image's PATH. An inherited GOROOT can make that driver
 # execute a different installation's compiler, despite GOTOOLCHAIN=local.
 unexport GOROOT
-
-verification-init:
-	@test -n "$${VERIFICATION_PLAN:-}" || { echo 'VERIFICATION_PLAN must name the task budget JSON' >&2; exit 2; }
-	@python3 scripts/verify.py init
-
-verification-report:
-	@python3 scripts/verify.py report
-
-verification-handoff:
-	@python3 scripts/verify.py handoff
 
 # Toolchains come from the development image (ADR-0029); the names resolve on its PATH.
 GO ?= go
@@ -39,16 +29,15 @@ setup:
 	  if [ "$${UPDATE_LOCK:-}" = 1 ]; then $(DEV_COMPOSE) run --rm dev sh -c 'cd web && npm install --package-lock-only && cd ../tools/openapi && npm install --package-lock-only'; fi; \
 	  $(DEV_COMPOSE) run --rm dev sh -c 'go mod download && cd web && npm ci && cd ../tools/openapi && npm ci'
 
-# Shell in the dev container with the fixture running; CMD runs a command instead.
+# Shell in the dev container with the fixture running; CMD runs a command instead; SOCKET=1 adds Docker.
 shell:
-	@$(MAKE) --no-print-directory _enter MODE="$(MODE)" ENTER_CMD="$${CMD:-exec bash}"
+	@$(MAKE) --no-print-directory _enter SOCKET="$(SOCKET)" ENTER_CMD="$${CMD:-exec bash}"
 
 # Container images (ADR-0029): the published app and agent images and the never-published dev image.
 # IMAGE_REGISTRY and IMAGE_TAG select the publish destination; publish builds linux/amd64 and linux/arm64.
 IMAGE_TAG ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
 
-.PHONY: images publish
 images:
 	docker build --file deploy/app/Dockerfile --tag almanac:$(IMAGE_TAG) --tag almanac-local:dev .
 	docker build --file deploy/agent/Dockerfile --tag almanac-agent:$(IMAGE_TAG) --tag almanac-local-agent:dev .
@@ -106,136 +95,79 @@ credentials:
 agent:
 	@sh scripts/local-agent.sh
 
-# Verification runs inside the dev container (ADR-0029): from the host, verify enters it and
-# scripts/verify.py owns the mode table, receipts and the timing ledger. VERIFY_MODE is accepted
-# as an alias of MODE while the command catalog is re-approved.
-MODE ?= $(VERIFY_MODE)
-verify:
-	@if [ -n "$${ALMANAC_IN_DEV_CONTAINER:-}" ]; then python3 scripts/verify.py gate $(MODE); \
-	else $(MAKE) --no-print-directory _enter MODE="$(MODE)" ENTER_CMD="python3 scripts/verify.py gate $(MODE)"; fi
+# Tests (ADR-0033). Every target runs in the dev container (ADR-0029); from the host it enters it.
+#   make test              fast: formatting, vet, generated code, docs, Go and web unit tests
+#   make test-integration  Go tests against PostgreSQL and the real binaries, in parallel (RACE=1 adds -race)
+#   make test-browser      the UI catalogue in six theme and size setups, and the production build check
+#   make test-e2e          critical user journeys on a fresh Compose stack of the real images
+#   make test-perf         page speed of the SLO and SLI lists and details on a seeded fleet
+#   make check             what a pull request needs: test, test-integration and test-browser (CI adds e2e)
+dev = if [ -n "$${ALMANAC_IN_DEV_CONTAINER:-}" ]; then $(MAKE) --no-print-directory $(1); else $(MAKE) --no-print-directory _enter ENTER_CMD="make --no-print-directory $(1)"; fi
 
-# Enter the dev container. The Docker-driving modes add compose.dev.socket.yaml: the daemon
-# socket, the checkout at its host path and the daemon host's network.
-_enter:
-	@set -eu; files='-f compose.dev.yaml'; \
-	  case "$${MODE:-}" in compose|providers) files="$$files -f compose.dev.socket.yaml"; \
-	    export ALMANAC_HOST_CHECKOUT="$(CURDIR)"; \
-	    export ALMANAC_DOCKER_GID=$$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock almanac-dev:latest stat -c %g /var/run/docker.sock) ;; esac; \
-	  image=$$(docker image inspect --format '{{.Id}}' almanac-dev:latest 2>/dev/null || echo unknown); \
-	  docker compose $$files run --rm -e ALMANAC_DEV_IMAGE_ID="$$image" dev bash -c "$${ENTER_CMD}"
+test: ; @$(call dev,_test RACE=$(RACE))
+test-integration: ; @$(call dev,_test_integration RACE=$(RACE))
+test-browser: ; @$(call dev,_test_browser)
+coverage: ; @$(call dev,_coverage)
+check verify: test test-integration test-browser
 
-.PHONY: _verify_all
-_verify_all:
+# End-to-end and performance suites drive the host's Docker daemon, so they enter with the socket.
+# ARGS passes Playwright arguments, for example ARGS='--project onboarding' or ARGS='-g agent'.
+test-e2e:
+	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="sh scripts/e2e.sh $(ARGS)"
+
+# PERF_DAYS sets the history length (default 35) and PERF_RUNS the loads per page (default 10).
+test-perf:
+	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="E2E_CONFIG=playwright.perf.config.ts PERF_DAYS=$${PERF_DAYS:-35} PERF_RUNS=$${PERF_RUNS:-10} sh scripts/e2e.sh $(ARGS)"
+
+GO_TEST := GOTOOLCHAIN=local GOPROXY=off $(GO) test $(if $(RACE),-race)
+
+_test:
+	@set -eu; unformatted=$$(find cmd internal -name '*.go' -type f -print0 | xargs -0 $(GOFMT) -l); \
+	  test -z "$$unformatted" || { echo "Go files need formatting (make generate GENERATE_MODE=format): $$unformatted" >&2; exit 1; }
+	GOTOOLCHAIN=local GOPROXY=off $(GO) vet ./...
+	GOTOOLCHAIN=local GOPROXY=off $(GO) vet -tags=integration ./...
+	$(MAKE) --no-print-directory _verify_sqlc_generated _verify_generated
+	python3 scripts/check-docs.py
 	python3 scripts/check-image-pins.py
-	$(MAKE) _verify_web
-	$(MAKE) _verify_go
-
-_verify_web:
-	cd web && node --check scripts/measure-backend-browser.mjs
-	cd web && node --check scripts/check-telemetry-runtime.mjs
-	cd web && node --check scripts/check-local-compose.mjs
-	cd web && node --check scripts/check-slo-browser.mjs
-	cd web && node --check scripts/capture-telemetry-delivery.mjs
+	python3 scripts/local-agent-tty-test.py
+	cd web && node scripts/check-local-agent.mjs
 	cd web && npm run typecheck
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts
-	cd web && npm run build
-	cd web && node scripts/check-production.mjs
+	$(MAKE) --no-print-directory _ensure_web_assets
+	$(GO_TEST) ./...
 
-.PHONY: _verify_providers
-_verify_providers:
-	cd web && node scripts/check-local-providers.mjs
+# One `go test` for every package: packages run in parallel and integration tests call t.Parallel.
+# Each test gets its own database in the dev container's PostgreSQL fixture.
+_test_integration:
+	$(MAKE) --no-print-directory build
+	$(GO_TEST) -tags=integration -count=1 -timeout=10m ./...
+
+_test_browser:
+	cd web && ./node_modules/.bin/playwright test --config playwright.config.ts
+	cd web && npm run build && node scripts/check-production.mjs
+
+# Coverage of the unit and integration tests together; the report lands in .local/coverage.
+_coverage:
+	@mkdir -p .local/coverage
+	$(MAKE) --no-print-directory build
+	GOTOOLCHAIN=local GOPROXY=off $(GO) test -tags=integration -count=1 -timeout=10m -coverpkg=./internal/... -coverprofile=.local/coverage/go.out ./...
+	GOTOOLCHAIN=local GOPROXY=off $(GO) tool cover -func=.local/coverage/go.out | tail -1
+	GOTOOLCHAIN=local GOPROXY=off $(GO) tool cover -html=.local/coverage/go.out -o .local/coverage/go.html
+
+# Enter the dev container. SOCKET=1 adds compose.dev.socket.yaml for the suites that drive Docker:
+# the daemon socket, the checkout at its host path and the daemon host's network.
+_enter:
+	@set -eu; files='-f compose.dev.yaml'; \
+	  if [ -n "$${SOCKET:-}" ]; then files="$$files -f compose.dev.socket.yaml"; \
+	    export ALMANAC_HOST_CHECKOUT="$(CURDIR)"; \
+	    export ALMANAC_DOCKER_GID=$$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock almanac-dev:latest stat -c %g /var/run/docker.sock); fi; \
+	  docker compose $$files run --rm dev bash -c "$${ENTER_CMD}"
 
 _ensure_web_assets:
 	@if [ ! -f web/dist/index.html ]; then \
 	  echo 'Building missing embedded web assets'; \
 	  cd web && npm run build; \
 	fi
-
-_verify_go:
-	@set -eu; command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
-	  case "$${GO_PACKAGE:-./...}" in ./...|./internal/config|./internal/command|./internal/setupclient|./internal/cliprofile|./internal/uihttp|./internal/authhttp|./internal/backendhttp|./internal/agenthttp|./internal/agentclient|./internal/storage|./internal/identity|./internal/authentication|./internal/agentmanagement|./internal/agentaccess|./internal/agentownership|./internal/agentprotocol|./internal/agentruntime|./internal/agentcmd|./internal/agentws|./internal/secretfile|./internal/datasource|./internal/prometheus|./internal/datasourcehttp|./internal/datasourceclient|./internal/sli|./internal/slihttp|./internal/slo|./internal/slohttp|./internal/sloclient) ;; *) echo 'GO_PACKAGE must select a package with repository tests' >&2; exit 2;; esac; \
-	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  unformatted=$$(find cmd internal web -name '*.go' -type f -print0 | xargs -0 $(GOFMT) -l); \
-	  test -z "$$unformatted" || { echo "Go files need formatting: $$unformatted" >&2; exit 1; }; \
-	  target="$${GO_PACKAGE:-./...}"; \
-	  case "$$target" in ./...|./internal/command|./internal/uihttp) $(MAKE) _ensure_web_assets ;; esac; \
-	  $(GO) version; \
-	  $(GO) tool compile -V; \
-	  test_list=$$(mktemp .local/go-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  if ! $(GO) test -list . "$$target" > "$$test_list"; then echo 'Go test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
-	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
-	  test "$$tests" -gt 0 || { echo 'selected Go packages contain zero tests' >&2; exit 1; }; \
-	  echo "Selected Go tests: $$tests"; \
-	  $(GO) vet "$$target"; \
-	  $(GO) test "$$target"; \
-	  if [ -z "$${GO_PACKAGE:-}" ]; then \
-	    echo 'Compile database acceptance tests without running them'; \
-	    $(GO) test -tags=integration -run '^$$' ./internal/storage ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/command; \
-	    echo 'Compile controlled capacity entry without running it'; \
-	    $(GO) test -tags=integration,performance -run '^$$' ./internal/command; \
-	    $(MAKE) _verify_sqlc_generated; \
-	    mkdir -p bin; $(GO) build -o bin/almanac ./cmd/almanac; \
-	    $(GO) build -o bin/almanac-agent ./cmd/almanac-agent; \
-	    $(MAKE) _report_sizes; \
-	    $(MAKE) _verify_generated; \
-	    $(MAKE) _verify_smoke; \
-	  fi
-
-_verify_go_race: _ensure_web_assets
-	@set -eu; export GOTOOLCHAIN=local GOPROXY=off; \
-	  test_list=$$(mktemp .local/race-tests.XXXXXX); trap 'rm -f "$$test_list"' EXIT; \
-	  packages='./internal/uihttp ./internal/command ./internal/agentclient ./internal/setupclient ./internal/cliprofile ./internal/storage ./internal/identity ./internal/authentication ./internal/agentmanagement ./internal/agenthttp ./internal/authhttp ./internal/backendhttp ./internal/secretfile ./internal/agentaccess ./internal/agentcmd ./internal/agentws ./internal/agentruntime ./internal/agentownership ./internal/agentprotocol ./internal/datasource ./internal/sourcesecret ./internal/prometheus ./internal/datasourcehttp ./internal/datasourceclient ./internal/sli ./internal/slihttp ./internal/slo ./internal/slohttp ./internal/sloclient'; \
-	  if ! $(GO) test -list . $$packages > "$$test_list"; then echo 'race test discovery failed' >&2; cat "$$test_list"; exit 1; fi; \
-	  tests=$$(awk '/^Test/{n++} END{print n+0}' "$$test_list"); \
-	  test "$$tests" -gt 0 || { echo 'selected race packages contain zero tests' >&2; exit 1; }; \
-	  echo "Selected race tests: $$tests"; \
-	  $(GO) test -race $$packages
-
-_verify_auth_bench:
-	@set -eu; command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
-	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  benchmarks=$$($(GO) test -run '^$$' -list '^BenchmarkPassword(Hash|Verify)$$' ./internal/identity); \
-	  printf '%s\n' "$$benchmarks"; \
-	  test "$$(printf '%s\n' "$$benchmarks" | awk '/^Benchmark/{n++} END{print n+0}')" -eq 2 || { echo 'expected both named password benchmarks' >&2; exit 1; }; \
-	  $(GO) test -run '^$$' -bench '^BenchmarkPassword(Hash|Verify)$$' -benchtime=10x -count=1 -timeout=2m ./internal/identity
-
-.PHONY: _verify_performance
-_verify_performance:
-	@set -eu; umask 077; \
-	  case "$${ALMANAC_TEST_DATABASE_URL:-}" in 'postgres://almanac:almanac_f1_t05_local_only@127.0.0.1:15487/almanac_f1_storage?sslmode=disable') ;; *) echo 'performance requires the existing isolated local fixture' >&2; exit 2 ;; esac; \
-	  test -z "$${GO_PACKAGE:-}$${TEST_FILE:-}$${BROWSER_SCENARIO:-}$${BROWSER_PROJECT:-}$${GOFLAGS:-}" || { echo 'performance has no custom selectors or Go flags' >&2; exit 2; }; \
-	  command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
-	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  python3 scripts/verify.py fixture-check; \
-	  $(MAKE) build; \
-	  selected=$$($(GO) test -tags=integration,performance -list '^TestIntegrationControlledBackendPerformance$$' ./internal/command); \
-	  test "$$(printf '%s\n' "$$selected" | awk '/^TestIntegrationControlledBackendPerformance$$/{n++} END{print n+0}')" -eq 1 || { echo 'controlled performance entry missing' >&2; exit 1; }; \
-	  echo 'Selected controlled performance case: 10-SLO year-history acceptance; larger fleets deferred by maintainer'; \
-	  artifact="$(CURDIR)/.local/performance-go-test.jsonl"; status_file="$(CURDIR)/.local/performance-go-test.exit"; \
-	  printf 'running\n' > "$$status_file"; go_status=0; \
-	  $(GO) test -json -tags=integration,performance -p=1 -run '^TestIntegrationControlledBackendPerformance$$' -count=1 -timeout=8h30m ./internal/command > "$$artifact" || go_status=$$?; \
-	  printf '%s\n' "$$go_status" > "$$status_file"; \
-	  echo "Controlled performance Go events: $$artifact"; \
-	  if [ "$$go_status" -eq 0 ]; then python3 scripts/verify.py performance-evidence; else exit "$$go_status"; fi
-
-_verify_journey:
-	@set -eu; \
-	  case "$${BROWSER_SCENARIO:-onboarding}" in \
-	    onboarding|lost-login|lost-password) expected="TestIntegrationExecutableBrowserAuthentication/$${BROWSER_SCENARIO:-onboarding}"; journey='^TestIntegrationExecutableBrowserAuthentication$$/^'"$${BROWSER_SCENARIO:-onboarding}"'$$' ;; \
-	    agents|agents-close|agents-lost|agents-unavailable) expected="TestIntegrationExecutableBrowserAgentRegistration/$$BROWSER_SCENARIO"; journey='^TestIntegrationExecutableBrowserAgentRegistration$$/^'"$$BROWSER_SCENARIO"'$$' ;; \
-	    agents-lifecycle) expected='TestIntegrationExecutableBrowserAgentLifecycle'; journey='^TestIntegrationExecutableBrowserAgentLifecycle$$' ;; \
-	    slis) expected='TestIntegrationExecutableBrowserSLICollectionJourney'; journey='^TestIntegrationExecutableBrowserSLICollectionJourney$$' ;; \
-	    *) echo 'BROWSER_SCENARIO must select a documented browser journey' >&2; exit 2 ;; \
-	  esac; \
-	  command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
-	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
-	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  python3 scripts/verify.py fixture-check; \
-	  $(MAKE) build; \
-	  journey_log=$$(mktemp .local/journey-result.XXXXXX); \
-	  if ! $(GO) test -race -tags=integration -p=1 -v -run "$$journey" -count=1 -timeout=2m ./internal/command > "$$journey_log" 2>&1; then cat "$$journey_log"; exit 1; fi; \
-	  cat "$$journey_log"; \
-	  grep -F -- "--- PASS: $$expected (" "$$journey_log" >/dev/null || { echo 'selected browser journey did not execute and pass' >&2; exit 1; }
 
 _verify_sqlc_generated:
 	@set -eu; command -v $(SQLC) >/dev/null || { echo 'sqlc is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
@@ -250,10 +182,6 @@ _verify_generated:
 	  GOTOOLCHAIN=local GOPROXY=off $(OAPI_CODEGEN) -config api/oapi-codegen.yaml -o "$$temp_dir/generated.go" api/openapi.yaml; \
 	  tools/openapi/node_modules/.bin/openapi-typescript api/openapi.yaml -o "$$temp_dir/generated.ts" >/dev/null; \
 	  cmp internal/api/generated.go "$$temp_dir/generated.go"; cmp web/src/api/generated.ts "$$temp_dir/generated.ts"
-
-_verify_smoke:
-	@test -x bin/almanac || { echo 'binary missing; run make build or make verify MODE=go' >&2; exit 2; }
-	sh scripts/smoke-ui.sh
 
 _report_sizes:
 	@set -eu; binary_bytes=$$(wc -c < bin/almanac); \

@@ -177,12 +177,10 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
 
 Run `make setup` once to install locked dependencies and Chromium. `make preview`
 serves the development catalogue at `http://127.0.0.1:5198/design-system`.
-`make build` typechecks and creates production assets. `make verify` runs the
-component suite, production build and production exclusion check. Set
-`MODE=unit` to run focused component behavior checks, or
-`MODE=browser` for Chromium checks at desktop, intermediate and 360 px
-mobile widths in both themes. `TEST_FILE` can select one component test filename
-with the unit mode.
+`make build` typechecks and creates production assets. `make test` runs the
+component suite; `make test-browser` runs the Chromium checks at desktop,
+intermediate and 360 px mobile widths in both themes, the production build and the
+production exclusion check.
 
 The catalogue demonstrates actual shared control exports and local-only state,
 including the signed-in application shell. It includes palette and type specimens,

@@ -34,7 +34,7 @@ For delegated work:
 - Freeze product and verification inputs for a candidate under test. Concurrent
   work must not invalidate that candidate. Reports identify the tested revision or
   source fingerprint; another revision's result is not integrated acceptance.
-- A subagent returns its diff, exact commands, results, timings, fixture identity
+- A subagent returns its diff, exact commands, results, durations
   and gaps. It cannot accept its own work, relax checks, alter product contracts or
   start later milestones. The primary agent inspects the actual evidence and diff.
 - Start a new task turn for corrections to a completed subagent and confirm its
@@ -83,28 +83,19 @@ authorization and cannot introduce arbitrary passthrough execution.
 
 ## Verify and review
 
-Follow [testing](testing.md) for gate selection and evidence. Inspect one running
-real page/journey early; use focused checks while editing. Reserve Compose end-to-end,
-the catalogue matrix and the database/API integration suite for the completed integrated
-candidate and PR verification. A handoff, small edit or status request does not trigger
-them. Reuse passing evidence for unchanged relevant inputs, including PR publication.
+Follow [testing](testing.md). Run `make test` while editing and the affected suite
+early (one real journey with `make test-e2e ARGS=…` for user-facing work). Run
+`make check` and `make test-e2e` on the finished change; CI runs them again on every
+pull request. A handoff, small edit or status request does not trigger them.
 
 After a failure, preserve diagnostics, investigate with focused checks and rerun the
 affected gate when the corrected candidate is ready. Keep unaffected evidence. Never
 waive a required gate because a narrow check passed. Retain unexplained failures as
 open investigations; a later passing run alone does not establish a fix.
 
-For integration, use the dependency-aware selection described in
-[testing](testing.md): retain matching per-case passes from partial or complete
-runs, execute failed/missing/affected cases, and report reused coverage separately
-from new executions. Inspect the plan when the expected scope is uncertain.
-Do not repeat unchanged passing areas merely to get a fresh aggregate green run.
-Shared dependencies, fixture/tool changes and missing evidence widen selection;
-fresh full execution remains available for release qualification and investigations.
-
 Review the actual diff for correctness, contract fit, test strength, secrets, generated
 sources and scope. The primary agent exercises the integrated user checklist itself,
-including the normal deployment through the isolated Compose check when applicable.
+including the normal deployment through the isolated end-to-end stack when applicable.
 Keep default origin/authentication/configuration and persisted records in that path.
 Preserve operator data, credentials and the maintainer's preview. Isolated API fixtures
 and subagent summaries support acceptance but do not replace the user journey.
@@ -115,12 +106,10 @@ keyboard/focus, errors and exact values. Exercise continuous navigation/history 
 ordinary form entry, submission and correction. Screenshots alone are not acceptance.
 Lazy-loaded failures must remain visible without blanking unrelated controls.
 
-Compile integration-tagged tests in the full Go gate even when the real fixture is
-unavailable; compilation does not replace required real integration execution.
-Record candidate identity, commands, selected tests/counts, results, artifacts and
-gaps. Maintain timing receipts as specified in [command discipline](commands.md),
-reporting invocation time and occupied wall time separately. Avoid process reporting
-that does not help assess the outcome or next action.
+`make test` vets the integration-tagged tests so they compile even without the
+fixture; compilation does not replace running them. Report the commands, results,
+durations and gaps. Avoid process reporting that does not help assess the outcome or
+next action.
 
 ## Progress and publication
 

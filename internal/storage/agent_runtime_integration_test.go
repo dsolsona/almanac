@@ -15,6 +15,7 @@ import (
 )
 
 func TestIntegrationAgentRuntimeExplanationReflectsAssignment(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	credential, created := createOwnershipAgent(t, f, "runtime-assignment")
 	clock := func() time.Time { return f.base.Add(5 * time.Second) }
@@ -42,6 +43,7 @@ func TestIntegrationAgentRuntimeExplanationReflectsAssignment(t *testing.T) {
 }
 
 func TestIntegrationAgentOwnershipAndEmptyExecutionGrantCommitTogether(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "runtime-grant")
 	proof := ownershipBytes(32, 71)
@@ -204,6 +206,7 @@ FROM public.almanac_agent_execution_grants WHERE agent_id=$1`, created.Agent.ID,
 }
 
 func TestIntegrationAgentRuntimeGrantFailureRollsBackOwnership(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "runtime-grant-failure")
 	conn := integrationConnect(t, f.databaseURL)
@@ -234,6 +237,7 @@ func TestIntegrationAgentRuntimeGrantFailureRollsBackOwnership(t *testing.T) {
 }
 
 func TestIntegrationStaleHeartbeatDoesNotRegressAppliedRevision(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "stale-heartbeat")
 	now := f.base.Add(5 * time.Second)

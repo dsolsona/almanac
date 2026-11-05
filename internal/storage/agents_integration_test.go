@@ -17,6 +17,7 @@ import (
 )
 
 func TestIntegrationCreateAgentPersistsSafeReceiptAndReplaysMetadata(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -177,6 +178,7 @@ func (f agentFixture) input(name, key string) CreateAgentInput {
 }
 
 func TestIntegrationCreateAgentDenialsPreserveRegistrationRows(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		edit func(*testing.T, *agentFixture, *CreateAgentInput)
@@ -229,6 +231,7 @@ func TestIntegrationCreateAgentDenialsPreserveRegistrationRows(t *testing.T) {
 }
 
 func TestIntegrationCreateAgentConcurrentReceiptWriters(t *testing.T) {
+	t.Parallel()
 	for _, conflictBody := range []bool{false, true} {
 		name := "same-body"
 		if conflictBody {
@@ -272,6 +275,7 @@ func TestIntegrationCreateAgentConcurrentReceiptWriters(t *testing.T) {
 }
 
 func TestIntegrationCreateAgentActorIsolationAndFreshSessionReplay(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	first := f.input("actor-one-agent", "shared-key")
 	created, err := CreateAgent(t.Context(), f.databaseURL, first)
@@ -317,6 +321,7 @@ VALUES ('second-admin',$1,'administrator',true,false,$2,$2) RETURNING id::text`,
 }
 
 func TestIntegrationCreateAgentReceiptExpiryBoundaryAndClockNormalization(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	input := f.input("clock-agent", "clock-key")
 	zone := time.FixedZone("offset", 3600)
@@ -416,6 +421,7 @@ FROM public.almanac_agents a JOIN public.almanac_agent_credentials c ON c.agent_
 }
 
 func TestIntegrationCreateAgentProofAndSessionExpiryAfterLockWait(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name       string
 		start      time.Duration
@@ -467,6 +473,7 @@ func TestIntegrationCreateAgentProofAndSessionExpiryAfterLockWait(t *testing.T) 
 }
 
 func TestIntegrationCreateAgentOrderedAfterLogoutOrPasswordChange(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"logout", "password-change"} {
 		t.Run(change, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -533,6 +540,7 @@ CREATE TRIGGER pause_agent_invalidation BEFORE DELETE ON public.almanac_sessions
 }
 
 func TestIntegrationCreateAgentCancellationDuringUserLockLeavesNoRows(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	blocker := integrationConnect(t, f.databaseURL)
 	defer closeIntegrationConn(blocker)
@@ -563,6 +571,7 @@ func TestIntegrationCreateAgentCancellationDuringUserLockLeavesNoRows(t *testing
 }
 
 func TestIntegrationCreateAgentAuditAndReceiptFailuresRollBack(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"audit", "receipt"} {
 		t.Run(point, func(t *testing.T) {
 			f := newAgentFixture(t)

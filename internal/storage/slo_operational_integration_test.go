@@ -20,6 +20,7 @@ import (
 )
 
 func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "operational-agent")
 	now := f.base.Add(5 * time.Second)

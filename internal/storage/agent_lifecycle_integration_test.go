@@ -20,6 +20,7 @@ import (
 )
 
 func TestIntegrationAgentLifecycleReadsRevokesDisablesAndReplays(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("lifecycle-agent", "lifecycle-create"))
 	if err != nil {
@@ -73,6 +74,7 @@ func TestIntegrationAgentLifecycleReadsRevokesDisablesAndReplays(t *testing.T) {
 }
 
 func TestIntegrationMalformedAgentLifecycleReceiptFailsClosed(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("bad-receipt-agent", "bad-receipt-create"))
 	if err != nil {
@@ -99,6 +101,7 @@ func TestIntegrationMalformedAgentLifecycleReceiptFailsClosed(t *testing.T) {
 }
 
 func TestIntegrationMalformedAgentCreationReceiptFailsClosed(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	input := f.input("bad-create-receipt-agent", "bad-create-receipt")
 	created, err := CreateAgent(t.Context(), f.databaseURL, input)
@@ -118,6 +121,7 @@ func TestIntegrationMalformedAgentCreationReceiptFailsClosed(t *testing.T) {
 }
 
 func TestIntegrationMalformedNoopDisableReceiptMissingRequiredScalarsFailsClosed(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"changed", "revoked_credential_count", "agent.enabled"} {
 		t.Run(field, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -157,6 +161,7 @@ func TestIntegrationMalformedNoopDisableReceiptMissingRequiredScalarsFailsClosed
 }
 
 func TestIntegrationAgentReadAndLifecycleAuthorizationPreservesState(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, sql string
 		want      error
@@ -250,6 +255,7 @@ WHERE a.id=$1 AND c.id=$2`, created.Agent.ID, created.Credential.ID).Scan(&enabl
 }
 
 func TestIntegrationAgentReadRejectsRevokedSessionWithoutTargetDisclosure(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	if _, err := RevokeSession(t.Context(), f.databaseURL, f.verifier, f.base.Add(3*time.Second), "agent-read-session-revoke"); err != nil {
 		t.Fatal(err)
@@ -261,6 +267,7 @@ func TestIntegrationAgentReadRejectsRevokedSessionWithoutTargetDisclosure(t *tes
 }
 
 func TestIntegrationAgentReadRechecksSessionExpiryAfterTargetLock(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("read-expiry-wait-agent", "read-expiry-wait-create"))
 	if err != nil {
@@ -311,6 +318,7 @@ func TestIntegrationAgentReadRechecksSessionExpiryAfterTargetLock(t *testing.T) 
 }
 
 func TestIntegrationAgentLifecycleRejectsPriorLogoutPasswordRoleAndEpochChanges(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"logout", "password-change", "role-change", "epoch-change"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -372,6 +380,7 @@ func TestIntegrationAgentLifecycleRejectsPriorLogoutPasswordRoleAndEpochChanges(
 }
 
 func TestIntegrationAgentPaginationEqualTimestampAndCursorScope(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	ids := []string{"abcdefab-cdef-4abc-8def-abcdefabcdea", "abcdefab-cdef-4abc-8def-abcdefabcdeb", "abcdefab-cdef-4abc-8def-abcdefabcdec"}
 	var owners []string
@@ -437,6 +446,7 @@ func TestIntegrationAgentPaginationEqualTimestampAndCursorScope(t *testing.T) {
 }
 
 func TestIntegrationDisableBulkRevokesExpiredOldEpochAndPreservesHistory(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("bulk-disable-agent", "bulk-disable-create"))
 	if err != nil {
@@ -486,6 +496,7 @@ func TestIntegrationDisableBulkRevokesExpiredOldEpochAndPreservesHistory(t *test
 }
 
 func TestIntegrationAgentLifecycleNoOpsVersionAndHistoricalReplay(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("lifecycle-noop-agent", "lifecycle-noop-create"))
 	if err != nil {
@@ -573,6 +584,7 @@ func TestIntegrationAgentLifecycleNoOpsVersionAndHistoricalReplay(t *testing.T) 
 }
 
 func TestIntegrationLifecycleMaxVersionNoopAndChangedConflict(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("max-noop-agent", "max-noop-create"))
 	if err != nil {
@@ -624,6 +636,7 @@ func TestIntegrationLifecycleMaxVersionNoopAndChangedConflict(t *testing.T) {
 }
 
 func TestIntegrationAgentLifecycleReceiptExactExpiryCreatesFreshNoop(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("receipt-expiry-agent", "receipt-expiry-create"))
 	if err != nil {
@@ -671,6 +684,7 @@ func TestIntegrationAgentLifecycleReceiptExactExpiryCreatesFreshNoop(t *testing.
 }
 
 func TestIntegrationAgentLifecycleAuditAndReceiptFailuresRollback(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"audit", "receipt"} {
 		t.Run(point, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -735,6 +749,7 @@ func TestIntegrationAgentLifecycleAuditAndReceiptFailuresRollback(t *testing.T) 
 }
 
 func TestIntegrationAgentNoopAuditFailureRollsBackReceipt(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("noop-audit-agent", "noop-audit-create"))
 	if err != nil {
@@ -776,6 +791,7 @@ func TestIntegrationAgentNoopAuditFailureRollsBackReceipt(t *testing.T) {
 }
 
 func TestIntegrationDisableValidatesCredentialTimeAfterTargetLock(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name         string
 		issuedOffset time.Duration
@@ -816,6 +832,7 @@ func TestIntegrationDisableValidatesCredentialTimeAfterTargetLock(t *testing.T) 
 }
 
 func TestIntegrationAgentLifecycleRejectsBackwardsCompletionClock(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("backwards-clock-agent", "backwards-clock-create"))
 	if err != nil {
@@ -857,6 +874,7 @@ func TestIntegrationAgentLifecycleRejectsBackwardsCompletionClock(t *testing.T) 
 }
 
 func TestIntegrationLifecycleTargetLockWaitRechecksProofAndSession(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		lock    string
@@ -928,6 +946,7 @@ func TestIntegrationLifecycleTargetLockWaitRechecksProofAndSession(t *testing.T)
 }
 
 func TestIntegrationLifecycleCancellationDuringTargetLockReleasesTransaction(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("cancel-lifecycle-agent", "cancel-lifecycle-create"))
 	if err != nil {
@@ -979,6 +998,7 @@ func TestIntegrationLifecycleCancellationDuringTargetLockReleasesTransaction(t *
 }
 
 func TestIntegrationConcurrentSameLifecycleReceiptHasOneMutation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("lifecycle-race-agent", "lifecycle-race-create"))
 	if err != nil {
@@ -1039,6 +1059,7 @@ func TestIntegrationConcurrentSameLifecycleReceiptHasOneMutation(t *testing.T) {
 }
 
 func TestIntegrationDifferentAdministratorsRaceOnSharedAgentVersion(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("admin-race-agent", "admin-race-create"))
 	if err != nil {
@@ -1094,6 +1115,7 @@ func TestIntegrationDifferentAdministratorsRaceOnSharedAgentVersion(t *testing.T
 }
 
 func TestIntegrationAgentDeleteBlocksDependenciesAndReplaysAfterArchival(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	created, err := CreateAgent(t.Context(), f.databaseURL, f.input("retiring-agent", "retiring-create"))
 	if err != nil {
@@ -1171,6 +1193,7 @@ func TestIntegrationAgentDeleteBlocksDependenciesAndReplaysAfterArchival(t *test
 }
 
 func TestIntegrationAgentDeleteSerializesWithDatasourceAssignment(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "concurrent-delete")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: datasource.PrometheusProvider, ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}})

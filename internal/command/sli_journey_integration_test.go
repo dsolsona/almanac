@@ -35,6 +35,7 @@ import (
 // the real authenticated UI, then waits for the separate agent to query and
 // persist the first authorized canonical interval in the isolated database.
 func TestIntegrationExecutableBrowserSLICollectionJourney(t *testing.T) {
+	t.Parallel()
 	verifySLIBrowserDiagnostics(t)
 	started := time.Now()
 	databaseURL := testpostgres.Database(t)

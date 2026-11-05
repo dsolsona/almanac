@@ -25,6 +25,7 @@ import (
 // The grant is seeded after management creates the SLI so this test isolates
 // durable ingestion semantics; configuration activation has separate tests.
 func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "sli-ingest")
 	now := f.base.Add(4 * time.Second)
