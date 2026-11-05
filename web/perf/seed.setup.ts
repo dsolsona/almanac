@@ -64,16 +64,18 @@ test('seed the performance fleet', async ({ page }) => {
  execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
 SELECT point,p.sli_id,p.measurement_revision,point+interval '1 minute','observed',decode(repeat('ab',32),'hex'),'{}',
  gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),p.agent_id,p.session_generation,p.configuration_revision,p.lease_id,point,point+interval '1 minute'
-FROM perf_proofs p CROSS JOIN LATERAL generate_series(${from}, least(${to}, p.first_live) - interval '1 minute', interval '1 minute') point
+FROM public.perf_proofs p CROSS JOIN LATERAL generate_series(${from}, least(${to}, p.first_live) - interval '1 minute', interval '1 minute') point
 ON CONFLICT DO NOTHING;
 INSERT INTO public.almanac_sli_observation_values (interval_start,sli_id,measurement_revision,good_count,total_count)
 SELECT c.interval_start,c.sli_id,c.measurement_revision,p.good,${TOTAL}
-FROM public.almanac_sli_coverage c JOIN perf_proofs p USING (sli_id,measurement_revision)
+FROM public.almanac_sli_coverage c JOIN public.perf_proofs p USING (sli_id,measurement_revision)
 WHERE c.interval_start >= ${from} AND c.interval_start < least(${to}, p.first_live) AND c.outcome='observed'
 ON CONFLICT DO NOTHING;`);
   }
+  // The fixture's own table lives in this disposable stack's database; each statement runs as its own call.
   psql(`
-CREATE TEMP TABLE perf_proofs AS
+DROP TABLE IF EXISTS public.perf_proofs;
+CREATE UNLOGGED TABLE public.perf_proofs AS
 SELECT proof.*, g.good, first.first_live FROM (
   SELECT DISTINCT ON (sli_id) sli_id,measurement_revision,agent_id,session_generation,configuration_revision,lease_id
   FROM public.almanac_sli_coverage WHERE sli_id = ANY(${ids}) AND outcome='observed' ORDER BY sli_id, interval_start DESC
@@ -87,8 +89,14 @@ DO $$ DECLARE month date; BEGIN
   END LOOP;
 END $$;
 UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli_id = ANY(${ids});
-${chunks.join('\n')}
 `);
+  // One day per call keeps each call short and shows progress; a day is 20 × 1,440 intervals.
+  for (const [day, chunk] of chunks.entries()) {
+    const begun = Date.now();
+    psql(chunk);
+    console.log(`history day ${day + 1}/${chunks.length} written in ${Date.now() - begun} ms`);
+  }
+  psql('DROP TABLE public.perf_proofs;');
 
   const services: string[] = [];
   for (const name of ['checkout', 'payments', 'search']) {

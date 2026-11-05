@@ -4,19 +4,14 @@ package command
 
 import (
 	"bytes"
-	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json/v2"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,9 +29,8 @@ import (
 // TestIntegrationExecutableBrowserSLICollectionJourney creates an SLI through
 // the real authenticated UI, then waits for the separate agent to query and
 // persist the first authorized canonical interval in the isolated database.
-func TestIntegrationExecutableBrowserSLICollectionJourney(t *testing.T) {
+func TestIntegrationExecutableSLICollectionJourney(t *testing.T) {
 	t.Parallel()
-	verifySLIBrowserDiagnostics(t)
 	started := time.Now()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
@@ -176,8 +170,8 @@ func TestIntegrationExecutableBrowserSLICollectionJourney(t *testing.T) {
 	t.Logf("SLI journey stage=agent_ready elapsed=%s", time.Since(started).Round(time.Millisecond))
 	datasourceID := createSLIJourneyDatasource(t, binary, dir, journey, sourceEndpoint, sourceCA)
 	t.Logf("SLI journey stage=datasource_created elapsed=%s", time.Since(started).Round(time.Millisecond))
-	sliID := checkSLIBrowserJourney(t, baseURL, certificate, "sli-owner", permanentPassword, journey.id, datasourceID)
-	t.Logf("SLI journey stage=browser_observed elapsed=%s", time.Since(started).Round(time.Millisecond))
+	sliID := createSLIJourneySLI(t, binary, dir, journey, databaseURL, datasourceID)
+	t.Logf("SLI journey stage=observed elapsed=%s", time.Since(started).Round(time.Millisecond))
 	waitDatasourceAgentConfiguration(t, func(args ...string) []byte {
 		command := exec.CommandContext(t.Context(), binary, args...)
 		output, runErr := command.Output()
@@ -395,167 +389,46 @@ func createSLIJourneyDatasourceWithCadence(t *testing.T, binary, dir string, jou
 	return datasourceUUID(document.Result.Id)
 }
 
-func checkSLIBrowserJourney(t *testing.T, baseURL string, certificatePEM []byte, login, password, agentID, datasourceID string) string {
+// createSLIJourneySLI creates the journey's 99/100 SLI through the executable CLI and waits until the
+// assigned agent has collected its first interval. The UI path is covered by web/e2e (ADR-0033).
+func createSLIJourneySLI(t *testing.T, binary, dir string, journey connectedAgentJourney, databaseURL, datasourceID string) string {
 	t.Helper()
-	parsedURL, err := url.Parse(baseURL)
-	if err != nil || parsedURL.Scheme != "https" || parsedURL.Hostname() != "localhost" ||
-		parsedURL.Path != "" && parsedURL.Path != "/" || login == "" || password == "" ||
-		!validCLIUUID(agentID) || !validCLIUUID(datasourceID) || len(certificatePEM) > 16*1024 {
-		t.Fatal("SLI browser journey fixture is invalid")
-	}
-	block, rest := pem.Decode(certificatePEM)
-	if block == nil || block.Type != "CERTIFICATE" || len(rest) != 0 {
-		t.Fatal("decode SLI browser journey certificate failed")
-	}
-	certificate, err := x509.ParseCertificate(block.Bytes)
-	if err != nil || len(certificate.RawSubjectPublicKeyInfo) == 0 {
-		t.Fatal("parse SLI browser journey certificate failed")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
+	input, err := json.Marshal(map[string]any{"name": "request-success", "display_name": "Request success", "datasource_id": datasourceID,
+		"measurement_kind": "event_counts", "component_mode": "interval_count", "good_query": "vector(99)", "total_query": "vector(100)"})
 	if err != nil {
-		t.Fatal("resolve SLI browser journey repository failed")
+		t.Fatal("encode SLI journey SLI failed")
 	}
-	artifacts, err := os.MkdirTemp(filepath.Join(root, ".local"), "browser-sli-")
-	if err != nil {
-		t.Fatal("create SLI browser journey artifact directory failed")
+	path := filepath.Join(dir, "sli-journey-sli.json")
+	if err := os.WriteFile(path, input, 0o600); err != nil {
+		t.Fatal("write protected SLI journey SLI failed")
 	}
-	spki := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
-	fixture := struct {
-		URL          string `json:"url"`
-		SPKI         string `json:"spki"`
-		Login        string `json:"login"`
-		Password     string `json:"password"`
-		AgentID      string `json:"agent_id"`
-		DatasourceID string `json:"datasource_id"`
-		Artifacts    string `json:"artifacts"`
-	}{
-		URL: baseURL, SPKI: base64.StdEncoding.EncodeToString(spki[:]), Login: login, Password: password,
-		AgentID: agentID, DatasourceID: datasourceID, Artifacts: artifacts,
+	output, err := exec.CommandContext(t.Context(), binary, "slis", "create", "--profile-file="+journey.profile, "--input-file="+path,
+		"--idempotency-key=request-success-create", "--output=json").Output()
+	var document struct {
+		Result struct {
+			SLI struct {
+				ID string `json:"id"`
+			} `json:"sli"`
+		} `json:"result"`
 	}
-	input, err := json.Marshal(fixture)
-	if err != nil || len(input) > 16*1024 {
-		t.Fatal("encode SLI browser journey fixture failed")
+	if err != nil || json.Unmarshal(output, &document) != nil || !validCLIUUID(document.Result.SLI.ID) {
+		t.Fatal("create SLI journey SLI through the CLI failed")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 115*time.Second)
-	defer cancel()
-	browser := exec.CommandContext(ctx, "node", "scripts/check-sli-browser.mjs")
-	browser.Dir = filepath.Join(root, "web")
-	browser.Stdin = bytes.NewReader(input)
-	var output bytes.Buffer
-	browser.Stdout, browser.Stderr = &output, &output
-	err = browser.Run()
-	if strings.Contains(output.String(), login) || strings.Contains(output.String(), password) {
-		t.Fatal("SLI browser journey output contained an administrator credential")
-	}
-	if err != nil {
-		exitCode := -1
-		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
-			exitCode = exit.ExitCode()
+	db := testpostgres.Connect(t, databaseURL)
+	// Settling is fixed at 60 s and the cadence is 15 s, so the first interval lands within about 90 s.
+	for deadline := time.Now().Add(150 * time.Second); time.Now().Before(deadline); {
+		var observed int
+		if err := db.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1 AND outcome='observed'`, document.Result.SLI.ID).Scan(&observed); err == nil && observed > 0 {
+			return document.Result.SLI.ID
 		}
-		t.Fatalf("SLI browser acceptance failed (exit=%d %s); inspect sanitized artifacts in %s", exitCode, safeSLIBrowserFailureMarker(output.String()), artifacts)
-	}
-	if !hasSLIBrowserPassMarker(output.String()) {
-		t.Fatalf("SLI browser acceptance did not produce its exact completion marker; inspect sanitized artifacts in %s", artifacts)
-	}
-	if os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" && os.Getenv("OTEL_SDK_DISABLED") != "true" {
-		verifyRenderedJourneyTraces(t, artifacts, "sli.list")
-	}
-	manifest, err := os.ReadFile(filepath.Join(artifacts, "sli-journey.json"))
-	if err != nil {
-		t.Fatalf("read SLI browser journey evidence failed; inspect artifacts in %s", artifacts)
-	}
-	var evidence struct {
-		Scenario     string `json:"scenario"`
-		SLIID        string `json:"sli_id"`
-		Outcome      string `json:"outcome"`
-		GoodCount    string `json:"good_count"`
-		TotalCount   string `json:"total_count"`
-		Activation   string `json:"activation_state"`
-		DatasourceID string `json:"datasource_id"`
-		AgentID      string `json:"agent_id"`
-		CreateStatus int    `json:"create_status"`
-	}
-	if err := json.Unmarshal(manifest, &evidence); err != nil || evidence.Scenario != "browser-create-agent-collect-readback" ||
-		!validCLIUUID(evidence.SLIID) || evidence.Outcome != "observed" || evidence.GoodCount != "99" || evidence.TotalCount != "100" ||
-		evidence.Activation != "active" || evidence.DatasourceID != datasourceID ||
-		evidence.AgentID != agentID || evidence.CreateStatus != http.StatusCreated {
-		t.Fatalf("SLI browser journey evidence did not match the accepted path; inspect artifacts in %s", artifacts)
-	}
-	return evidence.SLIID
-}
-
-func safeSLIBrowserFailureMarker(output string) string {
-	var fields []string
-	for line := range strings.SplitSeq(output, "\n") {
-		candidate := strings.Fields(line)
-		if len(candidate) == 7 && candidate[0] == "FAIL" && candidate[1] == "browser-sli-journey" {
-			fields = candidate
-			break
+		select {
+		case <-t.Context().Done():
+			t.Fatal("SLI journey observation wait cancelled")
+		case <-time.After(time.Second):
 		}
 	}
-	if len(fields) != 7 || fields[0] != "FAIL" || fields[1] != "browser-sli-journey" {
-		return "stage=none api_status=none request_id=none api_code=none class=other"
-	}
-	values := make(map[string]string, 5)
-	for _, field := range fields[2:] {
-		key, value, ok := strings.Cut(field, "=")
-		if !ok || value == "" {
-			return "stage=none api_status=none request_id=none api_code=none class=other"
-		}
-		values[key] = value
-	}
-	stage := safeDiagnosticToken(values["stage"])
-	status := values["api_status"]
-	if status != "none" {
-		parsed := 0
-		for _, digit := range status {
-			if digit < '0' || digit > '9' {
-				parsed = -1
-				break
-			}
-			parsed = parsed*10 + int(digit-'0')
-		}
-		if parsed < 100 || parsed > 599 {
-			status = "none"
-		}
-	}
-	requestID := values["request_id"]
-	if requestID != "none" && !safeBrowserRequestID(requestID) {
-		requestID = "none"
-	}
-	code := values["api_code"]
-	safeCodes := map[string]bool{"agent_unavailable": true, "conflict": true, "forbidden": true, "invalid_request": true,
-		"measurement_conflict": true, "not_found": true, "observation_unavailable": true, "sli_unavailable": true,
-		"source_secret_unavailable": true, "unauthenticated": true, "unauthorized": true, "unsupported_measurement": true}
-	if code != "none" && !safeCodes[code] {
-		code = "none"
-	}
-	class := values["class"]
-	if class != "timeout" && class != "module" && class != "launch" && class != "other" {
-		class = "other"
-	}
-	return "stage=" + stage + " api_status=" + status + " request_id=" + requestID + " api_code=" + code + " class=" + class
-}
-
-func hasSLIBrowserPassMarker(output string) bool {
-	for line := range strings.SplitSeq(output, "\n") {
-		if strings.TrimSpace(line) == "PASS browser-sli-journey" {
-			return true
-		}
-	}
-	return false
-}
-
-func verifySLIBrowserDiagnostics(t *testing.T) {
-	t.Helper()
-	output := "warning contains sensitive fixture data\nFAIL browser-sli-journey stage=browser_launch api_status=none request_id=none api_code=none class=launch\n"
-	got := safeSLIBrowserFailureMarker(output)
-	if got != "stage=browser_launch api_status=none request_id=none api_code=none class=launch" {
-		t.Fatalf("safe failure marker = %q", got)
-	}
-	if !hasSLIBrowserPassMarker("warning\nPASS browser-sli-journey\n") || hasSLIBrowserPassMarker("PASS browser-sli-journey extra") {
-		t.Fatal("pass marker was not matched by complete line")
-	}
+	t.Fatal("CLI-created SLI produced no collected interval within 150 s")
+	return ""
 }
 
 func verifyPersistedSLIJourneyObservation(t *testing.T, databaseURL, sliID, agentID string) {
@@ -575,5 +448,5 @@ func verifyPersistedSLIJourneyObservation(t *testing.T, databaseURL, sliID, agen
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	t.Fatal("browser-created SLI did not produce a persisted 99/100 canonical interval")
+	t.Fatal("SLI journey SLI did not produce a persisted 99/100 canonical interval")
 }

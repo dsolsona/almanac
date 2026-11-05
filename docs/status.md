@@ -4,8 +4,9 @@ Current test work, 2026-11-05: [ADR-0033](adr/0033-simple-test-suite.md) replace
 `make verify MODE=…`, `scripts/verify.py`, the custom browser scripts and the controlled performance
 harness with `make test`, `make test-integration`, `make test-browser`, `make test-e2e`,
 `make test-perf` and CI on every pull request ([testing](testing.md)). [F7-T05](tasks/F7-T05.md) on
-`test/simplify-suite` is blocked: the Go journeys still need their browser calls removed, and the
-final gates need Docker, which stopped working when the host disk filled.
+`test/simplify-suite` is in review: integration runs in 67 s instead of about 14 minutes, the nine
+Playwright journeys in about three and a half minutes, and the e2e and perf stacks keep their data in
+memory so runs no longer grow the Docker disk.
 
 Current platform work, 2026-11-04: [ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)
 and [plan 0026](plans/0026-platform-agnostic-verification.md) are accepted
