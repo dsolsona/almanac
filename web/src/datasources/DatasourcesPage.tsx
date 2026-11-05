@@ -609,15 +609,17 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     const unused = rows.filter((row) => row.usage?.count === 0).length;
     const visible = rows.filter((row) => (!term || `${row.item.display_name} ${row.item.name} ${row.item.endpoint} ${agentName(row.item.agent_id) ?? ''}`.toLowerCase().includes(term))
       && (healthFilter === 'all' || (healthFilter === 'attention' ? row.vocabulary?.attention : row.usage?.count === 0)));
+    // Refresh stays available when the list is empty or its first read failed, so new records can be found without a reload.
+    const refresh = <RefreshButton label="Refresh datasources" busy={loading} lastRefreshed={updatedAt} onClick={() => loadList(cursor, pageSize)} />;
     return <>
       <PageHeader title="Datasources" headingRef={heading} actions={admin ? <Button onClick={() => navigate('/datasources/new')}>New datasource</Button> : undefined} />
       {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
       {loading && <span className="sr-only" role="status">Refreshing datasources</span>}
-      {currentItems.length === 0 && error && listResultKey.current !== locationKey ? null : currentItems.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <>
+      {currentItems.length === 0 && error && listResultKey.current !== locationKey ? <Toolbar><ToolbarSpacer />{refresh}</Toolbar> : currentItems.length === 0 ? <><Toolbar><ToolbarSpacer />{refresh}</Toolbar><Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel></> : <>
         <Toolbar>
           <SearchField id="datasource-search" label="Filter datasources" placeholder="Filter by name, endpoint or agent" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
           <SegmentedControl label="Filter by health" value={healthFilter} onChange={setHealthFilter} options={[{ value: 'all', label: 'All', count: rows.length }, ...(admin ? [{ value: 'attention' as const, label: 'Needs attention', count: attention }] : []), ...(sliUsage ? [{ value: 'unused' as const, label: 'Unused', count: unused }] : [])]} />
-          <ToolbarSpacer /><RefreshButton label="Refresh datasources" busy={loading} lastRefreshed={updatedAt} onClick={() => loadList(cursor, pageSize)} />
+          <ToolbarSpacer />{refresh}
         </Toolbar>
         {visible.length === 0 ? <p className="datasource-empty-filter">No datasources match these filters on this page.</p> : <table className="ds-table ui-list-table" aria-label="Datasources">
           <thead><tr><th scope="col">Datasource</th>{admin && <th scope="col">Health</th>}{admin && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col" className="num">SLIs</th></tr></thead>

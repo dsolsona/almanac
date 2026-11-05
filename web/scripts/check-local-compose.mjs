@@ -1152,7 +1152,10 @@ async function checkLocalAgentRegistration() {
         await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
         await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
         const credentialRecord = page.getByRole('listitem', { name: `Credential ${result.credential.id}` });
-        await expect(credentialRecord.getByText(result.credential.issued_at.replace('T', ' '), { exact: true })).toBeVisible();
+        // ADR-0031: the row shows a readable date; the exact recorded value is the time element's datetime and tooltip.
+        const issued = credentialRecord.locator(`time[datetime="${result.credential.issued_at}"]`);
+        await expect(issued).toBeVisible();
+        await expect(issued).toHaveAttribute('title', / UTC$/);
         const revoke = credentialRecord.getByRole('button', { name: 'Revoke credential', exact: true });
         await revoke.scrollIntoViewIfNeeded();
         await expect(revoke).toBeInViewport();
@@ -1174,8 +1177,8 @@ async function checkLocalAgentRegistration() {
     const row = page.getByRole('button', { name: 'local', exact: true }).locator('..').locator('..');
     const centers = await row.evaluate((element) => {
       const textCenter = (node) => { const range = document.createRange(); range.selectNodeContents(node); const rect = range.getBoundingClientRect(); return rect.y + rect.height / 2; };
-      // The name button sits on the first line of its cell; compare it with the status mark's first line in the same row (F6-T06).
-      return [textCenter(element.querySelector('button')), textCenter(element.querySelector('.ui-mark__row'))];
+      // The name button sits on the first line of its cell; compare it with the status chip on the same line (F6-T06, ADR-0031).
+      return [textCenter(element.querySelector('button')), textCenter(element.querySelector('.ui-status-chip'))];
     });
     assert.ok(Math.abs(centers[0] - centers[1]) < 1, 'agent name text should align with the status text');
     stage = 'real Compose agent table pointer focus';

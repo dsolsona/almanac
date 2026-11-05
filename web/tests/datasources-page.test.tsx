@@ -197,6 +197,21 @@ describe('datasource page', () => {
     expect(screen.queryByRole('heading', { name: 'No datasources yet' })).not.toBeInTheDocument();
   });
 
+  it('keeps refresh available when the first read fails or the list is empty', async () => {
+    history.replaceState({}, '', '/datasources');
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({}, 503))
+      .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
+      .mockImplementation(async () => response({ items: [source()], next_cursor: '' }));
+    vi.stubGlobal('fetch', fetcher);
+    const user = userEvent.setup(); render(<DatasourcesPage context={viewer} />);
+    expect(await screen.findByRole('alert')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Refresh datasources' }));
+    expect(await screen.findByRole('heading', { name: 'No datasources yet' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Refresh datasources' }));
+    expect(await screen.findByRole('link', { name: 'Production metrics' })).toBeVisible();
+  });
+
   it('keeps viewer reads redacted and does not request administrator-only agent assignment data', async () => {
     history.replaceState({}, '', '/datasources');
     const calls = installFetch();

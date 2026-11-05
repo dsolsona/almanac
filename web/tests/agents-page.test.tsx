@@ -232,6 +232,18 @@ describe('agent administration screen', () => {
     expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'session-agent', display_name: 'Session Agent', lifetime_seconds: 7776000 });
   });
 
+  it('keeps refresh available on an empty agent list', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
+      .mockImplementation(async () => response({ items: [agent()], next_cursor: '' }));
+    vi.stubGlobal('fetch', fetcher);
+    const user = userEvent.setup();
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByText('No agents have been registered.');
+    await user.click(screen.getByRole('button', { name: 'Refresh agents' }));
+    expect(await screen.findByRole('button', { name: 'west-1' })).toBeVisible();
+  });
+
   it('shows only a validated request ID and safe guidance for an unavailable registration response', async () => {
     const user = userEvent.setup(); installDialogs();
     const requestID = '0123456789abcdef0123456789abcdef';

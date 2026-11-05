@@ -345,6 +345,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   // The status block keeps one tree position whether or not the agent record is loaded yet.
   // The shell owns the heading and hands over its actions slot (ADR-0031): actions join the title line.
   // Undefined means no shell (standalone render): keep them inline. Null means the slot is not attached yet.
+  // Refresh stays available when the list is empty or its first read failed, so new records can be found without a reload.
+  const listRefresh = <RefreshButton label="Refresh agents" lastRefreshed={updatedAt} onClick={() => void load()} disabled={suspended || loading || submitBusy || lifecycleBusy} />;
   const titleActions = (node: ReactNode) => titleActionsTarget ? createPortal(node, titleActionsTarget) : titleActionsTarget === undefined ? <div className="agents-title-actions--inline">{node}</div> : null;
   const lifecycleLayout = ({ rotate, disable, remove, status }: { rotate: ReactNode; disable: ReactNode; remove: ReactNode; status: ReactNode }) => <>
     {status}
@@ -415,11 +417,11 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     {loading && <span className="sr-only" role="status">Refreshing agent records</span>}
     {!locationState.agent && <>
       {announceUnconfirmed && <p ref={registrationStatusRef} className="agents-error" role="status" aria-live="polite" tabIndex={-1}>Registration is not confirmed. The agent records currently shown may not include this request.</p>}
-      {loading && !hasCachedData.current ? null : agents.length === 0 ? <Panel heading="Agent records" className="agents-panel"><p>{error && !hasCachedData.current ? 'Agent records could not be loaded.' : intent?.outcome === 'unknown' ? 'No agents are currently visible.' : 'No agents have been registered.'}</p></Panel> : <>
+      {loading && !hasCachedData.current ? null : agents.length === 0 ? <><Toolbar><ToolbarSpacer />{listRefresh}</Toolbar><Panel heading="Agent records" className="agents-panel"><p>{error && !hasCachedData.current ? 'Agent records could not be loaded.' : intent?.outcome === 'unknown' ? 'No agents are currently visible.' : 'No agents have been registered.'}</p></Panel></> : <>
         <Toolbar>
           <SearchField id="agents-search" label="Filter agents" placeholder="Filter by name" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
           <SegmentedControl label="Filter by status" value={listFilter} onChange={setListFilter} options={[{ value: 'all', label: 'All', count: agents.length }, { value: 'attention', label: 'Needs attention', count: counts.attention }, { value: 'disabled', label: 'Disabled', count: counts.disabled }]} />
-          <ToolbarSpacer /><RefreshButton label="Refresh agents" lastRefreshed={updatedAt} onClick={() => void load()} disabled={suspended || loading || submitBusy || lifecycleBusy} />
+          <ToolbarSpacer />{listRefresh}
         </Toolbar>
         {visibleAgents.length === 0 ? <p className="agents-card__note">No agents match these filters on this page.</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list ui-list-table"><thead><tr><th scope="col">Agent</th><th scope="col">Status</th><th scope="col">Collection</th></tr></thead><tbody>{visibleAgents.map((item) => { const vocabulary = vocabularies.get(item.id)!; const collection = collectionSummary(item); return <tr key={item.id}>
           <td data-label="Agent" className="agents-table__name"><button className="agents-link" onClick={() => setQuery({ agent: item.id, agents_cursor: '', credentials_cursor: '' })}>{item.name}</button><span className="agents-table__sub ui-list-table__sub">{item.display_name !== item.name ? `${item.display_name} · ` : ''}{item.runtime?.software_version ? `${item.runtime.software_version} · ` : ''}since {dayFormat.format(new Date(item.created_at))}</span></td>
