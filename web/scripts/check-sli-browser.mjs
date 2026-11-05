@@ -168,9 +168,9 @@ try {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#main$/);
   await page.goBack();
-  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Refresh', exact: true }).focus();
-  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh SLI', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh SLI', exact: true }).focus();
+  await page.getByRole('button', { name: 'Refresh SLI', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Request success', exact: true })).not.toBeFocused();
   await expect(page.locator('.sli-state').filter({ hasText: 'Activation' }).locator('strong')).toHaveText(/scheduled|preparing|active/);
   const screenshotDir = fixture.artifacts;
@@ -203,7 +203,7 @@ try {
   let activationState = created.activation_state;
   let lastProgress = 0;
   while (performance.now() < deadline) {
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh SLI', exact: true }).click();
     if (performance.now() - lastProgress >= 5000) {
       const state = {};
       for (const label of ['Activation', 'Agent reachability', 'Freshness']) {
@@ -331,16 +331,16 @@ try {
   await expect(listRow).toBeVisible();
   const listNavigationMs=performance.now()-listNavigationStarted;
   await expect(listRow.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
-  await expect(listRow).toContainText('+1 more');
-  await expect(listRow.getByRole('link', { name: 'Reference SLO 1' })).toHaveAttribute('href', new RegExp('^/slos/[0-9a-f-]{36}$'));
-  await listRow.getByText(/^Exact values ·/).click();
-  const recentTable = listRow.getByRole('table', { name: `Exact counts for recent ${created.polling_interval_seconds}-second intervals` });
-  const observedStart = recentTable.locator('tbody > tr > td:first-child').filter({ hasText: new Date(firstObservation.interval_start).toISOString() });
-  await expect(observedStart).toHaveCount(1);
-  const observedSample = observedStart.locator('..');
-  await expect(observedSample.getByRole('cell', { name: 'Observed', exact: true })).toBeVisible();
-  await expect(observedSample.getByRole('cell', { name: '99', exact: true })).toBeVisible();
-  await expect(observedSample.getByRole('cell', { name: '100', exact: true })).toBeVisible();
+  // ADR-0032: the SLOs cell is a count linking to the SLI's objectives, with the names in its tooltip; the last
+  // sample is one value whose exact counts and interval end are in the cell tooltip.
+  const linkedCount = listRow.getByRole('link', { name: /^6 SLOs: / });
+  await expect(linkedCount).toHaveText('6 SLOs');
+  await expect(linkedCount).toHaveAttribute('href', `/slis/${created.id}`);
+  await expect(linkedCount).toHaveAttribute('title', /Reference SLO 1/);
+  await expect(listRow.getByRole('table')).toHaveCount(0);
+  const lastSample = listRow.locator('td[data-label="Last sample"]');
+  await expect(lastSample.locator('b')).toHaveText('99%');
+  await expect(lastSample).toHaveAttribute('title', new RegExp('^99 / 100 good · interval ending '));
   const searchInput = page.getByRole('searchbox', { name: 'Search SLIs', exact: true });
   await searchInput.fill('request-success');
   await expect(page).toHaveURL(/q=request-success/);
@@ -366,8 +366,13 @@ try {
   await page.reload();
   await expect(page).toHaveURL(listURL);
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
-  await page.getByRole('row').filter({ hasText: 'Request success' }).getByRole('link', { name: 'Reference SLO 1' }).click();
+  await page.getByRole('row').filter({ hasText: 'Request success' }).getByRole('link', { name: /^6 SLOs: / }).click();
+  await expect(page).toHaveURL(new RegExp(`/slis/${created.id}$`));
+  await page.getByRole('link', { name: 'Reference SLO 1', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/slos/${linkedSLOs[0].id}$`));
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/slis/${created.id}$`));
+  await expect(page.getByRole('link', { name: 'Reference SLO 1', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(listURL);
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
@@ -398,7 +403,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Request success', exact: true })).toHaveAttribute('href', `/slis/${created.id}`);
-  await expect(page.getByRole('row').filter({ hasText: '+1 more' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: '6 SLOs' })).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 1440, height: 900 });
     if (theme === 'dark' && await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).count()) {

@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Proposal · Datasources</title><link rel="stylesheet" href="../mock.css"><link rel="stylesheet" href="proposal.css"></head>
+<body data-current="datasources"><main>
+<div class="variant">Health as: <a href="?variant=a" data-v="a">A · chip column</a><a href="?variant=b" data-v="b">B · status rail</a></div>
+
+<div class="p-head">
+  <h1>Datasources</h1>
+  <span class="spacer"></span>
+  <div class="actions"><button class="btn primary">New datasource</button></div>
+</div>
+
+<div class="p-toolbar">
+  <label class="search"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search name, endpoint or agent"><kbd>/</kbd></label>
+  <span class="seg"><button aria-pressed="true">All <span class="n">4</span></button><button>Needs attention <span class="n">2</span></button><button>Unused <span class="n">1</span></button></span>
+  <span class="spacer"></span>
+  <button class="p-refresh" title="Refresh · last refreshed 13:11:56 UTC" aria-label="Refresh datasources"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+
+<table class="tbl responsive" data-variant="a">
+  <thead><tr><th>Datasource</th><th style="width:190px">Health</th><th style="width:130px">Agent</th><th style="width:80px">Cadence</th><th class="num" style="width:60px">SLIs</th><th style="width:170px">Last query <small>UTC</small></th></tr></thead>
+  <tbody>
+    <tr><td><a class="rowname" href="#">local-victoriametrics</a><span class="desc mono">Prometheus · http://victoriametrics:8428</span></td><td><span class="hc good"><i></i>Healthy</span></td><td class="mono">local</td><td class="mono">15 s</td><td class="num mono">6</td><td class="mono">13:11:50 · 42 ms</td></tr>
+    <tr><td><a class="rowname" href="#">prod-prometheus-eu</a><span class="desc mono">Prometheus · https://prometheus.eu-west-1.internal</span></td><td><span class="hc good"><i></i>Healthy</span></td><td class="mono">eu-west-1</td><td class="mono">30 s</td><td class="num mono">12</td><td class="mono">13:11:31 · 88 ms</td></tr>
+    <tr><td><a class="rowname" href="#">prod-prometheus-us</a><span class="desc mono">Prometheus · https://prometheus.us-east-1.internal</span></td><td><span class="hc stale"><i></i>Not collecting</span><span class="hc-reason">agent unreachable for 2 h</span></td><td class="mono">us-east-1</td><td class="mono">30 s</td><td class="num mono">6</td><td class="mono muted">11:09:02 · failed</td></tr>
+    <tr><td><a class="rowname" href="#">staging-mimir</a><span class="desc mono">Prometheus · https://mimir.staging.internal/prom</span></td><td><span class="hc warn"><i></i>Moving</span><span class="hc-reason">staging → eu-west-1</span></td><td class="mono">staging</td><td class="mono">60 s</td><td class="num mono">0</td><td class="mono">13:10:58 · 120 ms</td></tr>
+  </tbody>
+</table>
+
+<table class="tbl responsive" data-variant="b" hidden>
+  <thead><tr><th class="rail" aria-label="Health"></th><th>Datasource</th><th style="width:130px">Agent</th><th style="width:80px">Cadence</th><th class="num" style="width:60px">SLIs</th><th style="width:170px">Last query <small>UTC</small></th></tr></thead>
+  <tbody>
+    <tr><td class="rail"><span class="good" title="Healthy"><i></i></span></td><td><a class="rowname" href="#">local-victoriametrics</a><span class="desc mono">Prometheus · http://victoriametrics:8428</span></td><td class="mono">local</td><td class="mono">15 s</td><td class="num mono">6</td><td class="mono">13:11:50 · 42 ms</td></tr>
+    <tr><td class="rail"><span class="good" title="Healthy"><i></i></span></td><td><a class="rowname" href="#">prod-prometheus-eu</a><span class="desc mono">Prometheus · https://prometheus.eu-west-1.internal</span></td><td class="mono">eu-west-1</td><td class="mono">30 s</td><td class="num mono">12</td><td class="mono">13:11:31 · 88 ms</td></tr>
+    <tr><td class="rail"><span class="stale" title="Not collecting"><i></i></span></td><td><a class="rowname" href="#">prod-prometheus-us</a><span class="inline-attn stale">Not collecting · agent unreachable for 2 h</span></td><td class="mono">us-east-1</td><td class="mono">30 s</td><td class="num mono">6</td><td class="mono muted">11:09:02 · failed</td></tr>
+    <tr><td class="rail"><span class="warn" title="Moving"><i></i></span></td><td><a class="rowname" href="#">staging-mimir</a><span class="inline-attn warn">Moving · staging → eu-west-1</span></td><td class="mono">staging</td><td class="mono">60 s</td><td class="num mono">0</td><td class="mono">13:10:58 · 120 ms</td></tr>
+  </tbody>
+</table>
+
+<div class="pager" style="margin-top:12px"><span>Showing 4 of 4</span><span class="spacer"></span><label>Per page <select><option>20</option><option>10</option></select></label><button class="btn sm" disabled>‹ Previous</button><button class="btn sm" disabled>Next ›</button></div>
+
+<div class="p-stale" style="margin-top:28px"><b>Couldn't refresh at 13:12:40 UTC.</b> Showing data from 13:11:56. <button class="btn sm secondary">Retry</button></div>
+<p class="section-title" style="margin-top:4px">↑ shown above the table only when a refresh fails</p>
+
+<div class="anno"><h3>What changed</h3><ul>
+<li>Title and the one action share a line; the count subline and "Updated hh:mm:ss" are gone. Counts already live in the filter, and freshness only shows when a refresh fails (notice above).</li>
+<li>Toolbar is one aligned row: search, health filter, then refresh as a quiet icon at the far end (its tooltip has the last refresh time). The "Agent" select is removed: search already matches agent names.</li>
+<li>The name leads every row and is the link. "UTC" moves into the column header that shows times.</li>
+<li>A: health becomes a chip in the second column; the reason appears only when something needs attention. B: a status rail with a label only on rows that need attention; quieter, but the healthy state is just a dot.</li>
+<li>Auth column removed from the list (it is on the detail page); "Last query" is the column that answers "is it working".</li>
+</ul></div>
+</main><script src="../mock.js"></script>
+<script>const v=new URLSearchParams(location.search).get('variant')==='b'?'b':'a';document.querySelectorAll('[data-variant]').forEach(t=>t.hidden=t.dataset.variant!==v);document.querySelectorAll('.variant a').forEach(a=>{a.classList.toggle('on',a.dataset.v===v);a.href='?variant='+a.dataset.v+(new URLSearchParams(location.search).get('theme')?'&theme='+new URLSearchParams(location.search).get('theme'):'');});</script>
+</body></html>

@@ -29,16 +29,17 @@ function observedFraction(sample: SliRecentSample): number {
   return Number(scaledCount(sample.good_count) * 10_000n / total) / 10_000;
 }
 
-function stripLabel(samples: SliRecentSample[], cadenceSeconds: number): string {
+function stripLabel(samples: SliRecentSample[], cadenceSeconds: number, exactValues: boolean): string {
   const counts = new Map<string, number>();
   for (const sample of samples) counts.set(stateLabels[sample.state], (counts.get(stateLabels[sample.state]) ?? 0) + 1);
   const summary = [...counts].map(([label, count]) => `${count} ${label.toLowerCase()}`).join(', ');
-  return `Recent good-to-total measurements at ${cadenceSeconds}-second cadence: ${summary || 'no eligible intervals'}. Exact values are available in the table.`;
+  return `Recent good-to-total measurements at ${cadenceSeconds}-second cadence: ${summary || 'no eligible intervals'}. ${exactValues ? 'Exact values are available in the table.' : 'Exact values are on the SLI page.'}`;
 }
 
-export function SliRecentStrip({ samples, cadenceSeconds }: { samples: SliRecentSample[]; cadenceSeconds: number }) {
+// Lists show the strip alone (exactValues false): exact counts live on the SLI detail page, where the table has room.
+export function SliRecentStrip({ samples, cadenceSeconds, exactValues = true }: { samples: SliRecentSample[]; cadenceSeconds: number; exactValues?: boolean }) {
   return <div className="sli-recent-strip">
-    <svg className="sli-recent-strip__plot" viewBox="0 0 140 24" role="img" aria-label={stripLabel(samples, cadenceSeconds)}>
+    <svg className="sli-recent-strip__plot" viewBox="0 0 140 24" role="img" aria-label={stripLabel(samples, cadenceSeconds, exactValues)}>
       <line className="sli-recent-strip__baseline" x1="0" y1="21" x2="140" y2="21" />
       {samples.map((sample, index) => {
         const x = 3 + index * 11;
@@ -53,7 +54,7 @@ export function SliRecentStrip({ samples, cadenceSeconds }: { samples: SliRecent
         return <line key={`${sample.interval_start}-${sample.state}`} className="sli-recent-strip__missing" x1={x} y1="18" x2={x + 7} y2="18" />;
       })}
     </svg>
-    <details className="sli-recent-strip__details">
+    {exactValues && <details className="sli-recent-strip__details">
       <summary>Exact values · {samples.length}</summary>
       <div className="sli-recent-strip__table-scroll" role="region" aria-label="Recent SLI exact count values" tabIndex={0}>
         <table>
@@ -66,6 +67,6 @@ export function SliRecentStrip({ samples, cadenceSeconds }: { samples: SliRecent
           </tr>)}</tbody>
         </table>
       </div>
-    </details>
+    </details>}
   </div>;
 }

@@ -28,6 +28,8 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 | `agent-detail.html` | Agent detail: status, tiles, datasources, credentials, run dialog | [F6-T06](../../tasks/F6-T06.md), in review |
 | `agent-register.html` | Three-step registration page with live first-heartbeat checklist | deferred by [F6-T06](../../tasks/F6-T06.md): the token and uncertain-intent flows are built on the registration dialog; needs its own task |
 
+Proposals from the 2026-11-05 review (list grammar, health chips, button roles) are in [proposals](proposals/README.md); approved the same day and recorded in [ADR-0031](../../adr/0031-list-grammar-and-button-roles.md). Where they differ from the mocks above, the proposals win.
+
 ## Deferred elements
 
 The first implementation round (plan [0025](../../plans/0025-ui-unification.md))

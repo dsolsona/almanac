@@ -150,9 +150,10 @@ describe('agent administration screen', () => {
     const user = userEvent.setup(); installDialogs(); installFetch();
     render(<AuthPage client={makeAuth()} />);
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
-    const record = await screen.findByRole('region', { name: `Credential ${credentialID}` });
+    // One compact row per token (ADR-0031): identifier, readable dates whose tooltips keep the exact recorded values, and Revoke.
+    const record = await screen.findByRole('listitem', { name: `Credential ${credentialID}` });
     expect(within(record).getByText(credentialID)).toBeVisible();
-    expect(within(record).getByText('2026-10-20 12:00:00.123456Z')).toBeVisible();
+    expect(within(record).getByTitle('2027-10-20 12:00:00.654321Z UTC')).toHaveTextContent('20 Oct 2027');
     expect(within(record).getByRole('button', { name: 'Revoke credential' })).toBeVisible();
   });
 
@@ -229,6 +230,18 @@ describe('agent administration screen', () => {
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     const create = fetcher.mock.calls.find(([url, init]) => String(url) === '/api/v1/agents' && init?.method === 'POST');
     expect(JSON.parse(String(create?.[1]?.body))).toEqual({ name: 'session-agent', display_name: 'Session Agent', lifetime_seconds: 7776000 });
+  });
+
+  it('keeps refresh available on an empty agent list', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
+      .mockImplementation(async () => response({ items: [agent()], next_cursor: '' }));
+    vi.stubGlobal('fetch', fetcher);
+    const user = userEvent.setup();
+    render(<AuthPage client={makeAuth()} />);
+    await screen.findByText('No agents have been registered.');
+    await user.click(screen.getByRole('button', { name: 'Refresh agents' }));
+    expect(await screen.findByRole('button', { name: 'west-1' })).toBeVisible();
   });
 
   it('shows only a validated request ID and safe guidance for an unavailable registration response', async () => {
@@ -368,8 +381,8 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'west-1' }));
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
     expect(location.search).toContain(`agent=${agentID}`);
-    expect(screen.getByText('Scheduled retirement (UTC)')).toBeVisible();
-    expect(screen.getByText('2026-10-22 12:00:00.987654Z')).toBeVisible();
+    expect(screen.getByText(/retires/)).toBeVisible();
+    expect(screen.getByTitle('2026-10-22 12:00:00.987654Z UTC')).toBeVisible();
     await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await waitFor(() => expect(location.search).toBe(''));
   });
@@ -660,7 +673,7 @@ describe('agent administration screen', () => {
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     fireEvent.submit(within(dialog).getByRole('button', { name: 'Rotate credential' }).closest('form')!);
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Register agent' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Register agent' })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Abandon command' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'east-1' }));
@@ -739,7 +752,8 @@ describe('agent administration screen', () => {
     });
     vi.stubGlobal('fetch', fetcher);
     render(<AuthPage client={makeAuth()} />);
-    await user.click(await screen.findByRole('button', { name: 'west-1' }));
+    await screen.findByRole('button', { name: 'west-1' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Register agent' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     const registration = screen.getByRole('dialog', { name: 'Register agent' });
     await user.type(within(registration).getByLabelText('Agent name (identifier)'), 'new-agent');
@@ -748,7 +762,6 @@ describe('agent administration screen', () => {
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
     await user.click(within(registration).getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByRole('button', { name: 'Keep request' }));
-    await user.click(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Agents' }));
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     expect(await screen.findByRole('button', { name: 'Rotate credential' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Revoke credential' })).toBeDisabled();
@@ -1153,26 +1166,27 @@ describe('agent administration screen', () => {
     expect(location.search).not.toContain('agents_cursor');
   });
 
-  it('navigates from an unrelated detail to the fresh result only after closing its token dialog', async () => {
-    const user = userEvent.setup(); installDialogs(); history.replaceState({}, '', `/?agent=${agentIDB}`);
+  it('navigates to the fresh result only after closing its token dialog', async () => {
+    // Registration is a list action (ADR-0031); the created agent opens only once its token is dismissed.
+    const user = userEvent.setup(); installDialogs(); history.replaceState({}, '', '/');
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (init?.method === 'POST') return response({ agent: agent(), credential: credential(), replayed: false, secret_state: 'issued', token: 'one-time-secret' }, 201);
-      if (url.includes('/credentials?')) return response({ items: [url.includes(agentIDB) ? credentialB() : credential()], next_cursor: '' });
-      if (url.endsWith(agentIDB)) return response(agentB(), 200, { ETag: `"agent:${agentIDB}:3"` });
-      return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      if (url.includes('/credentials?')) return response({ items: [credential()], next_cursor: '' });
+      if (url.endsWith(agentID)) return response(agent(), 200, { ETag: `"agent:${agentID}:3"` });
+      return response({ items: [agentB()], next_cursor: '' });
     });
     vi.stubGlobal('fetch', fetcher);
     render(<AuthPage client={makeAuth()} />);
     expect(await screen.findByText('east-1')).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Register agent' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-agent'); await user.type(screen.getByLabelText('Display name'), 'New agent');
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
-    expect(location.search).toContain(`agent=${agentIDB}`);
+    expect(location.search).not.toContain('agent=');
     await user.click(screen.getByRole('button', { name: 'Close token' }));
     await waitFor(() => expect(location.search).toContain(`agent=${agentID}`));
-    expect(await screen.findByText('west-1')).toBeVisible();
     expect(await screen.findByRole('heading', { name: 'Credential history' })).toBeVisible();
   });
 
@@ -1390,7 +1404,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     await user.type(screen.getByLabelText('Login'), 'second'); await user.type(screen.getByLabelText('Password'), 'password'); await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    await screen.findByRole('button', { name: 'Register agent' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Register agent' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     expect(screen.getByLabelText('Agent name (identifier)')).toHaveValue('');
     expect(screen.getByLabelText('Display name')).toHaveValue('');
@@ -1400,7 +1414,7 @@ describe('agent administration screen', () => {
     const user = userEvent.setup(); installDialogs();
     const auth = makeAuth(); auth.context = vi.fn().mockResolvedValueOnce(admin).mockResolvedValueOnce({ csrf_token: 'csrf-anon', session: null });
     render(<AuthPage client={auth} />);
-    await screen.findByRole('button', { name: 'Register agent' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Register agent' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.type(screen.getByLabelText('Agent name (identifier)'), 'private-draft'); await user.type(screen.getByLabelText('Display name'), 'Private draft');
     await user.click(screen.getByRole('button', { name: 'Close dialog' }));

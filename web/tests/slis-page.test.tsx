@@ -121,11 +121,11 @@ describe('SLI page', () => {
     act(() => { history.pushState({}, '', row.getAttribute('href')!); window.dispatchEvent(new PopStateEvent('popstate')); });
     const heading = await screen.findByRole('heading', { name: 'Request success' });
     await waitFor(() => expect(heading).toHaveFocus());
-    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    const refresh = screen.getByRole('button', { name: 'Refresh SLI' });
     await userEvent.click(refresh);
     expect(refresh).toHaveFocus();
     act(() => { history.pushState({}, '', '#main'); window.dispatchEvent(new PopStateEvent('popstate')); });
-    expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Refresh SLI' })).toBeVisible();
     expect(refresh).toHaveFocus();
     expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('href', '/slis');
     act(() => { history.pushState({}, '', '/slis'); window.dispatchEvent(new PopStateEvent('popstate')); });
@@ -201,7 +201,7 @@ describe('SLI page', () => {
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
     await screen.findByRole('heading', { name: 'Request success' });
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(historyReads).toBe(2));
     if (order === 'initial-first') {
       await act(async () => initial.resolve(response(historyPage([]))));
@@ -228,7 +228,7 @@ describe('SLI page', () => {
     render(<SlisPage context={editor} />);
     await screen.findByRole('table');
     expectObservedHistory();
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(historyReads).toBe(2));
     expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
     expectObservedHistory();
@@ -429,17 +429,14 @@ describe('SLI page', () => {
     expect(await screen.findByRole('link', { name: 'Search target' })).toHaveAttribute('href', `/slis/${sliID}`);
     expect(fetcher).toHaveBeenCalledWith('/api/v1/slis?limit=20&q=Search+target', expect.anything());
     expect(screen.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
-    await user.click(screen.getByText('Exact values · 6'));
-    const values = screen.getByRole('table', { name: 'Exact counts for recent 15-second intervals' });
-    expect(within(values).getByText('98')).toBeVisible();
-    expect(within(values).getByText('Zero traffic')).toBeVisible();
-    expect(within(values).getByText('Known empty')).toBeVisible();
-    expect(within(values).getByText('Missing')).toBeVisible();
-    expect(within(values).getByText('Partial')).toBeVisible();
-    expect(within(values).getByText('Failed')).toBeVisible();
-    expect(screen.getByText('+1 more')).toBeVisible();
+    // ADR-0032: the list shows the strip alone (exact counts are on the SLI page) and the linked SLOs as a count
+    // that opens the SLI's objectives, with the names in its tooltip.
+    expect(screen.queryByText(/^Exact values/)).toBeNull();
+    const linkedCount = screen.getByRole('link', { name: /^6 SLOs: Objective 0/ });
+    expect(linkedCount).toHaveTextContent(/^6 SLOs$/);
+    expect(linkedCount).toHaveAttribute('href', `/slis/${sliID}`);
+    expect(linkedCount.getAttribute('title')).toMatch(/^Objective 0, .*, and 1 more$/);
     expect(screen.getByRole('link', { name: 'Production metrics' })).toHaveAttribute('href', `/datasources/${sourceID}`);
-    expect(screen.getByRole('link', { name: 'Objective 0' })).toHaveAttribute('href', '/slos/c2e07390-3c86-4a7f-b7e5-c15e9626e71c');
   });
 
   it('loads the next bounded SLI list page from its cursor', async () => {
@@ -559,7 +556,7 @@ describe('SLI page', () => {
     await user.clear(field);
     await user.type(field, 'Draft name');
     expect(await screen.findByText('SLI management is temporarily unavailable.')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(field).toHaveValue('Draft name'));
   });
 
@@ -580,7 +577,7 @@ describe('SLI page', () => {
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
     await screen.findByRole('heading', { name: 'Request success' });
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(reads).toBe(2));
     act(() => { history.pushState({}, '', `/slis/${otherID}`); window.dispatchEvent(new PopStateEvent('popstate')); });
     expect(await screen.findByRole('heading', { name: 'Checkout' })).toBeVisible();

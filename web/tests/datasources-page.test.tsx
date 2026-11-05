@@ -197,6 +197,21 @@ describe('datasource page', () => {
     expect(screen.queryByRole('heading', { name: 'No datasources yet' })).not.toBeInTheDocument();
   });
 
+  it('keeps refresh available when the first read fails or the list is empty', async () => {
+    history.replaceState({}, '', '/datasources');
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({}, 503))
+      .mockResolvedValueOnce(response({ items: [], next_cursor: '' }))
+      .mockImplementation(async () => response({ items: [source()], next_cursor: '' }));
+    vi.stubGlobal('fetch', fetcher);
+    const user = userEvent.setup(); render(<DatasourcesPage context={viewer} />);
+    expect(await screen.findByRole('alert')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Refresh datasources' }));
+    expect(await screen.findByRole('heading', { name: 'No datasources yet' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Refresh datasources' }));
+    expect(await screen.findByRole('link', { name: 'Production metrics' })).toBeVisible();
+  });
+
   it('keeps viewer reads redacted and does not request administrator-only agent assignment data', async () => {
     history.replaceState({}, '', '/datasources');
     const calls = installFetch();
@@ -204,7 +219,8 @@ describe('datasource page', () => {
     expect(await screen.findByText('Production metrics')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'New datasource' })).not.toBeInTheDocument();
     expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
-    expect(screen.getByText('bearer · set')).toBeVisible();
+    // Viewers see the record without administrator-only health or agent columns; auth details stay on the detail page (ADR-0031).
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Datasource', 'Cadence', 'SLIs']);
   });
 
   it('keeps First page available while viewing the last page', async () => {
@@ -559,11 +575,12 @@ describe('datasource page', () => {
     }));
     render(<DatasourcesPage context={admin} />);
     const table = await screen.findByRole('table', { name: 'Datasources' });
-    expect(screen.getByText('2 datasources · 1 needs attention · all times UTC')).toBeVisible();
+    // Name-first rows, health as a chip, no count subline (ADR-0031).
+    expect(screen.queryByText(/all times UTC/)).not.toBeInTheDocument();
+    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Datasource', 'Health', 'Agent', 'Cadence', 'SLIs']);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Healthy');
-    expect(rows[0]).toHaveTextContent('agent connected');
-    expect(rows[0]).toHaveTextContent('bearer · set');
+    expect(rows[0]).not.toHaveTextContent('agent connected');
     expect(rows[1]).toHaveTextContent('Not collecting');
     expect(rows[1]).toHaveTextContent('agent unreachable for 2 h');
     expect(rows[1]).toHaveTextContent('TLS unverified');
@@ -576,7 +593,12 @@ describe('datasource page', () => {
     await user.type(screen.getByLabelText('Filter datasources'), 'West');
     expect(within(table).getAllByRole('row')).toHaveLength(2);
     expect(within(table).getByRole('link', { name: 'Production metrics' })).toBeVisible();
-    await user.selectOptions(screen.getByLabelText('Agent'), offlineID);
+    expect(screen.queryByLabelText('Agent')).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Filter datasources'));
+    await user.type(screen.getByLabelText('Filter datasources'), 'East collector');
+    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(within(table).getByRole('link', { name: 'Staging metrics' })).toBeVisible();
+    await user.type(screen.getByLabelText('Filter datasources'), ' nothing');
     expect(screen.getByText('No datasources match these filters on this page.')).toBeVisible();
   });
 

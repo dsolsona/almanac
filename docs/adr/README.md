@@ -56,3 +56,5 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0028](0028-unified-operational-ui.md) | One visual grammar for operational and administration screens | accepted |
 | [ADR-0029](0029-platform-agnostic-development-and-verification.md) | Build, test and ship only through Docker images | accepted |
 | [ADR-0030](0030-browser-tracing-overhead-is-not-an-acceptance-check.md) | Browser tracing overhead is not an acceptance check | accepted |
+| [ADR-0031](0031-list-grammar-and-button-roles.md) | Name-first lists, quiet freshness and button roles | accepted |
+| [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md) | Centred list tables, one value per cell and SLI data-state vocabulary | accepted |

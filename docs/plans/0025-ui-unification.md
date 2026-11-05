@@ -53,6 +53,7 @@ the integrated result of the previous one.
   collapsed runtime details, quiet disable/delete line; registration page with
   three steps and the live checklist polling existing runtime status.
 - [ ] **F6-T07 Follow-ups after review** ([F6-T07](../tasks/F6-T07.md), in progress). Expiry chips in the agent dialogs, the missing 20 px spacing token, one SLI list action, the shared shell width on SLO pages, single field alerts, and the first-round journey regressions.
+- [ ] **F6-T08 Name-first lists and button roles** ([F6-T08](../tasks/F6-T08.md), in progress). The approved 2026-11-05 proposals ([ADR-0031](../adr/0031-list-grammar-and-button-roles.md)) applied to every list and detail page.
 
 ## Acceptance for every task
 

@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Proposal · SLOs</title><link rel="stylesheet" href="../mock.css"><link rel="stylesheet" href="proposal.css"></head>
+<body data-current="slos"><main>
+<div class="p-head">
+  <h1>SLOs</h1>
+  <span class="spacer"></span>
+  <div class="actions"><button class="btn primary">New SLO</button></div>
+</div>
+
+<div class="p-toolbar">
+  <label class="search"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search name, service or SLI"><kbd>/</kbd></label>
+  <button class="p-filter">Service <b>Any</b> ▾</button>
+  <button class="p-filter on">Sort <b>Most urgent</b> ▾</button>
+  <span class="spacer"></span>
+  <button class="p-refresh" title="Refresh · last refreshed 13:22:40 UTC" aria-label="Refresh SLOs"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+
+<div class="triage" role="group" aria-label="Filter by urgency">
+  <button class="tile crit" aria-pressed="false"><span class="big">4</span><span class="lbl"><span class="st crit"><i></i></span>Needs attention</span><span class="why">1 breached · 1 burning fast · 1 low budget · 1 not reporting</span></button>
+  <button class="tile warn" aria-pressed="false"><span class="big">2</span><span class="lbl"><span class="st warn"><i></i></span>Watch</span><span class="why">1 below half budget · 1 partial window</span></button>
+  <button class="tile good" aria-pressed="false"><span class="big">4</span><span class="lbl"><span class="st good"><i></i></span>Healthy</span><span class="why">on track, burn below 1×</span></button>
+</div>
+
+<section class="group">
+  <header><h2>Needs attention</h2><span class="count">4</span><span class="sort">sorted by exhaustion, then remaining budget</span></header>
+  <table class="tbl">
+    <thead><tr><th>SLO</th><th style="width:190px">Status</th><th style="width:120px">Target · window</th><th class="num" style="width:110px">Remaining</th><th class="num" style="width:120px">Burn 1 h · 6 h</th><th class="num" style="width:110px">Exhaustion</th></tr></thead>
+    <tbody>
+      <tr><td><a class="rowname" href="#">Refund processing &lt; 2 s</a><span class="desc">Core · refund-fast</span></td><td><span class="hc crit"><i></i>Breached</span><span class="hc-reason">window below target</span></td><td class="mono"><b>99.9%</b> · 30 d</td><td class="num mono" style="color:var(--status-breached)"><b>−20.5%</b></td><td class="num mono">0.44× · 0.36×</td><td class="num mono" style="color:var(--status-breached)">exhausted</td></tr>
+      <tr><td><a class="rowname" href="#">Payment authorisation success</a><span class="desc">Core · payment-auth-success</span></td><td><span class="hc warn"><i></i>Burning fast</span><span class="hc-reason">burn 18× · 59% left</span></td><td class="mono"><b>99.9%</b> · 30 d</td><td class="num mono"><b>59%</b></td><td class="num mono"><b style="color:var(--status-warning)">18×</b> · 21×</td><td class="num mono">≈ 2 h</td></tr>
+      <tr><td><a class="rowname" href="#">CI pipeline success on main</a><span class="desc">Delivery · ci-main</span></td><td><span class="hc stale"><i></i>Not reporting</span><span class="hc-reason">last sample 26 h ago</span></td><td class="mono"><b>95%</b> · 7 d</td><td class="num mono muted">—</td><td class="num mono muted">—</td><td class="num mono muted">—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="anno"><h3>What changed</h3><ul>
+<li>Head and refresh as on every list; the count subline is gone because the triage tiles already carry the counts and reasons.</li>
+<li>Rows lead with the SLO name; status becomes a chip in the second column. The urgency groups stay: they are the SLO list's sort and its value.</li>
+<li>Service and sort are filter chips in the toolbar row, matching the other lists.</li>
+</ul></div>
+</main><script src="../mock.js"></script></body></html>

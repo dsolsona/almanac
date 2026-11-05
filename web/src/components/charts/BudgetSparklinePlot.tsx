@@ -9,5 +9,5 @@ use([LineChart, ScatterChart, AriaComponent, GridComponent, SVGRenderer]);
 
 export function BudgetSparklinePlot({samples,label,onReady}:{samples:BudgetSample[];label:string;onReady?:()=>void}) {
   const container=useEChart(()=>buildBudgetSparklineOption(samples,label,cssColor('--s1')),[samples,label],onReady);
-  return <div className="slo-reference-spark" ref={container} role="img" aria-label={`${label}: ${samples.length} rolling budget samples; partial observations remain isolated`} style={{height:40}}/>;
+  return <div className="slo-reference-spark" ref={container} role="img" aria-label={`${label}: ${samples.length} rolling budget samples; partial observations remain isolated`} style={{height:24}}/>;
 }
