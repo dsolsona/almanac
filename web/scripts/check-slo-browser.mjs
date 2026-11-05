@@ -154,7 +154,8 @@ try {
       await expect.poll(()=>page.locator('.app-slo-row').first().evaluate(row=>{
         const objective=row.querySelector('.app-slo-name').getBoundingClientRect();
         const status=row.querySelector('.app-slo-status').getBoundingClientRect();
-        return status.bottom<=objective.top+1;
+        // Name first, then its status chip on the next line (ADR-0031).
+        return objective.bottom<=status.top+1;
       })).toBe(true);
     }
     await expect.poll(() => page.evaluate((requireChart) => {

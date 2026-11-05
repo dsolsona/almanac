@@ -8,25 +8,27 @@
 .sli-list-toolbar .ui-field:has(.sli-list-datasource) .ui-label { font: 13px var(--mono); font-weight: 400; color: var(--text-2); }
 .sli-list-toolbar .sli-list-datasource.ui-control { width: auto; min-width: 11rem; }
 .sli-list-scroll { max-width: 100%; overflow: auto; }
+/* Lists are not boxed (ADR-0031): only the top rule, like the datasource and agent lists. */
+.sli-table-scroll.sli-list-scroll { border: 0; border-radius: 0; }
 .sli-list-table { width: 100%; min-width: 960px; border-collapse: collapse; border-top: 1px solid var(--border); table-layout: fixed; font-size: .875rem; }
 .sli-list-table > thead > tr > th { padding: 10px 8px; border-bottom: 1px solid var(--border); color: var(--text-2); font: 600 11px var(--mono); text-align: start; white-space: nowrap; }
 .sli-list-table > tbody > tr > td { padding: 12px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow-wrap: anywhere; }
 .sli-list-table > tbody > tr:hover > td { background: var(--surface-2); }
-.sli-list-table > thead > tr > th:nth-child(1) { width: 160px; }
-.sli-list-table > thead > tr > th:nth-child(3) { width: 72px; }
-.sli-list-table > thead > tr > th:nth-child(4) { width: 150px; }
-.sli-list-table > thead > tr > th:nth-child(5) { width: 150px; }
-.sli-list-table > thead > tr > th:nth-child(6) { width: 170px; }
-.sli-list-table > thead > tr > th:nth-child(7) { width: 210px; }
-.sli-list-name a { display: block; color: var(--text); text-decoration: none; }
-.sli-list-name a:hover strong { text-decoration: underline; }
+/* Column widths by name, not position (ADR-0031 reorder): the SLI name takes the remaining width. */
+.sli-list-table th.sli-col-health { width: 190px; }
+.sli-list-table th.sli-col-recent { width: 160px; }
+.sli-list-table th.sli-col-sample { width: 190px; }
+.sli-list-table th.sli-col-slos { width: 220px; }
+.sli-list-name > a { display: block; color: var(--text); text-decoration: none; }
+.sli-list-name > a:hover strong { text-decoration: underline; }
 .sli-list-name strong { font-size: .875rem; font-weight: 600; }
 .sli-list-name small, .sli-list-table > tbody > tr > td > small { display: block; margin-top: 2px; color: var(--text-2); font-size: .75rem; }
-.sli-list-name small { font-family: var(--mono); }
+.sli-list-name small { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sli-list-source a, .sli-list-links a { color: var(--text); text-decoration: none; }
 .sli-list-source a:hover, .sli-list-links a:hover { text-decoration: underline; }
 .sli-list-source { color: var(--text-2); }
-.sli-list-links { display: grid; gap: 3px; }
+.sli-list-links { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.sli-list-links small { flex: none; margin: 0; color: var(--text-3); font-size: .75rem; }
 .sli-list-links a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sli-list-create { display: inline-block; padding: 1px 8px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent-ink); font: 11px var(--mono); text-decoration: none; }
 .sli-list-table b { font-weight: 700; }
@@ -142,8 +144,7 @@
   .sli-list-table > tbody > tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
   .sli-list-table > tbody > tr > td { display: block; min-width: 0; padding: 0; border: 0; }
   .sli-list-table > tbody > tr > td::before { display: block; margin-bottom: 3px; color: var(--text-3); font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; content: attr(data-label); }
-  .sli-list-table > tbody > tr > td:nth-child(1)::before, .sli-list-table > tbody > tr > td:nth-child(2)::before { display: none; }
-  .sli-list-table > tbody > tr > td:nth-child(1), .sli-list-table > tbody > tr > td:nth-child(2), .sli-list-table > tbody > tr > td:nth-child(7) { grid-column: 1 / -1; }
-  .sli-list-table > tbody > tr > td:nth-child(3) { display: none; }
-  .sli-list-table > tbody > tr > td:nth-child(5) .sli-recent-strip__plot { width: 7rem; }
+  .sli-list-table > tbody > tr > td.sli-list-name::before, .sli-list-table > tbody > tr > td.sli-col-health::before { display: none; }
+  .sli-list-table > tbody > tr > td.sli-list-name, .sli-list-table > tbody > tr > td.sli-col-health, .sli-list-table > tbody > tr > td.sli-col-slos { grid-column: 1 / -1; }
+  .sli-list-table > tbody > tr > td.sli-col-recent .sli-recent-strip__plot { width: 7rem; }
 }

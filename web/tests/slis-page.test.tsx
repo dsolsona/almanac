@@ -437,7 +437,8 @@ describe('SLI page', () => {
     expect(within(values).getByText('Missing')).toBeVisible();
     expect(within(values).getByText('Partial')).toBeVisible();
     expect(within(values).getByText('Failed')).toBeVisible();
-    expect(screen.getByText('+1 more')).toBeVisible();
+    // One line per row: the first linked SLO and a count of the rest (six linked).
+    expect(screen.getByText('+5 more')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Production metrics' })).toHaveAttribute('href', `/datasources/${sourceID}`);
     expect(screen.getByRole('link', { name: 'Objective 0' })).toHaveAttribute('href', '/slos/c2e07390-3c86-4a7f-b7e5-c15e9626e71c');
   });

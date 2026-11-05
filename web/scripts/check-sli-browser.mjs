@@ -331,7 +331,7 @@ try {
   await expect(listRow).toBeVisible();
   const listNavigationMs=performance.now()-listNavigationStarted;
   await expect(listRow.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
-  await expect(listRow).toContainText('+1 more');
+  await expect(listRow).toContainText('+5 more');
   await expect(listRow.getByRole('link', { name: 'Reference SLO 1' })).toHaveAttribute('href', new RegExp('^/slos/[0-9a-f-]{36}$'));
   await listRow.getByText(/^Exact values ·/).click();
   const recentTable = listRow.getByRole('table', { name: `Exact counts for recent ${created.polling_interval_seconds}-second intervals` });
@@ -398,7 +398,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Request success', exact: true })).toHaveAttribute('href', `/slis/${created.id}`);
-  await expect(page.getByRole('row').filter({ hasText: '+1 more' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: '+5 more' })).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 1440, height: 900 });
     if (theme === 'dark' && await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).count()) {
