@@ -26,7 +26,7 @@ it('keeps last-known numbers visible with stale status, evaluation time and fail
  expect(document.querySelector('time')).toHaveAttribute('datetime',detail.current.evaluation_at);
  expect(document.querySelector('.slo-reference-status')).toHaveAttribute('data-status','stale');
  read.mockResolvedValue({snapshot_id:sloID,items:[{...item,current_state:'failed'}],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
- fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
+ fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));
  expect(await screen.findByText(/Update failed/)).toBeVisible();
  expect(document.querySelector('.app-slo-budget b')).toHaveTextContent('99%');
  view.unmount();
@@ -106,7 +106,7 @@ it('never polls preparing first pages and leaves cursor pages pinned until expli
  expect(read).toHaveBeenCalledTimes(1);
  await act(async()=>{await vi.advanceTimersByTimeAsync(60000);});
  expect(read).toHaveBeenCalledTimes(1);
- fireEvent.click(screen.getByRole('button',{name:/^Refresh$/}));
+ fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));
  await act(async()=>{});
  expect(read).toHaveBeenCalledTimes(2);
  view.rerender(<OperationalOverviewView locationKey="/slos?cursor=page-two" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
@@ -179,7 +179,7 @@ it('refreshes a later overview page from a fresh first-page snapshot and retains
  const seen:URLSearchParams[]=[];
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const url=new URL(String(input),'https://localhost');if(url.pathname==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});seen.push(url.searchParams);return new Response(JSON.stringify({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'next-page',previous_cursor:'previous-page'}),{status:200});});
  vi.stubGlobal('fetch',fetcher);const filters='q=checkout&service_id=55555555-5555-5555-5555-555555555555&urgency=watch';const later=`/slos?${filters}&cursor=page-two&previous_cursor=page-one`;history.replaceState({},'',later);const onLocationChange=vi.fn();const props={canWrite:false,onCreate:()=>undefined,onLocationChange};
- const view=render(<OperationalOverviewView {...props} locationKey={later}/>);await screen.findByText('No SLOs match these filters.');fireEvent.click(screen.getByRole('button',{name:'Refresh'}));const first=`/slos?${filters}`;expect(onLocationChange).toHaveBeenCalledWith(first);view.rerender(<OperationalOverviewView {...props} locationKey={first}/>);await waitFor(()=>expect(seen).toHaveLength(2));expect(seen[0]?.get('cursor')).toBe('page-two');expect(seen[1]?.has('cursor')).toBe(false);expect(seen[1]?.get('q')).toBe('checkout');expect(seen[1]?.get('service_id')).toBe('55555555-5555-5555-5555-555555555555');expect(seen[1]?.get('urgency')).toBe('watch');
+ const view=render(<OperationalOverviewView {...props} locationKey={later}/>);await screen.findByText('No SLOs match these filters.');fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));const first=`/slos?${filters}`;expect(onLocationChange).toHaveBeenCalledWith(first);view.rerender(<OperationalOverviewView {...props} locationKey={first}/>);await waitFor(()=>expect(seen).toHaveLength(2));expect(seen[0]?.get('cursor')).toBe('page-two');expect(seen[1]?.has('cursor')).toBe(false);expect(seen[1]?.get('q')).toBe('checkout');expect(seen[1]?.get('service_id')).toBe('55555555-5555-5555-5555-555555555555');expect(seen[1]?.get('urgency')).toBe('watch');
 });
 
 it('keeps retry and range controls available after the first detail read fails, then recovers on a new range',async()=>{
@@ -200,7 +200,7 @@ it('marks retained overview values with their last confirmed evaluation after a 
   exhaustion:{state:'unavailable',remaining_events:null,bad_events_per_hour:null,hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[]},budget_sparkline:[]};
  const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const path=new URL(String(input),'https://localhost').pathname;if(path==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});reads++;if(reads===1)return new Response(JSON.stringify({snapshot_id:id,items:[item],group_counts:{needs_attention:1,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as unknown as OperationalOverview),{status:200});return new Response(JSON.stringify({message:'refresh failed'}),{status:503});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const props={canWrite:false,onCreate:()=>undefined,onLocationChange:vi.fn()};
- render(<OperationalOverviewView {...props} locationKey="/slos"/>);expect(await screen.findByRole('link',{name:/^Checkout$/})).toBeVisible();expect(document.querySelector('.slo-reference-status')).toHaveAttribute('title','Observations are stale; Complete window is below target');fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
+ render(<OperationalOverviewView {...props} locationKey="/slos"/>);expect(await screen.findByRole('link',{name:/^Checkout$/})).toBeVisible();expect(document.querySelector('.slo-reference-status')).toHaveAttribute('title','Observations are stale; Complete window is below target');fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));
  expect(document.querySelector('.app-slo-status')).toHaveTextContent('+1 more');expect(screen.getByText('Observations are stale; Complete window is below target')).toBeInTheDocument();
  await waitFor(()=>expect(screen.getAllByRole('alert').some(alert=>alert.textContent?.includes('request could not be completed'))).toBe(true));const alert=screen.getAllByRole('alert').find(value=>value.textContent?.includes('request could not be completed'));expect(alert).toHaveTextContent(`Last confirmed evaluation: ${evaluatedAt}`);expect(screen.getByRole('link',{name:/^Checkout$/})).toBeVisible();
 });
@@ -231,7 +231,7 @@ it('names the status from the leading reason and keeps every reason in the title
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await screen.findByRole('link',{name:'SLO 0'});
  const statuses=[...document.querySelectorAll('.app-slo-row .slo-reference-status')];
- expect(statuses.map(node=>node.querySelector('.ui-mark__row')?.textContent)).toEqual(['Burning fast','Breached','Not reporting','Low budget']);
+ expect(statuses.map(node=>node.querySelector('.ui-status-chip')?.textContent)).toEqual(['Burning fast','Breached','Not reporting','Low budget']);
  expect(statuses[0]).toHaveAttribute('title','1 h burn is at least 1×; Less than half of budget remains');
  expect(statuses[0]).toHaveTextContent('+1 more');
 });

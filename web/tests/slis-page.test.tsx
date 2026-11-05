@@ -121,11 +121,11 @@ describe('SLI page', () => {
     act(() => { history.pushState({}, '', row.getAttribute('href')!); window.dispatchEvent(new PopStateEvent('popstate')); });
     const heading = await screen.findByRole('heading', { name: 'Request success' });
     await waitFor(() => expect(heading).toHaveFocus());
-    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    const refresh = screen.getByRole('button', { name: 'Refresh SLI' });
     await userEvent.click(refresh);
     expect(refresh).toHaveFocus();
     act(() => { history.pushState({}, '', '#main'); window.dispatchEvent(new PopStateEvent('popstate')); });
-    expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Refresh SLI' })).toBeVisible();
     expect(refresh).toHaveFocus();
     expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'SLIs' })).toHaveAttribute('href', '/slis');
     act(() => { history.pushState({}, '', '/slis'); window.dispatchEvent(new PopStateEvent('popstate')); });
@@ -201,7 +201,7 @@ describe('SLI page', () => {
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
     await screen.findByRole('heading', { name: 'Request success' });
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(historyReads).toBe(2));
     if (order === 'initial-first') {
       await act(async () => initial.resolve(response(historyPage([]))));
@@ -228,7 +228,7 @@ describe('SLI page', () => {
     render(<SlisPage context={editor} />);
     await screen.findByRole('table');
     expectObservedHistory();
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(historyReads).toBe(2));
     expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
     expectObservedHistory();
@@ -559,7 +559,7 @@ describe('SLI page', () => {
     await user.clear(field);
     await user.type(field, 'Draft name');
     expect(await screen.findByText('SLI management is temporarily unavailable.')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(field).toHaveValue('Draft name'));
   });
 
@@ -580,7 +580,7 @@ describe('SLI page', () => {
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
     await screen.findByRole('heading', { name: 'Request success' });
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(reads).toBe(2));
     act(() => { history.pushState({}, '', `/slis/${otherID}`); window.dispatchEvent(new PopStateEvent('popstate')); });
     expect(await screen.findByRole('heading', { name: 'Checkout' })).toBeVisible();

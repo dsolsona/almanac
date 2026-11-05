@@ -25,7 +25,8 @@ amendments to SPEC-0012, the visual reference and the design guide apply.
 
 ## Decision
 
-1. **One grammar.** Every list uses the same header (Bevan title, mono count
+1. **One grammar.** (List header and row order superseded by
+   [ADR-0031](0031-list-grammar-and-button-roles.md).) Every list uses the same header (Bevan title, mono count
    subline, "Updated hh:mm:ss UTC", Refresh, one primary action), toolbar (search
    with `/`, segmented health filter, compact selects), row (status shape plus
    label plus one-line mono reason, name with context subline, right-aligned

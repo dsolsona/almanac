@@ -1,6 +1,10 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 
-export type ButtonVariant = 'primary' | 'selected' | 'outline' | 'ghost' | 'danger';
+// Roles (ADR-0031, design guide "Button roles"): primary is the one main action of a view;
+// outline is secondary; ghost is quiet (utility, icon); link is inline row and in-text actions;
+// danger-outline starts a destructive action; danger (filled) only confirms one in its dialog;
+// selected is the pressed state of a toggle, never an action.
+export type ButtonVariant = 'primary' | 'selected' | 'outline' | 'ghost' | 'link' | 'danger-outline' | 'danger';
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   pending?: boolean;

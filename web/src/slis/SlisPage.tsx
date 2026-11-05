@@ -5,7 +5,7 @@ import { ModuleView } from '../components/ModuleView.tsx';
 import { SliRecentStrip, type SliRecentSample } from '../components/charts/SliRecentStrip.tsx';
 import { ExactValuesTable, type ExactValueRow } from '../components/charts/ExactValuesTable.tsx';
 import type { TimelineChart, Coverage } from '../components/charts/timelineModel.ts';
-import { Button, Combobox, Dialog, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, SearchField, SegmentedControl, SelectField, StatusMark, TextField, Toolbar, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, Combobox, Dialog, FilterSelect, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, RefreshButton, SearchField, SegmentedControl, StatusChip, StatusMark, TextField, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 import { createDatasourceClient, type Datasource } from '../datasources/client.ts';
 import { createSliClient, SliFailure, type Sli, type SliCreateRequest, type SliObservation, type SliObservationPage } from './client.ts';
 import { clockFormat, clockTime, relativeAge, sliVocabulary } from './vocabulary.ts';
@@ -592,7 +592,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           <div className="sli-detail-head__status"><StatusMark tone={words.tone} label={`${words.label} · ${words.reason}`} /></div>
           <p className="sli-detail-head__meta"><code>{sli.name}</code> · Ratio · two queries · {datasource?.display_name ?? 'datasource'} · every {sli.polling_interval_seconds} s</p>
         </div>
-        <div className="sli-detail-head__actions"><Button variant="outline" onClick={() => void refreshDetail()} pending={pending}>Refresh</Button>{canWrite && <Button onClick={openEdit}>Edit SLI</Button>}{canWrite && <Button variant="outline" onClick={() => navigate('/slos/new')}>New SLO</Button>}</div>
+        <div className="sli-detail-head__actions"><RefreshButton label="Refresh SLI" busy={pending} lastRefreshed={updatedAt} onClick={() => void refreshDetail()} />{canWrite && <Button onClick={openEdit}>Edit SLI</Button>}{canWrite && <Button variant="outline" onClick={() => navigate('/slos/new')}>New SLO</Button>}</div>
       </div>
       {error && <p className="sli-error" role="alert">{error}</p>}
       {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
@@ -682,31 +682,27 @@ export function SlisPage({ context }: { context: AuthContext }) {
     </>;
   }
 
-  const datasourceOptions = [{ value: '', label: 'All datasources' }, ...sources.map((source) => ({ value: source.id, label: source.display_name }))];
+  const datasourceOptions = [{ value: '', label: 'Any' }, ...sources.map((source) => ({ value: source.id, label: source.display_name }))];
   const hasListFilters = listSearch.trim() !== '' || listDatasourceID !== '';
-  const attention = items.filter((item) => sliVocabulary(item).attention).length;
   const paged = Boolean(listCursor || listNextCursor);
-  const summary = <>{items.length} SLI{items.length === 1 ? '' : 's'}{paged ? ' on this page' : ''}{attention ? ` · ${attention} need${attention === 1 ? 's' : ''} attention` : ''} · all times UTC</>;
   const openCreate = () => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); };
   return <>
-    <PageHeader title="SLIs" summary={summary} headingRef={titleRef} updatedAt={updatedAt ? `${updatedAt} UTC` : undefined} actions={<><Button variant="outline" aria-label="Refresh" title="Refresh SLIs" disabled={listBusy} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)}>↻ Refresh</Button>{canWrite && !sourceError && <Button onClick={openCreate}>New SLI</Button>}</>} />
+    <PageHeader title="SLIs" headingRef={titleRef} actions={canWrite && !sourceError ? <Button onClick={openCreate}>New SLI</Button> : undefined} />
     {error && <p className="sli-error" role="alert">{error}</p>}
     {sourceError && <><p className="sli-error" role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></>}
     {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}
-    <Toolbar className="sli-list-toolbar"><SearchField id="sli-list-search" label="Search SLIs" placeholder="Search by name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} shortcut /><SelectField id="sli-list-datasource" label="Datasource" className="sli-list-datasource" options={datasourceOptions} value={listDatasourceID} onChange={(event) => void updateListFilters(listSearch, event.target.value)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</Toolbar>
+    <Toolbar className="sli-list-toolbar"><SearchField id="sli-list-search" label="Search SLIs" placeholder="Search by name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} shortcut /><FilterSelect id="sli-list-datasource" label="Datasource" options={datasourceOptions} value={listDatasourceID} onChange={(value) => void updateListFilters(listSearch, value)} /><ToolbarSpacer /><RefreshButton label="Refresh SLIs" busy={listBusy} lastRefreshed={updatedAt} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</Toolbar>
     {items.length === 0 ? error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
       {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p></> : <p>Create your first SLI from a Prometheus datasource with New SLI.</p>}
     </div>
-      : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table"><thead><tr><th scope="col">Health</th><th scope="col">SLI</th><th scope="col">Type</th><th scope="col">Datasource</th><th scope="col">Last 12 intervals</th><th scope="col">Last sample</th><th scope="col">SLOs</th></tr></thead><tbody>{items.map((item) => {
+      : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table"><thead><tr><th scope="col">SLI</th><th scope="col">Health</th><th scope="col">Last 12 intervals</th><th scope="col">Last sample <small>UTC</small></th><th scope="col">SLOs</th></tr></thead><tbody>{items.map((item) => {
         const observation = item.latest_observation;
         const linked = item.linked_slos?.items ?? [];
         const recent = (item.recent_measurements ?? []) as SliRecentSample[];
         const words = sliVocabulary(item);
         return <tr key={item.id}>
-          <td data-label="Health"><StatusMark tone={words.tone} label={words.label} reason={words.reason} /><span className="sr-only">{sliListHealth(item)}</span></td>
-          <td data-label="SLI" className="sli-list-name"><a href={`/slis/${item.id}`} data-app-route><strong>{item.display_name}</strong></a><small>{item.name}</small></td>
-          <td data-label="Type">{item.measurement_kind === 'event_counts' && item.component_mode === 'interval_count' ? 'Ratio' : 'Unsupported'}</td>
-          <td data-label="Datasource" className="sli-list-source">{item.datasource_display_name ? <a href={`/datasources/${item.datasource_id}`} data-app-route>{item.datasource_display_name}</a> : <span>Datasource name unavailable</span>}</td>
+          <td data-label="SLI" className="sli-list-name"><a href={`/slis/${item.id}`} data-app-route><strong>{item.display_name}</strong></a><small><span className="mono">{item.name}</span> · {item.measurement_kind === 'event_counts' && item.component_mode === 'interval_count' ? 'Ratio' : 'Unsupported'} · <span className="sli-list-source">{item.datasource_display_name ? <a href={`/datasources/${item.datasource_id}`} data-app-route>{item.datasource_display_name}</a> : 'datasource name unavailable'}</span></small></td>
+          <td data-label="Health"><StatusChip tone={words.tone} label={words.label} reason={words.reason} /><span className="sr-only">{sliListHealth(item)}</span></td>
           <td data-label="Last 12 intervals"><SliRecentStrip samples={recent} cadenceSeconds={item.polling_interval_seconds} /></td>
           <td data-label="Last sample">{observation ? <><b className={observation.outcome === 'observed' ? '' : 'muted'}>{observation.outcome === 'observed' ? ratioPercent(observation.good_count!, observation.total_count!) : outcomeLabel(observation.outcome).toLowerCase()}</b> <span className="sli-muted">· {relativeAge(observation.interval_end)}</span><small className="mono">{observation.outcome === 'observed' ? `${count(observation.good_count!)} / ${count(observation.total_count!)}` : observation.outcome === 'failed' ? observation.error_code ?? 'failed' : observation.outcome === 'incomplete' ? `missing ${observation.missing_components.join(', ')}` : 'no count value'} · <time dateTime={observation.interval_end} title={shortTime(observation.interval_end)}>{clockTime(observation.interval_end)}</time></small></> : <><b className="muted">no sample yet</b>{item.next_expected_execution_at && <small className="mono">first query {clockTime(item.next_expected_execution_at)}</small>}</>}</td>
           <td data-label="SLOs">{linked.length ? <><div className="sli-list-links">{linked.map((objective) => <a key={objective.id} href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a>)}</div>{item.linked_slos && item.linked_slos.total_count > linked.length && <small>+{item.linked_slos.total_count - linked.length} more</small>}</> : canWrite ? <a className="sli-list-create" href="/slos/new" data-app-route>+ Create SLO</a> : <span className="sli-muted">No linked SLOs</span>}</td>

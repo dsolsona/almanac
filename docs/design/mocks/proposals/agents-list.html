@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Proposal · Agents</title><link rel="stylesheet" href="../mock.css"><link rel="stylesheet" href="proposal.css"></head>
+<body data-current="agents"><main>
+<div class="p-head">
+  <h1>Agents</h1>
+  <span class="spacer"></span>
+  <div class="actions"><button class="btn primary">Register agent</button></div>
+</div>
+
+<div class="p-toolbar">
+  <label class="search"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search name or version"><kbd>/</kbd></label>
+  <span class="seg"><button aria-pressed="true">All <span class="n">3</span></button><button>Needs attention <span class="n">1</span></button><button>Disabled <span class="n">0</span></button></span>
+  <span class="spacer"></span>
+  <button class="p-refresh" title="Refresh · last refreshed 13:15:02 UTC" aria-label="Refresh agents"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+
+<table class="tbl responsive">
+  <thead><tr><th>Agent</th><th style="width:210px">Status</th><th style="width:200px">Datasources</th><th style="width:150px">Last heartbeat <small>UTC</small></th><th style="width:150px">Credential</th></tr></thead>
+  <tbody>
+    <tr><td><a class="rowname" href="#">local</a><span class="desc mono">Local · 1.4.0</span></td><td><span class="hc good"><i></i>Connected</span></td><td class="mono">local-victoriametrics</td><td class="mono">13:14:58</td><td class="mono">78 d left</td></tr>
+    <tr><td><a class="rowname" href="#">eu-west-1</a><span class="desc mono">EU collector · 1.4.0</span></td><td><span class="hc good"><i></i>Connected</span></td><td class="mono">prod-prometheus-eu <span class="muted">+1</span></td><td class="mono">13:14:51</td><td class="mono">201 d left</td></tr>
+    <tr><td><a class="rowname" href="#">us-east-1</a><span class="desc mono">US collector · 1.3.2</span></td><td><span class="hc stale"><i></i>Unreachable</span><span class="hc-reason">no heartbeat for 2 h</span></td><td class="mono">prod-prometheus-us</td><td class="mono muted">11:09:02</td><td class="mono">6 d left</td></tr>
+  </tbody>
+</table>
+<div class="pager" style="margin-top:12px"><span>Showing 3 of 3</span><span class="spacer"></span><button class="btn sm" disabled>‹ Previous</button><button class="btn sm" disabled>Next ›</button></div>
+
+<div class="anno"><h3>What changed</h3><ul>
+<li>No small "Agents" breadcrumb above the title on a top-level page; breadcrumbs appear only on detail pages.</li>
+<li>Same head as every list: title left, the one primary action ("Register agent") right; Refresh moves to the toolbar end like the other lists. No count subline, no "Updated".</li>
+<li>Name first; status chip second with a reason only when something needs attention; datasources by name; credential time left as a plain value (warning chip under 14 days, per SPEC-0004).</li>
+</ul></div>
+</main><script src="../mock.js"></script></body></html>

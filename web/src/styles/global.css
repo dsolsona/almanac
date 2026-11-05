@@ -39,6 +39,11 @@ a { color: var(--accent-ink); }
 .ui-button--outline:hover:not(:disabled), .ui-button--ghost:hover:not(:disabled) { background: var(--surface-2); }
 .ui-button--ghost { background: transparent; }
 .ui-button--danger { background: var(--status-breached); color: var(--primary-foreground); }
+.ui-button--danger-outline { border-color: currentColor; background: var(--surface); color: var(--status-breached); }
+.ui-button--danger-outline:hover:not(:disabled) { background: var(--crit-wash); }
+.ui-button--link { min-height: 0; padding: 0; border: 0; background: none; color: var(--accent-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.ui-button--link:hover:not(:disabled) { color: var(--accent); }
+.ui-button--link.ui-button--link-danger, .ui-danger-link { color: var(--status-breached); }
 .ui-button__mark { width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-spin 700ms linear infinite; }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
 .ui-switch { position: relative; min-width: 0; }

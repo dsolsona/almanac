@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ChoiceChips, Combobox, FormActions, FormSection, Pager, PageHeader, Panel, SearchField, SegmentedControl, SelectionSummary, StatusMark, TextareaField, TextField, Toolbar, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, Pager, PageHeader, Panel, RefreshButton, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 
 // Local catalogue data only; never application records.
 const datasourceExamples: ComboboxOption[] = [
@@ -11,6 +11,8 @@ const datasourceExamples: ComboboxOption[] = [
 
 export function OperationalControlsSection() {
   const [filter, setFilter] = useState('all');
+  const [service, setService] = useState('');
+  const [refreshes, setRefreshes] = useState(0);
   const [target, setTarget] = useState('99.9');
   const [windowDays, setWindowDays] = useState('30');
   const [datasource, setDatasource] = useState<string | null>(null);
@@ -28,12 +30,16 @@ export function OperationalControlsSection() {
 
     <Panel heading="Page header, search and pager">
       <div className="operational-list-demo">
-        <PageHeader title="SLOs" summary="10 SLOs · 4 need attention · all times UTC" updatedAt="10:00:20 UTC" actions={<><Button variant="outline">↻ Refresh</Button><Button>New SLO</Button></>} />
+        <PageHeader title="SLOs" actions={<Button>New SLO</Button>} />
         <Toolbar>
           <SearchField id="catalogue-search" label="Search SLOs" placeholder="Search by name, service or SLI" shortcut />
           <SegmentedControl label="Filter by status" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All', count: 10 }, { value: 'attention', label: 'Needs attention', count: 4 }, { value: 'healthy', label: 'Healthy', count: 4 }, { value: 'archived', label: 'Archived', disabled: true, title: 'Not available yet' }]} />
+          <FilterSelect id="catalogue-service-filter" label="Service" value={service} onChange={setService} options={[{ value: '', label: 'Any' }, { value: 'core', label: 'Core' }, { value: 'delivery', label: 'Delivery' }]} />
+          <ToolbarSpacer /><RefreshButton label="Refresh SLOs" lastRefreshed="10:00:20" onClick={() => setRefreshes((value) => value + 1)} />
         </Toolbar>
-        <p className="demo-feedback" role="status">Filter: {filter}.</p>
+        <div className="catalogue-chip-row" aria-label="Health chips">{(['healthy', 'warning', 'breached', 'stale', 'none'] as const).map((tone) => <StatusChip key={tone} tone={tone} label={{ healthy: 'Healthy', warning: 'Burning fast', breached: 'Breached', stale: 'Not reporting', none: 'No data yet' }[tone]} reason={tone === 'healthy' ? 'never shown when healthy' : 'one-line reason'} />)}</div>
+        <div className="catalogue-chip-row" aria-label="Button roles"><Button>Save changes</Button><Button variant="outline">Cancel</Button><Button variant="ghost">Copy</Button><Button variant="link">Change</Button><Button variant="danger-outline">Delete…</Button><Button variant="danger">Delete agent</Button></div>
+        <p className="demo-feedback" role="status">Filter: {filter}. Service: {service || 'any'}. Refreshed {refreshes} times.</p>
         <Pager id="catalogue-page-size" label="Example result pages" position="Page 1 · showing 10 of 10" pageSize={pageSize} onPageSizeChange={setPageSize} hasPrevious={false} hasNext={false} />
       </div>
     </Panel>

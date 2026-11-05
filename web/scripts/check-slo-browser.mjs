@@ -93,7 +93,8 @@ try {
     await expect.poll(()=>page.locator('.app-slo-name>a.app-slo-hitarea').evaluateAll(links=>links.map(link=>new URL(link.href).pathname).sort())).toEqual(rows);
     const count=urgency?observed.body.group_counts[urgency]:Object.values(observed.body.group_counts).reduce((sum,value)=>sum+value,0);
     stage='filtered overview matching count';
-    await expect(page.locator('.app-slo-list-sub')).toContainText(`${count} SLO${count===1?'':'s'}`); await expect(page.locator('.app-slo-list-sub')).toContainText('all times UTC');
+    // No count subline or Updated line on lists (ADR-0031); the triage tiles carry the counts.
+    await expect(page.locator('.ui-page-head__summary')).toHaveCount(0); await expect(page.getByText(/all times UTC/)).toHaveCount(0);
     return observed.body;
   };
   const openPreparedOverview=async()=>{
@@ -288,7 +289,7 @@ try {
   const precedingJourneys=journeyTraces.length;
   const refreshedOverview=page.waitForResponse(r=>!precedingRequests.has(r.request())&&r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/v1/slos/overview')
     .then(response=>response.status());
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByRole('button',{name:'Refresh SLOs',exact:true}).click();
   assert.equal(await refreshedOverview,200);
   await page.waitForFunction(()=>globalThis.__almanacRefreshResponse?.settled);
   const renderedOverviewResponse=await page.evaluate(()=>globalThis.__almanacRefreshResponse);

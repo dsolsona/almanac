@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, AgentFailure, type Agent, type AgentCredential, type AgentDatasourcePage, type AgentIssuance, type AgentDetail } from './client.ts';
 import { AgentRuntimePanel } from './AgentRuntimePanel.tsx';
 import { AgentLifecycleControls } from './AgentLifecycleControls.tsx';
 import { DurationControl, describeDuration } from './DurationControl.tsx';
-import { Button, Dialog, Pager, Panel, SearchField, SegmentedControl, StatusMark, TextField, Toolbar, type MarkTone } from '../components/ui/index.ts';
+import { Button, Dialog, Pager, Panel, RefreshButton, SearchField, SegmentedControl, StatusChip, StatusMark, TextField, Toolbar, ToolbarSpacer, type MarkTone } from '../components/ui/index.ts';
 import { relativeAge } from '../slis/vocabulary.ts';
 import './agents.css';
 import { journeyContentReady } from '../telemetry/client.ts';
@@ -14,7 +15,7 @@ export type AgentRecoveryCause = 'connection' | 'service' | 'timeout' | 'respons
 export type AgentCreateIntent = { key: string; name: string; displayName: string; lifetimeSeconds?: number; userID: string; outcome: 'unknown' | 'rejected' | 'conflict'; retryRejected?: 'session' | 'permission' | 'other'; recoveryCause?: AgentRecoveryCause; requestID?: string };
 export type AgentLifecycleIntent = { kind: 'rotate' | 'revoke' | 'disable' | 'delete'; key: string; userID: string; agentID: string; credentialID?: string; etag: string; lifetimeSeconds?: number; overlapSeconds?: number; retryAfterDeadline?: number; outcome: 'unknown' | 'rejected' | 'conflict'; retryRejected?: 'session' | 'permission' | 'other' | 'conflict' };
 export type SessionRecheck = { confirmed: true; context: AuthContext } | { confirmed: false };
-type Props = { onBreadcrumbChange?: (value: { id: string; name: string } | null) => void; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; draft: AgentSafeDraft; onDraftChange: (draft: AgentSafeDraft) => void; intent: AgentCreateIntent | null; onIntentChange: (intent: AgentCreateIntent | null) => void; lifecycleIntent: AgentLifecycleIntent | null; onLifecycleIntentChange: (intent: AgentLifecycleIntent | null) => void };
+type Props = { titleActionsTarget?: HTMLElement | null; onBreadcrumbChange?: (value: { id: string; name: string } | null) => void; context: AuthContext; recheckSession: () => Promise<SessionRecheck>; suspended: boolean; draft: AgentSafeDraft; onDraftChange: (draft: AgentSafeDraft) => void; intent: AgentCreateIntent | null; onIntentChange: (intent: AgentCreateIntent | null) => void; lifecycleIntent: AgentLifecycleIntent | null; onLifecycleIntentChange: (intent: AgentLifecycleIntent | null) => void };
 const emptyDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '', nameEdited: false };
 const safeError = 'The request could not be completed. Check the session and try again.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -51,6 +52,9 @@ function registrationFeedback(intent: AgentCreateIntent, conflicted: boolean, pr
 function queryState() { const q = new URLSearchParams(location.search); return { agent: q.get('agent') ?? '', agents_cursor: q.get('agents_cursor') ?? '', credentials_cursor: q.get('credentials_cursor') ?? '' }; }
 function setQuery(patch: Partial<ReturnType<typeof queryState>>, replace = false) { const q = new URLSearchParams(location.search); for (const [key, value] of Object.entries(patch)) value ? q.set(key, value) : q.delete(key); const url = `${location.pathname}${q.size ? `?${q}` : ''}`; history[replace ? 'replaceState' : 'pushState']({}, '', url); window.dispatchEvent(new PopStateEvent('popstate')); }
 function date(value: string) { return value.replace('T', ' '); }
+const shortDay = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+// A readable UTC date with the exact recorded value in its tooltip.
+function Day({ value }: { value: string }) { return <time dateTime={value} title={`${date(value)} UTC`}>{shortDay.format(new Date(value))}</time>; }
 const clockFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC', hour12: false });
 const dayFormat = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 type AgentSource = AgentDatasourcePage['items'][number];
@@ -89,7 +93,7 @@ function runCommands(agent: Agent): [string, string, string][] {
   ].map(([value, label, command]) => [value!, label!, command!.replace('{name}', agent.name)]) as [string, string, string][];
 }
 
-export function AgentsPage({ context, recheckSession, suspended, draft, onDraftChange, intent, onIntentChange, lifecycleIntent, onLifecycleIntentChange, onBreadcrumbChange }: Props) {
+export function AgentsPage({ context, recheckSession, suspended, draft, onDraftChange, intent, onIntentChange, lifecycleIntent, onLifecycleIntentChange, onBreadcrumbChange, titleActionsTarget }: Props) {
   const clientRef = useRef<ReturnType<typeof createAgentClient> | null>(null);
   if (!clientRef.current) clientRef.current = createAgentClient();
   const api = clientRef.current;
@@ -332,7 +336,6 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   const visibleAgents = agents.filter((item) => (!term || `${item.name} ${item.display_name}`.toLowerCase().includes(term))
     && (listFilter === 'all' || (listFilter === 'attention' ? vocabularies.get(item.id)?.attention : !item.enabled)));
   const counts = { connected: agents.filter((item) => vocabularies.get(item.id)?.label === 'Connected').length, unreachable: agents.filter((item) => vocabularies.get(item.id)?.label === 'Unreachable').length, never: agents.filter((item) => vocabularies.get(item.id)?.label === 'Never connected').length, disabled: agents.filter((item) => !item.enabled).length, attention: agents.filter((item) => vocabularies.get(item.id)?.attention).length };
-  const listSummary = [`${agents.length} agent${agents.length === 1 ? '' : 's'}${agentNext || locationState.agents_cursor ? ' on this page' : ''}`, counts.connected ? `${counts.connected} connected` : '', counts.unreachable ? `${counts.unreachable} unreachable` : '', counts.never ? `${counts.never} never connected` : '', counts.disabled ? `${counts.disabled} disabled` : '', 'all times UTC'].filter(Boolean).join(' · ');
   const detailVocabulary = agent ? agentVocabulary(agent) : null;
   const runtime = agent?.runtime ?? null;
   const historyComplete = !credentialNext && !locationState.credentials_cursor;
@@ -340,6 +343,9 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   const agentSources = datasources ?? [];
   const blockers = agentSources;
   // The status block keeps one tree position whether or not the agent record is loaded yet.
+  // The shell owns the heading and hands over its actions slot (ADR-0031): actions join the title line.
+  // Undefined means no shell (standalone render): keep them inline. Null means the slot is not attached yet.
+  const titleActions = (node: ReactNode) => titleActionsTarget ? createPortal(node, titleActionsTarget) : titleActionsTarget === undefined ? <div className="agents-title-actions--inline">{node}</div> : null;
   const lifecycleLayout = ({ rotate, disable, remove, status }: { rotate: ReactNode; disable: ReactNode; remove: ReactNode; status: ReactNode }) => <>
     {status}
     {agent && <>
@@ -348,7 +354,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         {detailVocabulary && <p className="agents-detail-status"><StatusMark tone={detailVocabulary.tone} label={`${detailVocabulary.label} · ${detailVocabulary.reason}`} /></p>}
         <p className="agents-detail-meta"><span className="mono">{agent.name}</span>{runtime ? ` · ${runtime.protocol} · ${runtime.software_version}` : ''} · registered {dayFormat.format(new Date(agent.created_at))}{datasources ? ` · ${agentSources.length}${datasourcesPartial ? '+' : ''} datasource${agentSources.length === 1 && !datasourcesPartial ? '' : 's'}` : ''}</p>
       </div>
-      <div className="agents-detail-head__actions">{updatedAt && <span className="ui-page-head__updated">Updated {updatedAt}</span>}<Button variant="outline" aria-label="Refresh agent" onClick={() => void load()} disabled={suspended || loading || submitBusy || lifecycleBusy}>↻ Refresh</Button><Button ref={runTrigger} variant="outline" onClick={() => setRunOpen(true)}>? How to run</Button>{rotate}<Button ref={registerTrigger} variant="outline" onClick={openRegister} disabled={suspended || lifecycleBusy || Boolean(lifecycleIntent)}>Register agent</Button></div>
+      {titleActions(<><RefreshButton label="Refresh agent" lastRefreshed={updatedAt} onClick={() => void load()} disabled={suspended || loading || submitBusy || lifecycleBusy} /><Button ref={runTrigger} variant="outline" onClick={() => setRunOpen(true)}>How to run</Button>{rotate}</>)}
     </div>
     {detailVocabulary?.label === 'Unreachable' && <section className="agents-banner" aria-label="Agent unreachable"><p>The agent last reported{runtime?.last_heartbeat_at ? <> at <b>{clockFormat.format(new Date(runtime.last_heartbeat_at))} UTC</b></> : ''}; the backend has heard nothing since{runtime?.last_heartbeat_at ? ` (${relativeAge(runtime.last_heartbeat_at)})` : ''}. {blockers.length ? `Its ${blockers.length}${datasourcesPartial ? '+' : ''} datasource${blockers.length === 1 && !datasourcesPartial ? ' is' : 's are'} not collecting. ` : ''}If the process is down, restart it with its current credential; it replaces the old process immediately. If the host is gone, move its datasources to another agent below.</p></section>}
     {!agent.enabled && <section className="agents-banner" aria-label="Agent disabled"><p>This agent is disabled by an administrator. Its credentials are revoked and it is not operational, even if its latest report showed a connection.</p></section>}
@@ -370,10 +376,18 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       </table>}
       {datasourcesPartial && <p className="agents-card__note">Showing the first {agentSources.length}; more datasources use this agent. Open the datasource list to see them all.</p>}
     </section>
-    <Panel heading="Credential history" className="agents-panel agents-card--panel"><p>Tokens this agent can authenticate with; values are never shown. Scheduled retirement and revocation are separate events. This history does not show whether a credential is currently connected or active.</p>
-      {credentials.length === 0 ? <p>No credentials are recorded.</p> : <div className="agents-credentials" role="region" aria-label="Credential history">{credentials.map((item) => { const state = item.revoked_at ? ['none', 'Revoked'] as const : Date.parse(item.expires_at) <= Date.now() ? ['stale', 'Expired'] as const : item.retire_at && Date.parse(item.retire_at) <= Date.now() ? ['stale', 'Retired'] as const : item.retire_at ? ['warning', 'Retiring'] as const : ['healthy', 'Current'] as const; return <section className="agents-credential" key={item.id} aria-label={`Credential ${item.id}`}><div className="agents-credential__state"><StatusMark tone={state[0]} label={state[1]} /></div><dl className="agents-meta"><div><dt>Credential ID</dt><dd>{item.id}</dd></div><div><dt>Issued (UTC)</dt><dd>{date(item.issued_at)}</dd></div><div><dt>Expires (UTC)</dt><dd>{date(item.expires_at)}</dd></div><div><dt>Scheduled retirement (UTC)</dt><dd>{item.retire_at ? date(item.retire_at) : '—'}</dd></div><div><dt>Revoked (UTC)</dt><dd>{item.revoked_at ? date(item.revoked_at) : '—'}</dd></div></dl>{item.revoked_at === null && <Button variant="danger" onClick={() => setRevokeRequest({ credentialID: item.id, sequence: ++revokeSequence.current })} disabled={suspended || lifecycleBusy || submitBusy || loading || Boolean(error) || !agentDetail || Boolean(intent) || Boolean(lifecycleIntent)}>Revoke credential</Button>}</section>; })}</div>}
+    <Panel heading="Credential history" className="agents-panel agents-card--panel"><p className="agents-card__hint">Values are never shown. Rotation keeps the previous token valid for its grace period; revoking takes effect immediately.</p>
+      {credentials.length === 0 ? <p>No credentials are recorded.</p> : <div className="agents-credentials" role="region" aria-label="Credential history"><ul className="agents-credential-list">{credentials.map((item) => {
+        const state = item.revoked_at ? ['none', 'Revoked'] as const : Date.parse(item.expires_at) <= Date.now() ? ['stale', 'Expired'] as const : item.retire_at && Date.parse(item.retire_at) <= Date.now() ? ['stale', 'Retired'] as const : item.retire_at ? ['warning', 'Retiring'] as const : ['healthy', 'Current'] as const;
+        const live = item.revoked_at === null && state[1] !== 'Expired' && state[1] !== 'Retired';
+        // One row per token (ADR-0031): state, identifier, the dates that matter for that state, and a text-style revoke.
+        return <li className={`agents-credential ${live ? '' : 'agents-credential--past'}`.trim()} key={item.id} aria-label={`Credential ${item.id}`}>
+          <StatusChip tone={state[0]} label={state[1]} />
+          <span className="agents-credential__id mono" title={item.id}>{item.id}</span>
+          <span className="agents-credential__when mono">{item.revoked_at ? <>revoked <Day value={item.revoked_at} /></> : item.retire_at ? <>retires <Day value={item.retire_at} /> · expires <Day value={item.expires_at} /></> : <>issued <Day value={item.issued_at} /> · expires <Day value={item.expires_at} /></>}</span>
+          {item.revoked_at === null ? <Button variant="link" className="ui-danger-link" onClick={() => setRevokeRequest({ credentialID: item.id, sequence: ++revokeSequence.current })} disabled={suspended || lifecycleBusy || submitBusy || loading || Boolean(error) || !agentDetail || Boolean(intent) || Boolean(lifecycleIntent)} aria-label="Revoke credential">Revoke</Button> : <span />}
+        </li>; })}</ul></div>}
       {credentialNext && <Button variant="outline" onClick={() => setQuery({ credentials_cursor: credentialNext })}>Next credential history</Button>}
-      <p className="agents-card__note">Rotation issues a new token and keeps the current one valid for a grace period so you can restart the agent without a gap. Revoking takes effect immediately.</p>
     </Panel>
     <details className="agents-runtime-details"><summary>Runtime details</summary><dl className="agents-meta agents-record"><div><dt>Agent ID</dt><dd>{agent.id}</dd></div><div><dt>Created (UTC)</dt><dd>{date(agent.created_at)}</dd></div><div><dt>Updated (UTC)</dt><dd>{date(agent.updated_at)}</dd></div><div><dt>Record version</dt><dd>{agent.version}</dd></div></dl><AgentRuntimePanel agent={agent} /></details>
     <div className="agents-dangerline"><span className="agents-dangerline__text"><b>Disable</b> stops the agent and revokes its credentials; <b>delete</b> also removes it.{blockers.length ? ` Move ${blockers.map((row) => row.display_name).join(', ')} first.` : ''}</span><span className="agents-dangerline__actions">{disable}{remove}</span></div>
@@ -391,9 +405,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   </>;
 
   return <section className="agents-screen" aria-labelledby="agents-title">
-    {!locationState.agent && <div className="agents-head"><p className="ui-page-head__summary agents-head__summary">{hasCachedData.current ? listSummary : 'all times UTC'}</p><div className="ui-page-head__actions">{updatedAt && <span className="ui-page-head__updated">Updated {updatedAt}</span>}<Button variant="outline" aria-label="Refresh agents" onClick={() => void load()} disabled={suspended || loading || submitBusy || lifecycleBusy}>↻ Refresh</Button><Button ref={registerTrigger} onClick={openRegister} disabled={suspended || lifecycleBusy || Boolean(lifecycleIntent)}>Register agent</Button></div></div>}
-    {locationState.agent && !agent && <div className="agents-head"><div className="ui-page-head__actions"><Button ref={registerTrigger} variant="outline" onClick={openRegister} disabled={suspended || lifecycleBusy || Boolean(lifecycleIntent)}>Register agent</Button></div></div>}
-    {error && !registerOpen && <div ref={errorRef} className="agents-error" role="alert" tabIndex={-1}>{error}{locationState.agent && !agent && <> <Button variant="outline" onClick={() => setQuery({ agent: '', credentials_cursor: '' })}>Back to agents</Button></>}</div>}
+    {!locationState.agent && titleActions(<Button ref={registerTrigger} onClick={openRegister} disabled={suspended || lifecycleBusy || Boolean(lifecycleIntent)}>Register agent</Button>)}
+        {error && !registerOpen && <div ref={errorRef} className="agents-error" role="alert" tabIndex={-1}>{error}{locationState.agent && !agent && <> <Button variant="outline" onClick={() => setQuery({ agent: '', credentials_cursor: '' })}>Back to agents</Button></>}</div>}
     {registrationNotice && <div className="agents-notice" role="status">{registrationNotice}</div>}
     {intent && registrationState && <Panel heading={registrationState.heading} className="agents-unknown"><p>{registrationState.message}</p>{intent.requestID && <p>Request ID: <code>{intent.requestID}</code></p>}{proofRejected === 'unavailable' && <Button variant="outline" onClick={() => void checkAuthorityAgain()}>Check session</Button>}{!(conflicted || intent.outcome === 'conflict') && proofRejected !== 'unavailable' && <Button variant="outline" disabled={Date.now() < throttleUntil} onClick={() => setRegisterOpen(true)}>Retry registration</Button>}<Button variant="ghost" onClick={() => setAbandonPrompt(true)}>Abandon request</Button></Panel>}
     {announceUnconfirmed && locationState.agent && <p ref={registrationStatusRef} className="agents-error" role="status" aria-live="polite" tabIndex={-1}>Registration is not confirmed. The agent records currently shown may not include this request.</p>}
@@ -406,10 +419,11 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         <Toolbar>
           <SearchField id="agents-search" label="Filter agents" placeholder="Filter by name" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
           <SegmentedControl label="Filter by status" value={listFilter} onChange={setListFilter} options={[{ value: 'all', label: 'All', count: agents.length }, { value: 'attention', label: 'Needs attention', count: counts.attention }, { value: 'disabled', label: 'Disabled', count: counts.disabled }]} />
+          <ToolbarSpacer /><RefreshButton label="Refresh agents" lastRefreshed={updatedAt} onClick={() => void load()} disabled={suspended || loading || submitBusy || lifecycleBusy} />
         </Toolbar>
-        {visibleAgents.length === 0 ? <p className="agents-card__note">No agents match these filters on this page.</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list"><thead><tr><th scope="col">Status</th><th scope="col">Agent</th><th scope="col">Collection</th></tr></thead><tbody>{visibleAgents.map((item) => { const vocabulary = vocabularies.get(item.id)!; const collection = collectionSummary(item); return <tr key={item.id}>
-          <td data-label="Status"><StatusMark tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>
+        {visibleAgents.length === 0 ? <p className="agents-card__note">No agents match these filters on this page.</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list"><thead><tr><th scope="col">Agent</th><th scope="col">Status</th><th scope="col">Collection</th></tr></thead><tbody>{visibleAgents.map((item) => { const vocabulary = vocabularies.get(item.id)!; const collection = collectionSummary(item); return <tr key={item.id}>
           <td data-label="Agent" className="agents-table__name"><button className="agents-link" onClick={() => setQuery({ agent: item.id, agents_cursor: '', credentials_cursor: '' })}>{item.name}</button><span className="agents-table__sub">{item.display_name !== item.name ? `${item.display_name} · ` : ''}{item.runtime?.software_version ? `${item.runtime.software_version} · ` : ''}since {dayFormat.format(new Date(item.created_at))}</span></td>
+          <td data-label="Status"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>
           <td data-label="Collection"><b className={collection.label === '—' || collection.label === 'Not started' ? 'agents-table__muted' : undefined}>{collection.label}</b><span className="agents-table__sub mono">{collection.sub}</span></td>
         </tr>; })}</tbody></table></div>}
         <Pager id="agents-page-size" label="Agent result pages" position={`Showing ${visibleAgents.length} of ${agents.length}${agentNext || locationState.agents_cursor ? ' on this page' : ''}`} pageSize={LIMIT} pageSizes={[LIMIT]} onPageSizeChange={() => undefined} hasPrevious={previousCursors.length > 0} hasNext={Boolean(agentNext)} busy={loading}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, ChoiceChips, Combobox, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, SearchField, SegmentedControl, SelectField, StatusMark, TextareaField, TextField, Toolbar, type ComboboxOption, type MarkTone } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, RefreshButton, SearchField, SegmentedControl, StatusChip, StatusMark, TextareaField, TextField, Toolbar, ToolbarSpacer, type ComboboxOption, type MarkTone } from '../components/ui/index.ts';
 import { createSliClient } from '../slis/client.ts';
 import { relativeAge } from '../slis/vocabulary.ts';
 import { createDatasourceClient, DatasourceFailure, type Datasource, type DatasourceWrite, type Diagnostic, type Provider } from './client.ts';
@@ -257,7 +257,6 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [sliUsageTruncated, setSliUsageTruncated] = useState(false);
   const [listSearch, setListSearch] = useState('');
   const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
-  const [agentFilter, setAgentFilter] = useState('');
   const [createAndAddSli, setCreateAndAddSli] = useState(false);
   const continueToSli = useRef(false);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -607,30 +606,26 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     const term = listSearch.trim().toLowerCase();
     const rows = currentItems.map((item) => ({ item, vocabulary: admin ? datasourceVocabulary(item, agents) : null, usage: usageOf(item.id) }));
     const attention = rows.filter((row) => row.vocabulary?.attention).length;
-    const moving = rows.filter((row) => row.item.reassignment).length;
     const unused = rows.filter((row) => row.usage?.count === 0).length;
     const visible = rows.filter((row) => (!term || `${row.item.display_name} ${row.item.name} ${row.item.endpoint} ${agentName(row.item.agent_id) ?? ''}`.toLowerCase().includes(term))
-      && (healthFilter === 'all' || (healthFilter === 'attention' ? row.vocabulary?.attention : row.usage?.count === 0))
-      && (!agentFilter || row.item.agent_id === agentFilter));
-    const summary = [`${currentItems.length} datasource${currentItems.length === 1 ? '' : 's'}${nextCursor || cursor ? ' on this page' : ''}`, admin ? `${attention} need${attention === 1 ? 's' : ''} attention` : '', moving ? `${moving} moving` : '', 'all times UTC'].filter(Boolean).join(' · ');
+      && (healthFilter === 'all' || (healthFilter === 'attention' ? row.vocabulary?.attention : row.usage?.count === 0)));
     return <>
-      <PageHeader title="Datasources" summary={summary} updatedAt={updatedAt} headingRef={heading} actions={<><Button variant="outline" aria-label="Refresh datasources" pending={loading} onClick={() => loadList(cursor, pageSize)}>↻ Refresh</Button>{admin && <Button onClick={() => navigate('/datasources/new')}>New datasource</Button>}</>} />
+      <PageHeader title="Datasources" headingRef={heading} actions={admin ? <Button onClick={() => navigate('/datasources/new')}>New datasource</Button> : undefined} />
       {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
       {loading && <span className="sr-only" role="status">Refreshing datasources</span>}
       {currentItems.length === 0 && error && listResultKey.current !== locationKey ? null : currentItems.length === 0 ? <Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel> : <>
         <Toolbar>
           <SearchField id="datasource-search" label="Filter datasources" placeholder="Filter by name, endpoint or agent" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
           <SegmentedControl label="Filter by health" value={healthFilter} onChange={setHealthFilter} options={[{ value: 'all', label: 'All', count: rows.length }, ...(admin ? [{ value: 'attention' as const, label: 'Needs attention', count: attention }] : []), ...(sliUsage ? [{ value: 'unused' as const, label: 'Unused', count: unused }] : [])]} />
-          {admin && agents.length > 0 && <SelectField id="datasource-agent-filter" label="Agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} options={[{ value: '', label: 'All agents' }, ...agents.map((agent) => ({ value: agent.id, label: agent.display_name }))]} />}
+          <ToolbarSpacer /><RefreshButton label="Refresh datasources" busy={loading} lastRefreshed={updatedAt} onClick={() => loadList(cursor, pageSize)} />
         </Toolbar>
         {visible.length === 0 ? <p className="datasource-empty-filter">No datasources match these filters on this page.</p> : <table className="ds-table" aria-label="Datasources">
-          <thead><tr>{admin && <th scope="col">Health</th>}<th scope="col">Datasource</th>{admin && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col">Auth</th><th scope="col" className="num">SLIs</th></tr></thead>
+          <thead><tr><th scope="col">Datasource</th>{admin && <th scope="col">Health</th>}{admin && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col" className="num">SLIs</th></tr></thead>
           <tbody>{visible.map(({ item, vocabulary, usage }) => <tr key={item.id} className="ds-row">
-            {admin && vocabulary && <td data-label="Health"><StatusMark tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>}
             <td data-label="Datasource" className="ds-row__name"><a href={`/datasources/${item.id}`} data-app-route onClick={(event) => { event.preventDefault(); navigate(`/datasources/${item.id}`); }}>{item.display_name}</a><span className="ds-row__sub">Prometheus · {item.endpoint}{item.tls.insecure_skip_verify && <span className="ui-pill ds-pill--warning">TLS unverified</span>}</span></td>
-            {admin && <td data-label="Agent"><StatusMark tone={vocabulary?.tone === 'warning' && !item.reassignment ? 'warning' : item.reassignment ? 'warning' : vocabulary?.tone ?? 'none'} label={item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'} /></td>}
+            {admin && vocabulary && <td data-label="Health"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>}
+            {admin && <td data-label="Agent" className="mono">{item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'}</td>}
             <td data-label="Cadence" className="mono">{item.polling_interval_seconds} s</td>
-            <td data-label="Auth" className="ds-row__auth">{item.authentication.mode === 'none' ? 'none' : `${item.authentication.mode} · ${item.authentication[item.authentication.mode === 'basic' ? 'password_configured' : 'token_configured'] ? 'set' : 'not set'}`}</td>
             <td data-label="SLIs" className="num mono">{usage ? usageCount(usage) : '—'}</td>
           </tr>)}</tbody>
         </table>}
@@ -728,7 +723,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         {vocabulary && <p className="ds-head__status"><StatusMark tone={vocabulary.tone} label={`${vocabulary.label} · ${vocabulary.reason}`} /></p>}
         {source && <p className="ds-head__meta">Prometheus · <span className="mono">{source.endpoint}</span> · every {source.polling_interval_seconds} s{selectedUsage ? ` · ${usageCount(selectedUsage)} SLI${selectedUsage.count === 1 ? '' : 's'}` : ''} · version {source.version}</p>}
       </div>
-      <div className="ds-head__actions">{updatedAt && <span className="ui-page-head__updated">Updated {updatedAt}</span>}<Button variant="outline" aria-label="Refresh datasource" pending={pending} disabled={currentUncertainSave} onClick={() => void refreshReassignment()}>↻ Refresh</Button>{testTools}</div>
+      <div className="ds-head__actions"><RefreshButton label="Refresh datasource" busy={pending} disabled={currentUncertainSave} lastRefreshed={updatedAt} onClick={() => void refreshReassignment()} />{testTools}</div>
     </div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
     {reassignment && <section className="ds-banner" aria-labelledby="ds-moving-title"><h2 id="ds-moving-title">Moving datasource</h2>{reassignment.state === 'replacement_unavailable' ? <p>{agentName(reassignment.target_agent_id) ?? 'The replacement collector'} is unavailable. Cancel this reassignment before choosing another collector.</p> : <p>Almanac will start {agentName(reassignment.target_agent_id) ?? 'the replacement collector'} after {agentName(reassignment.source_agent_id) ?? 'the previous collector'} stops collecting.</p>}<p>If the previous agent is offline, this may require waiting until <time dateTime={reassignment.authority_expires_at} title={reassignment.authority_expires_at}>{displayTime(reassignment.authority_expires_at)}</time>. The replacement may start later.</p><div className="ds-banner__actions"><Button variant="outline" disabled={pending || currentUncertainSave} onClick={() => void refreshReassignment()}>Refresh reassignment</Button>{admin && <Button variant="outline" disabled={pending || currentUncertainSave || reassignmentStale} onClick={() => void cancelReassignment()}>Cancel reassignment</Button>}</div></section>}

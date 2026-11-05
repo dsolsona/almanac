@@ -72,10 +72,18 @@ and the shared `--dialog-scrim` token.
 
 Import controls from `src/components/ui/` and prefer native semantics:
 
-- `Button` supports primary, selected, outline, ghost and danger variants. Use the
-  teal selected variant with `aria-pressed` for active presets and view controls.
-  It defaults to
-  `type="button"`; pending actions are disabled and announced as busy.
+- `Button` variants map to roles ([ADR-0031](../docs/adr/0031-list-grammar-and-button-roles.md)):
+  **primary** is the one main action of a view (create on a list, save on a form,
+  the main action of a detail page; at most one per view, and the confirming
+  action of a dialog); **outline** is secondary (other safe actions, Cancel);
+  **ghost** is quiet (Refresh, Copy, overflow; icon-only buttons need a label and
+  a tooltip); **link** is an inline row or in-text action (Change, Revoke, with
+  the `ui-danger-link` class when destructive); **danger-outline** starts a
+  destructive action ("Delete…") in the danger zone at the end of a detail page;
+  filled **danger** only confirms a destructive action inside its dialog;
+  **selected** is the pressed state of a toggle with `aria-pressed`, never an
+  action. Buttons default to `type="button"`; pending actions are disabled and
+  announced as busy.
 - `TextField` and `SelectField` require an id and visible label; hints and errors
   are programmatically associated. Select options are native options for fixed
   small choices; pickers that need state context use the type-ahead `Combobox`
@@ -135,10 +143,19 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   and `ui-form-grid` two-column rows. `FormActions` closes the form with a mono
   note on the left and the buttons on the right. Forms use the full content width;
   a muted section marks a step that cannot be configured yet.
-- `PageHeader`, `Toolbar`, `SearchField` and `Pager` compose every list: Bevan
-  title with a mono summary and “Updated hh:mm:ss UTC” beside the actions; search
-  with a `/` shortcut that does not fire while typing elsewhere; a pager that always
-  shows position, per-page and previous/next.
+- `PageHeader`, `Toolbar`, `SearchField`, `FilterSelect`, `RefreshButton`,
+  `StatusChip` and `Pager` compose every list ([ADR-0031](../docs/adr/0031-list-grammar-and-button-roles.md)):
+  the Bevan title and the page's one primary action share a line, with no count
+  subline and no "Updated" line (a summary is only a form's intro sentence); the
+  toolbar is one aligned row of search (with a `/` shortcut that does not fire
+  while typing elsewhere), the segmented health filter, any secondary filter as a
+  `FilterSelect` pill, then `ToolbarSpacer` and a quiet `RefreshButton` whose
+  tooltip holds the last refresh time; failed refreshes are reported by the page's
+  notice. Rows lead with the name as the link; health is a `StatusChip` in the
+  second column whose reason appears only when the state needs attention; "UTC"
+  sits in the header of a column that shows times. The pager always shows
+  position, per-page and previous/next. Detail pages use a breadcrumb line above
+  the title, the actions on the title line and a quiet refresh.
 - Hints, errors and sublines are 13 px minimum; 12 px is reserved for labels, axis
   ticks and captions. `--card-inset` (24 px, 14 px at or below 860 px) governs
   card headers, bodies, first/last table cells, pagers and lane labels.

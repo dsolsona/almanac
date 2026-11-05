@@ -579,7 +579,7 @@ async function checkCollectedSLI(page, agentID) {
   assert.equal(firstSLI.datasource_id, datasource.body.id);
   await expect(page.getByRole('heading', { name: 'First journey', exact: true })).toBeVisible();
   await expect.poll(async () => {
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh SLI', exact: true }).click();
     const counts = page.locator('.sli-counts strong');
     return await counts.count() === 2 ? [await counts.nth(0).textContent(), await counts.nth(1).textContent()] : [];
   }, { timeout: 110_000, intervals: [1000] }).toEqual(['99', '100']);
@@ -956,7 +956,7 @@ async function checkDefaultCadenceSLI(page, agentID) {
   stage = 'real Compose default cadence first observation';
   try {
     await expect.poll(async () => {
-      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await page.getByRole('button', { name: 'Refresh SLI', exact: true }).click();
       const counts = page.locator('.sli-counts strong');
       return await counts.count() === 2 ? [await counts.nth(0).textContent(), await counts.nth(1).textContent()] : [];
     }, { timeout: Math.max(1, 60_000 - (performance.now() - creationStarted)), intervals: [1000] }).toEqual(['99', '100']);
@@ -1151,7 +1151,7 @@ async function checkLocalAgentRegistration() {
         stage = `real Compose ${theme} ${viewportName} agent detail screenshot after token closure`;
         await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
         await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
-        const credentialRecord = page.getByRole('region', { name: `Credential ${result.credential.id}` });
+        const credentialRecord = page.getByRole('listitem', { name: `Credential ${result.credential.id}` });
         await expect(credentialRecord.getByText(result.credential.issued_at.replace('T', ' '), { exact: true })).toBeVisible();
         const revoke = credentialRecord.getByRole('button', { name: 'Revoke credential', exact: true });
         await revoke.scrollIntoViewIfNeeded();

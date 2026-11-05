@@ -70,14 +70,38 @@
 .ui-label__optional { color: var(--text-3); font-weight: 400; }
 
 /* List composition: page header, toolbar, search, pager */
-.ui-page-head { display: flex; align-items: flex-start; gap: var(--space-6); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.ui-page-head { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; margin-bottom: var(--space-5); }
 .ui-page-head__copy { min-width: 0; flex: 1 1 320px; }
 .ui-page-head__copy .app-breadcrumbs { margin-bottom: var(--space-2); }
-.ui-page-head__title { margin: 0; }
+.ui-page-head .ui-page-head__title { margin: 0; }
 .ui-page-head__summary { margin: var(--space-1) 0 0; color: var(--text-2); font-family: var(--mono); font-size: .8125rem; line-height: 1.7; }
-.ui-page-head__actions { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; }
-.ui-page-head__updated { color: var(--text-3); font-family: var(--mono); font-size: .8125rem; }
-.ui-toolbar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-5, 20px); }
+.ui-page-head__actions { display: flex; align-items: center; gap: var(--space-2); }
+.ui-toolbar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.ui-toolbar__spacer { flex: 1; }
+.ui-toolbar > .ui-field { margin: 0; }
+/* Quiet refresh: icon only, control height, label and last refresh time in the tooltip. */
+.ui-button.ui-refresh { width: var(--control-height); min-width: var(--control-height); padding: 0; color: var(--text-2); }
+.ui-button.ui-refresh svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Toolbar filter: label inside a control-height pill; dashed until a value is chosen. */
+.ui-filter { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-height); padding: 0 4px 0 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); color: var(--text-2); font-family: var(--mono); font-size: .8125rem; }
+.ui-filter--on { border-style: solid; background: var(--surface); }
+.ui-filter select { min-height: calc(var(--control-height) - 2px); padding: 0 6px; border: 0; background: transparent; color: var(--text); font: 600 .8125rem var(--mono); }
+.ui-filter:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+/* Health chip (StatusChip). */
+.ui-status-chip-cell { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+.ui-status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 9px 0 8px; border: 1px solid transparent; border-radius: 999px; font-size: .75rem; font-weight: 600; line-height: 1; white-space: nowrap; }
+.ui-status-chip__shape { display: inline-block; flex: none; width: 9px; height: 9px; }
+.ui-status-chip--healthy { color: var(--status-healthy); background: var(--good-wash); }
+.ui-status-chip--healthy .ui-status-chip__shape { border-radius: 50%; background: currentColor; }
+.ui-status-chip--warning { color: var(--status-warning); background: var(--warn-wash); }
+.ui-status-chip--warning .ui-status-chip__shape { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid currentColor; }
+.ui-status-chip--breached { color: var(--status-breached); background: var(--crit-wash); }
+.ui-status-chip--breached .ui-status-chip__shape { background: currentColor; }
+.ui-status-chip--stale { color: var(--status-stale); background: var(--neutral-wash); }
+.ui-status-chip--stale .ui-status-chip__shape { border: 2px solid currentColor; border-radius: 50%; }
+.ui-status-chip--none { color: var(--status-stale); border-color: var(--border); background: transparent; }
+.ui-status-chip--none .ui-status-chip__shape { border: 2px dashed currentColor; border-radius: 50%; }
+.ui-status-chip__reason { max-width: 260px; overflow: hidden; color: var(--text-3); font-family: var(--mono); font-size: .6875rem; text-overflow: ellipsis; white-space: nowrap; }
 .ui-search { display: flex; align-items: center; gap: var(--space-2); flex: 1 1 220px; max-width: 420px; min-height: var(--control-height); padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
 .ui-search svg { width: 16px; height: 16px; flex: none; color: var(--text-3); }
 .ui-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }

@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Proposal · Button roles</title><link rel="stylesheet" href="../mock.css"><link rel="stylesheet" href="proposal.css">
+<style>.roles{display:grid;grid-template-columns:200px 220px minmax(0,1fr);gap:0;border:1px solid var(--border);border-radius:3px;background:var(--surface)} .roles>div{padding:14px 16px;border-top:1px solid var(--border);font-size:13px} .roles>div:nth-child(-n+3){border-top:0;font:600 11px var(--mono);color:var(--text-3);text-transform:uppercase;letter-spacing:.05em} .roles b{font-weight:650}</style></head>
+<body data-current="agents"><main>
+<div class="p-head"><h1>Button roles</h1></div>
+<p style="max-width:70ch;color:var(--text-2);margin:0 0 20px">The design guide lists five variants but not when to use them, so every action defaulted to outline. A button's look should say what it does. The rules below use only existing tokens.</p>
+
+<div class="roles">
+  <div>Role</div><div>Looks like</div><div>Use it for</div>
+  <div><b>Primary</b></div><div><button class="btn primary">New datasource</button></div><div>The one action the page exists for: create on a list, save on a form, the main action on a detail page. <b>At most one per view.</b> Dialogs: the confirming action.</div>
+  <div><b>Secondary</b></div><div><button class="btn secondary">How to run</button></div><div>Other safe actions that change or open something: Test connection, Edit, How to run, Cancel next to a primary.</div>
+  <div><b>Quiet</b> (ghost, icon)</div><div><button class="btn ghost icon" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button> <button class="btn ghost">Copy</button></div><div>Utility actions that never change data: Refresh, Copy, Show more, overflow ⋯. Icon-only buttons always have a label and a tooltip.</div>
+  <div><b>Inline</b> (link)</div><div><button class="btn link">Change</button> <button class="btn link danger">Revoke</button></div><div>Per-row and in-text actions where a full button would dominate the row: Change in a picker summary, Revoke on a credential row. Danger colour when destructive.</div>
+  <div><b>Destructive</b></div><div><button class="btn danger-outline">Delete…</button></div><div>Starting a destructive action (Disable…, Delete…, Revoke all…). Ends with "…" because it opens a confirmation. Grouped in a danger zone at the end of a detail page.</div>
+  <div><b>Confirm destructive</b></div><div><button class="btn danger-fill">Delete agent</button></div><div>Only inside the confirmation dialog, naming the object. The only filled red button in the product.</div>
+  <div><b>Selected</b></div><div><span class="seg" style="height:34px"><button aria-pressed="true">30 d</button><button>90 d</button></span></div><div>Pressed state of a segmented control, chip or view toggle (teal), never an action.</div>
+</div>
+
+<p class="section-title">Example: the agent detail header</p>
+<div class="p-detail-head" style="border:1px solid var(--border);padding:14px 16px;border-radius:3px;background:var(--surface)"><div><h1 style="font-size:26px">US collector</h1></div><div class="actions"><button class="btn ghost icon" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button><button class="btn secondary">How to run</button><button class="btn primary">Rotate credential</button></div></div>
+
+<div class="anno"><h3>Proposal for the design guide</h3><ul>
+<li>Add a "Button roles" section with the table above; map roles to the existing <code>Button</code> variants (primary, outline as secondary, ghost as quiet) and add <code>link</code> and <code>danger-outline</code> / filled danger.</li>
+<li>Lists: one primary in the head, quiet Refresh at the toolbar end. Forms: primary Create/Save with secondary Cancel, right-aligned. Details: at most one primary, secondary actions beside it, destructive actions in the danger zone.</li>
+</ul></div>
+</main><script src="../mock.js"></script></body></html>

@@ -168,9 +168,9 @@ try {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#main$/);
   await page.goBack();
-  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Refresh', exact: true }).focus();
-  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh SLI', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh SLI', exact: true }).focus();
+  await page.getByRole('button', { name: 'Refresh SLI', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Request success', exact: true })).not.toBeFocused();
   await expect(page.locator('.sli-state').filter({ hasText: 'Activation' }).locator('strong')).toHaveText(/scheduled|preparing|active/);
   const screenshotDir = fixture.artifacts;
@@ -203,7 +203,7 @@ try {
   let activationState = created.activation_state;
   let lastProgress = 0;
   while (performance.now() < deadline) {
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh SLI', exact: true }).click();
     if (performance.now() - lastProgress >= 5000) {
       const state = {};
       for (const label of ['Activation', 'Agent reachability', 'Freshness']) {

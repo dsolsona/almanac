@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Proposal · SLIs</title><link rel="stylesheet" href="../mock.css"><link rel="stylesheet" href="proposal.css"></head>
+<body data-current="slis"><main>
+<div class="p-head">
+  <h1>SLIs</h1>
+  <span class="spacer"></span>
+  <div class="actions"><button class="btn primary">New SLI</button></div>
+</div>
+
+<div class="p-toolbar">
+  <label class="search"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg><input placeholder="Search name or datasource"><kbd>/</kbd></label>
+  <span class="seg"><button aria-pressed="true">All <span class="n">10</span></button><button>Needs attention <span class="n">3</span></button><button>No SLO yet <span class="n">1</span></button></span>
+  <button class="p-filter">Datasource <b>Any</b> ▾</button>
+  <span class="spacer"></span>
+  <button class="p-refresh" title="Refresh · last refreshed 13:20:11 UTC" aria-label="Refresh SLIs"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+
+<table class="tbl responsive">
+  <thead><tr><th>SLI</th><th style="width:200px">Health</th><th style="width:150px">Last 24 h</th><th style="width:150px">Last sample <small>UTC</small></th><th style="width:200px">SLOs</th></tr></thead>
+  <tbody>
+    <tr><td><a class="rowname" href="#">checkout-availability</a><span class="desc">Ratio · local-victoriametrics</span></td><td><span class="hc good"><i></i>Healthy</span></td><td><svg viewBox="0 0 140 20" width="140" height="20"><path class="line" d="M0,6 L140,6"/></svg></td><td class="mono">13:20:00</td><td class="mono">2 · <a href="#">checkout-99.9</a> <span class="muted">+1</span></td></tr>
+    <tr><td><a class="rowname" href="#">payment-auth-success</a><span class="desc">Ratio · prod-prometheus-eu</span></td><td><span class="hc crit"><i></i>Failing</span><span class="hc-reason">good ratio 93.1% · last hour</span></td><td><svg viewBox="0 0 140 20" width="140" height="20"><path class="line crit" d="M0,5 L110,6 L140,15"/></svg></td><td class="mono">13:19:45</td><td class="mono">1 · <a href="#">payment-auth</a></td></tr>
+    <tr><td><a class="rowname" href="#">ci-main-success</a><span class="desc">Ratio · prod-prometheus-us</span></td><td><span class="hc stale"><i></i>Not reporting</span><span class="hc-reason">last sample 26 h ago</span></td><td><svg viewBox="0 0 140 20" width="140" height="20"><path class="gap" d="M70,10 L140,10"/><path class="line" d="M0,8 L70,8"/></svg></td><td class="mono muted">yesterday 11:02</td><td class="mono">1 · <a href="#">ci-main</a></td></tr>
+    <tr><td><a class="rowname" href="#">search-latency</a><span class="desc">Ratio · local-victoriametrics</span></td><td><span class="hc good"><i></i>Healthy</span></td><td><svg viewBox="0 0 140 20" width="140" height="20"><path class="line" d="M0,7 L140,7"/></svg></td><td class="mono">13:20:00</td><td class="muted">No SLO yet</td></tr>
+  </tbody>
+</table>
+<div class="pager" style="margin-top:12px"><span>Showing 4 of 10</span><span class="spacer"></span><label>Per page <select><option>20</option><option>10</option></select></label><button class="btn sm" disabled>‹ Previous</button><button class="btn sm">Next ›</button></div>
+
+<div class="anno"><h3>What changed</h3><ul>
+<li>Same head and toolbar as every list. A secondary filter that is worth keeping (Datasource here) is a dashed filter chip in the same row and height, not a labelled select floating beside it.</li>
+<li>Name first, health chip second, type and datasource folded into the name's subline, which drops two columns.</li>
+<li>"UTC" lives in the time column header; no count subline, no "Updated".</li>
+</ul></div>
+</main><script src="../mock.js"></script></body></html>

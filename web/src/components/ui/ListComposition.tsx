@@ -5,27 +5,43 @@ import './operational-controls.css';
 
 type PageHeaderProps = {
   title: string;
+  // An intro sentence for forms only; lists carry no count subline (ADR-0031).
   summary?: ReactNode;
   breadcrumb?: { href: string; label: string; current: string };
-  updatedAt?: string;
   actions?: ReactNode;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 };
 
-// Page title row: Bevan title, mono summary, and the action group aligned to the title line.
-export function PageHeader({ title, summary, breadcrumb, updatedAt, actions, headingRef }: PageHeaderProps) {
+// Page title row: Bevan title with the page's actions on the same line. Lists put their one
+// primary action here and their refresh at the end of the toolbar; there is no "Updated" line.
+export function PageHeader({ title, summary, breadcrumb, actions, headingRef }: PageHeaderProps) {
   return <div className="ui-page-head">
     <div className="ui-page-head__copy">
       {breadcrumb && <nav className="app-breadcrumbs" aria-label="Breadcrumb"><a href={breadcrumb.href} data-app-route>{breadcrumb.label}</a><span aria-hidden="true">/</span><span aria-current="page">{breadcrumb.current}</span></nav>}
       <h1 ref={headingRef} className="app-page-heading ui-page-head__title" tabIndex={-1}>{title}</h1>
       {summary && <p className="ui-page-head__summary">{summary}</p>}
     </div>
-    {(updatedAt || actions) && <div className="ui-page-head__actions">
-      {updatedAt && <span className="ui-page-head__updated">Updated {updatedAt}</span>}
-      {actions}
-    </div>}
+    {actions && <div className="ui-page-head__actions">{actions}</div>}
   </div>;
 }
+
+// Quiet icon button for refreshing a list or record. Its tooltip carries the last refresh time,
+// which replaces the "Updated hh:mm:ss" line; failures are reported by the page's own notice.
+export function RefreshButton({ label, onClick, busy = false, disabled = false, lastRefreshed }: { label: string; onClick: () => void; busy?: boolean; disabled?: boolean; lastRefreshed?: string }) {
+  return <Button variant="ghost" className="ui-refresh" aria-label={label} title={lastRefreshed ? `${label} · last refreshed ${lastRefreshed} UTC` : label} pending={busy} disabled={disabled} onClick={onClick}>
+    {!busy && <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>}
+  </Button>;
+}
+
+// A secondary list filter that sits in the toolbar row at control height, label inside.
+export function FilterSelect({ id, label, value, options, onChange, disabled }: { id: string; label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; disabled?: boolean }) {
+  return <label className={`ui-filter ${value ? 'ui-filter--on' : ''}`.trim()} htmlFor={id}>
+    <span className="ui-filter__label" aria-hidden="true">{label}</span>
+    <select id={id} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+  </label>;
+}
+
+export function ToolbarSpacer() { return <span className="ui-toolbar__spacer" aria-hidden="true" />; }
 
 type SearchFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
   id: string;

@@ -38,7 +38,7 @@
 .app-slo-group > header h2 { margin:0; font:400 21px/1.3 var(--almanac-heading); letter-spacing:-.02em; }
 .app-slo-group > header > span { display:grid; place-items:center; min-width:24px; height:24px; padding:0 6px; border:1px solid var(--border); border-radius:50%; font:12px var(--mono); color:var(--text-2); align-self:center; }
 .app-slo-group > header small { font:11px/1.6 var(--mono); color:var(--text-3); }
-.app-slo-columns,.app-slo-row { display:grid; grid-template-columns:150px minmax(190px,1fr) 96px 160px 104px 96px 96px 12px; gap:14px; align-items:center; }
+.app-slo-columns,.app-slo-row { display:grid; grid-template-columns:minmax(190px,1fr) 170px 96px 160px 104px 96px 96px 12px; gap:14px; align-items:center; }
 .app-slo-columns { padding:10px 0; font:11px var(--mono); color:var(--text-2); }
 .app-slo-columns > span:nth-child(n+5) { text-align:right; }
 .app-slo-rows { display:flex; flex-direction:column; }
@@ -82,8 +82,8 @@
 @media (max-width:1149px) {
   .app-slo-columns { display:none; }
   .app-slo-row { grid-template-columns:minmax(0,1fr) 92px; gap:6px 12px; padding:12px 0; }
-  .app-slo-status { grid-column:1; grid-row:1; }
-  .app-slo-name { grid-column:1; grid-row:2; }
+  .app-slo-name { grid-column:1; grid-row:1; }
+  .app-slo-status { grid-column:1; grid-row:2; }
   .app-slo-objective { grid-column:1; grid-row:3; }
   .app-slo-spark { grid-column:1; grid-row:4; }
   .app-slo-budget { grid-column:2; grid-row:1 / span 2; }
