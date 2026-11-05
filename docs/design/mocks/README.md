@@ -24,9 +24,9 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 | `ds-list.html` | Datasource list with health, agent, cadence, SLI count | [F6-T05](../../tasks/F6-T05.md), in review (last query deferred) |
 | `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | [F6-T05](../../tasks/F6-T05.md), in review (last test summary, delete deferred) |
 | `ds-create.html` | New datasource: Identity → Connection → Agent with test result | [F6-T05](../../tasks/F6-T05.md), in review |
-| `agents-list.html` | Agent list with heartbeat strip, datasources, collection | planned, F6-T06 |
-| `agent-detail.html` | Agent detail: status, tiles, datasources, credentials, run dialog | planned, F6-T06 |
-| `agent-register.html` | Three-step registration page with live first-heartbeat checklist | planned, F6-T06 |
+| `agents-list.html` | Agent list with heartbeat strip, datasources, collection | [F6-T06](../../tasks/F6-T06.md), in review (heartbeat strip, row datasources deferred) |
+| `agent-detail.html` | Agent detail: status, tiles, datasources, credentials, run dialog | [F6-T06](../../tasks/F6-T06.md), in review |
+| `agent-register.html` | Three-step registration page with live first-heartbeat checklist | deferred by [F6-T06](../../tasks/F6-T06.md): the token and uncertain-intent flows are built on the registration dialog; needs its own task |
 
 ## Deferred elements
 

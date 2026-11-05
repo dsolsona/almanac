@@ -1163,9 +1163,10 @@ async function checkLocalAgentRegistration() {
     const row = page.getByRole('button', { name: 'local', exact: true }).locator('..').locator('..');
     const centers = await row.evaluate((element) => {
       const textCenter = (node) => { const range = document.createRange(); range.selectNodeContents(node); const rect = range.getBoundingClientRect(); return rect.y + rect.height / 2; };
-      return [textCenter(element.querySelector('button')), textCenter(element.querySelectorAll('td')[1])];
+      // The name button sits on the first line of its cell; compare it with the status mark's first line in the same row (F6-T06).
+      return [textCenter(element.querySelector('button')), textCenter(element.querySelector('.ui-mark__row'))];
     });
-    assert.ok(Math.abs(centers[0] - centers[1]) < 1, 'agent name text should align with display name text');
+    assert.ok(Math.abs(centers[0] - centers[1]) < 1, 'agent name text should align with the status text');
     stage = 'real Compose agent table pointer focus';
     const region = page.locator('.agents-table-scroll').and(page.getByRole('region', { name: 'Agent records', exact: true }));
     await expect(region).toHaveCount(1);
