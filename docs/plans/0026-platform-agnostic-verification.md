@@ -1,6 +1,6 @@
 # Docker-only development, verification and images
 
-- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 to F7-T03 in review, F7-T04 next
+- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 to F7-T03 in review, F7-T04 next; the Compose verifier's tracing-overhead gate retired by [ADR-0030](../adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
 - Created: 2026-11-04
 - Scope: tooling, images, fixtures and documentation; no product behaviour changes
 - Base: `main`; independent of the open UI stack (PRs #54–#60), which still cites the retired modes until merged

@@ -146,8 +146,9 @@ export failures, plus browser-intake drops/export failures. Queue metrics come f
 the pinned Go SDK's self-observation feature, enabled by the application. Export
 uses bounded batches and a two-second network timeout; application requests never
 wait for a successful export. Spans exclude credentials, raw queries, SQL arguments
-and response bodies. Runtime journey and overhead acceptance is tracked in
-[F3-T09](docs/tasks/F3-T09.md).
+and response bodies. Runtime journey acceptance is tracked in
+[F3-T09](docs/tasks/F3-T09.md); tracing's own overhead is not an acceptance
+check ([ADR-0030](docs/adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)).
 
 After developer tooling setup, `make verify VERIFY_MODE=providers` starts an isolated
 provider project, inserts synthetic metrics and spans, checks exact query results

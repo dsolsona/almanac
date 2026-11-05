@@ -55,3 +55,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0027](0027-bounded-history-quality-display.md) | Keep dense history graphs available at the displayed resolution | accepted |
 
 | [ADR-0029](0029-platform-agnostic-development-and-verification.md) | Build, test and ship only through Docker images | accepted |
+| [ADR-0030](0030-browser-tracing-overhead-is-not-an-acceptance-check.md) | Browser tracing overhead is not an acceptance check | accepted |

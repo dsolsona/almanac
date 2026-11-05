@@ -91,8 +91,8 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
   const samples=[],events=[];
   const report={hardware:{host_cpu:cpus()[0]?.model,host_memory_bytes:totalmem(),platform:platform(),architecture:arch()},
     software:{node:process.version,chromium:browser.version(),otel_api:dependencies['@opentelemetry/api'],otel_sdk:dependencies['@opentelemetry/sdk-trace'],otel_http_exporter:dependencies['@opentelemetry/exporter-trace-otlp-http']},
-    fixture:{viewport:[1440,1000],cpu_slowdown:1,bandwidth_cap:null,rtt_ms:networkLatency,root_sampling:1,order:['enabled','disabled','disabled','enabled'],warm_samples_per_page_and_mode:10,matrix_collection_bound_ms:180_000,disabled_mode:'Same production bundle; OTEL_SDK_DISABLED and browser capability disable tracing. Common SDK loading remains in both modes.'},
-    backend_sha256:backendSHA,preceding_gate_failure:precedingFailure,samples,overhead:[],process_samples:[],speed_failures:[],minute_boundary:null,tracing_checks_passed:false,page_speed_passed:false};
+    fixture:{viewport:[1440,1000],cpu_slowdown:1,bandwidth_cap:null,rtt_ms:networkLatency,root_sampling:1,order:['enabled','enabled'],warm_samples_per_page_and_mode:10,matrix_collection_bound_ms:180_000},
+    backend_sha256:backendSHA,preceding_gate_failure:precedingFailure,samples,process_samples:[],speed_failures:[],minute_boundary:null,tracing_checks_passed:false,page_speed_passed:false};
   let latestDate=0;
   const visit=async(context,journey,path,mode,block,phase)=>{
     report.current={journey,mode,block,phase};
@@ -183,7 +183,9 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
   try {
     report.dataset_before=await snapshotDataset();
     const matrixStarted=performance.now();
-    for(const [block,enabled]of [true,false,false,true].entries()){
+    // Tracing stays enabled, the product's default; its own overhead is not an
+    // acceptance check (ADR-0030). Two blocks keep ten warm samples per page.
+    for(const [block,enabled]of [true,true].entries()){
       await setEnabled(enabled);
       for(const [journey,path]of cases){
         const context=await browser.newContext({storageState,viewport:{width:1440,height:1000},colorScheme:'light'});
@@ -200,7 +202,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     report.matrix_elapsed_ms=performance.now()-matrixStarted;
     assert.ok(report.matrix_elapsed_ms<=180_000,'bounded telemetry comparison exceeded 180s');
     // Retain a real ordinary visit across a server minute boundary separately
-    // from the enabled/disabled comparison; no time headers are rewritten.
+    // from the warm samples; no time headers are rewritten.
     assert.ok(latestDate>0,'server time evidence is missing');
     const before=Math.floor(latestDate/60_000);
     await new Promise(resolve=>setTimeout(resolve,60_000-latestDate%60_000+1100));
@@ -211,11 +213,7 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
     assert.ok(report.minute_boundary.after>before,'server minute boundary was not observed');
     report.dataset_after=await snapshotDataset();
     assert.deepEqual(report.dataset_after,report.dataset_before,'canonical fixture changed during the tracing comparison');
-    for(const [journey]of cases){
-      const values=mode=>samples.filter(value=>value.journey===journey&&value.mode===mode&&value.phase==='repeat').map(value=>value.elapsed_ms);
-      const enabled=summary(values('enabled')),disabled=summary(values('disabled'));
-      report.overhead.push({journey,enabled,disabled,p95_fraction:enabled.p95_ms/disabled.p95_ms-1});
-    }
+    report.page_timing=Object.fromEntries(cases.map(([journey])=>[journey,summary(samples.filter(value=>value.journey===journey&&value.phase==='repeat').map(value=>value.elapsed_ms))]));
     report.speed_failures=samples.filter(value=>value.elapsed_ms>=1000);
     report.page_speed_passed=report.speed_failures.length===0;
     await writeFile(join(artifacts,'telemetry-runtime.json'),JSON.stringify(report,null,2),{mode:0o600});
@@ -249,7 +247,6 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       }catch(error){report.diagnostic_profile_error=error.name;}
       finally{await diagnostic.close();}
     }
-    assert.ok(report.overhead.every(value=>value.p95_fraction<=.05),'tracing exceeds the 5% p95 overhead allowance; inspect telemetry-runtime.json');
     report.tracing_checks_passed=true;
     assert.ok(samples.every(value=>value.result==='ready'&&value.pending_responses===0),'normal navigation waited for preparation or unavailable responses; inspect telemetry-runtime.json');
     assert.equal(report.page_speed_passed,true,'rendered page-load budget exceeded; inspect telemetry-runtime.json and connected VictoriaTraces');

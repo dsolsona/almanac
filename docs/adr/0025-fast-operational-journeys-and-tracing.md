@@ -80,8 +80,9 @@ no existing data by itself.
 
 Calculated histories become retained data with migration, size and write costs,
 separate from expendable HTTP caches. Tracing adds pinned dependencies and bounded
-export overhead. Measure all costs, enabled/disabled tracing and the full 365-day
-scale fixture; the decision is not a capacity claim. Preserve immutable exports
+export overhead. Measure all costs and the full 365-day scale fixture (the
+enabled/disabled tracing comparison is superseded by
+[ADR-0030](0030-browser-tracing-overhead-is-not-an-acceptance-check.md)); the decision is not a capacity claim. Preserve immutable exports
 and honest gaps if expired source inputs prevent historical recalculation.
 
 ## Revisit conditions

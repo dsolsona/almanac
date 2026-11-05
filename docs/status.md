@@ -9,11 +9,12 @@ and [plan 0026](plans/0026-platform-agnostic-verification.md) are accepted
 VictoriaTraces fixtures, `make setup`/`make shell`, toolchains from the dev
 image, lane marker removed) are in review. [F7-T03](tasks/F7-T03.md)
 (`scripts/verify.py`, thin `make verify MODE=…` entry, socket overlay for the
-Compose modes, lane deleted) is in progress: every mode but `compose` is green
-from the host; `compose` fixed three verifier defects and, on the recovered host, now
-passes every stage except the 5 % p95 tracing-overhead allowance (measured
-+6 to +10 % because pages load faster inside the VM), which is the
-maintainer's decision. The Linux-host
+Compose modes, lane deleted) is in review: every mode is green from the host,
+including `compose` after three verifier fixes and the retirement of the
+enabled/disabled tracing-overhead gate by
+[ADR-0030](adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
+(the maintainer: browser tracing in its current form is a measurement aid,
+not a product feature with a budget). The Linux-host
 evidence and F7-T04 (docs, command catalog) follow.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
