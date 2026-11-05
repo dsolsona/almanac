@@ -16,6 +16,7 @@ printf '%s\\n' "$*" >> "$FAKE_LOG"
 case "$1 $2" in
   'compose -f') case "$*" in *' ps '*) printf 'abc123\\n';; *' exec '*) printf 'public certificate\\n';; esac ;;
   'inspect --format') case "$3" in *Health*) printf 'healthy\\n';; *) printf 'sha256:abc\\n';; esac ;;
+  'image inspect') printf 'sha256:abc\\n' ;;
   'create -i') [ "$FAKE_CREATE_FAIL" != 1 ] || exit 1; printf 'owned-container-id\\n' ;;
   'start --attach') exec sleep 30 ;;
   'rm -f') : ;;

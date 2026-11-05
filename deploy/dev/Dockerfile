@@ -30,6 +30,23 @@ RUN apt-get update \
         ca-certificates curl gcc git libc6-dev make postgresql-client procps python3 ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI, Compose and buildx for the modes that drive the host daemon through the mounted
+# socket (ADR-0029 decision 6). The repository key is checked against its published fingerprint.
+ARG DOCKER_CLI_VERSION=5:29.0.0-1~debian.12~bookworm
+ARG DOCKER_COMPOSE_VERSION=2.40.3-1~debian.12~bookworm
+ARG DOCKER_BUILDX_VERSION=0.38.1-1~debian.12~bookworm
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && gpg --show-keys --with-fingerprint --with-colons /etc/apt/keyrings/docker.asc | grep -q '^fpr:::::::::9DC858229FC7DD38854AE2D88D81803C0EBFCD88:' \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        "docker-ce-cli=${DOCKER_CLI_VERSION}" "docker-compose-plugin=${DOCKER_COMPOSE_VERSION}" "docker-buildx-plugin=${DOCKER_BUILDX_VERSION}" \
+    && rm -rf /var/lib/apt/lists/*
+
+# The checkout is a bind mount owned by another numeric user; Git must still read it.
+RUN git config --system --add safe.directory '*'
+
 # Chromium for the Playwright matrix, installed once for the pinned Playwright release.
 RUN npx --yes "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
     && chmod -R a+rX /opt/ms-playwright \

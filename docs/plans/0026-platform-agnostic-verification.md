@@ -1,6 +1,6 @@
 # Docker-only development, verification and images
 
-- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 and F7-T02 in review, F7-T03 next
+- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 to F7-T03 in review, F7-T04 next
 - Created: 2026-11-04
 - Scope: tooling, images, fixtures and documentation; no product behaviour changes
 - Base: `main`; independent of the open UI stack (PRs #54–#60), which still cites the retired modes until merged
@@ -38,14 +38,13 @@ sequential and each branches from the previous one.
   marker is removed; the Compose override files of deployment tests move to
   `.local/tmp`. Evidence: the integration suite and the browser journeys
   inside the dev container on both hosts; a Colima run at default settings.
-- [ ] **F7-T03 Verification entry and the Compose journey.** `scripts/verify.py`
+- [ ] **F7-T03 Verification entry and the Compose journey** ([F7-T03](../tasks/F7-T03.md), in review). `scripts/verify.py`
   replaces `verification-controls.py`, `integration-runner.py`,
   `verify-linux.sh`, `setup-database.sh`, `setup-go.sh` and
   `deploy/verification/`, keeping selection, receipts and the ledger; the
   Makefile becomes thin targets; `MODE=compose` runs from the dev container
-  with the host socket and the checkout mounted at its host path, the
-  browser joining the stack network, and the initializer's certificate
-  covering the service alias. Evidence: every mode natively through
+  with the host socket, the checkout mounted at its host path and the
+  daemon host's network (amended from the stack-network alias design). Evidence: every mode natively through
   `make verify` on both hosts, receipts carrying OS, architecture, image
   digest and revision; the Compose journey on both hosts.
 - [ ] **F7-T04 Documentation and approvals.** Rewrite the testing guide's

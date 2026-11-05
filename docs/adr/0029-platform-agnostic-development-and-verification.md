@@ -83,11 +83,17 @@ Accepted; the Makefile, Dockerfiles, Compose files and guides follow it.
    browser reaches the stack by joining the stack's network and using the
    service name; the local initializer issues its certificate for `localhost`,
    `127.0.0.1` and the service alias. No other mode receives the socket.
+   (Amended in F7-T03, 2026-11-04: the dev service uses the daemon host's
+   network for this mode instead. Published loopback ports are reachable as
+   `localhost` from there on Docker Engine and Colima, so the verifier, its
+   certificate and its port-occupancy checks stay unchanged and no service
+   alias is needed; Docker Desktop needs host networking enabled.)
 7. **One verification script, fewer layers.** `scripts/verify.py` absorbs
    `verification-controls.py` and `integration-runner.py`, keeping dependency
    based integration selection, pass receipts and the timing ledger. It owns
    the mode table and the single fixture identity. The Makefile becomes thin
-   targets that enter the container. `scripts/verify-linux.sh`,
+   targets that enter the container; the individual check recipes stay as
+   its internal `_verify_*` targets. `scripts/verify-linux.sh`,
    `scripts/setup-database.sh`, `scripts/setup-go.sh` and
    `deploy/verification/` are deleted. Receipts record OS, architecture, the
    image digest and the Git revision with a dirty flag.

@@ -1,4 +1,4 @@
-.PHONY: setup shell build verify preview generate bootstrap run start stop logs credentials agent verification-init verification-report verification-handoff _verify_all _verify_go _verify_go_portability _verify_web _verify_go_race _verify_smoke _verify_integration _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
+.PHONY: setup shell stop-dev build verify _enter preview generate bootstrap run start stop logs credentials agent verification-init verification-report verification-handoff _verify_all _verify_go _verify_web _verify_go_race _verify_smoke _verify_auth_bench _verify_providers _verify_sqlc_generated _report_sizes _ensure_web_assets
 
 # Go comes from the dev image's PATH. An inherited GOROOT can make that driver
 # execute a different installation's compiler, despite GOTOOLCHAIN=local.
@@ -6,13 +6,13 @@ unexport GOROOT
 
 verification-init:
 	@test -n "$${VERIFICATION_PLAN:-}" || { echo 'VERIFICATION_PLAN must name the task budget JSON' >&2; exit 2; }
-	@python3 scripts/verification-controls.py init
+	@python3 scripts/verify.py init
 
 verification-report:
-	@python3 scripts/verification-controls.py report
+	@python3 scripts/verify.py report
 
 verification-handoff:
-	@python3 scripts/verification-controls.py handoff
+	@python3 scripts/verify.py handoff
 
 # Toolchains come from the development image (ADR-0029); the names resolve on its PATH.
 GO ?= go
@@ -41,7 +41,7 @@ setup:
 
 # Shell in the dev container with the fixture running; CMD runs a command instead.
 shell:
-	@$(DEV_COMPOSE) run --rm dev bash -c "$${CMD:-exec bash}"
+	@$(MAKE) --no-print-directory _enter MODE="$(MODE)" ENTER_CMD="$${CMD:-exec bash}"
 
 # Container images (ADR-0029): the published app and agent images and the never-published dev image.
 # IMAGE_REGISTRY and IMAGE_TAG select the publish destination; publish builds linux/amd64 and linux/arm64.
@@ -91,6 +91,9 @@ run start:
 
 stop:
 	docker compose -f compose.yaml stop
+
+# Remove the dev container's fixtures (tmpfs, no data to preserve); caches stay in their volumes.
+stop-dev:
 	$(DEV_COMPOSE) down
 
 logs:
@@ -103,34 +106,23 @@ credentials:
 agent:
 	@sh scripts/local-agent.sh
 
+# Verification runs inside the dev container (ADR-0029): from the host, verify enters it and
+# scripts/verify.py owns the mode table, receipts and the timing ledger. VERIFY_MODE is accepted
+# as an alias of MODE while the command catalog is re-approved.
+MODE ?= $(VERIFY_MODE)
 verify:
-	@if [ "$${VERIFY_MODE:-}" = "slo-unit" ]; then python3 scripts/verification-controls.py run slo-unit; \
-	elif [ "$${VERIFY_MODE:-}" = "slo-integration" ]; then python3 scripts/verification-controls.py run slo-integration; \
-	elif [ "$${VERIFY_MODE:-}" = "slo-journey" ]; then python3 scripts/verification-controls.py run slo-journey; \
-	elif [ "$${VERIFY_MODE:-}" = "agent-lifecycle" ]; then python3 scripts/verification-controls.py run agent-lifecycle; \
-	elif [ "$${VERIFY_MODE:-}" = "verification-tools" ]; then python3 scripts/verification-controls.py run verification-tools; \
-	elif [ "$${VERIFY_MODE:-}" = "linux-sli" ]; then python3 scripts/verification-controls.py run-gate linux-sli; \
-	elif [ "$${VERIFY_MODE:-}" = "linux" ]; then python3 scripts/verification-controls.py run-gate linux; \
-	elif [ "$${VERIFY_MODE:-}" = "go" ]; then python3 scripts/verification-controls.py run-gate go; \
-	elif [ "$${VERIFY_MODE:-}" = "go-portability" ]; then python3 scripts/verification-controls.py run-gate go-portability; \
-	elif [ "$${VERIFY_MODE:-}" = "go-race" ]; then python3 scripts/verification-controls.py run-gate go-race; \
-	elif [ "$${VERIFY_MODE:-}" = "auth-bench" ]; then python3 scripts/verification-controls.py run-gate auth-bench; \
-	elif [ "$${VERIFY_MODE:-}" = "integration" ]; then python3 scripts/verification-controls.py run-gate integration; \
-	elif [ "$${VERIFY_MODE:-}" = "performance" ]; then python3 scripts/verification-controls.py run-gate performance; \
-	elif [ "$${VERIFY_MODE:-}" = "journey" ]; then python3 scripts/verification-controls.py run-gate journey; \
-	elif [ "$${VERIFY_MODE:-}" = "compose" ]; then python3 scripts/verification-controls.py run-gate compose; \
-	elif [ "$${VERIFY_MODE:-}" = "providers" ]; then python3 scripts/verification-controls.py run-gate providers; \
-	elif [ "$${VERIFY_MODE:-}" = "smoke" ]; then python3 scripts/verification-controls.py run-gate smoke; \
-	elif [ "$${VERIFY_MODE:-}" = "unit" ]; then \
-	  if [ -z "$${TEST_FILE:-}" ]; then python3 scripts/verification-controls.py run-gate unit; else \
-	    case "$${TEST_FILE}" in tests/*.test.tsx) ;; *) echo 'TEST_FILE must select a tests/*.test.tsx file' >&2; exit 2;; esac; \
-	    case "$${TEST_FILE}" in *[!A-Za-z0-9_./-]*|*..*) echo 'TEST_FILE contains unsupported characters' >&2; exit 2;; esac; \
-	    cd web && if [ ! -f "$${TEST_FILE}" ]; then echo 'TEST_FILE must name an existing test file' >&2; exit 2; fi && \
-	      ./node_modules/.bin/vitest run --config vitest.config.ts "$${TEST_FILE}"; fi; \
-	elif [ "$${VERIFY_MODE:-}" = "browser" ]; then python3 scripts/verification-controls.py run-gate browser; \
-	elif [ -z "$${VERIFY_MODE:-}" ]; then \
-	  python3 scripts/verification-controls.py run-gate ordinary; \
-	else echo 'unknown VERIFY_MODE (use unit, browser, go, go-portability, go-race, auth-bench, integration, performance, journey, providers, compose, smoke, linux, linux-sli, slo-unit, slo-integration, slo-journey, agent-lifecycle, or verification-tools)' >&2; exit 2; fi
+	@if [ -n "$${ALMANAC_IN_DEV_CONTAINER:-}" ]; then python3 scripts/verify.py gate $(MODE); \
+	else $(MAKE) --no-print-directory _enter MODE="$(MODE)" ENTER_CMD="python3 scripts/verify.py gate $(MODE)"; fi
+
+# Enter the dev container. The Docker-driving modes add compose.dev.socket.yaml: the daemon
+# socket, the checkout at its host path and the daemon host's network.
+_enter:
+	@set -eu; files='-f compose.dev.yaml'; \
+	  case "$${MODE:-}" in compose|providers) files="$$files -f compose.dev.socket.yaml"; \
+	    export ALMANAC_HOST_CHECKOUT="$(CURDIR)"; \
+	    export ALMANAC_DOCKER_GID=$$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock almanac-dev:latest stat -c %g /var/run/docker.sock) ;; esac; \
+	  image=$$(docker image inspect --format '{{.Id}}' almanac-dev:latest 2>/dev/null || echo unknown); \
+	  docker compose $$files run --rm -e ALMANAC_DEV_IMAGE_ID="$$image" dev bash -c "$${ENTER_CMD}"
 
 .PHONY: _verify_all
 _verify_all:
@@ -152,16 +144,6 @@ _verify_web:
 .PHONY: _verify_providers
 _verify_providers:
 	cd web && node scripts/check-local-providers.mjs
-
-.PHONY: _verify_go_portability
-_verify_go_portability: _ensure_web_assets
-	@set -eu; command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
-	  export GOTOOLCHAIN=local GOPROXY=off GOOS=darwin GOARCH=amd64 CGO_ENABLED=0; \
-	  out="$(CURDIR)/.local/portability/darwin-amd64"; mkdir -p "$$out"; \
-	  echo 'Compile internal/command tests for darwin/amd64 (ordinary tags; compile only)'; \
-	  $(GO) test -c -o "$$out/command.test" ./internal/command; \
-	  echo 'Compile internal/command tests for darwin/amd64 (integration tag; compile only)'; \
-	  $(GO) test -c -tags=integration -o "$$out/command.integration.test" ./internal/command
 
 _ensure_web_assets:
 	@if [ ! -f web/dist/index.html ]; then \
@@ -217,14 +199,6 @@ _verify_auth_bench:
 	  test "$$(printf '%s\n' "$$benchmarks" | awk '/^Benchmark/{n++} END{print n+0}')" -eq 2 || { echo 'expected both named password benchmarks' >&2; exit 1; }; \
 	  $(GO) test -run '^$$' -bench '^BenchmarkPassword(Hash|Verify)$$' -benchtime=10x -count=1 -timeout=2m ./internal/identity
 
-_verify_integration: _ensure_web_assets
-	@set -eu; \
-	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  $(MAKE) _verify_sqlc_generated; \
-	  sh scripts/setup-database.sh --check; \
-	  $(MAKE) build; \
-	  python3 scripts/integration-runner.py
-
 .PHONY: _verify_performance
 _verify_performance:
 	@set -eu; umask 077; \
@@ -232,7 +206,7 @@ _verify_performance:
 	  test -z "$${GO_PACKAGE:-}$${TEST_FILE:-}$${BROWSER_SCENARIO:-}$${BROWSER_PROJECT:-}$${GOFLAGS:-}" || { echo 'performance has no custom selectors or Go flags' >&2; exit 2; }; \
 	  command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
 	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  sh scripts/setup-database.sh --check; \
+	  python3 scripts/verify.py fixture-check; \
 	  $(MAKE) build; \
 	  selected=$$($(GO) test -tags=integration,performance -list '^TestIntegrationControlledBackendPerformance$$' ./internal/command); \
 	  test "$$(printf '%s\n' "$$selected" | awk '/^TestIntegrationControlledBackendPerformance$$/{n++} END{print n+0}')" -eq 1 || { echo 'controlled performance entry missing' >&2; exit 1; }; \
@@ -242,7 +216,7 @@ _verify_performance:
 	  $(GO) test -json -tags=integration,performance -p=1 -run '^TestIntegrationControlledBackendPerformance$$' -count=1 -timeout=8h30m ./internal/command > "$$artifact" || go_status=$$?; \
 	  printf '%s\n' "$$go_status" > "$$status_file"; \
 	  echo "Controlled performance Go events: $$artifact"; \
-	  if [ "$$go_status" -eq 0 ]; then python3 scripts/verification-controls.py performance-evidence; else exit "$$go_status"; fi
+	  if [ "$$go_status" -eq 0 ]; then python3 scripts/verify.py performance-evidence; else exit "$$go_status"; fi
 
 _verify_journey:
 	@set -eu; \
@@ -256,7 +230,7 @@ _verify_journey:
 	  command -v $(GO) >/dev/null || { echo 'Go is missing; run inside the dev container (make shell)' >&2; exit 2; }; \
 	  test -n "$${ALMANAC_TEST_DATABASE_URL:-}" || { echo 'ALMANAC_TEST_DATABASE_URL must select the isolated local fixture' >&2; exit 2; }; \
 	  export GOTOOLCHAIN=local GOPROXY=off; \
-	  sh scripts/setup-database.sh --check; \
+	  python3 scripts/verify.py fixture-check; \
 	  $(MAKE) build; \
 	  journey_log=$$(mktemp .local/journey-result.XXXXXX); \
 	  if ! $(GO) test -race -tags=integration -p=1 -v -run "$$journey" -count=1 -timeout=2m ./internal/command > "$$journey_log" 2>&1; then cat "$$journey_log"; exit 1; fi; \

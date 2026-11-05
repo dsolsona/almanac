@@ -150,18 +150,23 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       assert.ok(Math.abs(wallElapsed-elapsed)<250,'clock discontinuity invalidates the runtime sample');
       assert.deepEqual([...capabilities],[mode==='enabled'?'1':'0'],'runtime tracing configuration was not applied');
       if(mode==='enabled')events.push(...rendered.events);
-      if(mode==='enabled'&&(phase==='first'||pending>0)){
+      if(mode==='enabled'){
         // The measured load is already complete. Preserve this trace before
-        // closing its tab; diagnostic export is outside the page-load timing.
+        // closing its tab: every sample's tab is closed within milliseconds of
+        // ready, and a user keeps the same tab so the page-hide outbox replays
+        // for them; here the export must finish before the close. Diagnostic
+        // export is outside the page-load timing.
         const flushed=await page.evaluate(()=>new Promise(resolve=>{
           const timeout=setTimeout(()=>resolve({result:'timeout'}),2100);
           addEventListener('almanac:telemetry-flushed',event=>{clearTimeout(timeout);resolve(event.detail);},{once:true});
           dispatchEvent(new Event('almanac:telemetry-flush'));
         }));
         assert.equal(flushed.result,'ready','container evidence flush did not finish');
-        const emitted=await page.evaluate(()=>window.almanacRuntimeJourneys);
-        events.push(...emitted.map(event=>({...event,diagnostic:pending>0})));
-        sample.trace_id=emitted.find(event=>event.journey===journey)?.trace_id??null;
+        if(phase==='first'||pending>0){
+          const emitted=await page.evaluate(()=>window.almanacRuntimeJourneys);
+          events.push(...emitted.map(event=>({...event,diagnostic:pending>0})));
+          sample.trace_id=emitted.find(event=>event.journey===journey)?.trace_id??null;
+        }
       }
     } catch(error) {
       if(sample.result==='ready')sample.evidence_error_type=error.name;

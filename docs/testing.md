@@ -215,15 +215,13 @@ The foundation provides these fixed entry points:
 | --- | --- |
 | `make setup` | Builds the dev image for the host user, pulls the PostgreSQL 18.6 fixture image, fails when either image's platform differs from the daemon's, and warms the Go module and npm caches in named volumes inside the dev container; network-capable; `UPDATE_LOCK=1` refreshes the web lockfiles first (ADR-0029) |
 | `make shell` | Starts the tmpfs PostgreSQL and VictoriaTraces fixtures from `compose.dev.yaml` and opens a shell in the dev container, where `ALMANAC_TEST_DATABASE_URL` is preset; `CMD='…'` runs one command instead (make expands `$`, so write `$$` for a literal dollar sign). Every `build`, `generate` and `verify` target below runs inside it |
+| `make stop-dev` | Removes the dev fixtures (tmpfs PostgreSQL and VictoriaTraces); the cache volumes stay. `make stop` keeps stopping only the local application stack |
 | `make build` | Typecheck, production assets and embedded Go executable; size report |
 | `make images` | Builds the published `app` and `agent` images and the never-published `dev` image from `deploy/*/Dockerfile` for the host platform (ADR-0029) |
 | `make publish IMAGE_REGISTRY=<prefix>` | Runs the image pin check, then builds and pushes `almanac` and `almanac-agent` for `linux/amd64` and `linux/arm64` |
 | `make generate` | Operational API generation; GENERATE_MODE=format uses pinned gofmt; GENERATE_MODE=sqlc regenerates storage queries |
-| `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion and binary smoke |
-| `make verify VERIFY_MODE=linux` | Offline Linux candidate gate: snapshots tracked and safe untracked source changes, attests a SHA256, then runs the full gate, race gate, real PostgreSQL/browser integration suite and catalogue Chromium matrix in order; exports sanitized logs and acceptance screenshots under `.local/linux-verification.*` |
-| `make verify VERIFY_MODE=linux-sli` | Offline focused Linux journey: runs only the real SLI browser journey in the same isolated PostgreSQL fixture and exports the same sanitized evidence; does not replace the full Linux gate |
+| `make verify` | Web and Go suites, vet/format, build, generated drift, routing/exclusion, binary smoke and the verification tooling tests; `MODE=…` selects the modes below (`VERIFY_MODE` is an accepted alias) |
 | `make verify VERIFY_MODE=go` | Go checks; optional GO_PACKAGE selects a tested package without whole-binary smoke |
-| `make verify VERIFY_MODE=go-portability` | Compile-only `internal/command` test binaries for fixed `darwin/amd64`, with ordinary and integration tags, CGO disabled and the pinned offline Go toolchain; ignored outputs and a distinct build cache live under `.local/` |
 | `make verify VERIFY_MODE=go-race` | HTTP/lifecycle, command, agent and setup clients, protected profile, storage, identity, authentication, source-secret, Prometheus datasource and diagnostic unit race checks |
 | `make verify VERIFY_MODE=auth-bench` | Fixed password Hash/Verify benchmarks, ten iterations each, one run and a two-minute timeout |
 | `make verify VERIFY_MODE=integration` (in the dev container) | Explicit isolated PostgreSQL fixture; storage, authentication, authhttp and executable command suites run serially, including real Chromium onboarding and agent CLI acceptance; GO_PACKAGE=all (default) or one of those package paths. Preserves per-package Go JSON events under `.local/integration-test-json/`, the combined event stream at `.local/integration-go-test.jsonl`, the numeric Go test status at `.local/integration-go-test.exit`, and a slowest-test summary. |
@@ -233,7 +231,7 @@ The foundation provides these fixed entry points:
 | `make verify VERIFY_MODE=unit` | Component suite only; optional `TEST_FILE=tests/ui.test.tsx` |
 | `make verify VERIFY_MODE=browser` | Catalogue Chromium matrix; no build or install |
 | `make preview` | Local catalogue on port 5198 |
-| `make verify VERIFY_MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes |
+| `make verify VERIFY_MODE=compose` | Isolated Compose build/start, initializer checks, actual browser onboarding, repeated bootstrap and restart persistence; owns and removes only its temporary project volumes. Runs from the dev container through the host Docker socket (`compose.dev.socket.yaml`); `providers` uses the same entry |
 
 Controlled API distributions include each operation's first visits alongside its
 100 repeat reads, with explicit first-visit markers and retained maxima. Enforce

@@ -7,10 +7,12 @@ and [plan 0026](plans/0026-platform-agnostic-verification.md) are accepted
 (three Dockerfiles, multi-arch index pins, pin check) and
 [F7-T02](tasks/F7-T02.md) (`compose.dev.yaml` with tmpfs PostgreSQL and
 VictoriaTraces fixtures, `make setup`/`make shell`, toolchains from the dev
-image, lane marker removed) are in review. Inside the dev container on this
-macOS/Colima host the ordinary, integration (173), journey, browser (126) and
-race gates pass; the Linux-host evidence and F7-T03 (`scripts/verify.py`,
-Compose journey socket mode, lane deletion) are next.
+image, lane marker removed) are in review. [F7-T03](tasks/F7-T03.md)
+(`scripts/verify.py`, thin `make verify MODE=…` entry, socket overlay for the
+Compose modes, lane deleted) is in progress: every mode but `compose` is green
+from the host; `compose` fixed two verifier defects and then failed on a host
+out of disk and memory, so it still needs a green run. The Linux-host
+evidence and F7-T04 (docs, command catalog) follow.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
