@@ -59,8 +59,9 @@ Status text uses the `--status-*` foreground tokens with `--good-wash`,
 color to communicate a warning. Components consume tokens; feature styles own
 composition only.
 
-Spacing follows 4, 8, 12, 16, 24, 32, 48 and 64 px (`--almanac-space-*` and
-their `--space-*` semantic aliases; `--space-12` and `--space-16` are 48 and
+Spacing follows 4, 8, 12, 16, 20, 24, 32, 48 and 64 px (`--almanac-space-*` and
+their `--space-*` semantic aliases; `--space-5` is the 20 px gap between form
+section cards and below page heads, as in the approved mocks; `--space-12` and `--space-16` are 48 and
 64 px). Controls are 38 px high on fine pointers and 44 px on coarse pointers.
 Controls and panels use 3 px corners (`--radius-sm`); the general radius is 4
 px. Focus is visible with a 3 px semantic outline. Motion uses `--motion` (120

@@ -116,7 +116,13 @@ export function AgentLifecycleControls({ agent, detail, credentials, context, re
       if (kind === 'rotate' && ((lifetime !== '' && (!Number.isInteger(life) || life! < 1 || life! > 31536000)) || (overlap !== '' && (!Number.isInteger(over) || over! < 0 || over! > 600)))) return null;
       return { kind, key: crypto.randomUUID(), userID, agentID: agent!.id, ...(kind === 'revoke' ? { credentialID } : {}), etag: strongDetail!.etag, ...(life === undefined || life === 0 ? {} : { lifetimeSeconds: life }), ...(over === undefined ? {} : { overlapSeconds: over }), outcome: 'unknown' as const };
     })();
-    if (!value) { setError('Choose a whole number of seconds: expiry must be between 1 second and 1 year, and grace between 0 and 10 minutes.'); return; }
+    if (!value) {
+      // Each duration's chips announce an invalid custom value; focus the first one instead of repeating it.
+      const invalid = ['agent-rotation-lifetime', 'agent-rotation-overlap'].find((id) => document.getElementById(`${id}-error`));
+      if (invalid) { setError(''); document.querySelector<HTMLElement>(`[aria-controls="${invalid}-custom"]`)?.focus(); }
+      else setError('Enter custom durations as whole numbers: expiry from 1 to 365 days, grace from 0 to 600 seconds.');
+      return;
+    }
     const action = old?.kind ?? kind;
     if (action === 'revoke' && (!value.credentialID || (!old && !hasCurrentCredential(value.credentialID)))) { setError('That credential is already revoked or is no longer in the current history page. Refresh the history before continuing.'); return; }
     const payload = action === 'rotate' ? { ...(value.lifetimeSeconds === undefined ? {} : { lifetime_seconds: value.lifetimeSeconds }), ...(value.overlapSeconds === undefined ? {} : { overlap_seconds: value.overlapSeconds }) } : {};

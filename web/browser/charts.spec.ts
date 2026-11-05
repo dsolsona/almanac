@@ -30,9 +30,9 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await expect(page.getByText('page 1 of 2')).toBeVisible();
   await page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).screenshot({ path: testInfo.outputPath('timeline-panel.png') });
   await page.locator('.exact-values').screenshot({ path: testInfo.outputPath('exact-values-page1.png') });
-  await page.getByRole('button', { name: 'Next' }).click();
+  await page.locator('.exact-values').getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('page 2 of 2')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
+  await expect(page.locator('.exact-values').getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
   await expect.poll(() => chartRequests.length).toBeGreaterThan(0);
 
   await plot.scrollIntoViewIfNeeded();
@@ -82,7 +82,7 @@ test('chart theme updates and keyboard pagination work without page overflow', a
   const scrollRegion = page.getByRole('region', { name: 'Exact timeline values' });
   await scrollRegion.focus();
   await expect(scrollRegion).toBeFocused();
-  const next = page.getByRole('button', { name: 'Next' });
+  const next = page.locator('.exact-values').getByRole('button', { name: 'Next', exact: true });
   await next.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByText('page 2 of 2')).toBeVisible();
@@ -220,7 +220,7 @@ test('a failed lazy chart import leaves catalogue controls available and reload 
   await expect(page.getByRole('alert').filter({ hasText: /chart examples could not be loaded/i })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Foundations' })).toBeVisible();
   await page.getByRole('button', { name: 'Primary' }).click();
-  await expect(page.locator('.demo-feedback')).toContainText('Count: 1');
+  await expect(page.locator('.demo-feedback').filter({ hasText: 'Button action' })).toContainText('Count: 1');
 
   await page.getByRole('button', { name: 'Reload catalogue to retry' }).click();
   await expect(page.getByRole('button', { name: 'Charts' })).toBeVisible();

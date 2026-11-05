@@ -251,7 +251,9 @@ try {
   await heading('Sign in');
   await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
   await signIn(fixture.permanent);
-  await heading('Agents');
+  // Sign-in returns to the previous agents URL; on an agent detail the heading is that agent's name.
+  await expect(page).toHaveURL((url) => url.pathname === '/agents');
+  await expect(page.locator('#agents-title')).toBeVisible();
   await signOut();
   await heading('Sign in');
   assert.equal(pageErrors, 0);

@@ -539,6 +539,10 @@ async function checkCollectedSLI(page, agentID) {
     }
   }
   await setCaptureViewport(page, 'light', { name: 'desktop', width: 1440, height: 1000 });
+  // The SLI list has one action, New SLI (maintainer, 2026-11-05); its page explains the prerequisite.
+  await expect(page.getByRole('button', { name: 'Add datasource', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'New SLI', exact: true }).click();
+  await expect(page).toHaveURL((current) => current.pathname === '/slis/new');
   await page.getByRole('button', { name: 'Add datasource', exact: true }).click();
   await expect(page).toHaveURL(/\/datasources\/new\?return=slis$/);
   await page.getByLabel('Display name', { exact: true }).fill('Compose metrics');
@@ -778,6 +782,8 @@ async function checkAgentRetirement(page, original, collection) {
   const agentURL = `${url}/agents?agent=${original.agent.id}`;
   stage = 'real Compose assigned-agent deletion is blocked';
   await page.goto(agentURL);
+  // Runtime details are collapsed under a disclosure on the unified detail (F6-T06).
+  await page.getByText('Runtime details', { exact: true }).click();
   const runtime = page.getByRole('region', { name: 'Agent runtime', exact: true });
   await expect(runtime).not.toContainText('No datasources are assigned to this agent.');
   const runtimeExplanation = await page.evaluate(async (id) => {
@@ -789,7 +795,7 @@ async function checkAgentRetirement(page, original, collection) {
   await page.getByRole('button', { name: 'Rotate credential', exact: true }).click();
   const rotation = page.getByRole('dialog', { name: 'Rotate credential', exact: true });
   await expect(rotation.getByLabel('Current password', { exact: true })).toHaveCount(0);
-  await expect(rotation.getByLabel('Keep the previous credential valid for', { exact: true })).toHaveValue('600');
+  await expect(rotation.getByRole('radiogroup', { name: 'Keep the previous credential valid for', exact: true }).getByRole('radio', { name: '10 minutes', exact: true })).toHaveAttribute('aria-checked', 'true');
   await rotation.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole('button', { name: 'Revoke credential', exact: true }).click();
   const revoke = page.getByRole('dialog', { name: 'Revoke credential', exact: true });
@@ -819,18 +825,21 @@ async function checkAgentRetirement(page, original, collection) {
   await dialog.getByRole('button', { name: 'Register replacement agent', exact: true }).click();
   const register = page.getByRole('dialog', { name: 'Register agent', exact: true });
   await register.getByLabel('Display name', { exact: true }).fill('Replacement');
-  await expect(register.getByLabel('New credential expires after', { exact: true })).toHaveValue('7776000');
-  await register.getByLabel('New credential expires after', { exact: true }).selectOption('custom');
-  await register.getByLabel('Custom amount', { exact: true }).fill('90');
-  await register.getByLabel('Unit', { exact: true }).selectOption('86400');
+  const expiry = register.getByRole('radiogroup', { name: 'New credential expires after', exact: true });
+  await expect(expiry.getByRole('radio', { name: '90 days', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(register.getByRole('combobox')).toHaveCount(0);
+  await expiry.getByRole('radio', { name: 'Custom…', exact: true }).click();
+  await register.getByLabel('Custom new credential expires after', { exact: true }).fill('90');
   for (const theme of ['light', 'dark']) for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile', width: 360, height: 900 }]) {
     await page.setViewportSize(viewport);
     await page.locator('html').evaluate((element, dark) => element.classList.toggle('dark', dark), theme === 'dark');
-    const amount = await register.getByLabel('Custom amount', { exact: true }).boundingBox();
-    const unit = await register.getByLabel('Unit', { exact: true }).boundingBox();
-    assert.ok(amount && unit && amount.y + amount.height <= unit.y && unit.x + unit.width <= viewport.width, 'custom duration fields overlap or overflow');
+    const chips = await expiry.boundingBox();
+    const amount = await register.getByLabel('Custom new credential expires after', { exact: true }).boundingBox();
+    assert.ok(chips && amount && chips.x + chips.width <= viewport.width && amount.x + amount.width <= viewport.width, 'expiry chips or custom days input overflow');
     await page.screenshot({ path: join(artifacts, `duration-custom-${viewport.name}-${theme}.png`), animations: 'disabled' });
   }
+  await register.getByLabel('Custom new credential expires after', { exact: true }).press('Enter');
+  await expect(expiry.getByRole('radio', { name: 'Custom · 90 days', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(register.getByLabel('Current password', { exact: true })).toHaveCount(0);
   stage = 'real Compose register and connect replacement';
   const created = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/agents');
@@ -1129,7 +1138,8 @@ async function checkLocalAgentRegistration() {
     await expect(page.getByRole('heading', { name: 'Credential history', exact: true })).toBeVisible();
     await expect(page.getByText(result.credential.id, { exact: true })).toBeVisible();
     stage = 'real Compose verify Local display name after token close';
-    await expect(page.locator('dd').getByText('Local', { exact: true })).toBeVisible();
+    // The agent detail heading carries the display name (approved agent-detail mock).
+    await expect(page.getByRole('heading', { level: 1, name: 'Local', exact: true })).toBeVisible();
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
     const agentURL = page.url();
     stage = 'real Compose registration uses the existing administrator session';
@@ -1219,7 +1229,8 @@ async function checkLocalAgentRegistration() {
     stage = 'real Compose reload persisted agent and one-time-token absence';
     await page.reload();
     await expect(page.getByText('local', { exact: true })).toBeVisible();
-    await expect(page.locator('dd').getByText('Local', { exact: true })).toBeVisible();
+    // The agent detail heading carries the display name (approved agent-detail mock).
+    await expect(page.getByRole('heading', { level: 1, name: 'Local', exact: true })).toBeVisible();
     assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
     stage = 'real Compose verify PostgreSQL persistence';
     const persisted = await compose(['exec', '-T', 'postgres', 'psql', '-U', 'almanac', '-d', 'almanac', '-Atc',
@@ -1279,7 +1290,7 @@ async function checkLocalAgentRegistration() {
         credential_history_read_seen: credentialHistoryReadSeen,
         credential_history_read_succeeded: credentialHistoryReadSucceeded,
         credential_history_visible: await visible(journeyPage.getByRole('heading', { name: 'Credential history', exact: true })),
-        local_display_name_visible: await visible(journeyPage.locator('dd').getByText('Local', { exact: true })),
+        local_display_name_visible: await visible(journeyPage.getByRole('heading', { level: 1, name: 'Local', exact: true })),
       };
       writeFileSync(join(artifacts, 'local-agent-post-create-diagnostic.json'), JSON.stringify(safeState, null, 2), { mode: 0o600 });
       const noPasswords = await journeyPage.locator('input[type="password"]').evaluateAll((inputs) => inputs.every((input) => input.value === ''));

@@ -150,18 +150,21 @@ export async function checkTelemetryRuntime({browser,url,storageState,sliID,sloI
       assert.ok(Math.abs(wallElapsed-elapsed)<250,'clock discontinuity invalidates the runtime sample');
       assert.deepEqual([...capabilities],[mode==='enabled'?'1':'0'],'runtime tracing configuration was not applied');
       if(mode==='enabled')events.push(...rendered.events);
-      if(mode==='enabled'){
+      if(mode==='enabled'&&(phase==='first'||pending>0||journey==='sli.list')){
         // The measured load is already complete. Preserve this trace before
-        // closing its tab: every sample's tab is closed within milliseconds of
-        // ready, and a user keeps the same tab so the page-hide outbox replays
-        // for them; here the export must finish before the close. Diagnostic
-        // export is outside the page-load timing.
+        // closing its tab: the browser outbox is per tab, so spans of a closed tab
+        // are lost. Flush where the evidence is used: first and diagnostic samples,
+        // and SLI list repeats, one of which becomes the slowest-SLI capture.
+        // Diagnostic export is outside the page-load timing.
         const flushed=await page.evaluate(()=>new Promise(resolve=>{
           const timeout=setTimeout(()=>resolve({result:'timeout'}),2100);
           addEventListener('almanac:telemetry-flushed',event=>{clearTimeout(timeout);resolve(event.detail);},{once:true});
           dispatchEvent(new Event('almanac:telemetry-flush'));
         }));
-        assert.equal(flushed.result,'ready','container evidence flush did not finish');
+        // First and diagnostic samples must flush; for repeat samples the flush is best effort and the
+        // connected-trace capture below remains the gate.
+        if(phase==='first'||pending>0)assert.equal(flushed.result,'ready','container evidence flush did not finish');
+        else sample.flush_result=flushed.result;
         if(phase==='first'||pending>0){
           const emitted=await page.evaluate(()=>window.almanacRuntimeJourneys);
           events.push(...emitted.map(event=>({...event,diagnostic:pending>0})));

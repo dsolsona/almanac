@@ -234,6 +234,9 @@ export function SlosPage({context}:{context:AuthContext}) {
           ? `The window must be a multiple of the ${selectedSli.polling_interval_seconds}-second collection interval.`
         : historical && !historyStart ? 'Measurement history is unavailable. Retry loading history before including it.' : '';
       if (problem) {
+        // The target chips already announce an invalid custom value; focus it rather than repeating the alert.
+        const fieldError = problem.startsWith('Target must') && document.getElementById('slo-target-error');
+        if (fieldError) { setFormError(''); document.querySelector<HTMLElement>('[aria-controls="slo-target-custom"]')?.focus(); return; }
         setFormError(problem);
         heading.current?.querySelector('h1')?.focus();
         return;
@@ -252,7 +255,12 @@ export function SlosPage({context}:{context:AuthContext}) {
     try {
       const result = await sloClient.create(JSON.parse(intent.body) as CreateSlo, context, intent.key);
       if (sloIntent.current === intent) sloIntent.current = null;
-      if (current === generation.current) navigate(`/slos/${result.id}`);
+      if (current === generation.current) {
+        // The next New SLO starts empty; carrying this SLO's service and SLI over invites near-duplicates.
+        // Only the form that submitted resets: a response arriving after navigation must not erase a newer draft.
+        setDisplay(''); setName(''); setNameEdited(false); setServiceID(''); setSliID(''); setTarget('99.9'); setDuration('30'); setHistorical(false); setFormError('');
+        navigate(`/slos/${result.id}`);
+      }
     } catch (failure) {
       if (failure instanceof SloFailure && failure.uncertain && sloIntent.current === intent) intent.uncertain = true;
       if (current === generation.current) {

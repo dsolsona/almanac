@@ -85,6 +85,8 @@ services:
       - npm-cache:/cache/npm
       - web-node-modules:/workspace/web/node_modules
       - openapi-node-modules:/workspace/tools/openapi/node_modules
+      # Playwright traces churn many small files; on the macOS bind mount they hit EACCES (F6-T07).
+      - web-test-results:/workspace/web/test-results
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,3 +100,4 @@ volumes:
   npm-cache:
   web-node-modules:
   openapi-node-modules:
+  web-test-results:

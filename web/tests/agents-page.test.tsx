@@ -113,25 +113,28 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    expect(within(dialog).getByLabelText('New credential expires after')).toHaveValue('7776000');
-    expect(within(dialog).getByLabelText('Keep the previous credential valid for')).toHaveValue('600');
+    expect(within(within(dialog).getByRole('radiogroup', { name: 'New credential expires after' })).getByRole('radio', { name: '90 days' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(within(dialog).getByRole('radiogroup', { name: 'Keep the previous credential valid for' })).getByRole('radio', { name: '10 minutes' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Current password')).not.toBeInTheDocument();
   });
 
-  it('rejects fractional seconds and excessive custom grace without sending a command', async () => {
+  it('rejects fractional days and excessive custom grace with one alert and without sending a command', async () => {
     const user = userEvent.setup(); installDialogs(); const fetcher = installFetch();
     render(<AuthPage client={makeAuth()} />); await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const dialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.selectOptions(within(dialog).getByLabelText('New credential expires after'), 'custom');
-    await user.type(within(dialog).getByLabelText('Custom amount'), '0.5');
+    const expiry = within(dialog).getByRole('radiogroup', { name: 'New credential expires after' });
+    const grace = within(dialog).getByRole('radiogroup', { name: 'Keep the previous credential valid for' });
+    await user.click(within(expiry).getByRole('radio', { name: 'Custom…' }));
+    await user.type(within(dialog).getByLabelText('Custom new credential expires after'), '0.5');
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('whole number of seconds');
-    await user.selectOptions(within(dialog).getByLabelText('New credential expires after'), '7776000');
-    await user.selectOptions(within(dialog).getByLabelText('Keep the previous credential valid for'), 'custom');
-    await user.type(within(dialog).getByLabelText('Custom amount'), '601');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('whole number of days from 1 to 365');
+    await user.click(within(expiry).getByRole('radio', { name: '90 days' }));
+    await user.click(within(grace).getByRole('radio', { name: 'Custom…' }));
+    await user.type(within(dialog).getByLabelText('Custom keep the previous credential valid for'), '601');
     await user.click(within(dialog).getByRole('button', { name: 'Rotate credential' }));
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('10 minutes');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('whole number of seconds from 0 to 600');
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
   });
   it('exposes one keyboard-scrollable agent table within its named panel', async () => {
@@ -336,7 +339,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Enter an agent name and display name, and an expiry between 1 second and 1 year as a whole number of seconds.');
+    expect(alert).toHaveTextContent('Enter an agent name and display name.');
     expect(screen.getByRole('dialog', { name: 'Register agent' })).toContainElement(alert);
     await waitFor(() => expect(alert).toHaveFocus());
     expect(screen.getAllByRole('alert')).toHaveLength(1);
@@ -521,7 +524,7 @@ describe('agent administration screen', () => {
     expect(screen.queryByText('replacement-secret')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Rotate credential' }));
     const rotateDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.selectOptions(within(rotateDialog).getByLabelText('Keep the previous credential valid for'), '0');
+    await user.click(within(within(rotateDialog).getByRole('radiogroup', { name: 'Keep the previous credential valid for' })).getByRole('radio', { name: 'Immediately' }));
 
     await user.click(within(rotateDialog).getByRole('button', { name: 'Rotate credential' }));
     await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
@@ -775,10 +778,10 @@ describe('agent administration screen', () => {
     await user.click(await screen.findByRole('button', { name: 'west-1' }));
     await user.click(await screen.findByRole('button', { name: 'Rotate credential' }));
     const rotateDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    await user.selectOptions(within(rotateDialog).getByLabelText('New credential expires after'), 'custom');
-    await user.type(within(rotateDialog).getByLabelText('Custom amount'), '12345');
-    await user.selectOptions(within(rotateDialog).getByLabelText('Keep the previous credential valid for'), 'custom');
-    await user.type(within(rotateDialog).getAllByLabelText('Custom amount')[1], '17');
+    await user.click(within(within(rotateDialog).getByRole('radiogroup', { name: 'New credential expires after' })).getByRole('radio', { name: 'Custom…' }));
+    await user.type(within(rotateDialog).getByLabelText('Custom new credential expires after'), '14');
+    await user.click(within(within(rotateDialog).getByRole('radiogroup', { name: 'Keep the previous credential valid for' })).getByRole('radio', { name: 'Custom…' }));
+    await user.type(within(rotateDialog).getByLabelText('Custom keep the previous credential valid for'), '17');
 
     await user.click(within(rotateDialog).getByRole('button', { name: 'Rotate credential' }));
     expect(await screen.findByRole('heading', { name: 'Credential action outcome unknown' })).toBeVisible();
@@ -796,7 +799,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await user.click(await screen.findByRole('button', { name: /Retry rotate credential/i }));
     const retryDialog = screen.getByRole('dialog', { name: 'Rotate credential' });
-    expect(within(retryDialog).getByText('12345 seconds', { selector: 'dd' })).toBeVisible();
+    expect(within(retryDialog).getByText('14 days', { selector: 'dd' })).toBeVisible();
     expect(within(retryDialog).getByText('17 seconds', { selector: 'dd' })).toBeVisible();
     expect(within(retryDialog).queryByLabelText('New credential expires after')).not.toBeInTheDocument();
     expect(within(retryDialog).queryByLabelText('Keep the previous credential valid for')).not.toBeInTheDocument();
@@ -811,9 +814,9 @@ describe('agent administration screen', () => {
     expect(firstHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"` });
     expect(secondHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
     expect(thirdHeaders).toMatchObject({ 'If-Match': `"agent:${agentID}:3"`, 'Idempotency-Key': firstHeaders['Idempotency-Key'] });
-    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ lifetime_seconds: 12345, overlap_seconds: 17 });
-    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ lifetime_seconds: 12345, overlap_seconds: 17 });
-    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ lifetime_seconds: 12345, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[0]?.[1]?.body))).toEqual({ lifetime_seconds: 1209600, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[1]?.[1]?.body))).toEqual({ lifetime_seconds: 1209600, overlap_seconds: 17 });
+    expect(JSON.parse(String(requests[2]?.[1]?.body))).toEqual({ lifetime_seconds: 1209600, overlap_seconds: 17 });
     expect(await screen.findByRole('status')).toHaveTextContent(/one-time token is no longer available/i);
     expect(screen.queryByLabelText('Agent token', { selector: 'output' })).not.toBeInTheDocument();
   });
@@ -1130,7 +1133,7 @@ describe('agent administration screen', () => {
     await user.click(screen.getByRole('button', { name: 'Register agent' }));
     await user.type(screen.getByLabelText('Agent name (identifier)'), 'new-east');
     await user.type(screen.getByLabelText('Display name'), 'East collector');
-    await user.selectOptions(screen.getByLabelText('New credential expires after'), '2592000');
+    await user.click(within(screen.getByRole('radiogroup', { name: 'New credential expires after' })).getByRole('radio', { name: '30 days' }));
     await user.click(screen.getAllByRole('button', { name: 'Register agent' })[1]!);
     expect(await screen.findByRole('dialog', { name: 'Agent token' })).toBeVisible();
     expect(location.search).toContain('agents_cursor=page-two');

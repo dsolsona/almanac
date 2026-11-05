@@ -308,13 +308,14 @@ stage = 'browser launch';
   assert.equal(await page.locator('body').innerText().then((text) => text.includes(passwordForRedaction)), false);
 
   const waitForDiagnostic = async (expectedState) => expect.poll(async () => {
-    const state = await page.locator('.diagnostic-result').last().locator('.datasource-diagnostic-status').textContent().catch(() => null);
+    const state = await page.locator('.diagnostic-result').last().locator('.ui-mark__row').first().textContent().catch(() => null);
     return state?.trim().toLowerCase();
   }, { timeout: 15000 }).toBe(expectedState);
   const assertNoCredentialDrafts = async () => {
     assert.equal(page.url().includes(fixture.basic_password), false);
     assert.equal(page.url().includes(fixture.bearer_token), false);
-    assert.deepEqual(await page.locator('input[type="password"]').evaluateAll((inputs) => inputs.map((input) => input.value)), ['']);
+    // A saved secret shows Replace instead of an input; any password input present must be empty.
+    assert.ok((await page.locator('input[type="password"]').evaluateAll((inputs) => inputs.map((input) => input.value))).every((value) => value === ''));
     assert.equal(await page.evaluate((values) => Array.from({ length: localStorage.length }, (_, index) => localStorage.getItem(localStorage.key(index) ?? '') ?? '').some((entry) => values.some((value) => entry.includes(value))), [fixture.basic_password, fixture.bearer_token]), false);
   };
   const openSavedDatasource = async (datasourceID) => {

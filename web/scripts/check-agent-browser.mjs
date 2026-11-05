@@ -33,7 +33,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   setStage('agent list first page');
   await expect(page.getByRole('region', { name: 'Agent records', exact: true }).and(page.locator('[tabindex="0"]')).locator('tbody tr')).toHaveCount(50);
   setStage('agent list second page');
-  await page.getByRole('button', { name: 'Next agents', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Agent result pages', exact: true }).getByRole('button', { name: 'Next ›', exact: true }).click();
   await expect(page.getByRole('button', { name: 'fixture-051', exact: true })).toBeVisible();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.has('agents_cursor'));
   setStage('agent list browser back');
@@ -55,7 +55,9 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   setStage('direct agent selection URL reload');
   await page.goto(selectedURL);
   await expectSelectedAgentURL(selectedAgentID, 'direct agent selection URL reload');
-  await expect(page.getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
+  // The agent ID sits in the collapsed Runtime details section of the redesigned detail page.
+  await page.locator('.agents-runtime-details > summary').click();
+  await expect(page.locator('.agents-runtime-details').getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
   setStage('credential history first page');
   await expect(history.locator('.agents-credential')).toHaveCount(50);
   setStage('credential history second page');
@@ -74,7 +76,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   await page.reload();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
   await expect(history.locator('.agents-credential')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb', exact: true }).getByRole('link', { name: 'Agents', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
 
   const lost = fixture.scenario === 'agents-lost';
@@ -180,7 +182,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     await page.setViewportSize({ width: 1440, height: 900 });
     await selectTheme('light');
     setStage('connection feedback screenshots captured');
-    await expect(page.locator('section[aria-labelledby="panel-agent-records"]')).toContainText('Registration is not confirmed. The agent records currently shown may not include this request.');
+    await expect(page.getByRole('status').filter({ hasText: 'Registration is not confirmed. The agent records currently shown may not include this request.' })).toBeVisible();
     await expect(page.getByText(/No response was received from Almanac/)).toBeVisible();
     await expect(page.getByLabel('Current password')).toHaveCount(0);
     assert.equal(await page.locator('output[aria-label="Agent token"]').count(), 0);
@@ -223,7 +225,8 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     await expect(page.getByRole('dialog', { name: 'Agent token', exact: true })).not.toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: /token.*(?:unavailable|no longer available)/i })).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get('agent')).toBe(evidence.agent_id);
-    await expect(page.getByText(evidence.agent_id, { exact: true })).toBeVisible();
+    await page.locator('.agents-runtime-details > summary').click();
+    await expect(page.locator('.agents-runtime-details').getByText(evidence.agent_id, { exact: true })).toBeVisible();
     assert.equal(createRequests, 2);
   } else {
     setStage('one-time token keyboard and clipboard');
@@ -258,13 +261,16 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
     if (fixture.scenario === 'agents-close') await dialog.getByRole('button', { name: 'Close token', exact: true }).click();
     else await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'Register agent', exact: true })).toBeFocused();
+    // Closing the token opens the created agent (F6-T06); focus moves to its detail heading.
+    await expect.poll(() => new URL(page.url()).searchParams.get('agent')).toBe(evidence.agent_id);
+    await expect(page.locator('#agents-title')).toBeFocused();
     assert.equal(await page.locator('body').textContent().then((text) => text.includes(token)), false);
     setStage('created agent navigation and reload');
     await expect.poll(() => new URL(page.url()).searchParams.get('agent')).toBe(evidence.agent_id);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
-    await expect(page.getByText(evidence.agent_id, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Browser acceptance agent', exact: true })).toBeVisible();
+    await page.locator('.agents-runtime-details > summary').click();
+    await expect(page.locator('.agents-runtime-details').getByText(evidence.agent_id, { exact: true })).toBeVisible();
     await expect(history.locator('.agents-credential')).toHaveCount(1);
     await expect(history).toContainText(evidence.credential_id);
     await expect(page.locator('output[aria-label="Agent token"]')).toHaveCount(0);
@@ -299,7 +305,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
       await page.getByRole('button', { name: 'Refresh agents', exact: true }).click();
       assert.equal((await listRead).status(), 401);
     } else {
-      await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Breadcrumb', exact: true }).getByRole('link', { name: 'Agents', exact: true }).click();
     }
     await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toHaveCount(0);

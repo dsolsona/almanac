@@ -17,6 +17,7 @@
   --almanac-space-2: 8px;
   --almanac-space-3: 12px;
   --almanac-space-4: 16px;
+  --almanac-space-5: 20px;
   --almanac-space-6: 24px;
   --almanac-space-8: 32px;
   --primary-foreground: #ffffff;
@@ -75,6 +76,7 @@
   --space-2: var(--almanac-space-2);
   --space-3: var(--almanac-space-3);
   --space-4: var(--almanac-space-4);
+  --space-5: var(--almanac-space-5);
   --space-6: var(--almanac-space-6);
   --space-8: var(--almanac-space-8);
   --space-12: 48px;
