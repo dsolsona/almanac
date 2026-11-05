@@ -34,7 +34,7 @@ directly. The database URL is preset in the container and is never passed on the
 command line. `MODE=compose` and `MODE=providers` add `compose.dev.socket.yaml`,
 which mounts the daemon socket, the checkout at its host path and the daemon
 host's network; no other mode receives the socket. `VERIFY_MODE` remains an
-accepted alias of `MODE` until the catalog below is re-approved.
+accepted alias of `MODE`.
 
 ## Recorded verification invocations
 
@@ -43,10 +43,11 @@ On 2026-10-29 the maintainer approved a closed catalog of host-side modes
 `agent-lifecycle`, the `linux` lane and the host toolchain setup). Plan 0026
 retired those modes and the host toolchain on 2026-11-05; their selections are
 now `unit`, `integration INTEGRATION_TEST=…` and `journey BROWSER_SCENARIO=…`.
-The invocations below are the recorded set for the Docker-only workflow. They
-await the maintainer's re-approval (F7-T04); recording them here does not
-approve them, and other selectors and command forms retain the exact-invocation
-rule.
+The invocations below are the approved set for the Docker-only workflow: the
+maintainer approved this catalog on 2026-11-05 in the working conversation
+("the catalog in docs/commands.md is approved"). Reuse it throughout
+authorized work; other selectors and command forms retain the exact-invocation
+rule. `make publish` stays unused until the maintainer names a registry.
 
 The controls live in `scripts/verify.py`. An active local
 `.local/verification/task.json` enables task-wide budgets; worker checkouts share
@@ -164,7 +165,7 @@ ledger. Final integrated gates remain separate from endurance observation.
 
 On 2026-11-02 the maintainer explicitly approved this entry for F3-T08, including
 reruns only after diagnosing and fixing a failure; its invocation is now the one
-below, inside the dev container, and awaits re-approval with the catalog above.
+below, inside the dev container, approved with the catalog above.
 Record the failure, correction and replan before a rerun. Ordinary, integration
 and Compose verification do not launch this separate workload:
 

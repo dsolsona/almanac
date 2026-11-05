@@ -1,6 +1,6 @@
 # Docker-only development, verification and images
 
-- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 to F7-T04 in review (catalog re-approval and Linux-host evidence pending); the Compose verifier's tracing-overhead gate retired by [ADR-0030](../adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
+- State: accepted 2026-11-04 (Crit session `d21016424a44`); F7-T01 to F7-T03 in review, F7-T04 done; the catalog was approved on 2026-11-05; the Linux-host evidence and the publish registry are pending; the Compose verifier's tracing-overhead gate retired by [ADR-0030](../adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
 - Created: 2026-11-04
 - Scope: tooling, images, fixtures and documentation; no product behaviour changes
 - Base: `main`; independent of the open UI stack (PRs #54–#60), which still cites the retired modes until merged
@@ -47,7 +47,7 @@ sequential and each branches from the previous one.
   daemon host's network (amended from the stack-network alias design). Evidence: every mode natively through
   `make verify` on both hosts, receipts carrying OS, architecture, image
   digest and revision; the Compose journey on both hosts.
-- [ ] **F7-T04 Documentation and approvals** ([F7-T04](../tasks/F7-T04.md), in review). Rewrite the testing guide's
+- [x] **F7-T04 Documentation and approvals** ([F7-T04](../tasks/F7-T04.md), done). Rewrite the testing guide's
   command table, the README setup and agent sections (containers or Linux
   hosts), AGENTS.md command rules and the command catalog for the new mode
   set; record the retired modes and the evidence from T01–T03 in status.

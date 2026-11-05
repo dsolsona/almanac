@@ -15,8 +15,9 @@ enabled/disabled tracing-overhead gate by
 [ADR-0030](adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)
 (the maintainer: browser tracing in its current form is a measurement aid,
 not a product feature with a budget). [F7-T04](tasks/F7-T04.md) (guides,
-AGENTS.md command rules and the recorded command catalog) is in review; the
-catalog awaits the maintainer's re-approval. Retired with plan 0026: the
+AGENTS.md command rules and the command catalog) is done; the maintainer
+approved the catalog on 2026-11-05. The registry for `make publish` is not
+yet decided. Retired with plan 0026: the
 `slo-unit`, `slo-integration`, `slo-journey`, `agent-lifecycle`,
 `verification-tools`, `linux`, `linux-sli` and `go-portability` modes, the host
 toolchain (`scripts/setup-go.sh`, `.local/bin`), `scripts/setup-database.sh`,
