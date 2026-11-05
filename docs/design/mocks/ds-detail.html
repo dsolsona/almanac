@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · Datasource</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="datasources"><main>
+<a class="back" href="#">← All datasources</a>
+<div class="detail-head">
+  <div>
+    <h1>prod-prometheus-us</h1>
+    <div class="status-line"><span class="st stale"><i></i>Not collecting · agent us-east-1 unreachable for 2 h</span></div>
+    <div class="meta">Prometheus · <span class="mono">https://prometheus.us-east-1.internal:9090</span> · every 30 s · 6 SLIs · version 4</div>
+  </div>
+  <div class="actions"><button class="btn">↻ Refresh</button><button class="btn">▶ Test connection</button><button class="btn">⋯</button></div>
+</div>
+
+<div class="banner">The assigned agent <b>us-east-1</b> has not sent a heartbeat since 08:00 UTC. Its 6 SLIs are not collecting; intervals since then will show as missing. <a href="#" style="color:inherit;text-decoration:underline">Open the agent</a> or move this datasource to another agent below.</div>
+
+<div class="sumtiles">
+  <div class="tile"><span class="k">Agent</span><span class="v"><span class="st stale" style="font-size:16px"><i></i>us-east-1</span></span><span class="s">last heartbeat 08:00 UTC · 2 h ago</span></div>
+  <div class="tile"><span class="k">Last successful query</span><span class="v">07:59:30</span><span class="s">0.3 s · 2 h ago</span></div>
+  <div class="tile"><span class="k">Configuration</span><span class="v">applied · rev 14</span><span class="s">agent has the current settings</span></div>
+  <div class="tile"><span class="k">Used by</span><span class="v">6 SLIs</span><span class="s">search-latency, search-availability, +4</span></div>
+</div>
+
+<form class="form">
+<section class="section">
+  <header><h2>Connection</h2><span class="hint">Where and how to reach Prometheus</span></header>
+  <div class="body">
+    <div class="grid2">
+      <div class="field"><label for="dn">Display name</label><input id="dn" value="prod-prometheus-us"></div>
+      <div class="field"><label for="id">Identifier</label><input id="id" value="prod-prometheus-us" disabled><div class="hint">Fixed after creation.</div></div>
+    </div>
+    <div class="field"><label>Provider</label><div class="dscard" style="padding:8px 12px;grid-template-columns:auto 1fr"><span class="nm">Prometheus</span><span class="sm" style="grid-column:2">fixed after creation · create a new datasource to use another provider</span></div></div>
+    <div class="field"><label for="ep">Endpoint</label><input id="ep" value="https://prometheus.us-east-1.internal:9090" class="mono"><div class="hint">The base URL the agent will call. No credentials in the URL.</div></div>
+    <div class="field"><label>Authentication</label>
+      <div class="authbox">
+        <span class="seg"><button type="button" aria-pressed="false">None</button><button type="button" aria-pressed="true">Basic</button><button type="button" aria-pressed="false">Bearer token</button></span>
+        <div class="authfields">
+          <div class="field"><label for="user">Username</label><input id="user" value="almanac" class="mono"></div>
+          <div class="field"><label>Password</label><div class="dscard" style="padding:8px 12px;grid-template-columns:auto 1fr auto"><span class="st good"><i></i>Set</span><span class="sm" style="grid-column:2">saved 22 Oct · never shown</span><button type="button" class="change">Replace</button></div></div>
+        </div>
+      </div></div>
+    <div class="grid2">
+      <div class="field"><label>Query every</label><span class="seg"><button type="button" aria-pressed="false">15 s</button><button type="button" aria-pressed="true">30 s</button><button type="button" aria-pressed="false">60 s</button><button type="button" aria-pressed="false">5 min</button></span><div class="hint">Changing it starts a new measurement revision for the 6 SLIs on this datasource.</div></div>
+      <div class="field"><label>TLS</label><span class="seg"><button type="button" aria-pressed="true">Verify certificate</button><button type="button" aria-pressed="false">Custom CA</button><button type="button" aria-pressed="false">Skip verification</button></span><div class="hint">Verifying against the system roots.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <header><h2>Agent</h2><span class="hint">Which agent runs the queries</span></header>
+  <div class="body">
+    <div class="field"><label>Assigned agent</label>
+      <div class="dscard" style="border-color:var(--status-stale)">
+        <span class="st stale"><i></i>Unreachable</span>
+        <span class="nm">us-east-1 <span class="pill">almanac-agent/2 · 0.9.3</span></span>
+        <button type="button" class="change">Move to another agent</button>
+        <span class="sm">last heartbeat 08:00 UTC · 2 h ago · configuration rev 14 applied · 1 datasource · <a href="#" style="color:var(--accent-ink);text-decoration:underline">open agent</a></span>
+      </div>
+      <div class="hint">Moving hands over collection without a gap: the new agent starts after the current one stops, or after its authority expires if it stays offline.</div></div>
+  </div>
+</section>
+
+<section class="section">
+  <header><h2>Test</h2><span class="hint">Runs on the assigned agent · nothing is saved</span><div class="tools" style="margin-left:0"><button type="button" class="btn sm" disabled title="Agent unreachable">▶ Test connection</button></div></header>
+  <div class="body">
+    <div class="preview">
+      <h3>Last test <span class="warnt">⚠ unavailable · agent unreachable</span><span class="updated" style="margin-left:auto">previous success 03 Nov 17:42 UTC · 0.3 s</span></h3>
+      <p class="annot" style="margin:0">Connection tests and query previews need a connected agent. The last successful test reached Prometheus 2.54.1 with 1,284 series available.</p>
+    </div>
+    <div class="field"><div class="qhead"><label for="q">Preview query</label><span class="lang">PromQL</span></div><div class="qbox"><div class="ln">1</div><div class="code" id="q" style="min-height:40px">up</div></div><div class="hint">Returns the latest value per series; use it to check labels before writing SLI queries.</div></div>
+    <div><button type="button" class="btn sm" disabled>▶ Run preview</button></div>
+  </div>
+</section>
+
+<section class="section" style="border-color:var(--status-breached)">
+  <header><h2 style="color:var(--status-breached)">Delete this datasource</h2><span class="hint">Blocked: 6 SLIs use it. Delete or move them first.</span></header>
+  <div class="body" style="padding-top:12px"><div><button type="button" class="btn danger" disabled>Delete datasource…</button></div></div>
+</section>
+
+<div class="actions"><div class="left"><span class="updated">Saving sends the new settings to the agent; collection continues with the previous ones until it confirms.</span></div><button type="button" class="btn">Discard changes</button><button type="button" class="btn primary">Save changes</button></div>
+</form>
+</main><script src="mock.js"></script></body></html>

@@ -1,5 +1,13 @@
 # SLI and SLO visual reference
 
+> Superseded, 2026-11-04 (ADR-0028 accepted in Crit session `9a46588aaaa4`): the maintainer reviewed the screens built
+> against this reference and approved a new set of [HTML mocks](mocks/README.md)
+> covering SLI, SLO, datasource and agent screens. Under
+> [ADR-0028](../adr/0028-unified-operational-ui.md) those mocks become the
+> side-by-side acceptance reference and the detail pages become single column.
+> The slo-tracker images below remain as history of the earlier target and for
+> the composition elements the mocks keep (dense rows, lanes, presets).
+
 The maintainer selected these slo-tracker screenshots on 2026-10-29 as the target
 for Almanac's operational screens, and confirmed that the existing left navigation
 stays. This is a composition and interaction reference, not just a palette reference.

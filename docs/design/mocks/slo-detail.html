@@ -1,0 +1,69 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mock · SLO detail</title><link rel="stylesheet" href="mock.css"></head>
+<body data-current="slos"><main>
+<a class="back" href="#">← All SLOs</a>
+<div class="detail-head">
+  <div>
+    <h1>Refund processing &lt; 2 s</h1>
+    <div class="status-line"><span class="st crit"><i></i>Breached</span><span class="st warn"><i></i>Burning 14× over the last hour</span></div>
+    <div class="meta"><a>Core</a> · 99.9% over 30 d rolling · SLI <a>refund-fast</a> · revision 2 since 12 Oct</div>
+  </div>
+  <div class="actions"><button class="btn" disabled title="Alerts arrive with F4">Mute · not available yet</button><button class="btn primary">Edit SLO</button><button class="btn">⋯</button></div>
+</div>
+
+<section class="card status-band">
+  <header><h2>Status</h2><span class="hint">evaluated 10:00:20 UTC · fresh · complete window</span><div class="tools"><button class="btn sm">Calculation details ▾</button></div></header>
+  <div class="body band">
+    <div class="band-hero"><div class="hero crit">−20.5%</div><p class="caption">error budget remaining</p><span class="meter crit"><i style="width:0"></i></span></div>
+    <div class="band-why"><p class="qlabel" style="margin:0 0 8px">Why it needs attention</p><ul class="reasons">
+      <li><span class="st crit"><i></i></span><span>Complete window is below target (99.88% &lt; 99.9%)</span></li>
+      <li><span class="st warn"><i></i></span><span>Burned 14× between 02:00 and 04:00 UTC on 30 Oct</span></li>
+      <li><span class="st none"><i></i></span><span>Budget recovers as 30 Oct leaves the window, ≈ 25 Nov</span></li></ul></div>
+    <dl class="band-facts">
+      <div><dt>Attainment</dt><dd>99.88%</dd></div><div><dt>Target</dt><dd>99.9% · 30 d</dd></div><div><dt>Burn 1 h · 6 h</dt><dd>0.44× · 0.36×</dd></div>
+      <div><dt>Bad events left</dt><dd>−1,025 <small>of 5,000 allowed</small></dd></div><div><dt>Exhaustion</dt><dd>exhausted <small>at 1 h rate</small></dd></div><div><dt>Coverage</dt><dd>100% <small>43,200 of 43,200 intervals</small></dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="card">
+    <header><h2>Timeline</h2><span class="hint">one time axis for every panel</span>
+      <div class="tools"><span class="seg" style="height:32px"><button>7 d</button><button aria-pressed="true">30 d</button><button>90 d</button><button>1 y</button></span><span class="seg" style="height:32px"><button aria-pressed="true">UTC</button><button>Local</button></span><button class="btn sm">↻</button></div>
+    </header>
+    <div class="lanes">
+      <div class="lane-label compact"><h3>Events</h3><div class="tools"><button class="btn sm" title="Add annotation">+</button><button class="btn sm" title="All events as a list">▦</button></div><p>annotations · revisions · maintenance</p></div>
+      <div class="lane-plot events"><div class="evplot">
+        <div class="evrow r1"><span class="tick" style="left:23%"></span><span class="chip" style="left:calc(23% + 4px)">definition · revision 2</span><span class="tick" style="left:83%"></span><span class="chip info end" style="left:calc(83% - 4px)">deploy refunds v2.14 ▸</span></div>
+        <div class="evrow r2"><span class="bar maint" style="left:30%;width:6.6%"></span><span class="lbl" style="left:calc(36.6% + 6px)">maintenance · 14–16 Oct</span><span class="bar crit" style="left:83.3%;width:.4%;min-width:4px"></span><span class="lbl crit" style="left:calc(83.7% + 6px)">INC-412 · 2 h</span></div>
+      </div></div>
+
+      <div class="lane-label"><h3>SLI</h3><div class="v">99.88%</div><p>good ÷ total · 30 d</p><div class="tools"><button class="btn sm">▦ Table</button></div></div>
+      <div class="lane-plot"><svg viewBox="0 0 820 150"><g class="gridline"><line x1="50" y1="20" x2="800" y2="20"/><line x1="50" y1="60" x2="800" y2="60"/><line x1="50" y1="100" x2="800" y2="100"/><line x1="50" y1="140" x2="800" y2="140"/></g><text class="axis" x="44" y="24" text-anchor="end">100%</text><text class="axis" x="44" y="64" text-anchor="end">99.9%</text><text class="axis" x="44" y="104" text-anchor="end">99.5%</text><text class="axis" x="44" y="144" text-anchor="end">99%</text><line class="ref" x1="50" y1="60" x2="800" y2="60"/><text class="axis" x="796" y="54" text-anchor="end">Target 99.9%</text><path class="line" d="M50,30 L630,32 L640,130 L660,130 L668,30 L800,30"/></svg></div>
+
+      <div class="lane-label"><h3>Budget remaining</h3><div class="v" style="color:var(--status-breached)">−20.5%</div><p>−1,025 bad events left</p><div class="tools"><button class="btn sm">▦ Table</button></div></div>
+      <div class="lane-plot"><svg viewBox="0 0 820 170"><g class="gridline"><line x1="50" y1="20" x2="800" y2="20"/><line x1="50" y1="60" x2="800" y2="60"/><line x1="50" y1="100" x2="800" y2="100"/><line x1="50" y1="140" x2="800" y2="140"/></g><text class="axis" x="44" y="24" text-anchor="end">80%</text><text class="axis" x="44" y="64" text-anchor="end">40%</text><text class="axis" x="44" y="104" text-anchor="end">0%</text><text class="axis" x="44" y="144" text-anchor="end">−40%</text><line class="ref" x1="50" y1="100" x2="800" y2="100"/><path class="area crit" d="M50,38 L630,46 L665,120 L800,120 L800,100 L50,100 Z" style="opacity:.18"/><path class="line" d="M50,38 L630,46 L665,120 L800,120"/></svg></div>
+
+      <div class="lane-label"><h3>Burn rate</h3><div class="v">0.44×</div><p>1 h window · 1× is on plan</p><div class="tools"><span class="seg" style="height:30px"><button aria-pressed="true">1 h</button><button>6 h</button></span><button class="btn sm">▦ Table</button></div></div>
+      <div class="lane-plot"><svg viewBox="0 0 820 150"><g class="gridline"><line x1="50" y1="20" x2="800" y2="20"/><line x1="50" y1="60" x2="800" y2="60"/><line x1="50" y1="100" x2="800" y2="100"/><line x1="50" y1="140" x2="800" y2="140"/></g><text class="axis" x="44" y="24" text-anchor="end">15×</text><text class="axis" x="44" y="64" text-anchor="end">10×</text><text class="axis" x="44" y="104" text-anchor="end">5×</text><text class="axis" x="44" y="144" text-anchor="end">0×</text><line class="ref" x1="50" y1="132" x2="800" y2="132"/><text class="axis" x="796" y="128" text-anchor="end">1×</text><path class="line" d="M50,136 L632,136 L636,28 L664,28 L668,136 L800,136"/></svg></div>
+
+      <div class="lane-label" style="border-bottom:0"><h3>Compliance</h3><div class="v">24 / 30</div><p>days the window target was met</p><div class="tools"><button class="btn sm">▦ Table</button></div></div>
+      <div class="lane-plot" style="border-bottom:0"><svg viewBox="0 0 820 150"><g class="gridline"><line x1="50" y1="20" x2="800" y2="20"/><line x1="50" y1="80" x2="800" y2="80"/></g><text class="axis" x="44" y="24" text-anchor="end">100%</text><text class="axis" x="44" y="84" text-anchor="end">99.9%</text><line class="ref" x1="50" y1="80" x2="800" y2="80"/>
+        <g>
+          <rect class="bar" x="56" y="34" width="18" height="86" rx="3"/><rect class="bar" x="81" y="34" width="18" height="86" rx="3"/><rect class="bar" x="106" y="34" width="18" height="86" rx="3"/><rect class="bar" x="131" y="34" width="18" height="86" rx="3"/><rect class="bar" x="156" y="34" width="18" height="86" rx="3"/><rect class="bar" x="181" y="34" width="18" height="86" rx="3"/><rect class="bar" x="206" y="34" width="18" height="86" rx="3"/><rect class="bar" x="231" y="34" width="18" height="86" rx="3"/><rect class="bar" x="256" y="34" width="18" height="86" rx="3"/><rect class="bar" x="281" y="34" width="18" height="86" rx="3"/><rect class="bar" x="306" y="34" width="18" height="86" rx="3"/><rect class="bar" x="331" y="34" width="18" height="86" rx="3"/><rect class="bar" x="356" y="34" width="18" height="86" rx="3"/><rect class="bar" x="381" y="34" width="18" height="86" rx="3"/><rect class="bar" x="406" y="34" width="18" height="86" rx="3"/><rect class="bar" x="431" y="34" width="18" height="86" rx="3"/><rect class="bar" x="456" y="34" width="18" height="86" rx="3"/><rect class="bar" x="481" y="34" width="18" height="86" rx="3"/><rect class="bar" x="506" y="34" width="18" height="86" rx="3"/><rect class="bar" x="531" y="34" width="18" height="86" rx="3"/><rect class="bar" x="556" y="34" width="18" height="86" rx="3"/><rect class="bar" x="581" y="34" width="18" height="86" rx="3"/><rect class="bar" x="606" y="34" width="18" height="86" rx="3"/><rect class="bar" x="631" y="36" width="18" height="84" rx="3"/><rect class="bar crit" x="656" y="96" width="18" height="24" rx="3"/><rect class="bar crit" x="681" y="96" width="18" height="24" rx="3"/><rect class="bar crit" x="706" y="96" width="18" height="24" rx="3"/><rect class="bar crit" x="731" y="96" width="18" height="24" rx="3"/><rect class="bar crit" x="756" y="96" width="18" height="24" rx="3"/><rect class="bar crit" x="781" y="96" width="18" height="24" rx="3"/>
+        </g>
+        <text class="axis" x="120" y="142">Oct 9</text><text class="axis" x="220" y="142">Oct 13</text><text class="axis" x="320" y="142">Oct 17</text><text class="axis" x="420" y="142">Oct 21</text><text class="axis" x="520" y="142">Oct 25</text><text class="axis" x="620" y="142">Oct 29</text><text class="axis" x="720" y="142">Nov 2</text></svg></div>
+    </div>
+    <p class="note" style="padding-bottom:12px">Completed UTC days · 0 unknown · 0 not applicable · resolution 4 h · exact values available per lane</p>
+  </section>
+
+<section class="card" style="margin-top:20px">
+  <header><h2>Definition</h2><span class="hint">revision 2 · since 12 Oct 2026 · created 01 Oct 2026 by admin</span><div class="tools"><a href="#" style="font:12px var(--mono);color:var(--accent-ink);text-decoration:underline">View SLI</a></div></header>
+  <div class="body defgrid">
+    <div><p class="qlabel" style="margin:0 0 4px">SLI</p><a href="#" style="color:var(--accent-ink);text-decoration:underline">Refund processing &lt; 2 s</a> · <span class="mono">refund-fast</span></div>
+    <div><p class="qlabel" style="margin:0 0 4px">Type</p>Ratio · two queries · event counts</div>
+    <div><p class="qlabel" style="margin:0 0 4px">Datasource</p><a href="#" style="color:var(--accent-ink);text-decoration:underline">local-victoriametrics</a> · 60 s step · 60 s delay</div>
+    <div><p class="qlabel" style="margin:0 0 4px">Revisions</p>2 · target was 99.5% before 12 Oct</div>
+    <div class="span2"><p class="qlabel" style="margin:0">Good events</p><pre class="q">sum(increase(refund_duration_seconds_bucket{le="2"}[1m]))</pre></div>
+    <div class="span2"><p class="qlabel" style="margin:0">Total events</p><pre class="q">sum(increase(refund_duration_seconds_count[1m]))</pre></div>
+  </div>
+</section>
+</main><script src="mock.js"></script></body></html>

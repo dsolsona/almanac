@@ -1,5 +1,17 @@
 # Delivery status
 
+Current checkpoint, 2026-11-04 (later): PR #53 is merged; `main` is `2f059e7`.
+The maintainer reviewed the SLI, SLO, datasource and agent screens and approved
+replacement [mocks](design/mocks/README.md). [ADR-0028](adr/0028-unified-operational-ui.md)
+and the [UI unification plan](plans/0025-ui-unification.md) were accepted in
+Crit session `9a46588aaaa4` with no comments, published as
+[PR #54](https://github.com/dsolsona/almanac/pull/54) from `design/ui-unification`; the first round is UI-only and
+backend-dependent mock elements are deferred. [F6-T01](tasks/F6-T01.md), the
+design-system foundation, is implemented and in review: new shared controls,
+catalogue section and design-guide update; 7 new unit cases, 48/48 catalogue
+browser checks and the web stages of `make verify` pass. The Go stages were not
+run because the pinned toolchain is not installed in this checkout.
+
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on
 PR #53. Final ordinary and race checks pass. Both normal and added-100-ms cohorts pass all 342 connected

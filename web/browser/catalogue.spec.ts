@@ -29,11 +29,14 @@ test('catalogue foundations and shared controls work at this viewport and theme'
       return 0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!;
     };
     const ratio = (selector: string) => {
-      const style = getComputedStyle(document.querySelector(selector)!);
-      const values = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a);
+      let element: Element | null = document.querySelector(selector)!;
+      const style = getComputedStyle(element);
+      let background = style.backgroundColor;
+      while (element && /rgba\(.*,\s*0\)$/.test(background)) { element = element.parentElement; background = element ? getComputedStyle(element).backgroundColor : 'rgb(255, 255, 255)'; }
+      const values = [luminance(style.color), luminance(background)].sort((a, b) => b - a);
       return (values[0]! + 0.05) / (values[1]! + 0.05);
     };
-    return Object.fromEntries(['body', '.ui-button--primary', '.ui-status--healthy', '.ui-status--warning', '.ui-status--breached', '.ui-status--no-data', '.ui-status--stale'].map((selector) => [selector, ratio(selector)]));
+    return Object.fromEntries(['body', '.ui-button--primary', '.ui-status--healthy', '.ui-status--warning', '.ui-status--breached', '.ui-status--no-data', '.ui-status--stale', '.ui-mark--healthy', '.ui-mark--warning', '.ui-mark--breached', '.ui-mark--stale', '.ui-chip[aria-checked="true"]', '.ui-segmented__option[aria-checked="true"]'].map((selector) => [selector, ratio(selector)]));
   });
   for (const [selector, ratio] of Object.entries(contrast)) expect(ratio, `${selector} contrast`).toBeGreaterThanOrEqual(4.5);
   await page.screenshot({ path: testInfo.outputPath('catalogue.png'), fullPage: true });
@@ -161,4 +164,49 @@ test('coarse pointer controls use the 44px target size', async ({ browser, baseU
   } finally {
     await context.close();
   }
+});
+
+test('operational controls: picker, chips and segmented filter work by keyboard and fit the viewport', async ({ page }, testInfo) => {
+  await page.goto('/design-system#operational');
+  const section = page.locator('#operational');
+  await section.scrollIntoViewIfNeeded();
+  const picker = section.locator('.ui-panel').filter({ hasText: 'Type-ahead picker' });
+  const input = picker.getByRole('combobox', { name: 'Datasource', exact: true });
+  await input.click();
+  await expect(section.getByRole('listbox')).toBeVisible();
+  await input.fill('prod');
+  await expect(section.getByRole('listbox').getByRole('option')).toHaveCount(2);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(picker.getByRole('button', { name: 'Change' })).toBeVisible();
+  await expect(picker.locator('.ui-summary').getByText('prod-prometheus-eu')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath(`operational-selected-${testInfo.project.name}.png`), fullPage: false, animations: 'disabled' });
+  await picker.getByRole('button', { name: 'Change' }).click();
+  await expect(picker.getByRole('combobox', { name: 'Datasource', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  const custom = section.getByRole('radio', { name: 'Custom…' }).first();
+  await custom.click();
+  const customInput = section.getByRole('textbox', { name: 'Custom target' });
+  await expect(customInput).toBeFocused();
+  await customInput.fill('99.7');
+  await page.keyboard.press('Enter');
+  await expect(section.getByRole('radio', { name: 'Custom · 99.7%' })).toHaveAttribute('aria-checked', 'true');
+  const filter = section.getByRole('radiogroup', { name: 'Filter by status' });
+  await filter.getByRole('radio', { name: 'All 10' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(filter.getByRole('radio', { name: 'Needs attention 4' })).toHaveAttribute('aria-checked', 'true');
+  await expect(filter.getByRole('radio', { name: 'Archived' })).toBeDisabled();
+  const dimensions = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+  expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+  const geometry = await section.evaluate((element) => ({
+    chip: parseFloat(getComputedStyle(element.querySelector('.ui-chip')!).minHeight),
+    radius: getComputedStyle(element.querySelector('.ui-chip')!).borderTopLeftRadius,
+    shape: parseFloat(getComputedStyle(element.querySelector('.ui-mark--healthy .ui-mark__shape')!).width),
+    inset: getComputedStyle(document.documentElement).getPropertyValue('--card-inset').trim(),
+  }));
+  expect(geometry.chip).toBeGreaterThanOrEqual(38);
+  expect(geometry.radius).toBe('3px');
+  expect(geometry.shape).toBe(11);
+  expect(geometry.inset).toBe(testInfo.project.name.startsWith('mobile') ? '14px' : '24px');
+  await page.screenshot({ path: testInfo.outputPath(`operational-${testInfo.project.name}.png`), fullPage: true, animations: 'disabled' });
 });
