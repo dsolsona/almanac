@@ -15,7 +15,10 @@ run because the pinned toolchain is not installed in this checkout.
 `design/f6-t02-slo` (stacked) and in review: 15/24 SLO unit cases, 139
 slo-unit web cases, 48/48 catalogue checks and the web stages of `make verify`
 pass; the real-stack SLO journey and traced timings are blocked by the same
-missing Go toolchain.
+missing Go toolchain. [F6-T03](tasks/F6-T03.md), the SLI list and detail,
+is implemented on `design/f6-t03-sli` (stacked) and in review with the same
+web evidence (35 SLI cases, 139 slo-unit web cases, 48/48 catalogue, web
+stages of `make verify`); its real journey is blocked identically.
 
 Current checkpoint, 2026-11-04: [F3-T08](tasks/F3-T08.md) has passed bounded
 ten-SLO/year runtime acceptance on `bd9fcfb`; the continuation is published on

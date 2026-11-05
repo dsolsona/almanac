@@ -317,7 +317,7 @@ try {
   await expect(page.getByRole('heading', { name: 'SLIs', exact: true })).toBeFocused();
   await expect(page.getByRole('alert')).toContainText('Datasources could not be loaded');
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add SLI', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New SLI', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(detailURL);
 
@@ -329,7 +329,7 @@ try {
   await expect(listRow).toBeVisible();
   const listNavigationMs=performance.now()-listNavigationStarted;
   await expect(listRow.getByRole('img', { name: /Recent good-to-total measurements/ })).toBeVisible();
-  await expect(listRow).toContainText('5 of 6');
+  await expect(listRow).toContainText('+1 more');
   await expect(listRow.getByRole('link', { name: 'Reference SLO 1' })).toHaveAttribute('href', new RegExp('^/slos/[0-9a-f-]{36}$'));
   await listRow.getByText(/^Exact values ·/).click();
   const recentTable = listRow.getByRole('table', { name: `Exact counts for recent ${created.polling_interval_seconds}-second intervals` });
@@ -339,7 +339,7 @@ try {
   await expect(observedSample.getByRole('cell', { name: 'Observed', exact: true })).toBeVisible();
   await expect(observedSample.getByRole('cell', { name: '99', exact: true })).toBeVisible();
   await expect(observedSample.getByRole('cell', { name: '100', exact: true })).toBeVisible();
-  const searchInput = page.getByRole('textbox', { name: 'Search SLIs', exact: true });
+  const searchInput = page.getByRole('searchbox', { name: 'Search SLIs', exact: true });
   await searchInput.fill('request-success');
   await expect(page).toHaveURL(/q=request-success/);
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
@@ -371,7 +371,7 @@ try {
   await expect(page.getByRole('row').filter({ hasText: 'Request success' })).toBeVisible();
 
   stage = 'capture populated editor and list layout matrix';
-  await page.getByRole('button', { name: 'Add SLI', exact: true }).click();
+  await page.getByRole('button', { name: 'New SLI', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Create SLI', exact: true })).toBeFocused();
   await page.getByLabel('Display name', { exact: true }).fill('Reference editor preview');
   await page.getByLabel('Datasource', { exact: true }).selectOption(fixture.datasource_id);
@@ -395,7 +395,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Request success', exact: true })).toHaveAttribute('href', `/slis/${created.id}`);
-  await expect(page.getByRole('row').filter({ hasText: '5 of 6' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: '+1 more' })).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 1440, height: 900 });
     if (theme === 'dark' && await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).count()) {

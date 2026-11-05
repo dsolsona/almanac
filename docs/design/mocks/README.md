@@ -18,8 +18,8 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 | `slo-detail.html` | Single-column SLO detail: status band, timeline, definition | [F6-T02](../../tasks/F6-T02.md), in review (Events lane, Mute, edit page deferred) |
 | `slo-create.html` | New SLO: Identity → Indicator → Objective → Alerting | planned, F6-T04 |
 | `slo-edit.html` | Edit SLO with revision banner and history | planned, F6-T04 |
-| `sli-list.html` | Dense SLI table with health filter and 24 h strip | planned, F6-T03 |
-| `sli-detail.html` | Single-column SLI detail: tiles, chart, intervals, definition, objectives | planned, F6-T03 |
+| `sli-list.html` | Dense SLI table with health filter and 24 h strip | [F6-T03](../../tasks/F6-T03.md), in review (health filter deferred) |
+| `sli-detail.html` | Single-column SLI detail: tiles, chart, intervals, definition, objectives | [F6-T03](../../tasks/F6-T03.md), in review (range chips, volume bars, objective status deferred) |
 | `sli-create.html` | New SLI: Identity → Source → Measurement with query test | planned, F6-T04 |
 | `ds-list.html` | Datasource list with health, agent, cadence, SLI count | planned, F6-T05 |
 | `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | planned, F6-T05 |
