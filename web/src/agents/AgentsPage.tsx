@@ -244,7 +244,13 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     const earlierOutcomeUnknown = operation?.outcome === 'unknown';
     if (!operation) {
       const lifetime = draft.lifetime === '' ? 7776000 : Number(draft.lifetime);
-      if (!draft.name || !draft.displayName || (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 31536000)) { setError('Enter an agent name and display name, and an expiry between 1 second and 1 year as a whole number of seconds.'); return; }
+      if (!Number.isInteger(lifetime) || lifetime < 1 || lifetime > 31536000) {
+        // The expiry chips announce an invalid custom value themselves; only an empty custom entry needs a message.
+        if (document.getElementById('agent-lifetime-error')) { setError(''); document.querySelector<HTMLElement>('[aria-controls="agent-lifetime-custom"]')?.focus(); }
+        else setError('Enter a custom expiry as a whole number of days from 1 to 365.');
+        return;
+      }
+      if (!draft.name || !draft.displayName) { setError('Enter an agent name and display name.'); return; }
       if (!AGENT_NAME.test(draft.name)) { setNameError(agentNameError); document.getElementById('agent-name')?.focus(); return; }
       setNameError('');
       operation = { key: crypto.randomUUID(), name: draft.name, displayName: draft.displayName, ...(lifetime === undefined ? {} : { lifetimeSeconds: lifetime }), userID: currentUser, outcome: 'unknown' };

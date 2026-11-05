@@ -1,8 +1,6 @@
 /* SLO list and detail composition under ADR-0028 (docs/design/mocks/slo-list.html, slo-detail.html).
    Timeline lane geometry is retained from the earlier port; list and detail chrome follow the mocks. */
-.app-main:has(.slos-page) { width:calc(100% - 64px); }
-@media(max-width:860px) { .app-main:has(.slos-page) { width:calc(100% - 32px); } }
-@media(max-width:420px) { .app-main:has(.slos-page) { width:calc(100% - 24px); } }
+/* The page width comes from the shared shell, like every other page (no SLO-only override). */
 
 /* Status wrapper keeps the data-status/title hooks used by verifiers; the mark itself is the shared StatusMark. */
 .slo-reference-status { display:inline-grid; gap:2px; min-width:0; }
@@ -116,7 +114,10 @@
 .app-detail-heading > div:first-child { min-width:0; flex:1 1 320px; }
 .slos-page .app-detail-heading h1 { margin:0; font:400 clamp(26px,2.6vw,36px)/1.25 var(--almanac-heading); letter-spacing:-.03em; overflow-wrap:anywhere; }
 .app-detail-status { display:flex; flex-wrap:wrap; gap:6px 18px; margin:8px 0 2px; }
-.app-detail-status .ui-mark { font-size:15px; }
+.app-detail-status .ui-mark { font-size:15px; min-width:0; }
+/* Long status reasons wrap on narrow screens instead of widening the page. */
+.app-detail-status .ui-mark__row { white-space:normal; align-items:baseline; }
+.app-detail-status .ui-mark__shape { align-self:center; }
 .app-detail-status .ui-mark__shape { width:12px; height:12px; }
 .app-detail-status .ui-mark--warning .ui-mark__shape { border-left-width:7px; border-right-width:7px; border-bottom-width:12px; }
 .app-detail-meta { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:4px; font:12px/1.9 var(--mono); color:var(--text-3); }

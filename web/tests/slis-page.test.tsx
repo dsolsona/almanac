@@ -60,7 +60,11 @@ describe('SLI page', () => {
     history.replaceState({}, '', path);
     vi.stubGlobal('fetch', vi.fn(async () => response({ items: [], next_cursor: '' })));
     render(<SlisPage context={context} />);
-    if (context === admin) {
+    if (context === admin && path === '/slis') {
+      // The list has one action, the header's New SLI; the prerequisite is explained, not duplicated as buttons.
+      expect(await screen.findByText(/Add a Prometheus datasource to create/)).toBeVisible();
+      expect(screen.getAllByRole('button').filter((button) => /SLI|datasource/i.test(button.textContent ?? '')).map((button) => button.textContent)).toEqual(['New SLI']);
+    } else if (context === admin) {
       expect(await screen.findByText(/Add a Prometheus datasource to create/)).toBeVisible();
       const action = screen.getByRole('button', { name: 'Add datasource' });
       expect(screen.queryByRole('button', { name: 'Create SLI' })).not.toBeInTheDocument();
@@ -84,7 +88,9 @@ describe('SLI page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Datasources could not be loaded');
     expect(screen.queryByRole('button', { name: 'Add datasource' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByRole('button', { name: 'Create SLI' })).toBeVisible();
+    expect(await screen.findByText(/Create your first SLI/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'New SLI' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Create SLI' })).not.toBeInTheDocument();
   });
 
   it('recovers a failed datasource read with existing SLIs', async () => {

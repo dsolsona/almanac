@@ -171,9 +171,9 @@ try {
     await page.setViewportSize({width:2048,height:1280});
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.evaluate(()=>document.fonts.ready);
-    // The reference fills the available workspace. A generic 1240px shell cap
-    // previously escaped the 1440px checks and narrowed both screens.
-    await expect(page.locator('.app-main')).toHaveCSS('width',/17\d\dpx/);
+    // SLO pages use the shared shell width like every other page (maintainer, 2026-11-05):
+    // capped at 1240px and centred, so text keeps the same distance from the navigation.
+    await expect(page.locator('.app-main')).toHaveCSS('width','1240px');
     const actual=await page.locator(selector).first().screenshot({animations:'disabled'});
     const expected=await readFile(new URL(`../../docs/design/mocks/png/${reference}`,import.meta.url));
     referenceCaptures[screen]={actual:actual.toString('base64'),expected:expected.toString('base64')};

@@ -33,7 +33,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   setStage('agent list first page');
   await expect(page.getByRole('region', { name: 'Agent records', exact: true }).and(page.locator('[tabindex="0"]')).locator('tbody tr')).toHaveCount(50);
   setStage('agent list second page');
-  await page.getByRole('button', { name: 'Next agents', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Agent result pages', exact: true }).getByRole('button', { name: 'Next ›', exact: true }).click();
   await expect(page.getByRole('button', { name: 'fixture-051', exact: true })).toBeVisible();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.has('agents_cursor'));
   setStage('agent list browser back');
@@ -55,7 +55,9 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   setStage('direct agent selection URL reload');
   await page.goto(selectedURL);
   await expectSelectedAgentURL(selectedAgentID, 'direct agent selection URL reload');
-  await expect(page.getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
+  // The agent ID sits in the collapsed Runtime details section of the redesigned detail page.
+  await page.locator('.agents-runtime-details > summary').click();
+  await expect(page.locator('.agents-runtime-details').getByText('10000000-0000-4000-8000-000000000001', { exact: true })).toBeVisible();
   setStage('credential history first page');
   await expect(history.locator('.agents-credential')).toHaveCount(50);
   setStage('credential history second page');
@@ -74,7 +76,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
   await page.reload();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && url.searchParams.get('agent') === selectedAgentID && url.searchParams.has('credentials_cursor'));
   await expect(history.locator('.agents-credential')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb', exact: true }).getByRole('link', { name: 'Agents', exact: true }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/agents' && !url.searchParams.has('agent'));
 
   const lost = fixture.scenario === 'agents-lost';
@@ -299,7 +301,7 @@ export async function runAgentRegistrationJourney({ page, context, fixture, setS
       await page.getByRole('button', { name: 'Refresh agents', exact: true }).click();
       assert.equal((await listRead).status(), 401);
     } else {
-      await page.getByRole('button', { name: 'Back to agents', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Breadcrumb', exact: true }).getByRole('link', { name: 'Agents', exact: true }).click();
     }
     await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Credential history', exact: true })).toHaveCount(0);

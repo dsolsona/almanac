@@ -62,6 +62,9 @@
 .agents-table .mono { font-family: var(--mono); font-size: .8125rem; }
 .agents-table__name { min-width: 180px; }
 .agents-table__name a, .agents-table__name .agents-link { color: var(--text); font: 600 .8125rem var(--mono); text-decoration: none; min-height: 0; }
+/* Name and status share one first line: both block-level at the status mark's 1.4 line height. */
+.agents-table__name .agents-link { display: block; line-height: 1.4; }
+.agents-table td > .ui-mark { display: grid; }
 .agents-table__name a:hover, .agents-table__name .agents-link:hover { text-decoration: underline; }
 .agents-table__sub { display: block; margin-top: 2px; color: var(--text-2); font-size: .75rem; overflow-wrap: anywhere; }
 .agents-table__muted { color: var(--text-3); font-size: .75rem; }

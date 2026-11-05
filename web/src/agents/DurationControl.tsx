@@ -1,21 +1,43 @@
 import { useState } from 'react';
-import { SelectField, TextField } from '../components/ui/index.ts';
+import { ChoiceChips } from '../components/ui/index.ts';
 
+// Credential expiry and grace as preset chips with a self-applying "Custom…" chip (ADR-0028,
+// approved agent-register mock). Expiry customs are whole days, grace customs whole seconds,
+// so a typed value is never rounded (SPEC-0018). The value is seconds as a string: '' keeps the
+// default, 'invalid' marks a custom entry the owning form must reject.
 type Props = { id: string; label: string; value: string; onChange: (value: string) => void; grace?: boolean; disabled?: boolean };
-export function DurationControl({ id, label, value, onChange, grace = false, disabled }: Props) {
-  const presets = grace ? [['0', 'Immediately'], ['60', '1 minute'], ['300', '5 minutes'], ['600', '10 minutes']] : [['86400', '1 day'], ['2592000', '30 days'], ['7776000', '90 days'], ['31536000', '1 year']];
-  const [custom, setCustom] = useState(Boolean(value) && !presets.some(([seconds]) => seconds === value));
-  const [amount, setAmount] = useState(value && !presets.some(([seconds]) => seconds === value) ? value : '');
-  const [unit, setUnit] = useState('1');
-  function update(number: string, factor: string) {
-    setAmount(number); setUnit(factor);
-    const seconds = Number(number) * Number(factor);
-    onChange(number.trim() && Number.isSafeInteger(seconds) ? String(seconds) : 'invalid');
-  }
-  return <div className="agents-duration"><SelectField id={id} label={label} value={custom ? 'custom' : value || (grace ? '600' : '7776000')} disabled={disabled} hint={grace ? 'The previous credential remains valid while you update the running agent. Maximum 10 minutes.' : 'Authentication stops when the credential expires. Maximum 1 year.'} options={[...presets.map(([seconds, text]) => ({ value: seconds, label: text })), { value: 'custom', label: 'Custom' }]} onChange={(event) => { if (event.target.value === 'custom') { setCustom(true); update('', unit); } else { setCustom(false); onChange(event.target.value); } }} />
-    {custom && <><TextField id={`${id}-amount`} label="Custom amount" type="number" min="0" value={amount} disabled={disabled} onChange={(event) => update(event.target.value, unit)} /><SelectField id={`${id}-unit`} label="Unit" value={unit} disabled={disabled} onChange={(event) => update(amount, event.target.value)} options={[{ value: '1', label: 'Seconds' }, { value: '60', label: 'Minutes' }, ...(!grace ? [{ value: '3600', label: 'Hours' }, { value: '86400', label: 'Days' }] : [])]} /></>}
-  </div>;
+
+const expiry = { presets: [['30d', 2592000, '30 days'], ['90d', 7776000, '90 days'], ['1y', 31536000, '1 year']] as const, unit: 86400, max: 365, unitLabel: 'days', fallback: '90d',
+  hint: 'Authentication stops when the credential expires. You can rotate it any time from the agent page. Maximum 1 year.' };
+const overlap = { presets: [['now', 0, 'Immediately'], ['1m', 60, '1 minute'], ['5m', 300, '5 minutes'], ['10m', 600, '10 minutes']] as const, unit: 1, max: 600, unitLabel: 'seconds', fallback: '10m',
+  hint: 'The previous credential remains valid while you update the running agent. Maximum 10 minutes.' };
+
+function choiceFor(seconds: string, spec: typeof expiry | typeof overlap): string {
+  if (seconds === '' || seconds === 'invalid') return seconds === '' ? spec.fallback : '';
+  const preset = spec.presets.find(([, value]) => String(value) === seconds);
+  if (preset) return preset[0];
+  const amount = Number(seconds) / spec.unit;
+  return Number.isInteger(amount) ? String(amount) : '';
 }
+
+export function DurationControl({ id, label, value, onChange, grace = false, disabled }: Props) {
+  const spec = grace ? overlap : expiry;
+  const [choice, setChoice] = useState(() => choiceFor(value, spec));
+  const minimum = grace ? 0 : 1;
+  const validate = (text: string) => /^\d+$/.test(text) && Number(text) >= minimum && Number(text) <= spec.max
+    ? undefined : `Enter a whole number of ${spec.unitLabel} from ${minimum} to ${spec.max}.`;
+  function change(next: string) {
+    setChoice(next);
+    const preset = spec.presets.find(([key]) => key === next);
+    if (preset) onChange(String(preset[1]));
+    else onChange(validate(next) === undefined ? String(Number(next) * spec.unit) : 'invalid');
+  }
+  return <ChoiceChips id={id} label={label} value={choice} onChange={change} disabled={disabled} hint={spec.hint}
+    options={spec.presets.map(([key, , text]) => ({ value: key, label: text }))}
+    custom={{ unit: spec.unitLabel, placeholder: grace ? 'e.g. 120' : 'e.g. 14', inputMode: 'numeric', validate,
+      format: (text) => `${text} ${Number(text) === 1 ? spec.unitLabel.slice(0, -1) : spec.unitLabel}` }} />;
+}
+
 export function describeDuration(seconds: number): string {
   if (seconds === 0) return 'Immediately';
   for (const [unit, name] of [[86400, 'day'], [3600, 'hour'], [60, 'minute']] as const) if (seconds % unit === 0) return `${seconds / unit} ${name}${seconds === unit ? '' : 's'}`;

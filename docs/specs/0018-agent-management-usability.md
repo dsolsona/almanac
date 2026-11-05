@@ -68,7 +68,11 @@ continues to work after archival, subject to current authorization.
 ## Credential controls and session authority
 
 Use "New credential expires after" and "Keep the previous credential valid for"
-with readable units, defaults of 90 days and 10 minutes, and short explanations.
+as preset chips with a self-applying "Custom…" chip (no unit selector): expiry
+presets 30 days, 90 days and 1 year with custom whole days; grace presets
+Immediately, 1, 5 and 10 minutes with custom whole seconds. Defaults are 90 days
+and 10 minutes, with short explanations. An invalid custom value is announced
+once, at the field.
 Registration uses the same expiry control. Explain that expiry stops authentication
 and the grace period allows updating the running agent. Preserve maximum lifetime
 of one year, maximum overlap of ten minutes, explicit immediate retirement and

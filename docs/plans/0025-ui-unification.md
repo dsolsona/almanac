@@ -52,6 +52,7 @@ the integrated result of the previous one.
   banner, tiles, datasources table, credentials table, "How to run" dialog,
   collapsed runtime details, quiet disable/delete line; registration page with
   three steps and the live checklist polling existing runtime status.
+- [ ] **F6-T07 Follow-ups after review** ([F6-T07](../tasks/F6-T07.md), in progress). Expiry chips in the agent dialogs, the missing 20 px spacing token, one SLI list action, the shared shell width on SLO pages, single field alerts, and the first-round journey regressions.
 
 ## Acceptance for every task
 

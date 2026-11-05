@@ -13,4 +13,5 @@ services:
       - ${ALMANAC_HOST_CHECKOUT:?set by make}:${ALMANAC_HOST_CHECKOUT:?set by make}
       - web-node-modules:${ALMANAC_HOST_CHECKOUT:?set by make}/web/node_modules
       - openapi-node-modules:${ALMANAC_HOST_CHECKOUT:?set by make}/tools/openapi/node_modules
+      - web-test-results:${ALMANAC_HOST_CHECKOUT:?set by make}/web/test-results
     depends_on: !reset []
