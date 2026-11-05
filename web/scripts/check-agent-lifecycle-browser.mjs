@@ -45,7 +45,7 @@ export async function runAgentLifecycleJourney({ page, context, fixture, setStag
   const rotation = page.getByRole('dialog', { name: 'Rotate credential', exact: true });
   await inspectEmptyDialog(rotation, 'rotation-form');
   setStage('credential rotation overlap entry');
-  await rotation.getByLabel('Keep the previous credential valid for', { exact: true }).selectOption('0');
+  await rotation.getByRole('radiogroup', { name: 'Keep the previous credential valid for', exact: true }).getByRole('radio', { name: 'Immediately', exact: true }).click();
   setStage('credential rotation no premature mutation');
   assert.equal(mutations.length, 0);
   const { response: rotatedResponse, body: rotated } = await submit(rotation, '/credentials/rotate');

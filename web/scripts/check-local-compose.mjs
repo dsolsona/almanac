@@ -782,6 +782,8 @@ async function checkAgentRetirement(page, original, collection) {
   const agentURL = `${url}/agents?agent=${original.agent.id}`;
   stage = 'real Compose assigned-agent deletion is blocked';
   await page.goto(agentURL);
+  // Runtime details are collapsed under a disclosure on the unified detail (F6-T06).
+  await page.getByText('Runtime details', { exact: true }).click();
   const runtime = page.getByRole('region', { name: 'Agent runtime', exact: true });
   await expect(runtime).not.toContainText('No datasources are assigned to this agent.');
   const runtimeExplanation = await page.evaluate(async (id) => {
@@ -793,7 +795,7 @@ async function checkAgentRetirement(page, original, collection) {
   await page.getByRole('button', { name: 'Rotate credential', exact: true }).click();
   const rotation = page.getByRole('dialog', { name: 'Rotate credential', exact: true });
   await expect(rotation.getByLabel('Current password', { exact: true })).toHaveCount(0);
-  await expect(rotation.getByLabel('Keep the previous credential valid for', { exact: true })).toHaveValue('600');
+  await expect(rotation.getByRole('radiogroup', { name: 'Keep the previous credential valid for', exact: true }).getByRole('radio', { name: '10 minutes', exact: true })).toHaveAttribute('aria-checked', 'true');
   await rotation.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole('button', { name: 'Revoke credential', exact: true }).click();
   const revoke = page.getByRole('dialog', { name: 'Revoke credential', exact: true });

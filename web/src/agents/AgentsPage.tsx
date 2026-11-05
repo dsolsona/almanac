@@ -312,7 +312,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     setTokenResult(null); setCopyNotice('');
     const destination = pendingAgentNavigation.current; pendingAgentNavigation.current = '';
     requestAnimationFrame(() => {
-      if (destination && navigateToCreatedAgent) setQuery({ agent: destination, agents_cursor: '', credentials_cursor: '' });
+      // Opening the created agent replaces the list, so focus moves to the detail heading rather than a removed trigger.
+      if (destination && navigateToCreatedAgent) { setQuery({ agent: destination, agents_cursor: '', credentials_cursor: '' }); requestAnimationFrame(() => document.querySelector<HTMLElement>('.agents-heading')?.focus()); }
       else if (tokenTrigger.current?.isConnected) tokenTrigger.current.focus();
       else document.querySelector<HTMLElement>('.agents-heading')?.focus();
     });
