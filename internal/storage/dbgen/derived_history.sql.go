@@ -113,7 +113,7 @@ const claimSloHistoryJob = `-- name: ClaimSloHistoryJob :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_history_jobs
     WHERE (state <> 'failed' OR (last_error IS DISTINCT FROM 'retention_expired'
-           AND (failing_since IS NULL OR failing_since > $2::timestamptz-interval '7 days')))
+           AND (attempts < 5 OR failing_since IS NULL OR failing_since > $2::timestamptz-interval '7 days')))
       AND next_attempt_at <= $2::timestamptz
       AND (lease_until IS NULL OR lease_until <= $2::timestamptz)
     ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED

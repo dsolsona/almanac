@@ -49,7 +49,8 @@ func (q *Queries) AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDe
 const claimDerivedDirtyBatch = `-- name: ClaimDerivedDirtyBatch :many
 WITH candidates AS (
     SELECT sli_id,measurement_revision,range_start FROM public.almanac_derived_dirty_ranges
-    WHERE (failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+    WHERE (attempts<5 OR failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+      AND last_error IS DISTINCT FROM 'retention_expired'
       AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
     ORDER BY range_start DESC,next_attempt_at,sli_id,measurement_revision
@@ -108,7 +109,7 @@ WITH requested AS (
            unnest($5::bigint[]) AS epoch,unnest($6::timestamptz[]) AS start_at
 )
 UPDATE public.almanac_derived_dirty_ranges d
-SET lease_until=NULL,attempts=GREATEST(d.attempts-1,0),next_attempt_at=$1::timestamptz,
+SET lease_until=NULL,attempts=CASE WHEN d.attempts>=5 AND d.failing_since IS NOT NULL THEN d.attempts ELSE GREATEST(d.attempts-1,0) END,next_attempt_at=$1::timestamptz,
     last_error=$2::text
 FROM requested r
 WHERE d.sli_id=r.sli_id AND d.measurement_revision=r.revision AND d.range_start=r.start_at AND d.lease_epoch=r.epoch

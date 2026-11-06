@@ -313,3 +313,69 @@ func TestIntegrationDerivedRetriesContinueStopAndRestart(t *testing.T) {
 		}
 	}
 }
+
+// Review of PR #65: a temporary wait must not erase a real failure, work stops only after five failures
+// and seven days of them, retention-expired hours are never rebuilt, and a failing source hour shows
+// its SLOs as failing rather than merely catching up.
+func TestIntegrationDerivedFailureStateSurvivesWaitsAndShowsBlockedSources(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "self-heal-state", true)
+	s.drain(t, "initial aggregation")
+	sloID := s.createSLO(t, "self-heal-state")
+	if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
+		t.Fatal(err)
+	}
+	id, _ := canonicalUUID(sloID)
+	q := dbgen.New(s.conn)
+	repair := func() (attempts int, epoch int64, version string) {
+		t.Helper()
+		if err := s.conn.QueryRow(t.Context(), `SELECT attempts,lease_epoch,calculation_version FROM public.almanac_slo_series_repair WHERE slo_id=$1`, sloID).Scan(&attempts, &epoch, &version); err != nil {
+			t.Fatal(err)
+		}
+		return attempts, epoch, version
+	}
+
+	// Failing at the cap: a temporary wait keeps all five failures.
+	hourAgo := s.now.Add(-time.Hour)
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET attempts=5,failing_since=$2,cursor_at=$3 WHERE slo_id=$1`, sloID, hourAgo, s.historyStart); err != nil {
+		t.Fatal(err)
+	}
+	_, epoch, version := repair()
+	if err := q.DeferRetainedSeriesRepair(t.Context(), dbgen.DeferRetainedSeriesRepairParams{SloID: id, DefinitionRevision: 1, MeasurementRevision: 1,
+		CalculationVersion: version, LeaseEpoch: epoch, NextAttemptAt: timestamp(s.now)}); err != nil {
+		t.Fatal(err)
+	}
+	if attempts, _, _ := repair(); attempts != 5 {
+		t.Fatalf("a temporary wait reduced a failing item's attempts to %d", attempts)
+	}
+
+	// Four failures over eight days of waits: not stopped, still claimed.
+	eightDaysAgo := s.now.Add(-8 * 24 * time.Hour)
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET attempts=4,failing_since=$2,next_attempt_at=$3,lease_until=NULL WHERE slo_id=$1`, sloID, eightDaysAgo, s.now.Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.runtime.repairRetainedSeries(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
+		t.Fatal(err)
+	}
+	if attempts, _, _ := repair(); attempts != 0 {
+		t.Fatalf("work with four failures was not claimed after eight days: attempts=%d", attempts)
+	}
+
+	// An hour retention expired is never claimed for rebuilding.
+	if _, err := s.conn.Exec(t.Context(), `INSERT INTO public.almanac_derived_dirty_ranges
+(sli_id,measurement_revision,generation,range_start,range_end,next_attempt_at,updated_at,attempts,last_error)
+VALUES ($1,1,1,$2,$2::timestamptz+interval '1 hour',$3,$3,5,'retention_expired')`, s.sliID, s.historyStart, s.now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if count, err := s.runtime.rebuildDerivedBatch(t.Context(), s.clock); err != nil || count != 0 {
+		t.Fatalf("a retention-expired hour was claimed: count=%d, %v", count, err)
+	}
+
+	// A failing source hour shows the SLO that reads it as failing.
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_derived_dirty_ranges SET last_error='aggregate_rebuild_failed',failing_since=$2 WHERE sli_id=$1`, s.sliID, hourAgo); err != nil {
+		t.Fatal(err)
+	}
+	if states, _, err := s.runtime.checkDerivedConsistency(t.Context(), s.now); err != nil || states.Failing != 1 {
+		t.Fatalf("a failing source hour did not show its SLO as failing: %+v, %v", states, err)
+	}
+}

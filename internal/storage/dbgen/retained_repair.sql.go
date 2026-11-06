@@ -56,7 +56,7 @@ const claimRetainedSeriesRepair = `-- name: ClaimRetainedSeriesRepair :one
 WITH candidate AS (
     SELECT slo_id,definition_revision,measurement_revision,calculation_version
     FROM public.almanac_slo_series_repair
-    WHERE cursor_at<end_at AND (failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+    WHERE cursor_at<end_at AND (attempts<5 OR failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
       AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
     ORDER BY next_attempt_at,slo_id LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -99,7 +99,7 @@ func (q *Queries) ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetain
 }
 
 const deferRetainedSeriesRepair = `-- name: DeferRetainedSeriesRepair :exec
-UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6,
+UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,next_attempt_at=$6,
     last_error=$7::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5
 `

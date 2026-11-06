@@ -32,7 +32,7 @@ func (q *Queries) AcknowledgeRetainedTileWork(ctx context.Context, arg Acknowled
 const claimRetainedTileWork = `-- name: ClaimRetainedTileWork :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_series_tile_work
-    WHERE (failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+    WHERE (attempts<5 OR failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
       AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
     ORDER BY summary_only,next_attempt_at,resolution_seconds,range_start DESC,id
@@ -76,7 +76,7 @@ func (q *Queries) ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTi
 }
 
 const deferRetainedTileWork = `-- name: DeferRetainedTileWork :exec
-UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$3
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,next_attempt_at=$3
 WHERE id=$1 AND lease_epoch=$2
 `
 

@@ -52,6 +52,8 @@ SET definition_revision=EXCLUDED.definition_revision,measurement_revision=EXCLUD
     attempts=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)
          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
          THEN almanac_slo_current_failures.attempts ELSE 0 END,
+    failing_since=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
+         THEN almanac_slo_current_failures.failing_since ELSE NULL END,
     next_attempt_at=EXCLUDED.next_attempt_at,last_error=EXCLUDED.last_error
 `
 
@@ -186,7 +188,7 @@ LEFT JOIN public.almanac_sli_source_generations source
 LEFT JOIN public.almanac_slo_current_failures f
     ON f.slo_id=s.id AND f.definition_revision=d.revision
     AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
-WHERE (f.slo_id IS NULL OR ((f.failing_since IS NULL OR f.failing_since>$2::timestamptz-interval '7 days') AND f.next_attempt_at<=$2::timestamptz))
+WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failing_since>$2::timestamptz-interval '7 days') AND f.next_attempt_at<=$2::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.calculation_version<>$1
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)

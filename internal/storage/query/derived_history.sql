@@ -97,7 +97,7 @@ WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_history_jobs
     WHERE (state <> 'failed' OR (last_error IS DISTINCT FROM 'retention_expired'
-           AND (failing_since IS NULL OR failing_since > sqlc.arg(now)::timestamptz-interval '7 days')))
+           AND (attempts < 5 OR failing_since IS NULL OR failing_since > sqlc.arg(now)::timestamptz-interval '7 days')))
       AND next_attempt_at <= sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until <= sqlc.arg(now)::timestamptz)
     ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED

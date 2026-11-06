@@ -9,23 +9,23 @@ WITH changed AS (
 ), current_work AS (
     UPDATE public.almanac_slo_current_failures f SET attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
     FROM changed c WHERE f.slo_id=c.slo_id AND f.definition_revision=c.definition_revision AND f.measurement_revision=c.measurement_revision
-      AND f.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>f.failing_since
+      AND f.attempts>=5 AND f.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>f.failing_since
     RETURNING 1
 ), repair_work AS (
     UPDATE public.almanac_slo_series_repair w SET attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
     FROM changed c WHERE w.slo_id=c.slo_id AND w.definition_revision=c.definition_revision AND w.measurement_revision=c.measurement_revision
-      AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
+      AND w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
     RETURNING 1
 ), tile_work AS (
     UPDATE public.almanac_slo_series_tile_work w SET attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
     FROM changed c WHERE w.slo_id=c.slo_id AND w.definition_revision=c.definition_revision AND w.measurement_revision=c.measurement_revision
-      AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
+      AND w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
     RETURNING 1
 ), history_work AS (
     UPDATE public.almanac_slo_history_jobs j SET state='pending',attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
     FROM changed c WHERE j.slo_id=c.slo_id AND j.definition_revision=c.definition_revision AND j.measurement_revision=c.measurement_revision
       AND j.state='failed' AND j.last_error IS DISTINCT FROM 'retention_expired'
-      AND j.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>j.failing_since
+      AND j.attempts>=5 AND j.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>j.failing_since
     RETURNING 1
 )
 SELECT ((SELECT count(*) FROM current_work)+(SELECT count(*) FROM repair_work)
@@ -50,9 +50,13 @@ WITH slo AS (
     UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_series_tile_work
     UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_history_jobs
         WHERE last_error IS DISTINCT FROM 'retention_expired'
+    UNION ALL SELECT d.slo_id,d.revision,d.measurement_revision,dirty.attempts,dirty.failing_since
+        FROM public.almanac_derived_dirty_ranges dirty
+        JOIN public.almanac_slo_definitions d ON d.sli_id=dirty.sli_id AND d.measurement_revision=dirty.measurement_revision
+        WHERE dirty.last_error IS DISTINCT FROM 'retention_expired'
 ), classified AS (
     SELECT s.id,
-           bool_or(w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days') AS stopped,
+           bool_or(w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days') AS stopped,
            bool_or(w.attempts>=5) AS failing,
            bool_or(w.slo_id IS NOT NULL) AS queued,
            bool_or(s.generation_id IS NULL OR s.g_revision<>s.revision OR s.g_measurement_revision<>s.measurement_revision

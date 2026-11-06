@@ -93,7 +93,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 			return true, err
 		}
 		coherentGeneration = pgtype.Int8{Int64: generation, Valid: true}
-		facts = derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision, from: start.Add(-time.Duration(row.RollingWindowSeconds) * time.Second), to: through}
+		facts = derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision, from: start.Add(-max(time.Duration(row.RollingWindowSeconds)*time.Second, 6*time.Hour)), to: through}
 		points, err := buildRetainedRepairPoints(bounded, q, row, source, start, through, now)
 		if err != nil {
 			return true, err

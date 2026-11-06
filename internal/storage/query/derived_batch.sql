@@ -1,7 +1,8 @@
 -- name: ClaimDerivedDirtyBatch :many
 WITH candidates AS (
     SELECT sli_id,measurement_revision,range_start FROM public.almanac_derived_dirty_ranges
-    WHERE (failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
+    WHERE (attempts<5 OR failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
+      AND last_error IS DISTINCT FROM 'retention_expired'
       AND next_attempt_at<=sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
     ORDER BY range_start DESC,next_attempt_at,sli_id,measurement_revision
@@ -98,7 +99,7 @@ WITH requested AS (
            unnest(sqlc.arg(epochs)::bigint[]) AS epoch,unnest(sqlc.arg(starts)::timestamptz[]) AS start_at
 )
 UPDATE public.almanac_derived_dirty_ranges d
-SET lease_until=NULL,attempts=GREATEST(d.attempts-1,0),next_attempt_at=sqlc.arg(next_attempt_at)::timestamptz,
+SET lease_until=NULL,attempts=CASE WHEN d.attempts>=5 AND d.failing_since IS NOT NULL THEN d.attempts ELSE GREATEST(d.attempts-1,0) END,next_attempt_at=sqlc.arg(next_attempt_at)::timestamptz,
     last_error=sqlc.arg(reason)::text
 FROM requested r
 WHERE d.sli_id=r.sli_id AND d.measurement_revision=r.revision AND d.range_start=r.start_at AND d.lease_epoch=r.epoch;

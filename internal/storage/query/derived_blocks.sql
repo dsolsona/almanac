@@ -55,5 +55,6 @@ WHERE (b.slo_id,b.definition_revision,b.measurement_revision,b.calculation_versi
 
 -- name: ReleaseSloHistoryForDependencies :execrows
 UPDATE public.almanac_slo_history_jobs
-SET state='pending', attempts=GREATEST(attempts-1,0), lease_until=NULL, next_attempt_at=$3
+SET state=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN 'failed' ELSE 'pending' END,
+    attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END, lease_until=NULL, next_attempt_at=$3
 WHERE id=$1 AND lease_epoch=$2 AND state='running';

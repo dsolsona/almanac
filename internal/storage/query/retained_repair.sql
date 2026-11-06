@@ -10,7 +10,7 @@ WHERE almanac_slo_series_repair.end_at<EXCLUDED.end_at;
 WITH candidate AS (
     SELECT slo_id,definition_revision,measurement_revision,calculation_version
     FROM public.almanac_slo_series_repair
-    WHERE cursor_at<end_at AND (failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
+    WHERE cursor_at<end_at AND (attempts<5 OR failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
       AND next_attempt_at<=sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
     ORDER BY next_attempt_at,slo_id LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -32,7 +32,7 @@ WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calcu
   AND version=$5 AND lease_epoch=$6;
 
 -- name: DeferRetainedSeriesRepair :exec
-UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6,
+UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,next_attempt_at=$6,
     last_error=sqlc.narg(last_error)::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5;
 

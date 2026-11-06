@@ -34,7 +34,7 @@ WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3
 -- name: ClaimRetainedTileWork :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_series_tile_work
-    WHERE (failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
+    WHERE (attempts<5 OR failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
       AND next_attempt_at<=sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
     ORDER BY summary_only,next_attempt_at,resolution_seconds,range_start DESC,id
@@ -124,6 +124,6 @@ UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,
 WHERE id=$1 AND lease_epoch=$2;
 
 -- name: DeferRetainedTileWork :exec
-UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$3
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,next_attempt_at=$3
 WHERE id=$1 AND lease_epoch=$2;
 
