@@ -17,6 +17,7 @@ type agentPagePlan struct {
 }
 
 func TestIntegrationAgentPaginationUpgradeUsesOrderedIndexes(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	migrations, err := LoadMigrations(embeddedMigrations)
 	if err != nil {

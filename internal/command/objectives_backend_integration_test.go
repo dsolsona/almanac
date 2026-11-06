@@ -21,14 +21,10 @@ type objectiveJourneyBackend struct {
 	process         *exec.Cmd
 	done            chan struct{}
 	err             error
-	deployment      *performanceDeployment
 }
 
 func (b *objectiveJourneyBackend) start(t *testing.T) time.Duration {
 	t.Helper()
-	if b.deployment != nil {
-		return b.deployment.start(t)
-	}
 	if b.process != nil {
 		t.Fatal("isolated backend was started without joining the preceding process")
 	}
@@ -61,10 +57,6 @@ func (b *objectiveJourneyBackend) start(t *testing.T) time.Duration {
 
 func (b *objectiveJourneyBackend) stop(t *testing.T) time.Duration {
 	t.Helper()
-	if b.deployment != nil {
-		b.client.CloseIdleConnections()
-		return b.deployment.stop(t)
-	}
 	if b.process == nil {
 		return 0
 	}

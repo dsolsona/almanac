@@ -5,7 +5,7 @@
 - Accepted: 2026-11-04
 - Approval: Crit session `d21016424a44` approved 2026-11-04 after one comment (three Dockerfiles instead of one); the maintainer set the direction in the same day's working conversation ("we will run everything under Docker, tests included; a development image, and published images for the app and the agent")
 - Related specs: none; governs [testing](../testing.md), [commands](../commands.md), the Makefile, Dockerfiles and Compose files
-- Supersedes / superseded by: supersedes the isolated Linux lane (F2-T22) and the host toolchain installed by `make setup`
+- Supersedes / superseded by: decisions 4, 6 and 7 superseded by [ADR-0033](0033-simple-test-suite.md); supersedes the isolated Linux lane (F2-T22) and the host toolchain installed by `make setup`
 
 ## Context
 

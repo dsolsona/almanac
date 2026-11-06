@@ -38,6 +38,7 @@ func (c *safeClock) Advance(duration time.Duration) {
 }
 
 func TestIntegrationCreateAgentUsesCurrentSessionForFreshIssueAndReplay(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade test database failed")

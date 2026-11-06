@@ -22,6 +22,7 @@ func integrationMigrationMarker(t *testing.T, offset int, label string) (int, st
 }
 
 func TestIntegrationPersistentSessionLifecycleAndExpiryBoundaries(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -163,6 +164,7 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 }
 
 func TestIntegrationInspectSessionDoesNotExtendIdleExpiry(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -209,6 +211,7 @@ func TestIntegrationInspectSessionDoesNotExtendIdleExpiry(t *testing.T) {
 }
 
 func TestIntegrationSessionUsesCurrentRoleAndNeverUpgradesRestriction(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -245,6 +248,7 @@ func TestIntegrationSessionUsesCurrentRoleAndNeverUpgradesRestriction(t *testing
 }
 
 func TestIntegrationSessionAbsoluteExpiryIsNotExtendedByActivity(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -291,6 +295,7 @@ func TestIntegrationSessionAbsoluteExpiryIsNotExtendedByActivity(t *testing.T) {
 }
 
 func TestIntegrationSessionsInvalidateOnDisableRevisionAndEpochChanges(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -392,6 +397,7 @@ func TestIntegrationSessionsInvalidateOnDisableRevisionAndEpochChanges(t *testin
 }
 
 func TestIntegrationSessionOperationsRejectMissingInstallationAuthority(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -446,6 +452,7 @@ func TestIntegrationSessionOperationsRejectMissingInstallationAuthority(t *testi
 }
 
 func TestIntegrationConcurrentSessionTouchesPersistGreatestValidTime(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -510,6 +517,7 @@ func TestIntegrationConcurrentSessionTouchesPersistGreatestValidTime(t *testing.
 }
 
 func TestIntegrationSessionRevocationAuditFailureRollsBackDeletion(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -559,6 +567,7 @@ CREATE TRIGGER fail_revoke_audit BEFORE INSERT ON public.almanac_audit_events FO
 }
 
 func TestIntegrationSessionLockCancellationCleansUpAndCanRetry(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -637,6 +646,7 @@ AND query LIKE '%FROM public.almanac_users%'`).Scan(&count); err != nil {
 }
 
 func TestIntegrationSessionOperationsFailClosedForIncompatibleOrMissingSchema(t *testing.T) {
+	t.Parallel()
 	t.Run("pending schema", func(t *testing.T) {
 		databaseURL := integrationDatabase(t)
 		migrations, err := LoadMigrations(embeddedMigrations)
@@ -697,6 +707,7 @@ VALUES ('owner', $1, 'viewer', true, false, now(), now())`, testPasswordVerifier
 }
 
 func TestIntegrationSchemaTwoUpgradePreservesOwnerAndAudit(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	migrations, err := LoadMigrations(embeddedMigrations)
 	if err != nil {
@@ -744,6 +755,7 @@ VALUES ('owner-v2', $1, 'administrator', true, true, 1, $2, $2) RETURNING id`, t
 }
 
 func TestIntegrationSessionIssueRejectsStaleEpochAndAuditFailureRollsBack(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)

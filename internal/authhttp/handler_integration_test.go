@@ -30,6 +30,7 @@ import (
 )
 
 func TestIntegrationTLSAuthenticationJourney(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -300,6 +301,7 @@ func (b *integrationStalledBody) Close() error {
 }
 
 func TestIntegrationTLSBoundedChunkedBodyAndCleanup(t *testing.T) {
+	t.Parallel()
 	handler, err := New(&authentication.Service{}, Options{PublicOrigin: "https://almanac.example", Now: time.Now})
 	if err != nil {
 		t.Fatal(err)
@@ -369,6 +371,7 @@ func TestIntegrationTLSBoundedChunkedBodyAndCleanup(t *testing.T) {
 }
 
 func TestIntegrationLoginBudgetsUseOnlyConfiguredProxySource(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)

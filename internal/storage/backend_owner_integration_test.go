@@ -10,6 +10,7 @@ import (
 )
 
 func TestIntegrationBackendOwnerExcludesDuplicatesAndReleases(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")
@@ -48,6 +49,7 @@ func TestIntegrationBackendOwnerExcludesDuplicatesAndReleases(t *testing.T) {
 }
 
 func TestIntegrationBackendOwnerLossIsRecorded(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")
@@ -80,6 +82,7 @@ func TestIntegrationBackendOwnerLossIsRecorded(t *testing.T) {
 }
 
 func TestIntegrationBackendOwnerCloseDuringDrainDetectsConcurrentTermination(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")
@@ -109,6 +112,7 @@ func TestIntegrationBackendOwnerCloseDuringDrainDetectsConcurrentTermination(t *
 }
 
 func TestIntegrationBackendOwnerRejectsIncompatibleSchema(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()

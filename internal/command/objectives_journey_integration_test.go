@@ -5,10 +5,8 @@ package command
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"encoding/pem"
@@ -40,11 +38,6 @@ type objectiveJourneyFixture struct {
 	logs                                                  *runtimeLog
 	backend                                               *objectiveJourneyBackend
 	metricsURL                                            string
-}
-
-func startObjectiveJourneyFixture(t *testing.T) objectiveJourneyFixture {
-	t.Helper()
-	return startObjectiveJourneyFixtureWithMetrics(t, false)
 }
 
 func startObjectiveJourneyFixtureWithMetrics(t *testing.T, internalMetrics bool) objectiveJourneyFixture {
@@ -175,13 +168,12 @@ func TestIntegrationExecutableFirstObjectiveJourney(t *testing.T) {
 	t.Logf("SLI journey stage=agent_ready elapsed=%s", time.Since(started).Round(time.Millisecond))
 	datasourceID := createSLIJourneyDatasource(t, f.binary, f.dir, journey, f.sourceEndpoint, f.sourceCA)
 	t.Logf("SLI journey stage=datasource_created elapsed=%s", time.Since(started).Round(time.Millisecond))
-	sliID := checkSLIBrowserJourney(t, f.baseURL, f.certificate, "sli-owner", f.password, journey.id, datasourceID)
-	t.Logf("SLI journey stage=browser_observed elapsed=%s", time.Since(started).Round(time.Millisecond))
+	sliID := createSLIJourneySLI(t, f.binary, f.dir, journey, f.databaseURL, datasourceID)
+	t.Logf("SLI journey stage=observed elapsed=%s", time.Since(started).Round(time.Millisecond))
 	verifyPersistedSLIJourneyObservation(t, f.databaseURL, sliID, journey.id)
 	verifySLIMalformedBatchIsAtomic(t, f.apiClient, f.baseURL, f.databaseURL, filepath.Join(f.dir, "sli-agent-token"), sliID)
 	runObjectiveCLIJourney(t, f.binary, f.dir, journey.profile, sliID, f.databaseURL, f.baseURL, f.apiClient)
 	traceSink.observeCollection(t, f.databaseURL, sliID, journey.id, f.metricsURL)
-	runObjectiveBrowserJourney(t, f.baseURL, f.certificate, "sli-owner", f.password, sliID, traceSink)
 	if strings.Contains(f.logs.String(), "SLI journey initial phrase 473!") || strings.Contains(f.logs.String(), f.password) {
 		t.Fatal("backend logs contained a credential")
 	}
@@ -353,71 +345,6 @@ func sameObjectiveDecimal(value, want string) bool {
 	}
 	b, ok := new(big.Rat).SetString(want)
 	return ok && a.Cmp(b) == 0
-}
-
-func runObjectiveBrowserJourney(t *testing.T, baseURL string, certificatePEM []byte, login, password, sliID string, traceSink *journeyTraceSink) {
-	t.Helper()
-	block, rest := pem.Decode(certificatePEM)
-	if block == nil || block.Type != "CERTIFICATE" || len(rest) != 0 || !validCLIUUID(sliID) {
-		t.Fatal("invalid objective browser fixture")
-	}
-	certificate, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		t.Fatal("invalid objective browser certificate")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifacts, err := os.MkdirTemp(filepath.Join(root, ".local"), "browser-sli-objective-")
-	if err != nil {
-		t.Fatal("create objective artifact directory failed")
-	}
-	hash := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
-	fixture := struct {
-		URL             string `json:"url"`
-		SPKI            string `json:"spki"`
-		Login           string `json:"login"`
-		Password        string `json:"password"`
-		SliID           string `json:"sli_id"`
-		Artifacts       string `json:"artifacts"`
-		CA              string `json:"certificate"`
-		TraceControlURL string `json:"trace_control_url"`
-		TraceControlKey string `json:"trace_control_key"`
-	}{baseURL, base64.StdEncoding.EncodeToString(hash[:]), login, password, sliID, artifacts, string(certificatePEM), traceSink.server.URL, traceSink.key}
-	input, err := json.Marshal(fixture)
-	if err != nil || len(input) > 16*1024 {
-		t.Fatal("encode objective browser fixture failed")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 125*time.Second)
-	defer cancel()
-	browser := exec.CommandContext(ctx, "node", "scripts/check-slo-browser.mjs")
-	browser.Dir = filepath.Join(root, "web")
-	browser.Stdin = bytes.NewReader(input)
-	var output bytes.Buffer
-	browser.Stdout = &output
-	browser.Stderr = &output
-	err = browser.Run()
-	if strings.Contains(output.String(), password) || strings.Contains(output.String(), login) {
-		t.Fatal("browser output contained a credential")
-	}
-	if err != nil || strings.TrimSpace(output.String()) != "PASS browser-slo-journey" {
-		t.Fatalf("objective browser failed; inspect sanitized artifacts in %s", artifacts)
-	}
-	verifyRenderedJourneyTraces(t, artifacts, "slo.list", "slo.detail")
-	manifest, err := os.ReadFile(filepath.Join(artifacts, "slo-journey.json"))
-	var evidence struct {
-		SloID       string                   `json:"slo_id"`
-		ServiceID   string                   `json:"service_id"`
-		SliID       string                   `json:"sli_id"`
-		Operational api.SloOperationalDetail `json:"operational"`
-	}
-	if err != nil || json.Unmarshal(manifest, &evidence) != nil || !validCLIUUID(evidence.SloID) || !validCLIUUID(evidence.ServiceID) || evidence.SliID != sliID ||
-		evidence.Operational.Objective.Id.String() != evidence.SloID || !validCLIUUID(evidence.Operational.EvaluationId.String()) ||
-		evidence.Operational.Current.Performance.Attainment == nil || !sameObjectiveDecimal(*evidence.Operational.Current.Performance.Attainment, "0.99") ||
-		evidence.Operational.Burn1h.WindowSeconds != api.SloBurnValueWindowSecondsN3600 || evidence.Operational.Burn6h.WindowSeconds != api.SloBurnValueWindowSecondsN21600 {
-		t.Fatalf("browser objective evidence invalid; inspect %s", artifacts)
-	}
 }
 
 func verifyObjectiveHTTPBoundaries(t *testing.T, client *http.Client, baseURL, session, serviceID, sliID, databaseURL string) {

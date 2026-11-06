@@ -14,6 +14,7 @@ import (
 )
 
 func TestIntegrationAgentAccessAuthenticatesIssuedTokenAndEnforcesCredentialState(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, err := identity.NewAgentToken()
 	if err != nil {
@@ -87,6 +88,7 @@ func TestIntegrationAgentAccessAuthenticatesIssuedTokenAndEnforcesCredentialStat
 }
 
 func TestIntegrationAgentAccessRetirementAndRevocation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, err := identity.NewAgentToken()
 	if err != nil {
@@ -143,6 +145,7 @@ func TestIntegrationAgentAccessRetirementAndRevocation(t *testing.T) {
 }
 
 func TestIntegrationAgentAccessRejectsCredentialWithReplacedEpoch(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, err := identity.NewAgentToken()
 	if err != nil {
@@ -169,6 +172,7 @@ func TestIntegrationAgentAccessRejectsCredentialWithReplacedEpoch(t *testing.T) 
 }
 
 func TestIntegrationAgentAccessRejectsDisabledAgentWithUnrevokedCredential(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, err := identity.NewAgentToken()
 	if err != nil {
@@ -195,6 +199,7 @@ func TestIntegrationAgentAccessRejectsDisabledAgentWithUnrevokedCredential(t *te
 }
 
 func TestIntegrationAgentAccessRejectsIncompleteOnboardingAndZeroClock(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, err := identity.NewAgentToken()
 	if err != nil {
@@ -226,6 +231,7 @@ func TestIntegrationAgentAccessRejectsIncompleteOnboardingAndZeroClock(t *testin
 }
 
 func TestIntegrationAgentAccessHonorsExplicitZeroRotationOverlap(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	oldToken, err := identity.NewAgentToken()
 	if err != nil {
@@ -262,6 +268,7 @@ func TestIntegrationAgentAccessHonorsExplicitZeroRotationOverlap(t *testing.T) {
 }
 
 func TestIntegrationAgentAccessSamplesClockAfterInstallationLockWait(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -330,6 +337,7 @@ func TestIntegrationAgentAccessSamplesClockAfterInstallationLockWait(t *testing.
 }
 
 func TestIntegrationAgentAccessSerializesBehindCredentialRevocation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

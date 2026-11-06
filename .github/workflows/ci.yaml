@@ -1,0 +1,67 @@
+# Continuous integration (ADR-0033): the same make targets as local development, in the same dev
+# image. Each suite is its own job so they run in parallel; the dev image comes from the build cache.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Nightly: the performance suite, which is too slow to gate every pull request.
+    - cron: '17 3 * * *'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: ${{ matrix.suite }}
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: test
+            command: make test RACE=1
+          - suite: test-integration
+            command: make test-integration RACE=1
+          - suite: test-browser
+            command: make test-browser
+          - suite: test-e2e
+            command: make test-e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/dev-image
+      - name: ${{ matrix.suite }}
+        run: ${{ matrix.command }}
+      - name: Keep end-to-end results
+        if: failure() && matrix.suite == 'test-e2e'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: .local/e2e/
+          retention-days: 7
+
+  performance:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/dev-image
+      - name: test-perf
+        run: make test-perf
+      - name: Keep performance results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-results
+          path: .local/perf/
+          retention-days: 30

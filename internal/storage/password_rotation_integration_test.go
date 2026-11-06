@@ -21,6 +21,7 @@ import (
 const rotationTestPasswordVerifier2 = "$argon2id$v=19$m=19456,t=2,p=1$MTIzNDU2Nzg5YWJjZGVmZw$MDEyMzQ1Njc4OWFiY2RlZzAxMjM0NTY3ODlhYmNkZWY"
 
 func TestIntegrationRotatePasswordCompletesOnboardingAndInvalidatesSessions(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -199,6 +200,7 @@ WHERE subject_id=$1 AND request_id='rotate-retry' AND action IN
 }
 
 func TestIntegrationConcurrentInitialRotationsHaveOneWinner(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -279,6 +281,7 @@ AND request_id='concurrent-rotation' AND action IN ('identity.password.changed',
 }
 
 func TestIntegrationPasswordRotationLockCancellationCanRetry(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -368,6 +371,7 @@ WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%al
 }
 
 func TestIntegrationRotatePasswordDenialsPreserveState(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"unknown session", "revoked session", "idle expired", "absolute expired", "pre-creation",
 		"disabled user", "stale session epoch", "stale session revision", "stale proof epoch",
@@ -467,6 +471,7 @@ VALUES ('rotation-non-owner', $1, 'editor', true, false, 1, $2, $2) RETURNING id
 }
 
 func TestIntegrationInitialOnboardingAuditFailureRollsBackAndRetries(t *testing.T) {
+	t.Parallel()
 	fixture := newRotationFixture(t, "completion-audit-failure")
 	fixture.input.RequestID = "completion-failure"
 	conn := integrationConnect(t, fixture.databaseURL)
@@ -510,6 +515,7 @@ CREATE TRIGGER fail_onboarding_completion_audit BEFORE INSERT ON public.almanac_
 }
 
 func TestIntegrationRotatePasswordSchemaAndOutageErrorsAreSafe(t *testing.T) {
+	t.Parallel()
 	t.Run("missing schema", func(t *testing.T) {
 		databaseURL := integrationDatabase(t)
 		input := validRotationInput()

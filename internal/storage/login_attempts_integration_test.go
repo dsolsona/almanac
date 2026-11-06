@@ -20,6 +20,7 @@ import (
 )
 
 func TestIntegrationLoginAdmissionEnforcesAccountAndSourceLimits(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -73,6 +74,7 @@ func TestIntegrationLoginAdmissionEnforcesAccountAndSourceLimits(t *testing.T) {
 }
 
 func TestIntegrationLoginAdmissionCanonicalKeysSecretsAndCompletions(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -158,6 +160,7 @@ WHERE position(convert_to('Case@Example', 'UTF8') in account_key) > 0
 }
 
 func TestIntegrationLoginAdmissionExpiryBoundariesAndRetryDimensions(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -221,6 +224,7 @@ SELECT sha256(convert_to('other-dimension-' || n::text,'UTF8')), sha256(convert_
 }
 
 func TestIntegrationLoginAdmissionConcurrentReservationsRespectBothLimits(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -283,6 +287,7 @@ func TestIntegrationLoginAdmissionConcurrentReservationsRespectBothLimits(t *tes
 }
 
 func TestIntegrationLoginAdmissionUsesFreshSnapshotAfterAdvisoryWait(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -455,6 +460,7 @@ func backendPID(t *testing.T, conn *pgx.Conn) int32 {
 }
 
 func TestIntegrationLoginAdmissionPruningBoundAndSkipLocked(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -518,6 +524,7 @@ WHERE account_key=sha256(convert_to('expired-account-1','UTF8'))`).Scan(&lockedI
 }
 
 func TestIntegrationLoginAdmissionLockCancellationAndFaultRollback(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -626,6 +633,7 @@ CREATE TRIGGER fail_login_attempt_update BEFORE UPDATE ON public.almanac_login_a
 }
 
 func TestIntegrationLoginAdmissionSchemaCompatibilityAndMigrationPreservation(t *testing.T) {
+	t.Parallel()
 	t.Run("schema 3 preserves users installation sessions and audits", func(t *testing.T) {
 		databaseURL := integrationDatabase(t)
 		migrations, err := LoadMigrations(embeddedMigrations)

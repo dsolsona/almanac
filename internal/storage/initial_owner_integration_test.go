@@ -17,6 +17,7 @@ import (
 const testPasswordVerifier = "$argon2id$v=19$m=19456,t=2,p=1$MDEyMzQ1Njc4OWFiY2RlZg$MDEyMzQ1Njc4OWFiY2RlZzAxMjM0NTY3ODlhYmNkZWY"
 
 func TestIntegrationInitialOwnerProvisionIsAtomicAndIdempotent(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -97,6 +98,7 @@ func TestIntegrationInitialOwnerProvisionIsAtomicAndIdempotent(t *testing.T) {
 }
 
 func TestIntegrationConcurrentInitialOwnerProvisionCreatesOneOwner(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -164,6 +166,7 @@ func TestIntegrationConcurrentInitialOwnerProvisionCreatesOneOwner(t *testing.T)
 }
 
 func TestIntegrationInitialOwnerAuditFailureRollsBackAndCanRetry(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -203,6 +206,7 @@ CREATE TRIGGER fail_initial_owner_audit BEFORE INSERT ON public.almanac_audit_ev
 }
 
 func TestIntegrationInitialOwnerRejectsMalformedInputWithoutState(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -244,6 +248,7 @@ func TestIntegrationInitialOwnerRejectsMalformedInputWithoutState(t *testing.T) 
 }
 
 func TestIntegrationInitialOwnerStorageConstraints(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -277,6 +282,7 @@ func TestIntegrationInitialOwnerStorageConstraints(t *testing.T) {
 }
 
 func TestIntegrationInitialOwnerStateRequiresCurrentSchema(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	state, err := ReadInitialOwnerState(t.Context(), databaseURL)
 	if err == nil || state != (InitialOwnerState{}) || strings.Contains(err.Error(), databasePassword(databaseURL)) {
@@ -296,6 +302,7 @@ func TestIntegrationInitialOwnerStateRequiresCurrentSchema(t *testing.T) {
 }
 
 func TestIntegrationInitialOwnerLockWaitHonorsCancellationAndRetries(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)

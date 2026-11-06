@@ -32,6 +32,7 @@ import (
 )
 
 func TestIntegrationExecutableAgentManagementRouteAndSessionLifecycle(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade isolated database failed")
@@ -424,13 +425,8 @@ func runConnectedAgentJourney(t *testing.T, databaseURL, backendBinary, dir, bas
 				lastEvidence = fmt.Sprintf("status=%d reachability=%s desired=%s applied=%s scheduler=%s progress=%s grants=%d heartbeat=%t", response.StatusCode,
 					safeDiagnosticToken(string(detail.Runtime.Reachability)), safeDiagnosticToken(detail.Runtime.DesiredConfigurationRevision), safeDiagnosticToken(detail.Runtime.AppliedConfigurationRevision), safeDiagnosticToken(string(detail.Runtime.SchedulerHealth)), safeDiagnosticToken(string(detail.Runtime.CollectionProgress)), grants, detail.Runtime.LastHeartbeatAt != nil)
 				if grants >= 3 && detail.Runtime.Reachability == api.AgentRuntimeStatusReachabilityConnected && detail.Runtime.AppliedConfigurationRevision == "1" && detail.Runtime.DesiredConfigurationRevision == "1" && detail.Runtime.LastHeartbeatAt != nil && detail.Runtime.SchedulerHealth == api.AgentRuntimeStatusSchedulerHealthReady && detail.Runtime.CollectionProgress == api.AgentRuntimeStatusCollectionProgressNotStarted {
-					certificate, err := os.ReadFile(certFile)
-					if err != nil {
-						t.Fatal("read public backend certificate for browser check failed")
-					}
-					artifacts := assertConnectedAgentBrowser(t, baseURL, certificate, "agent-owner", password, created.Result.Agent.ID)
 					replacementDone, replacementResult := assertFreshAgentReplacesOwner(t, agentBinary, baseURL, token, certFile, databaseURL, created.Result.Agent.ID, client, agentDone, agentResult)
-					return connectedAgentJourney{id: created.Result.Agent.ID, credentialID: created.Result.Credential.ID, token: token, profile: profile, passwordPath: passwordPath, done: replacementDone, result: replacementResult, artifacts: artifacts}
+					return connectedAgentJourney{id: created.Result.Agent.ID, credentialID: created.Result.Credential.ID, token: token, profile: profile, passwordPath: passwordPath, done: replacementDone, result: replacementResult}
 				}
 			}
 		}
@@ -572,11 +568,6 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 	if observationTable != nil {
 		t.Fatal("diagnostic journey requires separate future observation ingestion storage")
 	}
-	certificate, err := os.ReadFile(certFile)
-	if err != nil {
-		t.Fatal("read backend certificate for datasource browser failed")
-	}
-	checkDatasourceBrowser(t, baseURL, certificate, "agent-owner", password, journey.id, datasourceID, "vector(1)", string(caPEM))
 }
 
 func datasourceCLIErrorCode(output []byte) string {

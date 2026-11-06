@@ -63,7 +63,7 @@ test('charts load on demand and render SVG with exact table paging and hover det
   await page.screenshot({ path: test.info().outputPath('charts.png'), fullPage: true });
 });
 
-test('chart theme updates and keyboard pagination work without page overflow', async ({ page }, testInfo) => {
+test('chart theme updates and keyboard pagination work without page overflow', { tag: '@matrix' }, async ({ page }, testInfo) => {
   await page.goto('/design-system');
   await page.getByRole('navigation', { name: 'Catalogue sections' }).getByRole('button', { name: 'Charts' }).click();
   const svg = page.getByRole('region', { name: 'Illustrative timeline chart', exact: true }).locator('.timeline-chart__plot svg');

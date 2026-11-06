@@ -9,7 +9,7 @@ const datasource = {
   created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z',
 };
 
-test('SLI form controls align and fit the viewport', async ({ page }, testInfo) => {
+test('SLI form controls align and fit the viewport', { tag: '@matrix' }, async ({ page }, testInfo) => {
   await page.route('**/api/v1/auth/context', (route) => route.fulfill({ json: {
     csrf_token: 'local-visual-fixture', session: { user_id: 'visual-user', login: 'visual', role: 'administrator', restricted: false },
   } }));

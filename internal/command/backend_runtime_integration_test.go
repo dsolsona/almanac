@@ -37,10 +37,12 @@ import (
 )
 
 func TestIntegrationExecutableBackendTLSOwnerLifecycleAndRotation(t *testing.T) {
+	t.Parallel()
 	testExecutableBackendTLSOwnerLifecycleAndRotation(t, "backend")
 }
 
 func TestIntegrationExecutableCombinedBackendUITLSOwnerLifecycleAndRotation(t *testing.T) {
+	t.Parallel()
 	testExecutableBackendTLSOwnerLifecycleAndRotation(t, "backend,ui")
 }
 
@@ -754,6 +756,7 @@ func replaceFlagValue(args []string, name, value string) []string {
 }
 
 func TestIntegrationExecutableMissingInitialCredentialsStaysUnavailable(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")
@@ -872,6 +875,7 @@ func TestIntegrationExecutableMissingInitialCredentialsStaysUnavailable(t *testi
 }
 
 func TestIntegrationExecutableWeakAndUnsafeCredentialsFailClosed(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade disposable database failed")

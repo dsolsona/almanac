@@ -22,6 +22,7 @@ import (
 )
 
 func TestIntegrationUpgradeIsIdempotentAndPreservesInstallationIdentity(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	state, err := CheckCompatibility(t.Context(), databaseURL)
 	if err != nil || state != CompatibilityMissing {
@@ -64,6 +65,7 @@ func TestIntegrationUpgradeIsIdempotentAndPreservesInstallationIdentity(t *testi
 }
 
 func TestIntegrationConcurrentUpgradesApplyOnce(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -110,6 +112,7 @@ func TestIntegrationConcurrentUpgradesApplyOnce(t *testing.T) {
 }
 
 func TestIntegrationUpgradeFromVersionOneAppliesInitialOwnerSchema(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	migrations, err := LoadMigrations(embeddedMigrations)
 	if err != nil {
@@ -143,6 +146,7 @@ func TestIntegrationUpgradeFromVersionOneAppliesInitialOwnerSchema(t *testing.T)
 }
 
 func TestIntegrationFailedMigrationRollsBackAndReleasesLock(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -179,6 +183,7 @@ func TestIntegrationFailedMigrationRollsBackAndReleasesLock(t *testing.T) {
 }
 
 func TestIntegrationAlteredAndNewerHistoryAreRejected(t *testing.T) {
+	t.Parallel()
 	t.Run("altered checksum", func(t *testing.T) {
 		databaseURL := integrationDatabase(t)
 		if _, err := Upgrade(t.Context(), databaseURL); err != nil {
@@ -233,6 +238,7 @@ func TestIntegrationAlteredAndNewerHistoryAreRejected(t *testing.T) {
 }
 
 func TestIntegrationCancelledLockWaitLeavesNoMetadataAndCanRetry(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	blocker := integrationConnect(t, databaseURL)
 	if _, err := blocker.Exec(t.Context(), "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
@@ -295,6 +301,7 @@ func TestIntegrationCancelledLockWaitLeavesNoMetadataAndCanRetry(t *testing.T) {
 }
 
 func TestIntegrationDBUpgradeBinarySuccessErrorsAndSignalCancellation(t *testing.T) {
+	t.Parallel()
 	databaseURL := integrationDatabase(t)
 	urlFile := protectedDatabaseURLFile(t, databaseURL)
 	binary := filepath.Join("..", "..", "bin", "almanac")

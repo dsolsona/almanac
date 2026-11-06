@@ -23,6 +23,7 @@ func (c *safeClock) SetNow(now time.Time) {
 }
 
 func TestIntegrationManagementRotationAndThinLifecycleWrappers(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)

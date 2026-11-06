@@ -93,6 +93,7 @@ func (h controlledHasher) Verify(ctx context.Context, password, verifier string)
 }
 
 func TestIntegrationBootstrapRestrictedLoginRotationAndLogout(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal("upgrade test database failed")
@@ -153,6 +154,7 @@ func TestIntegrationBootstrapRestrictedLoginRotationAndLogout(t *testing.T) {
 }
 
 func TestIntegrationCancelledLoginDoesNotReturnSession(t *testing.T) {
+	t.Parallel()
 	databaseURL := testpostgres.Database(t)
 	if _, err := storage.Upgrade(t.Context(), databaseURL); err != nil {
 		t.Fatal(err)
@@ -170,6 +172,7 @@ func TestIntegrationCancelledLoginDoesNotReturnSession(t *testing.T) {
 }
 
 func TestIntegrationConcurrentBootstrapAndRemovedPasswordFile(t *testing.T) {
+	t.Parallel()
 	_, service, _ := newIntegrationService(t)
 	password := "Concurrent bootstrap password 681!"
 	path := integrationProtectedFile(t, password, 0o600)
@@ -218,6 +221,7 @@ func TestIntegrationConcurrentBootstrapAndRemovedPasswordFile(t *testing.T) {
 }
 
 func TestIntegrationBootstrapRejectsMissingUnsafeWeakAndCommonCredentials(t *testing.T) {
+	t.Parallel()
 	_, service, _ := newIntegrationService(t)
 	for name, path := range map[string]string{
 		"missing": filepath.Join(t.TempDir(), "missing"),
@@ -239,6 +243,7 @@ func TestIntegrationBootstrapRejectsMissingUnsafeWeakAndCommonCredentials(t *tes
 }
 
 func TestIntegrationOrdinaryRotationAndFailedProofPreserveCredentials(t *testing.T) {
+	t.Parallel()
 	databaseURL, service, _ := newIntegrationService(t)
 	owner, _ := integrationOwner(t, service, "Ordinary rotation starting password 386!")
 	initial := "passwordpassword"
@@ -308,6 +313,7 @@ func TestIntegrationOrdinaryRotationAndFailedProofPreserveCredentials(t *testing
 }
 
 func TestIntegrationCompletedProofLeaseExpiryDoesNotIssueSession(t *testing.T) {
+	t.Parallel()
 	databaseURL, service, clock := newIntegrationService(t)
 	password := "Lease expiry proof password 325!"
 	integrationOwner(t, service, password)
@@ -327,6 +333,7 @@ func TestIntegrationCompletedProofLeaseExpiryDoesNotIssueSession(t *testing.T) {
 }
 
 func TestIntegrationCredentialEpochRaceDeniesLoginAndRotation(t *testing.T) {
+	t.Parallel()
 	t.Run("login issuance", func(t *testing.T) {
 		databaseURL, service, _ := newIntegrationService(t)
 		password := "Epoch race login password 315!"
@@ -392,6 +399,7 @@ func TestIntegrationCredentialEpochRaceDeniesLoginAndRotation(t *testing.T) {
 }
 
 func TestIntegrationMalformedAndCancelledInputsReturnNoSecrets(t *testing.T) {
+	t.Parallel()
 	_, service, _ := newIntegrationService(t)
 	password := "Malformed input test password 491!"
 	integrationOwner(t, service, password)
@@ -417,6 +425,7 @@ func TestIntegrationMalformedAndCancelledInputsReturnNoSecrets(t *testing.T) {
 }
 
 func TestIntegrationSharedRateLimitCoversLoginAndCurrentPasswordProof(t *testing.T) {
+	t.Parallel()
 	databaseURL, service, clock := newIntegrationService(t)
 	initial := "Admission control initial password 512!"
 	owner, _ := integrationOwner(t, service, initial)
@@ -461,6 +470,7 @@ WHERE account_key=sha256(convert_to(lower('owner'), 'UTF8')) AND state='failed'`
 }
 
 func TestIntegrationAdministratorSessionAuthorizationDoesNotRepeatPasswordWork(t *testing.T) {
+	t.Parallel()
 	_, service, _ := newIntegrationService(t)
 	initial := "Administrator proof throttle initial 513!"
 	integrationOwner(t, service, initial)
@@ -506,6 +516,7 @@ func TestIntegrationAdministratorSessionAuthorizationDoesNotRepeatPasswordWork(t
 }
 
 func TestIntegrationSharedSourceRateLimitReturnsExactRetry(t *testing.T) {
+	t.Parallel()
 	databaseURL, service, clock := newIntegrationService(t)
 	source := netip.MustParseAddr("198.51.100.101")
 	for attempt := range 20 {
@@ -572,6 +583,7 @@ FROM public.almanac_users u CROSS JOIN public.almanac_installation i WHERE u.id=
 }
 
 func TestIntegrationDatabaseFailurePrecedesBootstrapCredentialRead(t *testing.T) {
+	t.Parallel()
 	databaseURL, service, _ := newIntegrationService(t)
 	query := testpostgres.Connect(t, databaseURL)
 	if _, err := query.Exec(t.Context(), "DROP TABLE public.almanac_installation CASCADE"); err != nil {
@@ -584,6 +596,7 @@ func TestIntegrationDatabaseFailurePrecedesBootstrapCredentialRead(t *testing.T)
 }
 
 func TestIntegrationUnusableIdentitySnapshotsNeverIssueSession(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"unknown", "disabled", "null verifier", "unsupported verifier"} {
 		t.Run(mode, func(t *testing.T) {
 			databaseURL, service, _ := newIntegrationService(t)

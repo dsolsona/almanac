@@ -1,5 +1,5 @@
-# Overlay for the Docker-driving modes only (`make verify MODE=compose|providers`, ADR-0029
-# decision 6): the dev container gets the daemon socket, the checkout at its host path so
+# Overlay for the suites that drive Docker only (`make test-e2e`, `make test-perf`, `make shell SOCKET=1`;
+# ADR-0029 decision 6, ADR-0033): the dev container gets the daemon socket, the checkout at its host path so
 # build contexts and paths resolve on the host, and the daemon host's network so the
 # published loopback ports of the deployment under test are reachable as `localhost`.
 services:

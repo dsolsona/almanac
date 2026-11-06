@@ -12,6 +12,7 @@ import (
 )
 
 func TestIntegrationIncompatibleAttemptIsVisibleWithoutOwnershipAndFenced(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "incompatible-runtime")
 	proof := ownershipBytes(32, 81)
@@ -167,6 +168,7 @@ func TestIntegrationIncompatibleAttemptIsVisibleWithoutOwnershipAndFenced(t *tes
 }
 
 func TestIntegrationIncompatibleAttemptRejectsExpiredCredentialsAndOwner(t *testing.T) {
+	t.Parallel()
 	t.Run("expired credential", func(t *testing.T) {
 		f := newAgentFixture(t)
 		issued, err := identity.NewAgentToken()

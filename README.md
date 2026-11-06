@@ -66,7 +66,7 @@ and is never published. Base images are pinned by multi-architecture index
 digests, so each host builds and runs its native platform. `make images` builds
 all three locally; `make publish IMAGE_REGISTRY=ghcr.io/example` builds and
 pushes the two published images for `linux/amd64` and `linux/arm64`.
-`make verify` starts by checking that every file pins each image to one digest.
+`make test` starts by checking that every file pins each image to one digest.
 
 ### Start a local agent
 
@@ -150,10 +150,10 @@ and response bodies. Runtime journey acceptance is tracked in
 [F3-T09](docs/tasks/F3-T09.md); tracing's own overhead is not an acceptance
 check ([ADR-0030](docs/adr/0030-browser-tracing-overhead-is-not-an-acceptance-check.md)).
 
-After `make setup`, `make verify MODE=providers` starts an isolated
-provider project, inserts synthetic metrics and spans, checks exact query results
-before and after restart, and removes only its test-owned containers and volumes.
-It does not populate or reset your normal local sources.
+`make test-e2e` starts an isolated stack, writes a real series into its
+VictoriaMetrics, previews it through a real agent, and removes only its own
+containers and volumes ([testing](docs/testing.md)). It does not populate or reset
+your normal local sources.
 
 To try an SLI locally, assign a connected agent to a Prometheus datasource at
 `http://victoriametrics:8428`, then create an event-count SLI with `vector(99)` as
@@ -191,7 +191,7 @@ windows and exports are subsequent increments; see [delivery status](docs/status
 ## Runtime foundation
 
 `make setup` builds the development image and warms its caches; `make shell`
-enters it with the fixtures running, and `make verify` enters it by itself.
+enters it with the fixtures running, and the `make test…` targets enter it by themselves.
 Inside it, `make build` builds the production web assets and embeds them in
 `bin/almanac`.
 
@@ -442,21 +442,20 @@ safe status markers, not peer-supplied version values. If a compatible runtime
 already exists, its observed fields remain intact while the newer incompatible
 attempt changes reachability. A successful compatible connection clears that state.
 
-For isolated local storage checks, `compose.dev.yaml` runs the pinned PostgreSQL
-18.6 fixture on loopback port 15487 of the dev container, where
-`ALMANAC_TEST_DATABASE_URL` is preset. From the host, run:
+For integration tests, `compose.dev.yaml` runs the pinned PostgreSQL 18.6
+fixture on loopback port 15487 of the dev container, where
+`ALMANAC_TEST_DATABASE_URL` is preset; each test creates its own database.
 
 ```sh
-make verify MODE=integration GO_PACKAGE=./internal/storage
+make test               # fast checks and unit tests
+make test-integration   # PostgreSQL and real-binary tests, in parallel (RACE=1 adds -race)
+make test-browser       # UI catalogue matrix
+make test-e2e           # critical user journeys on a fresh Compose stack
+make test-perf          # page speed of the SLO and SLI lists and details
 ```
 
-Run `make verify MODE=go` for focused Go checks, `make verify MODE=go-race`
-for race checks, or `make verify` for web and Go verification; every mode enters
-the development container by itself. Catalogue browser checks use
-`make verify MODE=browser`. The full PostgreSQL integration suite
-also exercises browser onboarding against the built combined HTTPS executable;
-it uses the Chromium baked into the development image. Ordinary unit checks do
-not start PostgreSQL or run that browser journey.
+Every target enters the development container by itself. [Testing](docs/testing.md)
+explains what each layer covers and where a new test belongs.
 
 See [the web design system guide](web/DESIGN_SYSTEM.md) for the local UI setup,
 catalogue and verification commands.

@@ -16,6 +16,7 @@ import (
 )
 
 func TestIntegrationFreshAgentReplacesUnexpiredOwner(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, _ := createOwnershipAgent(t, f, "ownership-replacement")
 	now := f.base.Add(4 * time.Second)
@@ -50,6 +51,7 @@ func TestIntegrationFreshAgentReplacesUnexpiredOwner(t *testing.T) {
 }
 
 func TestIntegrationAgentOwnershipAcquireResumeRenewAndReplay(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-lifecycle")
 	secret := ownershipBytes(32, 3)
@@ -120,6 +122,7 @@ func TestIntegrationAgentOwnershipAcquireResumeRenewAndReplay(t *testing.T) {
 }
 
 func TestIntegrationAgentOwnershipExpiryRotationRevocationAndFencing(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-expiry")
 	secret := ownershipBytes(32, 9)
@@ -192,6 +195,7 @@ func TestIntegrationAgentOwnershipExpiryRotationRevocationAndFencing(t *testing.
 }
 
 func TestIntegrationAgentOwnershipConcurrentAcquisitionFencesEarlierGeneration(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-concurrent")
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -240,6 +244,7 @@ func TestIntegrationAgentOwnershipConcurrentAcquisitionFencesEarlierGeneration(t
 }
 
 func TestIntegrationAgentOwnershipNullableRenewalMetadataConstraint(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-constraint")
 	_, err := AcquireAgentOwnership(t.Context(), f.databaseURL, issued.ID, issued.Verifier,
@@ -257,6 +262,7 @@ func TestIntegrationAgentOwnershipNullableRenewalMetadataConstraint(t *testing.T
 }
 
 func TestIntegrationAgentOwnershipClampsToCredentialExpiryAndRetirement(t *testing.T) {
+	t.Parallel()
 	t.Run("credential expiry", func(t *testing.T) {
 		f := newAgentFixture(t)
 		issued, err := identity.NewAgentToken()
@@ -303,6 +309,7 @@ func TestIntegrationAgentOwnershipClampsToCredentialExpiryAndRetirement(t *testi
 }
 
 func TestIntegrationAgentOwnershipRenewalCannotShortenExistingGrantAfterRotation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-short-renewal")
 	secret := ownershipBytes(32, 44)
@@ -342,6 +349,7 @@ func TestIntegrationAgentOwnershipRenewalCannotShortenExistingGrantAfterRotation
 }
 
 func TestIntegrationAgentOwnershipCounterExhaustionFailsClosed(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	issued, created := createOwnershipAgent(t, f, "ownership-exhaustion")
 	secret := ownershipBytes(32, 31)
@@ -397,6 +405,7 @@ VALUES($1,$2,$3,$4,'[]'::jsonb,$5,$6,$3,$7,$6::timestamptz+interval '7 days')`, 
 }
 
 func TestIntegrationAgentOwnershipRejectsDisabledAndStaleEpochCredentials(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"disabled", "epoch"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -435,6 +444,7 @@ func TestIntegrationAgentOwnershipRejectsDisabledAndStaleEpochCredentials(t *tes
 }
 
 func TestIntegrationAgentOwnershipOrdersBehindCredentialRevocation(t *testing.T) {
+	t.Parallel()
 	f := newAgentFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
