@@ -15,21 +15,21 @@ func (r *Runtime) RunDerived(ctx context.Context, logger *slog.Logger) {
 	var nextMetrics time.Time
 	for {
 		if !time.Now().Before(nextCurrent) {
-			if err := r.refreshCurrentProjections(ctx, time.Now); err != nil && ctx.Err() == nil {
-				logger.ErrorContext(ctx, "current SLO preparation failed")
+			if err := r.refreshCurrentProjections(ctx, time.Now); err != nil && ctx.Err() == nil && !derivedTemporary(ctx, err) {
+				logger.ErrorContext(ctx, "current SLO preparation failed", "error", derivedErrorDetail(err))
 			}
 			nextCurrent = time.Now().Add(time.Second)
 		}
 		if !time.Now().Before(nextMetrics) {
 			if err := r.sampleDerivedMetrics(ctx, time.Now()); err != nil && ctx.Err() == nil {
-				logger.ErrorContext(ctx, "derived metrics sampling failed")
+				logger.ErrorContext(ctx, "derived metrics sampling failed", "error", derivedErrorDetail(err))
 			}
 			nextMetrics = time.Now().Add(30 * time.Second)
 		}
 		count, err := r.rebuildDerivedBatch(ctx, time.Now)
-		if err != nil && ctx.Err() == nil {
+		if err != nil && ctx.Err() == nil && !derivedTemporary(ctx, err) {
 			r.metrics.preparationErrors[0].Add(1)
-			logger.ErrorContext(ctx, "derived aggregate rebuild failed")
+			logger.ErrorContext(ctx, "derived aggregate rebuild failed", "error", derivedErrorDetail(err))
 		}
 		if count == 100 && err == nil && ctx.Err() == nil {
 			// Drain bounded batches without imposing a one-second sleep on each

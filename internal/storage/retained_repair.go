@@ -12,7 +12,6 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -36,14 +35,16 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 	if err != nil {
 		return false, err
 	}
+	// The source range this batch reads, for rebuilding it if its aggregates prove inconsistent.
+	var facts derivedFactsRange
 	defer func() {
 		if resultErr == nil {
 			return
 		}
 		cleanup, stop := context.WithTimeout(context.Background(), 2*time.Second)
 		defer stop()
-		conflict, serialization := errors.AsType[*pgconn.PgError](resultErr)
-		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) || serialization && conflict.Code == "40001" {
+		resultErr = errors.Join(resultErr, facts.rebuildIfInconsistent(cleanup, dbgen.New(conn), resultErr, clock()))
+		if derivedTemporary(ctx, resultErr) {
 			var reason pgtype.Text
 			if errors.Is(resultErr, ErrDerivedSourceFailed) {
 				reason = pgtype.Text{String: "source_aggregate_failed", Valid: true}
@@ -56,7 +57,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 		}
 		err := dbgen.New(conn).FailRetainedSeriesRepair(cleanup, dbgen.FailRetainedSeriesRepairParams{SloID: work.SloID,
 			DefinitionRevision: work.DefinitionRevision, MeasurementRevision: work.MeasurementRevision,
-			CalculationVersion: work.CalculationVersion, LeaseEpoch: work.LeaseEpoch, Column6: timestamp(clock())})
+			CalculationVersion: work.CalculationVersion, LeaseEpoch: work.LeaseEpoch, Column6: timestamp(clock()), Reason: derivedFailureReason(resultErr, "retained_series_repair_failed")})
 		resultErr = errors.Join(resultErr, err)
 	}()
 	tx, err := conn.BeginTx(bounded, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
@@ -92,6 +93,7 @@ func (r *Runtime) repairRetainedSeries(ctx context.Context, clock func() time.Ti
 			return true, err
 		}
 		coherentGeneration = pgtype.Int8{Int64: generation, Valid: true}
+		facts = derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision, from: start.Add(-time.Duration(row.RollingWindowSeconds) * time.Second), to: through}
 		points, err := buildRetainedRepairPoints(bounded, q, row, source, start, through, now)
 		if err != nil {
 			return true, err

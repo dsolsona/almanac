@@ -34,13 +34,14 @@ WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3
 -- name: ClaimRetainedTileWork :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_series_tile_work
-    WHERE attempts<5 AND next_attempt_at<=sqlc.arg(now)::timestamptz
+    WHERE (failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
+      AND next_attempt_at<=sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
     ORDER BY summary_only,next_attempt_at,resolution_seconds,range_start DESC,id
     LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_series_tile_work w
-SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=sqlc.arg(lease_until)::timestamptz
+SET attempts=LEAST(w.attempts+1,5),lease_epoch=w.lease_epoch+1,lease_until=sqlc.arg(lease_until)::timestamptz
 FROM candidate c WHERE w.id=c.id RETURNING w.*;
 
 -- name: ReadRetainedTilePoints :many
@@ -68,7 +69,7 @@ WHERE almanac_slo_series_tiles.published_at<=EXCLUDED.published_at;
 DELETE FROM public.almanac_slo_series_tile_work WHERE id=$1 AND version=$2 AND lease_epoch=$3;
 
 -- name: ReleaseRetainedTileWork :exec
-UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=0,last_error=NULL
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=0,last_error=NULL,failing_since=NULL
 WHERE id=$1 AND lease_epoch=$2;
 
 -- name: QueueRetainedTileSummaries :execrows
@@ -118,7 +119,8 @@ ORDER BY range_start LIMIT 1000;
 
 -- name: FailRetainedTileWork :exec
 UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,
-    next_attempt_at=$3::timestamptz+power(2,LEAST(attempts,5))*interval '1 second',last_error=$4
+    next_attempt_at=$3::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$3::timestamptz)>$3::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(failing_since,$3::timestamptz),last_error=$4
 WHERE id=$1 AND lease_epoch=$2;
 
 -- name: DeferRetainedTileWork :exec

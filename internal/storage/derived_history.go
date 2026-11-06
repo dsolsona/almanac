@@ -13,7 +13,6 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -103,26 +102,26 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 		if repaired && repairErr == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
 		}
-		if repairErr != nil && !errors.Is(repairErr, ErrDerivedPending) && !errors.Is(repairErr, ErrDerivedSourceFailed) && ctx.Err() == nil {
+		if repairErr != nil && !derivedTemporary(ctx, repairErr) && ctx.Err() == nil {
 			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "retained SLO series repair failed")
+			logger.ErrorContext(ctx, "retained SLO series repair failed", "error", derivedErrorDetail(repairErr))
 		}
 		seriesWorked, seriesErr := r.prepareRetainedTile(ctx, time.Now)
-		if seriesErr != nil && ctx.Err() == nil {
+		if seriesErr != nil && !derivedTemporary(ctx, seriesErr) && ctx.Err() == nil {
 			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "retained SLO tile preparation failed")
+			logger.ErrorContext(ctx, "retained SLO tile preparation failed", "error", derivedErrorDetail(seriesErr))
 		}
 		if seriesWorked && seriesErr == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
 		}
 		if err := r.queueDueBudgetHistory(ctx, time.Now()); err != nil && ctx.Err() == nil {
-			logger.ErrorContext(ctx, "SLO overview history admission failed")
+			logger.ErrorContext(ctx, "SLO overview history admission failed", "error", derivedErrorDetail(err))
 		}
 		worked := false
 		err := r.prepareHistory(ctx, time.Now, &worked)
-		if err != nil && !errors.Is(err, ErrDerivedPending) && ctx.Err() == nil {
+		if err != nil && !derivedTemporary(ctx, err) && ctx.Err() == nil {
 			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "SLO history preparation failed")
+			logger.ErrorContext(ctx, "SLO history preparation failed", "error", derivedErrorDetail(err))
 		}
 		if worked && err == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
@@ -134,7 +133,7 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 			queued, summaryErr := r.queueRetainedTileSummaries(ctx, time.Now())
 			nextSummaries = time.Now().Add(30 * time.Second)
 			if summaryErr != nil {
-				logger.ErrorContext(ctx, "retained tile summary admission failed")
+				logger.ErrorContext(ctx, "retained tile summary admission failed", "error", derivedErrorDetail(summaryErr))
 			}
 			if queued > 0 && summaryErr == nil {
 				nextSummaries = time.Time{}
@@ -191,6 +190,8 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	if worked != nil {
 		*worked = true
 	}
+	// The source range this job reads, for rebuilding it if its aggregates prove inconsistent.
+	var facts derivedFactsRange
 	defer func() {
 		if resultErr == nil {
 			return
@@ -203,13 +204,14 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 			return
 		}
 		defer failureConn.Release()
-		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) {
+		resultErr = errors.Join(resultErr, facts.rebuildIfInconsistent(cleanup, dbgen.New(failureConn), resultErr, clock()))
+		if derivedTemporary(ctx, resultErr) {
 			_, err = dbgen.New(failureConn).ReleaseSloHistoryForDependencies(cleanup, dbgen.ReleaseSloHistoryForDependenciesParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch, NextAttemptAt: timestamp(clock().Add(2 * time.Second))})
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
 		_, err = dbgen.New(failureConn).FailSloHistoryJob(cleanup, dbgen.FailSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch,
-			NextAttemptAt: timestamp(clock().Add(time.Duration(1<<min(job.Attempts, int32(5))) * time.Second)), LastError: pgtype.Text{String: derivedFailureCode(resultErr), Valid: true}})
+			Column3: timestamp(clock()), LastError: pgtype.Text{String: derivedFailureCode(resultErr), Valid: true}})
 		resultErr = errors.Join(resultErr, err)
 	}()
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -232,6 +234,8 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	if err != nil {
 		return err
 	}
+	facts = derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision,
+		from: job.RangeStart.Time.Add(-time.Duration(row.RollingWindowSeconds) * time.Second), to: job.RangeEnd.Time}
 	sourceGeneration, err := q.GetDerivedSourceGeneration(bounded, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
 	if errors.Is(err, pgx.ErrNoRows) {
 		sourceGeneration = 0
@@ -316,16 +320,7 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 }
 
 func derivedFailureCode(err error) string {
-	if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "54000" {
-		return "derived_cache_limit"
-	}
-	if errors.Is(err, ErrOperationalResource) {
-		return "derived_resource_limit"
-	}
-	if errors.Is(err, ErrOperationalRangeDense) {
-		return "history_range_too_dense"
-	}
-	return "history_preparation_failed"
+	return derivedFailureReason(err, "history_preparation_failed")
 }
 
 type retainedHistoryPublication struct {

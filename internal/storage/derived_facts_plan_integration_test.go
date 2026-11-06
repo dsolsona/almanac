@@ -55,7 +55,10 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(ctx, `ANALYZE public.almanac_sli_coverage; ANALYZE public.almanac_sli_observation_values; ANALYZE public.almanac_sli_hourly_aggregates`); err != nil {
+	// Autovacuum often analyses the freshly loaded fixture at this moment. It yields to a waiting lock
+	// only after deadlock_timeout (1 s), so this setup step waits longer than that; the plan check
+	// below keeps the production 250 ms limit.
+	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout='3s'; ANALYZE public.almanac_sli_coverage; ANALYZE public.almanac_sli_observation_values; ANALYZE public.almanac_sli_hourly_aggregates; SET LOCAL lock_timeout='250ms'`); err != nil {
 		t.Fatal("analyze retained fixture before query-plan acceptance", err)
 	}
 	var plan []byte
@@ -197,7 +200,7 @@ func (c *factsQueryCapture) Exec(_ context.Context, statement string, arguments 
 func verifyDerivedBatchValueLookup(t *testing.T, tx pgx.Tx, batch dbgen.RebuildDerivedBatchParams) {
 	t.Helper()
 	capture := &factsQueryCapture{}
-	if err := dbgen.New(capture).RebuildDerivedBatch(t.Context(), batch); !errors.Is(err, errFactsQueryCaptured) {
+	if _, err := dbgen.New(capture).RebuildDerivedBatch(t.Context(), batch); !errors.Is(err, errFactsQueryCaptured) {
 		t.Fatal("capture source aggregate query failed", err)
 	}
 	// Exercise the hash-join alternative without loading a year merely to change planner statistics.

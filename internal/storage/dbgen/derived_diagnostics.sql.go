@@ -93,7 +93,7 @@ func (q *Queries) ListSloPreparationJobs(ctx context.Context, arg ListSloPrepara
 
 const retryCurrentSloPreparation = `-- name: RetryCurrentSloPreparation :execrows
 UPDATE public.almanac_slo_current_failures f
-SET attempts=0,next_attempt_at=$1::timestamptz,manual_retried_at=$1::timestamptz,last_error=''
+SET attempts=0,next_attempt_at=$1::timestamptz,manual_retried_at=$1::timestamptz,last_error='',failing_since=NULL
 WHERE f.slo_id=$2 AND f.definition_revision=$3
   AND f.measurement_revision=$4 AND f.calculation_version=$5
   AND f.attempts>=5 AND (f.manual_retried_at IS NULL OR f.manual_retried_at<=$1::timestamptz-interval '1 minute')
@@ -124,7 +124,7 @@ func (q *Queries) RetryCurrentSloPreparation(ctx context.Context, arg RetryCurre
 const retryRetainedRepair = `-- name: RetryRetainedRepair :execrows
 UPDATE public.almanac_slo_series_repair
 SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=$1::timestamptz,
-    manual_retried_at=$1::timestamptz,last_error=NULL
+    manual_retried_at=$1::timestamptz,last_error=NULL,failing_since=NULL
 WHERE id=$2 AND slo_id=$3
   AND definition_revision=$4 AND measurement_revision=$5
   AND calculation_version=$6 AND cursor_at<end_at AND attempts>=5
@@ -159,7 +159,7 @@ func (q *Queries) RetryRetainedRepair(ctx context.Context, arg RetryRetainedRepa
 const retryRetainedTile = `-- name: RetryRetainedTile :execrows
 UPDATE public.almanac_slo_series_tile_work
 SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=$1::timestamptz,
-    manual_retried_at=$1::timestamptz,last_error=NULL
+    manual_retried_at=$1::timestamptz,last_error=NULL,failing_since=NULL
 WHERE id=$2 AND slo_id=$3
   AND definition_revision=$4 AND measurement_revision=$5
   AND calculation_version=$6 AND exclusion_revision=0 AND attempts>=5
@@ -194,7 +194,7 @@ func (q *Queries) RetryRetainedTile(ctx context.Context, arg RetryRetainedTilePa
 const retrySourceAggregate = `-- name: RetrySourceAggregate :execrows
 UPDATE public.almanac_derived_dirty_ranges d
 SET attempts=0,lease_until=NULL,lease_epoch=d.lease_epoch+1,next_attempt_at=$1::timestamptz,
-    manual_retried_at=$1::timestamptz,last_error=NULL
+    manual_retried_at=$1::timestamptz,last_error=NULL,failing_since=NULL
 WHERE d.id=$2 AND d.sli_id=$3 AND d.measurement_revision=$4
   AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$1::timestamptz)
   AND d.last_error IS DISTINCT FROM 'retention_expired'

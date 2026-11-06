@@ -21,7 +21,7 @@ WITH requested AS (
     WHERE d.sli_id=r.sli_id AND d.measurement_revision=r.revision AND d.range_start=r.start_at
       AND d.generation=r.generation AND d.lease_epoch=r.epoch RETURNING d.sli_id
 )
-UPDATE public.almanac_derived_dirty_ranges d SET lease_until=NULL,attempts=0,last_error=NULL
+UPDATE public.almanac_derived_dirty_ranges d SET lease_until=NULL,attempts=0,last_error=NULL,failing_since=NULL
 FROM requested r
 WHERE d.sli_id=r.sli_id AND d.measurement_revision=r.revision AND d.range_start=r.start_at
   AND d.generation<>r.generation AND d.lease_epoch=r.epoch
@@ -49,15 +49,16 @@ func (q *Queries) AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDe
 const claimDerivedDirtyBatch = `-- name: ClaimDerivedDirtyBatch :many
 WITH candidates AS (
     SELECT sli_id,measurement_revision,range_start FROM public.almanac_derived_dirty_ranges
-    WHERE attempts<5 AND next_attempt_at<=$2::timestamptz
+    WHERE (failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+      AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
     ORDER BY range_start DESC,next_attempt_at,sli_id,measurement_revision
     LIMIT $3 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_derived_dirty_ranges d
-SET lease_epoch=d.lease_epoch+1,lease_until=$1::timestamptz,attempts=d.attempts+1
+SET lease_epoch=d.lease_epoch+1,lease_until=$1::timestamptz,attempts=LEAST(d.attempts+1,5)
 FROM candidates c WHERE d.sli_id=c.sli_id AND d.measurement_revision=c.measurement_revision AND d.range_start=c.range_start
-RETURNING d.id, d.sli_id, d.measurement_revision, d.generation, d.range_start, d.range_end, d.lease_epoch, d.lease_until, d.attempts, d.next_attempt_at, d.last_error, d.manual_retried_at, d.updated_at
+RETURNING d.id, d.sli_id, d.measurement_revision, d.generation, d.range_start, d.range_end, d.lease_epoch, d.lease_until, d.attempts, d.next_attempt_at, d.last_error, d.manual_retried_at, d.updated_at, d.failing_since
 `
 
 type ClaimDerivedDirtyBatchParams struct {
@@ -89,6 +90,7 @@ func (q *Queries) ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDi
 			&i.LastError,
 			&i.ManualRetriedAt,
 			&i.UpdatedAt,
+			&i.FailingSince,
 		); err != nil {
 			return nil, err
 		}
@@ -100,19 +102,55 @@ func (q *Queries) ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDi
 	return items, nil
 }
 
-const failDerivedBatch = `-- name: FailDerivedBatch :exec
+const deferDerivedBatch = `-- name: DeferDerivedBatch :exec
 WITH requested AS (
-    SELECT unnest($2::uuid[]) AS sli_id,unnest($3::bigint[]) AS revision,
-           unnest($4::bigint[]) AS epoch,unnest($5::timestamptz[]) AS start_at
+    SELECT unnest($3::uuid[]) AS sli_id,unnest($4::bigint[]) AS revision,
+           unnest($5::bigint[]) AS epoch,unnest($6::timestamptz[]) AS start_at
 )
 UPDATE public.almanac_derived_dirty_ranges d
-SET lease_until=NULL,next_attempt_at=$1::timestamptz+power(2,LEAST(d.attempts,5))*interval '1 second',last_error='aggregate_rebuild_failed'
+SET lease_until=NULL,attempts=GREATEST(d.attempts-1,0),next_attempt_at=$1::timestamptz,
+    last_error=$2::text
+FROM requested r
+WHERE d.sli_id=r.sli_id AND d.measurement_revision=r.revision AND d.range_start=r.start_at AND d.lease_epoch=r.epoch
+`
+
+type DeferDerivedBatchParams struct {
+	NextAttemptAt pgtype.Timestamptz   `json:"next_attempt_at"`
+	Reason        string               `json:"reason"`
+	SliIds        []pgtype.UUID        `json:"sli_ids"`
+	Revisions     []int64              `json:"revisions"`
+	Epochs        []int64              `json:"epochs"`
+	Starts        []pgtype.Timestamptz `json:"starts"`
+}
+
+// Hours waiting for their observation values: retry soon without counting an attempt (ADR-0034).
+func (q *Queries) DeferDerivedBatch(ctx context.Context, arg DeferDerivedBatchParams) error {
+	_, err := q.db.Exec(ctx, deferDerivedBatch,
+		arg.NextAttemptAt,
+		arg.Reason,
+		arg.SliIds,
+		arg.Revisions,
+		arg.Epochs,
+		arg.Starts,
+	)
+	return err
+}
+
+const failDerivedBatch = `-- name: FailDerivedBatch :exec
+WITH requested AS (
+    SELECT unnest($3::uuid[]) AS sli_id,unnest($4::bigint[]) AS revision,
+           unnest($5::bigint[]) AS epoch,unnest($6::timestamptz[]) AS start_at
+)
+UPDATE public.almanac_derived_dirty_ranges d
+SET lease_until=NULL,next_attempt_at=$1::timestamptz+CASE WHEN d.attempts<5 THEN power(2,d.attempts)*interval '1 second' WHEN coalesce(d.failing_since,$1::timestamptz)>$1::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(d.failing_since,$1::timestamptz),last_error=$2::text
 FROM requested r
 WHERE d.sli_id=r.sli_id AND d.measurement_revision=r.revision AND d.range_start=r.start_at AND d.lease_epoch=r.epoch
 `
 
 type FailDerivedBatchParams struct {
 	Now       pgtype.Timestamptz   `json:"now"`
+	Reason    string               `json:"reason"`
 	SliIds    []pgtype.UUID        `json:"sli_ids"`
 	Revisions []int64              `json:"revisions"`
 	Epochs    []int64              `json:"epochs"`
@@ -122,6 +160,7 @@ type FailDerivedBatchParams struct {
 func (q *Queries) FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error {
 	_, err := q.db.Exec(ctx, failDerivedBatch,
 		arg.Now,
+		arg.Reason,
 		arg.SliIds,
 		arg.Revisions,
 		arg.Epochs,
@@ -130,49 +169,56 @@ func (q *Queries) FailDerivedBatch(ctx context.Context, arg FailDerivedBatchPara
 	return err
 }
 
-const rebuildDerivedBatch = `-- name: RebuildDerivedBatch :exec
+const rebuildDerivedBatch = `-- name: RebuildDerivedBatch :many
 WITH requested AS (
     SELECT unnest($1::uuid[]) AS sli_id,
            unnest($2::bigint[]) AS revision,
            unnest($3::bigint[]) AS generation,
            unnest($4::timestamptz[]) AS hour_start
+), computed AS (
+    SELECT r.sli_id,r.revision,r.hour_start,r.generation,a.good, a.total, a.observed, a.known_empty, a.zero_traffic, a.missing_values, a.first_interval, a.last_interval, a.latest_receipt, a.first_observation, a.last_observation
+    FROM requested r CROSS JOIN LATERAL (
+        SELECT coalesce(sum(v.good_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS good,
+               coalesce(sum(v.total_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS total,
+               count(*) FILTER (WHERE c.outcome='observed') AS observed,
+               count(*) FILTER (WHERE c.outcome='complete_empty') AS known_empty,
+               count(*) FILTER (WHERE c.outcome='observed' AND v.total_count=0) AS zero_traffic,
+               count(*) FILTER (WHERE c.outcome='observed' AND v.total_count IS NULL) AS missing_values,
+               min(c.interval_start) AS first_interval,max(c.interval_end) AS last_interval,max(c.recorded_at) AS latest_receipt,
+               min(c.interval_start) FILTER (WHERE c.outcome='observed') AS first_observation,
+               max(c.interval_end) FILTER (WHERE c.outcome='observed') AS last_observation
+        FROM public.almanac_sli_coverage c
+        LEFT JOIN LATERAL (
+            SELECT value.good_count,value.total_count
+            FROM public.almanac_sli_observation_values value
+            WHERE value.interval_start=c.interval_start
+              AND value.sli_id=c.sli_id AND value.measurement_revision=c.measurement_revision
+              AND value.interval_start>=r.hour_start AND value.interval_start<r.hour_start+interval '1 hour'
+            LIMIT 1
+        ) v ON true
+        WHERE c.sli_id=r.sli_id AND c.measurement_revision=r.revision
+          AND c.interval_start>=r.hour_start AND c.interval_start<r.hour_start+interval '1 hour'
+    ) a
+), stored AS (
+    INSERT INTO public.almanac_sli_hourly_aggregates
+        (sli_id,measurement_revision,hour_start,source_generation,good,total,
+         observed_intervals,known_empty_intervals,zero_traffic_intervals,
+         first_interval_start,last_interval_end,latest_receipt_at,first_observation_at,last_observation_at)
+    SELECT sli_id,revision,hour_start,generation,good,total,observed,known_empty,zero_traffic,
+           first_interval,last_interval,latest_receipt,first_observation,last_observation
+    FROM computed
+    WHERE first_interval IS NOT NULL AND missing_values=0
+    ON CONFLICT (sli_id,measurement_revision,hour_start) DO UPDATE
+    SET source_generation=EXCLUDED.source_generation,good=EXCLUDED.good,total=EXCLUDED.total,
+        observed_intervals=EXCLUDED.observed_intervals,known_empty_intervals=EXCLUDED.known_empty_intervals,
+        zero_traffic_intervals=EXCLUDED.zero_traffic_intervals,first_interval_start=EXCLUDED.first_interval_start,
+        last_interval_end=EXCLUDED.last_interval_end,latest_receipt_at=EXCLUDED.latest_receipt_at,
+        first_observation_at=EXCLUDED.first_observation_at,last_observation_at=EXCLUDED.last_observation_at
+    WHERE almanac_sli_hourly_aggregates.source_generation<=EXCLUDED.source_generation
+    RETURNING 1
 )
-INSERT INTO public.almanac_sli_hourly_aggregates
-    (sli_id,measurement_revision,hour_start,source_generation,good,total,
-     observed_intervals,known_empty_intervals,zero_traffic_intervals,
-     first_interval_start,last_interval_end,latest_receipt_at,first_observation_at,last_observation_at)
-SELECT r.sli_id,r.revision,r.hour_start,r.generation,
-       a.good,a.total,a.observed,a.known_empty,a.zero_traffic,
-       a.first_interval,a.last_interval,a.latest_receipt,a.first_observation,a.last_observation
-FROM requested r CROSS JOIN LATERAL (
-    SELECT coalesce(sum(v.good_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS good,
-           coalesce(sum(v.total_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS total,
-           count(*) FILTER (WHERE c.outcome='observed') AS observed,
-           count(*) FILTER (WHERE c.outcome='complete_empty') AS known_empty,
-           count(*) FILTER (WHERE c.outcome='observed' AND v.total_count=0) AS zero_traffic,
-           min(c.interval_start) AS first_interval,max(c.interval_end) AS last_interval,max(c.recorded_at) AS latest_receipt,
-           min(c.interval_start) FILTER (WHERE c.outcome='observed') AS first_observation,
-           max(c.interval_end) FILTER (WHERE c.outcome='observed') AS last_observation
-    FROM public.almanac_sli_coverage c
-    LEFT JOIN LATERAL (
-        SELECT value.good_count,value.total_count
-        FROM public.almanac_sli_observation_values value
-        WHERE value.interval_start=c.interval_start
-          AND value.sli_id=c.sli_id AND value.measurement_revision=c.measurement_revision
-          AND value.interval_start>=r.hour_start AND value.interval_start<r.hour_start+interval '1 hour'
-        LIMIT 1
-    ) v ON true
-    WHERE c.sli_id=r.sli_id AND c.measurement_revision=r.revision
-      AND c.interval_start>=r.hour_start AND c.interval_start<r.hour_start+interval '1 hour'
-) a
-WHERE a.first_interval IS NOT NULL
-ON CONFLICT (sli_id,measurement_revision,hour_start) DO UPDATE
-SET source_generation=EXCLUDED.source_generation,good=EXCLUDED.good,total=EXCLUDED.total,
-    observed_intervals=EXCLUDED.observed_intervals,known_empty_intervals=EXCLUDED.known_empty_intervals,
-    zero_traffic_intervals=EXCLUDED.zero_traffic_intervals,first_interval_start=EXCLUDED.first_interval_start,
-    last_interval_end=EXCLUDED.last_interval_end,latest_receipt_at=EXCLUDED.latest_receipt_at,
-    first_observation_at=EXCLUDED.first_observation_at,last_observation_at=EXCLUDED.last_observation_at
-WHERE almanac_sli_hourly_aggregates.source_generation<=EXCLUDED.source_generation
+SELECT sli_id::uuid AS sli_id,revision::bigint AS measurement_revision,hour_start::timestamptz AS hour_start
+FROM computed WHERE missing_values>0
 `
 
 type RebuildDerivedBatchParams struct {
@@ -182,12 +228,35 @@ type RebuildDerivedBatchParams struct {
 	Starts      []pgtype.Timestamptz `json:"starts"`
 }
 
-func (q *Queries) RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) error {
-	_, err := q.db.Exec(ctx, rebuildDerivedBatch,
+type RebuildDerivedBatchRow struct {
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	HourStart           pgtype.Timestamptz `json:"hour_start"`
+}
+
+// Hours with an observed interval whose values are not committed yet are not stored: the aggregate
+// would count the interval with zero totals (ADR-0034). They are returned so the caller defers them.
+func (q *Queries) RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) ([]RebuildDerivedBatchRow, error) {
+	rows, err := q.db.Query(ctx, rebuildDerivedBatch,
 		arg.SliIds,
 		arg.Revisions,
 		arg.Generations,
 		arg.Starts,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RebuildDerivedBatchRow{}
+	for rows.Next() {
+		var i RebuildDerivedBatchRow
+		if err := rows.Scan(&i.SliID, &i.MeasurementRevision, &i.HourStart); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

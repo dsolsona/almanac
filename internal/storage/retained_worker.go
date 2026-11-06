@@ -11,7 +11,6 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -40,14 +39,14 @@ func (r *Runtime) prepareRetainedTile(ctx context.Context, clock func() time.Tim
 		}
 		cleanup, stop := context.WithTimeout(context.Background(), 2*time.Second)
 		defer stop()
-		if conflict, ok := errors.AsType[*pgconn.PgError](resultErr); ok && conflict.Code == "40001" {
+		if derivedTemporary(ctx, resultErr) {
 			err := dbgen.New(conn).DeferRetainedTileWork(cleanup, dbgen.DeferRetainedTileWorkParams{
 				ID: work.ID, LeaseEpoch: work.LeaseEpoch, NextAttemptAt: timestamp(clock().Add(time.Second))})
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
 		err := dbgen.New(conn).FailRetainedTileWork(cleanup, dbgen.FailRetainedTileWorkParams{ID: work.ID,
-			LeaseEpoch: work.LeaseEpoch, Column3: timestamp(clock()), LastError: pgtype.Text{String: "retained_tile_failed", Valid: true}})
+			LeaseEpoch: work.LeaseEpoch, Column3: timestamp(clock()), LastError: pgtype.Text{String: derivedFailureReason(resultErr, "retained_tile_failed"), Valid: true}})
 		resultErr = errors.Join(resultErr, err)
 	}()
 	tx, err := conn.BeginTx(bounded, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})

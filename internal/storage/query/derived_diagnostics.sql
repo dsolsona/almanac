@@ -37,7 +37,7 @@ ORDER BY (state='failed') DESC,next_attempt_at,id LIMIT 101;
 
 -- name: RetryCurrentSloPreparation :execrows
 UPDATE public.almanac_slo_current_failures f
-SET attempts=0,next_attempt_at=sqlc.arg(now)::timestamptz,manual_retried_at=sqlc.arg(now)::timestamptz,last_error=''
+SET attempts=0,next_attempt_at=sqlc.arg(now)::timestamptz,manual_retried_at=sqlc.arg(now)::timestamptz,last_error='',failing_since=NULL
 WHERE f.slo_id=sqlc.arg(slo_id) AND f.definition_revision=sqlc.arg(definition_revision)
   AND f.measurement_revision=sqlc.arg(measurement_revision) AND f.calculation_version=sqlc.arg(calculation_version)
   AND f.attempts>=5 AND (f.manual_retried_at IS NULL OR f.manual_retried_at<=sqlc.arg(now)::timestamptz-interval '1 minute');
@@ -45,7 +45,7 @@ WHERE f.slo_id=sqlc.arg(slo_id) AND f.definition_revision=sqlc.arg(definition_re
 -- name: RetrySourceAggregate :execrows
 UPDATE public.almanac_derived_dirty_ranges d
 SET attempts=0,lease_until=NULL,lease_epoch=d.lease_epoch+1,next_attempt_at=sqlc.arg(now)::timestamptz,
-    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL
+    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL,failing_since=NULL
 WHERE d.id=sqlc.arg(job_id) AND d.sli_id=sqlc.arg(sli_id) AND d.measurement_revision=sqlc.arg(measurement_revision)
   AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=sqlc.arg(now)::timestamptz)
   AND d.last_error IS DISTINCT FROM 'retention_expired'
@@ -54,7 +54,7 @@ WHERE d.id=sqlc.arg(job_id) AND d.sli_id=sqlc.arg(sli_id) AND d.measurement_revi
 -- name: RetryRetainedTile :execrows
 UPDATE public.almanac_slo_series_tile_work
 SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=sqlc.arg(now)::timestamptz,
-    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL
+    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL,failing_since=NULL
 WHERE id=sqlc.arg(job_id) AND slo_id=sqlc.arg(slo_id)
   AND definition_revision=sqlc.arg(definition_revision) AND measurement_revision=sqlc.arg(measurement_revision)
   AND calculation_version=sqlc.arg(calculation_version) AND exclusion_revision=0 AND attempts>=5
@@ -64,7 +64,7 @@ WHERE id=sqlc.arg(job_id) AND slo_id=sqlc.arg(slo_id)
 -- name: RetryRetainedRepair :execrows
 UPDATE public.almanac_slo_series_repair
 SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=sqlc.arg(now)::timestamptz,
-    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL
+    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL,failing_since=NULL
 WHERE id=sqlc.arg(job_id) AND slo_id=sqlc.arg(slo_id)
   AND definition_revision=sqlc.arg(definition_revision) AND measurement_revision=sqlc.arg(measurement_revision)
   AND calculation_version=sqlc.arg(calculation_version) AND cursor_at<end_at AND attempts>=5

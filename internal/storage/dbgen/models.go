@@ -160,6 +160,7 @@ type AlmanacDerivedDirtyRange struct {
 	LastError           pgtype.Text        `json:"last_error"`
 	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
 }
 
 type AlmanacDiagnostic struct {
@@ -413,6 +414,7 @@ type AlmanacSloCurrentFailure struct {
 	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
 	LastError           string             `json:"last_error"`
 	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
 }
 
 type AlmanacSloCurrentProjection struct {
@@ -509,6 +511,7 @@ type AlmanacSloHistoryJob struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	LastError           pgtype.Text        `json:"last_error"`
 	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
 }
 
 type AlmanacSloOverviewSnapshot struct {
@@ -576,6 +579,7 @@ type AlmanacSloSeriesRepair struct {
 	ManualRetriedAt          pgtype.Timestamptz `json:"manual_retried_at"`
 	CoherentThrough          pgtype.Timestamptz `json:"coherent_through"`
 	CoherentSourceGeneration int64              `json:"coherent_source_generation"`
+	FailingSince             pgtype.Timestamptz `json:"failing_since"`
 }
 
 type AlmanacSloSeriesTile struct {
@@ -614,6 +618,7 @@ type AlmanacSloSeriesTileWork struct {
 	LastError           pgtype.Text        `json:"last_error"`
 	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
 	SummaryOnly         bool               `json:"summary_only"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
 }
 
 type AlmanacUser struct {

@@ -10,18 +10,19 @@ WHERE almanac_slo_series_repair.end_at<EXCLUDED.end_at;
 WITH candidate AS (
     SELECT slo_id,definition_revision,measurement_revision,calculation_version
     FROM public.almanac_slo_series_repair
-    WHERE cursor_at<end_at AND attempts<5 AND next_attempt_at<=sqlc.arg(now)::timestamptz
+    WHERE cursor_at<end_at AND (failing_since IS NULL OR failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
+      AND next_attempt_at<=sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
     ORDER BY next_attempt_at,slo_id LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_series_repair w
-SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=sqlc.arg(lease_until)::timestamptz
+SET attempts=LEAST(w.attempts+1,5),lease_epoch=w.lease_epoch+1,lease_until=sqlc.arg(lease_until)::timestamptz
 FROM candidate c WHERE (w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version)
     =(c.slo_id,c.definition_revision,c.measurement_revision,c.calculation_version)
 RETURNING w.*;
 
 -- name: AdvanceRetainedSeriesRepair :execrows
-UPDATE public.almanac_slo_series_repair SET cursor_at=$7,attempts=0,lease_until=NULL,last_error=NULL,
+UPDATE public.almanac_slo_series_repair SET cursor_at=$7,attempts=0,lease_until=NULL,last_error=NULL,failing_since=NULL,
     next_attempt_at=$8,
     coherent_through=CASE WHEN $7>=end_at AND sqlc.narg(coherent_source_generation)::bigint IS NOT NULL
                          THEN $7 ELSE coherent_through END,
@@ -37,7 +38,8 @@ WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calcu
 
 -- name: FailRetainedSeriesRepair :exec
 UPDATE public.almanac_slo_series_repair SET lease_until=NULL,
-    next_attempt_at=$6::timestamptz+power(2,LEAST(attempts,5))*interval '1 second',last_error='retained_series_repair_failed'
+    next_attempt_at=$6::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$6::timestamptz)>$6::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(failing_since,$6::timestamptz),last_error=sqlc.arg(reason)::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5;
 
 -- name: PublishRetainedSloPointBatch :many

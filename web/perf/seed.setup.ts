@@ -59,7 +59,9 @@ test('seed the performance fleet', async ({ page }) => {
   for (let day = 0; day <= DAYS; day += 1) {
     const from = `'${start}'::timestamptz + interval '${day} days'`;
     const to = `'${start}'::timestamptz + interval '${day + 1} days'`;
-    chunks.push(`INSERT INTO public.almanac_sli_coverage
+    // Records and values commit together, as ingestion does; the aggregator must never see one without the other.
+    chunks.push(`BEGIN;
+INSERT INTO public.almanac_sli_coverage
 (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,
  execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
 SELECT point,p.sli_id,p.measurement_revision,point+interval '1 minute','observed',decode(repeat('ab',32),'hex'),'{}',
@@ -70,7 +72,8 @@ INSERT INTO public.almanac_sli_observation_values (interval_start,sli_id,measure
 SELECT c.interval_start,c.sli_id,c.measurement_revision,p.good,${TOTAL}
 FROM public.almanac_sli_coverage c JOIN public.perf_proofs p USING (sli_id,measurement_revision)
 WHERE c.interval_start >= ${from} AND c.interval_start < least(${to}, p.first_live) AND c.outcome='observed'
-ON CONFLICT DO NOTHING;`);
+ON CONFLICT DO NOTHING;
+COMMIT;`);
   }
   // The fixture's own table lives in this disposable stack's database; each statement runs as its own call.
   psql(`

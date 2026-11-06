@@ -46,6 +46,8 @@ type Querier interface {
 	// Waiting on source work is schedulable state, not a failed calculation attempt.
 	// Preserve an existing failure budget for this revision instead of resetting it.
 	DeferCurrentPreparation(ctx context.Context, arg DeferCurrentPreparationParams) error
+	// Hours waiting for their observation values: retry soon without counting an attempt (ADR-0034).
+	DeferDerivedBatch(ctx context.Context, arg DeferDerivedBatchParams) error
 	DeferRetainedSeriesRepair(ctx context.Context, arg DeferRetainedSeriesRepairParams) error
 	DeferRetainedTileWork(ctx context.Context, arg DeferRetainedTileWorkParams) error
 	DeferRetentionWork(ctx context.Context, arg DeferRetentionWorkParams) error
@@ -78,7 +80,7 @@ type Querier interface {
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
 	// A crash on the last permitted attempt must become an observable failure,
 	// rather than remaining running forever with an unclaimable expired lease.
-	ExhaustExpiredSloHistoryJobs(ctx context.Context, leaseUntil pgtype.Timestamptz) (int64, error)
+	ExhaustExpiredSloHistoryJobs(ctx context.Context, failingSince pgtype.Timestamptz) (int64, error)
 	ExhaustRetentionWork(ctx context.Context, nextAttemptAt pgtype.Timestamptz) error
 	// Expired leases are fenced before removing their facts. Retained failure rows
 	// remain inspectable and cannot be manually retried against deleted inputs.
@@ -222,6 +224,9 @@ type Querier interface {
 	LoginAttemptKeys(ctx context.Context, arg LoginAttemptKeysParams) (LoginAttemptKeysRow, error)
 	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
 	MarkDatasourceReassignmentDrained(ctx context.Context, arg MarkDatasourceReassignmentDrainedParams) (int64, error)
+	// A calculation found the SLI's aggregates contradicting themselves (ADR-0034): rebuild the hours it
+	// read from the raw observations. Nothing is marked for an SLI with no accepted observations.
+	MarkDerivedHoursDirty(ctx context.Context, arg MarkDerivedHoursDirtyParams) error
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
 	MaterializeSloOverviewReferences(ctx context.Context, arg MaterializeSloOverviewReferencesParams) (MaterializeSloOverviewReferencesRow, error)
 	OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error)
@@ -256,14 +261,22 @@ type Querier interface {
 	// interior once; only cadence-aligned boundary fragments use canonical rows.
 	ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedWindowBatchParams) ([]ReadRetainedWindowBatchRow, error)
 	ReadReusableSloBlocks(ctx context.Context, arg ReadReusableSloBlocksParams) ([]ReadReusableSloBlocksRow, error)
+	// Each active SLO is stopped (some of its work failed for seven days), failing (some of its work failed
+	// five times in a row), catching up (its current values or retained history are behind) or up to date.
+	ReadSloDerivedStates(ctx context.Context, arg ReadSloDerivedStatesParams) (ReadSloDerivedStatesRow, error)
 	ReadSloHistoryPreparationState(ctx context.Context, arg ReadSloHistoryPreparationStateParams) (ReadSloHistoryPreparationStateRow, error)
-	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) error
+	// Hours with an observed interval whose values are not committed yet are not stored: the aggregate
+	// would count the interval with zero totals (ADR-0034). They are returned so the caller defers them.
+	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) ([]RebuildDerivedBatchRow, error)
 	RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error)
 	RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
 	ReleaseRetainedTileWork(ctx context.Context, arg ReleaseRetainedTileWorkParams) error
 	ReleaseSloHistoryForDependencies(ctx context.Context, arg ReleaseSloHistoryForDependenciesParams) (int64, error)
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
+	// ADR-0034: work that stopped after seven days of continuous failure starts again once its SLI has
+	// received observations since the failures began. Dirty hours restart in the ingestion trigger.
+	RestartStoppedDerivedWork(ctx context.Context, now pgtype.Timestamptz) (int64, error)
 	RetentionHasDependencies(ctx context.Context, arg RetentionHasDependenciesParams) (bool, error)
 	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
 	RetryCurrentSloPreparation(ctx context.Context, arg RetryCurrentSloPreparationParams) (int64, error)
