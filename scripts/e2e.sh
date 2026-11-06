@@ -38,9 +38,10 @@ case "${1:-}" in
   up) up; printf 'End-to-end stack ready at %s\n' "$E2E_BASE_URL" ;;
   down) down ;;
   *)
-    up
+    # The trap comes before the start, so a stack that fails its health checks is removed too, and
+    # Playwright runs in a subshell so the trap's Compose paths still resolve from the repository root.
     [ "${E2E_KEEP:-}" = 1 ] || trap down EXIT
-    cd web
-    ./node_modules/.bin/playwright test --config "${E2E_CONFIG:-playwright.e2e.config.ts}" "$@"
+    up
+    (cd web && ./node_modules/.bin/playwright test --config "${E2E_CONFIG:-playwright.e2e.config.ts}" "$@")
     ;;
 esac

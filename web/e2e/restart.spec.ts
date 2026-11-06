@@ -12,12 +12,15 @@ test('data and collection survive an application restart', async ({ page }) => {
   await expect(page.locator('.sli-list-name strong').first()).toBeVisible();
   const names = await page.locator('.sli-list-name strong').allTextContents();
   expect(names.length).toBeGreaterThan(0);
+  // The end of the newest observed interval across the SLIs, in milliseconds (0 if none).
   const latest = async () => {
     const page1 = await api(page, 'GET', '/api/v1/slis?limit=200');
-    return page1.body.items.map((item: { latest_observation: { interval_end: string } | null }) => item.latest_observation?.interval_end ?? '').sort().at(-1) as string;
+    return Math.max(0, ...page1.body.items
+      .filter((item: { latest_observation: { outcome: string } | null }) => item.latest_observation?.outcome === 'observed')
+      .map((item: { latest_observation: { interval_end: string } }) => Date.parse(item.latest_observation.interval_end)));
   };
   const before = await latest();
-  expect(before).not.toBe('');
+  expect(before).toBeGreaterThan(0);
 
   restartApp();
 
@@ -30,6 +33,6 @@ test('data and collection survive an application restart', async ({ page }) => {
   await page.goto('/slis');
   await expect(page.locator('.sli-list-name strong')).toHaveText(names);
 
-  // The agent reconnects by itself and collection continues: a newer interval than before the restart arrives.
-  await expect.poll(latest, { timeout: 180_000, intervals: [5_000] }).not.toBe(before);
+  // The agent reconnects by itself and collection continues: a newer observed interval than before the restart arrives.
+  await expect.poll(latest, { timeout: 180_000, intervals: [5_000] }).toBeGreaterThan(before);
 });
