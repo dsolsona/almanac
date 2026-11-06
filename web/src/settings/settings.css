@@ -1,5 +1,5 @@
 /* Composition copied from the approved settings reference; controls remain shared. */
-.application-shell--settings, .settings-activation { font-synthesis:auto; }
+.application-shell--settings, .settings-activation, .settings-link-output { font-synthesis:auto; }
 .application-shell--settings .app-main { width:100%; max-width:1480px; margin:0 auto; padding:28px 32px 48px; }
 .application-shell--settings .app-sidebar { padding:28px 20px; }
 .application-shell--settings .app-sidebar__brand { display:block; min-height:0; padding:0; }

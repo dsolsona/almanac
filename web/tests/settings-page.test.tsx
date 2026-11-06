@@ -1,7 +1,9 @@
 import { afterAll, afterEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SettingsPage } from '../src/settings/SettingsPage.tsx';
+import { useState } from 'react';
+import { AccountLinkDialog, SettingsPage as SettingsView } from '../src/settings/SettingsPage.tsx';
+import type { CommandResult } from '../src/settings/client.ts';
 import { AuthPage } from '../src/auth/AuthPage.tsx';
 import { createAuthClient, type AuthContext } from '../src/auth/client.ts';
 
@@ -14,6 +16,11 @@ Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true
 Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value(this:HTMLDialogElement){this.removeAttribute('open');}});
 afterAll(()=>{for(const [name,descriptor]of Object.entries(dialogDescriptors)){if(descriptor)Object.defineProperty(HTMLDialogElement.prototype,name,descriptor);else Reflect.deleteProperty(HTMLDialogElement.prototype,name);}});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();history.replaceState({},'','/');localStorage.clear();document.documentElement.classList.remove('dark');});
+
+function SettingsPage({context}:{context:AuthContext}) {
+ const [issued,setIssued]=useState<CommandResult|null>(null);
+ return <><SettingsView context={context} onIssuedLink={setIssued}/>{issued&&<AccountLinkDialog issued={issued} onClose={()=>setIssued(null)}/>}</>;
+}
 
 it('puts the role chip, theme choice and password footer action on the account page',async()=>{
  history.replaceState({},'','/settings/account');
@@ -114,4 +121,52 @@ it('uses the recovered session after a password-change response is lost, without
  expect(await screen.findByRole('status')).toHaveTextContent('Your name has been updated.');
  expect(profileCSRF).toBe('replacement-csrf');
  expect(rotations).toBe(1);
+});
+
+it('keeps an own reset link available after the revoked session becomes anonymous, until dismissal',async()=>{
+ history.replaceState({},'',`/settings/users/${id}`);
+ const self={...profile,is_last_admin:false};
+ const link=`${location.origin}/activate#alu_reset_${'R'.repeat(43)}`;
+ let reset=false;
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  if(String(input).endsWith('/auth/context'))return response(reset?{csrf_token:'anonymous-csrf',session:null}:admin);
+  if(init?.method==='POST'){
+   reset=true;
+   return response({user:{...self,status:'resetting',version:'2'},purpose:'reset',expires_at:'2026-11-06T14:15:00Z',replayed:false,link});
+  }
+  return response(self);
+ }));
+ render(<AuthPage client={createAuthClient()}/>);
+ await userEvent.click(await screen.findByRole('button',{name:/^Reset password$/}));
+ await userEvent.click(screen.getByRole('button',{name:/^Generate link$/}));
+ await screen.findByRole('button',{name:/^Sign in$/});
+ const dialog=await screen.findByRole('dialog',{name:'Password reset link ready'});
+ expect(within(dialog).getByText(link)).toBeVisible();
+ expect(JSON.stringify(localStorage)+JSON.stringify(sessionStorage)).not.toContain('alu_reset_');
+ await userEvent.click(within(dialog).getByRole('button',{name:/^Done$/}));
+ expect(screen.queryByText(link)).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:/^Sign in$/})).toBeVisible();
+});
+
+it.each(['success','failure'])('ignores a late user save %s after navigation to another loaded user',async outcome=>{
+ const first={...profile,id:'00000000-0000-4000-8000-000000000001',full_name:'User A',email:'a@example.test',is_last_admin:false};
+ const second={...first,id:'00000000-0000-4000-8000-000000000002',full_name:'User B',email:'b@example.test'};
+ history.replaceState({},'',`/settings/users/${first.id}`);
+ let finish!:(response:Response)=>void;
+ const saving=new Promise<Response>(resolve=>{finish=resolve;});
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  if(init?.method==='PUT')return saving;
+  return response(String(input).endsWith(second.id)?second:first);
+ }));
+ render(<SettingsPage context={admin}/>);
+ const name=await screen.findByLabelText('Full name');
+ await userEvent.clear(name);await userEvent.type(name,'User A updated');
+ await userEvent.click(screen.getByRole('button',{name:/^Save changes$/}));
+ history.pushState({},'',`/settings/users/${second.id}`);fireEvent.popState(window);
+ await waitFor(()=>expect(screen.getByLabelText('Full name')).toHaveValue('User B'));
+ await act(async()=>finish(outcome==='success'?response({user:{...first,full_name:'User A updated',version:'2'},purpose:'',expires_at:null,replayed:false}):response({code:'conflict'},409)));
+ await waitFor(()=>expect(screen.getByRole('button',{name:/^Save changes$/})).toBeEnabled());
+ expect(screen.getByLabelText('Full name')).toHaveValue('User B');
+ expect(screen.getByRole('heading',{level:1})).toHaveTextContent('User B');
+ expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

@@ -19,7 +19,8 @@ const samples = [
  ['Kim Santos','kim@example.com','viewer','disabled',null],
 ];
 
-test('settings matches the approved reference in both themes at desktop and mobile sizes',async({browser},testInfo)=>{
+for(const [width,height] of [[1440,1000],[360,900]])for(const theme of ['light','dark'])
+test(`settings matches the approved reference at ${width}px in ${theme} theme`,async({browser},testInfo)=>{
  const users=samples.map(([full_name,email,role,status,last_sign_in],index)=>({id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,full_name,email,role,status,last_sign_in,version:'1',sign_in_history_known:index!==11,is_last_admin:index===0}));
  const root=resolve('..');
  const server=createServer(async(request,response)=>{
@@ -32,7 +33,6 @@ test('settings matches the approved reference in both themes at desktop and mobi
  const output=resolve('../.local/settings-parity');await mkdir(output,{recursive:true});
  const geometry:unknown[]=[];
  try{
-  for(const [width,height] of [[1440,1000],[360,900]])for(const theme of ['light','dark']){
    const context=await browser.newContext({viewport:{width,height},storageState:{cookies:[],origins:[]}});
    await context.addInitScript(theme=>localStorage.setItem('almanac-theme',theme),theme);
    const actual=await context.newPage();await actual.clock.setFixedTime(new Date('2026-11-06T14:00:00Z'));
@@ -94,10 +94,9 @@ test('settings matches the approved reference in both themes at desktop and mobi
     expect(await actual.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    }
    await context.close();
-  }
  }finally{server.close();}
- await writeFile(resolve(output,'geometry.json'),JSON.stringify(geometry,null,2));
- await writeFile(resolve(output,'summary.json'),JSON.stringify(geometry.filter((entry:any)=>entry.kind==='pixels'),null,2));
- await writeFile(resolve(output,'users-layout.json'),JSON.stringify(geometry.filter((entry:any)=>entry.name==='users'&&entry.theme==='light'&&entry.kind!=='pixels').map((entry:any)=>({kind:entry.kind,width:entry.width,nodes:entry.nodes.map((node:any)=>({class:node.class,x:node.rect.x,y:node.rect.y,w:node.rect.width,h:node.rect.height}))})),null,2));
- await testInfo.attach('settings geometry',{path:resolve(output,'geometry.json'),contentType:'application/json'});
+ await writeFile(resolve(output,`geometry-${width}-${theme}.json`),JSON.stringify(geometry,null,2));
+ await writeFile(resolve(output,`summary-${width}-${theme}.json`),JSON.stringify(geometry.filter((entry:any)=>entry.kind==='pixels'),null,2));
+ await writeFile(resolve(output,`users-layout-${width}-${theme}.json`),JSON.stringify(geometry.filter((entry:any)=>entry.name==='users'&&entry.kind!=='pixels').map((entry:any)=>({kind:entry.kind,width:entry.width,nodes:entry.nodes.map((node:any)=>({class:node.class,x:node.rect.x,y:node.rect.y,w:node.rect.width,h:node.rect.height}))})),null,2));
+ await testInfo.attach('settings geometry',{path:resolve(output,`geometry-${width}-${theme}.json`),contentType:'application/json'});
 });

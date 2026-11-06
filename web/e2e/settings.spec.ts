@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { api, unique } from './support/api.ts';
+import { api, expectOk, unique } from './support/api.ts';
 
 test('an administrator creates a user, shares setup, and controls real account access', async ({ page, browser },testInfo) => {
   const name = unique('Sam Rivera'), email = `${unique('sam')}@example.test`;
@@ -93,4 +93,41 @@ test('an administrator creates a user, shares setup, and controls real account a
     await expect(page).toHaveURL(/\/settings\/users$/);
     expect((await api(page,'GET',`/api/v1/users/${userPath.split('/').at(-1)}`)).status).toBe(404);
   } finally { await person.close(); }
+});
+
+test('an administrator can keep and redeem their own reset link after signing out',async({page,browser})=>{
+  const email=`${unique('self-reset')}@example.test`,password='A private fixture password for this admin 61';
+  const created=await expectOk(api(page,'POST','/api/v1/users',{full_name:'Self Reset Admin',email,role:'administrator'}));
+  const person=await browser.newContext({ignoreHTTPSErrors:true,storageState:{cookies:[],origins:[]}});
+  try{
+    const user=await person.newPage();
+    await user.goto(created.body.link);
+    await user.getByLabel('Password',{exact:true}).fill(password);
+    await user.getByLabel('Confirm password',{exact:true}).fill(password);
+    await user.getByRole('button',{name:'Set password',exact:true}).click();
+    await expect(user.getByRole('heading',{name:'Your account is ready',exact:true})).toBeVisible();
+    await user.getByRole('link',{name:'Continue to sign in',exact:true}).click();
+    await user.getByLabel('Login',{exact:true}).fill(email);
+    await user.getByLabel('Password',{exact:true}).fill(password);
+    await user.getByRole('button',{name:'Sign in',exact:true}).click();
+    await expect(user.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
+    await user.goto(`/settings/users/${created.body.user.id}`);
+    await user.getByRole('button',{name:'Reset password',exact:true}).click();
+    await user.getByRole('dialog',{name:'Reset Self Reset Admin’s password?'}).getByRole('button',{name:'Generate link',exact:true}).click();
+    const dialog=user.getByRole('dialog',{name:'Password reset link ready'});
+    await expect(dialog).toBeVisible();
+    await expect(user.locator('.application-shell')).toHaveCount(0);
+    const link=(await dialog.locator('code').textContent())!;
+    await expect(dialog.getByRole('button',{name:'Done',exact:true})).toBeFocused();
+    await dialog.getByRole('button',{name:'Done',exact:true}).click();
+    await expect(user.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
+    await expect(user.locator('main h1')).toBeFocused();
+    await expect(user.getByText(link,{exact:true})).toHaveCount(0);
+    await user.goto(link);
+    await expect(user.getByRole('heading',{name:'Reset your password',exact:true})).toBeVisible();
+    await user.getByLabel('Password',{exact:true}).fill('Another private password for this admin 62');
+    await user.getByLabel('Confirm password',{exact:true}).fill('Another private password for this admin 62');
+    await user.getByRole('button',{name:'Set password',exact:true}).click();
+    await expect(user.getByRole('heading',{name:'Your account is ready',exact:true})).toBeVisible();
+  }finally{await person.close();}
 });

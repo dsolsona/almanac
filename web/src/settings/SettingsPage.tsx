@@ -27,7 +27,7 @@ function LastSignIn({user,now}:{user:ManagedUser;now:number}) {
   return <time dateTime={user.last_sign_in} title={exact} aria-label={`Last sign-in: ${exact}`}>{label}</time>;
 }
 
-export function SettingsPage({context,onProfileChange,onSessionChange,onAuthFailure,onCheckSession,client=defaultAuthClient}:{context:AuthContext;onProfileChange?:(user:ManagedUser)=>void;onSessionChange?:(context:AuthContext)=>void;onAuthFailure?:(error:AuthFailure)=>void;onCheckSession?:()=>void;client?:ReturnType<typeof createAuthClient>}) {
+export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChange,onAuthFailure,onCheckSession,client=defaultAuthClient}:{context:AuthContext;onIssuedLink:(result:CommandResult)=>void;onProfileChange?:(user:ManagedUser)=>void;onSessionChange?:(context:AuthContext)=>void;onAuthFailure?:(error:AuthFailure)=>void;onCheckSession?:()=>void;client?:ReturnType<typeof createAuthClient>}) {
   const authClient=useRef(client).current;
   const [path,setPath]=useState(location.pathname);
   const [record,setRecord]=useState<ManagedUser|null>(null);
@@ -40,16 +40,16 @@ export function SettingsPage({context,onProfileChange,onSessionChange,onAuthFail
   const [readPath,setReadPath]=useState('');
   const [readPending,setReadPending]=useState(true),[pending,setPending]=useState(false),[uncertain,setUncertain]=useState(false);
   const [error,setError]=useState(''),[message,setMessage]=useState(''),[fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
-  const [confirmAction,setConfirmAction]=useState<UserAction|null>(null),[issued,setIssued]=useState<CommandResult|null>(null),[copyMessage,setCopyMessage]=useState('');
+  const [confirmAction,setConfirmAction]=useState<UserAction|null>(null);
   const [now,setNow]=useState(Date.now());
-  const heading=useRef<HTMLHeadingElement>(null),trigger=useRef<HTMLElement>(null),cancelButton=useRef<HTMLButtonElement>(null),doneButton=useRef<HTMLButtonElement>(null);
-  const busy=useRef(false),live=useRef(true),intent=useRef<{signature:string;key:string}|null>(null);
+  const heading=useRef<HTMLHeadingElement>(null),trigger=useRef<HTMLElement>(null),cancelButton=useRef<HTMLButtonElement>(null);
+  const busy=useRef(false),live=useRef(true),navigation=useRef(0),intent=useRef<{signature:string;key:string}|null>(null);
   const account=path==='/settings'||path==='/settings/account', users=path.startsWith('/settings/users'), list=path==='/settings/users', creating=path==='/settings/users/new', changingPassword=path==='/settings/password';
   const admin=context.session?.role==='administrator', id=path.split('/')[3];
   const target=record && (account?record.id===context.session?.user_id:record.id===id)?record:null;
   const blocked=pending||uncertain;
-  useEffect(()=>{live.current=true;const changed=()=>setPath(location.pathname);window.addEventListener('popstate',changed);return()=>{live.current=false;window.removeEventListener('popstate',changed);};},[]);
-  useEffect(()=>{setPassword('');setConfirmation('');setFieldErrors({});setError('');setUncertain(false);intent.current=null;heading.current?.focus();},[path]);
+  useEffect(()=>{live.current=true;const changed=()=>{navigation.current++;setPath(location.pathname);};window.addEventListener('popstate',changed);return()=>{live.current=false;window.removeEventListener('popstate',changed);};},[]);
+  useEffect(()=>{setPassword('');setConfirmation('');setConfirmAction(null);setFieldErrors({});setError('');setUncertain(false);intent.current=null;heading.current?.focus();},[path]);
   useEffect(()=>{
     const controller=new AbortController();setReadPending(true);setError('');
     if(users&&!admin||changingPassword) {setReadPath(path);setReadPending(false);return()=>controller.abort();}
@@ -79,20 +79,21 @@ export function SettingsPage({context,onProfileChange,onSessionChange,onAuthFail
     if(Object.keys(errors).length){setFieldErrors(errors);return;}
     if(operation!=='create'&&!target)return;
     busy.current=true;setPending(true);setError('');setFieldErrors({});
+    const generation=navigation.current;
     const key=keyFor(JSON.stringify({operation,user:target?.id,version:target?.version,...body}));
     try {
       const result=operation==='create'?await settingsClient.create(context,body,key):operation==='profile'?await settingsClient.profile(context,target!,body.full_name,key):operation==='update'?await settingsClient.update(context,target!,body,key):await settingsClient.action(context,target!,operation,key);
-      if(!live.current)return;
+      if(!live.current||generation!==navigation.current)return;
       intent.current=null;setUncertain(false);setConfirmAction(null);setRecord(result.user);setMessage(operation==='delete'?`${result.user.full_name} deleted.`:operation==='profile'?'Your name has been updated.':operation==='create'?'User added.':operation==='update'?'Changes saved.':'Account access updated.');
       if(result.user.id===context.session?.user_id)onProfileChange?.(result.user);
-      if(result.link){setCopyMessage('');setIssued(result);}
+      if(result.link)onIssuedLink(result);
       else if(result.replayed&&['create','reset-password','replace-setup-link'].includes(operation))setMessage('The original command completed. Its one-time link cannot be retrieved; generate a replacement if needed.');
       if(operation==='create')navigate(`/settings/users/${result.user.id}`);
       if(operation==='delete'){resetPage();navigate('/settings/users');}
       if(result.user.id===context.session?.user_id&&operation!=='profile') {
         const next=await authClient.context();if(live.current)onSessionChange?.(next);
       }
-    }catch(err){if(live.current){setError(operation==='create'&&err instanceof SettingsFailure&&err.uncertain?'The operation may have completed. Retry Add user with this unchanged draft to confirm the original command. A setup link is only shown once.':err instanceof Error?err.message:'The operation could not be confirmed.');setUncertain(err instanceof SettingsFailure&&err.uncertain);if(err instanceof SettingsFailure&&err.code==='email_in_use')setFieldErrors({email:err.message});}}
+    }catch(err){if(live.current&&generation===navigation.current){setError(operation==='create'&&err instanceof SettingsFailure&&err.uncertain?'The operation may have completed. Retry Add user with this unchanged draft to confirm the original command. A setup link is only shown once.':err instanceof Error?err.message:'The operation could not be confirmed.');setUncertain(err instanceof SettingsFailure&&err.uncertain);if(err instanceof SettingsFailure&&err.code==='email_in_use')setFieldErrors({email:err.message});}}
     finally{busy.current=false;if(live.current)setPending(false);}
   }
   async function changePassword(event:FormEvent){
@@ -107,7 +108,7 @@ export function SettingsPage({context,onProfileChange,onSessionChange,onAuthFail
   function openConfirmation(action:UserAction,event:MouseEvent<HTMLButtonElement>){trigger.current=event.currentTarget;setConfirmAction(action);setError('');}
   function routeClick(event:MouseEvent<HTMLElement>){
     const anchor=event.target instanceof Element?event.target.closest<HTMLAnchorElement>('a[data-settings-route]'):null;
-    if(anchor&&!event.defaultPrevented&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();if(pending)return;setIssued(null);setConfirmAction(null);setMessage('');navigate(anchor.pathname);}
+    if(anchor&&!event.defaultPrevented&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();if(pending)return;setConfirmAction(null);setMessage('');navigate(anchor.pathname);}
   }
   const crumb=(current:string,isUser=false)=><nav className="settings-crumbs" aria-label="Breadcrumb"><a href="/settings/account" data-settings-route>Settings</a><span aria-hidden="true">/</span>{isUser&&<><a href="/settings/users" data-settings-route>Users</a><span aria-hidden="true">/</span></>}<span aria-current="page">{current}</span></nav>;
   const title=list?'Users':creating?'Add user':account?'Your account':changingPassword?'Change password':target?.full_name??'User details';
@@ -116,8 +117,6 @@ export function SettingsPage({context,onProfileChange,onSessionChange,onAuthFail
   const confirmDescription:Record<UserAction,string>={delete:'This permanently removes the account and revokes its sessions, tokens and pending links. Past audit activity keeps its attribution. This cannot be undone.',disable:'They will be signed out immediately. Their sessions, personal tokens and pending setup or reset links will be revoked. Their profile and role are kept.',enable:'Restore this account’s access. They will need to sign in again; previous sessions and links stay revoked.','reset-password':'This signs the user out, revokes their tokens and pending links, and suspends password sign-in until the new password is set. Share the new link privately; it expires in 15 minutes.','cancel-password-reset':'The reset link will stop working. The user can sign in again with their previous password. Revoked sessions and tokens stay revoked.','replace-setup-link':'The original setup link will stop working. Share the replacement privately; it expires in 24 hours.'};
   const actionLabel:Record<UserAction,string>={delete:'Delete user',disable:'Disable user',enable:'Enable user','reset-password':'Generate link','cancel-password-reset':'Cancel reset','replace-setup-link':'Generate link'};
   const resetAction:UserAction=target?.status==='resetting'?'cancel-password-reset':target?.status==='pending'?'replace-setup-link':'reset-password';
-  const closeIssued=()=>{setIssued(null);setCopyMessage('');};
-  async function copyLink(){try{await navigator.clipboard.writeText(issued!.link!);setCopyMessage('Link copied.');}catch{setCopyMessage('Copy is unavailable. Select the link above to copy it.');}}
 
   return <div className="settings-page" onClick={routeClick}>
     <nav className="settings-tabs" aria-label="Settings"><a href="/settings/account" data-settings-route aria-current={!users?'page':undefined}>Your account</a>{admin&&<a href="/settings/users" data-settings-route aria-current={users?'page':undefined}>Users</a>}</nav>
@@ -152,8 +151,15 @@ export function SettingsPage({context,onProfileChange,onSessionChange,onAuthFail
     <Dialog open={confirmAction!==null} onClose={()=>{if(!pending)setConfirmAction(null);}} title={confirmTitle||'Confirm account action'} triggerRef={trigger} initialFocusRef={cancelButton}>
       {confirmAction&&<><p>{confirmDescription[confirmAction]}</p>{error&&<div role="alert" className="settings-notice settings-notice--error">{error}</div>}<div className="settings-dialog-actions"><Button ref={cancelButton} variant="outline" onClick={()=>setConfirmAction(null)} disabled={pending}>Cancel</Button><Button variant={confirmAction==='delete'||confirmAction==='disable'?'danger':'primary'} onClick={()=>void mutate(confirmAction)} pending={pending}>{actionLabel[confirmAction]}</Button></div></>}
     </Dialog>
-    <Dialog open={issued!==null} onClose={closeIssued} title={issued?.purpose==='reset'?'Password reset link ready':'Password setup link ready'} triggerRef={heading} initialFocusRef={doneButton}>
-      {issued&&<><p>{issued.user.full_name} · {issued.user.email}. Share this link privately. It expires in {issued.purpose==='reset'?'15 minutes':'24 hours'} and can be used once. No email has been sent.</p><div className="settings-one-time"><code>{issued.link}</code></div><p className="settings-muted">This link will not be available after closing this dialog.</p><div className="settings-dialog-actions"><Button variant="outline" onClick={()=>void copyLink()}>Copy link</Button><Button ref={doneButton} onClick={closeIssued}>Done</Button></div><p role="status">{copyMessage}</p></>}
-    </Dialog>
   </div>;
+}
+
+export function AccountLinkDialog({issued,onClose}:{issued:CommandResult;onClose:()=>void}) {
+  const [copyMessage,setCopyMessage]=useState('');
+  const trigger=useRef<HTMLElement>(null),doneButton=useRef<HTMLButtonElement>(null);
+  useEffect(()=>()=>{document.querySelector<HTMLElement>('#main h1')?.focus();},[]);
+  async function copyLink(){try{await navigator.clipboard.writeText(issued.link!);setCopyMessage('Link copied.');}catch{setCopyMessage('Copy is unavailable. Select the link above to copy it.');}}
+  return <div className="settings-page settings-link-output"><Dialog open onClose={onClose} title={issued.purpose==='reset'?'Password reset link ready':'Password setup link ready'} triggerRef={trigger} initialFocusRef={doneButton}>
+    <p>{issued.user.full_name} · {issued.user.email}. Share this link privately. It expires in {issued.purpose==='reset'?'15 minutes':'24 hours'} and can be used once. No email has been sent.</p><div className="settings-one-time"><code>{issued.link}</code></div><p className="settings-muted">This link will not be available after closing this dialog.</p><div className="settings-dialog-actions"><Button variant="outline" onClick={()=>void copyLink()}>Copy link</Button><Button ref={doneButton} onClick={onClose}>Done</Button></div><p role="status">{copyMessage}</p>
+  </Dialog></div>;
 }
