@@ -133,6 +133,8 @@ _disk_trim:
 GO_TEST := GOTOOLCHAIN=local GOPROXY=off $(GO) test $(if $(RACE),-race)
 
 _test:
+	@mkdir -p .local
+	$(MAKE) --no-print-directory _ensure_web_assets
 	@set -eu; unformatted=$$(find cmd internal -name '*.go' -type f -print0 | xargs -0 $(GOFMT) -l); \
 	  test -z "$$unformatted" || { echo "Go files need formatting (make generate GENERATE_MODE=format): $$unformatted" >&2; exit 1; }
 	GOTOOLCHAIN=local GOPROXY=off $(GO) vet ./...
@@ -144,18 +146,20 @@ _test:
 	cd web && node scripts/check-local-agent.mjs
 	cd web && npm run typecheck
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts
-	$(MAKE) --no-print-directory _ensure_web_assets
 	$(GO_TEST) ./...
 
 # One `go test` for every package: packages run in parallel and integration tests call t.Parallel.
 # Each test gets its own database in the dev container's PostgreSQL fixture.
 _test_integration:
+	@mkdir -p .local
 	$(MAKE) --no-print-directory build
 	$(GO_TEST) -tags=integration -count=1 -timeout=10m ./...
 
+# The catalogue tests include production-build checks, so the build comes first.
 _test_browser:
+	cd web && npm run build
 	cd web && ./node_modules/.bin/playwright test --config playwright.config.ts
-	cd web && npm run build && node scripts/check-production.mjs
+	cd web && node scripts/check-production.mjs
 
 # Coverage of the unit and integration tests together; the report lands in .local/coverage.
 _coverage:
