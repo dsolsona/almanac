@@ -3,6 +3,7 @@ package slo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 )
@@ -99,19 +100,19 @@ func NewWindowSweepContext(ctx context.Context, input WindowInput) (*WindowSweep
 			}
 		}
 		if fact.Start.IsZero() || fact.End.Sub(fact.Start) != input.Cadence || index > 0 && !input.Observations[index-1].Start.Before(fact.Start) {
-			return nil, ErrOperationalFacts
+			return nil, fmt.Errorf("%w: observation intervals are not ordered whole cadence intervals", ErrOperationalFacts)
 		}
 		if fact.Outcome == "observed" {
 			g, ok := decimal(fact.Good, false)
 			if !ok {
-				return nil, ErrOperationalFacts
+				return nil, fmt.Errorf("%w: observation good count is not a decimal", ErrOperationalFacts)
 			}
 			t, ok := decimal(fact.Total, false)
 			if !ok || g.Cmp(t) > 0 {
-				return nil, ErrOperationalFacts
+				return nil, fmt.Errorf("%w: observation total is not a decimal or is below good", ErrOperationalFacts)
 			}
 		} else if fact.Outcome != "complete_empty" && fact.Outcome != "incomplete" && fact.Outcome != "failed" {
-			return nil, ErrOperationalFacts
+			return nil, fmt.Errorf("%w: unknown observation outcome", ErrOperationalFacts)
 		}
 	}
 	target, ok := decimal(input.Target, true)
@@ -246,7 +247,7 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 	expired := int64(retention.Sub(eligible) / s.input.Cadence)
 	missing := expected - expired - s.observedCount - s.emptyCount
 	if missing < 0 {
-		return WindowResult{}, ErrOperationalFacts
+		return WindowResult{}, fmt.Errorf("%w: %d observed and %d empty intervals exceed the %d expected in the window", ErrOperationalFacts, s.observedCount, s.emptyCount, expected-expired)
 	}
 	quality := "complete"
 	switch {

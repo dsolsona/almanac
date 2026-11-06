@@ -32,14 +32,15 @@ func (q *Queries) AcknowledgeRetainedTileWork(ctx context.Context, arg Acknowled
 const claimRetainedTileWork = `-- name: ClaimRetainedTileWork :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_series_tile_work
-    WHERE attempts<5 AND next_attempt_at<=$2::timestamptz
+    WHERE (attempts<5 OR failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+      AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
     ORDER BY summary_only,next_attempt_at,resolution_seconds,range_start DESC,id
     LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_series_tile_work w
-SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
-FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.exclusion_revision, w.calculation_version, w.resolution_seconds, w.range_start, w.range_end, w.version, w.source_generation, w.next_attempt_at, w.attempts, w.lease_epoch, w.lease_until, w.last_error, w.manual_retried_at, w.summary_only
+SET attempts=LEAST(w.attempts+1,5),lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
+FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.exclusion_revision, w.calculation_version, w.resolution_seconds, w.range_start, w.range_end, w.version, w.source_generation, w.next_attempt_at, w.attempts, w.lease_epoch, w.lease_until, w.last_error, w.manual_retried_at, w.summary_only, w.failing_since
 `
 
 type ClaimRetainedTileWorkParams struct {
@@ -69,12 +70,13 @@ func (q *Queries) ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTi
 		&i.LastError,
 		&i.ManualRetriedAt,
 		&i.SummaryOnly,
+		&i.FailingSince,
 	)
 	return i, err
 }
 
 const deferRetainedTileWork = `-- name: DeferRetainedTileWork :exec
-UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$3
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,next_attempt_at=$3
 WHERE id=$1 AND lease_epoch=$2
 `
 
@@ -91,7 +93,8 @@ func (q *Queries) DeferRetainedTileWork(ctx context.Context, arg DeferRetainedTi
 
 const failRetainedTileWork = `-- name: FailRetainedTileWork :exec
 UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,
-    next_attempt_at=$3::timestamptz+power(2,LEAST(attempts,5))*interval '1 second',last_error=$4
+    next_attempt_at=$3::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$3::timestamptz)>$3::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(failing_since,$3::timestamptz),last_error=$4
 WHERE id=$1 AND lease_epoch=$2
 `
 
@@ -447,7 +450,7 @@ func (q *Queries) ReadRetainedTileSummaryInput(ctx context.Context, id pgtype.UU
 }
 
 const releaseRetainedTileWork = `-- name: ReleaseRetainedTileWork :exec
-UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=0,last_error=NULL
+UPDATE public.almanac_slo_series_tile_work SET lease_until=NULL,attempts=0,last_error=NULL,failing_since=NULL
 WHERE id=$1 AND lease_epoch=$2
 `
 

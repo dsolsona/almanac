@@ -26,6 +26,7 @@ type runtimeMetrics struct {
 	historyHits       atomic.Uint64
 	historyMisses     atomic.Uint64
 	diagnostics       atomic.Pointer[derivedMetricsSnapshot]
+	sloStates         atomic.Pointer[dbgen.ReadSloDerivedStatesRow]
 	ingestion         [3]ingestionMetrics
 }
 
@@ -228,6 +229,16 @@ func (r *Runtime) MetricsHandler() http.Handler {
 			metric(&body, "almanac_derived_oldest_history_seconds", "", snapshot.OldestHistorySeconds)
 			metric(&body, "almanac_derived_current_lag_seconds", "", snapshot.CurrentLagSeconds)
 			metric(&body, "almanac_derived_pending_current", "", snapshot.PendingCurrent)
+		}
+		if states := r.metrics.sloStates.Load(); states != nil {
+			for _, state := range []struct {
+				name  string
+				count int64
+			}{{"up_to_date", states.UpToDate}, {"catching_up", states.CatchingUp}, {"failing", states.Failing}, {"stopped", states.Stopped}} {
+				metric(&body, "almanac_derived_slos", fmt.Sprintf(`state=%q`, state.name), state.count)
+			}
+		}
+		if snapshot := r.metrics.diagnostics.Load(); snapshot != nil {
 			metric(&body, "almanac_derived_cache_payload_bytes", "", snapshot.CacheBytes)
 			metric(&body, "almanac_derived_cache_limit_bytes", "", snapshot.CacheLimitBytes)
 			metric(&body, "almanac_storage_relation_bytes", `kind="canonical"`, snapshot.CanonicalBytes)

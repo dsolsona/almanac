@@ -112,14 +112,16 @@ func (q *Queries) AttachPreparedBudgetSparkline(ctx context.Context, arg AttachP
 const claimSloHistoryJob = `-- name: ClaimSloHistoryJob :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_history_jobs
-    WHERE state <> 'failed' AND attempts < 5 AND next_attempt_at <= $2::timestamptz
+    WHERE (state <> 'failed' OR (last_error IS DISTINCT FROM 'retention_expired'
+           AND (attempts < 5 OR failing_since IS NULL OR failing_since > $2::timestamptz-interval '7 days')))
+      AND next_attempt_at <= $2::timestamptz
       AND (lease_until IS NULL OR lease_until <= $2::timestamptz)
     ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_history_jobs j
-SET state='running', attempts=j.attempts+1, lease_epoch=j.lease_epoch+1,
+SET state='running', attempts=LEAST(j.attempts+1,5), lease_epoch=j.lease_epoch+1,
     lease_until=$1::timestamptz
-FROM candidate c WHERE j.id=c.id RETURNING j.id, j.slo_id, j.definition_revision, j.measurement_revision, j.source_generation, j.calculation_version, j.retention_start, j.evaluated_through, j.range_start, j.range_end, j.burn_window_seconds, j.kind, j.state, j.attempts, j.lease_epoch, j.lease_until, j.next_attempt_at, j.created_at, j.last_error, j.manual_retried_at
+FROM candidate c WHERE j.id=c.id RETURNING j.id, j.slo_id, j.definition_revision, j.measurement_revision, j.source_generation, j.calculation_version, j.retention_start, j.evaluated_through, j.range_start, j.range_end, j.burn_window_seconds, j.kind, j.state, j.attempts, j.lease_epoch, j.lease_until, j.next_attempt_at, j.created_at, j.last_error, j.manual_retried_at, j.failing_since
 `
 
 type ClaimSloHistoryJobParams struct {
@@ -151,6 +153,7 @@ func (q *Queries) ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJob
 		&i.CreatedAt,
 		&i.LastError,
 		&i.ManualRetriedAt,
+		&i.FailingSince,
 	)
 	return i, err
 }
@@ -204,14 +207,15 @@ func (q *Queries) DeleteExpiredDerivedGenerations(ctx context.Context, published
 
 const exhaustExpiredSloHistoryJobs = `-- name: ExhaustExpiredSloHistoryJobs :execrows
 UPDATE public.almanac_slo_history_jobs
-SET state='failed', lease_until=NULL, last_error='history_lease_expired'
+SET state='failed', lease_until=NULL, last_error='history_lease_expired', failing_since=coalesce(failing_since,$1),
+    next_attempt_at=$1::timestamptz+CASE WHEN coalesce(failing_since,$1)>$1::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END
 WHERE state='running' AND attempts>=5 AND lease_until <= $1
 `
 
 // A crash on the last permitted attempt must become an observable failure,
 // rather than remaining running forever with an unclaimable expired lease.
-func (q *Queries) ExhaustExpiredSloHistoryJobs(ctx context.Context, leaseUntil pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, exhaustExpiredSloHistoryJobs, leaseUntil)
+func (q *Queries) ExhaustExpiredSloHistoryJobs(ctx context.Context, failingSince pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, exhaustExpiredSloHistoryJobs, failingSince)
 	if err != nil {
 		return 0, err
 	}
@@ -221,22 +225,23 @@ func (q *Queries) ExhaustExpiredSloHistoryJobs(ctx context.Context, leaseUntil p
 const failSloHistoryJob = `-- name: FailSloHistoryJob :execrows
 UPDATE public.almanac_slo_history_jobs
 SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,
-    lease_until=NULL,next_attempt_at=$3,last_error=$4
+    lease_until=NULL,next_attempt_at=$3::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$3::timestamptz)>$3::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(failing_since,$3::timestamptz),last_error=$4
 WHERE id=$1 AND lease_epoch=$2
 `
 
 type FailSloHistoryJobParams struct {
-	ID            pgtype.UUID        `json:"id"`
-	LeaseEpoch    int64              `json:"lease_epoch"`
-	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	LastError     pgtype.Text        `json:"last_error"`
+	ID         pgtype.UUID        `json:"id"`
+	LeaseEpoch int64              `json:"lease_epoch"`
+	Column3    pgtype.Timestamptz `json:"column_3"`
+	LastError  pgtype.Text        `json:"last_error"`
 }
 
 func (q *Queries) FailSloHistoryJob(ctx context.Context, arg FailSloHistoryJobParams) (int64, error) {
 	result, err := q.db.Exec(ctx, failSloHistoryJob,
 		arg.ID,
 		arg.LeaseEpoch,
-		arg.NextAttemptAt,
+		arg.Column3,
 		arg.LastError,
 	)
 	if err != nil {
@@ -535,7 +540,7 @@ func (q *Queries) ReadSloHistoryPreparationState(ctx context.Context, arg ReadSl
 const retryFailedSloHistoryJob = `-- name: RetryFailedSloHistoryJob :execrows
 UPDATE public.almanac_slo_history_jobs target
 SET state='pending',attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,
-    next_attempt_at=$3,manual_retried_at=$3,last_error=NULL
+    next_attempt_at=$3,manual_retried_at=$3,last_error=NULL,failing_since=NULL
 WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
   AND target.last_error IS DISTINCT FROM 'retention_expired'
   AND (target.manual_retried_at IS NULL OR target.manual_retried_at<=$3::timestamptz-interval '1 minute')

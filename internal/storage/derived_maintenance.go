@@ -17,27 +17,31 @@ import (
 func (r *Runtime) RunDerivedMaintenance(ctx context.Context, logger *slog.Logger) {
 	ticks := time.NewTicker(time.Second)
 	defer ticks.Stop()
-	var nextDiscovery, nextPartitions time.Time
+	var nextDiscovery, nextPartitions, nextConsistency time.Time
 	for {
 		now := time.Now().UTC()
 		if err := r.cleanupDerivedSnapshots(ctx, now); err != nil && ctx.Err() == nil {
-			logger.ErrorContext(ctx, "derived snapshot cleanup failed")
+			logger.ErrorContext(ctx, "derived snapshot cleanup failed", "error", derivedErrorDetail(err))
 		}
 		if !now.Before(nextPartitions) {
 			if err := r.prepareObservationPartitions(ctx, now); err != nil && ctx.Err() == nil {
-				logger.ErrorContext(ctx, "observation partition maintenance failed")
+				logger.ErrorContext(ctx, "observation partition maintenance failed", "error", derivedErrorDetail(err))
 			} else {
 				nextPartitions = now.Add(time.Hour)
 			}
 		}
 		if !now.Before(nextDiscovery) {
 			if err := r.discoverRetention(ctx, now); err != nil && ctx.Err() == nil {
-				logger.ErrorContext(ctx, "retention discovery failed")
+				logger.ErrorContext(ctx, "retention discovery failed", "error", derivedErrorDetail(err))
 			}
 			nextDiscovery = now.Add(time.Minute)
 		}
+		if !now.Before(nextConsistency) {
+			r.reportDerivedConsistency(ctx, logger, now)
+			nextConsistency = now.Add(time.Minute)
+		}
 		if _, err := r.applyRetentionPreview(ctx, now); err != nil && !errors.Is(err, errRetentionBlocked) && ctx.Err() == nil {
-			logger.ErrorContext(ctx, "retention maintenance failed")
+			logger.ErrorContext(ctx, "retention maintenance failed", "error", derivedErrorDetail(err))
 		}
 		select {
 		case <-ctx.Done():

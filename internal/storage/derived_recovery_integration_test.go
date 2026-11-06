@@ -723,7 +723,7 @@ func verifyDerivedBlockFences(t *testing.T, runtime *Runtime, databaseURL, id st
 	batch := dbgen.RebuildDerivedBatchParams{SliIds: []pgtype.UUID{job.SliID}, Revisions: []int64{job.MeasurementRevision}, Generations: []int64{job.Generation}, Starts: []pgtype.Timestamptz{job.RangeStart}}
 	verifyDerivedBatchValueLookup(t, tx, batch)
 	ack := dbgen.AcknowledgeDerivedBatchParams{SliIds: batch.SliIds, Revisions: batch.Revisions, Generations: batch.Generations, Starts: batch.Starts, Epochs: []int64{job.LeaseEpoch}}
-	if err := q.RebuildDerivedBatch(t.Context(), batch); err != nil {
+	if _, err := q.RebuildDerivedBatch(t.Context(), batch); err != nil {
 		t.Fatal(err)
 	}
 	// Inject the newer arrival between rebuild and acknowledgment. The older

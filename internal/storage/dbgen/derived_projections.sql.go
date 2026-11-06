@@ -52,6 +52,8 @@ SET definition_revision=EXCLUDED.definition_revision,measurement_revision=EXCLUD
     attempts=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)
          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
          THEN almanac_slo_current_failures.attempts ELSE 0 END,
+    failing_since=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
+         THEN almanac_slo_current_failures.failing_since ELSE NULL END,
     next_attempt_at=EXCLUDED.next_attempt_at,last_error=EXCLUDED.last_error
 `
 
@@ -186,7 +188,7 @@ LEFT JOIN public.almanac_sli_source_generations source
 LEFT JOIN public.almanac_slo_current_failures f
     ON f.slo_id=s.id AND f.definition_revision=d.revision
     AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
-WHERE (f.slo_id IS NULL OR (f.attempts<5 AND f.next_attempt_at<=$2::timestamptz))
+WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failing_since>$2::timestamptz-interval '7 days') AND f.next_attempt_at<=$2::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.calculation_version<>$1
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
@@ -265,15 +267,20 @@ func (q *Queries) PublishDerivedCurrentProjection(ctx context.Context, arg Publi
 
 const recordCurrentPreparationFailure = `-- name: RecordCurrentPreparationFailure :exec
 INSERT INTO public.almanac_slo_current_failures
-    (slo_id,definition_revision,measurement_revision,calculation_version,attempts,next_attempt_at,last_error)
-VALUES ($1,$2,$3,$4,1,$5::timestamptz+interval '2 seconds','current_preparation_failed')
+    (slo_id,definition_revision,measurement_revision,calculation_version,attempts,next_attempt_at,last_error,failing_since)
+VALUES ($1,$2,$3,$4,1,$5::timestamptz+interval '2 seconds',$6::text,$5::timestamptz)
 ON CONFLICT (slo_id) DO UPDATE
 SET definition_revision=EXCLUDED.definition_revision,measurement_revision=EXCLUDED.measurement_revision,
     calculation_version=EXCLUDED.calculation_version,
     attempts=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)
          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
          THEN LEAST(almanac_slo_current_failures.attempts+1,5) ELSE 1 END,
-    next_attempt_at=$5::timestamptz+interval '32 seconds',last_error=EXCLUDED.last_error
+    next_attempt_at=$5::timestamptz+CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
+         THEN CASE WHEN LEAST(almanac_slo_current_failures.attempts+1,5)<5 THEN power(2,LEAST(almanac_slo_current_failures.attempts+1,5))*interval '1 second' WHEN coalesce(almanac_slo_current_failures.failing_since,$5::timestamptz)>$5::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END
+         ELSE interval '2 seconds' END,
+    failing_since=CASE WHEN (almanac_slo_current_failures.definition_revision,almanac_slo_current_failures.measurement_revision,almanac_slo_current_failures.calculation_version)          = (EXCLUDED.definition_revision,EXCLUDED.measurement_revision,EXCLUDED.calculation_version)
+         THEN coalesce(almanac_slo_current_failures.failing_since,$5::timestamptz) ELSE $5::timestamptz END,
+    last_error=EXCLUDED.last_error
 `
 
 type RecordCurrentPreparationFailureParams struct {
@@ -282,6 +289,7 @@ type RecordCurrentPreparationFailureParams struct {
 	MeasurementRevision int64              `json:"measurement_revision"`
 	CalculationVersion  string             `json:"calculation_version"`
 	Column5             pgtype.Timestamptz `json:"column_5"`
+	Reason              string             `json:"reason"`
 }
 
 func (q *Queries) RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error {
@@ -291,6 +299,7 @@ func (q *Queries) RecordCurrentPreparationFailure(ctx context.Context, arg Recor
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
 		arg.Column5,
+		arg.Reason,
 	)
 	return err
 }

@@ -79,13 +79,14 @@ SELECT EXISTS (
 -- rather than remaining running forever with an unclaimable expired lease.
 -- name: ExhaustExpiredSloHistoryJobs :execrows
 UPDATE public.almanac_slo_history_jobs
-SET state='failed', lease_until=NULL, last_error='history_lease_expired'
+SET state='failed', lease_until=NULL, last_error='history_lease_expired', failing_since=coalesce(failing_since,$1),
+    next_attempt_at=$1::timestamptz+CASE WHEN coalesce(failing_since,$1)>$1::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END
 WHERE state='running' AND attempts>=5 AND lease_until <= $1;
 
 -- name: RetryFailedSloHistoryJob :execrows
 UPDATE public.almanac_slo_history_jobs target
 SET state='pending',attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,
-    next_attempt_at=$3,manual_retried_at=$3,last_error=NULL
+    next_attempt_at=$3,manual_retried_at=$3,last_error=NULL,failing_since=NULL
 WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
   AND target.last_error IS DISTINCT FROM 'retention_expired'
   AND (target.manual_retried_at IS NULL OR target.manual_retried_at<=$3::timestamptz-interval '1 minute')
@@ -95,12 +96,14 @@ WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
 -- name: ClaimSloHistoryJob :one
 WITH candidate AS (
     SELECT id FROM public.almanac_slo_history_jobs
-    WHERE state <> 'failed' AND attempts < 5 AND next_attempt_at <= sqlc.arg(now)::timestamptz
+    WHERE (state <> 'failed' OR (last_error IS DISTINCT FROM 'retention_expired'
+           AND (attempts < 5 OR failing_since IS NULL OR failing_since > sqlc.arg(now)::timestamptz-interval '7 days')))
+      AND next_attempt_at <= sqlc.arg(now)::timestamptz
       AND (lease_until IS NULL OR lease_until <= sqlc.arg(now)::timestamptz)
     ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_history_jobs j
-SET state='running', attempts=j.attempts+1, lease_epoch=j.lease_epoch+1,
+SET state='running', attempts=LEAST(j.attempts+1,5), lease_epoch=j.lease_epoch+1,
     lease_until=sqlc.arg(lease_until)::timestamptz
 FROM candidate c WHERE j.id=c.id RETURNING j.*;
 
@@ -143,7 +146,8 @@ DELETE FROM public.almanac_slo_history_jobs WHERE id=$1 AND lease_epoch=$2 AND s
 -- name: FailSloHistoryJob :execrows
 UPDATE public.almanac_slo_history_jobs
 SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,
-    lease_until=NULL,next_attempt_at=$3,last_error=$4
+    lease_until=NULL,next_attempt_at=$3::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$3::timestamptz)>$3::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(failing_since,$3::timestamptz),last_error=$4
 WHERE id=$1 AND lease_epoch=$2;
 
 -- name: LockHistoryAdmission :exec

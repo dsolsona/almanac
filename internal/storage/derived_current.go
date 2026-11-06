@@ -14,7 +14,6 @@ import (
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -175,14 +174,16 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 			resultErr = errors.Join(resultErr, err)
 			return
 		}
-		conflict, isPostgres := errors.AsType[*pgconn.PgError](resultErr)
-		serialization := isPostgres && conflict.Code == "40001"
-		if errors.Is(resultErr, ErrDerivedPending) || errors.Is(resultErr, ErrDerivedSourceFailed) || serialization {
+		now := clock()
+		facts := derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision,
+			from: now.Add(-max(time.Duration(row.RollingWindowSeconds)*time.Second, 6*time.Hour)), to: now}
+		resultErr = errors.Join(resultErr, facts.rebuildIfInconsistent(cleanup, dbgen.New(conn), resultErr, now))
+		if derivedTemporary(ctx, resultErr) {
 			err := dbgen.New(conn).DeferCurrentPreparation(cleanup, dbgen.DeferCurrentPreparationParams{
 				SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 				CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock()),
 			})
-			if serialization {
+			if !errors.Is(resultErr, ErrDerivedPending) {
 				resultErr = errors.Join(ErrDerivedPending, resultErr)
 			}
 			resultErr = errors.Join(resultErr, err)
@@ -190,7 +191,7 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 		}
 		err := dbgen.New(conn).RecordCurrentPreparationFailure(cleanup, dbgen.RecordCurrentPreparationFailureParams{
 			SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
-			CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock()),
+			CalculationVersion: operationalCalculationVersion, Column5: timestamp(clock()), Reason: derivedFailureReason(resultErr, "current_preparation_failed"),
 		})
 		resultErr = errors.Join(resultErr, err)
 	}()

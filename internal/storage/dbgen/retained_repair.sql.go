@@ -12,7 +12,7 @@ import (
 )
 
 const advanceRetainedSeriesRepair = `-- name: AdvanceRetainedSeriesRepair :execrows
-UPDATE public.almanac_slo_series_repair SET cursor_at=$7,attempts=0,lease_until=NULL,last_error=NULL,
+UPDATE public.almanac_slo_series_repair SET cursor_at=$7,attempts=0,lease_until=NULL,last_error=NULL,failing_since=NULL,
     next_attempt_at=$8,
     coherent_through=CASE WHEN $7>=end_at AND $9::bigint IS NOT NULL
                          THEN $7 ELSE coherent_through END,
@@ -56,15 +56,16 @@ const claimRetainedSeriesRepair = `-- name: ClaimRetainedSeriesRepair :one
 WITH candidate AS (
     SELECT slo_id,definition_revision,measurement_revision,calculation_version
     FROM public.almanac_slo_series_repair
-    WHERE cursor_at<end_at AND attempts<5 AND next_attempt_at<=$2::timestamptz
+    WHERE cursor_at<end_at AND (attempts<5 OR failing_since IS NULL OR failing_since>$2::timestamptz-interval '7 days')
+      AND next_attempt_at<=$2::timestamptz
       AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
     ORDER BY next_attempt_at,slo_id LIMIT 1 FOR UPDATE SKIP LOCKED
 )
 UPDATE public.almanac_slo_series_repair w
-SET attempts=w.attempts+1,lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
+SET attempts=LEAST(w.attempts+1,5),lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
 FROM candidate c WHERE (w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version)
     =(c.slo_id,c.definition_revision,c.measurement_revision,c.calculation_version)
-RETURNING w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.cursor_at, w.end_at, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.id, w.manual_retried_at, w.coherent_through, w.coherent_source_generation
+RETURNING w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.cursor_at, w.end_at, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.id, w.manual_retried_at, w.coherent_through, w.coherent_source_generation, w.failing_since
 `
 
 type ClaimRetainedSeriesRepairParams struct {
@@ -92,12 +93,13 @@ func (q *Queries) ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetain
 		&i.ManualRetriedAt,
 		&i.CoherentThrough,
 		&i.CoherentSourceGeneration,
+		&i.FailingSince,
 	)
 	return i, err
 }
 
 const deferRetainedSeriesRepair = `-- name: DeferRetainedSeriesRepair :exec
-UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=GREATEST(attempts-1,0),next_attempt_at=$6,
+UPDATE public.almanac_slo_series_repair SET lease_until=NULL,attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,next_attempt_at=$6,
     last_error=$7::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5
 `
@@ -159,7 +161,8 @@ func (q *Queries) ExtendRetainedSeriesRepair(ctx context.Context, arg ExtendReta
 
 const failRetainedSeriesRepair = `-- name: FailRetainedSeriesRepair :exec
 UPDATE public.almanac_slo_series_repair SET lease_until=NULL,
-    next_attempt_at=$6::timestamptz+power(2,LEAST(attempts,5))*interval '1 second',last_error='retained_series_repair_failed'
+    next_attempt_at=$6::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$6::timestamptz)>$6::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
+    failing_since=coalesce(failing_since,$6::timestamptz),last_error=$7::text
 WHERE slo_id=$1 AND definition_revision=$2 AND measurement_revision=$3 AND calculation_version=$4 AND lease_epoch=$5
 `
 
@@ -170,6 +173,7 @@ type FailRetainedSeriesRepairParams struct {
 	CalculationVersion  string             `json:"calculation_version"`
 	LeaseEpoch          int64              `json:"lease_epoch"`
 	Column6             pgtype.Timestamptz `json:"column_6"`
+	Reason              string             `json:"reason"`
 }
 
 func (q *Queries) FailRetainedSeriesRepair(ctx context.Context, arg FailRetainedSeriesRepairParams) error {
@@ -180,6 +184,7 @@ func (q *Queries) FailRetainedSeriesRepair(ctx context.Context, arg FailRetained
 		arg.CalculationVersion,
 		arg.LeaseEpoch,
 		arg.Column6,
+		arg.Reason,
 	)
 	return err
 }
@@ -214,7 +219,7 @@ ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,
 DO UPDATE SET version=almanac_slo_series_tile_work.version+1,summary_only=false,
               source_generation=GREATEST(almanac_slo_series_tile_work.source_generation,EXCLUDED.source_generation),
               next_attempt_at=LEAST(almanac_slo_series_tile_work.next_attempt_at,EXCLUDED.next_attempt_at)
-RETURNING id, slo_id, definition_revision, measurement_revision, exclusion_revision, calculation_version, resolution_seconds, range_start, range_end, version, source_generation, next_attempt_at, attempts, lease_epoch, lease_until, last_error, manual_retried_at, summary_only
+RETURNING id, slo_id, definition_revision, measurement_revision, exclusion_revision, calculation_version, resolution_seconds, range_start, range_end, version, source_generation, next_attempt_at, attempts, lease_epoch, lease_until, last_error, manual_retried_at, summary_only, failing_since
 `
 
 type PublishRetainedSloPointBatchParams struct {
@@ -265,6 +270,7 @@ func (q *Queries) PublishRetainedSloPointBatch(ctx context.Context, arg PublishR
 			&i.LastError,
 			&i.ManualRetriedAt,
 			&i.SummaryOnly,
+			&i.FailingSince,
 		); err != nil {
 			return nil, err
 		}

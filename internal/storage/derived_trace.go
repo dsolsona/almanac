@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -35,6 +36,19 @@ func recordCurrentPublication(span trace.Span, generationID string, source int64
 		attribute.String("almanac.evaluated.through", at.UTC().Format(time.RFC3339Nano)))
 }
 
+// derivedErrorDetail describes a background calculation failure for operators: the SQLSTATE and message of
+// a database error, or the error text. Calculation inputs carry no credentials; the text is bounded.
+func derivedErrorDetail(err error) string {
+	if failure, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return "sqlstate " + failure.Code + ": " + failure.Message
+	}
+	detail := err.Error()
+	if len(detail) > 300 {
+		detail = detail[:300]
+	}
+	return detail
+}
+
 func finishDerivedTrace(ctx context.Context, span trace.Span, err error, success string) {
 	result := success
 	switch {
@@ -44,8 +58,11 @@ func finishDerivedTrace(ctx context.Context, span trace.Span, err error, success
 	case errors.Is(err, ErrDerivedPending), errors.Is(err, ErrDerivedSourceFailed):
 		result = "waiting"
 	case err != nil:
+		// ADR-0034: the span carries the cause, so a failing work item can be diagnosed from its trace.
 		result = "failed"
-		span.SetStatus(codes.Error, "background work failed")
+		detail := derivedErrorDetail(err)
+		span.RecordError(err, trace.WithAttributes(attribute.String("almanac.error.detail", detail)))
+		span.SetStatus(codes.Error, detail)
 	}
 	span.SetAttributes(attribute.String("almanac.result", result))
 	span.End()
