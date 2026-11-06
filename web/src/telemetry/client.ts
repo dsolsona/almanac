@@ -90,7 +90,7 @@ function apiRoute(path: string): string {
   if (!/^\/api\/(?:v1|agent\/v1)\//.test(path)) return 'unmatched';
   const parts = path.split('/').filter(Boolean);
   if (parts.length > 8) return 'unmatched';
-  const allowed = new Set(['api', 'v1', 'agent', 'auth', 'context', 'login', 'logout', 'password', 'agents', 'providers', 'datasources', 'diagnostics', 'slis', 'slos', 'services', 'overview', 'operational', 'status', 'history', 'values', 'preparation', 'retry', 'evaluation', 'observations', 'configuration', 'connect', 'result']);
+  const allowed = new Set(['api', 'v1', 'agent', 'auth', 'context', 'login', 'logout', 'password', 'account', 'users', 'activation', 'enable', 'disable', 'delete', 'reset-password', 'cancel-password-reset', 'replace-setup-link', 'agents', 'providers', 'datasources', 'diagnostics', 'slis', 'slos', 'services', 'overview', 'operational', 'status', 'history', 'values', 'preparation', 'retry', 'evaluation', 'observations', 'configuration', 'connect', 'result']);
   return '/' + parts.map(part => /^[0-9a-f-]{36}$/.test(part) ? '{id}' : allowed.has(part) ? part : '{value}').join('/');
 }
 

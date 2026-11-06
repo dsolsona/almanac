@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, Pager, PageHeader, Panel, RefreshButton, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, Pager, PageHeader, Panel, RefreshButton, RoleChip, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, ThemeChoice, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 
 // Local catalogue data only; never application records.
 const datasourceExamples: ComboboxOption[] = [
@@ -21,6 +21,7 @@ export function OperationalControlsSection() {
   const [description, setDescription] = useState('');
   const [kind, setKind] = useState('ratio');
   const [sectionName, setSectionName] = useState('');
+  const [role, setRole] = useState<string|null>(null);
   const percent = (value: string) => `${value}%`;
   const validateTarget = (value: string) => /^\d+(?:\.\d{1,5})?$/.test(value) && Number(value) > 0 && Number(value) < 100 ? undefined : 'Target must be above 0% and below 100%.';
   const validateDays = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 365 ? undefined : 'Enter whole days from 1 to 365.';
@@ -48,6 +49,18 @@ export function OperationalControlsSection() {
         <div className="catalogue-chip-row" aria-label="Button roles"><Button>Save changes</Button><Button variant="outline">Cancel</Button><Button variant="ghost">Copy</Button><Button variant="link">Change</Button><Button variant="danger-outline">Delete…</Button><Button variant="danger">Delete agent</Button></div>
         <p className="demo-feedback" role="status">Filter: {filter}. Service: {service || 'any'}. Refreshed {refreshes} times.</p>
         <Pager id="catalogue-page-size" label="Example result pages" position="Page 1 · showing 10 of 10" pageSize={pageSize} onPageSizeChange={setPageSize} hasPrevious={false} hasNext={false} />
+      </div>
+    </Panel>
+
+    <Panel heading="Account role and theme controls">
+      <div className="catalogue-chip-row" aria-label="User roles"><RoleChip role="viewer"/><RoleChip role="editor"/><RoleChip role="administrator"/></div>
+      <div className="field-stack">
+        <Combobox id="catalogue-role" label="Role" value={role} onChange={setRole} searchLabelOnly placeholder="Search roles…" options={[
+          {id:'viewer',label:'Viewer',detail:'Read services, SLIs, SLOs and measurements.'},
+          {id:'editor',label:'Editor',detail:'Viewer access, plus manage services, SLIs and SLOs.'},
+          {id:'administrator',label:'Admin',detail:'Editor access, plus manage users, agents, datasources and credentials.'},
+        ]}/>
+        <ThemeChoice/>
       </div>
     </Panel>
 

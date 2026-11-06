@@ -3,7 +3,8 @@ SELECT u.id, u.login, u.role, i.credential_epoch, u.password_verifier,
        u.enabled, u.must_change_password, u.credential_revision
 FROM public.almanac_users u
 LEFT JOIN public.almanac_installation i ON i.singleton
-WHERE lower(u.login) = lower(sqlc.arg(login));
+WHERE (lower(u.login) = lower(sqlc.arg(login)) OR lower(u.email) = lower(sqlc.arg(login)))
+ AND u.deleted_at IS NULL AND NOT u.password_login_suspended;
 
 -- name: LockSessionInstallation :one
 SELECT credential_epoch, bootstrap_admin_id, onboarding_completed_at

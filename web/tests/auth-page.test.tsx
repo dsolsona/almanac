@@ -169,7 +169,7 @@ describe('authentication page', () => {
     render(<AuthPage client={client} />);
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeVisible();
     expect(screen.getByText('owner')).toBeVisible();
-    expect(screen.getByText('administrator')).toBeVisible();
+    expect(screen.getByText('Admin')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible();
     expect(client.logout).toHaveBeenCalledOnce();

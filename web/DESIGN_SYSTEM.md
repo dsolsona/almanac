@@ -96,8 +96,17 @@ Import controls from `src/components/ui/` and prefer native semantics:
 - `Panel` is a semantic section with a heading and content, not a nested card.
 - `Dialog` is controlled by `open` and `onClose`; native dialog behavior supports
   Escape and focus containment, with focus restoration through `triggerRef`.
-- `ThemeToggle` honors a persisted choice, defaults to system preference, and
-  tolerates unavailable storage.
+- Theme selection lives under Settings → Your account through `ThemeChoice`.
+  `initializeTheme` applies the persisted choice before rendering any route;
+  both controls default to system preference and tolerate unavailable storage.
+  The authenticated sidebar and mobile menu have no separate theme toggle.
+- `RoleChip` shares the 24 px status-chip geometry with a neutral outline and no
+  status mark. Role labels are Viewer, Editor and Admin (`administrator` in the API).
+  User role pickers match option labels only; descriptions explain permissions
+  without broadening search matches. Their selected value uses the shared summary.
+- Settings uses tabs and shared form sections. Its sparse user table separates
+  full name/email and shares spare width naturally across columns; the SLI/SLO
+  first-column sizing rule remains unchanged ([ADR-0035](../docs/adr/0035-settings-and-local-user-administration.md)).
 - `Switch` uses a native checkbox with switch semantics, persistent label, hint,
   checked state text and visible thumb position.
 - `DatePicker` validates `YYYY-MM-DD` calendar dates and opens a shared native

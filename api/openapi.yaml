@@ -4,6 +4,99 @@ info:
   version: 1.0.0
   description: Anonymous operational endpoints for the independently runnable UI.
 paths:
+  /api/v1/account:
+    get:
+      operationId: getAccount
+      summary: Read the current unrestricted user's profile
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: Current profile, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/ManagedUser'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+    put:
+      operationId: updateAccount
+      summary: Update the current user's full name
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/UserIfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccountUpdateRequest'}}}}
+      responses:
+        '200': {description: Updated account, content: {application/json: {schema: {$ref: '#/components/schemas/UserCommandResult'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+  /api/v1/account/activation:
+    post:
+      operationId: redeemUserChallenge
+      summary: Consume a one-time password setup or reset credential
+      description: Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+      security: [{PreAuthenticationCookie: [], CsrfToken: []}, {SessionCookie: [], CsrfToken: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UserRedemptionRequest'}}}}
+      responses:
+        '204': {description: Password set and credential consumed}
+        default: {$ref: '#/components/responses/UserProblem'}
+  /api/v1/account/activation/context:
+    post:
+      operationId: inspectUserChallenge
+      summary: Inspect a valid one-time account link before choosing a password
+      description: Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+      security: [{PreAuthenticationCookie: [], CsrfToken: []}, {SessionCookie: [], CsrfToken: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UserChallengeRequest'}}}}
+      responses:
+        '200': {description: Valid link context, content: {application/json: {schema: {$ref: '#/components/schemas/UserChallengeContext'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+  /api/v1/users:
+    get:
+      operationId: listUsers
+      summary: List local users (administrator only)
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 2048}}
+        - {name: q, in: query, schema: {type: string, maxLength: 256}}
+        - {name: status, in: query, schema: {type: string, enum: [active, pending, disabled, resetting]}}
+        - {name: role, in: query, schema: {$ref: '#/components/schemas/UserRole'}}
+      responses:
+        '200': {description: Matching users, content: {application/json: {schema: {$ref: '#/components/schemas/UserPage'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+    post:
+      operationId: createUser
+      summary: Create a pending user and issue a one-time setup link
+      description: Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UserWriteRequest'}}}}
+      responses:
+        '201': {description: Pending user, content: {application/json: {schema: {$ref: '#/components/schemas/UserCommandResult'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+  /api/v1/users/{user_id}:
+    parameters: [{$ref: '#/components/parameters/UserId'}]
+    get:
+      operationId: getUser
+      summary: Read a local user (administrator only)
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: User profile, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/ManagedUser'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+    put:
+      operationId: updateUser
+      summary: Update full name, sign-in email and deployment-wide role
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/UserIfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UserWriteRequest'}}}}
+      responses:
+        '200': {description: Updated user, content: {application/json: {schema: {$ref: '#/components/schemas/UserCommandResult'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+  /api/v1/users/{user_id}/{action}:
+    parameters:
+      - {$ref: '#/components/parameters/UserId'}
+      - {name: action, in: path, required: true, schema: {type: string, enum: [enable, disable, delete, reset-password, cancel-password-reset, replace-setup-link]}}
+    post:
+      operationId: userCommand
+      summary: Execute an administrator user lifecycle command
+      description: Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/UserIfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyAuthRequest'}}}}
+      responses:
+        '200': {description: Command committed or metadata-only receipt replay, content: {application/json: {schema: {$ref: '#/components/schemas/UserCommandResult'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
   /api/v1/telemetry/traces:
     post:
       operationId: postBrowserTraces
@@ -879,6 +972,17 @@ paths:
         '405': {description: Method not allowed}
 components:
   parameters:
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    UserIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string}
+      description: Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'.
     AgentId:
       name: agent_id
       in: path
@@ -970,6 +1074,76 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    UserRole:
+      type: string
+      enum: [viewer, editor, administrator]
+    ManagedUser:
+      type: object
+      additionalProperties: false
+      required: [id, full_name, email, role, status, version, last_sign_in, sign_in_history_known, is_last_admin]
+      properties:
+        id: {type: string, format: uuid}
+        full_name: {type: string, maxLength: 160}
+        email: {type: string, nullable: true, maxLength: 254}
+        role: {$ref: '#/components/schemas/UserRole'}
+        status: {type: string, enum: [active, pending, disabled, resetting, deleted]}
+        version: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19}
+        last_sign_in: {type: string, format: date-time, nullable: true}
+        sign_in_history_known: {type: boolean}
+        is_last_admin: {type: boolean}
+    UserPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, next_cursor]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/ManagedUser'}}
+        total: {type: integer, format: int64, minimum: 0}
+        next_cursor: {type: string, maxLength: 2048}
+    AccountUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [full_name]
+      properties:
+        full_name: {type: string, minLength: 1, maxLength: 160}
+    UserWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [full_name, email, role]
+      properties:
+        full_name: {type: string, minLength: 1, maxLength: 160}
+        email: {type: string, format: email, maxLength: 254}
+        role: {$ref: '#/components/schemas/UserRole'}
+    UserCommandResult:
+      type: object
+      additionalProperties: false
+      required: [user, purpose, expires_at, replayed]
+      properties:
+        user: {$ref: '#/components/schemas/ManagedUser'}
+        purpose: {type: string, enum: ['', setup, reset]}
+        expires_at: {type: string, format: date-time, nullable: true}
+        replayed: {type: boolean}
+        link: {type: string, maxLength: 2048, description: One-time absolute HTTPS fragment URL, present only on fresh issuance.}
+    UserChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: {type: string, maxLength: 128, writeOnly: true}
+    UserChallengeContext:
+      type: object
+      additionalProperties: false
+      required: [full_name, email, purpose]
+      properties:
+        full_name: {type: string, maxLength: 160}
+        email: {type: string, nullable: true}
+        purpose: {type: string, enum: [setup, reset]}
+    UserRedemptionRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token: {type: string, maxLength: 128, writeOnly: true}
+        password: {type: string, minLength: 15, maxLength: 128, writeOnly: true}
     ServiceCreateRequest:
       type: object
       additionalProperties: false
@@ -2058,6 +2232,9 @@ components:
               message: {type: string}
         message: {type: string, example: Configured backend is unavailable}
   responses:
+    UserProblem:
+      description: Safe user request failure, with code invalid_request, unauthorized, forbidden, not_found, conflict, email_in_use, last_administrator, link_unavailable, password_policy, rate_limited or user_unavailable. No proof or password is returned.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
     AuthenticationRateLimited:
       description: Authentication proof throttled
       headers:

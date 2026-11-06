@@ -144,6 +144,9 @@ func IssueSession(ctx context.Context, databaseURL string, input IssueSessionInp
 	}); err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: session issuance audit failed", err)
 	}
+	if err := queries.RecordUserSignIn(ctx, dbgen.RecordUserSignInParams{ID: userID, Now: now}); err != nil {
+		return SessionAccess{}, operationError(ctx, "storage: sign-in recording failed", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: session issuance commit failed", err)
 	}

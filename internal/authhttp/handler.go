@@ -136,6 +136,30 @@ func (h *Handler) ValidateTLSRequest(r *http.Request) error {
 	return nil
 }
 
+// ValidateChallengeRequest binds public setup/reset to the context cookie and CSRF.
+// The one-time account credential supplies authority, not the optional session.
+func (h *Handler) ValidateChallengeRequest(r *http.Request) (netip.Addr, error) {
+	if r.Method != http.MethodPost || len(r.Header.Values("Authorization")) != 0 || !singleHeaderEquals(r.Header, "Origin", h.origin) {
+		return netip.Addr{}, ErrRequestOrigin
+	}
+	source, ok := h.requestSource(r)
+	if !ok {
+		return netip.Addr{}, ErrRequestTLS
+	}
+	session, preauth, invalid := cookieValues(r)
+	if invalid {
+		return netip.Addr{}, ErrSessionRequest
+	}
+	if session != "" {
+		if _, err := identity.SessionSecretVerifier(session); err != nil || !h.validCSRF(r, "session", session) {
+			return netip.Addr{}, ErrRequestCSRF
+		}
+	} else if !validPreauth(preauth) || !h.validCSRF(r, "login", preauth) {
+		return netip.Addr{}, ErrRequestCSRF
+	}
+	return source, nil
+}
+
 func canonicalOrigin(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host == "" || strings.HasSuffix(u.Host, ":") || u.User != nil || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || strings.Contains(u.Host, "*") {

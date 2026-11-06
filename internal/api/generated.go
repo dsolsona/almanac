@@ -831,6 +831,33 @@ func (e IncompleteOutcomeState) Valid() bool {
 	}
 }
 
+// Defines values for ManagedUserStatus.
+const (
+	ManagedUserStatusActive    ManagedUserStatus = "active"
+	ManagedUserStatusDeleted   ManagedUserStatus = "deleted"
+	ManagedUserStatusDisabled  ManagedUserStatus = "disabled"
+	ManagedUserStatusPending   ManagedUserStatus = "pending"
+	ManagedUserStatusResetting ManagedUserStatus = "resetting"
+)
+
+// Valid indicates whether the value is a known member of the ManagedUserStatus enum.
+func (e ManagedUserStatus) Valid() bool {
+	switch e {
+	case ManagedUserStatusActive:
+		return true
+	case ManagedUserStatusDeleted:
+		return true
+	case ManagedUserStatusDisabled:
+		return true
+	case ManagedUserStatusPending:
+		return true
+	case ManagedUserStatusResetting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ObservationItemResultStatus.
 const (
 	Accepted    ObservationItemResultStatus = "accepted"
@@ -2094,6 +2121,66 @@ func (e SloUrgencyReasonCode) Valid() bool {
 	}
 }
 
+// Defines values for UserChallengeContextPurpose.
+const (
+	UserChallengeContextPurposeReset UserChallengeContextPurpose = "reset"
+	UserChallengeContextPurposeSetup UserChallengeContextPurpose = "setup"
+)
+
+// Valid indicates whether the value is a known member of the UserChallengeContextPurpose enum.
+func (e UserChallengeContextPurpose) Valid() bool {
+	switch e {
+	case UserChallengeContextPurposeReset:
+		return true
+	case UserChallengeContextPurposeSetup:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserCommandResultPurpose.
+const (
+	UserCommandResultPurposeEmpty UserCommandResultPurpose = ""
+	UserCommandResultPurposeReset UserCommandResultPurpose = "reset"
+	UserCommandResultPurposeSetup UserCommandResultPurpose = "setup"
+)
+
+// Valid indicates whether the value is a known member of the UserCommandResultPurpose enum.
+func (e UserCommandResultPurpose) Valid() bool {
+	switch e {
+	case UserCommandResultPurposeEmpty:
+		return true
+	case UserCommandResultPurposeReset:
+		return true
+	case UserCommandResultPurposeSetup:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserRole.
+const (
+	Administrator UserRole = "administrator"
+	Editor        UserRole = "editor"
+	Viewer        UserRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the UserRole enum.
+func (e UserRole) Valid() bool {
+	switch e {
+	case Administrator:
+		return true
+	case Editor:
+		return true
+	case Viewer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetSloOperationalOverviewParamsUrgency.
 const (
 	GetSloOperationalOverviewParamsUrgencyHealthy        GetSloOperationalOverviewParamsUrgency = "healthy"
@@ -2179,6 +2266,35 @@ func (e GetSloOperationalDetailParamsPeriod) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Defines values for ListUsersParamsStatus.
+const (
+	ListUsersParamsStatusActive    ListUsersParamsStatus = "active"
+	ListUsersParamsStatusDisabled  ListUsersParamsStatus = "disabled"
+	ListUsersParamsStatusPending   ListUsersParamsStatus = "pending"
+	ListUsersParamsStatusResetting ListUsersParamsStatus = "resetting"
+)
+
+// Valid indicates whether the value is a known member of the ListUsersParamsStatus enum.
+func (e ListUsersParamsStatus) Valid() bool {
+	switch e {
+	case ListUsersParamsStatusActive:
+		return true
+	case ListUsersParamsStatusDisabled:
+		return true
+	case ListUsersParamsStatusPending:
+		return true
+	case ListUsersParamsStatusResetting:
+		return true
+	default:
+		return false
+	}
+}
+
+// AccountUpdateRequest defines model for AccountUpdateRequest.
+type AccountUpdateRequest struct {
+	FullName string `json:"full_name"`
 }
 
 // Agent defines model for Agent.
@@ -2638,6 +2754,22 @@ type LoginRequest struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
 }
+
+// ManagedUser defines model for ManagedUser.
+type ManagedUser struct {
+	Email              *string            `json:"email"`
+	FullName           string             `json:"full_name"`
+	Id                 openapi_types.UUID `json:"id"`
+	IsLastAdmin        bool               `json:"is_last_admin"`
+	LastSignIn         *time.Time         `json:"last_sign_in"`
+	Role               UserRole           `json:"role"`
+	SignInHistoryKnown bool               `json:"sign_in_history_known"`
+	Status             ManagedUserStatus  `json:"status"`
+	Version            string             `json:"version"`
+}
+
+// ManagedUserStatus defines model for ManagedUser.Status.
+type ManagedUserStatus string
 
 // ObservationBatchItem defines model for ObservationBatchItem.
 type ObservationBatchItem struct {
@@ -3529,6 +3661,58 @@ type SloUrgencyReason struct {
 // SloUrgencyReasonCode defines model for SloUrgencyReason.Code.
 type SloUrgencyReasonCode string
 
+// UserChallengeContext defines model for UserChallengeContext.
+type UserChallengeContext struct {
+	Email    *string                     `json:"email"`
+	FullName string                      `json:"full_name"`
+	Purpose  UserChallengeContextPurpose `json:"purpose"`
+}
+
+// UserChallengeContextPurpose defines model for UserChallengeContext.Purpose.
+type UserChallengeContextPurpose string
+
+// UserChallengeRequest defines model for UserChallengeRequest.
+type UserChallengeRequest struct {
+	Token *string `json:"token,omitempty"`
+}
+
+// UserCommandResult defines model for UserCommandResult.
+type UserCommandResult struct {
+	ExpiresAt *time.Time `json:"expires_at"`
+
+	// Link One-time absolute HTTPS fragment URL
+	Link     *string                  `json:"link,omitempty"`
+	Purpose  UserCommandResultPurpose `json:"purpose"`
+	Replayed bool                     `json:"replayed"`
+	User     ManagedUser              `json:"user"`
+}
+
+// UserCommandResultPurpose defines model for UserCommandResult.Purpose.
+type UserCommandResultPurpose string
+
+// UserPage defines model for UserPage.
+type UserPage struct {
+	Items      []ManagedUser `json:"items"`
+	NextCursor string        `json:"next_cursor"`
+	Total      int64         `json:"total"`
+}
+
+// UserRedemptionRequest defines model for UserRedemptionRequest.
+type UserRedemptionRequest struct {
+	Password *string `json:"password,omitempty"`
+	Token    *string `json:"token,omitempty"`
+}
+
+// UserRole defines model for UserRole.
+type UserRole string
+
+// UserWriteRequest defines model for UserWriteRequest.
+type UserWriteRequest struct {
+	Email    openapi_types.Email `json:"email"`
+	FullName string              `json:"full_name"`
+	Role     UserRole            `json:"role"`
+}
+
 // AgentId defines model for AgentId.
 type AgentId = openapi_types.UUID
 
@@ -3568,6 +3752,12 @@ type SliIfMatch = string
 // SloId defines model for SloId.
 type SloId = openapi_types.UUID
 
+// UserId defines model for UserId.
+type UserId = openapi_types.UUID
+
+// UserIfMatch defines model for UserIfMatch.
+type UserIfMatch = string
+
 // AuthenticationMethodNotAllowed defines model for AuthenticationMethodNotAllowed.
 type AuthenticationMethodNotAllowed = Problem
 
@@ -3576,6 +3766,9 @@ type AuthenticationProblem = Problem
 
 // AuthenticationRateLimited defines model for AuthenticationRateLimited.
 type AuthenticationRateLimited = Problem
+
+// UserProblem defines model for UserProblem.
+type UserProblem = Problem
 
 // GetAgentConfigurationParams defines parameters for GetAgentConfiguration.
 type GetAgentConfigurationParams struct {
@@ -3586,6 +3779,15 @@ type GetAgentConfigurationParams struct {
 type PostAgentDiagnosticResultParams struct {
 	// XAgentSessionGeneration Current positive canonical decimal ownership generation.
 	XAgentSessionGeneration string `json:"X-Agent-Session-Generation"`
+}
+
+// UpdateAccountParams defines parameters for UpdateAccount.
+type UpdateAccountParams struct {
+	// IfMatch Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'.
+	IfMatch UserIfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // GetAgentsParams defines parameters for GetAgents.
@@ -3803,11 +4005,56 @@ type PostBrowserTracesParams struct {
 	XCSRFToken string `json:"X-CSRF-Token"`
 }
 
+// ListUsersParams defines parameters for ListUsers.
+type ListUsersParams struct {
+	Limit  *int                   `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string                `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Q      *string                `form:"q,omitempty" json:"q,omitempty"`
+	Status *ListUsersParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Role   *UserRole              `form:"role,omitempty" json:"role,omitempty"`
+}
+
+// ListUsersParamsStatus defines parameters for ListUsers.
+type ListUsersParamsStatus string
+
+// CreateUserParams defines parameters for CreateUser.
+type CreateUserParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateUserParams defines parameters for UpdateUser.
+type UpdateUserParams struct {
+	// IfMatch Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'.
+	IfMatch UserIfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UserCommandParams defines parameters for UserCommand.
+type UserCommandParams struct {
+	// IfMatch Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'.
+	IfMatch UserIfMatch `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // PostAgentDiagnosticResultJSONRequestBody defines body for PostAgentDiagnosticResult for application/json ContentType.
 type PostAgentDiagnosticResultJSONRequestBody = DiagnosticResultPayload
 
 // PostAgentObservationsJSONRequestBody defines body for PostAgentObservations for application/json ContentType.
 type PostAgentObservationsJSONRequestBody = ObservationBatchRequest
+
+// UpdateAccountJSONRequestBody defines body for UpdateAccount for application/json ContentType.
+type UpdateAccountJSONRequestBody = AccountUpdateRequest
+
+// RedeemUserChallengeJSONRequestBody defines body for RedeemUserChallenge for application/json ContentType.
+type RedeemUserChallengeJSONRequestBody = UserRedemptionRequest
+
+// InspectUserChallengeJSONRequestBody defines body for InspectUserChallenge for application/json ContentType.
+type InspectUserChallengeJSONRequestBody = UserChallengeRequest
 
 // PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
 type PostAgentsJSONRequestBody = CreateAgentRequest
@@ -3874,6 +4121,15 @@ type PatchSloMetadataJSONRequestBody = ResourceMetadataWrite
 
 // PostBrowserTracesJSONRequestBody defines body for PostBrowserTraces for application/json ContentType.
 type PostBrowserTracesJSONRequestBody PostBrowserTracesJSONBody
+
+// CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
+type CreateUserJSONRequestBody = UserWriteRequest
+
+// UpdateUserJSONRequestBody defines body for UpdateUser for application/json ContentType.
+type UpdateUserJSONRequestBody = UserWriteRequest
+
+// UserCommandJSONRequestBody defines body for UserCommand for application/json ContentType.
+type UserCommandJSONRequestBody = EmptyAuthRequest
 
 // AsObservedOutcome returns the union data inside the ObservationExecutionOutcome as a ObservedOutcome
 func (t ObservationExecutionOutcome) AsObservedOutcome() (ObservedOutcome, error) {
@@ -4226,6 +4482,61 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
 	PostAgentObservations(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAccount Read the current unrestricted user's profile
+	//
+	// Corresponds with GET /api/v1/account (the `GetAccount` operationId).
+	GetAccount(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAccountWithBody Update the current user's full name
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+	UpdateAccountWithBody(ctx context.Context, params *UpdateAccountParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAccount Update the current user's full name
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+	UpdateAccount(ctx context.Context, params *UpdateAccountParams, body UpdateAccountJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RedeemUserChallengeWithBody Consume a one-time password setup or reset credential
+	//
+	// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+	RedeemUserChallengeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RedeemUserChallenge Consume a one-time password setup or reset credential
+	//
+	// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+	RedeemUserChallenge(ctx context.Context, body RedeemUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InspectUserChallengeWithBody Inspect a valid one-time account link before choosing a password
+	//
+	// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+	InspectUserChallengeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InspectUserChallenge Inspect a valid one-time account link before choosing a password
+	//
+	// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+	InspectUserChallenge(ctx context.Context, body InspectUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAgents List agents
 	//
@@ -4733,6 +5044,66 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
 	PostBrowserTraces(ctx context.Context, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListUsers List local users (administrator only)
+	//
+	// Corresponds with GET /api/v1/users (the `ListUsers` operationId).
+	ListUsers(ctx context.Context, params *ListUsersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateUserWithBody Create a pending user and issue a one-time setup link
+	//
+	// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+	CreateUserWithBody(ctx context.Context, params *CreateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateUser Create a pending user and issue a one-time setup link
+	//
+	// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+	CreateUser(ctx context.Context, params *CreateUserParams, body CreateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetUser Read a local user (administrator only)
+	//
+	// Corresponds with GET /api/v1/users/{user_id} (the `GetUser` operationId).
+	GetUser(ctx context.Context, userId UserId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateUserWithBody Update full name, sign-in email and deployment-wide role
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+	UpdateUserWithBody(ctx context.Context, userId UserId, params *UpdateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateUser Update full name, sign-in email and deployment-wide role
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+	UpdateUser(ctx context.Context, userId UserId, params *UpdateUserParams, body UpdateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UserCommandWithBody Execute an administrator user lifecycle command
+	//
+	// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+	UserCommandWithBody(ctx context.Context, userId UserId, action string, params *UserCommandParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UserCommand Execute an administrator user lifecycle command
+	//
+	// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+	UserCommand(ctx context.Context, userId UserId, action string, params *UserCommandParams, body UserCommandJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetLiveness Report whether the UI process is alive
 	//
 	// Corresponds with GET /livez (the `GetLiveness` operationId).
@@ -4827,6 +5198,131 @@ func (c *Client) PostAgentObservationsWithBody(ctx context.Context, contentType 
 // Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
 func (c *Client) PostAgentObservations(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAgentObservationsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAccount Read the current unrestricted user's profile
+//
+// Corresponds with GET /api/v1/account (the `GetAccount` operationId).
+func (c *Client) GetAccount(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAccountRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAccountWithBody Update the current user's full name
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+func (c *Client) UpdateAccountWithBody(ctx context.Context, params *UpdateAccountParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAccountRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAccount Update the current user's full name
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+func (c *Client) UpdateAccount(ctx context.Context, params *UpdateAccountParams, body UpdateAccountJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAccountRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RedeemUserChallengeWithBody Consume a one-time password setup or reset credential
+//
+// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+func (c *Client) RedeemUserChallengeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRedeemUserChallengeRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RedeemUserChallenge Consume a one-time password setup or reset credential
+//
+// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+func (c *Client) RedeemUserChallenge(ctx context.Context, body RedeemUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRedeemUserChallengeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// InspectUserChallengeWithBody Inspect a valid one-time account link before choosing a password
+//
+// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+func (c *Client) InspectUserChallengeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInspectUserChallengeRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// InspectUserChallenge Inspect a valid one-time account link before choosing a password
+//
+// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+func (c *Client) InspectUserChallenge(ctx context.Context, body InspectUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInspectUserChallengeRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6003,6 +6499,146 @@ func (c *Client) PostBrowserTraces(ctx context.Context, params *PostBrowserTrace
 	return c.Client.Do(req)
 }
 
+// ListUsers List local users (administrator only)
+//
+// Corresponds with GET /api/v1/users (the `ListUsers` operationId).
+func (c *Client) ListUsers(ctx context.Context, params *ListUsersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListUsersRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateUserWithBody Create a pending user and issue a one-time setup link
+//
+// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+func (c *Client) CreateUserWithBody(ctx context.Context, params *CreateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateUserRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateUser Create a pending user and issue a one-time setup link
+//
+// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+func (c *Client) CreateUser(ctx context.Context, params *CreateUserParams, body CreateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateUserRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetUser Read a local user (administrator only)
+//
+// Corresponds with GET /api/v1/users/{user_id} (the `GetUser` operationId).
+func (c *Client) GetUser(ctx context.Context, userId UserId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetUserRequest(c.Server, userId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateUserWithBody Update full name, sign-in email and deployment-wide role
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+func (c *Client) UpdateUserWithBody(ctx context.Context, userId UserId, params *UpdateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateUserRequestWithBody(c.Server, userId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateUser Update full name, sign-in email and deployment-wide role
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+func (c *Client) UpdateUser(ctx context.Context, userId UserId, params *UpdateUserParams, body UpdateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateUserRequest(c.Server, userId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UserCommandWithBody Execute an administrator user lifecycle command
+//
+// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+func (c *Client) UserCommandWithBody(ctx context.Context, userId UserId, action string, params *UserCommandParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUserCommandRequestWithBody(c.Server, userId, action, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UserCommand Execute an administrator user lifecycle command
+//
+// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+func (c *Client) UserCommand(ctx context.Context, userId UserId, action string, params *UserCommandParams, body UserCommandJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUserCommandRequest(c.Server, userId, action, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetLiveness Report whether the UI process is alive
 //
 // Corresponds with GET /livez (the `GetLiveness` operationId).
@@ -6156,6 +6792,175 @@ func NewPostAgentObservationsRequestWithBody(server string, contentType string, 
 	}
 
 	operationPath := fmt.Sprintf("/api/agent/v1/observations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAccountRequest constructs an http.Request for the GetAccount method
+func NewGetAccountRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/account")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateAccountRequest calls the generic UpdateAccount builder with application/json body
+func NewUpdateAccountRequest(server string, params *UpdateAccountParams, body UpdateAccountJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAccountRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewUpdateAccountRequestWithBody constructs an http.Request for the UpdateAccount method, with any body, and a specified content type
+func NewUpdateAccountRequestWithBody(server string, params *UpdateAccountParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/account")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewRedeemUserChallengeRequest calls the generic RedeemUserChallenge builder with application/json body
+func NewRedeemUserChallengeRequest(server string, body RedeemUserChallengeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRedeemUserChallengeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewRedeemUserChallengeRequestWithBody constructs an http.Request for the RedeemUserChallenge method, with any body, and a specified content type
+func NewRedeemUserChallengeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/account/activation")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInspectUserChallengeRequest calls the generic InspectUserChallenge builder with application/json body
+func NewInspectUserChallengeRequest(server string, body InspectUserChallengeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInspectUserChallengeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInspectUserChallengeRequestWithBody constructs an http.Request for the InspectUserChallenge method, with any body, and a specified content type
+func NewInspectUserChallengeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/account/activation/context")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -8715,6 +9520,340 @@ func NewPostBrowserTracesRequestWithBody(server string, params *PostBrowserTrace
 	return req, nil
 }
 
+// NewListUsersRequest constructs an http.Request for the ListUsers method
+func NewListUsersRequest(server string, params *ListUsersParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Role != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "role", *params.Role, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateUserRequest calls the generic CreateUser builder with application/json body
+func NewCreateUserRequest(server string, params *CreateUserParams, body CreateUserJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateUserRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateUserRequestWithBody constructs an http.Request for the CreateUser method, with any body, and a specified content type
+func NewCreateUserRequestWithBody(server string, params *CreateUserParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetUserRequest constructs an http.Request for the GetUser method
+func NewGetUserRequest(server string, userId UserId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "user_id", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateUserRequest calls the generic UpdateUser builder with application/json body
+func NewUpdateUserRequest(server string, userId UserId, params *UpdateUserParams, body UpdateUserJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateUserRequestWithBody(server, userId, params, "application/json", bodyReader)
+}
+
+// NewUpdateUserRequestWithBody constructs an http.Request for the UpdateUser method, with any body, and a specified content type
+func NewUpdateUserRequestWithBody(server string, userId UserId, params *UpdateUserParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "user_id", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewUserCommandRequest calls the generic UserCommand builder with application/json body
+func NewUserCommandRequest(server string, userId UserId, action string, params *UserCommandParams, body UserCommandJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUserCommandRequestWithBody(server, userId, action, params, "application/json", bodyReader)
+}
+
+// NewUserCommandRequestWithBody constructs an http.Request for the UserCommand method, with any body, and a specified content type
+func NewUserCommandRequestWithBody(server string, userId UserId, action string, params *UserCommandParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "user_id", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "action", action, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/users/%s/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewGetLivenessRequest constructs an http.Request for the GetLiveness method
 func NewGetLivenessRequest(server string) (*http.Request, error) {
 	var err error
@@ -8857,6 +9996,63 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/agent/v1/observations (the `PostAgentObservations` operationId).
 	PostAgentObservationsWithResponse(ctx context.Context, body PostAgentObservationsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentObservationsResponse, error)
+
+	// GetAccountWithResponse Read the current unrestricted user's profile
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/account (the `GetAccount` operationId).
+	GetAccountWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAccountResponse, error)
+
+	// UpdateAccountWithBodyWithResponse Update the current user's full name
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+	UpdateAccountWithBodyWithResponse(ctx context.Context, params *UpdateAccountParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAccountResponse, error)
+
+	// UpdateAccountWithResponse Update the current user's full name
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+	UpdateAccountWithResponse(ctx context.Context, params *UpdateAccountParams, body UpdateAccountJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAccountResponse, error)
+
+	// RedeemUserChallengeWithBodyWithResponse Consume a one-time password setup or reset credential
+	//
+	// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+	RedeemUserChallengeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RedeemUserChallengeResponse, error)
+
+	// RedeemUserChallengeWithResponse Consume a one-time password setup or reset credential
+	//
+	// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+	RedeemUserChallengeWithResponse(ctx context.Context, body RedeemUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*RedeemUserChallengeResponse, error)
+
+	// InspectUserChallengeWithBodyWithResponse Inspect a valid one-time account link before choosing a password
+	//
+	// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+	InspectUserChallengeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InspectUserChallengeResponse, error)
+
+	// InspectUserChallengeWithResponse Inspect a valid one-time account link before choosing a password
+	//
+	// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+	InspectUserChallengeWithResponse(ctx context.Context, body InspectUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*InspectUserChallengeResponse, error)
 
 	// GetAgentsWithResponse List agents
 	//
@@ -9408,6 +10604,70 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/telemetry/traces (the `PostBrowserTraces` operationId).
 	PostBrowserTracesWithResponse(ctx context.Context, params *PostBrowserTracesParams, body PostBrowserTracesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBrowserTracesResponse, error)
 
+	// ListUsersWithResponse List local users (administrator only)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/users (the `ListUsers` operationId).
+	ListUsersWithResponse(ctx context.Context, params *ListUsersParams, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
+
+	// CreateUserWithBodyWithResponse Create a pending user and issue a one-time setup link
+	//
+	// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+	CreateUserWithBodyWithResponse(ctx context.Context, params *CreateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateUserResponse, error)
+
+	// CreateUserWithResponse Create a pending user and issue a one-time setup link
+	//
+	// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+	CreateUserWithResponse(ctx context.Context, params *CreateUserParams, body CreateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateUserResponse, error)
+
+	// GetUserWithResponse Read a local user (administrator only)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/users/{user_id} (the `GetUser` operationId).
+	GetUserWithResponse(ctx context.Context, userId UserId, reqEditors ...RequestEditorFn) (*GetUserResponse, error)
+
+	// UpdateUserWithBodyWithResponse Update full name, sign-in email and deployment-wide role
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+	UpdateUserWithBodyWithResponse(ctx context.Context, userId UserId, params *UpdateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateUserResponse, error)
+
+	// UpdateUserWithResponse Update full name, sign-in email and deployment-wide role
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+	UpdateUserWithResponse(ctx context.Context, userId UserId, params *UpdateUserParams, body UpdateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateUserResponse, error)
+
+	// UserCommandWithBodyWithResponse Execute an administrator user lifecycle command
+	//
+	// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+	UserCommandWithBodyWithResponse(ctx context.Context, userId UserId, action string, params *UserCommandParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UserCommandResponse, error)
+
+	// UserCommandWithResponse Execute an administrator user lifecycle command
+	//
+	// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+	UserCommandWithResponse(ctx context.Context, userId UserId, action string, params *UserCommandParams, body UserCommandJSONRequestBody, reqEditors ...RequestEditorFn) (*UserCommandResponse, error)
+
 	// GetLivenessWithResponse Report whether the UI process is alive
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -9624,6 +10884,198 @@ func (r PostAgentObservationsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostAgentObservationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetAccountResponse200Headers the declared response headers of an HTTP 200 response for GetAccount
+type GetAccountResponse200Headers struct {
+	ETag *string
+}
+
+type GetAccountResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ManagedUser
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetAccountResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAccountResponse) GetJSON200() *ManagedUser {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAccountResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAccountResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAccountResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAccountResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAccountResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateAccountResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateAccountResponse) GetJSON200() *UserCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateAccountResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateAccountResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAccountResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAccountResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateAccountResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RedeemUserChallengeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RedeemUserChallengeResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RedeemUserChallengeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RedeemUserChallengeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RedeemUserChallengeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RedeemUserChallengeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type InspectUserChallengeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserChallengeContext
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r InspectUserChallengeResponse) GetJSON200() *UserChallengeContext {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r InspectUserChallengeResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r InspectUserChallengeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r InspectUserChallengeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InspectUserChallengeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r InspectUserChallengeResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12400,6 +13852,253 @@ func (r PostBrowserTracesResponse) ContentType() string {
 	return ""
 }
 
+type ListUsersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListUsersResponse) GetJSON200() *UserPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListUsersResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListUsersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListUsersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListUsersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListUsersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateUserResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *UserCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateUserResponse) GetJSON201() *UserCommandResult {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateUserResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateUserResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateUserResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateUserResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateUserResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetUserResponse200Headers the declared response headers of an HTTP 200 response for GetUser
+type GetUserResponse200Headers struct {
+	ETag *string
+}
+
+type GetUserResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ManagedUser
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetUserResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetUserResponse) GetJSON200() *ManagedUser {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetUserResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetUserResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetUserResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetUserResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetUserResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateUserResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateUserResponse) GetJSON200() *UserCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateUserResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateUserResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateUserResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateUserResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateUserResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UserCommandResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UserCommandResponse) GetJSON200() *UserCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UserCommandResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UserCommandResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UserCommandResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UserCommandResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UserCommandResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetLivenessResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12562,6 +14261,105 @@ func (c *ClientWithResponses) PostAgentObservationsWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParsePostAgentObservationsResponse(rsp)
+}
+
+// GetAccountWithResponse Read the current unrestricted user's profile
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/account (the `GetAccount` operationId).
+func (c *ClientWithResponses) GetAccountWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAccountResponse, error) {
+	rsp, err := c.GetAccount(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAccountResponse(rsp)
+}
+
+// UpdateAccountWithBodyWithResponse Update the current user's full name
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+func (c *ClientWithResponses) UpdateAccountWithBodyWithResponse(ctx context.Context, params *UpdateAccountParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAccountResponse, error) {
+	rsp, err := c.UpdateAccountWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAccountResponse(rsp)
+}
+
+// UpdateAccountWithResponse Update the current user's full name
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/account (the `UpdateAccount` operationId).
+func (c *ClientWithResponses) UpdateAccountWithResponse(ctx context.Context, params *UpdateAccountParams, body UpdateAccountJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAccountResponse, error) {
+	rsp, err := c.UpdateAccount(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAccountResponse(rsp)
+}
+
+// RedeemUserChallengeWithBodyWithResponse Consume a one-time password setup or reset credential
+//
+// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+func (c *ClientWithResponses) RedeemUserChallengeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RedeemUserChallengeResponse, error) {
+	rsp, err := c.RedeemUserChallengeWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRedeemUserChallengeResponse(rsp)
+}
+
+// RedeemUserChallengeWithResponse Consume a one-time password setup or reset credential
+//
+// Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/account/activation (the `RedeemUserChallenge` operationId).
+func (c *ClientWithResponses) RedeemUserChallengeWithResponse(ctx context.Context, body RedeemUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*RedeemUserChallengeResponse, error) {
+	rsp, err := c.RedeemUserChallenge(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRedeemUserChallengeResponse(rsp)
+}
+
+// InspectUserChallengeWithBodyWithResponse Inspect a valid one-time account link before choosing a password
+//
+// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+func (c *ClientWithResponses) InspectUserChallengeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InspectUserChallengeResponse, error) {
+	rsp, err := c.InspectUserChallengeWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInspectUserChallengeResponse(rsp)
+}
+
+// InspectUserChallengeWithResponse Inspect a valid one-time account link before choosing a password
+//
+// Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/account/activation/context (the `InspectUserChallenge` operationId).
+func (c *ClientWithResponses) InspectUserChallengeWithResponse(ctx context.Context, body InspectUserChallengeJSONRequestBody, reqEditors ...RequestEditorFn) (*InspectUserChallengeResponse, error) {
+	rsp, err := c.InspectUserChallenge(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInspectUserChallengeResponse(rsp)
 }
 
 // GetAgentsWithResponse List agents
@@ -13510,6 +15308,118 @@ func (c *ClientWithResponses) PostBrowserTracesWithResponse(ctx context.Context,
 	return ParsePostBrowserTracesResponse(rsp)
 }
 
+// ListUsersWithResponse List local users (administrator only)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/users (the `ListUsers` operationId).
+func (c *ClientWithResponses) ListUsersWithResponse(ctx context.Context, params *ListUsersParams, reqEditors ...RequestEditorFn) (*ListUsersResponse, error) {
+	rsp, err := c.ListUsers(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListUsersResponse(rsp)
+}
+
+// CreateUserWithBodyWithResponse Create a pending user and issue a one-time setup link
+//
+// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+func (c *ClientWithResponses) CreateUserWithBodyWithResponse(ctx context.Context, params *CreateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateUserResponse, error) {
+	rsp, err := c.CreateUserWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateUserResponse(rsp)
+}
+
+// CreateUserWithResponse Create a pending user and issue a one-time setup link
+//
+// Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users (the `CreateUser` operationId).
+func (c *ClientWithResponses) CreateUserWithResponse(ctx context.Context, params *CreateUserParams, body CreateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateUserResponse, error) {
+	rsp, err := c.CreateUser(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateUserResponse(rsp)
+}
+
+// GetUserWithResponse Read a local user (administrator only)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/users/{user_id} (the `GetUser` operationId).
+func (c *ClientWithResponses) GetUserWithResponse(ctx context.Context, userId UserId, reqEditors ...RequestEditorFn) (*GetUserResponse, error) {
+	rsp, err := c.GetUser(ctx, userId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetUserResponse(rsp)
+}
+
+// UpdateUserWithBodyWithResponse Update full name, sign-in email and deployment-wide role
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+func (c *ClientWithResponses) UpdateUserWithBodyWithResponse(ctx context.Context, userId UserId, params *UpdateUserParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateUserResponse, error) {
+	rsp, err := c.UpdateUserWithBody(ctx, userId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateUserResponse(rsp)
+}
+
+// UpdateUserWithResponse Update full name, sign-in email and deployment-wide role
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/users/{user_id} (the `UpdateUser` operationId).
+func (c *ClientWithResponses) UpdateUserWithResponse(ctx context.Context, userId UserId, params *UpdateUserParams, body UpdateUserJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateUserResponse, error) {
+	rsp, err := c.UpdateUser(ctx, userId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateUserResponse(rsp)
+}
+
+// UserCommandWithBodyWithResponse Execute an administrator user lifecycle command
+//
+// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+func (c *ClientWithResponses) UserCommandWithBodyWithResponse(ctx context.Context, userId UserId, action string, params *UserCommandParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UserCommandResponse, error) {
+	rsp, err := c.UserCommandWithBody(ctx, userId, action, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUserCommandResponse(rsp)
+}
+
+// UserCommandWithResponse Execute an administrator user lifecycle command
+//
+// Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/users/{user_id}/{action} (the `UserCommand` operationId).
+func (c *ClientWithResponses) UserCommandWithResponse(ctx context.Context, userId UserId, action string, params *UserCommandParams, body UserCommandJSONRequestBody, reqEditors ...RequestEditorFn) (*UserCommandResponse, error) {
+	rsp, err := c.UserCommand(ctx, userId, action, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUserCommandResponse(rsp)
+}
+
 // GetLivenessWithResponse Report whether the UI process is alive
 //
 // Returns a wrapper object for the known response body format(s).
@@ -13707,6 +15617,147 @@ func ParsePostAgentObservationsResponse(rsp *http.Response) (*PostAgentObservati
 			return nil, err
 		}
 		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAccountResponse parses an HTTP response from a GetAccountWithResponse call
+func ParseGetAccountResponse(rsp *http.Response) (*GetAccountResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAccountResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ManagedUser
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetAccountResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAccountResponse parses an HTTP response from a UpdateAccountWithResponse call
+func ParseUpdateAccountResponse(rsp *http.Response) (*UpdateAccountResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAccountResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRedeemUserChallengeResponse parses an HTTP response from a RedeemUserChallengeWithResponse call
+func ParseRedeemUserChallengeResponse(rsp *http.Response) (*RedeemUserChallengeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RedeemUserChallengeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseInspectUserChallengeResponse parses an HTTP response from a InspectUserChallengeWithResponse call
+func ParseInspectUserChallengeResponse(rsp *http.Response) (*InspectUserChallengeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InspectUserChallengeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserChallengeContext
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
 
 	}
 
@@ -15982,6 +18033,184 @@ func ParsePostBrowserTracesResponse(rsp *http.Response) (*PostBrowserTracesRespo
 	return response, nil
 }
 
+// ParseListUsersResponse parses an HTTP response from a ListUsersWithResponse call
+func ParseListUsersResponse(rsp *http.Response) (*ListUsersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListUsersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateUserResponse parses an HTTP response from a CreateUserWithResponse call
+func ParseCreateUserResponse(rsp *http.Response) (*CreateUserResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateUserResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest UserCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetUserResponse parses an HTTP response from a GetUserWithResponse call
+func ParseGetUserResponse(rsp *http.Response) (*GetUserResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetUserResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ManagedUser
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetUserResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseUpdateUserResponse parses an HTTP response from a UpdateUserWithResponse call
+func ParseUpdateUserResponse(rsp *http.Response) (*UpdateUserResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateUserResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUserCommandResponse parses an HTTP response from a UserCommandWithResponse call
+func ParseUserCommandResponse(rsp *http.Response) (*UserCommandResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UserCommandResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetLivenessResponse parses an HTTP response from a GetLivenessWithResponse call
 func ParseGetLivenessResponse(rsp *http.Response) (*GetLivenessResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -16058,6 +18287,18 @@ type ServerInterface interface {
 	// PostAgentObservations Submit a bounded batch of authorized SLI outcomes
 	// (POST /api/agent/v1/observations)
 	PostAgentObservations(w http.ResponseWriter, r *http.Request)
+	// GetAccount Read the current unrestricted user's profile
+	// (GET /api/v1/account)
+	GetAccount(w http.ResponseWriter, r *http.Request)
+	// UpdateAccount Update the current user's full name
+	// (PUT /api/v1/account)
+	UpdateAccount(w http.ResponseWriter, r *http.Request, params UpdateAccountParams)
+	// RedeemUserChallenge Consume a one-time password setup or reset credential
+	// (POST /api/v1/account/activation)
+	RedeemUserChallenge(w http.ResponseWriter, r *http.Request)
+	// InspectUserChallenge Inspect a valid one-time account link before choosing a password
+	// (POST /api/v1/account/activation/context)
+	InspectUserChallenge(w http.ResponseWriter, r *http.Request)
 	// GetAgents List agents
 	// (GET /api/v1/agents)
 	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
@@ -16190,6 +18431,21 @@ type ServerInterface interface {
 	// PostBrowserTraces Submit bounded authenticated browser OTLP traces
 	// (POST /api/v1/telemetry/traces)
 	PostBrowserTraces(w http.ResponseWriter, r *http.Request, params PostBrowserTracesParams)
+	// ListUsers List local users (administrator only)
+	// (GET /api/v1/users)
+	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
+	// CreateUser Create a pending user and issue a one-time setup link
+	// (POST /api/v1/users)
+	CreateUser(w http.ResponseWriter, r *http.Request, params CreateUserParams)
+	// GetUser Read a local user (administrator only)
+	// (GET /api/v1/users/{user_id})
+	GetUser(w http.ResponseWriter, r *http.Request, userId UserId)
+	// UpdateUser Update full name, sign-in email and deployment-wide role
+	// (PUT /api/v1/users/{user_id})
+	UpdateUser(w http.ResponseWriter, r *http.Request, userId UserId, params UpdateUserParams)
+	// UserCommand Execute an administrator user lifecycle command
+	// (POST /api/v1/users/{user_id}/{action})
+	UserCommand(w http.ResponseWriter, r *http.Request, userId UserId, action string, params UserCommandParams)
 	// GetLiveness Report whether the UI process is alive
 	// (GET /livez)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -16307,6 +18563,116 @@ func (siw *ServerInterfaceWrapper) PostAgentObservations(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAgentObservations(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAccount operation middleware
+func (siw *ServerInterfaceWrapper) GetAccount(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAccount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAccount operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateAccountParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch UserIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RedeemUserChallenge operation middleware
+func (siw *ServerInterfaceWrapper) RedeemUserChallenge(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RedeemUserChallenge(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InspectUserChallenge operation middleware
+func (siw *ServerInterfaceWrapper) InspectUserChallenge(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InspectUserChallenge(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -18352,6 +20718,325 @@ func (siw *ServerInterfaceWrapper) PostBrowserTraces(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListUsers operation middleware
+func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUsersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "role" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "role", r.URL.Query(), &params.Role, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "role"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "role", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUsers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUser operation middleware
+func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateUserParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUser(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUser operation middleware
+func (siw *ServerInterfaceWrapper) GetUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUser(w, r, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateUser operation middleware
+func (siw *ServerInterfaceWrapper) UpdateUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateUserParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch UserIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateUser(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UserCommand operation middleware
+func (siw *ServerInterfaceWrapper) UserCommand(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "action" -------------
+	var action string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "action", r.PathValue("action"), &action, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UserCommandParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch UserIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UserCommand(w, r, userId, action, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
 
@@ -18500,6 +21185,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/account", wrapper.GetAccount)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/account", wrapper.UpdateAccount)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/account/activation", wrapper.RedeemUserChallenge)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/account/activation/context", wrapper.InspectUserChallenge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/users/{user_id}", wrapper.GetUser)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/users/{user_id}", wrapper.UpdateUser)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/users/{user_id}/{action}", wrapper.UserCommand)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/telemetry/traces", wrapper.PostBrowserTraces)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/agent/v1/configuration", wrapper.GetAgentConfiguration)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/agent/v1/observations", wrapper.PostAgentObservations)

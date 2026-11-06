@@ -5,6 +5,10 @@ import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRe
 import './auth.css';
 import { journeyContentReady, routeName, telemetrySession } from '../telemetry/client.ts';
 import { ModuleView } from '../components/ModuleView.tsx';
+import type { ManagedUser } from '../settings/client.ts';
+
+const LazySettingsPage = lazy(() => import('../settings/SettingsPage.tsx').then(module => ({ default:module.SettingsPage })));
+const LazyActivationPage = lazy(() => import('../settings/ActivationPage.tsx').then(module => ({ default:module.ActivationPage })));
 
 const LazyAgentsPage = lazy(() => import('../agents/AgentsPage.tsx').then((module) => ({ default: module.AgentsPage })));
 const LazyDatasourcesPage = lazy(() => import('../datasources/DatasourcesPage.tsx').then((module) => ({ default: module.DatasourcesPage })));
@@ -67,6 +71,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const [agentTitleSlot, setAgentTitleSlot] = useState<HTMLDivElement | null>(null);
   const [agentDetailRoute, setAgentDetailRoute] = useState(() => Boolean(new URLSearchParams(window.location.search).get('agent')));
   const [context, setContextState] = useState<AuthContext | null>(null);
+  const [profile,setProfile] = useState<ManagedUser|null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [checking, setChecking] = useState(true);
   const [pending, setPending] = useState(false);
@@ -136,6 +141,12 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   }, [context, unavailable, checking, pathname]);
 
   const operational = !checking && !unavailable && Boolean(context?.session && !context.session.restricted);
+  useEffect(() => {
+    if (!operational || !context || !pathname.startsWith('/settings') || pathname === '/settings/account' || pathname === '/settings' || profile?.id === context.session?.user_id) return;
+    const request = new AbortController();
+    void import('../settings/client.ts').then(({settingsClient}) => settingsClient.account(context, request.signal)).then(user => { if (!request.signal.aborted) setProfile(user); }).catch(() => { /* The shell retains the authenticated login if the profile is unavailable. */ });
+    return () => request.abort();
+  }, [operational, pathname, context?.session?.user_id, profile?.id]);
   useEffect(() => {
     if (!checking && (!operational || (pathname.startsWith('/agents') && context?.session?.role !== 'administrator'))) {
       journeyContentReady(routeName(pathname), unavailable);
@@ -359,8 +370,10 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
 
   const lifecycleNotice = agentLifecycleIntent && (!context?.session || context.session.user_id !== agentLifecycleIntent.userID || context.session.restricted || context.session.role !== 'administrator') && <Panel heading={agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? 'Credential command needs reconciliation' : agentLifecycleIntent.outcome === 'rejected' ? 'Credential command was rejected' : 'Credential command outcome unknown'} className="auth-panel"><p>{agentLifecycleIntent.outcome === 'conflict' || agentLifecycleIntent.retryRejected === 'conflict' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} conflicted after an earlier uncertain attempt. Reconcile its original target, command key and resource version before starting another command.` : agentLifecycleIntent.outcome === 'rejected' ? `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} was rejected. Its original target, command key and resource version remain available for a deliberate retry.` : `A ${agentLifecycleIntent.kind} command for agent ${agentLifecycleIntent.agentID} may have completed. Its original target, command key and resource version remain available for a deliberate retry. No password or token was retained.`}</p></Panel>;
 
-  if (operational && context?.session) return <ApplicationShell login={context.session.login} role={context.session.role} pending={pending} showCheckSession={showCheckSession} onCheckSession={() => void checkSession(true)} onSignOut={() => void signOut()}>
-    {pathname.startsWith('/slos') || pathname.startsWith('/services/') ? <ScreenBoundary screen="SLO" key={`slos:${context.session.user_id}`}><ModuleView load={loadSlosPage} componentProps={{context}} fallback={<><h1 className="app-page-heading">SLOs</h1><span className="sr-only" role="status">Opening SLOs</span></>}/></ScreenBoundary>
+  if (pathname==='/activate'&&!unavailable) return context?<Suspense fallback={<span className="sr-only" role="status">Opening password setup</span>}><LazyActivationPage context={context}/></Suspense>:<span className="sr-only" role="status">Checking account setup</span>;
+
+  if (operational && context?.session) return <ApplicationShell login={profile?.id===context.session.user_id?profile.full_name:context.session.login} role={context.session.role} pending={pending} showCheckSession={showCheckSession} onCheckSession={() => void checkSession(true)} onSignOut={() => void signOut()}>
+    {pathname.startsWith('/settings')?<ScreenBoundary screen="Settings" key={`settings:${context.session.user_id}`}><Suspense fallback={<span className="sr-only" role="status">Opening settings</span>}><LazySettingsPage client={authClient} context={context} onProfileChange={setProfile} onSessionChange={setContext} onAuthFailure={error=>handleFailure(error,'password')} onCheckSession={()=>void checkSession(true)}/></Suspense></ScreenBoundary>:pathname.startsWith('/slos') || pathname.startsWith('/services/') ? <ScreenBoundary screen="SLO" key={`slos:${context.session.user_id}`}><ModuleView load={loadSlosPage} componentProps={{context}} fallback={<><h1 className="app-page-heading">SLOs</h1><span className="sr-only" role="status">Opening SLOs</span></>}/></ScreenBoundary>
       : pathname.startsWith('/datasources') ? <ScreenBoundary screen="Datasource" key={`datasources:${context.session.user_id}`}><Suspense fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb">{pathname === '/datasources' ? <span aria-current="page">Datasources</span> : <><a href="/datasources" data-app-route>Datasources</a><span aria-hidden="true">/</span><span aria-current="page">{pathname === '/datasources/new' ? 'Add datasource' : 'Datasource'}</span></>}</nav><h1 className="app-page-heading">Datasources</h1><span className="sr-only" role="status">Opening datasources</span></>}><LazyDatasourcesPage context={context} /></Suspense></ScreenBoundary>
       : pathname.startsWith('/slis') ? <ScreenBoundary screen="SLI" key={`slis:${context.session.user_id}`}><ModuleView load={loadSlisPage} componentProps={{context}} fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb">{pathname === '/slis' ? <span aria-current="page">SLIs</span> : <><a href="/slis" data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{pathname === '/slis/new' ? 'Create SLI' : 'SLI details'}</span></>}</nav><h1 className="app-page-heading">SLIs</h1><span className="sr-only" role="status">Opening SLIs</span></>} /></ScreenBoundary> : <>
     {agentDetailRoute && <nav className="app-breadcrumbs" aria-label="Breadcrumb"><a href="/agents" data-app-route>Agents</a><span aria-hidden="true">/</span><span aria-current="page">{agentCrumb?.id === new URLSearchParams(window.location.search).get('agent') ? agentCrumb.name : 'Agent details'}</span></nav>}

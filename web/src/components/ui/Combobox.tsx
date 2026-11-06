@@ -27,6 +27,7 @@ type Props = {
   disabled?: boolean;
   badge?: (option: ComboboxOption) => string | undefined;
   noMatch?: { text: (term: string) => string; action?: { label: (term: string) => string; onSelect: (term: string) => void } };
+  searchLabelOnly?: boolean;
 };
 
 function highlight(text: string, term: string): ReactNode {
@@ -38,7 +39,7 @@ function highlight(text: string, term: string): ReactNode {
 
 // Type-ahead picker. Options show their state before selection; the chosen option
 // collapses to a summary card with a Change action that returns focus to the input.
-export function Combobox({ id, label, options, value, onChange, placeholder, hint, error, disabled, badge, noMatch }: Props) {
+export function Combobox({ id, label, options, value, onChange, placeholder, hint, error, disabled, badge, noMatch, searchLabelOnly = false }: Props) {
   const [term, setTerm] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -50,7 +51,7 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
   const listId = `${id}-listbox`;
   const generated = useId();
   const selected = value === null ? undefined : options.find((option) => option.id === value);
-  const matches = options.filter((option) => !term || `${option.label} ${option.detail ?? ''} ${option.keywords ?? ''}`.toLowerCase().includes(term.toLowerCase()));
+  const matches = options.filter((option) => !term || (searchLabelOnly ? option.label : `${option.label} ${option.detail ?? ''} ${option.keywords ?? ''}`).toLowerCase().includes(term.toLowerCase()));
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;

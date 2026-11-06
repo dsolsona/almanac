@@ -31,6 +31,7 @@ import (
 	"github.com/dsolsona/almanac/internal/sourcesecret"
 	"github.com/dsolsona/almanac/internal/storage"
 	"github.com/dsolsona/almanac/internal/telemetry"
+	"github.com/dsolsona/almanac/internal/userhttp"
 )
 
 type Server struct {
@@ -145,6 +146,11 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 		return nil, errors.New("backendhttp: invalid objective handler configuration")
 	}
 	mux := http.NewServeMux()
+	users := userhttp.New(databaseURL, cfg.PublicOrigin, auth, service, time.Now, s.authenticationPreflight)
+	mux.Handle("/api/v1/account", users)
+	mux.Handle("/api/v1/account/", users)
+	mux.Handle("/api/v1/users", users)
+	mux.Handle("/api/v1/users/", users)
 	mux.Handle("/api/v1/telemetry/traces", browserTelemetry(auth, service))
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { writeHealth(w, http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.readiness)
