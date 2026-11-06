@@ -7,7 +7,9 @@ const baseURL = process.env.E2E_BASE_URL ?? 'https://localhost:18188';
 
 export default defineConfig({
   testDir: './e2e',
-  outputDir: '../.local/e2e/results',
+  // Results go to the dev container's test-results volume: trace recording on the macOS bind mount
+  // fails with EACCES (F6-T07). The HTML report, written once at the end, stays in .local for reading.
+  outputDir: './test-results/e2e',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   // A failure is a failure: no retries, so flaky tests are visible and get fixed.

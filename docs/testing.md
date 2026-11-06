@@ -50,8 +50,9 @@ are in [commands](commands.md).
 `scripts/e2e.sh` starts a fresh stack under the project name `almanac-e2e` on ports 18188, 18528
 and 19528, runs Playwright, and removes the stack. It never touches the `make run` stack or its
 data. `E2E_KEEP=1` keeps the stack for inspection; `sh scripts/e2e.sh down` (inside
-`make shell SOCKET=1`) removes it. Results, traces and screenshots of failures are in
-`.local/e2e/`; the HTML report is `.local/e2e/report/index.html`.
+`make shell SOCKET=1`) removes it. The HTML report, with screenshots and traces of failures, is
+`.local/e2e/report/index.html`; raw results stay in the dev container's test-results volume, because
+trace recording on the macOS bind mount fails.
 
 The performance suite uses the same stack with `playwright.perf.config.ts`. It seeds 20 SLIs and
 20 SLOs with `PERF_DAYS` of history (35 by default), checks the exact budgets, then times each page

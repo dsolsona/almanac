@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 // measurements do not compete. Run with `make test-perf`; results land in .local/perf/results.json.
 export default defineConfig({
   testDir: '.',
-  outputDir: '../.local/perf/results',
+  outputDir: './test-results/perf',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   retries: 0,
