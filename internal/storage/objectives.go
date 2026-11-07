@@ -28,6 +28,12 @@ var (
 )
 
 type ServiceRecord struct {
+	ServiceMetadata
+	Dependencies          []string
+	DependencyServices    []ServiceReference
+	UsedBy                []ServiceReference
+	UsedByCount           int
+	SloSummary            ServiceSloSummary
 	ID, Name, DisplayName string
 	Version               int64
 	CreatedAt, UpdatedAt  time.Time
@@ -48,6 +54,8 @@ type SloRecord struct {
 }
 
 type CreateObjectiveInput struct {
+	ServiceMetadata                             *ServiceMetadata
+	Dependencies                                []string
 	Proof                                       DatasourceProof
 	Name, DisplayName, ServiceID, SliID, Target string
 	RollingWindowSeconds                        int64
@@ -78,7 +86,7 @@ func validateObjectiveCreate(input CreateObjectiveInput, isSlo bool) bool {
 		return false
 	}
 	if !isSlo {
-		return true
+		return len(input.Dependencies) <= 100 && (input.ServiceMetadata == nil || validServiceMetadata(*input.ServiceMetadata))
 	}
 	_, serviceValid := canonicalUUID(input.ServiceID)
 	_, sliValid := canonicalUUID(input.SliID)
@@ -106,8 +114,10 @@ func CreateObjective(ctx context.Context, databaseURL string, input CreateObject
 		Name, DisplayName, ServiceID, SliID, Target string
 		RollingWindowSeconds                        int64
 		EvaluationValidFrom                         *time.Time
-	}{input.Name, input.DisplayName, input.ServiceID, input.SliID, input.Target, input.RollingWindowSeconds, input.EvaluationValidFrom}
-	raw, err := json.Marshal(request)
+		ServiceMetadata                             *ServiceMetadata `json:",omitzero"`
+		Dependencies                                []string         `json:",omitempty"`
+	}{input.Name, input.DisplayName, input.ServiceID, input.SliID, input.Target, input.RollingWindowSeconds, input.EvaluationValidFrom, input.ServiceMetadata, input.Dependencies}
+	raw, err := json.Marshal(request, json.Deterministic(true))
 	if err != nil {
 		return ServiceRecord{}, SloRecord{}, ErrObjectiveInvalid
 	}
@@ -118,6 +128,9 @@ func CreateObjective(ctx context.Context, databaseURL string, input CreateObject
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
+	if err = lockServiceCatalog(ctx, tx); err != nil {
+		return ServiceRecord{}, SloRecord{}, err
+	}
 	now := normalizedAgentNow(input.Now)
 	// Serialize a given actor/operation/key even when its receipt does not exist yet.
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", user.ID.String()+":"+operation+":"+input.IdempotencyKey); err != nil {
@@ -167,7 +180,25 @@ func CreateObjective(ctx context.Context, databaseURL string, input CreateObject
 		if e != nil {
 			return service, objective, operationError(ctx, "storage: service create failed", e)
 		}
-		service = serviceRecord(row)
+		metadata := ServiceMetadata{}
+		if input.ServiceMetadata != nil {
+			metadata = *input.ServiceMetadata
+		}
+		metadata = normalizeServiceMetadata(metadata)
+		encoded, e := json.Marshal(metadata)
+		if e != nil {
+			return service, objective, e
+		}
+		if e = q.SetServiceCatalogMetadata(ctx, dbgen.SetServiceCatalogMetadataParams{ID: pgID, Metadata: encoded}); e != nil {
+			return service, objective, e
+		}
+		if e = writeServiceDependencies(ctx, q, pgID, input.Dependencies); e != nil {
+			return service, objective, e
+		}
+		service, err = enrichedService(ctx, q, serviceRecord(row), now)
+		if err != nil {
+			return service, objective, err
+		}
 		raw, err = json.Marshal(service)
 	} else {
 		serviceID, _ := canonicalUUID(input.ServiceID)
@@ -271,6 +302,12 @@ func ReadObjective(ctx context.Context, databaseURL string, proof DatasourceProo
 	if err != nil {
 		return service, objective, operationError(ctx, "storage: objective read failed", err)
 	}
+	if !isSlo {
+		service, err = enrichedService(ctx, q, service, normalizedAgentNow(now))
+		if err != nil {
+			return service, objective, err
+		}
+	}
 	if err = finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
 		return ServiceRecord{}, SloRecord{}, err
 	}
@@ -331,6 +368,11 @@ func ListObjectives(ctx context.Context, databaseURL string, proof DatasourcePro
 	}
 	if err != nil {
 		return ObjectivePage{}, err
+	}
+	if !isSlo {
+		if err = enrichServices(ctx, q, page.Services, normalizedAgentNow(now)); err != nil {
+			return ObjectivePage{}, err
+		}
 	}
 	if err = finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
 		return ObjectivePage{}, err
@@ -395,6 +437,12 @@ func UpdateObjectiveMetadata(ctx context.Context, databaseURL string, proof Data
 	}
 	if err != nil {
 		return service, objective, err
+	}
+	if !isSlo {
+		service, err = enrichedService(ctx, q, service, normalizedAgentNow(now))
+		if err != nil {
+			return service, objective, err
+		}
 	}
 	if err = finishAgentRead(ctx, tx, now, started, user, installation, session); err != nil {
 		return ServiceRecord{}, SloRecord{}, err

@@ -214,3 +214,38 @@ func timestamp(value string) *time.Time {
 	}
 	return &parsed
 }
+
+func TestServiceCatalogFiltersAndArchiveTransport(t *testing.T) {
+	const id = "11111111-1111-4111-8111-111111111111"
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch r.Method {
+		case http.MethodGet:
+			if r.URL.Path != "/api/v1/services" || r.URL.Query().Get("q") != "team:store" || r.URL.Query().Get("owner") != "Commerce" || r.URL.Query().Get("coverage") != "without" {
+				t.Errorf("filters: %s", r.URL)
+			}
+			_, _ = w.Write([]byte(`{"items":[],"next_cursor":""}`))
+		case http.MethodDelete:
+			if r.URL.Path != "/api/v1/services/"+id || r.Header.Get("If-Match") != `"service:`+id+`:1"` || r.Header.Get("Idempotency-Key") != "" {
+				t.Errorf("archive transport: %s %v", r.URL, r.Header)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("method %s", r.Method)
+		}
+	}))
+	defer server.Close()
+	ops, err := api.NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := New(ops, func(context.Context, *http.Request) error { return nil })
+	if _, _, err := client.Do(t.Context(), Input{Kind: "services", Action: "list", Query: "team:store", Owner: "Commerce", Coverage: "without", Limit: 10}); err != nil {
+		t.Fatal(err)
+	}
+	data, _, err := client.Do(t.Context(), Input{Kind: "services", Action: "delete", ID: id, ETag: `"service:` + id + `:1"`})
+	if err != nil || !strings.Contains(string(data), `"archived":true`) || calls != 2 {
+		t.Fatalf("archive: %s %v (%d calls)", data, err, calls)
+	}
+}

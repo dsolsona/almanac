@@ -17,6 +17,7 @@ import (
 )
 
 type Operations interface {
+	ArchiveService(context.Context, api.ServiceId, *api.ArchiveServiceParams, ...api.RequestEditorFn) (*http.Response, error)
 	ListServices(context.Context, *api.ListServicesParams, ...api.RequestEditorFn) (*http.Response, error)
 	CreateService(context.Context, *api.CreateServiceParams, api.CreateServiceJSONRequestBody, ...api.RequestEditorFn) (*http.Response, error)
 	GetService(context.Context, api.ServiceId, ...api.RequestEditorFn) (*http.Response, error)
@@ -40,7 +41,7 @@ type Input struct {
 	GenerationID, Lane                             string
 	Offset                                         int
 	Kind, Action, ID, Cursor, ServiceID, Key, ETag string
-	Query, Urgency                                 string
+	Query, Urgency, Owner, Coverage                string
 	Limit                                          int
 	BurnWindowSeconds                              int
 	Body                                           []byte
@@ -63,7 +64,7 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		cursorPtr = &cursor
 	}
 	editor := c.editor
-	if in.Action == "create" || in.Action == "update" {
+	if in.Action == "create" || in.Action == "update" || in.Action == "delete" {
 		editor = func(ctx context.Context, r *http.Request) error {
 			if err := c.editor(ctx, r); err != nil {
 				return err
@@ -74,7 +75,18 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 	}
 	switch in.Kind + " " + in.Action {
 	case "services list":
-		response, err = c.ops.ListServices(ctx, &api.ListServicesParams{Limit: &limit, Cursor: cursorPtr}, editor)
+		params := &api.ListServicesParams{Limit: &limit, Cursor: cursorPtr}
+		if in.Query != "" {
+			params.Q = &in.Query
+		}
+		if in.Owner != "" {
+			params.Owner = &in.Owner
+		}
+		if in.Coverage != "" {
+			value := api.ListServicesParamsCoverage(in.Coverage)
+			params.Coverage = &value
+		}
+		response, err = c.ops.ListServices(ctx, params, editor)
 	case "services get":
 		response, err = c.ops.GetService(ctx, id, editor)
 	case "services create":
@@ -84,11 +96,13 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		}
 		response, err = c.ops.CreateService(ctx, &api.CreateServiceParams{IdempotencyKey: api.IdempotencyKey(in.Key)}, body, editor)
 	case "services update":
-		var body api.ResourceMetadataWrite
+		var body api.ServiceMetadataWrite
 		if json.Unmarshal(in.Body, &body) != nil {
 			return nil, "", failure("invalid_request", 0, false)
 		}
 		response, err = c.ops.PatchServiceMetadata(ctx, id, &api.PatchServiceMetadataParams{IfMatch: api.ResourceIfMatch(in.ETag)}, body, editor)
+	case "services delete":
+		response, err = c.ops.ArchiveService(ctx, id, &api.ArchiveServiceParams{IfMatch: api.ResourceIfMatch(in.ETag)}, editor)
 	case "slos list":
 		params := &api.ListSlosParams{Limit: &limit, Cursor: cursorPtr}
 		if in.ServiceID != "" {
@@ -169,7 +183,7 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 	default:
 		return nil, "", failure("invalid_request", 0, false)
 	}
-	mutation := in.Action == "create" || in.Action == "update"
+	mutation := in.Action == "create" || in.Action == "update" || in.Action == "delete"
 	if err != nil || response == nil {
 		if response != nil && response.Body != nil {
 			response.Body.Close()
@@ -186,6 +200,9 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		return nil, "", failure("invalid_response", 0, mutation)
 	}
 	expected := http.StatusOK
+	if in.Action == "delete" {
+		expected = http.StatusNoContent
+	}
 	if in.Action == "create" {
 		expected = http.StatusCreated
 	}
@@ -201,7 +218,7 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		_ = json.Unmarshal(data, &problem)
 		code := problem.Code
 		switch code {
-		case "invalid_request", "unauthenticated", "unauthorized", "forbidden", "not_found", "conflict", "request_timeout", "request_canceled", "snapshot_expired", "resource_limit", "range_too_dense", "derived_data_pending", "derived_data_failed":
+		case "service_in_use", "invalid_request", "unauthenticated", "unauthorized", "forbidden", "not_found", "conflict", "request_timeout", "request_canceled", "snapshot_expired", "resource_limit", "range_too_dense", "derived_data_pending", "derived_data_failed":
 		default:
 			code = "management_unavailable"
 		}
@@ -218,6 +235,12 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 			f.RequestID = problem.RequestID
 		}
 		return nil, "", f
+	}
+	if in.Action == "delete" {
+		if len(data) != 0 {
+			return nil, "", failure("invalid_response", 0, true)
+		}
+		return []byte(`{"archived":true}`), "", nil
 	}
 	var object map[string]any
 	valid := validResponse(data, in.Kind, in.Action, id)
@@ -546,6 +569,9 @@ func validResponse(data []byte, kind, action string, expectedID ...api.SloId) bo
 }
 func failure(code string, status int, unknown bool) *datasourceclient.Failure {
 	message := "The request could not be completed."
+	if code == "service_in_use" {
+		message = "Move or remove the referencing SLOs and service dependencies before deleting this service."
+	}
 	if code == "derived_data_pending" {
 		message = "SLO results are being prepared. Try again shortly."
 	}

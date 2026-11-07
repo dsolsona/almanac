@@ -157,7 +157,7 @@ func (q *Queries) FinishSloOverviewSnapshot(ctx context.Context, arg FinishSloOv
 }
 
 const getService = `-- name: GetService :one
-SELECT id, name, display_name, version, created_at, updated_at FROM public.almanac_services WHERE id = $1
+SELECT id, name, display_name, version, created_at, updated_at, metadata, archived_at FROM public.almanac_services WHERE id = $1 AND archived_at IS NULL
 `
 
 func (q *Queries) GetService(ctx context.Context, id pgtype.UUID) (AlmanacService, error) {
@@ -170,6 +170,8 @@ func (q *Queries) GetService(ctx context.Context, id pgtype.UUID) (AlmanacServic
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -363,7 +365,7 @@ func (q *Queries) InsertObjectiveCreateReceipt(ctx context.Context, arg InsertOb
 
 const insertService = `-- name: InsertService :one
 INSERT INTO public.almanac_services(id, name, display_name, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $4) RETURNING id, name, display_name, version, created_at, updated_at
+VALUES ($1, $2, $3, $4, $4) RETURNING id, name, display_name, version, created_at, updated_at, metadata, archived_at
 `
 
 type InsertServiceParams struct {
@@ -388,6 +390,8 @@ func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (A
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -691,8 +695,8 @@ func (q *Queries) ListOperationalSloFacts(ctx context.Context, arg ListOperation
 }
 
 const listServices = `-- name: ListServices :many
-SELECT id, name, display_name, version, created_at, updated_at FROM public.almanac_services
-WHERE (created_at, id) > ($1, $2::uuid) ORDER BY created_at, id LIMIT $3
+SELECT id, name, display_name, version, created_at, updated_at, metadata, archived_at FROM public.almanac_services
+WHERE archived_at IS NULL AND (created_at, id) > ($1, $2::uuid) ORDER BY created_at, id LIMIT $3
 `
 
 type ListServicesParams struct {
@@ -717,6 +721,8 @@ func (q *Queries) ListServices(ctx context.Context, arg ListServicesParams) ([]A
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Metadata,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -978,7 +984,7 @@ func (q *Queries) SloOverviewSnapshotUsage(ctx context.Context, arg SloOverviewS
 
 const updateServiceMetadata = `-- name: UpdateServiceMetadata :one
 UPDATE public.almanac_services SET display_name = $1, version = version + 1, updated_at = $2
-WHERE id = $3 AND version = $4 RETURNING id, name, display_name, version, created_at, updated_at
+WHERE id = $3 AND version = $4 RETURNING id, name, display_name, version, created_at, updated_at, metadata, archived_at
 `
 
 type UpdateServiceMetadataParams struct {
@@ -1003,6 +1009,8 @@ func (q *Queries) UpdateServiceMetadata(ctx context.Context, arg UpdateServiceMe
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

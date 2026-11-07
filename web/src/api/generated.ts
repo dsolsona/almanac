@@ -672,7 +672,11 @@ export interface paths {
         get: operations["getService"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Archive an unreferenced service
+         * @description Editors and administrators can archive a service using its current version. SLO and incoming service references return 409 service_in_use with blocking UUIDs.
+         */
+        delete: operations["archiveService"];
         options?: never;
         head?: never;
         /** Update service display metadata */
@@ -953,6 +957,52 @@ export interface components {
         ServiceCreateRequest: {
             name: string;
             display_name: string;
+            description?: string;
+            owner?: string;
+            contact?: string;
+            labels?: {
+                [key: string]: string[];
+            };
+            links?: components["schemas"]["ServiceLink"][];
+            annotations?: {
+                [key: string]: string;
+            };
+            dependencies?: string[];
+        };
+        ServiceMetadataWrite: {
+            display_name: string;
+            name?: string;
+            description?: string;
+            owner?: string;
+            contact?: string;
+            labels?: {
+                [key: string]: string[];
+            };
+            links?: components["schemas"]["ServiceLink"][];
+            annotations?: {
+                [key: string]: string;
+            };
+            dependencies?: string[];
+        };
+        ServiceLink: {
+            name: string;
+            /** @description Absolute credential-free HTTP or HTTPS link; Almanac does not fetch it. */
+            url: string;
+        };
+        ServiceReference: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            display_name: string;
+            owner: string;
+        };
+        ServiceSloSummary: {
+            /** @enum {string} */
+            state: "no_slos" | "on_track" | "breached" | "unknown";
+            total: number;
+            on_track: number;
+            breached: number;
+            unknown: number;
         };
         ResourceMetadataWrite: {
             display_name: string;
@@ -967,10 +1017,29 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            description?: string;
+            owner?: string;
+            contact?: string;
+            labels?: {
+                [key: string]: string[];
+            };
+            links?: components["schemas"]["ServiceLink"][];
+            annotations?: {
+                [key: string]: string;
+            };
+            dependencies?: string[];
+            dependency_services?: components["schemas"]["ServiceReference"][];
+            used_by?: components["schemas"]["ServiceReference"][];
+            used_by_count?: number;
+            slo_summary?: components["schemas"]["ServiceSloSummary"];
         };
         ServicePage: {
             items: components["schemas"]["Service"][];
             next_cursor: string;
+            total?: number;
+            all_count?: number;
+            with_slos_count?: number;
+            owners?: string[];
         };
         SloCreateRequest: {
             name: string;
@@ -2041,6 +2110,8 @@ export interface components {
             message: string;
             preparation?: components["schemas"]["DerivedPreparation"];
             request_id: string;
+            blocking_slo_ids?: string[];
+            blocking_service_ids?: string[];
             field_errors: {
                 field: string;
                 code: string;
@@ -3915,6 +3986,9 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["PageLimit"];
                 cursor?: components["parameters"]["PageCursor"];
+                q?: string;
+                owner?: string;
+                coverage?: "all" | "with" | "without";
             };
             header?: never;
             path?: never;
@@ -4011,6 +4085,38 @@ export interface operations {
             };
         };
     };
+    archiveService: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                service_id: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service archived; historical identity is preserved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     patchServiceMetadata: {
         parameters: {
             query?: never;
@@ -4025,7 +4131,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ResourceMetadataWrite"];
+                "application/json": components["schemas"]["ServiceMetadataWrite"];
             };
         };
         responses: {

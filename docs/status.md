@@ -1,5 +1,7 @@
 # Delivery status
 
+Service catalog candidate, 2026-11-07: [F8-T01](tasks/F8-T01.md) is published in [PR #68](https://github.com/dsolsona/almanac/pull/68) on `feat/service-catalog`, based on `61a5e5c`, under [ADR-0036](adr/0036-service-catalog.md) and [plan 0028](plans/0028-service-catalog.md). Follow-up Table / Graph tabs expose the full dependency view, graph nodes show their own SLO status, and empty graph owner placeholders are omitted. Final `make check` passes 409 frontend cases, all Go unit/integration packages and 69 browser cases, including all 42 retained-reference comparisons at the unchanged limit. Sequential `make test-e2e` passes all 13 journeys, including graph navigation and restart persistence, in 2.5 minutes. Commit, push and PR publication are authorized; merge and deployment are not.
+
 PR [#67](https://github.com/dsolsona/almanac/pull/67) review follow-up, 2026-11-06:
 two Greptile findings were reproduced and corrected in settings. Final `make check`
 passed with 394 frontend and 51 browser tests; all 28 reference comparisons passed

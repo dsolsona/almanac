@@ -173,3 +173,5 @@ under the [performance and tracing intervention](../plans/0023-performance-and-t
 reads, page-speed, accuracy and selective-integration phase. Its verification
 caveats remain recorded. Larger capacity and endurance validation remain deferred
 to [F3-T10](F3-T10.md).
+
+[F8-T01](F8-T01.md) implements the approved service catalog under [plan 0028](../plans/0028-service-catalog.md).

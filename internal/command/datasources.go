@@ -693,7 +693,7 @@ func writeDatasourceFailure(stdout, stderr io.Writer, operation string, jsonOut 
 		exit = 3
 	} else if code == "not_found" {
 		exit = 4
-	} else if code == "conflict" || code == "measurement_conflict" {
+	} else if code == "conflict" || code == "measurement_conflict" || code == "service_in_use" {
 		exit = 5
 	} else if code == "request_timeout" || code == "request_canceled" {
 		exit = 6

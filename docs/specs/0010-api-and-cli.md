@@ -1,5 +1,7 @@
 # SPEC-0010: API and CLI
 
+> Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
+
 > Accepted amendment, 2026-11-01: The existing operational detail endpoint accepts
 > `period=window|7d|90d|1y` for server-aligned bounds, mutually exclusive with
 > `start`/`end`. Existing timestamp callers and the seven-day API default remain

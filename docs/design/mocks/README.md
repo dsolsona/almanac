@@ -58,3 +58,7 @@ the target.
 
 Where a column's value cannot be computed from today's API, omit the column rather
 than show a placeholder. Record each omission in the implementing task.
+
+## Service catalog reference
+
+The approved [service catalog reference](services/README.md) governs F8-T01 under ADR-0036.

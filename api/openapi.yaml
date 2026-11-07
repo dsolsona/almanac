@@ -664,6 +664,9 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/PageLimit'}
         - {$ref: '#/components/parameters/PageCursor'}
+        - {name: q, in: query, schema: {type: string, maxLength: 128}}
+        - {name: owner, in: query, schema: {type: string, maxLength: 200}}
+        - {name: coverage, in: query, schema: {type: string, enum: [all, with, without]}}
       responses:
         '200': {description: Bounded service page, content: {application/json: {schema: {$ref: '#/components/schemas/ServicePage'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
@@ -694,10 +697,21 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/ServiceId'}
         - {$ref: '#/components/parameters/ResourceIfMatch'}
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceMetadataWrite'}}}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceMetadataWrite'}}}}
       responses:
         '200': {description: Updated service, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Service'}}}}
         'default': {description: Request rejected or stale version, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    delete:
+      operationId: archiveService
+      summary: Archive an unreferenced service
+      description: Editors and administrators can archive a service using its current version. SLO and incoming service references return 409 service_in_use with blocking UUIDs.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ServiceId'}
+        - {$ref: '#/components/parameters/ResourceIfMatch'}
+      responses:
+        '204': {description: Service archived; historical identity is preserved}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slos:
     get:
       operationId: listSlos
@@ -1151,6 +1165,51 @@ components:
       properties:
         name: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
         display_name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 4000}
+        owner: {type: string, maxLength: 200}
+        contact: {type: string, maxLength: 320}
+        labels: {type: object, maxProperties: 100, additionalProperties: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}}
+        links: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ServiceLink'}}
+        annotations: {type: object, maxProperties: 100, additionalProperties: {type: string, maxLength: 4096}}
+        dependencies: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+    ServiceMetadataWrite:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        name: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'}
+        description: {type: string, maxLength: 4000}
+        owner: {type: string, maxLength: 200}
+        contact: {type: string, maxLength: 320}
+        labels: {type: object, maxProperties: 100, additionalProperties: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}}
+        links: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ServiceLink'}}
+        annotations: {type: object, maxProperties: 100, additionalProperties: {type: string, maxLength: 4096}}
+        dependencies: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+    ServiceLink:
+      type: object
+      additionalProperties: false
+      required: [name, url]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        url: {type: string, maxLength: 2048, description: Absolute credential-free HTTP or HTTPS link; Almanac does not fetch it.}
+    ServiceReference:
+      type: object
+      required: [id, name, display_name, owner]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        owner: {type: string}
+    ServiceSloSummary:
+      type: object
+      required: [state, total, on_track, breached, unknown]
+      properties:
+        state: {type: string, enum: [no_slos, on_track, breached, unknown]}
+        total: {type: integer, minimum: 0}
+        on_track: {type: integer, minimum: 0}
+        breached: {type: integer, minimum: 0}
+        unknown: {type: integer, minimum: 0}
     ResourceMetadataWrite:
       type: object
       additionalProperties: false
@@ -1167,12 +1226,27 @@ components:
         version: {type: string}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        description: {type: string, maxLength: 4000}
+        owner: {type: string, maxLength: 200}
+        contact: {type: string, maxLength: 320}
+        labels: {type: object, maxProperties: 100, additionalProperties: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}}
+        links: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ServiceLink'}}
+        annotations: {type: object, maxProperties: 100, additionalProperties: {type: string, maxLength: 4096}}
+        dependencies: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+        dependency_services: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/ServiceReference'}}
+        used_by: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/ServiceReference'}}
+        used_by_count: {type: integer, minimum: 0}
+        slo_summary: {$ref: '#/components/schemas/ServiceSloSummary'}
     ServicePage:
       type: object
       required: [items, next_cursor]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/Service'}}
         next_cursor: {type: string}
+        total: {type: integer, minimum: 0}
+        all_count: {type: integer, minimum: 0}
+        with_slos_count: {type: integer, minimum: 0}
+        owners: {type: array, items: {type: string}}
     SloCreateRequest:
       type: object
       additionalProperties: false
@@ -2195,6 +2269,8 @@ components:
         message: {type: string}
         preparation: {$ref: '#/components/schemas/DerivedPreparation'}
         request_id: {type: string, pattern: '^[0-9a-f]{32}$'}
+        blocking_slo_ids: {type: array, items: {type: string, format: uuid}}
+        blocking_service_ids: {type: array, items: {type: string, format: uuid}}
         field_errors:
           type: array
           items:

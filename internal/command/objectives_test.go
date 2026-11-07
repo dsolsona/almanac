@@ -14,6 +14,9 @@ func TestObjectiveInputAndVersion(t *testing.T) {
 		want                bool
 	}{
 		{"services", "create", `{"name":"checkout","display_name":"Checkout"}`, true},
+		{"services", "create", `{"name":"checkout","display_name":"Checkout","owner":"Commerce","labels":{"team":["store"]},"links":[{"name":"Runbook","url":"https://example.test"}],"dependencies":[]}`, true},
+		{"services", "update", `{"display_name":"Orders","name":"orders","labels":{},"links":[],"dependencies":[]}`, true},
+		{"services", "update", `{"display_name":"Orders","owner":null}`, false},
 		{"services", "create", `{"name":"checkout","display_name":"Checkout","extra":1}`, false},
 		{"slos", "update", `{"display_name":"Checkout"}`, true},
 		{"slos", "update", `{"display_name":null}`, false},

@@ -131,6 +131,8 @@ export function SlosPage({context}:{context:AuthContext}) {
           ]);
           if (active) {
             setServices(availableServices); setSlis(availableSlis);
+            const serviceFromCatalog=new URLSearchParams(location.search).get('service_id');
+            if(serviceFromCatalog&&availableServices.some(service=>service.id===serviceFromCatalog))setServiceID(serviceFromCatalog);
             const wanted = new URLSearchParams(location.search).get('sli');
             if (wanted && availableSlis.some(item => item.id === wanted)) setSliID(wanted);
           }
