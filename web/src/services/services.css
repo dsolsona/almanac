@@ -113,7 +113,12 @@
 .services-page .service-symbol { width:32px; height:32px; display:grid; place-items:center; flex:none; border:1px solid var(--border); background:var(--surface-2); font:14px var(--almanac-heading); border-radius:3px; }
 .services-page .service-caption { min-width:0; flex:1; }
 .services-page .service-caption small { display:block; color:var(--text-3); font-size:13px; }
-.services-page .service-graph-variants { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.services-page .service-view-tabs { display:flex; gap:24px; border-bottom:1px solid var(--border); margin-bottom:24px; }
+.services-page .service-view-tabs a { padding:0 0 12px; color:var(--text-2); border-bottom:3px solid transparent; font-weight:600; text-decoration:none; }
+.services-page .service-view-tabs a[aria-current="page"] { color:var(--accent-ink); border-bottom-color:var(--accent); }
+.services-page .service-graph-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.services-page .service-graph-variants,.services-page .service-graph-legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.services-page .service-graph-legend .ui-status-chip { font-size:12px; }
 .services-page .service-graph-variants .ui-button { height:auto; min-height:24px; padding:2px 8px; font-size:12px; }
 .services-page .map-stage.service-map-scroll { max-height:800px; overflow:auto; }
 .services-page .graph-counter { display:inline-flex; border:1px solid var(--border); border-radius:3px; padding:4px 8px; font:12px/1.6 var(--mono); }
@@ -161,8 +166,6 @@
  .services-page .graph-mobile .selected-focus p { margin:4px 0 0; font-size:13px; }
 }
 @media(pointer:coarse){.services-page .ui-button,.services-page .ui-control,.services-page .service-remove,.services-page .service-token-add{min-height:44px;}}
-.services-page .service-graph-heading { color:inherit; text-decoration:none; }
-.services-page .service-graph-heading:hover { color:var(--accent-ink); text-decoration:underline; }
 .services-page .service-form .ui-label__optional { font-size:12px; font-weight:400; color:var(--text-3); margin-left:6px; }
 .services-page .service-link-hint { margin:0; }
 .services-page #label-entry-hint { margin-bottom:13px; }

@@ -41,8 +41,11 @@ test('services persist metadata and dependencies, retain UUIDs on rename, and pr
  await page.getByRole('link',{name:'Create SLO',exact:true}).click();
  await expect(page).toHaveURL(new RegExp('service_id='+serviceID));
  await expect(page.getByText('Create an SLI before creating an objective.',{exact:true}).or(page.getByText(display+' renamed',{exact:true}))).toBeVisible();
- await page.goto('/services/dependencies?service_id='+serviceID);
+ await page.goto('/services');
+ await page.getByRole('link',{name:'Graph',exact:true}).click();
+ await page.getByRole('combobox',{name:'Find a service'}).selectOption(serviceID);
  await expect(page.locator('.map-node.selected')).toHaveAttribute('data-id',serviceID);
+ await expect(page.locator('.map-node.selected')).toHaveAttribute('data-slo-state','no_slos');
  await page.locator('.map-node').filter({hasText:providerName}).focus();await page.keyboard.press('Enter');
  await expect(page.locator('.map-node.selected')).toHaveAttribute('data-id',provider.body.id);
  await expect(page.locator('.graph-details')).toContainText(providerName);

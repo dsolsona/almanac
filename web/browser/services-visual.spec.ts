@@ -37,9 +37,9 @@ test(`services match the approved reference at ${width}px in ${theme}`,async({br
    expect(await actual.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    const actualTarget=name.startsWith('graph')?width>860?'.map-desktop':'.graph-mobile':'.services-page',referenceTarget=name.startsWith('graph')?width>860?'.map-desktop':'.graph-mobile':'#screen';
    await actual.evaluate(()=>scrollTo(0,0));await reference.evaluate(()=>scrollTo(0,0));
-   // Equal viewport origins prevent SVG edge antialiasing differences caused by the prototype review bar.
+   // Match origins and raster layers: the prototype review bar otherwise changes subpixel SVG painting.
    const origin=Math.max(100,(await actual.locator(actualTarget).boundingBox())!.y,(await reference.locator(referenceTarget).boundingBox())!.y);
-   for(const [target,selector]of [[actual,actualTarget],[reference,referenceTarget]]as const)await target.locator(selector).evaluate((node,origin)=>{const box=node.getBoundingClientRect(),root=node.closest<HTMLElement>('.services-page,#screen')!;root.style.position='relative';root.style.top=`${origin-box.y}px`;},origin);
+   for(const [target,selector]of [[actual,actualTarget],[reference,referenceTarget]]as const)await target.locator(selector).evaluate((node,origin)=>{const box=node.getBoundingClientRect(),root=node.closest<HTMLElement>('.services-page,#screen')!;root.style.position='relative';root.style.top=`${origin-box.y}px`;if(node.matches('.map-desktop'))(node as HTMLElement).style.transform='translateZ(0)';},origin);
    const actualBox=await actual.locator(actualTarget).boundingBox(),referenceBox=await reference.locator(referenceTarget).boundingBox();
    // Expand fractional edges to complete CSS pixels; keep every content pixel in both crops.
    const fullPixels=(box:NonNullable<typeof actualBox>)=>({x:Math.floor(box.x),y:Math.floor(box.y),width:Math.ceil(box.x+box.width)-Math.floor(box.x),height:Math.ceil(box.y+box.height)-Math.floor(box.y)});

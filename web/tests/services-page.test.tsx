@@ -142,3 +142,29 @@ it('rereads service summaries on a new visit instead of reusing a cached success
  expect((await serviceClient.list()).items[0]!.slo_summary!.state).toBe('on_track');
  expect((await serviceClient.list()).items[0]!.slo_summary!.state).toBe('unknown');expect(reads).toBe(2);
 });
+
+it('opens the full graph from Services and exposes each service SLO status without empty-owner placeholders',async()=>{
+ history.replaceState({},'','/services');
+ const records=[
+  {...service,owner:'',slo_summary:{state:'on_track',total:1,on_track:1,breached:0,unknown:0}},
+  {...service,id:other,name:'payments',display_name:'Payments',owner:'',slo_summary:{state:'breached',total:2,on_track:0,breached:1,unknown:1}},
+  {...service,id:'00000000-0000-4000-8000-000000000003',name:'inventory',display_name:'Inventory',owner:'Commerce',slo_summary:{state:'unknown',total:1,on_track:0,breached:0,unknown:1}},
+  {...service,id:'00000000-0000-4000-8000-000000000004',name:'notifications',display_name:'Notifications',owner:''},
+ ];
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ const rendered=render(<ServicesPage context={context}/>);
+ await screen.findByRole('link',{name:'Checkout'});
+ await userEvent.click(screen.getByRole('link',{name:'Graph'}));
+ await waitFor(()=>expect(rendered.container.querySelectorAll('.map-node')).toHaveLength(4));
+ expect(screen.getByRole('link',{name:'Graph'})).toHaveAttribute('aria-current','page');
+ expect(screen.getByRole('group',{name:'Service SLO status'})).toHaveTextContent('On track');
+ for(const record of records)expect(rendered.container.querySelector(`.map-node[data-id="${record.id}"]`)).toHaveAttribute('data-slo-state',record.slo_summary.state);
+ expect(rendered.container.querySelector(`.map-node[data-id="${id}"] .subtitle`)).toHaveTextContent(/^1 SLO$/);
+ expect(screen.queryByText('Unassigned',{exact:true})).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'Owner groups'}));
+ expect(screen.queryByText('Unassigned',{exact:true})).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'List & map'}));
+ expect(screen.queryByText('Unassigned',{exact:true})).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('link',{name:'Table'}));
+ expect(await screen.findByRole('link',{name:'Checkout'})).toBeVisible();
+});

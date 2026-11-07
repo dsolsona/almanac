@@ -219,6 +219,15 @@ dialog::backdrop { background:rgb(12 24 25 / 42%); }
 .map-node text.subtitle { fill:var(--text-3); font:18px var(--font-body); }
 .map-node.selected > text:first-of-type { font-weight:700; }
 .map-node:hover .map-node-core { stroke:var(--selection); fill:var(--surface-2); }
+.map-node[data-slo-state] { --service-node-color:var(--border-strong); }
+.map-node[data-slo-state="on_track"] { --service-node-color:var(--status-healthy); }
+.map-node[data-slo-state="breached"] { --service-node-color:var(--status-breached); }
+.map-node[data-slo-state="unknown"] { --service-node-color:var(--status-stale); }
+.map-node[data-slo-state] .map-node-core { stroke:var(--service-node-color); fill:color-mix(in srgb,var(--service-node-color) 5%,var(--surface)); }
+.map-node[data-slo-state="unknown"] .map-node-core { stroke-dasharray:4 4; }
+.map-node[data-slo-state="no_slos"] .map-node-core { stroke-dasharray:2 5; }
+.map-node[data-slo-state] .map-node-port { fill:var(--service-node-color); }
+.map-node:is([data-slo-state="unknown"],[data-slo-state="no_slos"]) .map-node-port { fill:var(--surface); stroke:var(--service-node-color); stroke-width:2; }
 .map-node { cursor:pointer; }
 .map-node:focus { outline:none; }
 .map-node:focus-visible .map-node-orbit { stroke:var(--accent); stroke-width:3; stroke-dasharray:none; }
@@ -320,3 +329,10 @@ dialog::backdrop { background:rgb(12 24 25 / 42%); }
 }
 @media (pointer:coarse) { .btn,.field input,.field select,.p-refresh,.p-filter,.input-token button,.remove-saved,.token-add { min-height:44px; } .input-token button,.remove-saved { min-width:44px; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation:none !important; transition:none !important; } }
+
+.service-view-tabs { display:flex; gap:24px; border-bottom:1px solid var(--border); margin-bottom:24px; }
+.service-view-tabs a { padding:0 0 12px; color:var(--text-2); border-bottom:3px solid transparent; font-weight:600; text-decoration:none; }
+.service-view-tabs a[aria-current="page"] { color:var(--accent-ink); border-bottom-color:var(--accent); }
+.service-graph-legend { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.service-graph-legend .hc { font-size:12px; }
+.relationships .hc,.graph-details .hc { font-size:13px; }

@@ -45,6 +45,11 @@ narrow screens use cards grouped under Used by and Depends on.
   SLO result counts do not invent an overall service availability.
 - Catalog rows open details on click, retaining native name links, text selection
   and the separate dependency links within each row.
+- Table / Graph tabs expose the full dependency map from Services. The graph
+  colors each service using its own SLO summary and explains the states in a
+  legend. Unknown includes stale, incomplete and unavailable results; No SLOs
+  stays neutral. Selection keeps the status color and uses an outer orbit ring.
+  Empty owners do not add a placeholder or leading separator to graph captions.
 - The catalog's SLO status summarizes each service's own objectives: any breached
   SLO makes it Breached; otherwise an incomplete result makes it Unknown; all
   objectives must be evaluable and on track for On track. A service without
