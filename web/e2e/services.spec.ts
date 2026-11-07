@@ -46,6 +46,10 @@ test('services persist metadata and dependencies, retain UUIDs on rename, and pr
  await page.getByRole('combobox',{name:'Find a service'}).selectOption(serviceID);
  await expect(page.locator('.map-node.selected')).toHaveAttribute('data-id',serviceID);
  await expect(page.locator('.map-node.selected')).toHaveAttribute('data-slo-state','no_slos');
+ await expect(page.getByRole('heading',{name:'Relationships',exact:true})).toHaveCount(0);
+ const zoom=page.getByLabel('Graph zoom',{exact:true}),beforeZoom=await zoom.textContent();
+ await page.getByRole('button',{name:'Zoom in',exact:true}).click();await expect(zoom).not.toHaveText(beforeZoom!);
+ await page.getByRole('button',{name:'Focus selected',exact:true}).click();
  await page.locator('.map-node').filter({hasText:providerName}).focus();await page.keyboard.press('Enter');
  await expect(page.locator('.map-node.selected')).toHaveAttribute('data-id',provider.body.id);
  await expect(page.locator('.graph-details')).toContainText(providerName);

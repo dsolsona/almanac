@@ -168,3 +168,20 @@ it('opens the full graph from Services and exposes each service SLO status witho
  await userEvent.click(screen.getByRole('link',{name:'Table'}));
  expect(await screen.findByRole('link',{name:'Checkout'})).toBeVisible();
 });
+
+it('provides graph camera controls without a duplicate Relationships table',async()=>{
+ history.replaceState({},'','/services/dependencies');
+ const records=[{...service,dependencies:[other]}, {...service,id:other,name:'payments',display_name:'Payments',slo_summary:{state:'breached',total:1,on_track:0,breached:1,unknown:0}}];
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ render(<ServicesPage context={context}/>);
+ await screen.findByRole('button',{name:'Select Checkout, No SLOs, 0 SLOs'});
+ expect(screen.queryByRole('heading',{name:'Relationships'})).not.toBeInTheDocument();
+ const zoom=screen.getByLabelText('Graph zoom');const before=zoom.textContent;
+ await userEvent.click(screen.getByRole('button',{name:'Zoom in'}));
+ expect(zoom.textContent).not.toBe(before);
+ await userEvent.click(screen.getByRole('button',{name:'Fit all'}));
+ expect(zoom.textContent).toBe(before);
+ await userEvent.click(screen.getByRole('button',{name:'Needs attention'}));
+ expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:'Focus selected'})).toBeEnabled();
+});

@@ -81,6 +81,13 @@ narrow screens use cards grouped under Used by and Depends on.
   same circular visual language and curved arrows, aligned to the nodes as the
   layout resizes. Graphs show declared dependencies without
   propagating SLO status or impact.
+- The graph uses a fixed-height canvas with drag panning, pointer-centered wheel
+  zoom and explicit zoom controls. Fit all restores the full loaded catalog;
+  Focus selected centers a service and its direct neighborhood. Needs attention
+  frames breached/unknown services and their neighbors without filtering services
+  or claiming impact. The finder brings a chosen service into view. Arrow keys
+  pan, +/− zoom and 0 fits all. The duplicate Relationships table is removed;
+  mobile keeps the selected service's navigable relationships.
 
 Maintenance, integrations, source-based editing restrictions, an Environment resource
 and composite SLOs are outside these mocks. UI/CLI/API parity is a product contract;

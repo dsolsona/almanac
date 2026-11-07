@@ -120,10 +120,19 @@
 .services-page .service-graph-variants,.services-page .service-graph-legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .services-page .service-graph-legend .ui-status-chip { font-size:12px; }
 .services-page .service-graph-variants .ui-button { height:auto; min-height:24px; padding:2px 8px; font-size:12px; }
-.services-page .map-stage.service-map-scroll { max-height:800px; overflow:auto; }
+.services-page .map-stage.service-graph-viewport { height:clamp(420px,65vh,640px); padding:0; overflow:hidden; cursor:grab; touch-action:none; user-select:none; }
+.services-page .service-graph-viewport .service-network { width:100%; height:100%; min-height:0; }
+.services-page .service-graph-viewport.is-dragging,.services-page .service-graph-viewport.is-dragging .map-node { cursor:grabbing; }
+.services-page .service-network:focus-visible { outline:3px solid var(--focus-ring); outline-offset:-3px; }
+.services-page .graph-camera-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px var(--card-inset); border-bottom:1px solid var(--border); }
+.services-page .graph-camera-actions,.services-page .graph-camera-zoom { display:flex; align-items:center; gap:8px; }
+.services-page .graph-camera-zoom { margin-left:auto; }
+.services-page .graph-camera-zoom .ui-button { width:34px; min-height:34px; height:34px; padding:0; }
+.services-page .graph-camera-zoom output { width:5ch; text-align:center; font:12px var(--mono); color:var(--text-2); }
+.services-page .graph-camera-hint { width:100%; margin:0; font:11px var(--mono); color:var(--text-3); }
+.services-page .map-service-list { max-height:clamp(420px,65vh,640px); overflow:auto; overscroll-behavior:contain; }
 .services-page .graph-counter { display:inline-flex; border:1px solid var(--border); border-radius:3px; padding:4px 8px; font:12px/1.6 var(--mono); }
 .services-page .service-graph-more { display:flex; align-items:center; gap:16px; margin:16px 0; color:var(--text-3); }
-.services-page .service-graph-relationships { margin-top:32px; }
 @media(max-width:1200px){
  .services-page .services-table :is(th,td) { padding-left:10px; padding-right:10px; }
  .services-page .services-toolbar .service-coverage { order:2; }
@@ -160,6 +169,7 @@
  .services-page .ui-pager__position { flex-basis:100%; }
  .services-page .ui-pager__size { margin-right:auto; }
  .services-page .map-desktop { display:none; }
+ .services-page .graph-camera-toolbar { display:none; }
  .services-page .graph-mobile { display:block; padding:20px var(--card-inset); }
  .services-page .graph-mobile h3 { margin:0 0 8px; font:600 13px var(--mono); color:var(--text-2); }
  .services-page .graph-mobile .selected-focus { border:1px solid var(--accent); border-radius:3px; background:var(--accent-wash); padding:12px; margin:20px 0; }
