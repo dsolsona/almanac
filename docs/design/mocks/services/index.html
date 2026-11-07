@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Services · Almanac design proposal</title>
+  <link rel="stylesheet" href="../mock.css">
+  <link rel="stylesheet" href="../proposals/proposal.css">
+  <link rel="stylesheet" href="services.css">
+</head>
+<body data-current="services">
+  <a class="skip" href="#screen">Skip to content</a>
+  <main>
+    <aside class="review-bar" aria-label="Prototype controls">
+      <span><b>Design proposal</b><span class="review-sample"> · sample data</span></span>
+      <nav aria-label="Mock screens"><a href="#list">Catalog</a><a href="#new">Create</a><a href="#service/checkout">Detail</a><a href="#compare">Dependency designs</a><a href="#components">Components</a></nav>
+      <label>State <select id="preview-state"><option value="normal">Normal</option><option value="empty">Empty</option><option value="error">Read error</option><option value="stale">Refresh error</option><option value="conflict">Save conflict</option><option value="save-error">Save error</option></select></label>
+      <label>Role <select id="preview-role"><option value="editor">Editor</option><option value="viewer">Viewer</option></select></label>
+      <label id="dependency-style-control" hidden>Dependencies <select id="preview-dependencies"><option value="connected">Connected</option><option value="cards">Cards</option></select></label>
+    </aside>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <div id="screen" tabindex="-1"></div>
+    <footer class="prototype-note">Interactive design proposal. Changes stay in this tab; reload restores the examples.</footer>
+  </main>
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+  <dialog id="mobile-menu" aria-label="Navigation"></dialog>
+  <script src="../mock.js"></script>
+  <script src="services.js"></script>
+</body>
+</html>

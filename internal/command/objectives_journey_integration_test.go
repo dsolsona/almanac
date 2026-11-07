@@ -223,7 +223,7 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 		}
 		return path
 	}
-	serviceInput := writeInput("objective-service.json", map[string]any{"name": "cli-checkout", "display_name": "CLI Checkout"})
+	serviceInput := writeInput("objective-service.json", map[string]any{"name": "cli-checkout", "display_name": "CLI Checkout", "owner": "Commerce", "labels": map[string][]string{"team": {"store"}}, "links": []map[string]string{{"name": "Runbook", "url": "https://example.test/runbook"}}})
 	created := run(0, "services", "create", "--input-file="+serviceInput, "--idempotency-key=objective-service-create")
 	var service api.Service
 	var serviceTag string
@@ -246,15 +246,28 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 	if json.Unmarshal(detail.Result["service"], &fetched) != nil || fetched.Id != service.Id {
 		t.Fatal("service get mismatch")
 	}
-	serviceUpdate := writeInput("objective-service-update.json", map[string]string{"display_name": "CLI Checkout Updated"})
+	serviceUpdate := writeInput("objective-service-update.json", map[string]string{"name": "cli-orders", "display_name": "CLI Checkout Updated"})
 	updated := run(0, "services", "update", "--service-id="+serviceID, "--input-file="+serviceUpdate, "--if-match="+serviceTag)
-	if json.Unmarshal(updated.Result["service"], &fetched) != nil || fetched.DisplayName != "CLI Checkout Updated" {
+	if json.Unmarshal(updated.Result["service"], &fetched) != nil || fetched.DisplayName != "CLI Checkout Updated" || fetched.Id != service.Id || fetched.Name != "cli-orders" || fetched.Owner == nil || *fetched.Owner != "Commerce" {
 		t.Fatal("service metadata update failed")
 	}
 	conflict := run(5, "services", "update", "--service-id="+serviceID, "--input-file="+serviceUpdate, "--if-match="+serviceTag)
 	if conflict.Error == nil || conflict.Error.Code != "conflict" {
 		t.Fatal("stale service ETag was not rejected")
 	}
+	filtered := run(0, "services", "list", "--q=team:store", "--owner=Commerce", "--coverage=without")
+	if json.Unmarshal(filtered.Result["items"], &services) != nil || len(services) != 1 || services[0].Id != service.Id {
+		t.Fatal("catalog filters lost metadata")
+	}
+	disposableInput := writeInput("disposable-service.json", map[string]string{"name": "disposable", "display_name": "Disposable"})
+	disposable := run(0, "services", "create", "--input-file="+disposableInput, "--idempotency-key=disposable")
+	var unused api.Service
+	var unusedTag string
+	if json.Unmarshal(disposable.Result["service"], &unused) != nil || json.Unmarshal(disposable.Result["etag"], &unusedTag) != nil {
+		t.Fatal("disposable create")
+	}
+	run(0, "services", "delete", "--service-id="+unused.Id.String(), "--if-match="+unusedTag)
+	run(4, "services", "get", "--service-id="+unused.Id.String())
 	db := testpostgres.Connect(t, databaseURL)
 	var start, end time.Time
 	if err := db.QueryRow(t.Context(), `SELECT interval_start, interval_end FROM public.almanac_sli_coverage WHERE sli_id=$1 AND outcome='observed' ORDER BY interval_start DESC LIMIT 1`, sliID).Scan(&start, &end); err != nil {
@@ -266,6 +279,14 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 	var sloTag string
 	if json.Unmarshal(sloCreated.Result["slo"], &objective) != nil || json.Unmarshal(sloCreated.Result["etag"], &sloTag) != nil || objective.Name != "cli-availability" || objective.Target != "0.999" {
 		t.Fatal("invalid created objective")
+	}
+	var updatedServiceTag string
+	if json.Unmarshal(updated.Result["etag"], &updatedServiceTag) != nil {
+		t.Fatal("updated service ETag")
+	}
+	blocked := run(5, "services", "delete", "--service-id="+serviceID, "--if-match="+updatedServiceTag)
+	if blocked.Error == nil || blocked.Error.Code != "service_in_use" {
+		t.Fatal("SLO did not protect service archive")
 	}
 	sloID := objective.Id.String()
 	sloReplay := run(0, "slos", "create", "--input-file="+sloInput, "--idempotency-key=objective-slo-create")

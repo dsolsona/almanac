@@ -1,5 +1,7 @@
 # SPEC-0012: User interface
 
+> Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
+
 > Accepted amendment, 2026-11-04 (Crit session `9a46588aaaa4`): [ADR-0028](../adr/0028-unified-operational-ui.md)
 > replaces the slo-tracker screenshots with the approved [mocks](../design/mocks/README.md)
 > as the AC-11 side-by-side reference, makes SLI and SLO detail pages single

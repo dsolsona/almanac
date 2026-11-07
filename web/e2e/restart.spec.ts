@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { api } from './support/api.ts';
+import { api,expectOk,unique } from './support/api.ts';
 import { restartApp } from './support/stack.ts';
 
 // Runs after every other journey: restart the application container and check that what the
@@ -22,6 +22,10 @@ test('data and collection survive an application restart', async ({ page }) => {
   const before = await latest();
   expect(before).toBeGreaterThan(0);
 
+  const provider=await expectOk(api(page,'POST','/api/v1/services',{name:unique('restart-provider'),display_name:'Restart provider'}));
+  const service=await expectOk(api(page,'POST','/api/v1/services',{name:unique('restart-service'),display_name:'Restart service',owner:'Persistence',labels:{team:['reliability']},dependencies:[provider.body.id]}));
+  const archived=await expectOk(api(page,'POST','/api/v1/services',{name:unique('restart-archived'),display_name:'Archived service'}));
+  expect((await api(page,'DELETE','/api/v1/services/'+archived.body.id,undefined,{'If-Match':archived.etag!})).status).toBe(204);
   restartApp();
 
   await page.goto('/');
@@ -33,6 +37,9 @@ test('data and collection survive an application restart', async ({ page }) => {
   await page.goto('/slis');
   await expect(page.locator('.sli-list-name strong')).toHaveText(names);
 
+  const persisted=await expectOk(api(page,'GET','/api/v1/services/'+service.body.id));
+  expect(persisted.body.owner).toBe('Persistence');expect(persisted.body.labels).toEqual({team:['reliability']});expect(persisted.body.dependencies).toEqual([provider.body.id]);
+  expect((await api(page,'GET','/api/v1/services/'+archived.body.id)).status).toBe(404);
   // The agent reconnects by itself and collection continues: a newer observed interval than before the restart arrives.
   await expect.poll(latest, { timeout: 180_000, intervals: [5_000] }).toBeGreaterThan(before);
 });

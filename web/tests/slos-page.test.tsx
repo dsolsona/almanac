@@ -171,3 +171,11 @@ it('submits a custom window in whole days and reports a non-numeric custom windo
  await userEvent.click(within(screen.getByRole('radiogroup',{name:'Rolling window'})).getByRole('radio',{name:'Custom…'}));await userEvent.type(screen.getByLabelText('Custom rolling window'),'1.5');expect(screen.getByText('Enter a whole number of days.')).toBeVisible();await userEvent.click(screen.getByRole('button',{name:'Create SLO'}));expect(mocks.create).not.toHaveBeenCalled();
  await userEvent.click(within(screen.getByRole('radiogroup',{name:'Rolling window'})).getByRole('radio',{name:'Custom…'}));await userEvent.clear(screen.getByLabelText('Custom rolling window'));await userEvent.type(screen.getByLabelText('Custom rolling window'),'14');expect(screen.getByRole('radio',{name:'Custom · 14 days'})).toHaveAttribute('aria-checked','true');expect(screen.getByText(/covers the last 14 days/)).toBeVisible();await userEvent.click(screen.getByRole('button',{name:'Create SLO'}));await waitFor(()=>expect(mocks.create).toHaveBeenCalled());expect(mocks.create.mock.calls[0]![0]).toMatchObject({rolling_window_seconds:14*86400,target:'0.999'});
 });
+
+it('preselects the stable service UUID when creating an SLO from the catalog',async()=>{
+ history.replaceState({},'','/slos/new?service_id='+service.id);
+ mocks.services.mockResolvedValue({items:[service],next_cursor:''});mocks.list.mockResolvedValue({items:[sli],next_cursor:''});
+ render(<SlosPage context={admin}/>);
+ expect(await screen.findByText('Checkout',{exact:true})).toBeVisible();
+ expect(screen.queryByLabelText('Service',{exact:true})).not.toBeInTheDocument();
+});

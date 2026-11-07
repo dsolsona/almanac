@@ -1104,6 +1104,30 @@ func (e SecretActionAction) Valid() bool {
 	}
 }
 
+// Defines values for ServiceSloSummaryState.
+const (
+	ServiceSloSummaryStateBreached ServiceSloSummaryState = "breached"
+	ServiceSloSummaryStateNoSlos   ServiceSloSummaryState = "no_slos"
+	ServiceSloSummaryStateOnTrack  ServiceSloSummaryState = "on_track"
+	ServiceSloSummaryStateUnknown  ServiceSloSummaryState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the ServiceSloSummaryState enum.
+func (e ServiceSloSummaryState) Valid() bool {
+	switch e {
+	case ServiceSloSummaryStateBreached:
+		return true
+	case ServiceSloSummaryStateNoSlos:
+		return true
+	case ServiceSloSummaryStateOnTrack:
+		return true
+	case ServiceSloSummaryStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SliActivationState.
 const (
 	SliActivationStateActive    SliActivationState = "active"
@@ -2181,6 +2205,27 @@ func (e UserRole) Valid() bool {
 	}
 }
 
+// Defines values for ListServicesParamsCoverage.
+const (
+	All     ListServicesParamsCoverage = "all"
+	With    ListServicesParamsCoverage = "with"
+	Without ListServicesParamsCoverage = "without"
+)
+
+// Valid indicates whether the value is a known member of the ListServicesParamsCoverage enum.
+func (e ListServicesParamsCoverage) Valid() bool {
+	switch e {
+	case All:
+		return true
+	case With:
+		return true
+	case Without:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetSloOperationalOverviewParamsUrgency.
 const (
 	GetSloOperationalOverviewParamsUrgencyHealthy        GetSloOperationalOverviewParamsUrgency = "healthy"
@@ -2830,8 +2875,10 @@ type PasswordRequest struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	Code        string `json:"code"`
-	FieldErrors []struct {
+	BlockingServiceIds *[]openapi_types.UUID `json:"blocking_service_ids,omitempty"`
+	BlockingSloIds     *[]openapi_types.UUID `json:"blocking_slo_ids,omitempty"`
+	Code               string                `json:"code"`
+	FieldErrors        []struct {
 		Code    string `json:"code"`
 		Field   string `json:"field"`
 		Message string `json:"message"`
@@ -2972,25 +3019,88 @@ type SecretActionAction string
 
 // Service defines model for Service.
 type Service struct {
-	CreatedAt   time.Time          `json:"created_at"`
-	DisplayName string             `json:"display_name"`
-	Id          openapi_types.UUID `json:"id"`
-	Name        string             `json:"name"`
-	UpdatedAt   time.Time          `json:"updated_at"`
-	Version     string             `json:"version"`
+	Annotations        *map[string]string    `json:"annotations,omitempty"`
+	Contact            *string               `json:"contact,omitempty"`
+	CreatedAt          time.Time             `json:"created_at"`
+	Dependencies       *[]openapi_types.UUID `json:"dependencies,omitempty"`
+	DependencyServices *[]ServiceReference   `json:"dependency_services,omitempty"`
+	Description        *string               `json:"description,omitempty"`
+	DisplayName        string                `json:"display_name"`
+	Id                 openapi_types.UUID    `json:"id"`
+	Labels             *map[string][]string  `json:"labels,omitempty"`
+	Links              *[]ServiceLink        `json:"links,omitempty"`
+	Name               string                `json:"name"`
+	Owner              *string               `json:"owner,omitempty"`
+	SloSummary         *ServiceSloSummary    `json:"slo_summary,omitempty"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+	UsedBy             *[]ServiceReference   `json:"used_by,omitempty"`
+	UsedByCount        *int                  `json:"used_by_count,omitempty"`
+	Version            string                `json:"version"`
 }
 
 // ServiceCreateRequest defines model for ServiceCreateRequest.
 type ServiceCreateRequest struct {
-	DisplayName string `json:"display_name"`
-	Name        string `json:"name"`
+	Annotations  *map[string]string    `json:"annotations,omitempty"`
+	Contact      *string               `json:"contact,omitempty"`
+	Dependencies *[]openapi_types.UUID `json:"dependencies,omitempty"`
+	Description  *string               `json:"description,omitempty"`
+	DisplayName  string                `json:"display_name"`
+	Labels       *map[string][]string  `json:"labels,omitempty"`
+	Links        *[]ServiceLink        `json:"links,omitempty"`
+	Name         string                `json:"name"`
+	Owner        *string               `json:"owner,omitempty"`
+}
+
+// ServiceLink defines model for ServiceLink.
+type ServiceLink struct {
+	Name string `json:"name"`
+
+	// Url Absolute credential-free HTTP or HTTPS link; Almanac does not fetch it.
+	Url string `json:"url"`
+}
+
+// ServiceMetadataWrite defines model for ServiceMetadataWrite.
+type ServiceMetadataWrite struct {
+	Annotations  *map[string]string    `json:"annotations,omitempty"`
+	Contact      *string               `json:"contact,omitempty"`
+	Dependencies *[]openapi_types.UUID `json:"dependencies,omitempty"`
+	Description  *string               `json:"description,omitempty"`
+	DisplayName  string                `json:"display_name"`
+	Labels       *map[string][]string  `json:"labels,omitempty"`
+	Links        *[]ServiceLink        `json:"links,omitempty"`
+	Name         *string               `json:"name,omitempty"`
+	Owner        *string               `json:"owner,omitempty"`
 }
 
 // ServicePage defines model for ServicePage.
 type ServicePage struct {
-	Items      []Service `json:"items"`
-	NextCursor string    `json:"next_cursor"`
+	AllCount      *int      `json:"all_count,omitempty"`
+	Items         []Service `json:"items"`
+	NextCursor    string    `json:"next_cursor"`
+	Owners        *[]string `json:"owners,omitempty"`
+	Total         *int      `json:"total,omitempty"`
+	WithSlosCount *int      `json:"with_slos_count,omitempty"`
 }
+
+// ServiceReference defines model for ServiceReference.
+type ServiceReference struct {
+	DisplayName string             `json:"display_name"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+	Owner       string             `json:"owner"`
+}
+
+// ServiceSloSummary defines model for ServiceSloSummary.
+type ServiceSloSummary struct {
+	Breached int                    `json:"breached"`
+	OnTrack  int                    `json:"on_track"`
+	State    ServiceSloSummaryState `json:"state"`
+	Total    int                    `json:"total"`
+	Unknown  int                    `json:"unknown"`
+}
+
+// ServiceSloSummaryState defines model for ServiceSloSummary.State.
+type ServiceSloSummaryState string
 
 // Sli defines model for Sli.
 type Sli struct {
@@ -3884,14 +3994,26 @@ type GetProvidersParams struct {
 
 // ListServicesParams defines parameters for ListServices.
 type ListServicesParams struct {
-	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit    *PageLimit                  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *PageCursor                 `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Q        *string                     `form:"q,omitempty" json:"q,omitempty"`
+	Owner    *string                     `form:"owner,omitempty" json:"owner,omitempty"`
+	Coverage *ListServicesParamsCoverage `form:"coverage,omitempty" json:"coverage,omitempty"`
 }
+
+// ListServicesParamsCoverage defines parameters for ListServices.
+type ListServicesParamsCoverage string
 
 // CreateServiceParams defines parameters for CreateService.
 type CreateServiceParams struct {
 	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ArchiveServiceParams defines parameters for ArchiveService.
+type ArchiveServiceParams struct {
+	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+	IfMatch ResourceIfMatch `json:"If-Match"`
 }
 
 // PatchServiceMetadataParams defines parameters for PatchServiceMetadata.
@@ -4105,7 +4227,7 @@ type PostDiagnosticCancelJSONRequestBody = EmptyAuthRequest
 type CreateServiceJSONRequestBody = ServiceCreateRequest
 
 // PatchServiceMetadataJSONRequestBody defines body for PatchServiceMetadata for application/json ContentType.
-type PatchServiceMetadataJSONRequestBody = ResourceMetadataWrite
+type PatchServiceMetadataJSONRequestBody = ServiceMetadataWrite
 
 // CreateSliJSONRequestBody defines body for CreateSli for application/json ContentType.
 type CreateSliJSONRequestBody = SliCreateRequest
@@ -4862,6 +4984,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/services (the `CreateService` operationId).
 	CreateService(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ArchiveService Archive an unreferenced service
+	//
+	// Editors and administrators can archive a service using its current version. SLO and incoming service references return 409 service_in_use with blocking UUIDs.
+	//
+	// Corresponds with DELETE /api/v1/services/{service_id} (the `ArchiveService` operationId).
+	ArchiveService(ctx context.Context, serviceId ServiceId, params *ArchiveServiceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetService Read a service
 	//
@@ -6058,6 +6187,23 @@ func (c *Client) CreateServiceWithBody(ctx context.Context, params *CreateServic
 // Corresponds with POST /api/v1/services (the `CreateService` operationId).
 func (c *Client) CreateService(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateServiceRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ArchiveService Archive an unreferenced service
+//
+// Editors and administrators can archive a service using its current version. SLO and incoming service references return 409 service_in_use with blocking UUIDs.
+//
+// Corresponds with DELETE /api/v1/services/{service_id} (the `ArchiveService` operationId).
+func (c *Client) ArchiveService(ctx context.Context, serviceId ServiceId, params *ArchiveServiceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewArchiveServiceRequest(c.Server, serviceId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -8278,6 +8424,42 @@ func NewListServicesRequest(server string, params *ListServicesParams) (*http.Re
 
 		}
 
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Owner != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "owner", *params.Owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Coverage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "coverage", *params.Coverage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -8339,6 +8521,53 @@ func NewCreateServiceRequestWithBody(server string, params *CreateServiceParams,
 		}
 
 		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewArchiveServiceRequest constructs an http.Request for the ArchiveService method
+func NewArchiveServiceRequest(server string, serviceId ServiceId, params *ArchiveServiceParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "service_id", serviceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
 
 	}
 
@@ -10396,6 +10625,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/services (the `CreateService` operationId).
 	CreateServiceWithResponse(ctx context.Context, params *CreateServiceParams, body CreateServiceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateServiceResponse, error)
+
+	// ArchiveServiceWithResponse Archive an unreferenced service
+	//
+	// Editors and administrators can archive a service using its current version. SLO and incoming service references return 409 service_in_use with blocking UUIDs.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/services/{service_id} (the `ArchiveService` operationId).
+	ArchiveServiceWithResponse(ctx context.Context, serviceId ServiceId, params *ArchiveServiceParams, reqEditors ...RequestEditorFn) (*ArchiveServiceResponse, error)
 
 	// GetServiceWithResponse Read a service
 	//
@@ -12640,6 +12878,47 @@ func (r CreateServiceResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r CreateServiceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ArchiveServiceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ArchiveServiceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ArchiveServiceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ArchiveServiceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ArchiveServiceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ArchiveServiceResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -14951,6 +15230,21 @@ func (c *ClientWithResponses) CreateServiceWithResponse(ctx context.Context, par
 	return ParseCreateServiceResponse(rsp)
 }
 
+// ArchiveServiceWithResponse Archive an unreferenced service
+//
+// Editors and administrators can archive a service using its current version. SLO and incoming service references return 409 service_in_use with blocking UUIDs.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/services/{service_id} (the `ArchiveService` operationId).
+func (c *ClientWithResponses) ArchiveServiceWithResponse(ctx context.Context, serviceId ServiceId, params *ArchiveServiceParams, reqEditors ...RequestEditorFn) (*ArchiveServiceResponse, error) {
+	rsp, err := c.ArchiveService(ctx, serviceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseArchiveServiceResponse(rsp)
+}
+
 // GetServiceWithResponse Read a service
 //
 // Returns a wrapper object for the known response body format(s).
@@ -17034,6 +17328,35 @@ func ParseCreateServiceResponse(rsp *http.Response) (*CreateServiceResponse, err
 	return response, nil
 }
 
+// ParseArchiveServiceResponse parses an HTTP response from a ArchiveServiceWithResponse call
+func ParseArchiveServiceResponse(rsp *http.Response) (*ArchiveServiceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ArchiveServiceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetServiceResponse parses an HTTP response from a GetServiceWithResponse call
 func ParseGetServiceResponse(rsp *http.Response) (*GetServiceResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -18374,6 +18697,9 @@ type ServerInterface interface {
 	// CreateService Create a service
 	// (POST /api/v1/services)
 	CreateService(w http.ResponseWriter, r *http.Request, params CreateServiceParams)
+	// ArchiveService Archive an unreferenced service
+	// (DELETE /api/v1/services/{service_id})
+	ArchiveService(w http.ResponseWriter, r *http.Request, serviceId ServiceId, params ArchiveServiceParams)
 	// GetService Read a service
 	// (GET /api/v1/services/{service_id})
 	GetService(w http.ResponseWriter, r *http.Request, serviceId ServiceId)
@@ -19690,6 +20016,45 @@ func (siw *ServerInterfaceWrapper) ListServices(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner", r.URL.Query(), &params.Owner, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "coverage" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "coverage", r.URL.Query(), &params.Coverage, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "coverage"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "coverage", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListServices(w, r, params)
 	}))
@@ -19737,6 +20102,60 @@ func (siw *ServerInterfaceWrapper) CreateService(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateService(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveService operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveService(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "service_id" -------------
+	var serviceId ServiceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "service_id", r.PathValue("service_id"), &serviceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ArchiveServiceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveService(w, r, serviceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -21228,6 +21647,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/observations", wrapper.ListSliObservations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/services", wrapper.ListServices)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/services", wrapper.CreateService)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.ArchiveService)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.GetService)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.PatchServiceMetadata)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos", wrapper.ListSlos)

@@ -28,3 +28,5 @@ export { SelectionSummary } from './SelectionSummary.tsx';
 export { TextareaField } from './TextareaField.tsx';
 export { PageHeader, SearchField, Toolbar, ToolbarSpacer, RefreshButton, FilterSelect, Pager } from './ListComposition.tsx';
 export { FormSection, FormActions } from './FormSection.tsx';
+
+export { LabelChips } from './LabelChips.tsx';

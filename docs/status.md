@@ -1,5 +1,7 @@
 # Delivery status
 
+Service catalog candidate, 2026-11-07: [F8-T01](tasks/F8-T01.md) is implemented and locally verified on `feat/service-catalog`, based on `61a5e5c`, under [ADR-0036](adr/0036-service-catalog.md) and [plan 0028](plans/0028-service-catalog.md). Final `make check` passes 408 frontend cases, all Go unit/integration packages and 63 browser cases. All 42 retained-reference comparisons pass at 2× density with zero differing pixels; `make test-e2e` passes all 13 journeys, including restart persistence, in 2.7 minutes. The maintainer requested opening the PR; commit, push and publication are authorized. Merge and deployment are not.
+
 PR [#67](https://github.com/dsolsona/almanac/pull/67) review follow-up, 2026-11-06:
 two Greptile findings were reproduced and corrected in settings. Final `make check`
 passed with 394 frontend and 51 browser tests; all 28 reference comparisons passed
