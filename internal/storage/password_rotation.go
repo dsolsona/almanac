@@ -133,6 +133,9 @@ func RotateLocalPassword(ctx context.Context, databaseURL string, input RotatePa
 	if err := queries.DeleteUserSessions(ctx, userID); err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: password rotation session invalidation failed", err)
 	}
+	if err := queries.DeleteUserChallenges(ctx, userID); err != nil {
+		return SessionAccess{}, operationError(ctx, "storage: password rotation challenge invalidation failed", err)
+	}
 	newSessionID, err := queries.InsertSession(ctx, dbgen.InsertSessionParams{
 		UserID: userID, Verifier: input.NewSessionVerifier[:], CredentialRevision: user.CredentialRevision,
 		CredentialEpoch: epoch, Restricted: false, CreatedAt: now,

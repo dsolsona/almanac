@@ -41,7 +41,9 @@ type Querier interface {
 	CompleteRetentionWork(ctx context.Context, arg CompleteRetentionWorkParams) (int64, error)
 	CompleteSloHistoryJob(ctx context.Context, arg CompleteSloHistoryJobParams) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
+	CountManagedUsers(ctx context.Context, arg CountManagedUsersParams) (int64, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
+	CountUsableAdmins(ctx context.Context) (int64, error)
 	CurrentPreparationExhausted(ctx context.Context, arg CurrentPreparationExhaustedParams) (bool, error)
 	// Waiting on source work is schedulable state, not a failed calculation attempt.
 	// Preserve an existing failure budget for this revision instead of resetting it.
@@ -71,10 +73,12 @@ type Querier interface {
 	DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error
 	DeleteExpiredSloProjectionPayloads(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSourceHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) error
+	DeleteExpiredUserReceipts(ctx context.Context, now pgtype.Timestamptz) error
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteObjectiveCreateReceipt(ctx context.Context, arg DeleteObjectiveCreateReceiptParams) error
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) error
+	DeleteUserChallenges(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
@@ -106,6 +110,8 @@ type Querier interface {
 	FindSessionUserID(ctx context.Context, verifier []byte) (pgtype.UUID, error)
 	FindSliCreateReceipt(ctx context.Context, arg FindSliCreateReceiptParams) (FindSliCreateReceiptRow, error)
 	FindSliDeliveryReceipt(ctx context.Context, arg FindSliDeliveryReceiptParams) (FindSliDeliveryReceiptRow, error)
+	FindUserChallenge(ctx context.Context, verifier []byte) (AlmanacUserChallenge, error)
+	FindUserReceipt(ctx context.Context, arg FindUserReceiptParams) (FindUserReceiptRow, error)
 	FinishSloOverviewSnapshot(ctx context.Context, arg FinishSloOverviewSnapshotParams) error
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
@@ -122,6 +128,7 @@ type Querier interface {
 	GetDerivedSourceGeneration(ctx context.Context, arg GetDerivedSourceGenerationParams) (int64, error)
 	GetInitialOwnerState(ctx context.Context) (GetInitialOwnerStateRow, error)
 	GetLatestAgentConfigurationRevision(ctx context.Context, agentID pgtype.UUID) (int64, error)
+	GetManagedUser(ctx context.Context, id pgtype.UUID) (AlmanacUser, error)
 	GetMigrationHistory(ctx context.Context) ([]AlmanacSchemaMigration, error)
 	GetPublishedCurrentProjection(ctx context.Context, arg GetPublishedCurrentProjectionParams) (GetPublishedCurrentProjectionRow, error)
 	GetService(ctx context.Context, id pgtype.UUID) (AlmanacService, error)
@@ -153,6 +160,7 @@ type Querier interface {
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
 	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
+	InsertManagedUser(ctx context.Context, arg InsertManagedUserParams) (AlmanacUser, error)
 	InsertObjectiveCreateReceipt(ctx context.Context, arg InsertObjectiveCreateReceiptParams) error
 	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
 	InsertPreparedSloHistory(ctx context.Context, arg InsertPreparedSloHistoryParams) error
@@ -173,6 +181,8 @@ type Querier interface {
 	InsertSloDefinition(ctx context.Context, arg InsertSloDefinitionParams) error
 	InsertSloOverviewSnapshot(ctx context.Context, arg InsertSloOverviewSnapshotParams) error
 	InsertSloOverviewSnapshotItems(ctx context.Context, arg InsertSloOverviewSnapshotItemsParams) error
+	InsertUserChallenge(ctx context.Context, arg InsertUserChallengeParams) error
+	InsertUserReceipt(ctx context.Context, arg InsertUserReceiptParams) error
 	LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDatasourceGrantExpiryParams) (pgtype.Timestamptz, error)
 	LatestPreparedBudgetSparkline(ctx context.Context, arg LatestPreparedBudgetSparklineParams) (LatestPreparedBudgetSparklineRow, error)
 	LatestSliAcceptedAt(ctx context.Context, arg LatestSliAcceptedAtParams) (pgtype.Timestamptz, error)
@@ -184,6 +194,7 @@ type Querier interface {
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
+	ListManagedUsers(ctx context.Context, arg ListManagedUsersParams) ([]AlmanacUser, error)
 	ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error)
 	ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
@@ -212,6 +223,7 @@ type Querier interface {
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
+	LockManagedUser(ctx context.Context, id pgtype.UUID) (AlmanacUser, error)
 	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
 	LockRetentionWork(ctx context.Context, arg LockRetentionWorkParams) (pgtype.UUID, error)
 	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
@@ -271,6 +283,8 @@ type Querier interface {
 	RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error)
 	RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
+	RecordUserSignIn(ctx context.Context, arg RecordUserSignInParams) error
+	RedeemUserPassword(ctx context.Context, arg RedeemUserPasswordParams) (AlmanacUser, error)
 	ReleaseRetainedTileWork(ctx context.Context, arg ReleaseRetainedTileWorkParams) error
 	ReleaseSloHistoryForDependencies(ctx context.Context, arg ReleaseSloHistoryForDependenciesParams) (int64, error)
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
@@ -303,6 +317,7 @@ type Querier interface {
 	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
 	UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error)
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
+	UpdateManagedUser(ctx context.Context, arg UpdateManagedUserParams) (AlmanacUser, error)
 	UpdateServiceMetadata(ctx context.Context, arg UpdateServiceMetadataParams) (AlmanacService, error)
 	UpdateSliDisplayName(ctx context.Context, arg UpdateSliDisplayNameParams) (AlmanacSli, error)
 	UpdateSliEffectiveFrom(ctx context.Context, arg UpdateSliEffectiveFromParams) (int64, error)
@@ -311,6 +326,7 @@ type Querier interface {
 	UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error
 	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
 	UpsertSloDisplayBlock(ctx context.Context, arg UpsertSloDisplayBlockParams) error
+	UserEmailInUse(ctx context.Context, arg UserEmailInUseParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

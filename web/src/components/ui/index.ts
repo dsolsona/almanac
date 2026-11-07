@@ -9,6 +9,8 @@ export type { Status } from './StatusBadge.tsx';
 export { Panel } from './Panel.tsx';
 export { Dialog } from './Dialog.tsx';
 export { ThemeToggle } from './ThemeToggle.tsx';
+export { ThemeChoice } from './ThemeToggle.tsx';
+export { RoleChip } from './RoleChip.tsx';
 export { Switch } from './Switch.tsx';
 export { DatePicker } from './DatePicker.tsx';
 export { LoadingIndicator } from './LoadingIndicator.tsx';

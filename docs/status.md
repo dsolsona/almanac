@@ -1,5 +1,25 @@
 # Delivery status
 
+PR [#67](https://github.com/dsolsona/almanac/pull/67) review follow-up, 2026-11-06:
+two Greptile findings were reproduced and corrected in settings. Final `make check`
+passed with 394 frontend and 51 browser tests; all 28 reference comparisons passed
+in four viewport/theme cases with unchanged limits. Full `make test-e2e` passed all
+11 journeys, including actual self-reset/redeem and restart, in 2.5 minutes.
+[F1-T20](tasks/F1-T20.md) retains the failure diagnoses and evidence; GitHub tracks
+the CI rerun after publication. Merge and deployment remain outside this delivery.
+
+Current settings work, 2026-11-06: the maintainer approved
+[the settings/user reference](design/mocks/settings/README.md) and requested pixel
+parity in a new worktree. [F1-T20](tasks/F1-T20.md) is in review on
+`feat/settings-users`, base `dfc6b3a`, under [ADR-0035](adr/0035-settings-and-local-user-administration.md)
+and [plan 0027](plans/0027-settings-and-users.md). Account/user UI, API, CLI and
+the preserving migration are implemented. `make check` passed, including 48
+catalogue/browser checks and 28 reference comparisons. The final default E2E run
+passed all 10 tests, including the real user-management journey and restart, in
+2.7 minutes. The task records exact evidence and diagnosed failures. The change
+is ready for PR review; commit, push and PR publication are authorized. Merge
+and deployment remain outside this delivery.
+
 Current test work, 2026-11-05: [ADR-0033](adr/0033-simple-test-suite.md) replaces
 `make verify MODE=…`, `scripts/verify.py`, the custom browser scripts and the controlled performance
 harness with `make test`, `make test-integration`, `make test-browser`, `make test-e2e`,

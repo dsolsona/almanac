@@ -70,6 +70,9 @@ with actual browser/backend/database acceptance in the same increment.
 [local Compose plan](../plans/0018-local-compose.md), with persistent state and
 actual onboarding/restart verification.
 
+[F1-T20](F1-T20.md) implements the approved account settings and user administration
+under [plan 0027](../plans/0027-settings-and-users.md).
+
 F2 begins with [F2-T01](F2-T01.md), local VictoriaMetrics and VictoriaTraces fixtures
 under the [first observations plan](../plans/0019-first-observations.md).
 [F2-T02](F2-T02.md) adds guarded registration persistence and safe retry receipts;

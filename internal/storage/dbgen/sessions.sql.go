@@ -175,7 +175,8 @@ SELECT u.id, u.login, u.role, i.credential_epoch, u.password_verifier,
        u.enabled, u.must_change_password, u.credential_revision
 FROM public.almanac_users u
 LEFT JOIN public.almanac_installation i ON i.singleton
-WHERE lower(u.login) = lower($1)
+WHERE (lower(u.login) = lower($1) OR lower(u.email) = lower($1))
+ AND u.deleted_at IS NULL AND NOT u.password_login_suspended
 `
 
 type ReadLocalIdentityRow struct {

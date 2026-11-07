@@ -36,6 +36,18 @@ sessions. Browser local sign-in and administrator onboarding use the same operat
 under [F1-T18](../tasks/F1-T18.md); reusable CLI login and profiles are implemented
 under [F2-T10](../tasks/F2-T10.md).
 
+Account settings and local-user administration are implemented under
+[F1-T20](../tasks/F1-T20.md) and [ADR-0035](../adr/0035-settings-and-local-user-administration.md).
+`almanac account get/update/password/redeem` and `almanac users list/get/create/update`
+plus the access commands use the same versioned operations as Settings. User pages
+use filter-bound alphabetical keyset cursors (up to 2,048 bytes), default 50/max 200;
+the browser requests 10/20 rows. Profile writes require the exact strong user ETag
+and a caller-owned idempotency key. Create/reset/replacement commands reserve a new
+protected `--link-file` before dispatch. Replays return metadata and write no link
+file; the original one-time secret cannot be retrieved. Password and redemption
+commands read exact bytes from a protected `--password-file`. No email is sent.
+General API-key management remains deferred.
+
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and
 use agent credentials. Shared ingestion validation is reached through operation-

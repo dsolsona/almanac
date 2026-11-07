@@ -4,6 +4,128 @@
  */
 
 export interface paths {
+    "/api/v1/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the current unrestricted user's profile */
+        get: operations["getAccount"];
+        /** Update the current user's full name */
+        put: operations["updateAccount"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/activation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume a one-time password setup or reset credential
+         * @description Requires verified TLS, same Origin and the current context's cookie-bound CSRF token. Proofs are purpose-bound, expire after 24 hours for setup or 15 minutes for reset, and can be used once. No session is issued; sign in after setting the password. The credential belongs in the link fragment, never its query.
+         */
+        post: operations["redeemUserChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/activation/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect a valid one-time account link before choosing a password
+         * @description Uses the same TLS, origin and cookie-bound CSRF requirements as redemption. The proof is accepted only in the bounded request body. Returns no credential and performs no password mutation.
+         */
+        post: operations["inspectUserChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List local users (administrator only) */
+        get: operations["listUsers"];
+        put?: never;
+        /**
+         * Create a pending user and issue a one-time setup link
+         * @description Administrator only. The one-time link is absent on a receipt replay. Missing output requires an explicit replacement command, never retrieval of the original secret.
+         */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        /** Read a local user (administrator only) */
+        get: operations["getUser"];
+        /** Update full name, sign-in email and deployment-wide role */
+        put: operations["updateUser"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+                action: "enable" | "disable" | "delete" | "reset-password" | "cancel-password-reset" | "replace-setup-link";
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute an administrator user lifecycle command
+         * @description Checks current authority and the last usable local administrator transactionally. Delete archives identity and revokes access while preserving audit attribution. Reset suspends password login and revokes sessions and prior challenges. Enable restores the existing role, but does not restore revoked credentials. Command receipts last 24 hours and never retain plaintext credentials.
+         */
+        post: operations["userCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/traces": {
         parameters: {
             query?: never;
@@ -774,6 +896,60 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        UserRole: "viewer" | "editor" | "administrator";
+        ManagedUser: {
+            /** Format: uuid */
+            id: string;
+            full_name: string;
+            email: string | null;
+            role: components["schemas"]["UserRole"];
+            /** @enum {string} */
+            status: "active" | "pending" | "disabled" | "resetting" | "deleted";
+            version: string;
+            /** Format: date-time */
+            last_sign_in: string | null;
+            sign_in_history_known: boolean;
+            is_last_admin: boolean;
+        };
+        UserPage: {
+            items: components["schemas"]["ManagedUser"][];
+            /** Format: int64 */
+            total: number;
+            next_cursor: string;
+        };
+        AccountUpdateRequest: {
+            full_name: string;
+        };
+        UserWriteRequest: {
+            full_name: string;
+            /** Format: email */
+            email: string;
+            role: components["schemas"]["UserRole"];
+        };
+        UserCommandResult: {
+            user: components["schemas"]["ManagedUser"];
+            /** @enum {string} */
+            purpose: "" | "setup" | "reset";
+            /** Format: date-time */
+            expires_at: string | null;
+            replayed: boolean;
+            /** @description One-time absolute HTTPS fragment URL */
+            link?: string;
+        };
+        UserChallengeRequest: {
+            token: string;
+        };
+        UserChallengeContext: {
+            full_name: string;
+            email: string | null;
+            /** @enum {string} */
+            purpose: "setup" | "reset";
+        };
+        UserRedemptionRequest: {
+            token: string;
+            password: string;
+        };
         ServiceCreateRequest: {
             name: string;
             display_name: string;
@@ -1899,6 +2075,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description Safe user request failure, with code invalid_request, unauthorized, forbidden, not_found, conflict, email_in_use, last_administrator, link_unavailable, password_policy, rate_limited or user_unavailable. No proof or password is returned. */
+        UserProblem: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Authentication proof throttled */
         AuthenticationRateLimited: {
             headers: {
@@ -1931,6 +2116,9 @@ export interface components {
         };
     };
     parameters: {
+        UserId: string;
+        /** @description Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'. */
+        UserIfMatch: string;
         AgentId: string;
         DatasourceId: string;
         SliId: string;
@@ -1956,6 +2144,250 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current profile */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUser"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    updateAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCommandResult"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    redeemUserChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserRedemptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Password set and credential consumed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    inspectUserChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Valid link context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserChallengeContext"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                q?: string;
+                status?: "active" | "pending" | "disabled" | "resetting";
+                role?: components["schemas"]["UserRole"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Pending user */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCommandResult"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    getUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User profile */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUser"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCommandResult"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    userCommand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                user_id: components["parameters"]["UserId"];
+                action: "enable" | "disable" | "delete" | "reset-password" | "cancel-password-reset" | "replace-setup-link";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Command committed or metadata-only receipt replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCommandResult"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
     postBrowserTraces: {
         parameters: {
             query?: never;
