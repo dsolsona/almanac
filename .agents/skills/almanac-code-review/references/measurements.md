@@ -5,23 +5,20 @@ Read [calculations](../../../../docs/specs/0006-slo-calculation-and-reporting.md
 and relevant [maintenance](../../../../docs/specs/0016-maintenance-exclusions.md)
 or [annotation](../../../../docs/specs/0017-slo-timeline-annotations.md) contracts.
 
-- Derive expected results from inputs independently. Distinguish occurrence sums,
-  timeslice classification and ratio-timeslice means; do not substitute one method
-  for another or pool composite children with incompatible denominators.
-- Check units, input precision/range, exact intermediate comparisons and rounding
-  only at the specified boundary. Display rounding cannot decide status. Preserve
-  overspent and negative budgets instead of clamping them.
-- Verify explicit evaluation time, half-open bounds, full-interval eligibility,
-  cadence alignment and effective revisions. Check DST and civil-calendar boundaries
-  for zoned reporting; a local day is not always 24 hours.
-- Keep missing, partial, stale, known-empty, zero-traffic, excluded and expired data
-  distinguishable. Absent or unevaluable input cannot become attainment of 100%,
-  zero burn, a met objective or an alert recovery.
-- Trace exclusions through both numerator and denominator, including unions and
-  revision snapshots. Notification silences and timeline annotations do not change math.
-- Verify independent short burn windows, historical evaluations, snapshots and
-  exports against the same effective bounds. Check lossless numeric serialization
-  and spreadsheet-safe text where exports change.
+- Derive expected results independently using the specified aggregation, weighting
+  and budgeting method. Check whether combining inputs preserves their denominators
+  and meaning rather than substituting a convenient formula.
+- Check units, precision/range, intermediate arithmetic, rounding and comparisons
+  against the numerical contract, especially at classification boundaries.
+- Verify explicit evaluation time, interval inclusion, alignment and revision
+  boundaries. Exercise daylight-saving and civil-calendar transitions where relevant.
+- Trace missing, partial, stale, empty, zero-traffic and expired inputs through the
+  defined quality and freshness rules. Check that unavailable evidence cannot be
+  mistaken for a successful measurement or alert recovery.
+- Check the defined effects of exclusions, silences and annotations independently;
+  inspect population, interval and revision handling where they affect evaluation.
+- Compare windows, historical evaluations, snapshots and exports at equivalent
+  effective bounds. Check serialization and export safety against their contracts.
 
 Give a small numerical or time-boundary counterexample and trace its effect through
 the evaluator to the displayed result, export or alert decision.

@@ -15,20 +15,20 @@ and the current measurement method in
 - Inspect query counts, unnecessary round trips, retention scans, join expansion,
   pagination and transaction/lock scope. Verify schema and index support with the
   Storage lens when needed. Use query plans for planner-dependent claims.
-- Look for repeated exact calculations, parsing, sorting, copying, allocation and
+- Look for repeated calculations, parsing, sorting, copying, allocation and
   serialization in hot loops. Use CPU/allocation profiles to locate uncertain cost.
-  Preserve exact arithmetic and data quality; changing precision is not an optimization
-  within the accepted measurement contract.
+  Verify that optimizations preserve the numerical and data-quality guarantees
+  required by the current contract.
 - Check payload bytes, fetching unused history, duplicate requests, waterfall
-  dependencies and repeated chart construction or React work. Bound graph data
-  according to the accepted display contract while preserving extrema, gaps and
-  exact drill-down. Smaller payloads alone do not prove faster rendered journeys.
+  dependencies and repeated rendering work. Check display reduction against the
+  current data-fidelity requirements. Smaller payloads alone do not prove faster
+  rendered journeys.
 - Trace pool/lock wait, fan-out, goroutine lifetime, buffers, queue backlog and retry
-  amplification. Check cancellation and admission limits across shared resources;
-  repair/backfill cannot consume the capacity needed for live collection and reads.
+  amplification. Check cancellation, admission limits and workload isolation against
+  the documented priorities and capacity requirements.
 - Examine cache-miss, expiry, invalidation and simultaneous-miss behavior. Confirm
-  coherent revisions and bounded fallback work. Normal navigation cannot start a
-  preparation job and wait for it before presenting usable results.
+  coherent revisions and bounded fallback work. Verify foreground and background
+  work against the current responsiveness and preparation policy.
 
 ## Establish the evidence
 
@@ -37,16 +37,14 @@ and the current measurement method in
   Distinguish a demonstrated growth defect from measured latency; a nested loop or
   complex SQL statement alone does not establish a problem on a bounded workload.
 - For operational page changes, measure authenticated navigation through usable
-  rows and painted graphs, including first visits, cold misses and range/burn changes.
-  Current browser acceptance is p95 below 1,000 ms, with 500 ms the preferred target.
-  The four-page `make test-perf` fixture defaults to 20 SLIs/SLOs with 35 days of
-  history. Report its actual configuration; this is not evidence of the deferred
-  100/1,000-objective or endurance workloads.
-- Use VictoriaTraces to attribute browser, HTTP, pool/query, calculation, worker and
-  agent costs when available. Report missing instrumentation as an evidence gap;
-  trace completeness is not itself a performance gate under ADR-0033. Preserve the
-  normal tracing configuration rather than restoring a removed overhead comparison.
-- Run checks through the documented Docker commands and isolated fixtures. Retain
+  content, including first visits, cold misses and relevant interactions. Read the
+  current budgets, fixture settings, required scale and acceptance method from the
+  linked documents. Report the workload actually measured and avoid extrapolating
+  it to untested capacity or endurance.
+- Use the available traces and profiles to attribute request, database, calculation,
+  background and rendering costs. Report missing instrumentation as an evidence gap.
+  Follow the current observability policy when deciding what evidence is required.
+- Run relevant checks through documented commands and isolated fixtures. Retain
   slow and failed samples. Avoid claims based only on warmed API responses, raising
   budgets or repeatedly running the same workload until it passes.
 

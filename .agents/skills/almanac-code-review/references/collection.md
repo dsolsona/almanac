@@ -5,20 +5,20 @@ Read [agent protocol](../../../../docs/specs/0009-agent-protocol-and-ownership.m
 [providers](../../../../docs/specs/0015-datasource-providers.md), and
 [restart ownership](../../../../docs/adr/0022-restartable-agent-ownership.md).
 
-- Keep external queries and connectivity diagnostics on the assigned remote agent.
-  The backend accepts observations and coordinates work; it does not become a collector.
+- Trace where collection, diagnostics, coordination and ingestion execute. Compare
+  component responsibilities and authority with the current architecture contract.
 - Trace registration, acquisition, restart, takeover, reconnect and credential
   changes. Identify which process may query and which results the backend may accept
   before and after each lease or ownership boundary.
-- Check capability negotiation, configuration revisions and acknowledgement before
-  effective changes. Query edits cannot reinterpret observations already collected.
+- Check capability negotiation, configuration revisions, acknowledgement and effective
+  changes against the protocol. Examine how edits affect observations already collected.
 - Separate reachability, collection progress and observation freshness. Healthy
   heartbeats cannot make old measurements current.
 - Check collection scheduling, settled interval selection and initial execution.
   Reconnect or catch-up cannot silently skip intervals or duplicate conflicting values.
-- Verify finite buffers, admission limits, cancellation and retry budgets. Historical
-  work uses separate operations/channels and must preserve live scheduling and capacity,
-  including shared provider and database resources.
+- Verify buffers, admission limits, cancellation and retries against the documented
+  resource policy. Trace competing workloads through shared provider and database
+  resources to check isolation and scheduling guarantees.
 - Follow transport failures and lost acknowledgements through replay, deduplication
   and error reporting without assuming every submission succeeded or is safe to repeat.
 

@@ -45,15 +45,15 @@ reachable defects and evidence, and a code review does not establish OWASP compl
   Verify parameterization, argument handling and path containment at the actual sink.
 - Check server-side request forgery (SSRF) in datasource queries, diagnostics and
   notification URLs, including redirects and credentials sent to another host.
-  Apply the accepted connectivity policy: private network destinations are required
-  by some self-hosted installations, so their presence alone is not a defect.
+  Compare permitted schemes, destinations and credential forwarding with the current
+  connectivity policy; a private address alone does not establish a violation.
 - Trace the actor, current authority and operation through registration, rotation,
   revocation and ownership proofs. A heartbeat or valid identifier does not authorize
   an observation submission or release of datasource credentials.
 - Trace secrets through serialization, HTTP headers, errors, logs, traces, command
   arguments and artifacts. Test final output with synthetic values, including nested
   serialized strings; a redaction marker does not prove the secret was removed.
-- Check key/ciphertext binding and credential invalidation on restore when affected.
+- Check key/ciphertext binding and credential handling on restore against the current policy.
   Inspect unsafe deserialization and oversized or deeply nested inputs for execution,
   validation bypass or resource exhaustion. Ordinary validated JSON decoding is not
   automatically unsafe.

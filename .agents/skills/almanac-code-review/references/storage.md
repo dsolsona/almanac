@@ -7,11 +7,11 @@ and [derived recovery](../../../../docs/adr/0034-self-healing-derived-data.md).
 - Inspect SQL, schema constraints, indexes and callers before declaring an invariant
   unenforced. Check transaction boundaries, concurrent claims, lost updates, conflict
   handling and database isolation on reachable write paths.
-- Confirm that observation values, provenance, source generation and dirty-work
-  publication remain consistent. Imports, seeds and repair paths must not expose
-  intermediate facts that permanently poison derived state.
-- Compare derived results with canonical evaluation at identical time, definition,
-  exclusion and source-generation bounds. Check late data, expiry, invalidation,
+- Identify canonical facts, derived state and their update/publication boundaries.
+  Check consistency across normal writes, imports, seeds and repair paths, including
+  intermediate states visible to concurrent readers or workers.
+- Compare derived results with canonical evaluation under equivalent inputs and
+  versions defined by the current contract. Check late data, expiry, invalidation,
   interrupted workers and restart for stale or mixed-generation publication.
 - Verify missing-work detection, bounded retry/recovery and visible failure reasons
   against the accepted worker contract. A transient failure must not silently strand work.

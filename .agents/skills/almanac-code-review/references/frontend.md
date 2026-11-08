@@ -5,15 +5,15 @@ Read [UI contracts](../../../../docs/specs/0012-user-interface.md),
 SLI/SLO changes also require the
 [retained visual reference](../../../../docs/design/slo-visual-reference.md).
 
-- Trace React/TypeScript request state through navigation, forms and charts.
+- Trace request state through navigation, forms and charts.
   Check stale responses, abandoned requests, failed lazy imports, refreshes,
   authentication expiry and correction after a failed submission.
-- Compare actual SLI/SLO pages with the retained composition and chart geometry.
-  Inspect both themes, mobile and real interaction when render evidence is available;
+- Compare affected screens with their current approved references. Inspect the
+  themes, viewports and interactions required by the design guidance;
   static source analysis alone cannot establish visual or usability acceptance.
-- Reuse components in `web/src/components/ui/` and charts in
-  `web/src/components/charts/`. Check actual APIs and catalogue states before
-  recommending a replacement. Raw markup inside a component's implementation is expected.
+- Discover the current shared controls and charts through the design guidance and
+  code. Check their APIs and demonstrated states before recommending a replacement.
+  Raw markup inside a component's implementation is expected.
 - Check keyboard reachability, visible focus, control names/labels, dialog focus
   behavior, busy/disabled state and programmatically associated errors. Preserve
   reduced-motion behavior and readable theme tokens.

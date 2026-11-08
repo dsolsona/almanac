@@ -8,6 +8,10 @@ description: Use when reviewing Almanac working changes, commits, or branches fo
 Review Almanac changes against their intended outcome and accepted contracts.
 Produce evidence-backed findings with concrete user or operator consequences.
 
+Resolve product rules, limits, defaults, supported behavior and verification policy
+from the current repository guidance and accepted contracts at review time. Lenses
+describe how to investigate; they do not define or freeze those contracts.
+
 ## Boundaries
 
 Review without editing application code, committing, publishing, or posting comments.
@@ -104,9 +108,8 @@ assigning numerical confidence. Put unconfirmed concerns in open questions.
 
 Each finding contains a short action-oriented title, the smallest useful
 `file:line` location, the trigger, consequence, evidence and a minimal correction.
-Cite the governing contract when relevant. For example, two occurrence intervals
-with 99/100 and 900/1000 require 999/1100 attainment; averaging their ratios changes
-the reported result. Name the affected evaluator and its user-facing consumer.
+Cite the governing contract when relevant. For calculation findings, derive a small
+counterexample from that contract and trace it to an affected consumer.
 
 Combine duplicate findings by root cause. Keep unrelated pre-existing defects
 separate from change-introduced defects; an unchanged caller broken by this change

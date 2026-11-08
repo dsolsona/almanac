@@ -5,12 +5,11 @@ Read [runtime](../../../../docs/specs/0013-runtime-and-operations.md),
 [Docker workflow](../../../../docs/adr/0029-platform-agnostic-development-and-verification.md),
 and current [commands](../../../../docs/commands.md).
 
-- Review the supported PostgreSQL version, migration ordering, serialization and
-  compatibility checks. Serving processes must not perform unapproved schema changes
-  at boot. Do not demand destructive downgrade support where the contract forbids it.
+- Read the supported database versions, migration ownership and compatibility policy.
+  Check ordering, serialization and startup behavior against those requirements.
 - Identify existing data and old readers/writers before assessing a schema change.
   Apply expand/contract sequencing when running-version compatibility requires it;
-  avoid assuming a rolling multi-backend deployment that Almanac does not promise.
+  establish the supported deployment topology and rollback guarantees first.
 - Check actual DDL lock/rewrite behavior and migration transaction restrictions.
   Large data movement needs bounded work and a defined interruption/recovery path.
 - Keep operational backfills from blocking live collection or ordinary reads.
@@ -18,8 +17,8 @@ and current [commands](../../../../docs/commands.md).
 - Verify startup configuration, schema readiness, TLS, protected credentials,
   signal handling and connection draining in the normal container deployment.
   Check whether a failed start preserves useful diagnostics and existing data.
-- Review image architecture/pins, app/agent packaging and host/container paths for
-  supported Docker environments. Test fixtures must not reuse operator volumes,
+- Review image architecture/pins, artifact packaging and host/container paths for
+  the supported deployment environments. Test fixtures must not reuse operator volumes,
   credentials, preview ports or the local development stack.
 - Trace changed notification or provider side effects after a timeout, process
   restart or retry. Code rollback cannot retract an already delivered webhook.

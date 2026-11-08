@@ -13,8 +13,8 @@ or resource specs when their boundaries change.
   that an import, bulk operation or background worker cannot bypass the invariant.
 - Review OpenAPI and SQL sources alongside generated consumers. Confirm that
   generation is reproducible rather than recommending edits to generated output.
-- Distinguish a supported import from an executable definition. Unsupported valid
-  definitions must retain explicit inactive reasons under the accepted OpenSLO profile.
+- Check import acceptance, execution eligibility and compatibility claims against
+  the current supported profile; these may have different boundaries.
 - Evaluate existing saved definitions and independently running agent versions
   against the actual compatibility contract; avoid inventing a broader guarantee.
 

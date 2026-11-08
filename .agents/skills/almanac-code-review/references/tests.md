@@ -24,9 +24,10 @@ Read [testing](../../../../docs/testing.md) and
 
 ## Proportionate layers and execution cost
 
-- Check the appropriate dependency boundary: real PostgreSQL for SQL, constraints
-  and locking; real binaries/protocols for integration; real UI on the isolated
-  Compose stack for a user journey. Mocks cannot prove database semantics.
+- Choose the dependency boundary that can prove the assertion: database behavior
+  needs the real database semantics, protocol behavior needs its actual implementation,
+  and UI journeys need meaningful user interaction. Follow the current test guide
+  for harnesses and fixtures. Mocks cannot prove behavior they do not implement.
 - Keep pure calculations, validation and component behavior in fast unit tests.
   Database setup or full browser startup needs an assertion about behavior that
   dependency provides. Keep representative critical journeys end to end; exercise
@@ -35,8 +36,8 @@ Read [testing](../../../../docs/testing.md) and
   test protects a distinct boundary; consolidate copies that add the same evidence
   and make one behavior change require many assertion rewrites.
 - Inspect expensive setup inside loops, per-case process/container launches,
-  repeated migrations and global serialization. Follow Almanac's parallel integration
-  model with isolated per-test databases. Share immutable setup only where ownership
+  repeated migrations and global serialization. Use the documented isolation and
+  parallelism policy. Share immutable setup only where ownership
   and cleanup remain clear; never share mutable fixtures to buy speed.
 - Use suite/test timings to substantiate slowness and compare the affected lane
   after a change. A shorter test file or fewer tests does not establish a faster
@@ -56,7 +57,8 @@ Read [testing](../../../../docs/testing.md) and
   Separate legitimate condition polling from rerunning a failed test into green.
 - Preserve focused reproduction, failure diagnostics and the required final gates.
   Do not recommend retries, relaxed assertions or larger timeouts to conceal failure.
-- Check that catalogue tests own visual states and journeys assert visible outcomes.
+- Check suite responsibilities against the current test guide; keep detailed state
+  matrices in the appropriate lower layer and user journeys focused on visible outcomes.
   Test names and failure messages should reveal the broken behavior without tracing
   several helpers or depending on another test having run first.
 
