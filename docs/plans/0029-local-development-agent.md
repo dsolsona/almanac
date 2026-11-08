@@ -68,3 +68,19 @@ No product Go code, schema migration, dependency or production image change.
   encode equality check as the product parser, plus an E2E rejection case. That
   regression remains unrun under the waiver. Final `make test` passed in 26
   seconds: `/tmp/almanac-local-dev-agent-pr-final-unit.log`.
+
+## PR #69 CI follow-up
+
+- CI run `42488253074` on `512b6f0` passed unit, integration and catalogue suites,
+  but E2E failed after onboarding: the new connection assertion dereferenced
+  `body.agent.runtime`. The GET contract returns the agent directly; only the
+  frontend client wraps that value with its ETag. The performance seed already
+  reads `body.runtime`. One test failed and thirteen dependent cases did not run;
+  the original log is `/tmp/almanac-pr69-e2e-failed.log`.
+- Corrected the assertion to read `body.runtime`, use the existing `Agent` type,
+  and require HTTP 200 through `expectOk`. Local E2E remains waived; CI verifies
+  the actual connection and the later restart/revocation cases after publication.
+- The downloaded CI trace confirms HTTP 200 with `runtime` at the response root
+  and `reachability: connected`; seeding and initial connection succeeded before
+  the test's incorrect property access. `make test` passes after correction in
+  22 seconds: `/tmp/almanac-pr69-e2e-assertion-unit.log`.

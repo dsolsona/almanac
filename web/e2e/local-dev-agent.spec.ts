@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { api } from './support/api.ts';
+import type { Agent } from '../src/agents/client.ts';
+import { api, expectOk } from './support/api.ts';
 import { compose, localCommand, psql } from './support/stack.ts';
 
 test('seed local-dev once, then start and reconnect it with the local app', async ({ page }) => {
@@ -37,7 +38,7 @@ test('seed local-dev once, then start and reconnect it with the local app', asyn
   localCommand('run');
   const agentID = identity.split(':')[0];
   await page.goto('/agents');
-  const connected = async () => (await api(page, 'GET', `/api/v1/agents/${agentID}`)).body.agent.runtime?.reachability;
+  const connected = async () => (await expectOk(api<Agent>(page, 'GET', `/api/v1/agents/${agentID}`), [200])).body.runtime?.reachability;
   await expect.poll(connected).toBe('connected');
   await page.getByRole('button', { name: 'local-dev', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'local-dev', exact: true })).toBeVisible();
