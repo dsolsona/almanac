@@ -20,6 +20,14 @@ test('graph gestures stay in the canvas and focus useful service neighborhoods @
   await expect(page.locator('.graph-mobile .selected-focus')).toContainText(records.at(-1)!.display_name);expect(errors).toEqual([]);return;
  }
  const canvas=page.locator('.service-network'),zoom=page.getByLabel('Graph zoom',{exact:true});
+ const finderBox=(await page.getByRole('combobox',{name:'Find a service'}).boundingBox())!;
+ for(const control of [page.getByRole('button',{name:'Reset view',exact:true}),page.getByRole('button',{name:'Zoom out',exact:true}),page.getByRole('button',{name:'Graph help',exact:true})]){
+  const box=(await control.boundingBox())!;expect(Math.abs(box.y+box.height/2-finderBox.y-finderBox.height/2)).toBeLessThan(1);
+ }
+ const help=page.getByRole('button',{name:'Graph help',exact:true});
+ await expect(page.getByText('Drag to pan · Scroll to zoom · Arrow keys pan, +/− zoom, 0 fits all',{exact:true})).toBeHidden();
+ await help.click();await expect(page.getByText('Drag to pan · Scroll to zoom · Arrow keys pan, +/− zoom, 0 fits all',{exact:true})).toBeVisible();
+ await help.press('Escape');await expect(page.getByText('Drag to pan · Scroll to zoom · Arrow keys pan, +/− zoom, 0 fits all',{exact:true})).toBeHidden();
  const core=(name:string)=>page.locator(`.map-node[data-id="${records.find(record=>record.display_name===name)!.id}"] .map-node-core`);
  const selectedCore=page.locator('.map-node.selected .map-node-core');
  const center=async()=>{const box=(await selectedCore.boundingBox())!,viewport=(await canvas.boundingBox())!;expect(Math.abs(box.x+box.width/2-viewport.x-viewport.width/2)).toBeLessThan(1);expect(Math.abs(box.y+box.height/2-viewport.y-viewport.height/2)).toBeLessThan(1);};
@@ -67,10 +75,18 @@ test('graph gestures stay in the canvas and focus useful service neighborhoods @
  await page.getByRole('button',{name:'Owner groups',exact:true}).click();
  await page.screenshot({path:`../.local/services-parity/fleet-owners-${test.info().project.name}.png`,fullPage:true});
  const filters=page.getByRole('group',{name:'Service SLO status'});
- await filters.getByRole('button',{name:'Breached',exact:true}).click();await expect(page.locator('.map-node')).toHaveCount(1);
- await filters.getByRole('button',{name:'Unknown',exact:true}).click();await expect(page.locator('.map-node')).toHaveCount(2);
- await filters.getByRole('button',{name:'On track',exact:true}).click();await expect(page.locator('.map-node')).toHaveCount(3);
- for(const node of await page.locator('.map-node').all())expect(['on_track','breached','unknown']).toContain(await node.getAttribute('data-slo-state'));
+ await filters.getByRole('button',{name:'Breached',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(1);
+ await expect(page.locator('.map-node')).toHaveCount(12);
+ for(const name of ['API gateway','Cart','Payments','Orders']){
+  const node=page.locator(`.map-node[data-id="${records.find(record=>record.display_name===name)!.id}"]`);
+  await expect(node).toHaveAttribute('data-filter-match','false');expect(Number(await node.evaluate(node=>getComputedStyle(node).opacity))).toBeLessThan(.6);
+ }
+ await expect(page.locator(`.map-node[data-id="${records.find(record=>record.name==='configuration')!.id}"]`)).toHaveCount(0);
+ const paymentContext=page.getByRole('button',{name:'Select Payments, On track, 1 SLO',exact:true});await paymentContext.focus();await expect(paymentContext).toHaveCSS('opacity','1');
+ await paymentContext.press('Enter');await expect(page.locator('.graph-details')).toContainText('Payments');
+ await filters.getByRole('button',{name:'Unknown',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(2);
+ await filters.getByRole('button',{name:'On track',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(3);
+ for(const node of await page.locator('.map-node[data-filter-match="true"]').all())expect(['on_track','breached','unknown']).toContain(await node.getAttribute('data-slo-state'));
  await page.getByRole('button',{name:'Reset view',exact:true}).click();await expect(page.locator('.map-node')).toHaveCount(50);
  await expect(filters.getByRole('button',{name:'On track',exact:true})).toHaveAttribute('aria-pressed','false');
  expect(await canvas.evaluate(node=>node.parentElement!.scrollHeight<=node.parentElement!.clientHeight)).toBe(true);

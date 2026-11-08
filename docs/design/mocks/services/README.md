@@ -111,3 +111,11 @@ chips filter each service’s own aggregate status; no selection means all statu
 and multiple selections combine as alternatives. Reset clears filters and search.
 Circle tint and stroke use semantic status colors without inheriting dependency
 health; missing or stale results remain Unknown.
+
+Status filters retain each matching service's direct dependencies and dependents
+as muted context, including their connecting arrows. Context remains selectable,
+keeps its own SLO color and becomes fully readable on hover, keyboard focus or
+selection. Context does not expand recursively or count as a filter match. The
+finder, Reset view, zoom and help share one desktop toolbar row; narrow screens
+wrap the finder. Direction and gesture explanations live in the compact help
+control and remain available to assistive technology.

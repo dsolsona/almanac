@@ -123,8 +123,11 @@
 .services-page .service-status-filter[aria-pressed="true"] { border-color:var(--selection); background:var(--surface-2); }
 .services-page .service-status-filter:focus-visible { outline:3px solid var(--focus-ring); outline-offset:2px; }
 .services-page .service-status-filter:hover { background:var(--surface-2); }
-.services-page .graph-toolbar > .ui-field { width:min(400px,100%); min-width:0; }
-.services-page .graph-toolbar .ui-label { display:block; margin-bottom:6px; }
+.services-page .service-graph-panel { overflow:visible; }
+.services-page .graph-toolbar { flex-wrap:nowrap; }
+.services-page .graph-toolbar > .ui-field { flex:1; display:flex; align-items:center; gap:10px; max-width:520px; min-width:0; }
+.services-page .graph-toolbar .ui-label { flex:none; white-space:nowrap; margin:0; }
+.services-page .graph-toolbar .ui-combobox { flex:1; min-width:0; }
 .services-page .graph-toolbar .ui-combobox__detail { overflow-wrap:anywhere; }
 .services-page .service-graph-variants .ui-button { height:auto; min-height:24px; padding:2px 8px; font-size:12px; }
 .services-page .map-stage.service-graph-viewport { height:clamp(420px,65vh,640px); padding:0; overflow:hidden; cursor:grab; touch-action:none; user-select:none; }
@@ -134,13 +137,22 @@
 .services-page .service-graph-viewport.is-focused .map-node.quiet { opacity:.24; }
 .services-page .service-graph-viewport.is-focused .map-node.quiet:is(:hover,:focus-within) { opacity:1; }
 .services-page .service-graph-viewport.is-focused .map-edge:not(.active) { opacity:.08; }
+.services-page .service-graph-viewport .map-node.context { opacity:.34; }
+.services-page .service-graph-viewport .map-node.context:is(:hover,:focus-within,.selected) { opacity:1; }
+.services-page .service-graph-viewport .map-edge.context { opacity:.16; }
+.services-page .service-graph-viewport .map-edge.context.active { opacity:.45; }
 .services-page .service-network:focus-visible { outline:3px solid var(--focus-ring); outline-offset:-3px; }
-.services-page .graph-camera-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px var(--card-inset); border-bottom:1px solid var(--border); }
-.services-page .graph-camera-actions,.services-page .graph-camera-zoom { display:flex; align-items:center; gap:8px; }
-.services-page .graph-camera-zoom { margin-left:auto; }
+.services-page .graph-toolbar-actions,.services-page .graph-camera-zoom { display:flex; align-items:center; gap:8px; flex:none; }
+.services-page .graph-toolbar-actions { margin-left:auto; }
 .services-page .graph-camera-zoom .ui-button { width:34px; min-height:34px; height:34px; padding:0; }
 .services-page .graph-camera-zoom output { width:5ch; text-align:center; font:12px var(--mono); color:var(--text-2); }
-.services-page .graph-camera-hint { width:100%; margin:0; font:11px var(--mono); color:var(--text-3); }
+.services-page .graph-help { position:relative; }
+.services-page .graph-help summary { display:grid; place-items:center; list-style:none; width:34px; height:34px; border:1px solid var(--border); border-radius:50%; background:var(--surface); color:var(--text-2); cursor:pointer; font:600 14px var(--mono); }
+.services-page .graph-help summary::-webkit-details-marker { display:none; }
+.services-page .graph-help summary:focus-visible { outline:3px solid var(--focus-ring); outline-offset:2px; }
+.services-page .graph-help-content { position:absolute; z-index:10; right:0; top:calc(100% + 8px); width:min(320px,75vw); padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:3px; box-shadow:var(--shadow); color:var(--text-2); font-size:12px; }
+.services-page .graph-help-content p { margin:0 0 8px; }
+.services-page .graph-help-content p:last-child { margin:0; }
 .services-page .graph-counter { display:inline-flex; border:1px solid var(--border); border-radius:3px; padding:4px 8px; font:12px/1.6 var(--mono); }
 .services-page .service-graph-more { display:flex; align-items:center; gap:16px; margin:16px 0; color:var(--text-3); }
 @media(max-width:1200px){
@@ -176,7 +188,9 @@
  .services-page .ui-pager__position { flex-basis:100%; }
  .services-page .ui-pager__size { margin-right:auto; }
  .services-page .map-desktop { display:none; }
- .services-page .graph-camera-toolbar { display:none; }
+ .services-page .graph-toolbar { flex-wrap:wrap; }
+ .services-page .graph-toolbar > .ui-field { flex-basis:100%; max-width:none; }
+ .services-page .graph-camera-zoom { display:none; }
  .services-page .graph-mobile { display:block; padding:20px var(--card-inset); }
  .services-page .graph-mobile h3 { margin:0 0 8px; font:600 13px var(--mono); color:var(--text-2); }
  .services-page .graph-mobile .selected-focus { border:1px solid var(--accent); border-radius:3px; background:var(--accent-wash); padding:12px; margin:20px 0; }

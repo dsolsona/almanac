@@ -240,3 +240,29 @@ it('combines SLO status filters and resets an empty graph back to the complete c
  expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
  expect(within(filters).getByRole('button',{name:'On track'})).toHaveAttribute('aria-pressed','false');
 });
+
+it('keeps direct dependencies and dependents as selectable context around status matches',async()=>{
+ history.replaceState({},'','/services/dependencies');
+ const inventory='00000000-0000-4000-8000-000000000003',orders='00000000-0000-4000-8000-000000000004',isolated='00000000-0000-4000-8000-000000000005';
+ const records=[{...service,dependencies:[other],slo_summary:{state:'breached',total:1,on_track:0,breached:1,unknown:0}},
+  {...service,id:other,name:'payments',display_name:'Payments',dependencies:[inventory,id],slo_summary:{state:'on_track',total:1,on_track:1,breached:0,unknown:0}},
+  {...service,id:inventory,display_name:'Inventory'},
+  {...service,id:orders,display_name:'Orders',dependencies:[id]},
+  {...service,id:isolated,display_name:'Isolated'}];
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ const mounted=render(<ServicesPage context={context}/>);
+ await waitFor(()=>expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(5));
+ await userEvent.click(within(screen.getByRole('group',{name:'Service SLO status'})).getByRole('button',{name:'Breached'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
+ expect(mounted.container.querySelectorAll('.map-edge')).toHaveLength(3);
+ expect(mounted.container.querySelector(`.map-node[data-id="${id}"]`)).toHaveAttribute('data-filter-match','true');
+ const paymentNode=screen.getByRole('button',{name:'Select Payments, On track, 1 SLO'});
+ expect(paymentNode).toHaveAttribute('data-filter-match','false');
+ expect(mounted.container.querySelector(`.map-node[data-id="${orders}"]`)).toHaveAttribute('data-filter-match','false');
+ expect(mounted.container.querySelector(`.map-node[data-id="${inventory}"]`)).not.toBeInTheDocument();
+ expect(mounted.container.querySelector(`.map-node[data-id="${isolated}"]`)).not.toBeInTheDocument();
+ fireEvent.keyDown(paymentNode,{key:'Enter'});expect(paymentNode).toHaveAttribute('aria-pressed','true');
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
+ await userEvent.click(screen.getByRole('button',{name:'Reset view'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(5);
+});
