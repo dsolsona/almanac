@@ -175,3 +175,5 @@ caveats remain recorded. Larger capacity and endurance validation remain deferre
 to [F3-T10](F3-T10.md).
 
 [F8-T01](F8-T01.md) implements the approved service catalog under [plan 0028](../plans/0028-service-catalog.md).
+
+[F2-T33](F2-T33.md) replaces lease-waiting datasource moves with immediate editor/admin reassignment under ADR-0037; ADR-0038 completes Updating on configuration acknowledgement, with freshness separate. ADR-0039 finishes cancellation without a reverse pending move and preserves strict cancellation intent across ACK races.
