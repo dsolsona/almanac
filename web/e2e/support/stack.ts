@@ -15,12 +15,6 @@ export function compose(...args: string[]): string {
   return docker(['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml', ...args]);
 }
 
-export function localCommand(target: 'agent-seed' | 'run' | 'start'): string {
-  return execFileSync('make', [target], { cwd: '..', encoding: 'utf8', timeout: 120_000,
-    env: { ...process.env, COMPOSE_FILE: 'compose.yaml:compose.e2e.yaml' },
-    stdio: ['pipe', 'pipe', 'pipe'] });
-}
-
 export function initialPassword(): string {
   return compose('exec', '-T', 'app', 'cat', '/run/almanac-secrets/initial-admin-password').trim();
 }

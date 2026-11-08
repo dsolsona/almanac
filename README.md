@@ -70,26 +70,17 @@ pushes the two published images for `linux/amd64` and `linux/arm64`.
 
 ### Start a local agent
 
-For daily development, seed the local agent once:
+For a dev-only agent named `local-dev`:
 
 ```sh
-make agent-seed # Prepare the local database and create local-dev with a private random token
-make run        # Start the app and the seeded agent in the background
-make stop       # Stop both, preserving their data and token
+make agent-seed # Once: create the agent and save its private token
+make run        # Start the app and seeded agent
+make stop       # Stop both; preserve data and token
 ```
 
-Seeding works before or after first-run administrator onboarding and never changes
-your password. Complete onboarding normally before the agent can authenticate.
-Repeating `make agent-seed` reuses the same agent and token; subsequent `make run`
-and `make start` automatically start it. Its name and display name are `local-dev`.
-The agent receives its token and the app's public certificate through a private
-Docker volume, without application/database secrets or a token prompt.
-
-This seed writes directly to the selected local development database and is not
-part of the published application or agent images. It refuses an unrelated
-`local-dev` identity or disabled, deleted, revoked or expired saved authority.
-The credential lasts 365 days; seeding does not renew or undo revocation. Before
-seeding, startup retains its app-only behavior.
+Complete administrator onboarding normally. The token is stored in a private
+Docker volume and reused on later starts. Seeding writes directly to the local
+development database; it never changes your password.
 
 To run a different agent manually, register it in Almanac and copy its one-time credential.
 In a separate terminal run `make agent` and paste the credential at the private

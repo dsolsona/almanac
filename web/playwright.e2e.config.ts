@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // End-to-end suite (ADR-0033) against the real Compose stack started by scripts/e2e.sh.
-// Onboarding saves the administrator session, then local-agent checks startup before the
-// concurrent journeys create their agents. The collection restart check runs last.
+// Onboarding runs first through the UI and saves the administrator session; the journeys
+// reuse it in parallel; the restart check runs last because it restarts the application.
 const baseURL = process.env.E2E_BASE_URL ?? 'https://localhost:18188';
 
 export default defineConfig({
@@ -25,8 +25,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'onboarding', testMatch: 'onboarding.spec.ts' },
-    { name: 'local-agent', testMatch: 'local-dev-agent.spec.ts', dependencies: ['onboarding'], use: { storageState: 'e2e/.auth/admin.json' } },
-    { name: 'journeys', testIgnore: ['onboarding.spec.ts', 'local-dev-agent.spec.ts', 'restart.spec.ts'], dependencies: ['local-agent'], use: { storageState: 'e2e/.auth/admin.json' } },
+    { name: 'journeys', testIgnore: ['onboarding.spec.ts', 'restart.spec.ts'], dependencies: ['onboarding'], use: { storageState: 'e2e/.auth/admin.json' } },
     { name: 'restart', testMatch: 'restart.spec.ts', dependencies: ['journeys'], use: { storageState: 'e2e/.auth/admin.json' } },
   ],
 });

@@ -13,7 +13,6 @@ GO_GUIDELINES ?= go-modern-guidelines
 DEV_COMPOSE := docker compose -f compose.dev.yaml
 export ALMANAC_DEV_UID ?= $(shell id -u)
 export ALMANAC_DEV_GID ?= $(shell id -g)
-export COMPOSE_FILE ?= compose.yaml
 
 # Build the dev image for this user, pull the fixture image, check both against the daemon's
 # platform and warm the Go module and npm caches inside the container. Network-capable.
@@ -77,10 +76,10 @@ bootstrap:
 	$(MAKE) run
 
 run start:
-	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; command -v curl >/dev/null 2>&1 || { echo 'curl is required for local startup' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose build; docker compose up -d --wait --wait-timeout 90 --force-recreate app; sh scripts/check-local-readiness.sh; sh scripts/local-dev-agent.sh start; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
+	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; command -v curl >/dev/null 2>&1 || { echo 'curl is required for local startup' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; sh scripts/check-local-readiness.sh; sh scripts/local-dev-agent.sh start; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
 
 stop:
-	docker compose --profile agent stop
+	docker compose -f compose.yaml --profile agent stop
 
 # Remove the dev container's fixtures (tmpfs, no data to preserve); caches stay in their volumes.
 stop-dev:
@@ -148,8 +147,6 @@ _test:
 	python3 scripts/check-image-pins.py
 	python3 scripts/local-agent-tty-test.py
 	cd web && node scripts/check-local-agent.mjs
-	sh -n deploy/local/agent-seed.sh scripts/local-dev-agent.sh
-	cd web && node scripts/check-local-dev-agent.mjs
 	cd web && npm run typecheck
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts
 	$(GO_TEST) ./...

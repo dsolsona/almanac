@@ -8,7 +8,7 @@ are in [commands](commands.md).
 
 | Command | What it proves | Speed | When |
 | --- | --- | --- | --- |
-| `make test` | Formatting, vet, generated code, docs links, agent launchers/seeding orchestration, Go and web unit tests | about a minute | while editing, every PR |
+| `make test` | Formatting, vet, generated code, docs links, the agent launcher, Go and web unit tests | about a minute | while editing, every PR |
 | `make test-integration` | Go code against real PostgreSQL and the real binaries: constraints, transactions, persistence, auth, agents, CLI | a few minutes | every PR |
 | `make test-browser` | The UI catalogue in light, dark, intermediate and mobile setups; the production build | about two minutes | UI changes, every PR |
 | `make test-e2e` | The critical user journeys on a fresh Compose stack of the real images | a few minutes | every PR |

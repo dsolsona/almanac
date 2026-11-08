@@ -1,15 +1,5 @@
 # Delivery status
 
-Local development agent, 2026-11-08: [ADR-0037](adr/0037-local-development-agent.md)
-and [plan 0029](plans/0029-local-development-agent.md) add the maintainer-approved
-dev-only `make agent-seed` command and automatic `local-dev` startup with `make run`.
-Implemented in [PR #69](https://github.com/dsolsona/almanac/pull/69) on
-`feat/local-dev-agent-pr`. `make check` passes; local E2E execution remains waived.
-CI verifies seed/connection/restart/revocation after a response-assertion correction.
-A further test-fixture cleanup addresses the later collection failure; the complete
-CI suite remains the final gate. Failures and fixes are recorded in plan 0029.
-Operator data and the running preview are unchanged.
-
 PR [#68](https://github.com/dsolsona/almanac/pull/68) Greptile follow-up, 2026-11-08:
 six current findings are corrected with failing-then-passing regressions: remote
 dependency matches, discarded form composers, definite create-rejection recovery,

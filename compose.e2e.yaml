@@ -5,7 +5,6 @@ services:
   postgres:
     volumes: !override
       - postgres-secret:/run/postgres-secret:ro
-      - local-agent:/run/almanac-agent
       - type: tmpfs
         target: /var/lib/postgresql
         tmpfs:

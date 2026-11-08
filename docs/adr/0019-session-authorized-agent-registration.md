@@ -1,10 +1,5 @@
 # ADR-0019: Register agents using the administrator session
 
-> Development-only exception, accepted 2026-11-08:
-> [ADR-0037](0037-local-development-agent.md) permits `make agent-seed` to create
-> `local-dev` directly in the local development database. Normal registration
-> retains the administrator-session boundary below.
-
 - Status: accepted
 - Created: 2026-10-27
 - Accepted: 2026-10-27

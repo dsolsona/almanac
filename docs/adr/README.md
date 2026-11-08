@@ -62,4 +62,3 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0034](0034-self-healing-derived-data.md) | Derived SLO data that keeps itself up to date | accepted |
 | [ADR-0035](0035-settings-and-local-user-administration.md) | Settings and local user administration | accepted |
 | [ADR-0036](0036-service-catalog.md) | Service catalog and dependency exploration | accepted |
-| [ADR-0037](0037-local-development-agent.md) | Seed a local development agent | accepted |
