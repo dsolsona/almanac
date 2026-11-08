@@ -1,4 +1,4 @@
-.PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
+.PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
 
 # Go comes from the dev image's PATH. An inherited GOROOT can make that driver
 # execute a different installation's compiler, despite GOTOOLCHAIN=local.
@@ -76,10 +76,10 @@ bootstrap:
 	$(MAKE) run
 
 run start:
-	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; command -v curl >/dev/null 2>&1 || { echo 'curl is required for local startup' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; sh scripts/check-local-readiness.sh; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
+	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; command -v curl >/dev/null 2>&1 || { echo 'curl is required for local startup' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; sh scripts/check-local-readiness.sh; sh scripts/local-dev-agent.sh start; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
 
 stop:
-	docker compose -f compose.yaml stop
+	docker compose -f compose.yaml --profile agent stop
 
 # Remove the dev container's fixtures (tmpfs, no data to preserve); caches stay in their volumes.
 stop-dev:
@@ -94,6 +94,9 @@ credentials:
 
 agent:
 	@sh scripts/local-agent.sh
+
+agent-seed:
+	@sh scripts/local-dev-agent.sh seed
 
 # Tests (ADR-0033). Every target runs in the dev container (ADR-0029); from the host it enters it.
 #   make test              fast: formatting, vet, generated code, docs, Go and web unit tests

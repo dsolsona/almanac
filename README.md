@@ -70,7 +70,19 @@ pushes the two published images for `linux/amd64` and `linux/arm64`.
 
 ### Start a local agent
 
-After `make run`, register an agent in Almanac and copy its one-time credential.
+For a dev-only agent named `local-dev`:
+
+```sh
+make agent-seed # Once: create the agent and save its private token
+make run        # Start the app and seeded agent
+make stop       # Stop both; preserve data and token
+```
+
+Complete administrator onboarding normally. The token is stored in a private
+Docker volume and reused on later starts. Seeding writes directly to the local
+development database; it never changes your password.
+
+To run a different agent manually, register it in Almanac and copy its one-time credential.
 In a separate terminal run `make agent` and paste the credential at the private
 prompt. The command stays attached; press Ctrl-C to stop that agent. Check the
 agent's status in the UI to confirm it connected. Starting a replacement immediately
