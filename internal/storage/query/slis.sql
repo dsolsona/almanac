@@ -269,10 +269,10 @@ FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-LEFT JOIN public.almanac_datasource_reassignments AS pending ON pending.datasource_id = datasource.id AND NOT pending.uses_v2_removal
+LEFT JOIN public.almanac_datasource_reassignments AS pending ON pending.datasource_id = datasource.id AND NOT pending.uses_v2_removal AND pending.target_configuration_revision = 0
 LEFT JOIN public.almanac_sli_ownership_epochs AS epoch ON epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision AND epoch.ends_at IS NULL
 WHERE datasource.agent_id = $1
-  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.uses_v2_removal)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.uses_v2_removal AND r.target_configuration_revision = 0)
 ORDER BY sli.id;
 
 -- name: ListAuthorizedMeasurementGrantsForAgent :many
@@ -282,7 +282,7 @@ JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
 WHERE datasource.agent_id = sqlc.arg(agent_id)
-  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.target_configuration_revision = 0)
   AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_ownership_epochs e WHERE e.sli_id = measurement.sli_id AND e.measurement_revision = measurement.revision AND e.ends_at IS NULL AND e.configuration_revision > sqlc.arg(configuration_revision))
   AND measurement.activated_at IS NOT NULL
 ORDER BY sli.id;
@@ -318,6 +318,9 @@ FOR UPDATE;
 
 -- name: LockSliMeasurementForObservation :one
 SELECT measurement.sli_id, measurement.revision, measurement.datasource_id,
+       datasource.assignment_configuration_revision,
+       (SELECT epoch.starts_at FROM public.almanac_sli_ownership_epochs epoch
+           WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision AND epoch.ends_at IS NULL) AS current_ownership_from,
        COALESCE((SELECT epoch.agent_id FROM public.almanac_sli_ownership_epochs epoch
            WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision
              AND epoch.starts_at <= sqlc.arg(interval_start)::timestamptz

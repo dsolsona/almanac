@@ -423,6 +423,8 @@ func (e DatasourceAuthenticationMode) Valid() bool {
 // Defines values for DatasourceReassignmentState.
 const (
 	ReplacementUnavailable  DatasourceReassignmentState = "replacement_unavailable"
+	WaitingForCollection    DatasourceReassignmentState = "waiting_for_collection"
+	WaitingForConfiguration DatasourceReassignmentState = "waiting_for_configuration"
 	WaitingForPreviousAgent DatasourceReassignmentState = "waiting_for_previous_agent"
 )
 
@@ -430,6 +432,10 @@ const (
 func (e DatasourceReassignmentState) Valid() bool {
 	switch e {
 	case ReplacementUnavailable:
+		return true
+	case WaitingForCollection:
+		return true
+	case WaitingForConfiguration:
 		return true
 	case WaitingForPreviousAgent:
 		return true
@@ -2695,6 +2701,9 @@ type DatasourceWrite struct {
 		TokenSecret    SecretAction                      `json:"token_secret"`
 		Username       *string                           `json:"username"`
 	} `json:"authentication"`
+
+	// CancelReassignment Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed.
+	CancelReassignment     *bool                              `json:"cancel_reassignment,omitempty"`
 	ConfigurationFormat    DatasourceWriteConfigurationFormat `json:"configuration_format"`
 	DisplayName            string                             `json:"display_name"`
 	Endpoint               string                             `json:"endpoint"`

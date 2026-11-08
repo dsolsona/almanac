@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { metricsURL, startAgent } from './support/stack.ts';
-import { api, unique } from './support/api.ts';
+import { metricsURL, startAgent, stopAgent } from './support/stack.ts';
+import { api, expectOk, unique } from './support/api.ts';
 
 // The product's core journey, in the order a new operator follows it: register an agent and run it,
 // connect a Prometheus-compatible datasource through it, define an SLI and see real collected data,
@@ -13,6 +13,9 @@ const sliName = unique('Request success');
 const sloName = unique('Request availability');
 let agentID = '';
 let datasourceID = '';
+let sourceContainer = '';
+let sourceToken = '';
+let sliID = '';
 
 // The agent keeps running after this file: the restart journey checks that it reconnects.
 // scripts/e2e.sh removes it with the stack.
@@ -38,7 +41,8 @@ test('register an agent in the UI and see it connect', async ({ page }) => {
   const agents = await api(page, 'GET', '/api/v1/agents?limit=200');
   agentID = agents.body.items.find((item: { name: string }) => item.name === agentName).id;
 
-  startAgent(credential);
+  sourceToken = credential;
+  sourceContainer = startAgent(credential);
   await reloadUntil(page, async () => {
     await expect(page.getByText(/Connected · heartbeat/)).toBeVisible({ timeout: 2_000 });
   });
@@ -97,6 +101,8 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
   await page.getByLabel('Total events', { exact: true }).fill('vector(100)');
   await page.getByRole('button', { name: 'Create SLI', exact: true }).click();
   await expect(page.getByRole('heading', { name: sliName, exact: true })).toBeVisible();
+
+  sliID = new URL(page.url()).pathname.split('/').pop()!;
 
   // Settling is fixed at 60 s and the cadence is 15 s, so the first interval lands within ~90 s.
   await reloadUntil(page, async () => {
@@ -168,4 +174,95 @@ test('rename the SLO from its page', async ({ page }) => {
   await dialog.getByLabel('Display name', { exact: true }).fill(`${sloName} renamed`);
   await dialog.getByRole('button', { name: 'Save display name', exact: true }).click();
   await expect(page.getByRole('heading', { name: `${sloName} renamed`, exact: true })).toBeVisible();
+});
+
+
+test('replace a lost datasource agent without waiting for its lease', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto(`/datasources/${datasourceID}`);
+  const before = await expectOk(api(page, 'GET', `/api/v1/slis/${sliID}`));
+  const previousInterval = Date.parse(before.body.latest_observation.interval_end);
+  stopAgent(sourceContainer);
+  const replacementName = unique('replacement');
+  const registration = await expectOk(api(page, 'POST', '/api/v1/agents', { name: replacementName, display_name: replacementName }));
+  const replacementID: string = registration.body.agent.id;
+  const replacementContainer = startAgent(registration.body.token);
+  await expect.poll(async () => (await expectOk(api(page, 'GET', `/api/v1/agents/${replacementID}`))).body.runtime?.reachability, { timeout: 30_000 }).toBe('connected');
+  await expect.poll(async () => { const runtime = (await expectOk(api(page, 'GET', `/api/v1/agents/${replacementID}`))).body.runtime; return runtime?.applied_configuration_revision === runtime?.desired_configuration_revision; }, { timeout: 5_000 }).toBe(true);
+  await page.reload();
+  const assignment = page.getByRole('region', { name: 'Agent', exact: true });
+  await assignment.getByRole('button', { name: 'Change', exact: true }).click();
+  await page.getByLabel('Assigned agent', { exact: true }).click();
+  await page.locator(`#datasource-agent-option-${replacementID}`).click();
+  // Cancel while both agents are unavailable; cancellation must not become a reverse move.
+  stopAgent(replacementContainer);
+  await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Move back to previous agent', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Move back to previous agent', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Move back to previous agent', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Updating datasource', exact: true })).toHaveCount(0);
+  const canceled = await expectOk(api(page, 'GET', `/api/v1/datasources/${datasourceID}`));
+  expect(canceled.body.agent_id).toBe(agentID);
+  expect(canceled.body.reassignment ?? null).toBeNull();
+  await test.info().attach('canceled-offline-assignment', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+  startAgent(registration.body.token);
+  await expect.poll(async () => (await expectOk(api(page, 'GET', `/api/v1/agents/${replacementID}`))).body.runtime?.reachability, { timeout: 30_000 }).toBe('connected');
+  await expect.poll(async () => { const runtime = (await expectOk(api(page, 'GET', `/api/v1/agents/${replacementID}`))).body.runtime; return runtime?.applied_configuration_revision === runtime?.desired_configuration_revision; }, { timeout: 5_000 }).toBe(true);
+  await assignment.getByRole('button', { name: 'Change', exact: true }).click();
+  await page.getByLabel('Assigned agent', { exact: true }).click();
+  await page.locator(`#datasource-agent-option-${replacementID}`).click();
+  const saved = page.waitForResponse((response) => response.url().endsWith(`/api/v1/datasources/${datasourceID}`) && response.request().method() === 'PUT');
+  const updateStarted = Date.now();
+  await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+  expect((await saved).status()).toBe(200);
+  await expect(assignment).toContainText(replacementName);
+  await expect(page.locator('.ds-head__status')).toContainText('Active', { timeout: 5_000 });
+  await expect(page.getByRole('button', { name: 'Run preview', exact: true })).toBeEnabled({ timeout: 5_000 });
+  const updateDuration = Date.now() - updateStarted;
+  expect(updateDuration).toBeLessThan(5_000);
+  await test.info().attach('configuration-update-ms', { body: String(updateDuration), contentType: 'text/plain' });
+  const assigned = await expectOk(api(page, 'GET', `/api/v1/datasources/${datasourceID}`));
+  expect(assigned.body.agent_id).toBe(replacementID);
+  expect(assigned.body.reassignment ?? null).toBeNull();
+  await page.getByRole('button', { name: 'Test connection' }).first().click();
+  await expect(page.locator('.diagnostic-result').first()).toContainText('Succeeded', { timeout: 5_000 });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => {
+        document.documentElement.classList.toggle('dark', value === 'dark');
+        document.documentElement.style.colorScheme = value;
+      }, theme);
+      await expect(page.locator('.ds-head__status')).toContainText('Active');
+      await expect(assignment).toContainText(replacementName);
+      await expect(page.locator('.ds-head__meta')).toContainText('every 15 s');
+      await test.info().attach(`active-${width}-${theme}`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    }
+  }
+  await assignment.getByRole('button', { name: 'Change', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const picker = page.getByRole('combobox', { name: 'Assigned agent', exact: true });
+  await expect(picker).toBeFocused();
+  await picker.press('ArrowDown');
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await picker.press('Escape');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(picker).toBeFocused();
+  // Collection freshness follows its own canonical interval and settling delay.
+  await expect.poll(async () => Date.parse((await expectOk(api(page, 'GET', `/api/v1/slis/${sliID}`))).body.latest_observation.interval_end), { timeout: 180_000, intervals: [2_000] }).toBeGreaterThan(previousInterval);
+  const collected = await expectOk(api(page, 'GET', `/api/v1/slis/${sliID}`));
+  expect(Date.parse(collected.body.latest_observation.interval_end)).toBeGreaterThan(previousInterval);
+  expect(collected.body.latest_observation).toMatchObject({ measurement_revision: '1', outcome: 'observed' });
+  expect(Number(collected.body.latest_observation.good_count)).toBe(99);
+  expect(Number(collected.body.latest_observation.total_count)).toBe(100);
+  await expect(page.getByRole('heading', { name: 'Updating datasource', exact: true })).toHaveCount(0);
+  await expect(assignment).toContainText(replacementName);
+
+  // A returning old agent gets the removal configuration and does not reclaim collection.
+  startAgent(sourceToken);
+  await expect.poll(async () => (await expectOk(api(page, 'GET', `/api/v1/agents/${agentID}`))).body.runtime?.reachability, { timeout: 30_000 }).toBe('connected');
+  const oldAgent = await expectOk(api(page, 'GET', `/api/v1/agents/${agentID}`));
+  await expect.poll(async () => (await expectOk(api(page, 'GET', `/api/v1/agents/${agentID}`))).body.runtime?.applied_configuration_revision, { timeout: 30_000 }).toBe(oldAgent.body.runtime.desired_configuration_revision);
+  expect((await expectOk(api(page, 'GET', `/api/v1/datasources/${datasourceID}`))).body.agent_id).toBe(replacementID);
 });

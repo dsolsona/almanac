@@ -429,7 +429,7 @@ func validDatasource(data []byte) bool {
 	}
 	if reassignment, exists := fields["reassignment"]; exists {
 		var nested map[string]jsontext.Value
-		if json.Unmarshal(reassignment, &nested) != nil || !exactFields(nested, "source_agent_id", "target_agent_id", "requested_at", "authority_expires_at", "state") || value.Reassignment == nil || !uuidPattern.MatchString(uuidText(value.Reassignment.SourceAgentId)) || !uuidPattern.MatchString(uuidText(value.Reassignment.TargetAgentId)) || value.Reassignment.SourceAgentId != value.AgentId || value.Reassignment.TargetAgentId == value.AgentId || value.Reassignment.RequestedAt.IsZero() || value.Reassignment.AuthorityExpiresAt.IsZero() || !value.Reassignment.State.Valid() {
+		if json.Unmarshal(reassignment, &nested) != nil || !exactFields(nested, "source_agent_id", "target_agent_id", "requested_at", "authority_expires_at", "state") || value.Reassignment == nil || !uuidPattern.MatchString(uuidText(value.Reassignment.SourceAgentId)) || !uuidPattern.MatchString(uuidText(value.Reassignment.TargetAgentId)) || (value.Reassignment.SourceAgentId != value.AgentId && value.Reassignment.TargetAgentId != value.AgentId) || value.Reassignment.TargetAgentId == value.Reassignment.SourceAgentId || value.Reassignment.RequestedAt.IsZero() || value.Reassignment.AuthorityExpiresAt.IsZero() || !value.Reassignment.State.Valid() || ((value.Reassignment.State == api.WaitingForConfiguration || value.Reassignment.State == api.WaitingForCollection) && value.AgentId != value.Reassignment.TargetAgentId) {
 			return false
 		}
 		delete(fields, "reassignment")

@@ -31,13 +31,12 @@ function suggestDatasourceName(displayName: string): string {
 }
 const safeError = (error: unknown) => error instanceof DatasourceFailure ? error.message : 'Datasource management is temporarily unavailable.';
 const terminal = (value: Diagnostic) => ['succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(value.state);
-const displayTime = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'long' }).format(new Date(value));
 
 async function loadAgents(signal: AbortSignal): Promise<Agent[]> {
   let response: Response;
   try { response = await fetch('/api/v1/agents?limit=200', { credentials: 'same-origin', cache: 'no-store', signal }); }
   catch { throw new Error('Agent assignments could not be loaded.'); }
-  if (!response.ok) throw new Error(response.status === 403 ? 'Administrator access is required to manage agent assignments.' : 'Agent assignments could not be loaded.');
+  if (!response.ok) throw new Error(response.status === 403 ? 'Editor or administrator access is required to manage agent assignments.' : 'Agent assignments could not be loaded.');
   const value: unknown = await response.json();
   if (!object(value) || !Array.isArray(value.items) || value.items.length > 200 || !value.items.every((item) => object(item) && typeof item.id === 'string' && UUID.test(item.id) && typeof item.display_name === 'string' && typeof item.enabled === 'boolean')) {
     throw new Error('The server returned invalid agent assignment data.');
@@ -47,7 +46,7 @@ async function loadAgents(signal: AbortSignal): Promise<Agent[]> {
 
 type DatasourceAgentState = 'disabled' | 'unreported' | 'incompatible' | 'unsupported' | 'offline' | 'connected';
 
-function datasourceAgentState(agent: Agent): DatasourceAgentState {
+function datasourceAgentState(agent: Agent, forCollection: boolean | null = false): DatasourceAgentState {
   if (!agent.enabled) return 'disabled';
   const runtime = agent.runtime;
   if (!runtime) return 'unreported';
@@ -56,7 +55,7 @@ function datasourceAgentState(agent: Agent): DatasourceAgentState {
   if (capabilities.length === 0) return 'unreported';
   const supported = capabilities.some((capability) => capability.provider === 'prometheus'
     && capability.configuration_formats.includes('prometheus-http-v1')
-    && capability.operations.includes('connection_test') && capability.operations.includes('query_preview'));
+    && (forCollection !== false && capability.operations.includes('collect') || forCollection !== true && capability.operations.includes('connection_test') && capability.operations.includes('query_preview')));
   if (!supported) return 'unsupported';
   if (runtime.reachability === 'connected') return 'connected';
   if (runtime.reachability === 'unreachable') return 'offline';
@@ -69,35 +68,37 @@ function supportsDatasourceDiagnostics(agent: Agent): boolean {
 }
 
 // Picker status for an agent, from the same eligibility rules the assignment uses.
-function agentOption(agent: Agent): ComboboxOption {
-  const state = datasourceAgentState(agent);
+function agentOption(agent: Agent, forCollection: boolean | null = false): ComboboxOption {
+  const state = datasourceAgentState(agent, forCollection);
   const runtime = agent.runtime ?? undefined;
   const status: Record<DatasourceAgentState, [MarkTone, string]> = {
     connected: ['healthy', 'Connected'], offline: ['stale', 'Unreachable'], disabled: ['none', 'Disabled'],
-    unreported: ['none', runtime ? 'Capabilities not reported' : 'Never connected'], incompatible: ['warning', 'Incompatible protocol'], unsupported: ['warning', 'Diagnostics unsupported'],
+    unreported: ['none', runtime ? 'Capabilities not reported' : 'Never connected'], incompatible: ['warning', 'Incompatible protocol'], unsupported: ['warning', forCollection ? 'Collection unsupported' : 'Diagnostics unsupported'],
   };
   const [tone, label] = status[state];
   const detail = [runtime?.protocol && runtime.software_version ? `${runtime.protocol} · ${runtime.software_version}` : '', runtime?.last_heartbeat_at ? `last heartbeat ${relativeAge(runtime.last_heartbeat_at)}` : '',
-    state === 'connected' ? 'can test & preview' : state === 'offline' ? 'tests wait until it reconnects' : state === 'unreported' && !runtime ? 'start it with its token first' : ''].filter(Boolean).join(' · ');
-  return { id: agent.id, label: agent.display_name, keywords: agent.name, tone, status: label, detail: detail || undefined, disabled: !supportsDatasourceDiagnostics(agent) };
+    state === 'connected' ? supportsDatasourceDiagnostics(agent) ? 'can test & preview' : 'collection only' : state === 'offline' ? 'waiting for reconnection' : state === 'unreported' && !runtime ? 'start it with its token first' : ''].filter(Boolean).join(' · ');
+  return { id: agent.id, label: agent.display_name, keywords: agent.name, tone, status: label, detail: detail || undefined, disabled: state !== 'connected' && state !== 'offline' };
 }
 
 // ADR-0028 vocabulary for a datasource row, from its assignment and the agent's runtime only.
-function datasourceVocabulary(item: Datasource, agents: Agent[]): { tone: MarkTone; label: string; reason: string; attention: boolean } {
+function datasourceVocabulary(item: Datasource, agents: Agent[], forCollection: boolean | null = false): { tone: MarkTone; label: string; reason: string; attention: boolean } {
   const byID = (id: string) => agents.find((agent) => agent.id === id)?.display_name ?? 'another agent';
   if (item.reassignment) {
     const from = byID(item.reassignment.source_agent_id), to = byID(item.reassignment.target_agent_id);
-    return { tone: 'warning', label: 'Moving', reason: item.reassignment.state === 'replacement_unavailable' ? `${from} → ${to} · ${to} unavailable` : `${from} → ${to} · waiting for ${from}`, attention: true };
+    return item.reassignment.state === 'replacement_unavailable'
+      ? { tone: 'stale', label: 'Not collecting', reason: `${to} unavailable`, attention: true }
+      : { tone: 'warning', label: 'Updating', reason: `${from} → ${to} · applying configuration`, attention: true };
   }
   const agent = agents.find((candidate) => candidate.id === item.agent_id);
   if (!agent) return { tone: 'none', label: 'Unknown agent', reason: 'assigned agent not found', attention: true };
-  switch (datasourceAgentState(agent)) {
-    case 'connected': return { tone: 'healthy', label: 'Healthy', reason: 'agent connected', attention: false };
+  switch (datasourceAgentState(agent, forCollection)) {
+    case 'connected': return { tone: 'healthy', label: 'Active', reason: 'agent connected', attention: false };
     case 'offline': return { tone: 'stale', label: 'Not collecting', reason: agent.runtime?.last_heartbeat_at ? `agent unreachable for ${relativeAge(agent.runtime.last_heartbeat_at).replace(' ago', '')}` : 'agent unreachable', attention: true };
     case 'disabled': return { tone: 'stale', label: 'Not collecting', reason: 'agent disabled', attention: true };
     case 'unreported': return { tone: 'none', label: 'Waiting', reason: agent.runtime ? 'agent capabilities not reported' : 'agent never connected', attention: false };
     case 'incompatible': return { tone: 'warning', label: 'Needs attention', reason: 'agent protocol incompatible', attention: true };
-    case 'unsupported': return { tone: 'warning', label: 'Needs attention', reason: 'agent lacks Prometheus diagnostics', attention: true };
+    case 'unsupported': return { tone: 'warning', label: 'Needs attention', reason: forCollection ? 'agent lacks Prometheus collection' : 'agent lacks Prometheus diagnostics', attention: true };
   }
 }
 
@@ -333,7 +334,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       try {
         const [page, agentItems] = await Promise.all([
           client.list(size, next, request.signal),
-          admin ? loadAgents(request.signal) : Promise.resolve([]),
+          canPreview ? loadAgents(request.signal) : Promise.resolve([]),
         ]);
         if (request.signal.aborted || locationKeyRef.current !== routeAtRequest) return;
         listResultKey.current = routeAtRequest;
@@ -344,7 +345,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       finally { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setLoading(false); }
     })();
     return request;
-  }, [admin]);
+  }, [canPreview]);
 
   useEffect(() => {
     if (selectedID) {
@@ -355,7 +356,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       void client.get(selectedID, request.signal).then(({ datasource, etag: tag }) => {
         if (request.signal.aborted) return [] as Agent[];
         setSource(datasource); setEtag(tag); setDraft(fromDatasource(datasource)); setUpdatedAt(clockFormat.format(new Date()));
-        return admin ? loadAgents(request.signal) : Promise.resolve([] as Agent[]);
+        return canPreview ? loadAgents(request.signal) : Promise.resolve([] as Agent[]);
       }).then((agentItems) => { if (!request.signal.aborted) setAgents(agentItems); })
         .catch((reason: unknown) => { if (!request.signal.aborted) setError(safeError(reason)); }).finally(() => { if (!request.signal.aborted) setLoading(false); });
       return () => request.abort();
@@ -377,6 +378,33 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   useEffect(() => {
     if (!loading) journeyContentReady('management', !!error);
   }, [loading, error, locationKey]);
+
+  useEffect(() => {
+    if (!source?.reassignment || source.id !== selectedID || loading || pending || currentUncertainSave || reassignmentStale || draft.agent_id !== source.agent_id) return;
+    const request = new AbortController();
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const result = await client.get(source.id, request.signal);
+        if (request.signal.aborted) return;
+        if (result.datasource.version !== source.version) {
+          setReassignmentStale(true); setNotice('Datasource settings changed. Refresh to review the current assignment.'); return;
+        }
+        if (!result.datasource.reassignment && canPreview) {
+          const agentItems = await loadAgents(request.signal);
+          if (request.signal.aborted) return;
+          setAgents(agentItems);
+        }
+        setSource(result.datasource); setEtag(result.etag);
+        setUpdatedAt(clockFormat.format(new Date()));
+        if (result.datasource.reassignment) timer = window.setTimeout(() => void poll(), 1000);
+      } catch (reason) {
+        if (!request.signal.aborted) setError(safeError(reason));
+      }
+    };
+    timer = window.setTimeout(() => void poll(), 1000);
+    return () => { request.abort(); window.clearTimeout(timer); };
+  }, [source?.id, source?.version, source?.reassignment, selectedID, loading, pending, currentUncertainSave, reassignmentStale, draft.agent_id, source?.agent_id, canPreview]);
 
   useEffect(() => {
     if (!source || source.reassignment || !canPreview) return;
@@ -422,7 +450,6 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (currentUncertainSave) { await retryUncertainSave(); return; }
-    if (source?.reassignment) return;
     if (!DATASOURCE_NAME.test(draft.name)) {
       setNameValidationAttempted(true);
       document.getElementById('datasource-name')?.focus();
@@ -430,7 +457,8 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     }
     const problem = validateDraft(draft);
     if (problem) { setError(problem.message); document.getElementById(problem.field)?.focus(); return; }
-    const intent = { input: asWrite(draft, isNew), key: crypto.randomUUID(), ...(isNew ? {} : { etag }), isNew, route: locationKey } satisfies SaveIntent;
+    const cancelReassignment = Boolean(source?.reassignment && source.agent_id === source.reassignment.target_agent_id && draft.agent_id === source.reassignment.source_agent_id);
+    const intent = { input: { ...asWrite(draft, isNew), ...(cancelReassignment ? { cancel_reassignment: true } : {}) }, key: crypto.randomUUID(), ...(isNew ? {} : { etag }), isNew, route: locationKey, cancelReassignment } satisfies SaveIntent;
     saveIntent.current = intent;
     await executeSave(intent);
   }
@@ -456,7 +484,23 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       if (reason instanceof DatasourceFailure && reason.uncertain) {
         setUncertainSave(true);
         setError(intent.isNew ? 'The create response was lost. Retry the same request to safely recover its result.' : 'The save outcome is unknown. Refresh this datasource to reconcile its current version before continuing.');
-      } else { saveIntent.current = null; setUncertainSave(false); if (source?.reassignment && reason instanceof DatasourceFailure && ['conflict', 'reassignment_pending'].includes(reason.code)) setReassignmentStale(true); setError(reason instanceof Error && !(reason instanceof DatasourceFailure) ? reason.message : safeError(reason)); }
+      } else {
+        saveIntent.current = null; setUncertainSave(false);
+        if (intent.input.cancel_reassignment && reason instanceof DatasourceFailure && reason.code === 'conflict') {
+          try {
+            const [current, agentItems] = await Promise.all([client.get(selectedID!, request.signal), loadAgents(request.signal)]);
+            if (!activeRequest()) return;
+            setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource)); setAgents(agentItems); setReassignmentStale(false);
+            setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
+            setNotice(current.datasource.reassignment ? 'The assignment changed. Showing its current status.' : 'The move completed before cancellation. Showing the current assignment.');
+          } catch (refreshError) {
+            if (activeRequest()) { setReassignmentStale(true); setError(safeError(refreshError)); }
+          }
+        } else {
+          if (source?.reassignment && reason instanceof DatasourceFailure && ['conflict', 'reassignment_pending'].includes(reason.code)) setReassignmentStale(true);
+          setError(reason instanceof Error && !(reason instanceof DatasourceFailure) ? reason.message : safeError(reason));
+        }
+      }
     }
     finally {
       if (activeRequest()) {
@@ -469,7 +513,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   async function cancelReassignment() {
     if (!source?.reassignment || !etag || pending || currentUncertainSave || reassignmentStale) return;
-    const intent: SaveIntent = { input: asWrite(fromDatasource(source), false), key: crypto.randomUUID(), etag, isNew: false, route: locationKey, cancelReassignment: true };
+    const intent: SaveIntent = { input: { ...asWrite(fromDatasource(source), false), agent_id: source.reassignment.source_agent_id, ...(source.agent_id === source.reassignment.target_agent_id ? { cancel_reassignment: true } : {}) }, key: crypto.randomUUID(), etag, isNew: false, route: locationKey, cancelReassignment: true };
     saveIntent.current = intent; await executeSave(intent);
   }
 
@@ -479,7 +523,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     const request = new AbortController(); saveController.current = request;
     const route = locationKey;
     try {
-      const [current, agentItems] = await Promise.all([client.get(selectedID, request.signal), admin ? loadAgents(request.signal) : Promise.resolve([])]);
+      const [current, agentItems] = await Promise.all([client.get(selectedID, request.signal), canPreview ? loadAgents(request.signal) : Promise.resolve([])]);
       if (request.signal.aborted || locationKeyRef.current !== route) return;
       setSource(current.datasource); setEtag(current.etag); setDraft(fromDatasource(current.datasource)); setAgents(agentItems); setReassignmentStale(false); setUpdatedAt(clockFormat.format(new Date())); setNotice('Datasource status refreshed.');
       setProviders([]); setPreviewReadiness('loading'); setProviderRefresh((value) => value + 1);
@@ -604,7 +648,10 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   if (!selectedID && !isNew) {
     const currentItems = listResultKey.current === locationKey ? items : [];
     const term = listSearch.trim().toLowerCase();
-    const rows = currentItems.map((item) => ({ item, vocabulary: admin ? datasourceVocabulary(item, agents) : null, usage: usageOf(item.id) }));
+    const rows = currentItems.map((item) => {
+      const usage = usageOf(item.id);
+      return { item, vocabulary: canPreview ? datasourceVocabulary(item, agents, usage === null ? null : usage.count > 0) : null, usage };
+    });
     const attention = rows.filter((row) => row.vocabulary?.attention).length;
     const unused = rows.filter((row) => row.usage?.count === 0).length;
     const visible = rows.filter((row) => (!term || `${row.item.display_name} ${row.item.name} ${row.item.endpoint} ${agentName(row.item.agent_id) ?? ''}`.toLowerCase().includes(term))
@@ -622,11 +669,11 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
           <ToolbarSpacer />{refresh}
         </Toolbar>
         {visible.length === 0 ? <p className="datasource-empty-filter">No datasources match these filters on this page.</p> : <table className="ds-table ui-list-table" aria-label="Datasources">
-          <thead><tr><th scope="col">Datasource</th>{admin && <th scope="col">Health</th>}{admin && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col" className="num">SLIs</th></tr></thead>
+          <thead><tr><th scope="col">Datasource</th>{canPreview && <th scope="col">Health</th>}{canPreview && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col" className="num">SLIs</th></tr></thead>
           <tbody>{visible.map(({ item, vocabulary, usage }) => <tr key={item.id} className="ds-row">
             <td data-label="Datasource" className="ds-row__name"><a href={`/datasources/${item.id}`} data-app-route onClick={(event) => { event.preventDefault(); navigate(`/datasources/${item.id}`); }}>{item.display_name}</a><span className="ds-row__sub ui-list-table__sub">Prometheus · {item.endpoint}{item.tls.insecure_skip_verify && <span className="ui-pill ds-pill--warning">TLS unverified</span>}</span></td>
-            {admin && vocabulary && <td data-label="Health"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>}
-            {admin && <td data-label="Agent" className="mono">{item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'}</td>}
+            {canPreview && vocabulary && <td data-label="Health"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>}
+            {canPreview && <td data-label="Agent" className="mono">{item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'}</td>}
             <td data-label="Cadence" className="mono">{item.polling_interval_seconds} s</td>
             <td data-label="SLIs" className="num mono">{usage ? usageCount(usage) : '—'}</td>
           </tr>)}</tbody>
@@ -641,12 +688,13 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const readonly = !admin;
   const formDisabled = readonly || pending || currentUncertainSave || Boolean(source?.reassignment);
   const selectedUsage = source ? usageOf(source.id) : null;
-  const vocabulary = source && admin ? datasourceVocabulary(source, agents) : null;
+  const forCollection = source && selectedUsage === null ? null : (selectedUsage?.count ?? 0) > 0;
+  const vocabulary = source && canPreview ? datasourceVocabulary(source, agents, forCollection) : null;
   const sourceAgent = source ? agents.find((agent) => agent.id === source.agent_id) : undefined;
   const prometheusProvider = providers.find((provider) => provider.provider === 'prometheus' && provider.configuration_format === 'prometheus-http-v1');
-  const dirty = source ? connectionDraftChanged(draft, source) || draft.display_name !== source.display_name || Number(draft.polling_interval_seconds) !== source.polling_interval_seconds : false;
-  const agentOptions = agents.map(agentOption);
-  const agentPicker = <Combobox id="datasource-agent" label="Assigned agent" options={agentOptions} value={draft.agent_id || null} onChange={(id) => selectAgent(id ?? '')} disabled={formDisabled} placeholder="Type an agent name…" hint={source ? 'Moving hands over collection without a gap: the new agent starts after the current one stops, or after its authority expires if it stays offline.' : 'The agent runs every query for this datasource, so it must have network access to the endpoint.'} />;
+  const dirty = source ? draft.agent_id !== source.agent_id || connectionDraftChanged(draft, source) || draft.display_name !== source.display_name || Number(draft.polling_interval_seconds) !== source.polling_interval_seconds : false;
+  const agentOptions = agents.map((agent) => agentOption(agent, forCollection));
+  const agentPicker = <Combobox id="datasource-agent" label="Assigned agent" options={agentOptions} value={draft.agent_id || null} onChange={(id) => selectAgent(id ?? '')} disabled={!canPreview || pending || currentUncertainSave || reassignmentStale} placeholder="Type an agent name…" hint={source ? 'Saving immediately assigns this datasource to the new agent. Results from the previous agent are no longer accepted.' : 'The agent runs every query for this datasource, so it must have network access to the endpoint.'} />;
   const secretField = (kind: 'password' | 'token') => {
     const action = kind === 'password' ? draft.passwordAction : draft.tokenAction;
     const configured = kind === 'password' ? draft.passwordConfigured : draft.tokenConfigured;
@@ -690,7 +738,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     {tlsMode(draft.tls) === 'ca' && <TextareaField id="datasource-ca" label="Custom CA PEM" rows={4} value={draft.tls.ca_pem ?? ''} disabled={formDisabled} className="mono" onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, ca_pem: event.target.value } })} />}
   </>;
   const testTools = admin && <Button variant="outline" pending={pending} disabled={!connectionAvailable || !draft.agent_id || currentUncertainSave || Boolean(source?.reassignment)} onClick={() => void runDiagnostic('connection')}><span aria-hidden="true">▶ </span>Test connection</Button>;
-  const testAvailability = source?.reassignment ? 'Diagnostics are unavailable while the datasource is moving.' : connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents);
+  const testAvailability = source?.reassignment ? 'Waiting for the agent to acknowledge the configuration.' : connectionAvailable ? 'Runs on the assigned agent.' : datasourceAvailabilityMessage(selectedAgent, agents);
   const diagnosticResult = diagnostic && <div className="ds-preview"><h3>{diagnostic.operation === 'connection_test' ? 'Connection test' : 'Query preview'}</h3><DiagnosticView value={diagnostic} /></div>;
   const eligibilityAlert = isNew && admin && !agents.some(supportsDatasourceDiagnostics) && <p className="datasource-alert">{agents.length === 0 ? 'Register and start an Almanac agent before adding a datasource.' : agents.some((agent) => agent.enabled && datasourceAgentState(agent) === 'unreported') ? 'Start your registered agent before assigning this datasource.' : datasourceAvailabilityMessage(undefined, agents)} <Button variant="outline" onClick={() => navigate('/agents')}>View agents</Button></p>;
 
@@ -698,7 +746,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     return <>
       {createHeader}
       {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
-      {readonly ? <Panel heading="Access required"><p>Administrators manage datasources, credentials and assignments.</p></Panel> : <form className="ui-form ds-form" onSubmit={(event) => void submit(event)} noValidate>
+      {readonly ? <Panel heading="Access required"><p>Administrators create datasources and manage connection settings and credentials.</p></Panel> : <form className="ui-form ds-form" onSubmit={(event) => void submit(event)} noValidate>
         <FormSection step={1} title="Identity" hint="What is this source?">{connectionFields}</FormSection>
         <FormSection step={2} title="Connection" hint="Where and how to reach it?">{providerChoice}{connectionDetails}</FormSection>
         <FormSection step={3} title="Agent" hint="Which agent can reach it?" tools={testTools}>
@@ -728,17 +776,17 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
       <div className="ds-head__actions"><RefreshButton label="Refresh datasource" busy={pending} disabled={currentUncertainSave} lastRefreshed={updatedAt} onClick={() => void refreshReassignment()} />{testTools}</div>
     </div>
     {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
-    {reassignment && <section className="ds-banner" aria-labelledby="ds-moving-title"><h2 id="ds-moving-title">Moving datasource</h2>{reassignment.state === 'replacement_unavailable' ? <p>{agentName(reassignment.target_agent_id) ?? 'The replacement collector'} is unavailable. Cancel this reassignment before choosing another collector.</p> : <p>Almanac will start {agentName(reassignment.target_agent_id) ?? 'the replacement collector'} after {agentName(reassignment.source_agent_id) ?? 'the previous collector'} stops collecting.</p>}<p>If the previous agent is offline, this may require waiting until <time dateTime={reassignment.authority_expires_at} title={reassignment.authority_expires_at}>{displayTime(reassignment.authority_expires_at)}</time>. The replacement may start later.</p><div className="ds-banner__actions"><Button variant="outline" disabled={pending || currentUncertainSave} onClick={() => void refreshReassignment()}>Refresh reassignment</Button>{admin && <Button variant="outline" disabled={pending || currentUncertainSave || reassignmentStale} onClick={() => void cancelReassignment()}>Cancel reassignment</Button>}</div></section>}
-    {!reassignment && sourceAgent && datasourceAgentState(sourceAgent) === 'offline' && <section className="ds-banner" aria-label="Agent unreachable"><p>The assigned agent <b>{sourceAgent.display_name}</b> has not sent a heartbeat{sourceAgent.runtime?.last_heartbeat_at ? ` since ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC` : ''}. {selectedUsage?.count ? `Its ${selectedUsage.count} SLI${selectedUsage.count === 1 ? ' is' : 's are'} not collecting; intervals since then will show as missing. ` : ''}<a href={`/agents?agent=${sourceAgent.id}`} data-app-route>Open the agent</a> or move this datasource to another agent below.</p></section>}
+    {reassignment && <section className="ds-banner" aria-labelledby="ds-updating-title"><h2 id="ds-updating-title">{reassignment.state === 'replacement_unavailable' ? 'Agent unavailable' : 'Updating datasource'}</h2>{reassignment.state === 'replacement_unavailable' ? <p>{agentName(reassignment.target_agent_id) ?? 'The replacement collector'} is unavailable. Choose another agent below or refresh after it recovers.</p> : <p>{`Waiting for ${agentName(reassignment.target_agent_id) ?? 'the replacement collector'} to apply its configuration.`}</p>}<p>The replacement can start without waiting for the previous agent. Results submitted by the previous agent are rejected.</p><div className="ds-banner__actions"><Button variant="outline" disabled={pending || currentUncertainSave} onClick={() => void refreshReassignment()}>Refresh reassignment</Button>{canPreview && <Button variant="outline" disabled={pending || currentUncertainSave || reassignmentStale} onClick={() => void cancelReassignment()}>{source?.agent_id === reassignment.target_agent_id ? 'Move back to previous agent' : 'Cancel reassignment'}</Button>}</div></section>}
+    {!reassignment && sourceAgent && datasourceAgentState(sourceAgent, forCollection) === 'offline' && <section className="ds-banner" aria-label="Agent unreachable"><p>The assigned agent <b>{sourceAgent.display_name}</b> has not sent a heartbeat{sourceAgent.runtime?.last_heartbeat_at ? ` since ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC` : ''}. {selectedUsage?.count ? `Its ${selectedUsage.count} SLI${selectedUsage.count === 1 ? ' is' : 's are'} not collecting; intervals since then will show as missing. ` : ''}<a href={`/agents?agent=${sourceAgent.id}`} data-app-route>Open the agent</a> or move this datasource to another agent below.</p></section>}
     {source && <div className="ds-tiles">
-      <div className="ds-tile"><span className="ds-tile__k">Agent</span><span className="ds-tile__v">{admin ? <StatusMark tone={sourceAgent ? agentOption(sourceAgent).tone ?? 'none' : 'none'} label={sourceAgent?.display_name ?? 'Unknown'} /> : 'Assigned'}</span><span className="ds-tile__s">{admin ? (sourceAgent?.runtime?.last_heartbeat_at ? `last heartbeat ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC · ${relativeAge(sourceAgent.runtime.last_heartbeat_at)}` : sourceAgent ? agentOption(sourceAgent).status : 'assigned agent not found') : 'agent details need administrator access'}</span></div>
-      <div className="ds-tile"><span className="ds-tile__k">Configuration</span><span className="ds-tile__v">{reassignment ? 'moving' : canPreview ? previewReadiness === 'loading' ? 'checking…' : previewReadiness === 'available' ? `applied${prometheusProvider?.applied_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision}` : ''}` : previewReadiness === 'applying' || previewReadiness === 'still_applying' ? `applying${prometheusProvider?.desired_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision ?? '—'} of ${prometheusProvider.desired_configuration_revision}` : ''}` : previewReadiness.replaceAll('_', ' ') : 'not checked'}</span><span className="ds-tile__s">{reassignment ? 'handover in progress' : canPreview ? previewReadiness === 'available' ? 'agent has the current settings' : previewReadiness === 'loading' ? 'reading agent readiness' : 'agent does not confirm the current settings' : 'editor or administrator access required'}</span></div>
+      <div className="ds-tile"><span className="ds-tile__k">Agent</span><span className="ds-tile__v">{canPreview ? <StatusMark tone={sourceAgent ? agentOption(sourceAgent, forCollection).tone ?? 'none' : 'none'} label={sourceAgent?.display_name ?? 'Unknown'} /> : 'Assigned'}</span><span className="ds-tile__s">{canPreview ? (sourceAgent?.runtime?.last_heartbeat_at ? `last heartbeat ${clockFormat.format(new Date(sourceAgent.runtime.last_heartbeat_at))} UTC · ${relativeAge(sourceAgent.runtime.last_heartbeat_at)}` : sourceAgent ? agentOption(sourceAgent, forCollection).status : 'assigned agent not found') : 'agent details need editor or administrator access'}</span></div>
+      <div className="ds-tile"><span className="ds-tile__k">Configuration</span><span className="ds-tile__v">{reassignment ? reassignment.state === 'replacement_unavailable' ? 'not confirmed' : 'updating' : canPreview ? previewReadiness === 'loading' ? 'checking…' : previewReadiness === 'available' ? `applied${prometheusProvider?.applied_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision}` : ''}` : previewReadiness === 'applying' || previewReadiness === 'still_applying' ? `applying${prometheusProvider?.desired_configuration_revision ? ` · rev ${prometheusProvider.applied_configuration_revision ?? '—'} of ${prometheusProvider.desired_configuration_revision}` : ''}` : previewReadiness.replaceAll('_', ' ') : 'not checked'}</span><span className="ds-tile__s">{reassignment ? reassignment.state === 'replacement_unavailable' ? 'assigned agent unavailable' : 'waiting for configuration acknowledgement' : canPreview ? previewReadiness === 'available' ? 'agent has the current settings' : previewReadiness === 'loading' ? 'reading agent readiness' : 'agent does not confirm the current settings' : 'editor or administrator access required'}</span></div>
       <div className="ds-tile"><span className="ds-tile__k">Collection</span><span className="ds-tile__v">every {source.polling_interval_seconds} s</span><span className="ds-tile__s">auth {source.authentication.mode}{source.tls.insecure_skip_verify ? ' · TLS unverified' : source.tls.ca_pem ? ' · custom CA' : ''}</span></div>
       <div className="ds-tile"><span className="ds-tile__k">Used by</span><span className="ds-tile__v">{selectedUsage ? `${usageCount(selectedUsage)} SLI${selectedUsage.count === 1 ? '' : 's'}` : '—'}</span><span className="ds-tile__s">{selectedUsage ? selectedUsage.count === 0 ? 'no SLI uses it yet' : `${selectedUsage.names.join(', ')}${selectedUsage.count > selectedUsage.names.length ? `, +${selectedUsage.count - selectedUsage.names.length}` : ''}` : 'reading SLIs'}</span></div>
     </div>}
     <form className="ui-form ds-form" onSubmit={(event) => void submit(event)} noValidate>
-      <FormSection title="Connection" hint="Where and how to reach Prometheus">{connectionFields}{providerChoice}{connectionDetails}{readonly && <p className="ui-form-note">Your role can view redacted connection settings. Administrators manage credentials and assignments.</p>}</FormSection>
-      {admin && <FormSection title="Agent" hint="Which agent runs the queries">{agentPicker}</FormSection>}
+      <FormSection title="Connection" hint="Where and how to reach Prometheus">{connectionFields}{providerChoice}{connectionDetails}{readonly && <p className="ui-form-note">Your role can view redacted connection settings. Administrators manage connection settings and credentials. Editors can change the assigned agent.</p>}</FormSection>
+      {canPreview && <FormSection title="Agent" hint="Which agent runs the queries">{agentPicker}</FormSection>}
       {source && canPreview && <FormSection title="Test" hint="Runs on the assigned agent · nothing is saved">
         {admin && <p className="ui-form-note">{testAvailability}</p>}
         {!reassignment && <>
@@ -750,9 +798,9 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
         </>}
         {diagnosticResult}
       </FormSection>}
-      {admin && <FormActions note="Saving sends the new settings to the agent; collection continues with the previous ones until it confirms.">
+      {canPreview && <FormActions note="Changing agent sends configuration immediately; Updating clears when the agent acknowledges it. Collection freshness is shown separately.">
         <Button variant="outline" disabled={!dirty || pending || currentUncertainSave} onClick={() => { if (source) setDraft(fromDatasource(source)); }}>Discard changes</Button>
-        <Button type="submit" pending={pending} disabled={Boolean(reassignment) && !currentUncertainSave}>{currentUncertainSave ? 'Reconcile save' : 'Save settings'}</Button>
+        <Button type="submit" pending={pending} disabled={Boolean(reassignment) && draft.agent_id === source?.agent_id && !currentUncertainSave}>{currentUncertainSave ? 'Reconcile save' : 'Save settings'}</Button>
       </FormActions>}
     </form>
   </>;

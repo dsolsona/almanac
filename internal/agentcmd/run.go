@@ -328,22 +328,10 @@ func (c *client) runSession(ctx context.Context) error {
 		c.configurationPending = true
 	}
 	interval := time.Duration(welcome.Payload.HeartbeatIntervalMS) * time.Millisecond
-	if c.pending == nil {
-		timer := time.NewTimer(interval)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return closeAgentSession(conn)
-		case <-timer.C:
-		}
-	}
-	if c.pending == nil {
-		if err := c.prepareHeartbeat(); err != nil {
+	if c.pending != nil {
+		if err := c.writeHeartbeat(ctx, conn); err != nil {
 			return err
 		}
-	}
-	if err := c.writeHeartbeat(ctx, conn); err != nil {
-		return err
 	}
 	type readResult struct {
 		raw jsontext.Value
@@ -382,6 +370,11 @@ func (c *client) runSession(ctx context.Context) error {
 			}
 			if wasPending && c.pending == nil {
 				heartbeatTimer.Reset(interval)
+			}
+			if c.pending != nil && c.pendingSentAt.IsZero() {
+				if err := c.writeHeartbeat(ctx, conn); err != nil {
+					return err
+				}
 			}
 		case diagnosticResult := <-c.diagnostics.results:
 			canonical, err := diagnosticResult.result.CanonicalJSON()
@@ -441,6 +434,9 @@ func (c *client) reconcile(ctx context.Context, conn *websocket.Conn) error {
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusServiceUnavailable {
 		c.configurationPending = true
+		if c.protocol == agentprotocol.ProtocolV2 && c.revision == "0" && c.pending == nil {
+			return c.prepareHeartbeat()
+		}
 		if c.collections != nil && c.protocol != agentprotocol.ProtocolV2 {
 			c.collections.SetPaused(true)
 		}
@@ -555,10 +551,11 @@ func unchangedTransitionPairs(previous, next agentprotocol.ConfigurationSnapshot
 			allowed[collectionKey(def)] = true
 			continue
 		}
-		// A cancellation can change only the datasource resource version. Treat
-		// it as a removal and withheld addition until a matching grant arrives.
+		// Reassignment changes resource version and ownership start. Withhold
+		// changed pairs until a matching grant arrives.
 		previousAssignment.DatasourceVersion = nextAssignment.DatasourceVersion
 		old.DatasourceVersion = def.DatasourceVersion
+		old.EffectiveFrom = def.EffectiveFrom
 		if old != def || previousAssignment != nextAssignment {
 			return nil, errors.New("transition changed an existing collection")
 		}
@@ -696,6 +693,9 @@ func (c *client) handleMessage(ctx context.Context, conn *websocket.Conn, raw js
 		c.configurationPending = true
 		if c.collections != nil && c.protocol != agentprotocol.ProtocolV2 {
 			c.collections.SetPaused(true)
+		}
+		if c.protocol == agentprotocol.ProtocolV2 && c.revision != "" {
+			return c.reconcile(ctx, conn)
 		}
 	case agentprotocol.KindDiagnosticRequest:
 		var request agentprotocol.Envelope[agentprotocol.DiagnosticRequest]

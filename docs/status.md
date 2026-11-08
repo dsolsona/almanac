@@ -1,5 +1,43 @@
 # Delivery status
 
+Current datasource recovery work, 2026-11-08: [F2-T33](tasks/F2-T33.md) is in review
+on `fix/immediate-datasource-reassignment`, in
+`.worktrees/immediate-datasource-reassignment`, based on `259f7c1` under
+[plan 0029](plans/0029-immediate-datasource-reassignment.md),
+[ADR-0037](adr/0037-immediate-datasource-reassignment.md),
+[ADR-0038](adr/0038-datasource-configuration-acknowledgement.md), and
+[ADR-0039](adr/0039-cancel-pending-datasource-reassignment.md). Assignment and both
+agent configurations change immediately; old-agent submissions are fenced.
+Pending return cancels without a reverse pending row, including an offline
+restored agent. Explicit cancellation intent protects the ACK race and refreshes
+a completed assignment. Follow-up findings are resolved: legacy cancellation works
+with a disabled replacement, initial v2 configuration refresh avoids the first
+heartbeat wait, and collection-only choices remain available for active or unknown
+SLI usage. The review skill now requires inspection and a completed report before
+separately authorized checks or fixes.
+
+Final `make check` passed in 210 seconds with 437 frontend tests, all Go
+unit/integration suites and 81 browser cases. Sequential `make test-e2e` passed all
+15 journeys in 335 seconds (Playwright 4.3 minutes), including cancellation with
+both agents stopped and no reverse pending operation. The replacement was Active
+with diagnostics enabled in 1,374 ms; new collection, old-agent reconnect and backend
+restart passed. The maintainer authorized fixes, commits, push and PR publication;
+merge remains unauthorized. The final local app and agent rebuild passed host HTTPS readiness; the current
+maintainer-selected `local-dev` assignment (version 9, no pending move) was preserved.
+
+Previous ACK-only candidate evidence: Updating ends on acknowledgement, with freshness
+separate and automatic detail-page refresh. `make check` passed in 223 seconds
+with all Go suites, 431 frontend tests and 81 browser cases. After the final
+offline-status refresh fix, `make test` passed 432 frontend tests and Go unit
+suites in 23 seconds, and `make test-e2e` passed all 15 journeys in 295 seconds.
+Save through Active with enabled diagnostics took 1,377 ms, without reloading.
+The real connection test succeeded before waiting separately for a new 99/100
+observation; old-agent reconnect and backend restart passed. Local startup recovery was subsequently authorized: `make run` from this worktree
+restored app and agent against the existing schema-44 database and passed host
+HTTPS readiness. The primary checkout still only knows schema 43; local startup
+must use the candidate worktree until integration. Commit, publication and merge
+remain unauthorized.
+
 PR [#68](https://github.com/dsolsona/almanac/pull/68) Greptile follow-up, 2026-11-08:
 six current findings are corrected with failing-then-passing regressions: remote
 dependency matches, discarded form composers, definite create-rejection recovery,

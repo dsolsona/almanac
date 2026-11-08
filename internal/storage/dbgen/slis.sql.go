@@ -606,7 +606,7 @@ JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
 WHERE datasource.agent_id = $1
-  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.target_configuration_revision = 0)
   AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_ownership_epochs e WHERE e.sli_id = measurement.sli_id AND e.measurement_revision = measurement.revision AND e.ends_at IS NULL AND e.configuration_revision > $2)
   AND measurement.activated_at IS NOT NULL
 ORDER BY sli.id
@@ -696,10 +696,10 @@ FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
-LEFT JOIN public.almanac_datasource_reassignments AS pending ON pending.datasource_id = datasource.id AND NOT pending.uses_v2_removal
+LEFT JOIN public.almanac_datasource_reassignments AS pending ON pending.datasource_id = datasource.id AND NOT pending.uses_v2_removal AND pending.target_configuration_revision = 0
 LEFT JOIN public.almanac_sli_ownership_epochs AS epoch ON epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision AND epoch.ends_at IS NULL
 WHERE datasource.agent_id = $1
-  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.uses_v2_removal)
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = datasource.id AND r.uses_v2_removal AND r.target_configuration_revision = 0)
 ORDER BY sli.id
 `
 
@@ -1171,6 +1171,9 @@ func (q *Queries) ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisR
 
 const lockSliMeasurementForObservation = `-- name: LockSliMeasurementForObservation :one
 SELECT measurement.sli_id, measurement.revision, measurement.datasource_id,
+       datasource.assignment_configuration_revision,
+       (SELECT epoch.starts_at FROM public.almanac_sli_ownership_epochs epoch
+           WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision AND epoch.ends_at IS NULL) AS current_ownership_from,
        COALESCE((SELECT epoch.agent_id FROM public.almanac_sli_ownership_epochs epoch
            WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision
              AND epoch.starts_at <= $3::timestamptz
@@ -1194,17 +1197,19 @@ type LockSliMeasurementForObservationParams struct {
 }
 
 type LockSliMeasurementForObservationRow struct {
-	SliID                  pgtype.UUID        `json:"sli_id"`
-	Revision               int64              `json:"revision"`
-	DatasourceID           pgtype.UUID        `json:"datasource_id"`
-	IntervalAgentID        pgtype.UUID        `json:"interval_agent_id"`
-	MeasurementKind        string             `json:"measurement_kind"`
-	ComponentMode          string             `json:"component_mode"`
-	EffectiveFrom          pgtype.Timestamptz `json:"effective_from"`
-	CurrentAgentID         pgtype.UUID        `json:"current_agent_id"`
-	PollingIntervalSeconds int32              `json:"polling_interval_seconds"`
-	SettlingDelaySeconds   int32              `json:"settling_delay_seconds"`
-	CurrentRevision        int64              `json:"current_revision"`
+	SliID                           pgtype.UUID        `json:"sli_id"`
+	Revision                        int64              `json:"revision"`
+	DatasourceID                    pgtype.UUID        `json:"datasource_id"`
+	AssignmentConfigurationRevision int64              `json:"assignment_configuration_revision"`
+	CurrentOwnershipFrom            pgtype.Timestamptz `json:"current_ownership_from"`
+	IntervalAgentID                 pgtype.UUID        `json:"interval_agent_id"`
+	MeasurementKind                 string             `json:"measurement_kind"`
+	ComponentMode                   string             `json:"component_mode"`
+	EffectiveFrom                   pgtype.Timestamptz `json:"effective_from"`
+	CurrentAgentID                  pgtype.UUID        `json:"current_agent_id"`
+	PollingIntervalSeconds          int32              `json:"polling_interval_seconds"`
+	SettlingDelaySeconds            int32              `json:"settling_delay_seconds"`
+	CurrentRevision                 int64              `json:"current_revision"`
 }
 
 func (q *Queries) LockSliMeasurementForObservation(ctx context.Context, arg LockSliMeasurementForObservationParams) (LockSliMeasurementForObservationRow, error) {
@@ -1214,6 +1219,8 @@ func (q *Queries) LockSliMeasurementForObservation(ctx context.Context, arg Lock
 		&i.SliID,
 		&i.Revision,
 		&i.DatasourceID,
+		&i.AssignmentConfigurationRevision,
+		&i.CurrentOwnershipFrom,
 		&i.IntervalAgentID,
 		&i.MeasurementKind,
 		&i.ComponentMode,

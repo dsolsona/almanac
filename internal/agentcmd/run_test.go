@@ -292,7 +292,11 @@ func TestReconcileTransitionsFromEmptyConfigurationToAssigned(t *testing.T) {
 	definition := agentprotocol.SLICollection{SLIID: "00000000-0000-4000-8000-000000000010", MeasurementRevision: "1", DatasourceID: assignment.DatasourceID, DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount, GoodQuery: "good", TotalQuery: "total", EffectiveFrom: now}
 	empty := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "1", Assignments: []agentprotocol.DatasourceAssignment{}, SLIs: []agentprotocol.SLICollection{}}
 	assigned := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition}}
-	applied := make(chan agentprotocol.Envelope[agentprotocol.ConfigurationApplied], 2)
+	returning := agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "3", Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: []agentprotocol.SLICollection{definition}}
+	returning.Assignments[0].DatasourceVersion = "2"
+	returning.SLIs[0].DatasourceVersion = "2"
+	returning.SLIs[0].EffectiveFrom = now.Add(15 * time.Second)
+	applied := make(chan agentprotocol.Envelope[agentprotocol.ConfigurationApplied], 3)
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ws" {
@@ -301,7 +305,7 @@ func TestReconcileTransitionsFromEmptyConfigurationToAssigned(t *testing.T) {
 				return
 			}
 			defer conn.CloseNow()
-			for range 2 {
+			for range 3 {
 				_, raw, err := conn.Read(r.Context())
 				if err != nil {
 					return
@@ -314,7 +318,9 @@ func TestReconcileTransitionsFromEmptyConfigurationToAssigned(t *testing.T) {
 			return
 		}
 		snapshot := empty
-		if requests.Add(1) > 1 {
+		if n := requests.Add(1); n > 2 {
+			snapshot = returning
+		} else if n > 1 {
 			snapshot = assigned
 		}
 		w.Header().Set("ETag", snapshot.ETag())
@@ -332,10 +338,21 @@ func TestReconcileTransitionsFromEmptyConfigurationToAssigned(t *testing.T) {
 	if err := c.reconcile(t.Context(), ws); err != nil {
 		t.Fatalf("empty configuration: %v", err)
 	}
-	if err := c.reconcile(t.Context(), ws); err != nil {
-		t.Fatalf("empty-to-assigned transition: %v", err)
+	notice, err := json.Marshal(agentprotocol.Envelope[agentprotocol.ConfigurationChanged]{Kind: agentprotocol.KindConfigurationChanged, MessageID: "changed", SessionGeneration: c.generation, Payload: agentprotocol.ConfigurationChanged{DesiredRevision: "2"}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, revision := range []string{"1", "2"} {
+	if err := c.handleMessage(t.Context(), ws, notice); err != nil {
+		t.Fatalf("configuration notice must reconcile without a heartbeat: %v", err)
+	}
+	notice, err = json.Marshal(agentprotocol.Envelope[agentprotocol.ConfigurationChanged]{Kind: agentprotocol.KindConfigurationChanged, MessageID: "returning", SessionGeneration: c.generation, Payload: agentprotocol.ConfigurationChanged{DesiredRevision: "3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.handleMessage(t.Context(), ws, notice); err != nil {
+		t.Fatalf("returning datasource configuration must acknowledge before lease renewal: %v", err)
+	}
+	for _, revision := range []string{"1", "2", "3"} {
 		select {
 		case got := <-applied:
 			if got.Payload.ConfigurationRevision != revision {
@@ -658,6 +675,13 @@ func TestTransitionAllowsOnlyUnchangedRetainedPairs(t *testing.T) {
 	if versionErr != nil || versionAllowed[collectionKey(definition)] {
 		t.Fatalf("version-only pair must wait for a matching grant: %v", versionErr)
 	}
+	reassigned := versionOnly
+	reassigned.SLIs = append([]agentprotocol.SLICollection(nil), versionOnly.SLIs...)
+	reassigned.SLIs[0].EffectiveFrom = now.Add(15 * time.Second)
+	reassignedAllowed, reassignedErr := unchangedTransitionPairs(baseline, reassigned)
+	if reassignedErr != nil || reassignedAllowed[collectionKey(definition)] {
+		t.Fatalf("returning assignment must apply and wait for a matching grant: %v", reassignedErr)
+	}
 	changed := next
 	changed.SLIs = append([]agentprotocol.SLICollection(nil), next.SLIs...)
 	changed.SLIs[0].GoodQuery = "changed"
@@ -669,5 +693,115 @@ func TestTransitionAllowsOnlyUnchangedRetainedPairs(t *testing.T) {
 	allowed, err = unchangedTransitionPairs(current, next)
 	if err != nil || allowed[collectionKey(definition)] {
 		t.Fatal("restored pair authorized before matching grant")
+	}
+}
+
+func TestInitialPendingConfigurationPreparesImmediateHeartbeat(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) }))
+	defer server.Close()
+	for _, revision := range []string{"0", "1"} {
+		t.Run(revision, func(t *testing.T) {
+			c := testClient(time.Now().UTC(), testNonce(22))
+			c.opts.backendURL, c.http = server.URL, server.Client()
+			c.protocol, c.revision, c.pending = agentprotocol.ProtocolV2, revision, nil
+			if err := c.reconcile(t.Context(), nil); err != nil {
+				t.Fatal(err)
+			}
+			if (c.pending != nil) != (revision == "0") {
+				t.Fatalf("initial configuration refresh pending=%t for applied=%s", c.pending != nil, revision)
+			}
+			if revision == "0" {
+				pending := c.pending
+				if !c.pendingSentAt.IsZero() || pending.AppliedConfigurationRevision != "0" || pending.LeaseID != c.lease.LeaseID {
+					t.Fatal("refresh must carry current grant proof and await immediate send")
+				}
+				if err := c.reconcile(t.Context(), nil); err != nil || c.pending != pending {
+					t.Fatalf("repeated notice must preserve pending heartbeat: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestRunSessionRefreshesOvertakenInitialGrantImmediately(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	first := testLease(now, "initial-lease", now.Add(time.Hour))
+	next := testLease(now, "refreshed-lease", now.Add(time.Hour))
+	next.ConfigurationRevision = "2"
+	var ready atomic.Bool
+	outcome := make(chan error, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/agent/v1/configuration", func(w http.ResponseWriter, _ *http.Request) {
+		if !ready.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("ETag", `"agent-config:`+testAgentID+`:2"`)
+		data, _ := json.Marshal(agentprotocol.ConfigurationSnapshot{AgentID: testAgentID, ConfigurationRevision: "2", Assignments: []agentprotocol.DatasourceAssignment{}, SLIs: []agentprotocol.SLICollection{}})
+		_, _ = w.Write(data)
+	})
+	mux.HandleFunc("/api/agent/v1/connect", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{agentprotocol.ProtocolV2}})
+		if err != nil {
+			outcome <- err
+			return
+		}
+		defer conn.CloseNow()
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		var hello agentprotocol.Envelope[agentprotocol.Hello]
+		if err := readJSON(ctx, conn, &hello); err != nil {
+			outcome <- err
+			return
+		}
+		welcome := agentprotocol.Envelope[agentprotocol.Welcome]{Kind: agentprotocol.KindWelcome, MessageID: "welcome", SessionGeneration: "1", Payload: agentprotocol.Welcome{Protocol: agentprotocol.ProtocolV2, RequestNonce: hello.Payload.RequestNonce, ServerTime: now, AgentID: testAgentID, ConfigurationRevision: "1", RenewalSequence: "0", HeartbeatIntervalMS: 10_000, ExecutionLease: first}}
+		if err := writeTestMessage(ctx, conn, welcome); err != nil {
+			outcome <- err
+			return
+		}
+		var heartbeat agentprotocol.Envelope[agentprotocol.Heartbeat]
+		if err := readJSON(ctx, conn, &heartbeat); err != nil {
+			outcome <- err
+			return
+		}
+		if heartbeat.Validate() != nil || heartbeat.Payload.AppliedConfigurationRevision != "0" || heartbeat.Payload.LeaseID != first.LeaseID {
+			outcome <- errors.New("initial refresh lost its current grant proof")
+			return
+		}
+		ready.Store(true)
+		ack := agentprotocol.Envelope[agentprotocol.HeartbeatAck]{Kind: agentprotocol.KindHeartbeatAck, MessageID: "ack", SessionGeneration: "1", Payload: agentprotocol.HeartbeatAck{RequestNonce: heartbeat.Payload.RequestNonce, RenewalSequence: "1", ExecutionLease: next}}
+		if err := writeTestMessage(ctx, conn, ack); err != nil {
+			outcome <- err
+			return
+		}
+		var applied agentprotocol.Envelope[agentprotocol.ConfigurationApplied]
+		if err := readJSON(ctx, conn, &applied); err != nil {
+			outcome <- err
+			return
+		}
+		if applied.Validate() != nil || applied.Payload.ConfigurationRevision != "2" {
+			outcome <- errors.New("initial configuration was not acknowledged")
+			return
+		}
+		outcome <- nil
+		_ = writeTestMessage(ctx, conn, agentprotocol.Envelope[agentprotocol.Shutdown]{Kind: agentprotocol.KindShutdown, MessageID: "shutdown", SessionGeneration: "1", Payload: agentprotocol.Shutdown{Reason: "server_shutdown"}})
+	})
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+	c := testClient(now, testNonce(1))
+	c.opts.backendURL, c.http, c.revision, c.pending = server.URL, server.Client(), "0", nil
+	c.pendingSentAt = time.Time{}
+	c.diagnostics = newDiagnosticRunner(c)
+	defer c.diagnostics.close()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	if err := c.runSession(ctx); !errors.Is(err, errReconnect) {
+		t.Fatalf("initial configuration session: %v", err)
+	}
+	if err := <-outcome; err != nil {
+		t.Fatal(err)
+	}
+	if c.revision != "2" || c.pending != nil {
+		t.Fatal("new initial configuration did not settle")
 	}
 }

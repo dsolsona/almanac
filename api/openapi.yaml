@@ -1904,7 +1904,7 @@ components:
         target_agent_id: {type: string, format: uuid}
         requested_at: {type: string, format: date-time}
         authority_expires_at: {type: string, format: date-time}
-        state: {type: string, enum: [waiting_for_previous_agent, replacement_unavailable]}
+        state: {type: string, enum: [waiting_for_previous_agent, replacement_unavailable, waiting_for_configuration, waiting_for_collection]}
     DatasourceTLS:
       type: object
       additionalProperties: false
@@ -1943,6 +1943,7 @@ components:
             token_secret: {$ref: '#/components/schemas/SecretAction'}
         polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
         agent_id: {type: string, format: uuid}
+        cancel_reassignment: {type: boolean, description: Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed.}
     SecretAction:
       type: object
       additionalProperties: false

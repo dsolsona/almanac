@@ -29,6 +29,13 @@ describe('datasource client', () => {
     fetcher.mockResolvedValue(response({ ...source(), reassignment: { ...reassignment, state: ['waiting_for_previous_agent'] } }, 200, { ETag: `"datasource:${id}:4"` }));
     await expect(createDatasourceClient().get(id)).rejects.toMatchObject({ code: 'invalid_response' });
   });
+  it.each(['waiting_for_configuration', 'waiting_for_collection'])('accepts immediate target assignment in %s and rejects the former owner', async (state) => {
+    const reassignment = { source_agent_id: agent, target_agent_id: id, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T12:00:00Z', state };
+    const fetcher = vi.fn().mockResolvedValue(response({ ...source(), agent_id: id, reassignment }, 200, { ETag: `"datasource:${id}:4"` })); vi.stubGlobal('fetch', fetcher);
+    await expect(createDatasourceClient().get(id)).resolves.toMatchObject({ datasource: { agent_id: id, reassignment } });
+    fetcher.mockResolvedValue(response({ ...source(), reassignment }, 200, { ETag: `"datasource:${id}:4"` }));
+    await expect(createDatasourceClient().get(id)).rejects.toMatchObject({ code: 'invalid_response' });
+  });
   it('reads a redacted datasource and validates its canonical version ETag', async () => {
     const fetcher = vi.fn().mockResolvedValue(response(source(), 200, { ETag: `"datasource:${id}:4"` }));
     vi.stubGlobal('fetch', fetcher);

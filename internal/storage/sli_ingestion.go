@@ -88,7 +88,9 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 	if err != nil {
 		return result, operationError(ctx, "storage: SLI measurement authorization lookup failed", err)
 	}
-	if !measurement.IntervalAgentID.Valid || measurement.IntervalAgentID != state.agentID ||
+	if measurement.CurrentAgentID != state.agentID || configurationRevision < measurement.AssignmentConfigurationRevision ||
+		(measurement.CurrentOwnershipFrom.Valid && item.IntervalStart.Before(measurement.CurrentOwnershipFrom.Time)) ||
+		!measurement.IntervalAgentID.Valid || measurement.IntervalAgentID != state.agentID ||
 		measurement.MeasurementKind != string(sli.MeasurementKindEventCounts) || measurement.ComponentMode != string(sli.ComponentModeIntervalCount) {
 		return result, ErrObservationDenied
 	}

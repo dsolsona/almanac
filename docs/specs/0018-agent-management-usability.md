@@ -4,8 +4,8 @@
 - Created: 2026-10-28
 - Accepted: 2026-10-28
 - Approval: The maintainer approved the four numbered requirements in the working conversation: credential-driven Make startup, dependency-blocked deletion, readable durations and no repeated password prompts.
-- Implementation: verified
-- Verification: [F2-T24](../tasks/F2-T24.md) through [F2-T27](../tasks/F2-T27.md) record the management increment; [F2-T31](../tasks/F2-T31.md) records verified immediate restart and crash recovery
+- Implementation: in progress
+- Verification: Immediate reassignment is tracked in [F2-T33](../tasks/F2-T33.md); earlier management evidence is in [F2-T24](../tasks/F2-T24.md) through [F2-T27](../tasks/F2-T27.md) record the management increment; [F2-T31](../tasks/F2-T31.md) records verified immediate restart and crash recovery
 - Related ADRs: [ADR-0020](../adr/0020-session-authorized-management.md)
 - Plan: [agent management](../plans/0020-agent-management.md)
 - Supersedes / superseded by: Amends [SPEC-0004](0004-identity-and-access.md), [SPEC-0010](0010-api-and-cli.md), [SPEC-0012](0012-user-interface.md) and [SPEC-0013](0013-runtime-and-operations.md) for these workflows.
@@ -106,36 +106,66 @@ Expired sessions require sign-in; they do not invite password proof in a dialog.
   deletion, reassignment and successful deletion. Unit/database/race/generated and
   browser checks verify the candidate without replacing real acceptance with mocks.
 
-## Reassigning an active datasource
+## Reassigning a datasource
 
-Reassignment of a datasource with SLIs follows the normal handoff in
-[SPEC-0009](0009-agent-protocol-and-ownership.md). A request reserves the old and
-replacement agents, freezes renewal only of affected measurement grants, and
-publishes a removal configuration to the old agent. Both agents remain deletion
-blockers while the handoff is pending. The old agent acknowledges only after it has
-installed that configuration and canceled and drained affected collection tasks;
-otherwise its recorded authority must expire before the handoff completes. There is
-no force option. Unrelated measurements continue to use their own grants.
+Under [ADR-0037](../adr/0037-immediate-datasource-reassignment.md), an editor or
+administrator can immediately select a different agent, including while a prior
+move is pending. Editors can list safe agent summaries for selection and change
+assignment only; datasource creation, connection settings, credentials and agent
+lifecycle remain administrator-only. Viewers cannot change assignment.
 
-The datasource response retains the current `agent_id` and exposes a `reassignment`
-object with `source_agent_id`, `target_agent_id`, `requested_at`,
-`authority_expires_at`, and `state`: `waiting_for_previous_agent` or
-`replacement_unavailable`. An absent object means the assignment is active. A
-bounded background reconciler completes ready handoffs without mutating GET requests.
-Completion rechecks the replacement's enabled state and collection capabilities;
-unavailable replacements remain reserved and visibly pending. A versioned PUT
-selecting the source agent cancels a pending transition and restores its configuration
-and grant renewal. Other pending edits return `reassignment_pending`. Request,
-completion and cancellation are audited and advance the resource version.
-For a live v2 agent, beginning its first transition and activating a replacement
-wait until its current lease has caught up with its applied configuration. This
-keeps the previously authorized snapshot available as the transition baseline.
-If a v2 source is offline with unapplied configuration and no live ownership,
-its handoff retains the old configuration and waits for authority expiry instead
-of claiming a drain acknowledgement.
+Atomically change `agent_id`, partition canonical ownership intervals and publish
+new configurations for both agents. The replacement does not wait for the old
+agent's removal acknowledgement, reachability or lease expiry. The old agent
+receives configuration without the datasource when it reconnects. Reject all its
+subsequent submissions for that datasource, including buffered earlier intervals
+and receipt replay; preserve already accepted history, measurement revisions and
+unrelated datasource collection. Reassignment does not change query definitions
+or source settling delays. Superseding a future ownership epoch must not create
+zero-length epochs or revive earlier grants.
 
-Handoffs retain the measurement revision and its original effective time. Separately
-persisted ownership epochs partition canonical intervals at a future boundary. Old
-buffered observations remain eligible only under their original grants and before
-that boundary, subject to current credential and replay checks; replacement results
-are eligible at or after it. Historical measurements and observations are preserved.
+The datasource response reports the selected replacement in `agent_id` immediately.
+A `reassignment` object retains source, target and request time and reports
+`waiting_for_configuration`, `waiting_for_collection` or `replacement_unavailable`.
+The legacy `authority_expires_at` remains for compatibility but is not a replacement
+start deadline. Legacy pending moves must adopt immediate transfer without waiting
+for their recorded expiry. GET requests do not mutate recovery state.
+
+Under [ADR-0038](../adr/0038-datasource-configuration-acknowledgement.md), show
+Updating until the replacement's authenticated current process acknowledges the
+published configuration, then Active. Complete and audit on acknowledgement for
+all datasources, without a resource version increment or another configuration
+publication. Measurement freshness and query failures remain separate. Connected
+v2 agents fetch and apply configuration on the WebSocket notice immediately;
+normal completion takes a few seconds. Automatically refresh pending status
+without overwriting unsaved edits or uncertain writes, and enable diagnostics on
+configuration readiness without requiring a page reload or first observation.
+If the assigned replacement is unavailable, show Not collecting and an Agent
+unavailable explanation rather than an ongoing Updating label. The assignment
+is already changed; configuration remains unacknowledged until the agent recovers.
+
+Show the actual replacement blocker in UI and CLI. Operators may select another
+agent if the replacement fails. Returning to the source of a still-pending
+operation cancels it under [ADR-0039](../adr/0039-cancel-pending-datasource-reassignment.md):
+restore assignment, publish both configurations, and end the operation immediately
+without a reverse pending row or acknowledgement wait. Keep fresh ownership bounds
+and authorization floors; do not restore old grants. An offline restored agent
+shows Not collecting with its normal reachability/configuration state. Only actual
+current assignments block deletion;
+move history must not reserve a now-unassigned old agent. Serialize assignment
+with agent deletion, preserve identity in audit/history and do not restore an old
+assignment automatically when the replacement becomes unavailable.
+
+- AC-07: With an old agent disconnected and its execution lease still valid, an
+  editor/admin assignment immediately publishes both configurations. Old-agent
+  submissions and receipt replay are rejected; Updating ends on configuration
+  acknowledgement independently of measurement freshness, with diagnostics available.
+- AC-08: Replacement failure, repeated moves before a canonical boundary, old-agent
+  reconnect, pending-move upgrade and deletion races preserve single-owner accepted
+  intervals, historical observations and unrelated collection. Editor connectivity
+  edits and viewer assignment attempts are denied.
+
+- AC-09: Canceling a pending move restores its source and publishes both configurations
+  without another pending operation, even if the source is offline. Existing grants
+  remain fenced. Cancellation racing with ACK returns 409 without a reverse move;
+  the UI refreshes the completed assignment and removes stale rollback controls.

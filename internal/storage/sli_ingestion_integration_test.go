@@ -722,6 +722,9 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_coverage DROP COLUMN ingestion_generation`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_datasource_reassignments DROP COLUMN target_configuration_revision; ALTER TABLE public.almanac_datasources DROP COLUMN assignment_configuration_revision`); err != nil {
+		t.Fatal(err)
+	}
 	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}

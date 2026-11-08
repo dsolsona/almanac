@@ -222,7 +222,7 @@ func ListAgents(ctx context.Context, databaseURL string, input ListAgentsInput) 
 	if err != nil || input.Now == nil {
 		return AgentPage{}, ErrInvalidAgentInput
 	}
-	conn, queries, tx, user, installation, session, now, err := beginAgentRead(ctx, databaseURL, input.SessionVerifier, input.Now)
+	conn, queries, tx, user, installation, session, now, err := beginAgentReadWithRoles(ctx, databaseURL, input.SessionVerifier, input.Now, "administrator", "editor")
 	if err != nil {
 		return AgentPage{}, err
 	}

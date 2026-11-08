@@ -104,41 +104,43 @@ type AlmanacAuditEvent struct {
 }
 
 type AlmanacDatasource struct {
-	ID                     pgtype.UUID        `json:"id"`
-	Name                   string             `json:"name"`
-	DisplayName            string             `json:"display_name"`
-	Version                int64              `json:"version"`
-	Provider               string             `json:"provider"`
-	ConfigurationFormat    string             `json:"configuration_format"`
-	Endpoint               string             `json:"endpoint"`
-	Tls                    []byte             `json:"tls"`
-	AuthenticationMode     string             `json:"authentication_mode"`
-	AuthenticationUsername pgtype.Text        `json:"authentication_username"`
-	PasswordEnvelope       []byte             `json:"password_envelope"`
-	PasswordRevision       int64              `json:"password_revision"`
-	TokenEnvelope          []byte             `json:"token_envelope"`
-	TokenRevision          int64              `json:"token_revision"`
-	PollingIntervalSeconds int32              `json:"polling_interval_seconds"`
-	SettlingDelaySeconds   int32              `json:"settling_delay_seconds"`
-	AgentID                pgtype.UUID        `json:"agent_id"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ID                              pgtype.UUID        `json:"id"`
+	Name                            string             `json:"name"`
+	DisplayName                     string             `json:"display_name"`
+	Version                         int64              `json:"version"`
+	Provider                        string             `json:"provider"`
+	ConfigurationFormat             string             `json:"configuration_format"`
+	Endpoint                        string             `json:"endpoint"`
+	Tls                             []byte             `json:"tls"`
+	AuthenticationMode              string             `json:"authentication_mode"`
+	AuthenticationUsername          pgtype.Text        `json:"authentication_username"`
+	PasswordEnvelope                []byte             `json:"password_envelope"`
+	PasswordRevision                int64              `json:"password_revision"`
+	TokenEnvelope                   []byte             `json:"token_envelope"`
+	TokenRevision                   int64              `json:"token_revision"`
+	PollingIntervalSeconds          int32              `json:"polling_interval_seconds"`
+	SettlingDelaySeconds            int32              `json:"settling_delay_seconds"`
+	AgentID                         pgtype.UUID        `json:"agent_id"`
+	CreatedAt                       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                       pgtype.Timestamptz `json:"updated_at"`
+	AssignmentConfigurationRevision int64              `json:"assignment_configuration_revision"`
 }
 
 type AlmanacDatasourceReassignment struct {
-	DatasourceID        pgtype.UUID        `json:"datasource_id"`
-	SourceAgentID       pgtype.UUID        `json:"source_agent_id"`
-	TargetAgentID       pgtype.UUID        `json:"target_agent_id"`
-	RequestedAt         pgtype.Timestamptz `json:"requested_at"`
-	AuthorityExpiresAt  pgtype.Timestamptz `json:"authority_expires_at"`
-	RemovalRevision     int64              `json:"removal_revision"`
-	SourceConfigVersion int64              `json:"source_config_version"`
-	UsesV2Removal       bool               `json:"uses_v2_removal"`
-	DrainedAt           pgtype.Timestamptz `json:"drained_at"`
-	RetryAt             pgtype.Timestamptz `json:"retry_at"`
-	State               string             `json:"state"`
-	ActorID             pgtype.UUID        `json:"actor_id"`
-	RequestID           string             `json:"request_id"`
+	DatasourceID                pgtype.UUID        `json:"datasource_id"`
+	SourceAgentID               pgtype.UUID        `json:"source_agent_id"`
+	TargetAgentID               pgtype.UUID        `json:"target_agent_id"`
+	RequestedAt                 pgtype.Timestamptz `json:"requested_at"`
+	AuthorityExpiresAt          pgtype.Timestamptz `json:"authority_expires_at"`
+	RemovalRevision             int64              `json:"removal_revision"`
+	SourceConfigVersion         int64              `json:"source_config_version"`
+	UsesV2Removal               bool               `json:"uses_v2_removal"`
+	DrainedAt                   pgtype.Timestamptz `json:"drained_at"`
+	RetryAt                     pgtype.Timestamptz `json:"retry_at"`
+	State                       string             `json:"state"`
+	ActorID                     pgtype.UUID        `json:"actor_id"`
+	RequestID                   string             `json:"request_id"`
+	TargetConfigurationRevision int64              `json:"target_configuration_revision"`
 }
 
 type AlmanacDerivedCacheUsage struct {

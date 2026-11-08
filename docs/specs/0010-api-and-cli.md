@@ -60,7 +60,7 @@ specific live/historical entry points with separate admission budgets.
 | API resource/action | CLI shape | Permission |
 | --- | --- | --- |
 | services, folders, labels; list/get/create/update/delete | `almanac services ...`, `folders ...`, `labels ...` | Viewer read, Editor mutate |
-| datasources and capability catalog | `almanac datasources ...`, `providers list` | Viewer read redacted; Admin mutate/test connection/auth |
+| datasources and capability catalog | `almanac datasources ...`, `providers list` | Viewer read redacted; Editor/Admin reassign agents; Admin create/edit connectivity/test connection/auth |
 | SLI/SLO definitions, status, history and reports | `almanac slis ...`, `slos ...`, `reports ...` | Viewer read, Editor mutate |
 | query preview / connection test | `almanac slis test`, `datasources test` | Editor SLI preview on an existing source; Admin arbitrary source/connection tests |
 | agent creation, tokens and assignment | `almanac agents ...` | Admin |
@@ -223,3 +223,9 @@ unconfirmed registration as an empty list with no qualification.
   verified. Agent management has authenticated authorization, resource versions and
   safe receipts under F2-T02–F2-T06; full management API/CLI parity and broader
   resource RBAC remain outstanding.
+
+Datasource update cancellation under [ADR-0039](../adr/0039-cancel-pending-datasource-reassignment.md)
+uses optional `cancel_reassignment: true` on the existing datasource PUT. It requires
+an assignment-only update to the source of a current pending move. If that move
+already completed, return 409 without changing assignment, versions, configurations
+or epochs. The UI refreshes the completed result. Creation rejects a true flag.
