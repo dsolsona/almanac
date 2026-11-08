@@ -55,4 +55,10 @@ test('seed local-dev once, then start and reconnect it with the local app', asyn
   expect(() => localCommand('agent-seed')).toThrow();
   expect(psql(`SELECT count(*) FROM almanac_agent_credentials WHERE agent_id='${agentID}' AND revoked_at IS NOT NULL`)).toBe('1');
   expect(tokenHash()).toBe(originalHash);
+
+  // Later journeys own their agents; do not leave this revoked fixture selectable.
+  compose('stop', 'agent');
+  const detail = await expectOk(api<Agent>(page, 'GET', `/api/v1/agents/${agentID}`), [200]);
+  await expectOk(api(page, 'DELETE', `/api/v1/agents/${agentID}`, {}, { 'If-Match': detail.etag! }));
+  expect((await api(page, 'GET', `/api/v1/agents/${agentID}`)).status).toBe(404);
 });

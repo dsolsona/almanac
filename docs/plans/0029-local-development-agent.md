@@ -84,3 +84,14 @@ No product Go code, schema migration, dependency or production image change.
   and `reachability: connected`; seeding and initial connection succeeded before
   the test's incorrect property access. `make test` passes after correction in
   22 seconds: `/tmp/almanac-pr69-e2e-assertion-unit.log`.
+- CI run `42490938017` on `5db7660` passes the complete seeded-agent journey in
+  34.2 seconds, including restart, malformed-token rejection and revocation.
+  The collection journey then fails because the revoked seeded identity remains
+  in the shared agent list and is preselected instead of its own collector.
+  Nine cases passed, one failed and five were not run. Preserved log:
+  `/tmp/almanac-pr69-e2e-followup-failed.log`.
+- Added fixture cleanup after all seeded-agent assertions: stop its container,
+  archive its unassigned identity using the authenticated API and current ETag,
+  and verify it is no longer readable. Existing collection assertions are retained.
+- `make test` passes after fixture cleanup in 21 seconds:
+  `/tmp/almanac-pr69-e2e-cleanup-unit.log`. No local E2E was run.
