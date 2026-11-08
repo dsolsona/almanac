@@ -226,38 +226,83 @@
     }
     showModal(`Delete ${esc(service.name)}?`,`<p>This removes <b>${esc(service.name)}</b> from the service catalog. It has no SLOs and no services depend on it.</p>`,`${btn('Cancel','close-modal')}${btn('Delete service','confirm-delete','danger-fill',`data-id="${service.id}"`)}`);
   }
-  const graphIDs=['storefront','orders','checkout','payments','inventory','notifications','identity'];
+function networkLayout(records,grouped=false){
+ const ordered=[...records].sort((a,b)=>a.display_name.localeCompare(b.display_name)||a.id.localeCompare(b.id));
+ if(!ordered.length)return {positions:{},width:1040,height:600,ordered,groups:[],labelScales:{}};
+ if(grouped){
+  const owners=[...new Set(ordered.map(service=>service.owner??''))].sort((a,b)=>a.localeCompare(b));
+  const clusters=owners.map(owner=>{const layout=networkLayout(ordered.filter(service=>(service.owner??'')===owner));return {owner,layout,width:Math.max(340,layout.width*1.2),height:Math.max(300,layout.height*1.2+36)};});
+  const pack=(columns)=>{let x=24,y=24,rowHeight=0,width=0;
+   const placed=clusters.map((group,index)=>{if(index>0&&index%columns===0){x=24;y+=rowHeight+28;rowHeight=0;}const placement={...group,left:x+(group.width-group.layout.width)/2,top:y+(group.height-group.layout.height)/2+12,cx:x+group.width/2,cy:y+group.height/2};x+=group.width+28;rowHeight=Math.max(rowHeight,group.height);width=Math.max(width,x);return placement;});
+   return {placed,width:width+24,height:y+rowHeight+24};
+  };
+  const packed=Array.from({length:clusters.length},(_,index)=>pack(index+1)).sort((a,b)=>Math.max(a.width/1.7,a.height)-Math.max(b.width/1.7,b.height))[0],{placed}=packed;
+  const positions=Object.fromEntries(placed.flatMap(group=>Object.entries(group.layout.positions).map(([id,[px,py]])=>[id,[px+group.left,py+group.top]])));
+  return {positions,width:packed.width,height:packed.height,ordered,labelScales:Object.assign({},...placed.map(group=>group.layout.labelScales)),groups:placed.map(group=>({owner:group.owner,cx:group.cx,cy:group.cy,rx:group.width/2-8,ry:group.height/2-8}))};
+ }
+ const nodes=ordered.map((service,index)=>{const angle=index*Math.PI*(3-Math.sqrt(5)),radius=95*Math.sqrt(index+.5),label=[...service.display_name].slice(0,27).reduce((sum,char)=>sum+((char.codePointAt(0)??0)>255||/[MW@]/.test(char)?20:/[A-Z]/.test(char)?15:char===' '?6:11),0);return {service,index,x:Math.cos(angle)*radius*1.35,y:Math.sin(angle)*radius*.85,vx:0,vy:0,fx:0,fy:0,width:Math.max(128,label+24)};});
+ const byID=new Map(nodes.map(node=>[node.service.id,node]));
+ const links=nodes.flatMap(from=>(from.service.dependencies??[]).flatMap(id=>{const to=byID.get(id);return to&&to!==from?[{from,to}]:[];})).sort((a,b)=>a.from.index-b.from.index||a.to.index-b.to.index);
+ const separate=()=>{let overlap=false;for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+  const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,ox=(a.width+b.width)/2+20-Math.abs(dx),oy=168-Math.abs(dy);
+  if(ox<=0||oy<=0)continue;overlap=true;
+  if(ox<oy){const shift=(ox+.1)/2*(dx<0?-1:1);a.x-=shift;b.x+=shift;}else{const shift=(oy+.1)/2*(dy<0?-1:1);a.y-=shift;b.y+=shift;}
+ }return overlap;};
+ // Solve once with a fixed seed/order and iteration budget; selection never restarts the layout.
+ for(let step=0;step<180;step++){
+  const heat=1-step/210;
+  for(const node of nodes){node.fx=-node.x*.003;node.fy=-node.y*.007;}
+  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+   const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,distance=Math.max(1,Math.hypot(dx,dy)),force=8000/(distance*distance),fx=dx/distance*force,fy=dy/distance*force;a.fx-=fx;a.fy-=fy;b.fx+=fx;b.fy+=fy;
+  }
+  for(const {from,to}of links){const dx=to.x-from.x,dy=to.y-from.y,distance=Math.max(1,Math.hypot(dx,dy)),force=(distance-Math.max(190,(from.width+to.width)/2+36))*.025,fx=dx/distance*force,fy=dy/distance*force;from.fx+=fx;from.fy+=fy;to.fx-=fx;to.fy-=fy;}
+  for(const node of nodes){node.vx=(node.vx+node.fx)*.65;node.vy=(node.vy+node.fy)*.65;node.x+=Math.max(-24,Math.min(24,node.vx))*heat;node.y+=Math.max(-24,Math.min(24,node.vy))*heat;}
+  separate();
+ }
+ for(let step=0;step<160&&separate();step++);
+ const left=Math.min(...nodes.map(node=>node.x-node.width/2))-36,top=Math.min(...nodes.map(node=>node.y))-100;
+ const width=Math.max(...nodes.map(node=>node.x+node.width/2))-left+36,height=Math.max(...nodes.map(node=>node.y))-top+120;
+ const stretch=Math.max(1,Math.min(2,1.7*height/width)),labelScale=Math.min(stretch,nodes.length<20?1.6:2);
+ const positions=Object.fromEntries(nodes.map(node=>[node.service.id,[Math.round((node.x-left)*stretch*100)/100,Math.round((node.y-top)*100)/100]]));
+ return {positions,width:width*stretch,height,ordered,groups:[],labelScales:Object.fromEntries(nodes.map(node=>[node.service.id,labelScale]))};
+}
+
+  const graphIDs=['storefront','orders','checkout','payments','inventory','notifications','identity'].sort((a,b)=>get(a).name.localeCompare(get(b).name));
+  let graphFilters=[],graphFocused=false;
+  const graphState=id=>{const slos=objectives[get(id).id]||[];return slos.some(slo=>slo[1]==='breached')?'breached':slos.some(slo=>slo[1]!=='healthy')?'unknown':slos.length?'on_track':'no_slos';};
+  const visibleGraphIDs=()=>graphIDs.filter(id=>!graphFilters.length||graphFilters.includes(graphState(id)));
   function graph(design='a',small=false) {
-    const positions=design==='b'?{storefront:[175,125],checkout:[175,295],orders:[175,465],payments:[520,190],inventory:[520,400],identity:[865,190],notifications:[865,400]}:{storefront:[160,160],orders:[175,410],checkout:[510,280],payments:[805,110],inventory:[870,315],notifications:[730,485],identity:[505,70]};
+    const graphIDs=visibleGraphIDs();
+    const layout=networkLayout(graphIDs.map(id=>({id,display_name:get(id).name,owner:get(id).owner,dependencies:get(id).deps.map(dep=>get(dep).routeKey)})),design==='b'),positions=layout.positions;
     const marker=`arrow-${design}-${small?'small':'full'}`;
     const edges=graphIDs.flatMap(id=>get(id).deps.map(dep=>get(dep).routeKey).filter(dep=>graphIDs.includes(dep)).map(dep=>[id,dep]));
     const nearby=new Set(edges.filter(pair=>pair.includes(selectedNode)).flat());
     const glyph=icons.service.replace('<svg ','<svg x="-12" y="-12" width="24" height="24" ');
     const nodes=graphIDs.map(id=>{
       const s=get(id),[x,y]=positions[id],selected=selectedNode===id,r=selected?42:32,slos=objectives[s.id]||[],status=slos.some(slo=>slo[1]==='breached')?'breached':slos.some(slo=>slo[1]!=='healthy')?'unknown':slos.length?'on_track':'no_slos';
-      return `<g data-slo-state="${status}" class="map-node ${selected?'selected':nearby.has(id)?'nearby':'quiet'}" ${small?'':`data-action="select-node" data-id="${id}" role="button" tabindex="0" aria-pressed="${selected}" aria-label="Select ${esc(s.name)}, ${count(s)} SLO${count(s)===1?'':'s'}"`} transform="translate(${x} ${y})"><circle class="map-node-halo" r="${r+22}"/><circle class="map-node-orbit" r="${r+11}"/><circle class="map-node-core" r="${r}"/>${glyph}${status==='breached'?`<rect class="map-node-port" x="${r+7}" y="-4" width="8" height="8"/>`:`<circle class="map-node-port" cx="${r+11}" cy="0" r="4"/>`}<text text-anchor="middle" y="${r+36}">${esc(s.name)}</text><text class="subtitle" text-anchor="middle" y="${r+58}">${s.owner?esc(s.owner)+' · ':''}${count(s)} SLO${count(s)===1?'':'s'}</text></g>`;
+      return `<g data-slo-state="${status}" class="map-node ${selected?'selected':nearby.has(id)?'nearby':'quiet'}" ${small?'':`data-action="select-node" data-id="${id}" role="button" tabindex="0" aria-pressed="${selected}" aria-label="Select ${esc(s.name)}, ${count(s)} SLO${count(s)===1?'':'s'}"`} transform="translate(${x} ${y})"><circle class="map-node-halo" r="${r+22}"/><circle class="map-node-orbit" r="${r+11}"/><circle class="map-node-core" r="${r}"/>${glyph}${status==='breached'?`<rect class="map-node-port" x="${r+7}" y="-4" width="8" height="8"/>`:`<circle class="map-node-port" cx="${r+11}" cy="0" r="4"/>`}<text text-anchor="middle" y="${r+36}" style="font-size:${20*(layout.labelScales[s.id]??layout.labelScales[id]??1)}px">${esc(s.name)}</text></g>`;
     }).join('');
     const paths=edges.map(([from,to])=>{
       const [x,y]=positions[from],[tx,ty]=positions[to];
-      const direction=tx>=x?1:-1,fromR=from===selectedNode?54:44,toR=to===selectedNode?54:44;
-      const sx=x+direction*fromR,ex=tx-direction*toR,bend=Math.max(70,Math.abs(ex-sx)/2),active=from===selectedNode||to===selectedNode;
-      const d=tx===x?`M${x+fromR},${y} C${x+fromR+100},${y} ${tx+toR+100},${ty} ${tx+toR},${ty}`:`M${sx},${y} C${sx+direction*bend},${y} ${ex-direction*bend},${ty} ${ex},${ty}`;
+      const dx=tx-x,dy=ty-y,distance=Math.max(1,Math.hypot(dx,dy)),ux=dx/distance,uy=dy/distance,fromR=from===selectedNode?54:44,toR=to===selectedNode?54:44,sx=x+ux*fromR,sy=y+uy*fromR,ex=tx-ux*toR,ey=ty-uy*toR,bend=Math.min(48,distance*.1),active=from===selectedNode||to===selectedNode;
+      const d=`M${sx},${sy} Q${(sx+ex)/2-uy*bend},${(sy+ey)/2+ux*bend} ${ex},${ey}`;
       return `<path class="map-edge ${active?'active':''}" d="${d}" marker-end="url(#${marker}${active?'-active':''})"/>`;
     }).join('');
-    const groups=design==='b'?['Store experience','Commerce','Platform'].map((label,index)=>`<ellipse class="map-group" cx="${175+index*345}" cy="300" rx="155" ry="270"/><text class="map-caption" text-anchor="middle" x="${175+index*345}" y="50">${label}</text>`).join(''):'';
+    const groups=layout.groups.map(group=>`<g><ellipse class="map-group" cx="${group.cx}" cy="${group.cy}" rx="${group.rx}" ry="${group.ry}"/>${group.owner?`<text class="map-caption" text-anchor="middle" data-group-top="${group.cy-group.ry}" x="${group.cx}" y="${group.cy-group.ry+28}">${esc(group.owner)}</text>`:''}</g>`).join('');
     const arrows=['','-active'].map(suffix=>`<marker id="${marker}${suffix}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="var(--${suffix?'selection':'border-strong'})" stroke-width="1.5"/></marker>`).join('');
-    return `<svg class="service-network" viewBox="0 0 1040 600" ${small?'aria-hidden="true"':`role="group" aria-label="Service dependency map. Arrows point from a service to the service it depends on."`}>${small?'':'<g class="service-camera-scene">'}<defs>${arrows}</defs>${groups}${paths}${nodes}${small?'':'</g>'}</svg>`;
+    return `<svg class="service-network" viewBox="0 0 ${layout.width} ${layout.height}" data-world-width="${layout.width}" data-world-height="${layout.height}" ${small?'aria-hidden="true"':`role="group" aria-label="Service dependency map. Arrows point from a service to the service it depends on."`}>${small?'':'<g class="service-camera-scene">'}<defs>${arrows}</defs>${groups}${paths}${nodes}${small?'':'</g>'}</svg>`;
   }
   function graphDetails() {
     const s=get(selectedNode);
-    return `<span class="service-symbol" aria-hidden="true">${s.name[0]}</span><div class="service-caption"><strong>${esc(s.name)}</strong><small>${esc(s.description)}</small></div>${serviceSloStatus(s)}<span class="label-chip">${uses(s).length} used by</span>${route('View service',`service/${s.id}`,'btn')}`;
+    return `<span class="service-symbol" aria-hidden="true">${s.name[0]}</span><div class="service-caption"><strong>${esc(s.name)}</strong><small>${s.owner?esc(s.owner)+' · ':''}${esc(s.description)}</small></div>${serviceSloStatus(s)}<span class="label-chip">${uses(s).length} used by</span>${route('View service',`service/${s.id}`,'btn')}`;
   }
-  function map(design) {
-    const s=get(selectedNode), name={a:'Service focus',b:'Grouped by owner',c:'List & map'}[design]||'Service focus';
-    screen.innerHTML=heading('Services',canWrite()?route(`${icons.plus} New service`,'new','btn primary'):'<span class="read-only">View only</span>')+catalogViews(true)+`<div class="variant" aria-label="Dependency design">Design ${['a','b','c'].map(d=>route(`${d.toUpperCase()} · ${{a:'Service focus',b:'Owner groups',c:'List & map'}[d]}`,`map/${d}`,d===design?'on':'')).join('')}</div><div class="service-graph-legend" role="group" aria-label="Service SLO status">${chip('good','On track')}${chip('crit','Breached')}${chip('stale','Unknown')}${chip('none','No SLOs')}</div><section class="panel"><div class="graph-toolbar"><label>Find a service <select id="graph-service">${graphIDs.map(id=>`<option value="${id}" ${id===selectedNode?'selected':''}>${get(id).name}</option>`).join('')}</select></label><span class="map-legend">A → B means A depends on B</span></div><div class="graph-camera-toolbar"><div class="graph-camera-actions"><button class="btn" data-camera="fit">Fit all</button><button class="btn" data-camera="focus">Focus selected</button><button class="btn" data-camera="attention">Needs attention</button></div><div class="graph-camera-zoom"><button class="btn" data-camera="out" aria-label="Zoom out">−</button><output aria-label="Graph zoom">100%</output><button class="btn" data-camera="in" aria-label="Zoom in">+</button></div><p class="graph-camera-hint">Drag to pan · Scroll to zoom · Arrow keys pan, +/− zoom, 0 fits all</p></div><div class="map-desktop ${design==='c'?'map-split':''}">${design==='c'?`<div class="map-service-list">${graphIDs.map(id=>`<button data-action="select-node" data-id="${id}" aria-pressed="${id===selectedNode}"><strong>${get(id).name}</strong><small>${get(id).owner?esc(get(id).owner)+' · ':''}${count(get(id))} SLOs</small></button>`).join('')}</div>`:''}<div class="map-stage service-graph-viewport">${graph(design)}</div></div><div class="graph-mobile"><h3>Used by</h3>${relationList(uses(s),true)}<div class="selected-focus"><strong>${esc(s.name)}</strong><p style="margin:4px 0 0;font-size:13px">${esc(s.description)}</p></div><h3>Depends on</h3>${relationList(s.deps.map(get).filter(Boolean),true)}</div><div class="graph-details">${graphDetails()}</div></section><p class="compare-note">${{a:'Nearby relationships lead the view. Select a service to inspect it without losing your place.',b:'Owner groups show where dependencies cross team boundaries. Ownership does not change access or SLO results.',c:'A persistent service list gives a predictable way to find a service while the map supplies context.'}[design]||name}</p>`;
+  function map(design='a') {
+    const visible=visibleGraphIDs();if(!visible.includes(selectedNode)&&visible.length)selectedNode=visible[0];
+    const s=get(selectedNode),states=[['on_track','good','On track'],['breached','crit','Breached'],['unknown','stale','Unknown'],['no_slos','none','No SLOs']];
+    screen.innerHTML=heading('Services',canWrite()?route(`${icons.plus} New service`,'new','btn primary'):'<span class="read-only">View only</span>')+catalogViews(true)+`<div class="variant" aria-label="Dependency design">Design ${['a','b'].map(d=>route(`${d.toUpperCase()} · ${{a:'Service focus',b:'Owner groups'}[d]}`,`map/${d}`,d===design?'on':'')).join('')}</div><div class="service-graph-legend" role="group" aria-label="Service SLO status">${states.map(([state,tone,label])=>`<button class="service-status-filter" data-action="graph-filter" data-id="${state}" aria-pressed="${graphFilters.includes(state)}">${chip(tone,label)}</button>`).join('')}</div><section class="panel"><div class="graph-toolbar"><div class="graph-picker"><label for="graph-service">Find a service</label><input id="graph-service" role="combobox" aria-expanded="false" aria-controls="graph-service-options" autocomplete="off" placeholder="Search services or owners…"><ul id="graph-service-options" role="listbox" hidden>${visible.map(id=>`<li><button role="option" data-action="select-node" data-id="${id}" data-search="${esc(get(id).name+' '+get(id).owner+' '+get(id).description)}"><strong>${esc(get(id).name)}</strong><span>${states.find(item=>item[0]===graphState(id))[2]}</span><small>${esc([get(id).owner,get(id).description].filter(Boolean).join(' · '))}</small></button></li>`).join('')}</ul></div><span class="map-legend">A → B means A depends on B</span><button class="btn" data-action="graph-reset">Reset view</button></div>${visible.length?`<div class="graph-camera-toolbar"><div class="graph-camera-zoom"><button class="btn" data-camera="out" aria-label="Zoom out">−</button><output aria-label="Graph zoom">100%</output><button class="btn" data-camera="in" aria-label="Zoom in">+</button></div><p class="graph-camera-hint">Drag to pan · Scroll to zoom · Arrow keys pan, +/− zoom, 0 fits all</p></div><div class="map-desktop"><div class="map-stage service-graph-viewport ${graphFocused?'is-focused':''}">${graph(design)}</div></div><div class="graph-mobile"><h3>Used by</h3>${relationList(uses(s),true)}<div class="selected-focus"><strong>${esc(s.name)}</strong><p style="margin:4px 0 0;font-size:13px">${esc(s.description)}</p></div><h3>Depends on</h3>${relationList(s.deps.map(get).filter(Boolean),true)}</div><div class="graph-details">${graphDetails()}</div>`:'<p class="service-empty" role="status">No services match these statuses.</p>'}</section>`;
   }
   function compare() {
-    screen.innerHTML=heading('Dependency designs',route('Back to services','list','btn'))+`<p class="lead">Three ways to explore the same seven services and their dependencies. Open each design to try selection, service details and its mobile layout.</p><div class="design-options">${[['a','Service focus','Start with a service and follow its relationships. The simplest view for a specific question.'],['b','Owner groups','See how services connect across teams, with each team kept together.'],['c','List & map','Find services in a familiar list, with the dependency map alongside it.']].map(([d,title,description])=>`<section class="design-option"><div class="map-stage ${d==='c'?'small-split':''}">${d==='c'?`<ul aria-hidden="true">${graphIDs.map(id=>`<li>${get(id).name}</li>`).join('')}</ul>`:''}${graph(d,true)}</div><div class="option-copy"><span class="option-letter">DESIGN ${d.toUpperCase()}</span><h2>${title}</h2><p>${description}</p>${route(`Explore design ${d.toUpperCase()} →`,`map/${d}`,'btn')}</div></section>`).join('')}</div><p class="compare-note">All options use the same catalog data. No dependency changes an SLO’s result, and none is automatically treated as confirmed customer impact.</p>`;
+    screen.innerHTML=heading('Dependency designs',route('Back to services','list','btn'))+`<p class="lead">Two ways to explore the same seven services and their dependencies. Open each design to try selection, service details and its mobile layout.</p><div class="design-options">${[['a','Service focus','Start with a service and follow its relationships. The simplest view for a specific question.'],['b','Owner groups','See how services connect across teams, with each team kept together.']].map(([d,title,description])=>`<section class="design-option"><div class="map-stage ">${graph(d,true)}</div><div class="option-copy"><span class="option-letter">DESIGN ${d.toUpperCase()}</span><h2>${title}</h2><p>${description}</p>${route(`Explore design ${d.toUpperCase()} →`,`map/${d}`,'btn')}</div></section>`).join('')}</div><p class="compare-note">All options use the same catalog data. No dependency changes an SLO’s result, and none is automatically treated as confirmed customer impact.</p>`;
   }
   function components(service=get('checkout')) {
     screen.innerHTML=heading('Catalog components',route('Back to services','list','btn'))+`<p class="lead">Review individual controls and edge states. Use the State and Role controls above to try complete screens in those states.</p><div class="state-grid">`+
@@ -303,14 +348,16 @@
   function setupGraphCamera() {
     const stage=screen.querySelector('.service-graph-viewport');if(!stage)return;
     const svg=stage.querySelector('svg'),scene=svg.querySelector('.service-camera-scene'),output=screen.querySelector('[aria-label="Graph zoom"]');
+    const graphIDs=visibleGraphIDs();
+    const worldWidth=Number(svg.dataset.worldWidth),worldHeight=Number(svg.dataset.worldHeight);
     let width=1040,height=600,camera={x:0,y:0,scale:1},drag=null,ignoreClick=false;
-    const apply=()=>{scene.setAttribute('transform',`translate(${camera.x} ${camera.y}) scale(${camera.scale})`);output.textContent=`${Math.round(camera.scale*100)}%`;};
-    const fit=(bounds={x:0,y:0,width:1040,height:600})=>{const scale=Math.min((width-48)/bounds.width,(height-48)/bounds.height,1);camera={x:width/2-(bounds.x+bounds.width/2)*scale,y:height/2-(bounds.y+bounds.height/2)*scale,scale};apply();};
+    const apply=()=>{scene.setAttribute('transform',`translate(${camera.x} ${camera.y}) scale(${camera.scale})`);output.textContent=`${Math.round(camera.scale*100)}%`;for(const caption of svg.querySelectorAll('.map-caption')){caption.style.fontSize=`${13/camera.scale}px`;caption.setAttribute('y',Number(caption.dataset.groupTop)+28/camera.scale);}};
+    const fit=(bounds={x:0,y:0,width:worldWidth,height:worldHeight})=>{const scale=Math.min((width-48)/bounds.width,(height-48)/bounds.height,1);camera={x:width/2-(bounds.x+bounds.width/2)*scale,y:height/2-(bounds.y+bounds.height/2)*scale,scale};apply();};
     const measure=()=>{const box=svg.getBoundingClientRect();if(box.width<=48||box.height<=48)return;width=box.width;height=box.height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);fit();};
     const point=id=>{const node=svg.querySelector(`.map-node[data-id="${id}"]`),values=node.getAttribute('transform').match(/[\d.]+/g).map(Number);return values;};
     const focus=(ids,center)=>{const related=new Set(ids);for(const id of graphIDs)for(const dep of get(id).deps.map(dep=>get(dep).routeKey))if(ids.includes(id)||ids.includes(dep)){related.add(id);related.add(dep);}const points=[...related].filter(id=>graphIDs.includes(id)).map(point),xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),cx=center?.[0]??(Math.min(...xs)+Math.max(...xs))/2,cy=center?.[1]??(Math.min(...ys)+Math.max(...ys))/2,bw=2*Math.max(...xs.map(x=>Math.abs(x-cx)))+280,bh=2*Math.max(...ys.map(y=>Math.abs(y-cy)))+220;fit({x:cx-bw/2,y:cy-bh/2,width:bw,height:bh});};
-    const zoom=(factor,point={x:width/2,y:height/2})=>{const min=Math.min(.1,Math.min((width-48)/1040,(height-48)/600,1)/2),scale=Math.max(min,Math.min(4,camera.scale*factor)),ratio=scale/camera.scale;camera={scale,x:point.x-(point.x-camera.x)*ratio,y:point.y-(point.y-camera.y)*ratio};apply();};
-    screen.querySelector('.graph-camera-toolbar').addEventListener('click',event=>{const action=event.target.closest('[data-camera]')?.dataset.camera;if(action==='fit')fit();if(action==='focus')focus([selectedNode],point(selectedNode));if(action==='attention')focus(graphIDs.filter(id=>(objectives[get(id).id]||[]).some(slo=>slo[1]!=='healthy')));if(action==='in'||action==='out')zoom(action==='in'?1.25:1/1.25);});
+    const zoom=(factor,point={x:width/2,y:height/2})=>{const min=Math.min(.1,Math.min((width-48)/worldWidth,(height-48)/worldHeight,1)/2),scale=Math.max(min,Math.min(4,camera.scale*factor)),ratio=scale/camera.scale;camera={scale,x:point.x-(point.x-camera.x)*ratio,y:point.y-(point.y-camera.y)*ratio};apply();};
+    screen.querySelector('.graph-camera-toolbar').addEventListener('click',event=>{const action=event.target.closest('[data-camera]')?.dataset.camera;if(action==='in'||action==='out')zoom(action==='in'?1.25:1/1.25);});
     svg.tabIndex=0;
     svg.addEventListener('wheel',event=>{event.preventDefault();const box=svg.getBoundingClientRect(),delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?height:1);zoom(Math.exp(-Math.max(-240,Math.min(240,delta))*.002),{x:event.clientX-box.left,y:event.clientY-box.top});},{passive:false});
     svg.addEventListener('pointerdown',event=>{if(event.button===0&&event.isPrimary){ignoreClick=false;drag={id:event.pointerId,x:event.clientX,y:event.clientY,camera};}});
@@ -318,7 +365,7 @@
     const end=event=>{drag=null;if(svg.hasPointerCapture(event.pointerId))svg.releasePointerCapture(event.pointerId);};svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);svg.addEventListener('pointerleave',event=>{if(!ignoreClick)end(event);});
     svg.addEventListener('click',event=>{if(ignoreClick){event.preventDefault();event.stopPropagation();ignoreClick=false;}},true);
     svg.addEventListener('keydown',event=>{if(event.target!==svg)return;const delta={ArrowLeft:[48,0],ArrowRight:[-48,0],ArrowUp:[0,48],ArrowDown:[0,-48]}[event.key];if(delta){event.preventDefault();camera={...camera,x:camera.x+delta[0],y:camera.y+delta[1]};apply();}else if(['+','=','-','0'].includes(event.key)){event.preventDefault();if(event.key==='0')fit();else zoom(event.key==='-'?1/1.25:1.25);}});
-    measure();graphResize=new ResizeObserver(measure);graphResize.observe(svg);
+    measure();if(graphFocused)focus([selectedNode],point(selectedNode));graphResize=new ResizeObserver(measure);graphResize.observe(svg);
   }
   function render() {
     dependencyResize?.disconnect();graphResize?.disconnect();
@@ -326,7 +373,7 @@
     const service=get(id||'checkout');
     document.title=`${view==='list'?'Services':view==='new'?'New service':service?.name||'Services'} · Almanac design proposal`;
     document.querySelectorAll('.review-bar nav a').forEach(a=>{const match=a.hash===location.hash||(!location.hash&&a.hash==='#list');if(match)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
-    if(view==='list'||!view)list();else if(view==='new')edit(null);else if(view==='compare')compare();else if(view==='map')map(['a','b','c'].includes(id)?id:'a');else if(view==='components')components(service||get('checkout'));else if(!service)screen.innerHTML=heading('Service not found',route('Back to services','list','btn'))+empty('This service is unavailable','It may have been deleted. Return to the catalog to find another service.');else if(view==='slo-component')sloForm(service);else if(view==='edit')edit(service);else detail(service);
+    if(view==='list'||!view)list();else if(view==='new')edit(null);else if(view==='compare')compare();else if(view==='map')map(['a','b'].includes(id)?id:'a');else if(view==='components')components(service||get('checkout'));else if(!service)screen.innerHTML=heading('Service not found',route('Back to services','list','btn'))+empty('This service is unavailable','It may have been deleted. Return to the catalog to find another service.');else if(view==='slo-component')sloForm(service);else if(view==='edit')edit(service);else detail(service);
     if(view==='dependencies')requestAnimationFrame(()=>screen.querySelector('.service-dependencies')?.scrollIntoView({block:'start'}));
     const h1=screen.querySelector('h1');if(h1){h1.tabIndex=-1;h1.focus({preventScroll:true});}
     document.querySelector('#preview-state').value=state;document.querySelector('#preview-role').value=role;
@@ -337,6 +384,7 @@
     connectServiceDependencies();setupGraphCamera();
   }
   document.addEventListener('input',event=>{
+    if(event.target.id==='graph-service'){const options=screen.querySelector('#graph-service-options');options.hidden=false;event.target.setAttribute('aria-expanded','true');for(const button of options.querySelectorAll('button'))button.closest('li').hidden=!button.dataset.search.toLowerCase().includes(event.target.value.toLowerCase());}
     if(event.target.id==='service-search'){search=event.target.value;page=1;listResults();}
     if(event.target.closest('#service-form')){dirty=true;if(event.target.id==='display-name'&&draftKey==='new'&&!document.querySelector('#identifier').dataset.edited)document.querySelector('#identifier').value=event.target.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,63);if(event.target.id==='identifier')event.target.dataset.edited='true';}
   });
@@ -347,7 +395,7 @@
     if(id==='preview-state'){captureDraft();state=value;render();}
     if(id==='preview-role'){captureDraft();role=value;render();}
     if(id==='preview-dependencies'){dependencyStyle=value;render();}
-    if(id==='graph-service'){selectedNode=value;render();}
+
   });
   document.addEventListener('submit',event=>{
     if(event.target.id==='service-form'){event.preventDefault();if(canWrite())saveForm();}
@@ -389,7 +437,9 @@
     if(action==='discard'){dirty=false;draft=null;draftKey='';modal.close();location.hash=target.dataset.destination;}
     if(action==='reload-draft'){draft=null;draftKey='';dirty=false;state='normal';render();notify('Saved service reloaded.');}
     if(action==='retry-save'){state='normal';saveForm();}
-    if(action==='select-node'){selectedNode=id;render();const control=screen.querySelector(`.map-node[data-id="${id}"]`);control?.focus({preventScroll:true});}
+    if(action==='graph-filter'){graphFocused=false;graphFilters=graphFilters.includes(id)?graphFilters.filter(value=>value!==id):[...graphFilters,id];render();}
+    if(action==='graph-reset'){graphFilters=[];graphFocused=false;render();}
+    if(action==='select-node'){selectedNode=id;graphFocused=true;render();const control=screen.querySelector(`.map-node[data-id="${id}"]`);control?.focus({preventScroll:true});}
     if(action==='choose-slo-service'){showModal('Choose a service',`<div class="dependency-options">${services.map(s=>`<div class="relationships"><li><span class="service-caption"><strong>${esc(s.name)}</strong><small>${esc(s.description)}</small></span>${btn('Select','select-slo-service','',`data-id="${s.id}"`)}</li></div>`).join('')}</div>`,btn('Cancel','close-modal'));}
     if(action==='select-slo-service'){modal.close();selectSloService(get(id));}
     if(action==='inline-create'&&canWrite()){showModal('New service',`<p>Create a service and keep working on your SLO.</p><form id="inline-service-form">${input('inline-name','Display name','','','required')}${input('inline-id','Identifier','','Lowercase letters, numbers and hyphens.','required')}<p id="inline-error" role="alert" style="color:var(--status-breached)"></p></form>`,`${btn('Cancel','close-modal')}<button class="btn primary" type="submit" form="inline-service-form">Create and select</button>`);}

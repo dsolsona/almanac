@@ -20,10 +20,9 @@ Use the prototype navigation or the following fragment identifiers:
 | `#new` | Create a service with optional ownership, context, multi-value labels, arbitrary named links and dependencies |
 | `#edit/checkout` | Edit metadata without changing SLO definitions; validation, save errors, conflicts and discard confirmation |
 | `#dependencies/checkout` | Open the dependency section within service details; edit relationships through Edit service |
-| `#compare` | Compare three dependency visualization approaches using the same seven services |
+| `#compare` | Compare two dependency visualization approaches using the same seven services |
 | `#map/a` | Service focus with direct relationships and a selected-service summary |
 | `#map/b` | The same services grouped by owner |
-| `#map/c` | Persistent service list alongside the dependency map |
 | `#components` | Individual controls/states, blocked and permitted deletion, service selection and inline creation within an SLO form |
 | `#slo-component/checkout` | Start an SLO from a service, change the selected service or create one inline while keeping the objective draft |
 
@@ -82,10 +81,10 @@ narrow screens use cards grouped under Used by and Depends on.
   layout resizes. Graphs show declared dependencies without
   propagating SLO status or impact.
 - The graph uses a fixed-height canvas with drag panning, pointer-centered wheel
-  zoom and explicit zoom controls. Fit all restores the full loaded catalog;
-  Focus selected centers a service and its direct neighborhood. Needs attention
-  frames breached/unknown services and their neighbors without filtering services
-  or claiming impact. The finder brings a chosen service into view. Arrow keys
+  zoom and explicit zoom controls. Reset view clears filters/search and restores
+  the loaded catalog. Status chips filter service summaries and can be combined;
+  the type-ahead finder shows owner and status and centers the chosen service.
+  Arrow keys
   pan, +/− zoom and 0 fits all. The duplicate Relationships table is removed;
   mobile keeps the selected service's navigable relationships.
 
@@ -94,3 +93,21 @@ and composite SLOs are outside these mocks. UI/CLI/API parity is a product contr
 this prototype illustrates UI flows only. Backend and authentication behavior, browser
 history/draft recovery, and production shared-control wiring need implementation
 verification later. Sample SLO values are illustrative fixtures, not calculations.
+
+
+The 50-service refinement replaces fixed columns with deterministic positions
+computed from dependency links and label separation. Positions do not change on
+selection. Owner groups use compact, separately packed regions, and group headings
+stay readable when zooming. Nodes show service names and status; owner/count details
+remain in hover text, the service list and selected-service summary. Explicit focus
+dims unrelated context; Reset view restores the full overview. The reference retains a
+snapshot of the same layout math; rendered geometry and independent topology/layout
+acceptance checks cover the result.
+
+The 2026-11-08 refinement retains Service focus and Owner groups, removes List &
+map, and replaces framing actions with Reset view. The shared type-ahead picker
+shows service context before selection. On track, Breached, Unknown and No SLOs
+chips filter each service’s own aggregate status; no selection means all statuses,
+and multiple selections combine as alternatives. Reset clears filters and search.
+Circle tint and stroke use semantic status colors without inheriting dependency
+health; missing or stale results remain Unknown.

@@ -23,7 +23,7 @@ test(`services match the approved reference at ${width}px in ${theme}`,async({br
  await actual.route('**/api/v1/slos/overview**',route=>route.fulfill({json:overview(new URL(route.request().url()).searchParams.get('service_id')!)}));
  const summary:unknown[]=[];
  try{
-  for(const [name,path,hash]of [['list','/services','list'],['detail',`/services/${services[0]!.id}`,'service/checkout'],['new','/services/new','new'],['edit',`/services/${services[0]!.id}/edit`,'edit/checkout'],['graph','/services/dependencies','map/a'],['graph-b','/services/dependencies','map/b'],['graph-c','/services/dependencies','map/c']]as const){
+  for(const [name,path,hash]of [['list','/services','list'],['detail',`/services/${services[0]!.id}`,'service/checkout'],['new','/services/new','new'],['edit',`/services/${services[0]!.id}/edit`,'edit/checkout'],['graph','/services/dependencies','map/a'],['graph-b','/services/dependencies','map/b']]as const){
    await actual.goto(path);await actual.getByRole('heading',{level:1}).waitFor();
    if(name==='list')await actual.locator('.services-table tbody tr').first().waitFor();
    if(name==='detail')await actual.locator('.service-slo-table tbody tr').first().waitFor();
@@ -31,7 +31,6 @@ test(`services match the approved reference at ${width}px in ${theme}`,async({br
    if(name.startsWith('graph')&&width>860)await actual.locator('.map-node').first().waitFor();
    if(name.startsWith('graph')&&width<=860)await actual.locator('.graph-mobile .selected-focus').waitFor();
    if(name==='graph-b')await actual.getByRole('button',{name:'Owner groups',exact:true}).click();
-   if(name==='graph-c')await actual.getByRole('button',{name:'List & map',exact:true}).click();
    await reference.goto(`http://127.0.0.1:${address.port}/docs/design/mocks/services/?theme=${theme}#${hash}`);await reference.locator('#screen h1').waitFor();
    for(const target of [actual,reference]){await target.evaluate(()=>document.fonts.ready);await target.evaluate(()=>document.documentElement.style.setProperty('--mono','"Liberation Mono", monospace'));}
    expect(await actual.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

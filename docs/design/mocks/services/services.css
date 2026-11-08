@@ -216,14 +216,13 @@ dialog::backdrop { background:rgb(12 24 25 / 42%); }
 .map-node-port { fill:var(--border-strong); }
 .map-node.selected .map-node-port { fill:var(--selection); }
 .map-node text { fill:var(--text); font:600 20px var(--font-body); }
-.map-node text.subtitle { fill:var(--text-3); font:18px var(--font-body); }
 .map-node.selected > text:first-of-type { font-weight:700; }
 .map-node:hover .map-node-core { stroke:var(--selection); fill:var(--surface-2); }
 .map-node[data-slo-state] { --service-node-color:var(--border-strong); }
 .map-node[data-slo-state="on_track"] { --service-node-color:var(--status-healthy); }
 .map-node[data-slo-state="breached"] { --service-node-color:var(--status-breached); }
 .map-node[data-slo-state="unknown"] { --service-node-color:var(--status-stale); }
-.map-node[data-slo-state] .map-node-core { stroke:var(--service-node-color); fill:color-mix(in srgb,var(--service-node-color) 5%,var(--surface)); }
+.map-node[data-slo-state] .map-node-core { stroke:var(--service-node-color); fill:color-mix(in srgb,var(--service-node-color) 18%,var(--surface)); stroke-width:2.5; }
 .map-node[data-slo-state="unknown"] .map-node-core { stroke-dasharray:4 4; }
 .map-node[data-slo-state="no_slos"] .map-node-core { stroke-dasharray:2 5; }
 .map-node[data-slo-state] .map-node-port { fill:var(--service-node-color); }
@@ -238,12 +237,6 @@ dialog::backdrop { background:rgb(12 24 25 / 42%); }
 .graph-details .label-chip { background:var(--surface); }
 .graph-details .btn { margin-left:auto; }
 .graph-mobile { display:none; }
-.map-split { display:grid; grid-template-columns:240px minmax(0,1fr); }
-.map-service-list { padding:12px; border-right:1px solid var(--border); }
-.map-service-list button { display:block; width:100%; text-align:left; background:none; border:1px solid transparent; border-radius:3px; padding:12px; cursor:pointer; }
-.map-service-list button[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-wash); }
-.map-service-list small { display:block; color:var(--text-3); font:12px var(--mono); margin-top:4px; }
-.map-split .map-stage { padding:12px; display:grid; align-items:center; }
 .design-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
 .design-option { border:1px solid var(--border); border-radius:3px; background:var(--surface); overflow:hidden; }
 .design-option .map-stage { padding:12px 4px; border-bottom:1px solid var(--border); }
@@ -345,5 +338,20 @@ dialog::backdrop { background:rgb(12 24 25 / 42%); }
 .graph-camera-zoom .btn { width:34px; min-height:34px; height:34px; padding:0; }
 .graph-camera-zoom output { width:5ch; text-align:center; font:12px var(--mono); color:var(--text-2); }
 .graph-camera-hint { width:100%; margin:0; font:11px var(--mono); color:var(--text-3); }
-.map-service-list { max-height:clamp(420px,65vh,640px); overflow:auto; overscroll-behavior:contain; }
 @media(max-width:860px){.graph-camera-toolbar{display:none;}}
+
+.service-graph-viewport .map-edge:not(.active) { opacity:.2; }
+.service-graph-viewport.is-focused .map-node.quiet { opacity:.24; }
+.service-graph-viewport.is-focused .map-node.quiet:is(:hover,:focus-within) { opacity:1; }
+.service-graph-viewport.is-focused .map-edge:not(.active) { opacity:.08; }
+
+.service-status-filter { border:1px solid transparent; border-radius:20px; background:none; padding:3px; cursor:pointer; min-height:38px; }
+.service-status-filter[aria-pressed="true"] { border-color:var(--selection); background:var(--surface-2); }
+.service-status-filter:focus-visible { outline:3px solid var(--focus-ring); outline-offset:2px; }
+.graph-picker { position:relative; width:min(400px,100%); }
+.graph-picker label { display:block; margin-bottom:6px; }
+.graph-picker input { width:100%; }
+.graph-picker ul { position:absolute; z-index:10; top:100%; width:100%; margin:4px 0 0; padding:4px; list-style:none; background:var(--surface); border:1px solid var(--border); max-height:320px; overflow:auto; }
+.graph-picker button { display:grid; grid-template-columns:1fr auto; width:100%; text-align:left; border:0; background:none; padding:10px; color:var(--text); cursor:pointer; }
+.graph-picker button:hover,.graph-picker button:focus-visible { background:var(--surface-2); }
+.graph-picker small { grid-column:1/-1; color:var(--text-3); }

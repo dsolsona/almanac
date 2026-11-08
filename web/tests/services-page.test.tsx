@@ -1,10 +1,11 @@
 import {beforeEach,afterEach,expect,it,vi} from 'vitest';
-import {fireEvent,render,screen,waitFor,cleanup} from '@testing-library/react';
+import {fireEvent,render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ServicesPage} from '../src/services/ServicesPage.tsx';
 import type {AuthContext} from '../src/auth/client.ts';
 import {serviceClient} from '../src/services/client.ts';
 import {clearQueryCache} from '../src/queryCache.ts';
+import {serviceFleet} from '../browser/support/service-fleet.ts';
 
 const id='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
 const context:AuthContext={csrf_token:'csrf',session:{user_id:id,login:'editor@example.test',role:'editor',restricted:false}};
@@ -159,11 +160,9 @@ it('opens the full graph from Services and exposes each service SLO status witho
  expect(screen.getByRole('link',{name:'Graph'})).toHaveAttribute('aria-current','page');
  expect(screen.getByRole('group',{name:'Service SLO status'})).toHaveTextContent('On track');
  for(const record of records)expect(rendered.container.querySelector(`.map-node[data-id="${record.id}"]`)).toHaveAttribute('data-slo-state',record.slo_summary.state);
- expect(rendered.container.querySelector(`.map-node[data-id="${id}"] .subtitle`)).toHaveTextContent(/^1 SLO$/);
+ expect(rendered.container.querySelector(`.map-node[data-id="${id}"] title`)).toHaveTextContent(/^Checkout · On track · 1 SLO$/);
  expect(screen.queryByText('Unassigned',{exact:true})).not.toBeInTheDocument();
  await userEvent.click(screen.getByRole('button',{name:'Owner groups'}));
- expect(screen.queryByText('Unassigned',{exact:true})).not.toBeInTheDocument();
- await userEvent.click(screen.getByRole('button',{name:'List & map'}));
  expect(screen.queryByText('Unassigned',{exact:true})).not.toBeInTheDocument();
  await userEvent.click(screen.getByRole('link',{name:'Table'}));
  expect(await screen.findByRole('link',{name:'Checkout'})).toBeVisible();
@@ -179,9 +178,65 @@ it('provides graph camera controls without a duplicate Relationships table',asyn
  const zoom=screen.getByLabelText('Graph zoom');const before=zoom.textContent;
  await userEvent.click(screen.getByRole('button',{name:'Zoom in'}));
  expect(zoom.textContent).not.toBe(before);
- await userEvent.click(screen.getByRole('button',{name:'Fit all'}));
+ await userEvent.click(screen.getByRole('button',{name:'Reset view'}));
  expect(zoom.textContent).toBe(before);
- await userEvent.click(screen.getByRole('button',{name:'Needs attention'}));
+ await userEvent.click(within(screen.getByRole('group',{name:'Service SLO status'})).getByRole('button',{name:'Breached'}));
  expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','true');
- expect(screen.getByRole('button',{name:'Focus selected'})).toBeEnabled();
+ expect(screen.queryByRole('button',{name:'Focus selected'})).not.toBeInTheDocument();
+});
+
+
+it('lays out a fifty-service dependency network compactly instead of in three columns',async()=>{
+ history.replaceState({},'','/services/dependencies');const records=serviceFleet();
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ const mounted=render(<ServicesPage context={context}/>);
+ await waitFor(()=>expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(50));
+ const points=[...mounted.container.querySelectorAll('.map-node')].map(node=>node.getAttribute('transform')!.match(/-?[0-9.]+/g)!.map(Number));
+ const xs=points.map(point=>point[0]!),ys=points.map(point=>point[1]!);
+ expect((Math.max(...xs)-Math.min(...xs))/(Math.max(...ys)-Math.min(...ys))).toBeGreaterThan(.8);
+ expect(new Set(xs.map(x=>Math.round(x))).size).toBeGreaterThan(20);
+ const before=points.map(point=>point.join(','));
+ await userEvent.type(screen.getByRole('combobox',{name:'Find a service'}),records[20]!.display_name);
+ await userEvent.click(screen.getByRole('option',{name:new RegExp(records[20]!.display_name)}));
+ const after=[...mounted.container.querySelectorAll('.map-node')].map(node=>node.getAttribute('transform')!.match(/-?[0-9.]+/g)!.map(Number).join(','));
+ expect(after).toEqual(before);
+});
+
+it('finds services by typing their owner and shows their status before selection',async()=>{
+ history.replaceState({},'','/services/dependencies');
+ const records=[service,{...service,id:other,name:'payments',display_name:'Payments',owner:'Money movement',slo_summary:{state:'on_track',total:2,on_track:2,breached:0,unknown:0}}];
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ render(<ServicesPage context={context}/>);
+ await screen.findByRole('button',{name:'Select Payments, On track, 2 SLOs'});
+ const finder=screen.getByRole('combobox',{name:'Find a service'});
+ await userEvent.type(finder,'Money');
+ const option=screen.getByRole('option',{name:/Payments/});expect(option).toHaveTextContent('On track');expect(option).toHaveTextContent('Money movement');
+ await userEvent.keyboard('{ArrowDown}{Enter}');
+ expect(screen.getByRole('button',{name:'Select Payments, On track, 2 SLOs'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('combobox',{name:'Find a service'})).toHaveValue('');
+ expect(screen.queryByRole('button',{name:'List & map'})).not.toBeInTheDocument();
+});
+
+it('combines SLO status filters and resets an empty graph back to the complete catalog',async()=>{
+ history.replaceState({},'','/services/dependencies');
+ const records=[service,{...service,id:other,name:'payments',display_name:'Payments',slo_summary:{state:'breached',total:1,on_track:0,breached:1,unknown:0}},{...service,id:'00000000-0000-4000-8000-000000000003',display_name:'Search',slo_summary:{state:'unknown',total:1,on_track:0,breached:0,unknown:1}}];
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ const mounted=render(<ServicesPage context={context}/>);
+ await waitFor(()=>expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3));
+ const filters=screen.getByRole('group',{name:'Service SLO status'});
+ await userEvent.click(within(filters).getByRole('button',{name:'Breached'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
+ expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','true');
+ await userEvent.click(within(filters).getByRole('button',{name:'Unknown'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(2);
+ await userEvent.click(within(filters).getByRole('button',{name:'Breached'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
+ await userEvent.click(within(filters).getByRole('button',{name:'Unknown'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
+ await userEvent.click(within(filters).getByRole('button',{name:'On track'}));
+ expect(screen.getByText('No services match these statuses.')).toBeVisible();
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(0);
+ await userEvent.click(screen.getByRole('button',{name:'Reset view'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
+ expect(within(filters).getByRole('button',{name:'On track'})).toHaveAttribute('aria-pressed','false');
 });
