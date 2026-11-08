@@ -133,10 +133,11 @@ func printHelp(w io.Writer) {
   almanac slis update --profile-file=FILE --sli-id=UUID --if-match=ETAG --input-file=FILE
   almanac slis observations --profile-file=FILE --sli-id=UUID [--limit=50] [--cursor=CURSOR]
   almanac slis test --profile-file=FILE --datasource-id=UUID --query=PROMQL [--wait] [--cancel-on-timeout]
-  almanac services list --profile-file=FILE [--limit=50] [--cursor=CURSOR]
+  almanac services list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--q=TEXT] [--owner=OWNER] [--coverage=all|with|without]
   almanac services get --profile-file=FILE --service-id=UUID
   almanac services create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
   almanac services update --profile-file=FILE --service-id=UUID --if-match=ETAG --input-file=FILE
+  almanac services delete --profile-file=FILE --service-id=UUID --if-match=ETAG
   almanac slos list --profile-file=FILE [--service-id=UUID] [--limit=50] [--cursor=CURSOR]
   almanac slos get --profile-file=FILE --slo-id=UUID
   almanac slos create --profile-file=FILE --input-file=FILE --idempotency-key=KEY

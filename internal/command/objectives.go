@@ -30,12 +30,13 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	operation := kind + " " + action
 	rest := args[1:]
 	jsonOut := requestedJSON(rest)
-	valid := kind == "services" && (action == "list" || action == "get" || action == "create" || action == "update") || kind == "slos" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "evaluate" || action == "overview" || action == "operational" || action == "status" || action == "values")
+	valid := kind == "services" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "delete") || kind == "slos" && (action == "list" || action == "get" || action == "create" || action == "update" || action == "evaluate" || action == "overview" || action == "operational" || action == "status" || action == "values")
 	if !valid {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("choose a supported command"))
 	}
 	var profile, id, serviceID, inputFile, etag, key, cursor, output, at, start, end string
-	var query, urgency, operationalStart, operationalEnd string
+	var query, urgency, operationalStart, operationalEnd, owner, coverage string
+	var sortBy, sortOrder string
 	var limit, burnWindowSeconds int
 	var generationID, lane string
 	var offset int
@@ -58,6 +59,10 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	fs.StringVar(&start, "timeline-start", "", "timeline start")
 	fs.StringVar(&end, "timeline-end", "", "timeline end")
 	fs.StringVar(&query, "q", "", "literal name search")
+	fs.StringVar(&owner, "owner", "", "service owner filter")
+	fs.StringVar(&coverage, "coverage", "", "all, with or without SLOs")
+	fs.StringVar(&sortBy, "sort", "", "service sort: name, slo_status, owner, slo_count or dependency_count")
+	fs.StringVar(&sortOrder, "order", "", "asc or desc (requires sort)")
 	fs.StringVar(&urgency, "urgency", "", "needs_attention, watch or healthy")
 	fs.StringVar(&operationalStart, "start", "", "operational history range start")
 	fs.StringVar(&operationalEnd, "end", "", "operational history range end")
@@ -77,13 +82,16 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	fs.Visit(func(f *flag.Flag) { seen[f.Name] = true })
 	allowed := map[string]bool{"profile-file": true, "timeout": true, "output": true}
 	idFlag := kind[:len(kind)-1] + "-id"
-	if action == "get" || action == "update" || action == "evaluate" {
+	if action == "get" || action == "update" || action == "delete" || action == "evaluate" {
 		allowed[idFlag] = true
 	}
 	if action == "list" {
 		allowed["limit"], allowed["cursor"] = true, true
 		if kind == "slos" {
 			allowed["service-id"] = true
+		} else {
+			allowed["q"], allowed["owner"], allowed["coverage"] = true, true, true
+			allowed["sort"], allowed["order"] = true, true
 		}
 	}
 	if action == "create" {
@@ -91,6 +99,9 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	}
 	if action == "update" {
 		allowed["input-file"], allowed["if-match"] = true, true
+	}
+	if action == "delete" {
+		allowed["if-match"] = true
 	}
 	if action == "evaluate" {
 		allowed["at"], allowed["timeline-start"], allowed["timeline-end"] = true, true, true
@@ -122,7 +133,7 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if output != "json" && output != "text" || profile == "" || timeout <= 0 || timeout > 2*time.Minute || limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("invalid output, profile, deadline or pagination"))
 	}
-	if (action == "get" || action == "update" || action == "evaluate" || action == "operational") && !validCLIUUID(id) || serviceID != "" && !validCLIUUID(serviceID) {
+	if (action == "get" || action == "update" || action == "delete" || action == "evaluate" || action == "operational") && !validCLIUUID(id) || serviceID != "" && !validCLIUUID(serviceID) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("resource identifier must be a canonical UUID"))
 	}
 	if action == "overview" && (!utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 || urgency != "" && urgency != "needs_attention" && urgency != "watch" && urgency != "healthy") {
@@ -133,6 +144,9 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	}
 	if action == "create" && (inputFile == "" || !validKey(key)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and idempotency-key are required"))
+	}
+	if action == "delete" && !validObjectiveETag(etag, "service", id) {
+		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("exact if-match ETag is required"))
 	}
 	if action == "update" && (inputFile == "" || !validObjectiveETag(etag, kind[:len(kind)-1], id)) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("input-file and exact if-match ETag are required"))
@@ -217,14 +231,14 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if err != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceSetupFailure(err))
 	}
-	if (action == "create" || action == "update") && identity.Role != "administrator" && identity.Role != "editor" {
+	if (action == "create" || action == "update" || action == "delete") && identity.Role != "administrator" && identity.Role != "editor" {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceForbidden())
 	}
 	objectiveOps, ok := ops.(sloclient.Operations)
 	if !ok {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("objective operations unavailable"))
 	}
-	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{GenerationID: generationID, Lane: lane, Offset: offset, Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
+	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{GenerationID: generationID, Lane: lane, Offset: offset, Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Owner: owner, Coverage: coverage, Sort: sortBy, Order: sortOrder, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
 	if err != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err)
 	}
@@ -416,11 +430,25 @@ func validObjectiveInput(data []byte, kind, action string) bool {
 			return false
 		}
 	}
+	if kind == "services" {
+		allowed := map[string]bool{"name": true, "display_name": true, "description": true, "owner": true, "contact": true, "labels": true, "links": true, "annotations": true, "dependencies": true}
+		for field := range fields {
+			if !allowed[field] {
+				return false
+			}
+		}
+		if _, ok := fields["display_name"]; !ok {
+			return false
+		}
+		if action == "create" {
+			if _, ok := fields["name"]; !ok {
+				return false
+			}
+		}
+		return true
+	}
 	if action == "update" {
 		return exactFields(fields, "display_name")
-	}
-	if kind == "services" {
-		return exactFields(fields, "name", "display_name")
 	}
 	if _, ok := fields["evaluation_valid_from"]; ok {
 		return exactFields(fields, "name", "display_name", "service_id", "sli_id", "target", "rolling_window_seconds", "evaluation_valid_from")

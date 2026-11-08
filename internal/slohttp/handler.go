@@ -331,6 +331,10 @@ func (h *Handler) operationalDetail(w http.ResponseWriter, r *http.Request, requ
 func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, q url.Values, isSlo bool) {
 	switch r.Method {
 	case http.MethodGet:
+		if !isSlo {
+			h.listCatalogServices(w, r, requestID, proof, q)
+			return
+		}
 		if hasBody(r) || hasConditional(r) {
 			problem(w, 400, "invalid_request", requestID)
 			return
@@ -390,6 +394,10 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID s
 			}
 			input.Name = req.Name
 			input.DisplayName = req.DisplayName
+			if setCreateServiceMetadata(&input, req, body) != nil {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
 		}
 		service, objective, err := storage.CreateObjective(r.Context(), h.databaseURL, input, isSlo)
 		if err != nil {
@@ -441,14 +449,44 @@ func (h *Handler) detail(w http.ResponseWriter, r *http.Request, requestID strin
 			problem(w, status, "invalid_request", requestID)
 			return
 		}
+		if !isSlo {
+			var request api.ServiceMetadataWrite
+			if json.Unmarshal(body, &request, json.RejectUnknownMembers(true)) != nil {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+			service, err = storage.UpdateServiceCatalog(r.Context(), h.databaseURL, storage.ServiceUpdateInput{Proof: proof, ID: id, Patch: servicePatch(request), Version: version, RequestID: requestID, Now: h.now})
+			break
+		}
 		var req api.ResourceMetadataWrite
 		if json.Unmarshal(body, &req, json.RejectUnknownMembers(true)) != nil {
 			problem(w, 400, "invalid_request", requestID)
 			return
 		}
 		service, objective, err = storage.UpdateObjectiveMetadata(r.Context(), h.databaseURL, proof, id, req.DisplayName, requestID, version, h.now, isSlo)
+	case http.MethodDelete:
+		if isSlo {
+			w.Header().Set("Allow", "GET, PATCH")
+			problem(w, 405, "method_not_allowed", requestID)
+			return
+		}
+		version, valid := parseETag(r.Header.Values("If-Match"), kind, id)
+		if !valid || hasBody(r) || len(r.Header.Values("If-None-Match")) != 0 || len(r.Header.Values("Idempotency-Key")) != 0 {
+			problem(w, 400, "invalid_request", requestID)
+			return
+		}
+		if err = storage.ArchiveService(r.Context(), h.databaseURL, proof, id, version, requestID, h.now); err != nil {
+			storageError(w, err, requestID)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
 	default:
-		w.Header().Set("Allow", "GET, PATCH")
+		if isSlo {
+			w.Header().Set("Allow", "GET, PATCH")
+		} else {
+			w.Header().Set("Allow", "GET, PATCH, DELETE")
+		}
 		problem(w, 405, "method_not_allowed", requestID)
 		return
 	}
@@ -512,9 +550,6 @@ func (h *Handler) evaluate(w http.ResponseWriter, r *http.Request, requestID str
 	write(w, 200, result)
 }
 
-func serviceDTO(v storage.ServiceRecord) api.Service {
-	return api.Service{Id: uuid.MustParse(v.ID), Name: v.Name, DisplayName: v.DisplayName, Version: strconv.FormatInt(v.Version, 10), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
-}
 func sloDTO(v storage.SloRecord) api.Slo {
 	r := api.Slo{Id: uuid.MustParse(v.ID), Name: v.Name, DisplayName: v.DisplayName, Version: strconv.FormatInt(v.Version, 10), DefinitionRevision: strconv.FormatInt(v.DefinitionRevision, 10), ServiceId: uuid.MustParse(v.ServiceID), ServiceDisplayName: v.ServiceDisplayName, SliId: uuid.MustParse(v.SliID), SliDisplayName: v.SliDisplayName, Target: v.Target, RollingWindowSeconds: v.RollingWindowSeconds, CadenceSeconds: int(v.CadenceSeconds), ActivatedAt: v.ActivatedAt, EvaluationValidFrom: v.EvaluationValidFrom, HistoricalRequestedAt: v.HistoricalRequestedAt, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
 	if v.HistoricalRequestedBy != nil {
@@ -628,6 +663,17 @@ func fieldProblem(w http.ResponseWriter, requestID, field, code, message string)
 	}{{Code: code, Field: field, Message: message}}})
 }
 func storageError(w http.ResponseWriter, err error, id string, objectiveIDs ...string) {
+	if refs, ok := errors.AsType[*storage.ServiceReferencesError](err); ok {
+		slos, services := make([]uuid.UUID, 0, len(refs.Slos)), make([]uuid.UUID, 0, len(refs.Services))
+		for _, id := range refs.Slos {
+			slos = append(slos, uuid.MustParse(id))
+		}
+		for _, id := range refs.Services {
+			services = append(services, uuid.MustParse(id))
+		}
+		write(w, http.StatusConflict, api.Problem{Code: "service_in_use", Message: "Move or remove the referencing SLOs and service dependencies before deleting this service.", RequestId: id, BlockingSloIds: &slos, BlockingServiceIds: &services})
+		return
+	}
 	if errors.Is(err, storage.ErrDerivedPending) || errors.Is(err, storage.ErrDerivedFailed) {
 		state, code, message := "pending", "derived_data_pending", "SLO results are being prepared."
 		retry := 2

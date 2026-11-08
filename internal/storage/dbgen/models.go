@@ -255,6 +255,13 @@ type AlmanacService struct {
 	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Metadata    []byte             `json:"metadata"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+type AlmanacServiceDependency struct {
+	ServiceID    pgtype.UUID `json:"service_id"`
+	DependencyID pgtype.UUID `json:"dependency_id"`
 }
 
 type AlmanacSession struct {

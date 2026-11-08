@@ -148,7 +148,9 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   status mark, a secondary line and a disabled state; keyboard navigation uses
   arrows, Home/End, Enter and Escape; a no-match row can offer an action. The
   selection collapses to a `SelectionSummary` whose Change action returns focus to
-  the input.
+  the input. Supplying `onSearch` delegates filtering to the caller; returned
+  options are not filtered again by display text. This preserves API matches on
+  UUIDs, labels and other metadata. Local pickers keep their normal text filter.
 - `SelectionSummary` shows status, title, badge, detail, optional message and
   action; the warning variant uses the warning wash.
 - `FormSection` and `FormActions` compose create and edit forms as numbered

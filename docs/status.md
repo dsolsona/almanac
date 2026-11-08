@@ -1,5 +1,22 @@
 # Delivery status
 
+PR [#68](https://github.com/dsolsona/almanac/pull/68) Greptile follow-up, 2026-11-08:
+six current findings are corrected with failing-then-passing regressions: remote
+dependency matches, discarded form composers, definite create-rejection recovery,
+SLO pagination races, graph deep links across pages and actual pager offsets.
+The seventh finding targets the superseded fixed owner-column graph; the accepted
+packed layout and camera controls remain. Final `make check` passes 425 frontend
+tests, all Go suites and 75 browser cases, including 36 exact visual comparisons,
+in 3m51s. Sequential `make test-e2e` passes all 14 journeys in 3m28s wall time.
+The interrupted earlier visual run remains an unresolved navigation investigation
+in [F8-T01](tasks/F8-T01.md). Local preview remains at `dd74764`; this follow-up
+updates the PR without changing local data or credentials. Larger-fleet performance
+and manual screen-reader testing remain unrun. Merge is not authorized.
+
+Previous catalog checkpoint:
+
+Service catalog candidate, 2026-11-08: [F8-T01](tasks/F8-T01.md) is published in [PR #68](https://github.com/dsolsona/almanac/pull/68) on `feat/service-catalog`, based on `61a5e5c`, under [ADR-0036](adr/0036-service-catalog.md) and [plan 0028](plans/0028-service-catalog.md). Service focus and Owner groups use stable network placement with muted direct dependency context. Opening or filtering the graph selects nothing; selection can be cleared, and status chips are exclusive toggles. The shared owner type-ahead and all five sortable table columns compose with filtered pagination; API/CLI ordering applies before page limits. Navigation is SLOs, SLIs, Services. Final `make check` passes 419 frontend tests, all Go unit/integration suites and 75 browser cases, including all 36 exact reference comparisons, in 3m20s. Sequential `make test-e2e` passes all 14 real journeys in 3m29s wall time (Playwright: 2.7 minutes). Authorized `make run` verified host HTTPS readiness and the demo agent is running again. Before/after counts remain 50 services, 146 dependencies and 36 SLOs (24 original plus 12 separately authorized demos). No catalog or measurement records changed in this refinement. Larger catalogs, nightly fleet performance and manual screen-reader testing were not run; failures and their diagnoses remain in the task. Live changes can move sorted records between pages; refresh restarts traversal. Commit, push, PR updates and local deployment are authorized; merge is not.
+
 PR [#67](https://github.com/dsolsona/almanac/pull/67) review follow-up, 2026-11-06:
 two Greptile findings were reproduced and corrected in settings. Final `make check`
 passed with 394 frontend and 51 browser tests; all 28 reference comparisons passed

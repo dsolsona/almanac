@@ -1,5 +1,7 @@
 # SPEC-0005: OpenSLO and resource model
 
+> Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24

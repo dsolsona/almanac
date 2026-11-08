@@ -1,5 +1,7 @@
 # SPEC-0010: API and CLI
 
+> Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
+
 > Accepted amendment, 2026-11-01: The existing operational detail endpoint accepts
 > `period=window|7d|90d|1y` for server-aligned bounds, mutually exclusive with
 > `start`/`end`. Existing timestamp callers and the seven-day API default remain
@@ -82,6 +84,17 @@ credential-administration scope noninteractively, with expiry and audit; ordinar
 personal tokens cannot mint additional credentials.
 
 ## HTTP behavior
+
+The service catalog accepts `sort=name|slo_status|owner|slo_count|dependency_count`
+and `order=asc|desc` (default ascending; requires `sort`). These apply to the whole
+filtered catalog before bounded pagination, with UUID as the final tie-breaker.
+Name/owner ordering is case-insensitive; status ascending is Breached, Unknown,
+On track, No SLOs. Counts sort numerically. Omitting sort retains the existing
+creation-time/UUID order and cursor contract. Sorted cursors include their seek
+keys and bind search, owner, coverage, sort and direction; rebinding returns 400.
+These are live reads: metadata/status changes can move records between pages;
+refresh starts a new traversal. The CLI exposes equivalent `--sort`/`--order`
+options. The maintainer requested this catalog ordering on 2026-11-08.
 
 Resource IDs are opaque. Lists use stable opaque cursor pagination, default 50/max 200,
 with cursor-bound filters and ordering. SLI list and observation cursors are bounded

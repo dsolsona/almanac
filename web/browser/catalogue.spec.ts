@@ -61,6 +61,7 @@ test('application shell preview keeps navigation available at each viewport and 
   if (testInfo.project.name.startsWith('mobile')) await preview.getByRole('button', { name: 'Menu' }).click();
   const navigation = preview.getByRole('navigation', { name: 'Primary navigation' });
   await expect(navigation.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
+  expect(await navigation.locator('.app-navigation__group').first().getByRole('link').allTextContents()).toEqual(['SLOs','SLIs','Services']);
   const slos = navigation.getByRole('link', { name: 'SLOs' });
   await expect(slos).toHaveAttribute('href', '/slos');
   await expect(slos).not.toHaveAttribute('aria-disabled', 'true');

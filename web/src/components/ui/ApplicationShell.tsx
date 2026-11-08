@@ -3,10 +3,11 @@ import { Button } from './Button.tsx';
 import './application-shell.css';
 
 const mobileViewport = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 860px)').matches;
-type IconName = 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents' | 'settings';
+type IconName = 'services' | 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents' | 'settings';
 
 function NavIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
+    services:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M17 10V6h-3M7 14v4h3M10 6h7M7 10v8"/></>,
     slos: <><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></>,
     slis: <><path d="M3 12h3l2-6 4 12 2-6h7"/></>,
     alerts: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
@@ -35,7 +36,8 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
   const wasOpen = useRef(false);
   const datasourceCurrent = pathname.startsWith('/datasources');
   const sliCurrent = pathname.startsWith('/slis');
-  const sloCurrent = pathname.startsWith('/slos') || pathname.startsWith('/services/');
+  const sloCurrent = pathname.startsWith('/slos');
+  const serviceCurrent=pathname.startsWith('/services');
   const agentCurrent = embedded || pathname === '/' || pathname.startsWith('/agents');
   const settingsCurrent = pathname.startsWith('/settings');
 
@@ -77,7 +79,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       return;
     }
     const next = new URL(anchor.href, window.location.href);
-    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services\/[0-9a-f-]{36})?$/.test(next.pathname))) return;
+    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
     const path = `${next.pathname === '/' ? '/agents' : next.pathname}${query.size ? `?${query}` : ''}${next.hash}`;
@@ -109,7 +111,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
     }
   }
 
-  return <div className={`application-shell${embedded ? ' application-shell--embedded' : ''}${settingsCurrent ? ' application-shell--settings' : ''}`}>
+  return <div className={`application-shell${embedded ? ' application-shell--embedded' : ''}${settingsCurrent ? ' application-shell--settings' : ''}${serviceCurrent ? ' application-shell--services' : ''}`}>
     {!embedded && <a className="skip-link" href="#main">Skip to content</a>}
     <header className="app-mobile-header" inert={open || undefined}>
       <a className="wordmark" href="/agents" onClick={navigate}>ALMANAC</a>
@@ -125,6 +127,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
           <div className="app-navigation__items">
             <a ref={sloCurrent ? currentDestination : undefined} className={sloCurrent ? 'app-navigation__current' : ''} href="/slos" aria-current={sloCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slos"/>SLOs</a>
             <a ref={sliCurrent ? currentDestination : undefined} className={sliCurrent ? 'app-navigation__current' : ''} href="/slis" aria-current={sliCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slis"/>SLIs</a>
+            <a ref={serviceCurrent?currentDestination:undefined} className={serviceCurrent?'app-navigation__current':''} href="/services" aria-current={serviceCurrent?'page':undefined} onClick={navigate}><NavIcon name="services"/>Services</a>
           </div>
         </div>
         <div className="app-navigation__group"><h2>Operations</h2>
