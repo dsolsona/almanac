@@ -116,9 +116,11 @@ These documents govern applicable work; read them before that work begins.
   written. Never bypass restrictions with wrappers, passthrough targets or another
   tool. Do not request new approvals during unattended work; leave unavailable
   operations pending. Pass these restrictions to subagents.
-- Follow [testing](docs/testing.md): `make test` while editing, the affected
-  suite early, `make check` and `make test-e2e` on the finished change (CI runs
-  them on every PR). Diagnose a failure before rerunning; never retry into green.
+- Match verification to the change under [testing](docs/testing.md). Documentation,
+  skills and CI configuration alone do not require application tests, E2E, images
+  or benchmarks; check their links, syntax and behavior where relevant. For app
+  changes, run the affected suite early and `make check` / `make test-e2e` as applicable.
+  Diagnose a failure before rerunning; never retry into green.
 - Reproduce reported steps/values before fixes. Exercise the integrated user journey
   and normal isolated container deployment; mocks, screenshots and suite counts
   cannot replace real API/database/agent or usability evidence. UI acceptance includes

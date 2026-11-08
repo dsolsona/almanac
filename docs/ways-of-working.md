@@ -83,10 +83,10 @@ authorization and cannot introduce arbitrary passthrough execution.
 
 ## Verify and review
 
-Follow [testing](testing.md). Run `make test` while editing and the affected suite
-early (one real journey with `make test-e2e ARGS=…` for user-facing work). Run
-`make check` and `make test-e2e` on the finished change; CI runs them again on every
-pull request. A handoff, small edit or status request does not trigger them.
+Follow [testing](testing.md) and run checks that can detect a defect in the change.
+Docs, skills and CI-only changes need relevant link, syntax or behavior checks,
+not application suites. For app changes, run the affected suite early and the
+applicable final gates. A handoff, small edit or status request does not trigger them.
 
 After a failure, preserve diagnostics, investigate with focused checks and rerun the
 affected gate when the corrected candidate is ready. Keep unaffected evidence. Never
