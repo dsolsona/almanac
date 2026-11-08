@@ -32,11 +32,11 @@ and the current measurement method in
 
 ## Establish the evidence
 
-- Compare base and candidate on the same inputs, hardware and configuration. State
+- Inspect existing base/candidate measurements on the same inputs, hardware and configuration. State
   fleet size, history, concurrency, cache state, runs and measured percentiles.
   Distinguish a demonstrated growth defect from measured latency; a nested loop or
   complex SQL statement alone does not establish a problem on a bounded workload.
-- For operational page changes, measure authenticated navigation through usable
+- For operational page changes, inspect recorded authenticated navigation through usable
   content, including first visits, cold misses and relevant interactions. Read the
   current budgets, fixture settings, required scale and acceptance method from the
   linked documents. Report the workload actually measured and avoid extrapolating
@@ -44,9 +44,9 @@ and the current measurement method in
 - Use the available traces and profiles to attribute request, database, calculation,
   background and rendering costs. Report missing instrumentation as an evidence gap.
   Follow the current observability policy when deciding what evidence is required.
-- Run relevant checks through documented commands and isolated fixtures. Retain
-  slow and failed samples. Avoid claims based only on warmed API responses, raising
-  budgets or repeatedly running the same workload until it passes.
+- Assess existing slow and failed samples. Recommend missing measurements as
+  follow-up work after the review report; do not run benchmarks or reproductions
+  during review. Avoid claims based only on warmed API responses or raised budgets.
 
 A finding names the changed path, workload/growth mechanism, user or resource impact,
 supporting measurement or structural proof, and the smallest justified correction.

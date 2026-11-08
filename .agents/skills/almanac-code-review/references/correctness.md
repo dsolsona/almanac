@@ -14,9 +14,9 @@ documented operational steps that a user would actually run.
   channels, cleanup on early return, and shutdown while work is in flight.
 - Construct concrete concurrent interleavings and partial failures between side
   effects. Check replay after a lost response without assuming exactly-once effects.
-- Read `go.mod` before language/version-specific claims. Obtain the applicable Go
-  guidance through the command documented in [commands](../../../../docs/commands.md).
-  If unavailable, disclose that limitation rather than guessing its contents.
+- Read `go.mod` and available repository Go guidance before language/version-specific
+  claims. If evidence is unavailable, disclose the limitation rather than invoking
+  generation or execution commands during review.
 - Keep validation and error handling when code is moved or consolidated. Identify
   an actual consumer before proposing a new interface, abstraction or dependency.
 
