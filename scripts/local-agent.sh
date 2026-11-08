@@ -93,9 +93,9 @@ container=$(docker create -i --name "$name" --label almanac.local-agent=owned --
     exec /usr/local/bin/almanac-agent run --backend-url=https://localhost:8080 \
       --token-file=/tmp/agent-token --ca-file=/tmp/agent-ca.pem
   ') || fail 'could not create the agent container'
-printf '%s\n' 'Agent starting. Confirm connection in the Agents page; Ctrl-C stops this agent.'
-printf '%s\n' 'Starting this agent replaces any prior process using the same credential.'
 docker start --attach --interactive "$container" < "$directory/input" &
 attach=$!
+printf '%s\n' 'Agent starting. Confirm connection in the Agents page; Ctrl-C stops this agent.'
+printf '%s\n' 'Starting this agent replaces any prior process using the same credential.'
 wait "$attach" || fail 'agent stopped; check the error above'
 attach=''

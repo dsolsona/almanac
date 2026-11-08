@@ -255,6 +255,13 @@ type AlmanacService struct {
 	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Metadata    []byte             `json:"metadata"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
+type AlmanacServiceDependency struct {
+	ServiceID    pgtype.UUID `json:"service_id"`
+	DependencyID pgtype.UUID `json:"dependency_id"`
 }
 
 type AlmanacSession struct {
@@ -622,13 +629,38 @@ type AlmanacSloSeriesTileWork struct {
 }
 
 type AlmanacUser struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Login              string             `json:"login"`
-	PasswordVerifier   pgtype.Text        `json:"password_verifier"`
-	Role               string             `json:"role"`
-	Enabled            bool               `json:"enabled"`
-	MustChangePassword bool               `json:"must_change_password"`
+	ID                     pgtype.UUID        `json:"id"`
+	Login                  string             `json:"login"`
+	PasswordVerifier       pgtype.Text        `json:"password_verifier"`
+	Role                   string             `json:"role"`
+	Enabled                bool               `json:"enabled"`
+	MustChangePassword     bool               `json:"must_change_password"`
+	CredentialRevision     int64              `json:"credential_revision"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	FullName               string             `json:"full_name"`
+	Email                  pgtype.Text        `json:"email"`
+	LoginIsAlias           bool               `json:"login_is_alias"`
+	Version                int64              `json:"version"`
+	LastSignIn             pgtype.Timestamptz `json:"last_sign_in"`
+	SignInHistoryKnown     bool               `json:"sign_in_history_known"`
+	PasswordLoginSuspended bool               `json:"password_login_suspended"`
+	DeletedAt              pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type AlmanacUserChallenge struct {
+	Verifier           []byte             `json:"verifier"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	Purpose            string             `json:"purpose"`
 	CredentialRevision int64              `json:"credential_revision"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CredentialEpoch    pgtype.UUID        `json:"credential_epoch"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+}
+
+type AlmanacUserReceipt struct {
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	CommandKey string             `json:"command_key"`
+	Digest     []byte             `json:"digest"`
+	Result     []byte             `json:"result"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
 }

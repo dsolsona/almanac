@@ -48,10 +48,11 @@ type SearchFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
   label: string;
   shortcut?: boolean;
   inputRef?: RefObject<HTMLInputElement | null>;
+  icon?: ReactNode;
 };
 
 // Search input with an icon, a visually hidden label and an optional "/" focus shortcut.
-export function SearchField({ id, label, shortcut = false, inputRef, className = '', ...props }: SearchFieldProps) {
+export function SearchField({ id, label, shortcut = false, inputRef, icon, className = '', ...props }: SearchFieldProps) {
   const localRef = useRef<HTMLInputElement>(null);
   const ref = inputRef ?? localRef;
   useEffect(() => {
@@ -66,7 +67,7 @@ export function SearchField({ id, label, shortcut = false, inputRef, className =
     return () => window.removeEventListener('keydown', focusSearch);
   }, [shortcut, ref]);
   return <label className={`ui-search ${className}`.trim()} htmlFor={id}>
-    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="m12 12 5 5" stroke="currentColor" strokeWidth="1.5"/></svg>
+    {icon ?? <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="m12 12 5 5" stroke="currentColor" strokeWidth="1.5"/></svg>}
     <input {...props} ref={ref} id={id} type="search" autoComplete="off" aria-label={label} />
     {shortcut && <kbd aria-hidden="true">/</kbd>}
   </label>;

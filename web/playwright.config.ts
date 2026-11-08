@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './browser',
+  snapshotPathTemplate: '{testDir}/../../.local/settings-parity/reference/{arg}{ext}',
   fullyParallel: true,
   workers: 2,
   retries: 0,

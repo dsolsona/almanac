@@ -2,6 +2,9 @@ import './telemetry/client.ts';
 import { createRoot } from 'react-dom/client';
 import { AuthPage } from './auth/AuthPage.tsx';
 import './styles/global.css';
+import { initializeTheme } from './components/ui/ThemeToggle.tsx';
+
+initializeTheme();
 
 function NotFound() {
   return <>
@@ -15,5 +18,5 @@ const root = createRoot(document.getElementById('root')!);
 if (import.meta.env.DEV && window.location.pathname === '/design-system') {
   void import('./catalogue/Catalogue.tsx').then(({ Catalogue }) => root.render(<Catalogue />));
 } else {
-  root.render(window.location.pathname === '/' || window.location.pathname === '/agents' || /^\/(?:datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services\/[0-9a-f-]{36})$/.test(window.location.pathname) ? <AuthPage /> : <NotFound />);
+  root.render(window.location.pathname === '/' || window.location.pathname === '/agents' || window.location.pathname === '/activate' || /^\/(?:settings(?:\/account|\/password|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)$/.test(window.location.pathname) ? <AuthPage /> : <NotFound />);
 }

@@ -9,6 +9,8 @@ export type { Status } from './StatusBadge.tsx';
 export { Panel } from './Panel.tsx';
 export { Dialog } from './Dialog.tsx';
 export { ThemeToggle } from './ThemeToggle.tsx';
+export { ThemeChoice } from './ThemeToggle.tsx';
+export { RoleChip } from './RoleChip.tsx';
 export { Switch } from './Switch.tsx';
 export { DatePicker } from './DatePicker.tsx';
 export { LoadingIndicator } from './LoadingIndicator.tsx';
@@ -26,3 +28,5 @@ export { SelectionSummary } from './SelectionSummary.tsx';
 export { TextareaField } from './TextareaField.tsx';
 export { PageHeader, SearchField, Toolbar, ToolbarSpacer, RefreshButton, FilterSelect, Pager } from './ListComposition.tsx';
 export { FormSection, FormActions } from './FormSection.tsx';
+
+export { LabelChips } from './LabelChips.tsx';

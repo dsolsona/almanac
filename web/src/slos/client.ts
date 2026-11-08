@@ -194,7 +194,7 @@ const fieldMessages: Record<string, string> = {
   'timeline_start:timeline_range_invalid': 'Choose both aligned timeline bounds within the objective window, with at most 1,500 intervals.',
   'at:evaluation_time_invalid': 'Choose a valid evaluation time that is not in the future.',
 };
-async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
+export async function request<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   if (mutation) {
     clearQueryCache();
     try { return await requestUncached<T>(path, init, mutation, responseLimit); }
@@ -208,13 +208,14 @@ async function request<T>(path: string, init: RequestInit = {}, mutation = false
         await waitForReadRetry(signal, 2000);
       }
     }
-  }, init.signal, path.startsWith('/api/v1/slos/overview')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
+  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
 async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch { throw new SloFailure(mutation ? 'The request may have succeeded. Check the list before deliberately retrying the same request.' : 'Almanac could not be reached.', mutation); }
   const receivedAt=performance.now();
+  if(init.method==='DELETE'&&response.status===204)return {value:undefined as T,etag:''};
   let data: unknown;
   try {
     if (!response.body || Number(response.headers.get('Content-Length')) > responseLimit) throw new Error('large response');
@@ -231,7 +232,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     const listLimit=code==='resource_limit'&&path.split('?')[0]==='/api/v1/slos/overview'
       ? 'The SLO list is temporarily at its resource limit. Try Refresh shortly.' : '';
     if(response.status===401 || response.status===403)clearQueryCache(false);
-    throw new SloFailure(guidance || listLimit || messages[code] || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
+    throw new SloFailure(guidance || listLimit || (code==='service_in_use'?'Move or remove the referencing SLOs and service dependencies before deleting this service.':messages[code]) || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
   }
   const expected = init.method === 'POST' ? 201 : 200;
   if (response.status !== expected) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);
@@ -273,7 +274,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
   const time=Date.parse(serverTime??'');
   return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}),...(Number.isFinite(time)?{serverClock:{time,receivedAt}}:{}) };
 }
-function write(context: AuthContext, body: unknown, key?: string, etag?: string): RequestInit {
+export function write(context: AuthContext, body: unknown, key?: string, etag?: string): RequestInit {
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
 }
 export const sloClient = {

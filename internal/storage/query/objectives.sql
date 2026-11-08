@@ -1,9 +1,9 @@
 -- name: GetService :one
-SELECT id, name, display_name, version, created_at, updated_at FROM public.almanac_services WHERE id = $1;
+SELECT * FROM public.almanac_services WHERE id = $1 AND archived_at IS NULL;
 
 -- name: ListServices :many
-SELECT id, name, display_name, version, created_at, updated_at FROM public.almanac_services
-WHERE (created_at, id) > ($1, $2::uuid) ORDER BY created_at, id LIMIT $3;
+SELECT * FROM public.almanac_services
+WHERE archived_at IS NULL AND (created_at, id) > ($1, $2::uuid) ORDER BY created_at, id LIMIT $3;
 
 -- name: InsertService :one
 INSERT INTO public.almanac_services(id, name, display_name, created_at, updated_at)

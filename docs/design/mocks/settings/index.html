@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · Almanac design proposal</title>
+  <link rel="stylesheet" href="../mock.css">
+  <link rel="stylesheet" href="../proposals/proposal.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body data-current="settings">
+  <a class="skip" href="#content">Skip to content</a>
+  <main id="content">
+    <div id="screen"></div>
+    <aside class="review" aria-label="Mock review controls">
+      <details>
+        <summary>Design proposal · sample data · review journeys</summary>
+        <p>Changes last only in this tab. Reload to restore the sample users. No accounts, links or passwords are real.</p>
+        <div class="review-tools">
+          <label for="review-role">Preview as</label>
+          <select id="review-role"><option value="administrator">Admin</option><option value="editor">Editor</option><option value="viewer">Viewer</option></select>
+          <a href="#activate/pending">Password setup</a>
+          <a href="?state=expired#activate/pending">Expired link</a>
+          <a href="?state=empty#users">Empty list</a>
+          <a href="?state=error#users">Failed list</a>
+          <a href="?state=last-admin#users/owner">Last admin</a>
+          <button class="btn sm" id="fail-save" type="button">Fail next save</button>
+        </div>
+      </details>
+    </aside>
+  </main>
+  <dialog id="confirmation" aria-labelledby="dialog-title" aria-describedby="dialog-description"></dialog>
+  <dialog id="mobile-navigation" aria-label="Navigation menu"></dialog>
+  <script src="../mock.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

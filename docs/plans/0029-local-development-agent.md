@@ -59,3 +59,12 @@ No product Go code, schema migration, dependency or production image change.
   branch uses ADR-0036/plan 0028. This change uses ADR-0037/plan 0029 to avoid collision.
 - Implementation is ready for maintainer review; real-stack seed, first-use,
   connection and restart acceptance remain unverified under the E2E waiver.
+- Publication preparation: merged current `main` (`7582b31`) in the isolated
+  `feat/local-dev-agent-pr` checkout, retaining both sets of documentation additions.
+  `make check` passed in 196 seconds with 425 web units, all Go suites and 75
+  catalogue/browser cases. Log: `/tmp/almanac-local-dev-agent-pr-check.log`.
+- Independent review found that noncanonical Base64 pad bits could pass seed
+  verification while the agent parser rejected the token. Added the same decode/
+  encode equality check as the product parser, plus an E2E rejection case. That
+  regression remains unrun under the waiver. Final `make test` passed in 26
+  seconds: `/tmp/almanac-local-dev-agent-pr-final-unit.log`.

@@ -128,16 +128,20 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (SessionResult, e
 	if !validLogin(input.Login) || !validRequestID(input.RequestID) || !validCandidate(input.Password) || !validSource(input.Source) {
 		return SessionResult{}, ErrInvalidInput
 	}
-	admission, err := storage.BeginLoginAttempt(ctx, s.databaseURL, storage.BeginLoginAttemptInput{Login: input.Login, Source: input.Source.Unmap(), Now: s.currentTime()})
+	snapshot, err := storage.ReadLocalIdentity(ctx, s.databaseURL, input.Login)
+	if err != nil {
+		return SessionResult{}, err
+	}
+	account := input.Login
+	if snapshot.Found {
+		account = snapshot.Login
+	} // Email and the retained username share one attempt budget.
+	admission, err := storage.BeginLoginAttempt(ctx, s.databaseURL, storage.BeginLoginAttemptInput{Login: account, Source: input.Source.Unmap(), Now: s.currentTime()})
 	if err != nil {
 		return SessionResult{}, err
 	}
 	if !admission.Allowed {
 		return SessionResult{}, &RateLimitError{RetryAfter: admission.RetryAfter}
-	}
-	snapshot, err := storage.ReadLocalIdentity(ctx, s.databaseURL, input.Login)
-	if err != nil {
-		return SessionResult{}, err
 	}
 	valid, eligible, err := s.verify(ctx, input.Password, snapshot)
 	if err != nil {

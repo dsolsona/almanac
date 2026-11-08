@@ -45,6 +45,8 @@ sql:
       - internal/storage/migrations/0039_retained_hourly_wire.sql
       - internal/storage/migrations/0040_history_payload_metadata.sql
       - internal/storage/migrations/0041_continuous_derived_retries.sql
+      - internal/storage/migrations/0042_user_administration.sql
+      - internal/storage/migrations/0043_service_catalog.sql
     gen:
       go:
         package: dbgen

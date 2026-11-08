@@ -1,5 +1,14 @@
 # SPEC-0004: Identity and access
 
+> Accepted amendment, 2026-11-06: the maintainer approved the settings/user mocks
+> and email sign-in under [ADR-0035](../adr/0035-settings-and-local-user-administration.md).
+> Users have one full name, a case-insensitive unique sign-in email and an existing
+> deployment-wide role. Existing username accounts retain compatibility access;
+> email is assigned explicitly, never fabricated. Deletion archives the identity
+> and preserves audit attribution. The approved reference governs settings-specific
+> layout; activation/reset, current-session authority and last-admin protection below
+> remain required. Preferred/name-part fields, Google and general API keys are deferred.
+
 - Status: accepted
 - Created: 2026-10-24
 - Accepted: 2026-10-24
@@ -13,7 +22,8 @@
   [atomic password rotation](../plans/0010-atomic-password-rotation.md),
   [shared login admission](../plans/0011-shared-login-throttle.md),
   [local authentication service](../plans/0012-local-authentication-service.md),
-  [authentication HTTP](../plans/0013-local-authentication-http.md)
+  [authentication HTTP](../plans/0013-local-authentication-http.md),
+  [settings and users](../plans/0027-settings-and-users.md)
 - Supersedes / superseded by: Amended by [SPEC-0018](0018-agent-management-usability.md) for session-authorized management.
 
 ## Purpose

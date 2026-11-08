@@ -1,0 +1,11 @@
+.ui-label-chips { display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:0; list-style:none; min-width:0; max-width:100%; }
+.ui-label-chips:empty { display:none; }
+.ui-label-chip { display:inline-flex; align-items:center; min-width:0; max-width:100%; border:1px solid color-mix(in srgb,var(--selection) 22%,var(--border)); border-radius:14px; background:color-mix(in srgb,var(--selection) 5%,var(--surface)); }
+.ui-label-chip__key { max-width:45%; padding:4px 0 4px 10px; font:12px/20px var(--mono); color:var(--text-3); overflow-wrap:anywhere; }
+.ui-label-chip__colon { margin-left:4px; color:var(--border-strong); }
+.ui-label-chip__value { min-width:0; padding:4px 10px 4px 6px; font:600 13px/20px var(--font-body); color:var(--text); overflow-wrap:anywhere; }
+.ui-label-chip button { display:grid; place-items:center; flex:none; width:24px; height:24px; margin:3px 3px 3px -4px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--text-3); cursor:pointer; }
+.ui-label-chip button:hover { color:var(--accent-ink); background:var(--accent-wash); }
+.ui-label-chip button:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.ui-label-chip svg { width:14px; height:14px; }
+@media(pointer:coarse){.ui-label-chip button{min-width:44px;min-height:44px;}}

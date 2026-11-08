@@ -1,18 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { Button } from './Button.tsx';
-import { ThemeToggle } from './ThemeToggle.tsx';
 import './application-shell.css';
 
 const mobileViewport = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 860px)').matches;
-type IconName = 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents';
+type IconName = 'services' | 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents' | 'settings';
 
 function NavIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
+    services:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M17 10V6h-3M7 14v4h3M10 6h7M7 10v8"/></>,
     slos: <><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></>,
     slis: <><path d="M3 12h3l2-6 4 12 2-6h7"/></>,
     alerts: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
     datasources: <><ellipse cx="12" cy="5" rx="8.5" ry="3"/><path d="M3.5 5v7c0 1.7 3.8 3 8.5 3s8.5-1.3 8.5-3V5M3.5 12v7c0 1.7 3.8 3 8.5 3s8.5-1.3 8.5-3v-7"/></>,
     agents: <><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20c.4-3.4 2.3-5 5.5-5s5.1 1.6 5.5 5M14 15c3.8-.8 6.8.7 7.5 4"/></>,
+    settings: <><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></>,
   };
   return <svg className="app-navigation__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -35,8 +36,10 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
   const wasOpen = useRef(false);
   const datasourceCurrent = pathname.startsWith('/datasources');
   const sliCurrent = pathname.startsWith('/slis');
-  const sloCurrent = pathname.startsWith('/slos') || pathname.startsWith('/services/');
+  const sloCurrent = pathname.startsWith('/slos');
+  const serviceCurrent=pathname.startsWith('/services');
   const agentCurrent = embedded || pathname === '/' || pathname.startsWith('/agents');
+  const settingsCurrent = pathname.startsWith('/settings');
 
   useEffect(() => {
     const changed = () => setPathname(window.location.pathname);
@@ -76,7 +79,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       return;
     }
     const next = new URL(anchor.href, window.location.href);
-    if (next.origin !== window.location.origin || !(/^\/(?:agents|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services\/[0-9a-f-]{36})?$/.test(next.pathname))) return;
+    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
     const path = `${next.pathname === '/' ? '/agents' : next.pathname}${query.size ? `?${query}` : ''}${next.hash}`;
@@ -108,7 +111,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
     }
   }
 
-  return <div className={`application-shell${embedded ? ' application-shell--embedded' : ''}`}>
+  return <div className={`application-shell${embedded ? ' application-shell--embedded' : ''}${settingsCurrent ? ' application-shell--settings' : ''}${serviceCurrent ? ' application-shell--services' : ''}`}>
     {!embedded && <a className="skip-link" href="#main">Skip to content</a>}
     <header className="app-mobile-header" inert={open || undefined}>
       <a className="wordmark" href="/agents" onClick={navigate}>ALMANAC</a>
@@ -124,6 +127,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
           <div className="app-navigation__items">
             <a ref={sloCurrent ? currentDestination : undefined} className={sloCurrent ? 'app-navigation__current' : ''} href="/slos" aria-current={sloCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slos"/>SLOs</a>
             <a ref={sliCurrent ? currentDestination : undefined} className={sliCurrent ? 'app-navigation__current' : ''} href="/slis" aria-current={sliCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slis"/>SLIs</a>
+            <a ref={serviceCurrent?currentDestination:undefined} className={serviceCurrent?'app-navigation__current':''} href="/services" aria-current={serviceCurrent?'page':undefined} onClick={navigate}><NavIcon name="services"/>Services</a>
           </div>
         </div>
         <div className="app-navigation__group"><h2>Operations</h2>
@@ -133,12 +137,12 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
           <div className="app-navigation__items">
             <a ref={datasourceCurrent ? currentDestination : undefined} className={datasourceCurrent ? 'app-navigation__current' : ''} href="/datasources" aria-current={datasourceCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="datasources"/>Datasources</a>
             <a ref={agentCurrent ? currentDestination : undefined} className={agentCurrent ? 'app-navigation__current' : ''} href="/agents" aria-current={agentCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="agents"/>Agents</a>
+            <a ref={settingsCurrent ? currentDestination : undefined} className={settingsCurrent ? 'app-navigation__current' : ''} href="/settings/account" aria-current={settingsCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="settings"/>Settings</a>
           </div>
         </div>
       </nav>
       <footer className="app-account">
-        <div className="app-account__identity"><span className="app-account__avatar" aria-hidden="true">{login.slice(0, 1).toUpperCase()}</span><span className="app-account__copy"><strong>{login}</strong><small>{role}</small></span></div>
-        <ThemeToggle />
+        <div className="app-account__identity"><span className="app-account__avatar" aria-hidden="true">{login.slice(0, 1).toUpperCase()}</span><span className="app-account__copy"><strong>{login}</strong><small>{role==='administrator'?'Admin':role}</small></span></div>
         {showCheckSession && <Button variant="outline" onClick={() => { setOpen(false); onCheckSession(); }} pending={pending}>Check session</Button>}
         <Button variant="outline" onClick={() => { setOpen(false); onSignOut(); }} pending={pending}>Sign out</Button>
       </footer>

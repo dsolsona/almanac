@@ -20,6 +20,20 @@ test('seed local-dev once, then start and reconnect it with the local app', asyn
   expect(tokenHash()).toBe(originalHash);
   expect(psql("SELECT a.id || ':' || c.id FROM almanac_agents a JOIN almanac_agent_credentials c ON c.agent_id=a.id WHERE a.name='local-dev'")).toBe(identity);
 
+  // Changing only unused Base64 pad bits preserves the verifier but invalidates the token.
+  compose('exec', '-T', '--user', 'root', 'postgres', 'sh', '-c', `
+    set -eu
+    cp -p /run/almanac-agent/token /run/almanac-agent/token.saved
+    token=$(cat /run/almanac-agent/token)
+    last=$(printf '%s' "$token" | tail -c 1 | tr 'AEIMQUYcgkosw048' 'BFJNRVZdhlptx159')
+    printf '%s%s' "\${token%?}" "$last" > /run/almanac-agent/token
+  `);
+  try {
+    expect(() => localCommand('agent-seed')).toThrow();
+  } finally {
+    compose('exec', '-T', '--user', 'root', 'postgres', 'mv', '/run/almanac-agent/token.saved', '/run/almanac-agent/token');
+  }
+
   localCommand('run');
   const agentID = identity.split(':')[0];
   await page.goto('/agents');

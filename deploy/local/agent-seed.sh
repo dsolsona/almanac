@@ -35,6 +35,8 @@ case "$id" in ????????-????-????-????-????????????) ;; *) fail 'invalid saved to
 case "$id" in *[!0-9a-f-]*) fail 'invalid saved token ID' ;; esac
 case "$secret" in *[!A-Za-z0-9_-]*) fail 'invalid saved token secret' ;; esac
 [ "${#secret}" -eq 43 ] || fail 'invalid saved token secret'
+canonical=$(printf '%s=' "$secret" | tr '_-' '/+' | openssl base64 -d -A | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+[ "$canonical" = "$secret" ] || fail 'saved token secret must use canonical Base64'
 verifier=$(printf '%s=' "$secret" | tr '_-' '/+' | openssl base64 -d -A | sha256sum)
 verifier=${verifier%% *}
 unset token rest secret

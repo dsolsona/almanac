@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, Pager, PageHeader, Panel, RefreshButton, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, LabelChips, Pager, PageHeader, Panel, RefreshButton, RoleChip, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, ThemeChoice, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 
 // Local catalogue data only; never application records.
 const datasourceExamples: ComboboxOption[] = [
@@ -21,6 +21,10 @@ export function OperationalControlsSection() {
   const [description, setDescription] = useState('');
   const [kind, setKind] = useState('ratio');
   const [sectionName, setSectionName] = useState('');
+  const [role, setRole] = useState<string|null>(null);
+  const [dependencyIDs,setDependencyIDs]=useState(['payments']);
+  const [labels,setLabels]=useState<readonly (readonly [string,string])[]>([['team','store'],['env','production']]);
+  const serviceOptions:ComboboxOption[]=[{id:'payments',label:'Payments',detail:'Commerce'},{id:'identity',label:'Identity',detail:'Platform'},{id:'inventory',label:'Inventory',detail:'Commerce'}];
   const percent = (value: string) => `${value}%`;
   const validateTarget = (value: string) => /^\d+(?:\.\d{1,5})?$/.test(value) && Number(value) > 0 && Number(value) < 100 ? undefined : 'Target must be above 0% and below 100%.';
   const validateDays = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 365 ? undefined : 'Enter whole days from 1 to 365.';
@@ -48,6 +52,26 @@ export function OperationalControlsSection() {
         <div className="catalogue-chip-row" aria-label="Button roles"><Button>Save changes</Button><Button variant="outline">Cancel</Button><Button variant="ghost">Copy</Button><Button variant="link">Change</Button><Button variant="danger-outline">Delete…</Button><Button variant="danger">Delete agent</Button></div>
         <p className="demo-feedback" role="status">Filter: {filter}. Service: {service || 'any'}. Refreshed {refreshes} times.</p>
         <Pager id="catalogue-page-size" label="Example result pages" position="Page 1 · showing 10 of 10" pageSize={pageSize} onPageSizeChange={setPageSize} hasPrevious={false} hasNext={false} />
+      </div>
+    </Panel>
+
+    <Panel heading="Service labels and dependency selection">
+      <p className="ui-label">Read-only labels</p><LabelChips labels={[["team","store"],["team","commerce"],["region","europe-west-production-operations"]]}/>
+      <p className="ui-label">Removable labels</p><LabelChips labels={labels} onRemove={index=>setLabels(values=>values.filter((_,i)=>i!==index))}/>
+      <p className="ui-label">Disabled label removal</p><LabelChips labels={[["env","production"]]} onRemove={()=>{}} disabled/>
+      <Combobox id="catalogue-dependencies" label="Dependencies" value={null} options={serviceOptions} onChange={id=>{if(id)setDependencyIDs(values=>[...values,id]);}} multiple={{selected:serviceOptions.filter(option=>dependencyIDs.includes(option.id)),onRemove:id=>setDependencyIDs(values=>values.filter(value=>value!==id)),removeLabel:option=>`Remove dependency ${option.label}`}} placeholder="Search services…"/>
+      <div className="catalogue-chip-row" aria-label="Service SLO summaries"><StatusChip tone="healthy" label="On track"/><StatusChip tone="breached" label="Breached"/><StatusChip tone="stale" label="Unknown"/><StatusChip tone="none" label="No SLOs"/></div>
+    </Panel>
+
+    <Panel heading="Account role and theme controls">
+      <div className="catalogue-chip-row" aria-label="User roles"><RoleChip role="viewer"/><RoleChip role="editor"/><RoleChip role="administrator"/></div>
+      <div className="field-stack">
+        <Combobox id="catalogue-role" label="Role" value={role} onChange={setRole} searchLabelOnly placeholder="Search roles…" options={[
+          {id:'viewer',label:'Viewer',detail:'Read services, SLIs, SLOs and measurements.'},
+          {id:'editor',label:'Editor',detail:'Viewer access, plus manage services, SLIs and SLOs.'},
+          {id:'administrator',label:'Admin',detail:'Editor access, plus manage users, agents, datasources and credentials.'},
+        ]}/>
+        <ThemeChoice/>
       </div>
     </Panel>
 

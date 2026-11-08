@@ -60,4 +60,6 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md) | Centred list tables, one value per cell and SLI data-state vocabulary | accepted |
 | [ADR-0033](0033-simple-test-suite.md) | A simple test suite: fast tests, one parallel integration run, Playwright journeys and four page timings | accepted |
 | [ADR-0034](0034-self-healing-derived-data.md) | Derived SLO data that keeps itself up to date | accepted |
+| [ADR-0035](0035-settings-and-local-user-administration.md) | Settings and local user administration | accepted |
+| [ADR-0036](0036-service-catalog.md) | Service catalog and dependency exploration | accepted |
 | [ADR-0037](0037-local-development-agent.md) | Seed a local development agent | accepted |

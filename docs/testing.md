@@ -15,6 +15,9 @@ are in [commands](commands.md).
 | `make test-perf` | Page speed and exact values of the SLO list, SLO detail, SLI list and SLI detail on a seeded fleet | about ten minutes | nightly, performance work |
 
 `make check` runs the first three; CI runs all four PR suites in parallel on every pull request.
+In one checkout, run `make check` and `make test-e2e` sequentially: the catalogue
+runner clears `web/test-results`, which contains the E2E runner's output directory.
+CI jobs have separate workspaces and do not share these artifacts.
 
 ## Where a test belongs
 

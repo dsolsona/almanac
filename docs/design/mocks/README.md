@@ -1,5 +1,9 @@
 # UI mocks: unified SLI, SLO, datasource and agent screens
 
+Approved design, 2026-11-06: [Settings and user administration](settings/README.md)
+has clickable Settings, account, user list/add/edit and password journeys. It is
+approved for implementation with pixel parity, including its settings-specific table sizing.
+
 The maintainer reviewed and approved these mocks on 2026-11-04, and accepted
 [ADR-0028](../../adr/0028-unified-operational-ui.md) and [plan 0025](../../plans/0025-ui-unification.md)
 in Crit the same day, making them the visual and interaction reference for Almanac's operational and administration screens. They
@@ -54,3 +58,7 @@ the target.
 
 Where a column's value cannot be computed from today's API, omit the column rather
 than show a placeholder. Record each omission in the implementing task.
+
+## Service catalog reference
+
+The approved [service catalog reference](services/README.md) governs F8-T01 under ADR-0036.

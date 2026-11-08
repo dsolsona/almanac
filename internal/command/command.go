@@ -77,6 +77,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return setup(ctx, args[1:], stdout, stderr)
 	case "auth":
 		return authCommand(ctx, args[1:], stdout, stderr)
+	case "users", "account":
+		return usersCommand(ctx, args[0], args[1:], stdout, stderr)
 	case "agents":
 		return agentsCommand(ctx, args[1:], stdout, stderr)
 	case "datasources", "providers", "slis":
@@ -100,6 +102,16 @@ func printHelp(w io.Writer) {
   almanac auth login --profile-file=FILE --backend-url=ORIGIN --login=LOGIN --password-file=FILE [--ca-file=PEM] [--timeout=30s] [--output=json]
   almanac auth context --profile-file=FILE [--timeout=30s] [--output=json]
   almanac auth logout --profile-file=FILE [--timeout=30s] [--output=json]
+  almanac account get --profile-file=FILE
+  almanac account update --profile-file=FILE --input-file=FILE --if-match=ETAG --idempotency-key=KEY
+  almanac account password --profile-file=FILE --password-file=FILE
+  almanac account redeem --profile-file=FILE --link-file=FILE --password-file=FILE
+  almanac users list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--query=TEXT] [--status=STATUS] [--role=ROLE]
+  almanac users get --profile-file=FILE --user-id=UUID
+  almanac users create --profile-file=FILE --input-file=FILE --idempotency-key=KEY --link-file=FILE
+  almanac users update --profile-file=FILE --user-id=UUID --input-file=FILE --if-match=ETAG --idempotency-key=KEY
+  almanac users disable|enable|delete|cancel-password-reset --profile-file=FILE --user-id=UUID --if-match=ETAG --idempotency-key=KEY --confirm
+  almanac users reset-password|replace-setup-link --profile-file=FILE --user-id=UUID --if-match=ETAG --idempotency-key=KEY --link-file=FILE --confirm
   almanac agents list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--timeout=30s] [--output=json]
   almanac agents get --profile-file=FILE --agent-id=UUID
   almanac agents credentials list --profile-file=FILE --agent-id=UUID [--limit=50] [--cursor=CURSOR]
@@ -121,10 +133,11 @@ func printHelp(w io.Writer) {
   almanac slis update --profile-file=FILE --sli-id=UUID --if-match=ETAG --input-file=FILE
   almanac slis observations --profile-file=FILE --sli-id=UUID [--limit=50] [--cursor=CURSOR]
   almanac slis test --profile-file=FILE --datasource-id=UUID --query=PROMQL [--wait] [--cancel-on-timeout]
-  almanac services list --profile-file=FILE [--limit=50] [--cursor=CURSOR]
+  almanac services list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--q=TEXT] [--owner=OWNER] [--coverage=all|with|without]
   almanac services get --profile-file=FILE --service-id=UUID
   almanac services create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
   almanac services update --profile-file=FILE --service-id=UUID --if-match=ETAG --input-file=FILE
+  almanac services delete --profile-file=FILE --service-id=UUID --if-match=ETAG
   almanac slos list --profile-file=FILE [--service-id=UUID] [--limit=50] [--cursor=CURSOR]
   almanac slos get --profile-file=FILE --slo-id=UUID
   almanac slos create --profile-file=FILE --input-file=FILE --idempotency-key=KEY
