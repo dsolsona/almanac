@@ -23,6 +23,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql
       - postgres-secret:/run/postgres-secret:ro
+      - local-agent:/run/almanac-agent
     depends_on:
       init:
         condition: service_completed_successfully
@@ -121,16 +122,28 @@ services:
       - "127.0.0.1:${ALMANAC_TRACES_PORT:-19428}:10428"
     restart: unless-stopped
 
-  # The local agent image; `make agent` builds it and starts a container on the app's network.
+  # Seeded dev agent; the explicit `make agent` launcher also builds this image.
   agent:
     image: ${COMPOSE_PROJECT_NAME:-almanac-local}-agent:dev
     build:
       context: .
       dockerfile: deploy/agent/Dockerfile
     profiles: ["agent"]
-    network_mode: none
-    command: ["run"]
-    restart: "no"
+    network_mode: service:app
+    command: ["run", "--backend-url=https://localhost:8080", "--token-file=/run/almanac-agent/token", "--ca-file=/run/almanac-agent/ca.pem"]
+    environment:
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://victoriatraces:10428/insert/opentelemetry/v1/traces
+      OTEL_SDK_DISABLED: ${ALMANAC_TELEMETRY_DISABLED:-false}
+      ALMANAC_ENVIRONMENT: local
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - local-agent:/run/almanac-agent:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
 
   provider-ready:
     image: curlimages/curl:8.19.0@sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c
@@ -160,3 +173,4 @@ volumes:
   postgres-data:
   victoriametrics-data:
   victoriatraces-data:
+  local-agent:

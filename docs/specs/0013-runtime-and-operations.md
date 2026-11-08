@@ -165,6 +165,18 @@ ports, missing prerequisites, invalid saved state, and schema/init failures must
 fail visibly without deleting or adopting unrelated resources. No reset occurs as
 part of bootstrap, run, or stop.
 
+The maintainer approved a dev-only seeded agent on 2026-11-08
+([ADR-0037](../adr/0037-local-development-agent.md)). `make agent-seed` prepares
+the selected local database and creates `local-dev` with a random credential in
+a separate protected Docker volume. This development command may write directly
+to the database before or after onboarding; ordinary registration remains
+session-authorized. Repeat seeding preserves identity/token and refuses conflicting
+identities or invalid saved authority. After seeding, `make run`/`make start`
+starts the separate agent service in the background, using verified TLS and without
+database credentials. `make stop` stops it and preserves the token. Onboarding is
+still required before agent authentication. No seed runs implicitly in production
+images or ordinary application startup.
+
 Provide Docker images for server and agent, a Compose example with PostgreSQL and
 a demo metrics source, and Helm charts for server/agent. Keep demo credentials and
 synthetic data explicitly local; production requires initial-password onboarding.

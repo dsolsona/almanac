@@ -1,5 +1,9 @@
 # ADR-0007: PostgreSQL and storage boundaries
 
+> Development-only exception, accepted 2026-11-08:
+> [ADR-0037](0037-local-development-agent.md) permits the explicit local agent
+> seed command to write the development database directly.
+
 > Partial supersession, accepted 2026-10-30: [ADR-0024](0024-precomputed-operational-reads.md)
 > replaces optional acceleration with required pooled access and exact derived
 > operational reads. The original rationale below is retained; other decisions

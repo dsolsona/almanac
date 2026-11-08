@@ -1,5 +1,12 @@
 # Delivery status
 
+Local development agent, 2026-11-08: [ADR-0037](adr/0037-local-development-agent.md)
+and [plan 0029](plans/0029-local-development-agent.md) add the maintainer-approved
+dev-only `make agent-seed` command and automatic `local-dev` startup with `make run`.
+Implemented on `feat/local-dev-agent` for pull-request review. `make check`
+passes; the maintainer waived E2E execution, so actual seed/connection/restart
+acceptance remains unverified. Operator data and the running preview are unchanged.
+
 Current test work, 2026-11-05: [ADR-0033](adr/0033-simple-test-suite.md) replaces
 `make verify MODE=…`, `scripts/verify.py`, the custom browser scripts and the controlled performance
 harness with `make test`, `make test-integration`, `make test-browser`, `make test-e2e`,
