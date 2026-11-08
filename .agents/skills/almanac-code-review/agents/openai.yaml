@@ -1,0 +1,4 @@
+interface:
+  display_name: "Almanac Code Review"
+  short_description: "Review Almanac changes against accepted contracts"
+  default_prompt: "Use $almanac-code-review to review the current Almanac changes."
