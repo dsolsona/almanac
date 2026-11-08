@@ -1,11 +1,12 @@
 import {beforeEach,afterEach,expect,it,vi} from 'vitest';
-import {fireEvent,render,screen,waitFor,cleanup,within} from '@testing-library/react';
+import {act,fireEvent,render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ServicesPage} from '../src/services/ServicesPage.tsx';
 import type {AuthContext} from '../src/auth/client.ts';
 import {serviceClient} from '../src/services/client.ts';
 import {clearQueryCache} from '../src/queryCache.ts';
 import {serviceFleet} from '../browser/support/service-fleet.ts';
+import {overview} from '../browser/support/service-fixtures.ts';
 
 const id='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
 const context:AuthContext={csrf_token:'csrf',session:{user_id:id,login:'editor@example.test',role:'editor',restricted:false}};
@@ -14,7 +15,7 @@ const reply=(body:unknown,status=200,etag?:string)=>new Response(JSON.stringify(
 const page=(items:unknown[])=>({items,next_cursor:'',total:items.length,all_count:items.length,with_slos_count:0,owners:['Store experience']});
 const originalShowModal=Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype,'showModal'),originalClose=Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype,'close');
 beforeEach(()=>{context.session!.user_id=crypto.randomUUID();Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute('open','');}});Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute('open');}});});
-afterEach(()=>{cleanup();if(originalShowModal)Object.defineProperty(HTMLDialogElement.prototype,'showModal',originalShowModal);else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;if(originalClose)Object.defineProperty(HTMLDialogElement.prototype,'close',originalClose);else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close;vi.unstubAllGlobals();clearQueryCache(false);history.replaceState({},'','/');});
+afterEach(()=>{cleanup();vi.restoreAllMocks();if(originalShowModal)Object.defineProperty(HTMLDialogElement.prototype,'showModal',originalShowModal);else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;if(originalClose)Object.defineProperty(HTMLDialogElement.prototype,'close',originalClose);else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close;vi.unstubAllGlobals();clearQueryCache(false);history.replaceState({},'','/');});
 
 it('shows truthful service SLO marks and opens details by clicking a status cell',async()=>{
  history.replaceState({},'','/services');
@@ -303,4 +304,118 @@ it('searches the owner directory and requests catalog-wide sorting from column h
  expect(screen.getByRole('columnheader',{name:/SLO status/})).toHaveAttribute('aria-sort','ascending');
  await userEvent.click(screen.getByRole('button',{name:'SLO status'}));
  await waitFor(()=>expect(requests.at(-1)!.searchParams.get('order')).toBe('desc'));
+});
+
+
+it('keeps server dependency matches for UUIDs and labels selectable',async()=>{
+ history.replaceState({},'','/services/new');
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page([service]))));
+ render(<ServicesPage context={context}/>);
+ const input=screen.getByRole('combobox',{name:'Search dependencies'});
+ for(const term of [id,'team:store']){
+  await userEvent.clear(input);await userEvent.type(input,term);
+  expect(await screen.findByRole('option',{name:/Checkout/})).toBeVisible();
+ }
+ await userEvent.click(screen.getByRole('option',{name:/Checkout/}));
+ expect(screen.getByRole('button',{name:'Remove dependency Checkout'})).toBeVisible();
+});
+
+it('reloads saved fields without keeping unfinished labels, links or errors',async()=>{
+ history.replaceState({},'',`/services/${id}/edit`);let reads=0;
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  if(init?.method==='PATCH')return reply({code:'conflict'},409);
+  if(String(input).includes('?'))return reply(page([{...service,id:other,display_name:'Payments'}]));
+  reads++;return reply(service,200,`"service:${id}:1"`);
+ }));
+ render(<ServicesPage context={context}/>);
+ await screen.findByLabelText('Display name',{exact:true});
+ await userEvent.click(screen.getByRole('button',{name:'Save changes'}));
+ await screen.findByRole('button',{name:'Reload saved service'});
+ await userEvent.type(screen.getByRole('textbox',{name:'Labels'}),'bad key:value');
+ await userEvent.keyboard('{Enter}');
+ await userEvent.type(screen.getByLabelText('Name',{exact:true}),'Discarded link');
+ await userEvent.type(screen.getByLabelText('URL',{exact:true}),'https://discarded.example.test');
+ await userEvent.click(screen.getByRole('button',{name:'Reload saved service'}));
+ await waitFor(()=>expect(reads).toBe(2));
+ expect(screen.getByRole('textbox',{name:'Labels'})).toHaveValue('');
+ expect(screen.getByLabelText('Name',{exact:true})).toHaveValue('');
+ expect(screen.getByLabelText('URL',{exact:true})).toHaveValue('');
+ expect(screen.queryByText(/Use key:value, for example/)).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('combobox',{name:'Search dependencies'}));
+ await userEvent.click(screen.getByRole('option',{name:/Payments/}));
+ expect(screen.getByRole('button',{name:'Remove dependency Payments'})).toBeVisible();
+});
+
+it('unlocks a retained create draft after a definite name conflict on retry',async()=>{
+ history.replaceState({},'','/services/new');
+ const attempts:{body:string;key:string|null}[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(_input:RequestInfo|URL,init?:RequestInit)=>{
+  if(init?.method!=='POST')return reply(page([]));
+  attempts.push({body:String(init.body),key:new Headers(init.headers).get('Idempotency-Key')});
+  if(attempts.length===1)throw new TypeError('offline');
+  if(attempts.length===2)return reply({code:'conflict'},409);
+  return reply(service,201,`"service:${id}:1"`);
+ }));
+ render(<ServicesPage context={context}/>);
+ await userEvent.type(screen.getByLabelText('Display name',{exact:true}),'Checkout');
+ await userEvent.click(screen.getByRole('button',{name:'Create service'}));
+ await userEvent.click(await screen.findByRole('button',{name:'Retry the same save'}));
+ await waitFor(()=>expect(screen.getByLabelText('Identifier',{exact:true})).toBeEnabled());
+ expect(attempts[1]).toEqual(attempts[0]);
+ expect(screen.getByLabelText('Display name',{exact:true})).toHaveValue('Checkout');
+ await userEvent.clear(screen.getByLabelText('Identifier',{exact:true}));
+ await userEvent.type(screen.getByLabelText('Identifier',{exact:true}),'checkout-corrected');
+ await userEvent.click(screen.getByRole('button',{name:'Create service'}));
+ await waitFor(()=>expect(location.pathname).toBe(`/services/${id}`));
+ expect(attempts[2]!.key).not.toBe(attempts[0]!.key);
+ expect(JSON.parse(attempts[2]!.body).name).toBe('checkout-corrected');
+});
+
+it('blocks duplicate SLO page loads and ignores a page that completes after refresh',async()=>{
+ history.replaceState({},'',`/services/${id}`);
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(service,200,`"service:${id}:1"`)));
+ const sample=overview(id);let initialReads=0;
+ let finish:(value:Awaited<ReturnType<typeof serviceClient.objectives>>)=>void=()=>{};
+ const reads=vi.spyOn(serviceClient,'objectives').mockImplementation(async(_id,_signal,cursor)=>{
+  if(cursor)return new Promise(resolve=>{finish=resolve;});
+  initialReads++;
+  return {...sample,items:[sample.items[initialReads===1?0:2]!],next_cursor:initialReads===1?'next-slo':''};
+ });
+ render(<ServicesPage context={context}/>);
+ const more=await screen.findByRole('button',{name:'More SLOs'});
+ fireEvent.click(more);fireEvent.click(more);
+ expect(more).toBeDisabled();expect(reads).toHaveBeenCalledTimes(2);
+ await userEvent.click(screen.getByRole('button',{name:'Refresh services'}));
+ await screen.findByRole('link',{name:sample.items[2]!.slo.display_name});
+ await act(async()=>finish({...sample,items:[sample.items[1]!],next_cursor:''}));
+ expect(screen.queryByRole('link',{name:sample.items[1]!.slo.display_name})).not.toBeInTheDocument();
+ expect(screen.getByRole('link',{name:sample.items[2]!.slo.display_name})).toBeVisible();
+});
+
+it('retains an explicitly requested graph service until its catalog page arrives',async()=>{
+ history.replaceState({},'',`/services/dependencies?service_id=${other}`);
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>reply(new URL(String(input),location.origin).searchParams.has('cursor')?page([{...service,id:other,display_name:'Payments'}]):{...page([service]),next_cursor:'graph-next',total:2})));
+ const mounted=render(<ServicesPage context={context}/>);
+ const more=await screen.findByRole('button',{name:'Show more services'});
+ expect(mounted.container.querySelector('.map-node.selected')).not.toBeInTheDocument();
+ await userEvent.click(more);
+ await waitFor(()=>expect(mounted.container.querySelector('.map-node.selected')).toHaveAttribute('data-id',other));
+});
+
+it('numbers short catalog pages by actual records and restores offsets when going back',async()=>{
+ history.replaceState({},'','/services');
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+  const cursor=new URL(String(input),location.origin).searchParams.get('cursor')??'';
+  return reply({...page([{...service,display_name:cursor?'Payments':'Checkout'}]),total:3,next_cursor:cursor==='third'?'':cursor?'third':'second'});
+ }));
+ render(<ServicesPage context={context}/>);
+ expect(await screen.findByText('Showing 1–1 of 3')).toBeVisible();
+ await userEvent.click(screen.getByRole('button',{name:'Next ›'}));
+ expect(await screen.findByText('Showing 2–2 of 3')).toBeVisible();
+ await userEvent.click(screen.getByRole('button',{name:'Next ›'}));
+ expect(await screen.findByText('Showing 3–3 of 3')).toBeVisible();
+ await userEvent.click(screen.getByRole('button',{name:'‹ Previous'}));
+ expect(await screen.findByText('Showing 2–2 of 3')).toBeVisible();
+ await userEvent.click(screen.getByRole('button',{name:'‹ Previous'}));
+ expect(await screen.findByText('Showing 1–1 of 3')).toBeVisible();
 });

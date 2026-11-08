@@ -29,6 +29,7 @@ type Props = {
   noMatch?: { text: (term: string) => string; action?: { label: (term: string) => string; onSelect: (term: string) => void } };
   searchLabelOnly?: boolean;
   multiple?: {selected: ComboboxOption[]; onRemove: (id:string)=>void; removeLabel?: (option:ComboboxOption)=>string};
+  // The caller supplies filtered options when handling search.
   onSearch?: (term:string)=>void;
 };
 
@@ -53,7 +54,7 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
   const listId = `${id}-listbox`;
   const generated = useId();
   const selected = value === null ? undefined : options.find((option) => option.id === value);
-  const matches = options.filter(option=>!multiple?.selected.some(selected=>selected.id===option.id)).filter((option) => !term || (searchLabelOnly ? option.label : `${option.label} ${option.detail ?? ''} ${option.keywords ?? ''}`).toLowerCase().includes(term.toLowerCase()));
+  const matches = options.filter(option=>!multiple?.selected.some(selected=>selected.id===option.id)).filter((option) => onSearch!==undefined || !term || (searchLabelOnly ? option.label : `${option.label} ${option.detail ?? ''} ${option.keywords ?? ''}`).toLowerCase().includes(term.toLowerCase()));
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;

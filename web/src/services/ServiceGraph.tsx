@@ -18,7 +18,7 @@ export function ServiceGraph(){
  async function load(cursor=''){
   setBusy(true);setError('');try{const page=await serviceClient.list({limit:200,cursor});setRecords(old=>cursor?[...old,...page.items]:page.items);setNext(page.next_cursor);setTotal(page.total??page.items.length);}catch(failure){setError(serviceError(failure));}finally{setBusy(false);}
  }
- useEffect(()=>{let active=true;const request=new AbortController();setBusy(true);void serviceClient.list({limit:200},request.signal).then(page=>{if(!active)return;setRecords(page.items);setNext(page.next_cursor);setTotal(page.total??page.items.length);setSelectedID(page.items.some(service=>service.id===initial)?initial:'');}).catch(failure=>{if(active)setError(serviceError(failure));}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;request.abort();};},[]);
+ useEffect(()=>{let active=true;const request=new AbortController();setBusy(true);void serviceClient.list({limit:200},request.signal).then(page=>{if(!active)return;setRecords(page.items);setNext(page.next_cursor);setTotal(page.total??page.items.length);}).catch(failure=>{if(active)setError(serviceError(failure));}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;request.abort();};},[]);
  const matching=useMemo(()=>records.filter(service=>!filter||filter===(service.slo_summary?.state??'no_slos')),[records,filter]);
  const matchIDs=useMemo(()=>new Set(matching.map(service=>service.id)),[matching]);
  const visible=useMemo(()=>{const ids=new Set(matchIDs);for(const service of records)for(const dependency of service.dependencies??[])if(matchIDs.has(service.id)||matchIDs.has(dependency)){ids.add(service.id);ids.add(dependency);}return records.filter(service=>ids.has(service.id));},[records,matchIDs]);

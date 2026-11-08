@@ -22,8 +22,8 @@ test('catalog sorting orders the complete filtered catalog and owner search comp
 });
 
 test('services persist metadata and dependencies, retain UUIDs on rename, and protect references',async({page},testInfo)=>{
- const providerName=unique('Payments'),display=unique('Checkout');
- const provider=await expectOk(api(page,'POST','/api/v1/services',{name:unique('payments'),display_name:providerName,owner:'Commerce'}));
+ const providerName=unique('Payments'),display=unique('Checkout'),dependencyLabel=unique('dependency-label');
+ const provider=await expectOk(api(page,'POST','/api/v1/services',{name:unique('payments'),display_name:providerName,owner:'Commerce',labels:{team:[dependencyLabel]}}));
  const started=performance.now();
  await page.goto('/services');await expect(page.locator('.services-table tbody tr').first()).toBeVisible();
  const listMs=performance.now()-started;expect(listMs).toBeLessThan(1000);
@@ -35,7 +35,9 @@ test('services persist metadata and dependencies, retain UUIDs on rename, and pr
  await page.getByRole('textbox',{name:'Labels',exact:true}).fill('team:store');await page.getByRole('textbox',{name:'Labels',exact:true}).press('Enter');
  await page.getByRole('textbox',{name:'Labels',exact:true}).fill('env:production');await page.getByRole('textbox',{name:'Labels',exact:true}).press('Enter');
  await page.getByLabel('Name',{exact:true}).fill('Runbook');await page.getByLabel('URL',{exact:true}).fill('https://docs.example.test/runbook');await page.getByLabel('URL',{exact:true}).press('Enter');
- await page.getByRole('combobox',{name:'Search dependencies'}).fill(providerName);
+ await page.getByRole('combobox',{name:'Search dependencies'}).fill(provider.body.id);
+ await expect(page.getByRole('option',{name:new RegExp(providerName)})).toBeVisible();
+ await page.getByRole('combobox',{name:'Search dependencies'}).fill('team:'+dependencyLabel);
  await page.getByRole('option',{name:new RegExp(providerName)}).click();
  await expect(page.getByRole('button',{name:`Remove dependency ${providerName}`})).toBeVisible();
  await page.getByRole('button',{name:'Create service',exact:true}).click();

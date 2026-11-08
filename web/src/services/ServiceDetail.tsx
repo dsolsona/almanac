@@ -9,13 +9,14 @@ import {EmptyServices,navigateService,ServiceIcon,ServiceLink,ServiceSummaryMark
 
 export function ServiceDetail({id,context,canWrite}:{id:string;context:AuthContext;canWrite:boolean}){
  const [service,setService]=useState<Service|null>(null),[etag,setEtag]=useState(''),[objectives,setObjectives]=useState<OverviewItem[]>([]),[next,setNext]=useState(''),[sloError,setSloError]=useState(''),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[busy,setBusy]=useState(false),[dialog,setDialog]=useState(false),[deleting,setDeleting]=useState(false),[deleteError,setDeleteError]=useState(''),[blocked,setBlocked]=useState(false);
+ const sloRequest=useRef<AbortController|null>(null),[sloBusy,setSloBusy]=useState(false);
  const mounted=useRef(true);useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
  const heading=useRef<HTMLHeadingElement>(null),deleteButton=useRef<HTMLButtonElement>(null);
  useEffect(()=>{heading.current?.focus({preventScroll:true});},[!!service]);
- useEffect(()=>{const request=new AbortController();setBusy(true);setError('');setSloError('');
+ useEffect(()=>{const request=new AbortController();sloRequest.current?.abort();sloRequest.current=request;setSloBusy(true);setBusy(true);setError('');setSloError('');
   void serviceClient.get(id,request.signal).then(result=>{if(!request.signal.aborted){setService(result.value);setEtag(result.etag);}}).catch(failure=>{if(!request.signal.aborted)setError(serviceError(failure));}).finally(()=>{if(!request.signal.aborted){setBusy(false);journeyContentReady('management');}});
-  void serviceClient.objectives(id,request.signal).then(page=>{if(!request.signal.aborted){setObjectives(page.items);setNext(page.next_cursor);}}).catch(failure=>{if(!request.signal.aborted)setSloError(serviceError(failure));});
-  return()=>request.abort();
+  void serviceClient.objectives(id,request.signal).then(page=>{if(!request.signal.aborted){setObjectives(page.items);setNext(page.next_cursor);}}).catch(failure=>{if(!request.signal.aborted)setSloError(serviceError(failure));}).finally(()=>{if(sloRequest.current===request){sloRequest.current=null;setSloBusy(false);}});
+  return()=>{request.abort();sloRequest.current?.abort();};
  },[id,refresh]);
  useEffect(()=>{if(service&&location.hash==='#dependencies')document.getElementById('service-dependency-section')?.scrollIntoView({block:'start'});},[service]);
  const summary=service?.slo_summary;
@@ -26,6 +27,13 @@ export function ServiceDetail({id,context,canWrite}:{id:string;context:AuthConte
   catch(failure){if(!mounted.current)return;if(failure instanceof SloFailure&&failure.code==='service_in_use')setBlocked(true);setDeleteError(serviceError(failure));}
   finally{if(mounted.current)setDeleting(false);}
  }
+ async function moreSlos(){
+  if(!next||sloRequest.current)return;
+  const request=new AbortController();sloRequest.current=request;setSloBusy(true);setSloError('');
+  try{const page=await serviceClient.objectives(id,request.signal,next);if(!request.signal.aborted){setObjectives(old=>[...old,...page.items]);setNext(page.next_cursor);}}
+  catch(failure){if(!request.signal.aborted)setSloError(serviceError(failure));}
+  finally{if(sloRequest.current===request){sloRequest.current=null;setSloBusy(false);}}
+ }
  const sorted=[...objectives].sort((a,b)=>{const rank=(item:OverviewItem)=>objectiveMark(item).tone==='breached'?0:objectiveMark(item).tone==='healthy'?2:1;return rank(a)-rank(b);});
  return <article className="service-overview">
   <PageHeader title={service?.display_name??'Service details'} headingRef={heading} breadcrumb={{href:'/services',label:'Services',current:service?.display_name??'Service'}} actions={<><RefreshButton label="Refresh services" busy={busy} onClick={()=>{clearQueryCache();setRefresh(value=>value+1);}}/>{canWrite&&service?<ServiceLink href={`/services/${id}/edit`} primary>Edit service</ServiceLink>:!canWrite?<span className="service-muted">View only</span>:null}</>}/>
@@ -35,7 +43,7 @@ export function ServiceDetail({id,context,canWrite}:{id:string;context:AuthConte
    <section className="service-section service-objectives"><header><div><h2>SLOs</h2>{summary&&summary.total>0&&<div className="service-result-summary" aria-label="SLO results">{summary.breached>0&&<StatusChip tone="breached" label={`${summary.breached} breached`}/>} {summary.unknown>0&&<StatusChip tone="stale" label={`${summary.unknown} unknown`}/>} {summary.on_track>0&&<StatusChip tone="healthy" label={`${summary.on_track} on track`}/>}</div>}</div>{canWrite&&!!summary?.total&&<ServiceLink href={`/slos/new?service_id=${id}`}>Create SLO</ServiceLink>}</header>
     {sloError&&<div className="service-notice service-notice--error" role="alert">{sloError}<Button variant="outline" onClick={()=>{clearQueryCache();setRefresh(value=>value+1);}}>Try again</Button></div>}
     <div className="service-panel service-slo-table">{sorted.length?<table className="ui-list-table services-table"><thead><tr>{['SLO','Status','Objective','Budget left'].map(label=><th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{sorted.map(item=>{const mark=objectiveMark(item);return <tr key={item.slo.id}><td data-label="SLO"><a className="service-row-name" href={`/slos/${item.slo.id}`} data-app-route>{item.slo.display_name}</a></td><td data-label="Status"><StatusChip {...mark}/></td><td data-label="Objective"><span className="mono">{percent(item.slo.target)} · {windowLabel(item.slo.rolling_window_seconds)}</span></td><td data-label="Budget left"><span className={`mono ${mark.tone==='breached'?'service-breached':mark.tone==='healthy'?'':'service-muted'}`}>{mark.tone==='healthy'||mark.tone==='breached'?percent(item.current.performance.remaining_fraction):'—'}</span></td></tr>;})}</tbody></table>:!sloError&&summary?.total===0?<EmptyServices title="No SLOs yet" action={canWrite?<ServiceLink href={`/slos/new?service_id=${id}`}>Create SLO</ServiceLink>:undefined}>Add an objective to measure {service.display_name} against a reliability target.</EmptyServices>:!sloError?<span className="sr-only" role="status">Opening SLO results</span>:null}</div>
-    {next&&<Button variant="outline" onClick={async()=>{try{const page=await serviceClient.objectives(id,undefined,next);setObjectives(old=>[...old,...page.items]);setNext(page.next_cursor);}catch(failure){setSloError(serviceError(failure));}}}>More SLOs</Button>}
+    {next&&<Button variant="outline" pending={sloBusy} disabled={busy} onClick={moreSlos}>More SLOs</Button>}
    </section>
    <section className="service-section service-dependencies" id="service-dependency-section"><header><h2>Dependencies</h2></header><ServiceRelationships service={service}/></section>
    {canWrite&&<section className="service-danger-zone"><div><h2>Delete service</h2><p>{summary?.total?`${summary.total} SLOs reference this service.`:'No SLOs reference this service.'}</p></div><Button variant="danger-outline" ref={deleteButton} onClick={()=>{setBlocked(false);setDeleteError('');setDialog(true);}}>Delete service…</Button></section>}
