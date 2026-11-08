@@ -30,9 +30,13 @@ from the existing external-SLI contract. Backfill and repair remain in F4.
 > relevant broad database/Compose gates at completed candidates, reusing matching passes.
 
 > Accepted amendment, 2026-11-05 ([ADR-0033](../adr/0033-simple-test-suite.md)): the gates are
-> `make check` and `make test-e2e`, run in full on every pull request by CI; passes are no longer
+> `make check` and `make test-e2e`, run in full on application pull requests by CI; passes are no longer
 > reused. Rendered journey timings of the four main pages come from `make test-perf`, which runs
 > nightly; traces in VictoriaTraces remain the tool for locating cost.
+
+> Accepted clarification, 2026-11-08: documentation, skills and CI-only changes use relevant
+> lightweight checks instead of application suites. The maintainer approved matching verification
+> to the changed behavior; [testing](../testing.md) records the local and CI selection rules.
 
 ## Purpose
 

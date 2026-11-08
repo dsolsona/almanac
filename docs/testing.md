@@ -8,13 +8,17 @@ are in [commands](commands.md).
 
 | Command | What it proves | Speed | When |
 | --- | --- | --- | --- |
-| `make test` | Formatting, vet, generated code, docs links, the agent launcher, Go and web unit tests | about a minute | while editing, every PR |
-| `make test-integration` | Go code against real PostgreSQL and the real binaries: constraints, transactions, persistence, auth, agents, CLI | a few minutes | every PR |
-| `make test-browser` | The UI catalogue in light, dark, intermediate and mobile setups; the production build | about two minutes | UI changes, every PR |
-| `make test-e2e` | The critical user journeys on a fresh Compose stack of the real images | a few minutes | every PR |
+| `make test` | Formatting, vet, generated code, docs links, the agent launcher, Go and web unit tests | about a minute | application changes |
+| `make test-integration` | Go code against real PostgreSQL and the real binaries: constraints, transactions, persistence, auth, agents, CLI | a few minutes | database, protocol, API or runtime changes |
+| `make test-browser` | The UI catalogue in light, dark, intermediate and mobile setups; the production build | about two minutes | UI changes |
+| `make test-e2e` | The critical user journeys on a fresh Compose stack of the real images | a few minutes | affected user journeys or deployment changes |
 | `make test-perf` | Page speed and exact values of the SLO list, SLO detail, SLI list and SLI detail on a seeded fleet | about ten minutes | nightly, performance work |
 
-`make check` runs the first three; CI runs all four PR suites in parallel on every pull request.
+`make check` runs the first three. Choose local checks by the behavior changed; a skill or
+documentation edit is not a reason to build images or run application tests. Check relevant
+links, syntax and examples instead. CI uses built-in path filters to skip application jobs
+when all changes are Markdown, `docs/`, `.agents/`, `.codex/` or the CI workflow itself.
+Mixed changes run the existing four application suites; nightly/manual performance runs remain.
 In one checkout, run `make check` and `make test-e2e` sequentially: the catalogue
 runner clears `web/test-results`, which contains the E2E runner's output directory.
 CI jobs have separate workspaces and do not share these artifacts.

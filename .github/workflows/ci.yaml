@@ -4,8 +4,20 @@ name: CI
 
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+      - '.codex/**'
+      - '.github/workflows/ci.yaml'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+      - '.codex/**'
+      - '.github/workflows/ci.yaml'
   workflow_dispatch:
   schedule:
     # Nightly: the performance suite, which is too slow to gate every pull request.

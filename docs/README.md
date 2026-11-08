@@ -28,3 +28,21 @@ choices remain visible in the review guide. Templates are starting points, not d
 
 Keep documentation about Almanac itself. Update affected documents alongside code,
 and distinguish requirements, decisions, implementation status, and evidence.
+
+## Local code review
+
+The repository includes the
+[Almanac code review skill](../.agents/skills/almanac-code-review/SKILL.md).
+In Codex, type `$almanac-code-review` or select it through `/skills`.
+For example:
+
+```text
+$almanac-code-review review my uncommitted changes
+$almanac-code-review review this branch against feat/its-dependency
+$almanac-code-review focus on performance
+```
+
+The skill reviews without applying fixes or publishing comments. It selects relevant
+lenses, follows Almanac's accepted contracts, and reports findings and verification
+gaps. Codex discovers skills under `.agents/skills/`; restart Codex if it does not
+appear. No global installation or plugin is required.

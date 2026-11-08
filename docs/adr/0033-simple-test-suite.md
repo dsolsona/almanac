@@ -9,6 +9,10 @@
 
 ## Context
 
+Verification selection was clarified by the maintainer on 2026-11-08:
+[testing](../testing.md) exempts documentation, skills and CI-only changes from
+application suites. The commands and application-suite coverage below remain unchanged.
+
 On 2026-11-05 the suite was measured. Coverage was good and the unit layers were fast, but:
 
 - **The integration suite was slow.** It took about 14 minutes for 173 cases. Each case ran in its own `go test` process, one after another, with the race detector on. Even a trivial database test took about 2 seconds.
