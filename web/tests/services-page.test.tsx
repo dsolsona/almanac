@@ -181,7 +181,7 @@ it('provides graph camera controls without a duplicate Relationships table',asyn
  await userEvent.click(screen.getByRole('button',{name:'Reset view'}));
  expect(zoom.textContent).toBe(before);
  await userEvent.click(within(screen.getByRole('group',{name:'Service SLO status'})).getByRole('button',{name:'Breached'}));
- expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','false');
  expect(screen.queryByRole('button',{name:'Focus selected'})).not.toBeInTheDocument();
 });
 
@@ -217,7 +217,7 @@ it('finds services by typing their owner and shows their status before selection
  expect(screen.queryByRole('button',{name:'List & map'})).not.toBeInTheDocument();
 });
 
-it('combines SLO status filters and resets an empty graph back to the complete catalog',async()=>{
+it('switches SLO status filters and resets an empty graph back to the complete catalog',async()=>{
  history.replaceState({},'','/services/dependencies');
  const records=[service,{...service,id:other,name:'payments',display_name:'Payments',slo_summary:{state:'breached',total:1,on_track:0,breached:1,unknown:0}},{...service,id:'00000000-0000-4000-8000-000000000003',display_name:'Search',slo_summary:{state:'unknown',total:1,on_track:0,breached:0,unknown:1}}];
  vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
@@ -226,10 +226,12 @@ it('combines SLO status filters and resets an empty graph back to the complete c
  const filters=screen.getByRole('group',{name:'Service SLO status'});
  await userEvent.click(within(filters).getByRole('button',{name:'Breached'}));
  expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
- expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:'Select Payments, Breached, 1 SLO'})).toHaveAttribute('aria-pressed','false');
  await userEvent.click(within(filters).getByRole('button',{name:'Unknown'}));
- expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(2);
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
  await userEvent.click(within(filters).getByRole('button',{name:'Breached'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
+ await userEvent.click(within(filters).getByRole('button',{name:'Unknown'}));
  expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
  await userEvent.click(within(filters).getByRole('button',{name:'Unknown'}));
  expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
@@ -265,4 +267,40 @@ it('keeps direct dependencies and dependents as selectable context around status
  expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(3);
  await userEvent.click(screen.getByRole('button',{name:'Reset view'}));
  expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(5);
+});
+
+it('never selects a service implicitly and replaces the active graph status filter',async()=>{
+ history.replaceState({},'','/services/dependencies');
+ const records=[{...service,slo_summary:{state:'breached',total:1,on_track:0,breached:1,unknown:0}},{...service,id:other,display_name:'Payments',slo_summary:{state:'on_track',total:1,on_track:1,breached:0,unknown:0}}];
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(page(records))));
+ const mounted=render(<ServicesPage context={context}/>);
+ await waitFor(()=>expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(2));
+ expect(mounted.container.querySelector('.map-node.selected')).not.toBeInTheDocument();
+ const filters=screen.getByRole('group',{name:'Service SLO status'});
+ await userEvent.click(within(filters).getByRole('button',{name:'Breached'}));
+ expect(mounted.container.querySelector('.map-node.selected')).not.toBeInTheDocument();
+ await userEvent.click(within(filters).getByRole('button',{name:'On track'}));
+ expect(within(filters).getByRole('button',{name:'Breached'})).toHaveAttribute('aria-pressed','false');
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(1);
+ const node=screen.getByRole('button',{name:'Select Payments, On track, 1 SLO'});
+ fireEvent.keyDown(node,{key:'Enter'});expect(node).toHaveAttribute('aria-pressed','true');
+ fireEvent.keyDown(node,{key:'Enter'});expect(node).toHaveAttribute('aria-pressed','false');
+ await userEvent.click(within(filters).getByRole('button',{name:'On track'}));
+ expect(mounted.container.querySelectorAll('.map-node')).toHaveLength(2);
+});
+
+it('searches the owner directory and requests catalog-wide sorting from column headers',async()=>{
+ history.replaceState({},'','/services');
+ const requests:URL[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{requests.push(new URL(String(input),location.origin));return reply({...page([service]),owners:['Store experience','Money movement']});}));
+ render(<ServicesPage context={context}/>);await screen.findByRole('link',{name:'Checkout'});
+ await userEvent.type(screen.getByRole('combobox',{name:'Owner'}),'Money');
+ await userEvent.click(screen.getByRole('option',{name:/Money movement/}));
+ await waitFor(()=>expect(requests.at(-1)!.searchParams.get('owner')).toBe('Money movement'));
+ await userEvent.click(screen.getByRole('button',{name:'SLO status'}));
+ await waitFor(()=>expect(requests.at(-1)!.searchParams.get('sort')).toBe('slo_status'));
+ expect(requests.at(-1)!.searchParams.get('order')).toBe('asc');
+ expect(screen.getByRole('columnheader',{name:/SLO status/})).toHaveAttribute('aria-sort','ascending');
+ await userEvent.click(screen.getByRole('button',{name:'SLO status'}));
+ await waitFor(()=>expect(requests.at(-1)!.searchParams.get('order')).toBe('desc'));
 });

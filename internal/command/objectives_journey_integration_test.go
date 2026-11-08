@@ -255,7 +255,7 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 	if conflict.Error == nil || conflict.Error.Code != "conflict" {
 		t.Fatal("stale service ETag was not rejected")
 	}
-	filtered := run(0, "services", "list", "--q=team:store", "--owner=Commerce", "--coverage=without")
+	filtered := run(0, "services", "list", "--q=team:store", "--owner=Commerce", "--coverage=without", "--sort=owner", "--order=desc")
 	if json.Unmarshal(filtered.Result["items"], &services) != nil || len(services) != 1 || services[0].Id != service.Id {
 		t.Fatal("catalog filters lost metadata")
 	}

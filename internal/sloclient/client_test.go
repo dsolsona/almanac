@@ -222,7 +222,7 @@ func TestServiceCatalogFiltersAndArchiveTransport(t *testing.T) {
 		calls++
 		switch r.Method {
 		case http.MethodGet:
-			if r.URL.Path != "/api/v1/services" || r.URL.Query().Get("q") != "team:store" || r.URL.Query().Get("owner") != "Commerce" || r.URL.Query().Get("coverage") != "without" {
+			if r.URL.Path != "/api/v1/services" || r.URL.Query().Get("q") != "team:store" || r.URL.Query().Get("owner") != "Commerce" || r.URL.Query().Get("coverage") != "without" || r.URL.Query().Get("sort") != "owner" || r.URL.Query().Get("order") != "desc" {
 				t.Errorf("filters: %s", r.URL)
 			}
 			_, _ = w.Write([]byte(`{"items":[],"next_cursor":""}`))
@@ -241,7 +241,7 @@ func TestServiceCatalogFiltersAndArchiveTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := New(ops, func(context.Context, *http.Request) error { return nil })
-	if _, _, err := client.Do(t.Context(), Input{Kind: "services", Action: "list", Query: "team:store", Owner: "Commerce", Coverage: "without", Limit: 10}); err != nil {
+	if _, _, err := client.Do(t.Context(), Input{Kind: "services", Action: "list", Query: "team:store", Owner: "Commerce", Coverage: "without", Sort: "owner", Order: "desc", Limit: 10}); err != nil {
 		t.Fatal(err)
 	}
 	data, _, err := client.Do(t.Context(), Input{Kind: "services", Action: "delete", ID: id, ETag: `"service:` + id + `:1"`})

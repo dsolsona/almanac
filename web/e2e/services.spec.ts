@@ -1,6 +1,26 @@
 import {expect,test} from '@playwright/test';
 import {api,expectOk,unique} from './support/api.ts';
 
+test('catalog sorting orders the complete filtered catalog and owner search composes with paging',async({page})=>{
+ const prefix=unique('sort-catalog');
+ for(let index=20;index>=0;index--)await expectOk(api(page,'POST','/api/v1/services',{name:`${prefix}-${index}`,display_name:`${prefix} ${String(index).padStart(2,'0')}`,owner:`Owner ${index%3===0?'A':index%3===1?'B':'C'}`}));
+ await page.goto('/services');await page.getByRole('searchbox',{name:'Search services'}).fill(prefix);
+ await expect(page.locator('.services-table tbody tr')).toHaveCount(10);
+ await page.getByRole('button',{name:'Service',exact:true}).click();
+ await expect(page.locator('.services-table .service-row-name').first()).toHaveText(`${prefix} 00`);
+ await page.getByRole('button',{name:'Next ›',exact:true}).click();
+ await expect(page.locator('.services-table .service-row-name').first()).toHaveText(`${prefix} 10`);
+ await page.getByRole('button',{name:'Service',exact:true}).click();
+ await expect(page.locator('.services-table .service-row-name').first()).toHaveText(`${prefix} 20`);
+ await page.getByRole('combobox',{name:'Owner',exact:true}).fill('Owner A');
+ await page.getByRole('option',{name:/Owner A/}).click();
+ await expect(page.locator('.services-table tbody tr')).toHaveCount(7);
+ for(const cell of await page.locator('.service-owner-cell').all())await expect(cell).toHaveText('Owner A');
+ await page.getByRole('button',{name:'Clear owner filter',exact:true}).click();
+ await expect(page.locator('.services-table tbody tr')).toHaveCount(10);
+ expect((await api(page,'GET','/api/v1/services?sort=invalid')).status).toBe(400);
+});
+
 test('services persist metadata and dependencies, retain UUIDs on rename, and protect references',async({page},testInfo)=>{
  const providerName=unique('Payments'),display=unique('Checkout');
  const provider=await expectOk(api(page,'POST','/api/v1/services',{name:unique('payments'),display_name:providerName,owner:'Commerce'}));

@@ -2226,6 +2226,51 @@ func (e ListServicesParamsCoverage) Valid() bool {
 	}
 }
 
+// Defines values for ListServicesParamsSort.
+const (
+	DependencyCount ListServicesParamsSort = "dependency_count"
+	Name            ListServicesParamsSort = "name"
+	Owner           ListServicesParamsSort = "owner"
+	SloCount        ListServicesParamsSort = "slo_count"
+	SloStatus       ListServicesParamsSort = "slo_status"
+)
+
+// Valid indicates whether the value is a known member of the ListServicesParamsSort enum.
+func (e ListServicesParamsSort) Valid() bool {
+	switch e {
+	case DependencyCount:
+		return true
+	case Name:
+		return true
+	case Owner:
+		return true
+	case SloCount:
+		return true
+	case SloStatus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListServicesParamsOrder.
+const (
+	Asc  ListServicesParamsOrder = "asc"
+	Desc ListServicesParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListServicesParamsOrder enum.
+func (e ListServicesParamsOrder) Valid() bool {
+	switch e {
+	case Asc:
+		return true
+	case Desc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetSloOperationalOverviewParamsUrgency.
 const (
 	GetSloOperationalOverviewParamsUrgencyHealthy        GetSloOperationalOverviewParamsUrgency = "healthy"
@@ -3999,10 +4044,22 @@ type ListServicesParams struct {
 	Q        *string                     `form:"q,omitempty" json:"q,omitempty"`
 	Owner    *string                     `form:"owner,omitempty" json:"owner,omitempty"`
 	Coverage *ListServicesParamsCoverage `form:"coverage,omitempty" json:"coverage,omitempty"`
+
+	// Sort Sort the complete filtered catalog with UUID ties. Omitting sort retains creation order.
+	Sort *ListServicesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Requires sort. Status ascending is Breached, Unknown, On track, No SLOs. Cursors are bound to filters and ordering; changed metadata or status can move records between requests.
+	Order *ListServicesParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 }
 
 // ListServicesParamsCoverage defines parameters for ListServices.
 type ListServicesParamsCoverage string
+
+// ListServicesParamsSort defines parameters for ListServices.
+type ListServicesParamsSort string
+
+// ListServicesParamsOrder defines parameters for ListServices.
+type ListServicesParamsOrder string
 
 // CreateServiceParams defines parameters for CreateService.
 type CreateServiceParams struct {
@@ -8451,6 +8508,30 @@ func NewListServicesRequest(server string, params *ListServicesParams) (*http.Re
 		if params.Coverage != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "coverage", *params.Coverage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Order != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "order", *params.Order, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -20051,6 +20132,32 @@ func (siw *ServerInterfaceWrapper) ListServices(w http.ResponseWriter, r *http.R
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "coverage"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "coverage", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
 		}
 		return
 	}

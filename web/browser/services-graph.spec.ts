@@ -12,6 +12,7 @@ test('graph gestures stay in the canvas and focus useful service neighborhoods @
  const find=async(name:string)=>{await page.getByRole('combobox',{name:'Find a service'}).fill(name);await page.getByRole('option').filter({has:page.getByText(name,{exact:true})}).click();};
  await page.goto('/services/dependencies');
  await expect(page.locator('.map-node')).toHaveCount(records.length);
+ await expect(page.locator('.map-node.selected')).toHaveCount(0);
  await expect(page.getByRole('heading',{name:'Relationships',exact:true})).toHaveCount(0);
  if(page.viewportSize()!.width<=860){
   await expect(page.locator('.graph-mobile')).toBeVisible();
@@ -64,6 +65,7 @@ test('graph gestures stay in the canvas and focus useful service neighborhoods @
  expect(await page.locator('.map-node').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('transform')))).toEqual(positions);
  await page.getByRole('button',{name:'Reset view',exact:true}).click();await expect(zoom).toHaveText(initialZoom!);
  for(const node of await page.locator('.map-node-core').all()){const box=(await node.boundingBox())!,view=(await canvas.boundingBox())!;expect(box.x).toBeGreaterThanOrEqual(view.x);expect(box.y).toBeGreaterThanOrEqual(view.y);expect(box.x+box.width).toBeLessThanOrEqual(view.x+view.width);expect(box.y+box.height).toBeLessThanOrEqual(view.y+view.height);}
+ await find(checkout.display_name);
  await canvas.focus();await canvas.press('=');expect(await zoom.textContent()).not.toBe(initialZoom);
  await canvas.press('0');await expect(zoom).toHaveText(initialZoom!);
  const leftBefore=(await selectedCore.boundingBox())!.x;await canvas.press('ArrowRight');expect((await selectedCore.boundingBox())!.x-leftBefore).toBeCloseTo(-48,0);
@@ -77,6 +79,7 @@ test('graph gestures stay in the canvas and focus useful service neighborhoods @
  const filters=page.getByRole('group',{name:'Service SLO status'});
  await filters.getByRole('button',{name:'Breached',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(1);
  await expect(page.locator('.map-node')).toHaveCount(12);
+ await expect(page.locator('.map-node.selected')).toHaveCount(0);
  for(const name of ['API gateway','Cart','Payments','Orders']){
   const node=page.locator(`.map-node[data-id="${records.find(record=>record.display_name===name)!.id}"]`);
   await expect(node).toHaveAttribute('data-filter-match','false');expect(Number(await node.evaluate(node=>getComputedStyle(node).opacity))).toBeLessThan(.6);
@@ -84,9 +87,15 @@ test('graph gestures stay in the canvas and focus useful service neighborhoods @
  await expect(page.locator(`.map-node[data-id="${records.find(record=>record.name==='configuration')!.id}"]`)).toHaveCount(0);
  const paymentContext=page.getByRole('button',{name:'Select Payments, On track, 1 SLO',exact:true});await paymentContext.focus();await expect(paymentContext).toHaveCSS('opacity','1');
  await paymentContext.press('Enter');await expect(page.locator('.graph-details')).toContainText('Payments');
- await filters.getByRole('button',{name:'Unknown',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(2);
- await filters.getByRole('button',{name:'On track',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(3);
- for(const node of await page.locator('.map-node[data-filter-match="true"]').all())expect(['on_track','breached','unknown']).toContain(await node.getAttribute('data-slo-state'));
+ await paymentContext.press('Enter');await expect(page.locator('.map-node.selected')).toHaveCount(0);
+ await paymentContext.click();await expect(page.locator('.map-node.selected')).toHaveCount(1);
+ await page.getByRole('button',{name:'Clear selection',exact:true}).click();await expect(page.locator('.map-node.selected')).toHaveCount(0);
+ await find(checkout.display_name);await canvas.click({position:{x:5,y:5}});await expect(page.locator('.map-node.selected')).toHaveCount(0);
+ await filters.getByRole('button',{name:'Unknown',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(1);
+ await filters.getByRole('button',{name:'On track',exact:true}).click();await expect(page.locator('.map-node[data-filter-match="true"]')).toHaveCount(1);
+ await expect(filters.getByRole('button',{name:'Breached',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(filters.getByRole('button',{name:'Unknown',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(page.locator('.map-node.selected')).toHaveCount(0);
  await page.getByRole('button',{name:'Reset view',exact:true}).click();await expect(page.locator('.map-node')).toHaveCount(50);
  await expect(filters.getByRole('button',{name:'On track',exact:true})).toHaveAttribute('aria-pressed','false');
  expect(await canvas.evaluate(node=>node.parentElement!.scrollHeight<=node.parentElement!.clientHeight)).toBe(true);

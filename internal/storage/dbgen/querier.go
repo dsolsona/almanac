@@ -214,6 +214,7 @@ type Querier interface {
 	ListSloPreparationJobs(ctx context.Context, arg ListSloPreparationJobsParams) ([]ListSloPreparationJobsRow, error)
 	ListSloTimelineFacts(ctx context.Context, arg ListSloTimelineFactsParams) ([]ListSloTimelineFactsRow, error)
 	ListSlos(ctx context.Context, arg ListSlosParams) ([]ListSlosRow, error)
+	ListSortedCatalogServices(ctx context.Context, arg ListSortedCatalogServicesParams) ([]ListSortedCatalogServicesRow, error)
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
 	// would otherwise walk inactive history. Recheck base rows after any lock wait.
 	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)

@@ -40,6 +40,18 @@
 .services-page .services-table tbody tr { cursor:pointer; }
 .services-page .services-table tbody tr:hover td { background:var(--surface-2); }
 .services-page .service-row-name { font:600 14px/24px var(--font-body); display:inline-block; color:var(--text); text-decoration:none; }
+.services-page .service-sort { display:inline-flex; align-items:center; gap:6px; border:0; background:none; padding:0; color:inherit; font:inherit; cursor:pointer; white-space:nowrap; }
+.services-page .service-sort span { color:var(--text-3); }
+.services-page .service-sort:focus-visible { outline:3px solid var(--focus-ring); outline-offset:3px; }
+.services-page .service-owner-filter { position:relative; flex:none; width:220px; }
+.services-page .service-owner-filter .ui-field { display:flex; align-items:center; gap:8px; }
+.services-page .service-owner-filter .ui-label { flex:none; margin:0; font:13px var(--mono); }
+.services-page .service-owner-filter .ui-combobox { flex:1; min-width:0; }
+.services-page .service-owner-filter .ui-control { min-height:34px; height:34px; font-size:13px; }
+.services-page .service-owner-filter[data-active="true"] .ui-control { padding-right:52px; }
+.services-page .service-owner-clear { position:absolute; right:28px; top:50%; transform:translateY(-50%); width:24px; height:24px; padding:0; border:0; background:none; color:var(--text-2); cursor:pointer; }
+.services-page .service-owner-clear:focus-visible { outline:3px solid var(--focus-ring); }
+.services-page .graph-selection-hint { padding:18px var(--card-inset); margin:0; border-top:1px solid var(--border); color:var(--text-3); font-size:13px; }
 .services-page .service-row-description { display:block; color:var(--text-2); font:13px/1.5 var(--font-body); max-width:56ch; margin-top:2px; }
 .services-page .services-table .mono { font-size:13px; }
 .services-page .service-inline-link { color:var(--accent-ink); text-decoration:underline; text-underline-offset:3px; }
@@ -187,7 +199,7 @@
  .services-page .ui-pager { gap:12px 8px; }
  .services-page .ui-pager__position { flex-basis:100%; }
  .services-page .ui-pager__size { margin-right:auto; }
- .services-page .map-desktop { display:none; }
+ .services-page .map-desktop,.services-page .graph-desktop-hint { display:none; }
  .services-page .graph-toolbar { flex-wrap:wrap; }
  .services-page .graph-toolbar > .ui-field { flex-basis:100%; max-width:none; }
  .services-page .graph-camera-zoom { display:none; }
@@ -227,3 +239,12 @@
 .services-page .ui-status-chip-cell { display:inline-flex; }
 .services-page .service-owner-cell { margin-inline:auto; }
 @media(max-width:860px){.services-page .service-owner-cell{margin-inline:0;}}
+
+.services-page .service-mobile-sort { display:none; }
+.services-page .service-owner-filter .ui-combobox__label { overflow-wrap:anywhere; }
+@media(max-width:860px){.services-page .service-mobile-sort{display:flex;align-items:center;gap:8px;margin:0 0 12px}}
+@media(pointer:coarse){.services-page .graph-help summary{width:44px;height:44px}.services-page .graph-camera-zoom .ui-button{width:44px;min-height:44px;height:44px}.services-page .service-owner-filter .ui-control{min-height:44px;height:44px}.services-page .service-owner-clear{width:44px;height:44px;right:24px}.services-page .service-owner-filter[data-active="true"] .ui-control{padding-right:76px}}
+
+.services-page .graph-mobile > .service-muted { margin:0; }
+
+.services-page .service-owner-filter .ui-combobox__icon { top:50%; transform:translateY(-50%); font:14px/21px var(--font-body); }

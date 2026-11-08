@@ -36,6 +36,7 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	}
 	var profile, id, serviceID, inputFile, etag, key, cursor, output, at, start, end string
 	var query, urgency, operationalStart, operationalEnd, owner, coverage string
+	var sortBy, sortOrder string
 	var limit, burnWindowSeconds int
 	var generationID, lane string
 	var offset int
@@ -60,6 +61,8 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	fs.StringVar(&query, "q", "", "literal name search")
 	fs.StringVar(&owner, "owner", "", "service owner filter")
 	fs.StringVar(&coverage, "coverage", "", "all, with or without SLOs")
+	fs.StringVar(&sortBy, "sort", "", "service sort: name, slo_status, owner, slo_count or dependency_count")
+	fs.StringVar(&sortOrder, "order", "", "asc or desc (requires sort)")
 	fs.StringVar(&urgency, "urgency", "", "needs_attention, watch or healthy")
 	fs.StringVar(&operationalStart, "start", "", "operational history range start")
 	fs.StringVar(&operationalEnd, "end", "", "operational history range end")
@@ -88,6 +91,7 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 			allowed["service-id"] = true
 		} else {
 			allowed["q"], allowed["owner"], allowed["coverage"] = true, true, true
+			allowed["sort"], allowed["order"] = true, true
 		}
 	}
 	if action == "create" {
@@ -234,7 +238,7 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 	if !ok {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("objective operations unavailable"))
 	}
-	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{GenerationID: generationID, Lane: lane, Offset: offset, Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Owner: owner, Coverage: coverage, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
+	data, tag, err := sloclient.New(objectiveOps, editor).Do(ctx, sloclient.Input{GenerationID: generationID, Lane: lane, Offset: offset, Kind: kind, Action: action, ID: id, ServiceID: serviceID, Cursor: cursor, Limit: limit, Key: key, ETag: etag, Body: input, At: atTime, TimelineStart: startTime, TimelineEnd: endTime, Query: query, Urgency: urgency, Owner: owner, Coverage: coverage, Sort: sortBy, Order: sortOrder, Start: operationalStartTime, End: operationalEndTime, BurnWindowSeconds: burnWindowSeconds})
 	if err != nil {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err)
 	}

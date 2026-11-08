@@ -19,7 +19,7 @@ function catalogService(record:Service):Service{
  return value;
 }
 export const serviceClient={
- list:(query:{q?:string;owner?:string;coverage?:string;limit?:number;cursor?:string}={},signal?:AbortSignal)=>{
+ list:(query:{q?:string;owner?:string;coverage?:string;sort?:string;order?:string;limit?:number;cursor?:string}={},signal?:AbortSignal)=>{
   const params=new URLSearchParams();for(const [key,value]of Object.entries(query))if(value!==undefined&&value!=='')params.set(key,String(value));
   return request<ServicePage>(`/api/v1/services?${params}`,{signal}).then(result=>({...result.value,items:result.value.items.map(catalogService)}));
  },

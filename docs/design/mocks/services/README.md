@@ -82,7 +82,7 @@ narrow screens use cards grouped under Used by and Depends on.
   propagating SLO status or impact.
 - The graph uses a fixed-height canvas with drag panning, pointer-centered wheel
   zoom and explicit zoom controls. Reset view clears filters/search and restores
-  the loaded catalog. Status chips filter service summaries and can be combined;
+  the loaded catalog. Status chips filter service summaries one status at a time;
   the type-ahead finder shows owner and status and centers the chosen service.
   Arrow keys
   pan, +/− zoom and 0 fits all. The duplicate Relationships table is removed;
@@ -107,8 +107,8 @@ acceptance checks cover the result.
 The 2026-11-08 refinement retains Service focus and Owner groups, removes List &
 map, and replaces framing actions with Reset view. The shared type-ahead picker
 shows service context before selection. On track, Breached, Unknown and No SLOs
-chips filter each service’s own aggregate status; no selection means all statuses,
-and multiple selections combine as alternatives. Reset clears filters and search.
+chips filter each service’s own aggregate status; no active chip means all statuses,
+and selecting another chip replaces the active status. Reset clears filters and search.
 Circle tint and stroke use semantic status colors without inheriting dependency
 health; missing or stale results remain Unknown.
 
@@ -119,3 +119,11 @@ selection. Context does not expand recursively or count as a filter match. The
 finder, Reset view, zoom and help share one desktop toolbar row; narrow screens
 wrap the finder. Direction and gesture explanations live in the compact help
 control and remain available to assistive technology.
+
+Selection is explicit: opening or filtering the graph selects nothing. Select a
+node or use the finder; click it again, use Clear selection, press Escape in the
+canvas, or click empty canvas to deselect. Reset clears selection too. Status
+chips are single-choice toggles; clicking the active chip restores all statuses.
+The table owner filter uses the shared type-ahead pattern. All five columns sort
+the complete filtered catalog in either direction, with equivalent mobile sort
+controls. Product navigation is SLOs, SLIs, Services.

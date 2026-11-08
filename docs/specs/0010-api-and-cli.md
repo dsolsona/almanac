@@ -85,6 +85,17 @@ personal tokens cannot mint additional credentials.
 
 ## HTTP behavior
 
+The service catalog accepts `sort=name|slo_status|owner|slo_count|dependency_count`
+and `order=asc|desc` (default ascending; requires `sort`). These apply to the whole
+filtered catalog before bounded pagination, with UUID as the final tie-breaker.
+Name/owner ordering is case-insensitive; status ascending is Breached, Unknown,
+On track, No SLOs. Counts sort numerically. Omitting sort retains the existing
+creation-time/UUID order and cursor contract. Sorted cursors include their seek
+keys and bind search, owner, coverage, sort and direction; rebinding returns 400.
+These are live reads: metadata/status changes can move records between pages;
+refresh starts a new traversal. The CLI exposes equivalent `--sort`/`--order`
+options. The maintainer requested this catalog ordering on 2026-11-08.
+
 Resource IDs are opaque. Lists use stable opaque cursor pagination, default 50/max 200,
 with cursor-bound filters and ordering. SLI list and observation cursors are bounded
 to 512 bytes. Browser and CLI SLI list responses have a 10 MiB bound to accommodate

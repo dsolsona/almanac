@@ -42,6 +42,7 @@ type Input struct {
 	Offset                                         int
 	Kind, Action, ID, Cursor, ServiceID, Key, ETag string
 	Query, Urgency, Owner, Coverage                string
+	Sort, Order                                    string
 	Limit                                          int
 	BurnWindowSeconds                              int
 	Body                                           []byte
@@ -85,6 +86,14 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 		if in.Coverage != "" {
 			value := api.ListServicesParamsCoverage(in.Coverage)
 			params.Coverage = &value
+		}
+		if in.Sort != "" {
+			value := api.ListServicesParamsSort(in.Sort)
+			params.Sort = &value
+		}
+		if in.Order != "" {
+			value := api.ListServicesParamsOrder(in.Order)
+			params.Order = &value
 		}
 		response, err = c.ops.ListServices(ctx, params, editor)
 	case "services get":

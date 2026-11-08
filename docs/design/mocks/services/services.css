@@ -367,3 +367,26 @@ dialog::backdrop { background:rgb(12 24 25 / 42%); }
 .graph-help-content p { margin:0 0 8px; }
 .graph-help-content p:last-child { margin:0; }
 @media(max-width:860px){.graph-toolbar{flex-wrap:wrap}.graph-picker{flex-basis:100%;max-width:none}.graph-camera-zoom{display:none}}
+
+.service-sort { display:inline-flex; align-items:center; gap:6px; border:0; background:none; padding:0; color:inherit; font:inherit; cursor:pointer; white-space:nowrap; }
+.service-sort span { color:var(--text-3); }
+.service-sort:focus-visible { outline:3px solid var(--focus-ring); outline-offset:3px; }
+.service-owner-filter { position:relative; flex:none; width:220px; }
+.service-owner-filter .ui-field { display:flex; align-items:center; gap:8px; }
+.service-owner-filter .ui-label { flex:none; margin:0; font:13px var(--mono); }
+.service-owner-filter .ui-combobox { position:relative; flex:1; min-width:0; }
+.service-owner-filter .ui-control { width:100%; min-height:34px; height:34px; padding:0 36px 0 12px; border:1px solid var(--border-strong); border-radius:3px; background:var(--surface); color:var(--text); font-family:var(--mono); font-size:13px; }
+.service-owner-filter .ui-combobox__icon { position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--text-3); pointer-events:none; }
+.owner-options { position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:5; margin:0; padding:4px; list-style:none; max-height:280px; overflow:auto; border:1px solid var(--border-strong); background:var(--surface); }
+.owner-options button { display:block; width:100%; padding:8px 10px; border:0; background:none; color:var(--text); cursor:pointer; text-align:left; }
+.owner-options button:hover { background:var(--surface-2); }
+.graph-selection-hint { padding:18px var(--card-inset); margin:0; border-top:1px solid var(--border); color:var(--text-3); font-size:13px; }
+.graph-mobile > .muted { margin:0; }
+@media(max-width:860px){.graph-desktop-hint{display:none}}
+
+.service-mobile-sort { display:none; }
+@media(max-width:860px){.service-mobile-sort{display:flex;align-items:center;gap:8px;margin:0 0 12px}}
+@media(pointer:coarse){.graph-help summary{width:44px;height:44px}.graph-camera-zoom .btn{width:44px;min-height:44px;height:44px}.service-owner-filter .ui-control{min-height:44px;height:44px}}
+
+.service-mobile-sort .p-filter { height:38px; min-height:38px; padding:0 9px; border:1px solid var(--border-strong); }
+.service-mobile-sort .p-filter select { min-height:0; max-width:160px; padding:0; border:0; background:transparent; color:var(--text-2); font:13px var(--mono); }

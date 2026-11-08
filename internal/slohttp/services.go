@@ -29,6 +29,10 @@ func (h *Handler) listCatalogServices(w http.ResponseWriter, r *http.Request, re
 			input.Owner = values[0]
 		case "coverage":
 			input.Coverage = values[0]
+		case "sort":
+			input.Sort = values[0]
+		case "order":
+			input.Order = values[0]
 		case "cursor":
 			input.Cursor = values[0]
 		case "limit":

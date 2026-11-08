@@ -125,9 +125,9 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       <nav id="app-navigation-list" className="app-navigation" aria-label="Primary navigation">
         <div className="app-navigation__group"><h2>Product</h2>
           <div className="app-navigation__items">
-            <a ref={serviceCurrent?currentDestination:undefined} className={serviceCurrent?'app-navigation__current':''} href="/services" aria-current={serviceCurrent?'page':undefined} onClick={navigate}><NavIcon name="services"/>Services</a>
             <a ref={sloCurrent ? currentDestination : undefined} className={sloCurrent ? 'app-navigation__current' : ''} href="/slos" aria-current={sloCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slos"/>SLOs</a>
             <a ref={sliCurrent ? currentDestination : undefined} className={sliCurrent ? 'app-navigation__current' : ''} href="/slis" aria-current={sliCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="slis"/>SLIs</a>
+            <a ref={serviceCurrent?currentDestination:undefined} className={serviceCurrent?'app-navigation__current':''} href="/services" aria-current={serviceCurrent?'page':undefined} onClick={navigate}><NavIcon name="services"/>Services</a>
           </div>
         </div>
         <div className="app-navigation__group"><h2>Operations</h2>

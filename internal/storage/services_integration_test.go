@@ -4,6 +4,7 @@ package storage
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -65,6 +66,93 @@ func TestIntegrationServiceCatalogLifecycle(t *testing.T) {
 	}
 	if err := ArchiveService(t.Context(), f.databaseURL, proof, payments.ID, cycle.Version, "archive-payments", clock); err != nil {
 		t.Fatalf("archived source retained active incoming edge: %v", err)
+	}
+}
+
+func TestIntegrationServiceCatalogSortAcrossPages(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "catalog-sort", true)
+	goodSLO := s.createSLO(t, "sort-met")
+	var verifier [32]byte
+	verifier[0] = 98
+	proof := DatasourceProof{SessionVerifier: verifier}
+	var goodID string
+	if err := s.conn.QueryRow(t.Context(), `SELECT service_id FROM almanac_slo_definitions WHERE slo_id=$1`, goodSLO).Scan(&goodID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateServiceCatalog(t.Context(), s.f.databaseURL, ServiceUpdateInput{Proof: proof, ID: goodID, Version: 1, Patch: ServicePatch{DisplayName: "Zulu healthy", Owner: new("Bravo")}, RequestID: "owner", Now: s.clock}); err != nil {
+		t.Fatal(err)
+	}
+	create := func(name, display, owner string, dependencies []string) ServiceRecord {
+		t.Helper()
+		record, _, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: name, DisplayName: display, ServiceMetadata: &ServiceMetadata{Owner: owner}, Dependencies: dependencies, IdempotencyKey: name, RequestID: name, Now: s.clock}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return record
+	}
+	neutral := create("sort-neutral", "Middle neutral", "Delta", nil)
+	breached := create("sort-breached", "Alpha breached", "Charlie", []string{goodID, neutral.ID})
+	unknown := create("sort-unknown", "Omega unknown", "Alpha", []string{goodID})
+	objective := func(name, service, target string) {
+		t.Helper()
+		start := s.historyStart
+		_, _, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: name, DisplayName: name, ServiceID: service, SliID: s.sliID, Target: target, RollingWindowSeconds: 3600, EvaluationValidFrom: &start, IdempotencyKey: name, RequestID: name, Now: s.clock}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	objective("sort-breach-one", breached.ID, "0.999")
+	objective("sort-breach-two", breached.ID, "0.9999")
+	s.drain(t, "sort fixture")
+	if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil {
+		t.Fatal(err)
+	}
+	objective("sort-no-projection", unknown.ID, "0.99")
+	zero := []string{goodID, neutral.ID}
+	slices.Sort(zero)
+	one := []string{goodID, unknown.ID}
+	slices.Sort(one)
+	wants := map[string][]string{
+		"name":             {breached.ID, neutral.ID, unknown.ID, goodID},
+		"owner":            {unknown.ID, goodID, breached.ID, neutral.ID},
+		"slo_status":       {breached.ID, unknown.ID, goodID, neutral.ID},
+		"slo_count":        {neutral.ID, one[0], one[1], breached.ID},
+		"dependency_count": {zero[0], zero[1], unknown.ID, breached.ID},
+	}
+	for key, ascending := range wants {
+		for _, order := range []string{"asc", "desc"} {
+			input := ServiceCatalogInput{Proof: proof, Sort: key, Order: order, Limit: 1, Now: s.clock}
+			var got []string
+			for range 5 {
+				page, err := ListServiceCatalog(t.Context(), s.f.databaseURL, input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, record := range page.Services {
+					got = append(got, record.ID)
+				}
+				if page.NextCursor == "" {
+					break
+				}
+				if len(got) == 1 {
+					changed := input
+					changed.Cursor = page.NextCursor
+					changed.Order = map[string]string{"asc": "desc", "desc": "asc"}[order]
+					if _, err := ListServiceCatalog(t.Context(), s.f.databaseURL, changed); !errors.Is(err, ErrObjectiveInvalid) {
+						t.Fatalf("sort cursor rebound: %v", err)
+					}
+				}
+				input.Cursor = page.NextCursor
+			}
+			want := slices.Clone(ascending)
+			if order == "desc" {
+				slices.Reverse(want)
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("%s %s: got %v want %v", key, order, got, want)
+			}
+		}
 	}
 }
 

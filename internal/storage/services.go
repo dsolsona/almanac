@@ -377,6 +377,7 @@ type ServiceCatalogInput struct {
 	Runtime                        *Runtime
 	Proof                          DatasourceProof
 	Query, Owner, Coverage, Cursor string
+	Sort, Order                    string
 	Limit                          int
 	Now                            func() time.Time
 }
@@ -397,13 +398,40 @@ func ListServiceCatalog(ctx context.Context, databaseURL string, input ServiceCa
 	if !slices.Contains([]string{"all", "with", "without"}, input.Coverage) {
 		return ServiceCatalogPage{}, ErrObjectiveInvalid
 	}
+	if input.Sort != "" {
+		if input.Order == "" {
+			input.Order = "asc"
+		}
+		if !slices.Contains([]string{"name", "slo_status", "owner", "slo_count", "dependency_count"}, input.Sort) || !slices.Contains([]string{"asc", "desc"}, input.Order) {
+			return ServiceCatalogPage{}, ErrObjectiveInvalid
+		}
+	} else if input.Order != "" {
+		return ServiceCatalogPage{}, ErrObjectiveInvalid
+	}
 	filter := ""
 	if input.Query != "" || input.Owner != "" || input.Coverage != "all" {
 		raw, _ := json.Marshal([]string{input.Query, input.Owner, input.Coverage})
 		digest := sha256.Sum256(raw)
 		filter = hex.EncodeToString(digest[:])
 	}
-	limit, position, err := validateAgentPage("services", filter, input.Limit, input.Cursor)
+	if input.Sort != "" {
+		raw, _ := json.Marshal([]string{input.Query, input.Owner, input.Coverage, input.Sort, input.Order})
+		digest := sha256.Sum256(raw)
+		filter = hex.EncodeToString(digest[:])
+	}
+	legacyCursor := input.Cursor
+	var sortedPosition serviceSortCursor
+	if input.Sort != "" {
+		legacyCursor = ""
+		if input.Cursor != "" {
+			var err error
+			sortedPosition, err = decodeServiceSortCursor(input.Cursor, filter)
+			if err != nil {
+				return ServiceCatalogPage{}, err
+			}
+		}
+	}
+	limit, position, err := validateAgentPage("services", filter, input.Limit, legacyCursor)
 	if err != nil {
 		return ServiceCatalogPage{}, ErrObjectiveInvalid
 	}
@@ -413,7 +441,17 @@ func ListServiceCatalog(ctx context.Context, databaseURL string, input ServiceCa
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	rows, err := q.ListCatalogServices(ctx, dbgen.ListCatalogServicesParams{AfterTime: timestamp(position.Time), AfterID: uuidOrZero(position.ID), QueryText: input.Query, OwnerName: input.Owner, Coverage: input.Coverage, PageLimit: int32(limit + 1)})
+	at := normalizedAgentNow(input.Now)
+	var rows []dbgen.AlmanacService
+	var sortedRows []dbgen.ListSortedCatalogServicesRow
+	if input.Sort == "" {
+		rows, err = q.ListCatalogServices(ctx, dbgen.ListCatalogServicesParams{AfterTime: timestamp(position.Time), AfterID: uuidOrZero(position.ID), QueryText: input.Query, OwnerName: input.Owner, Coverage: input.Coverage, PageLimit: int32(limit + 1)})
+	} else {
+		sortedRows, err = q.ListSortedCatalogServices(ctx, dbgen.ListSortedCatalogServicesParams{QueryText: input.Query, OwnerName: input.Owner, Coverage: input.Coverage, SortKey: input.Sort, Descending: input.Order == "desc", HasCursor: input.Cursor != "", AfterNumber: sortedPosition.Number, AfterText: sortedPosition.Text, AfterID: uuidOrZero(sortedPosition.ID), PageLimit: int32(limit + 1), Now: timestamp(at), CalculationVersion: operationalCalculationVersion})
+		for _, row := range sortedRows {
+			rows = append(rows, row.AlmanacService)
+		}
+	}
 	if err != nil {
 		return ServiceCatalogPage{}, err
 	}
@@ -421,7 +459,7 @@ func ListServiceCatalog(ctx context.Context, databaseURL string, input ServiceCa
 	for _, row := range rows[:min(len(rows), limit)] {
 		page.Services = append(page.Services, serviceRecord(row))
 	}
-	if err = enrichServices(ctx, q, page.Services, normalizedAgentNow(input.Now)); err != nil {
+	if err = enrichServices(ctx, q, page.Services, at); err != nil {
 		return ServiceCatalogPage{}, err
 	}
 	// Keep metadata-rich pages comfortably inside the existing 4 MiB response bound.
@@ -439,7 +477,12 @@ func ListServiceCatalog(ctx context.Context, databaseURL string, input ServiceCa
 	}
 	if len(rows) > len(page.Services) && len(page.Services) > 0 {
 		last := page.Services[len(page.Services)-1]
-		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: "services", AgentID: filter, Time: last.CreatedAt, ID: last.ID})
+		if input.Sort == "" {
+			page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: "services", AgentID: filter, Time: last.CreatedAt, ID: last.ID})
+		} else {
+			key := sortedRows[len(page.Services)-1]
+			page.NextCursor, err = encodeServiceSortCursor(serviceSortCursor{Version: 1, Filter: filter, Number: key.SortNumber, Text: key.SortText, ID: last.ID})
+		}
 		if err != nil {
 			return ServiceCatalogPage{}, err
 		}

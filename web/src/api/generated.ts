@@ -3989,6 +3989,10 @@ export interface operations {
                 q?: string;
                 owner?: string;
                 coverage?: "all" | "with" | "without";
+                /** @description Sort the complete filtered catalog with UUID ties. Omitting sort retains creation order. */
+                sort?: "name" | "slo_status" | "owner" | "slo_count" | "dependency_count";
+                /** @description Requires sort. Status ascending is Breached, Unknown, On track, No SLOs. Cursors are bound to filters and ordering; changed metadata or status can move records between requests. */
+                order?: "asc" | "desc";
             };
             header?: never;
             path?: never;

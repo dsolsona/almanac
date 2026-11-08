@@ -667,6 +667,8 @@ paths:
         - {name: q, in: query, schema: {type: string, maxLength: 128}}
         - {name: owner, in: query, schema: {type: string, maxLength: 200}}
         - {name: coverage, in: query, schema: {type: string, enum: [all, with, without]}}
+        - {name: sort, in: query, description: Sort the complete filtered catalog with UUID ties. Omitting sort retains creation order., schema: {type: string, enum: [name, slo_status, owner, slo_count, dependency_count]}}
+        - {name: order, in: query, description: "Requires sort. Status ascending is Breached, Unknown, On track, No SLOs. Cursors are bound to filters and ordering; changed metadata or status can move records between requests.", schema: {type: string, enum: [asc, desc], default: asc}}
       responses:
         '200': {description: Bounded service page, content: {application/json: {schema: {$ref: '#/components/schemas/ServicePage'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}

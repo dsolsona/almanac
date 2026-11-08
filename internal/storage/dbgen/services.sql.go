@@ -185,6 +185,124 @@ func (q *Queries) ListServiceSloStates(ctx context.Context, arg ListServiceSloSt
 	return items, nil
 }
 
+const listSortedCatalogServices = `-- name: ListSortedCatalogServices :many
+WITH scope AS MATERIALIZED (
+SELECT id, name, display_name, version, created_at, updated_at, metadata, archived_at FROM public.almanac_services s
+WHERE archived_at IS NULL
+ AND ($7::text='' OR strpos(lower(s.name||' '||s.display_name||' '||s.id::text||' '||s.metadata::text||' '||coalesce((SELECT string_agg(label.key||' '||value.item||' '||label.key||':'||value.item,' ') FROM jsonb_each(coalesce(s.metadata->'labels','{}'::jsonb)) label CROSS JOIN LATERAL jsonb_array_elements_text(label.value) value(item)),'')),lower($7::text))>0)
+ AND ($8::text='' OR coalesce(nullif(s.metadata->>'owner',''),'Unassigned')=$8::text)
+ AND ($9::text='all' OR EXISTS(SELECT 1 FROM public.almanac_slo_definitions d JOIN public.almanac_slos slo ON slo.id=d.slo_id AND slo.definition_revision=d.revision WHERE d.service_id=s.id)=($9::text='with'))
+), states AS MATERIALIZED (
+SELECT d.service_id,
+ CASE WHEN coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
+    AND g.calculation_version=$10
+    AND g.source_generation=coalesce(source.generation,0)
+    AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($11::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
+    AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $11::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
+    AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
+    AND p.payload#>>'{current,quality,state}'='complete'
+    AND p.payload#>>'{current,quality,freshness}'='fresh'
+    AND p.payload#>>'{current,performance,provisional}'='false',false)
+ THEN coalesce(p.payload#>>'{current,performance,state}','unknown') ELSE 'unknown' END::text AS state
+FROM public.almanac_slos s
+JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
+LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
+LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
+WHERE d.service_id=ANY(SELECT id FROM scope) AND $12::text='slo_status'
+), keys AS MATERIALIZED (
+ SELECT s.id,
+ CASE $12::text
+  WHEN 'slo_status' THEN coalesce((SELECT min(CASE state WHEN 'violated' THEN 0 WHEN 'met' THEN 2 ELSE 1 END) FROM states WHERE service_id=s.id),3)
+  WHEN 'slo_count' THEN (SELECT count(*) FROM almanac_slo_definitions d JOIN almanac_slos objective ON objective.id=d.slo_id AND objective.definition_revision=d.revision WHERE d.service_id=s.id)
+  WHEN 'dependency_count' THEN (SELECT count(*) FROM almanac_service_dependencies edge WHERE edge.service_id=s.id)
+  ELSE 0 END::bigint AS sort_number,
+ CASE $12::text
+  WHEN 'name' THEN lower(s.display_name)
+  WHEN 'owner' THEN lower(coalesce(nullif(s.metadata->>'owner',''),'Unassigned'))
+  ELSE '' END::text AS sort_text
+ FROM scope s
+)
+SELECT catalog_record.id, catalog_record.name, catalog_record.display_name, catalog_record.version, catalog_record.created_at, catalog_record.updated_at, catalog_record.metadata, catalog_record.archived_at,keys.sort_number,keys.sort_text
+FROM keys JOIN public.almanac_services catalog_record ON catalog_record.id=keys.id
+WHERE NOT $1::boolean
+ OR (NOT $2::boolean AND (keys.sort_number,keys.sort_text,catalog_record.id)>($3::bigint,$4::text,$5::uuid))
+ OR ($2::boolean AND (keys.sort_number,keys.sort_text,catalog_record.id)<($3::bigint,$4::text,$5::uuid))
+ORDER BY
+ CASE WHEN NOT $2::boolean THEN keys.sort_number END ASC,
+ CASE WHEN NOT $2::boolean THEN keys.sort_text END ASC,
+ CASE WHEN NOT $2::boolean THEN catalog_record.id END ASC,
+ CASE WHEN $2::boolean THEN keys.sort_number END DESC,
+ CASE WHEN $2::boolean THEN keys.sort_text END DESC,
+ CASE WHEN $2::boolean THEN catalog_record.id END DESC
+LIMIT $6
+`
+
+type ListSortedCatalogServicesParams struct {
+	HasCursor          bool               `json:"has_cursor"`
+	Descending         bool               `json:"descending"`
+	AfterNumber        int64              `json:"after_number"`
+	AfterText          string             `json:"after_text"`
+	AfterID            pgtype.UUID        `json:"after_id"`
+	PageLimit          int32              `json:"page_limit"`
+	QueryText          string             `json:"query_text"`
+	OwnerName          string             `json:"owner_name"`
+	Coverage           string             `json:"coverage"`
+	CalculationVersion string             `json:"calculation_version"`
+	Now                pgtype.Timestamptz `json:"now"`
+	SortKey            string             `json:"sort_key"`
+}
+
+type ListSortedCatalogServicesRow struct {
+	AlmanacService AlmanacService `json:"almanac_service"`
+	SortNumber     int64          `json:"sort_number"`
+	SortText       string         `json:"sort_text"`
+}
+
+func (q *Queries) ListSortedCatalogServices(ctx context.Context, arg ListSortedCatalogServicesParams) ([]ListSortedCatalogServicesRow, error) {
+	rows, err := q.db.Query(ctx, listSortedCatalogServices,
+		arg.HasCursor,
+		arg.Descending,
+		arg.AfterNumber,
+		arg.AfterText,
+		arg.AfterID,
+		arg.PageLimit,
+		arg.QueryText,
+		arg.OwnerName,
+		arg.Coverage,
+		arg.CalculationVersion,
+		arg.Now,
+		arg.SortKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSortedCatalogServicesRow{}
+	for rows.Next() {
+		var i ListSortedCatalogServicesRow
+		if err := rows.Scan(
+			&i.AlmanacService.ID,
+			&i.AlmanacService.Name,
+			&i.AlmanacService.DisplayName,
+			&i.AlmanacService.Version,
+			&i.AlmanacService.CreatedAt,
+			&i.AlmanacService.UpdatedAt,
+			&i.AlmanacService.Metadata,
+			&i.AlmanacService.ArchivedAt,
+			&i.SortNumber,
+			&i.SortText,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const readServiceCatalogFields = `-- name: ReadServiceCatalogFields :many
 SELECT s.id,s.metadata,
  coalesce((SELECT jsonb_agg(jsonb_build_object('id',target.id,'name',target.name,'display_name',target.display_name,'owner',coalesce(target.metadata->>'owner','')) ORDER BY target.created_at,target.id)
