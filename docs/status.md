@@ -1,5 +1,14 @@
 # Delivery status
 
+PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:
+the end-to-end settings first-visit check recorded 1,041 ms against the 1,000 ms
+budget. The datasource recovery journey passed. A failing production browser
+regression confirmed Settings code waited for session validation; the existing
+public-route prefetch pattern now covers Settings while protected reads remain
+authenticated. Local `make check` passed in 239 seconds, including 437 frontend
+tests and 82 browser cases. The original timing budget remains; the full E2E result
+is tracked in the PR's required checks. See [F2-T33](tasks/F2-T33.md).
+
 Current datasource recovery work, 2026-11-08: [F2-T33](tasks/F2-T33.md) is in review
 on `fix/immediate-datasource-reassignment`, in
 `.worktrees/immediate-datasource-reassignment`, based on `259f7c1` under
