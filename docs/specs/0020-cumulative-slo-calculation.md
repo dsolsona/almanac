@@ -76,6 +76,7 @@ A mark `M` is the complete input of one evaluation at one endpoint:
 | `first_observation_at`, `last_observation_at` | First observed interval start and last observed interval end; present exactly when `observed > 0` |
 | `latest_receipt_at` | Maximum receipt time over observed and known-empty contributions, or absent |
 | `state`, `quality`, `freshness` | The sample state, quality state and freshness the evaluator produced at build |
+| `retention_start` | Optional original cutoff on a daily mark composed from an hourly row built with a different boundary; otherwise use the row boundary |
 
 `marks` is ordered by `at` and contains exactly the endpoints the existing
 reducer selects: first, last, minimum, maximum and both endpoints of every
@@ -86,7 +87,10 @@ freshness values of all endpoints in the range. A lane whose window is not a
 multiple of the cadence is `null`. A range with no endpoint (cadence longer than
 the range) stores lanes with empty `marks` and empty sets. Expected, expired and
 missing counts are not stored; the reader recomputes them from `at`, the lane
-window, validity and the row's `retention_start`.
+window, validity and the mark's original `retention_start`, defaulting to the
+row boundary. Composing a daily row never changes an untouched hourly mark's
+cutoff. A lane also records whether reduction discarded dense transitions, so
+the existing `display_coverage` disclosure remains reproducible.
 
 Minimum and maximum compare the exact attainment `good/total` by cross
 multiplication; ties keep the earlier endpoint; zero-traffic endpoints do not
@@ -139,7 +143,8 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   the batched query, at most 7,200 endpoints per read; a pending live edge
   reports the existing `history_preparing` reason. Each mark becomes a sample by
   calling `slo.EvaluateOperationalTotals` with the mark's sums, counts and
-  times, `At = at`, the lane window and `RetentionStart = row.retention_start`,
+  times, `At = at`, the lane window and the mark's original retention boundary
+  (the row boundary when no override is present),
   then `operationalSample`. Display buckets select with `reduceRetainedDisplay`
   and union presence sets into `display_coverage`. The API sample shape is
   unchanged. `history_preparation` reports ready/total seconds over the
@@ -240,3 +245,7 @@ Not verified yet.
   cadence-offset defects in that draft. Rewritten without cumulative sums over
   the existing hourly aggregates; marks carry complete inputs and absolute
   endpoints; late data beyond the cutoff uses the explicit expired outcome.
+- 2026-11-09: Clarified internal daily-mark provenance: composing hours built
+  against different cutoffs retains each selected mark's original boundary.
+  This implements the existing requirement to preserve untouched values;
+  no additional history store or change to retention behavior is introduced.

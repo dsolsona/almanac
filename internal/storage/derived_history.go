@@ -98,6 +98,14 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 	defer ticks.Stop()
 	var nextSummaries time.Time
 	for {
+		extremaWorked, extremaErr := r.buildSloExtrema(ctx, time.Now)
+		if extremaWorked && extremaErr == nil && ctx.Err() == nil {
+			r.metrics.historyJobs.Add(1)
+		}
+		if extremaErr != nil && !derivedTemporary(ctx, extremaErr) && ctx.Err() == nil {
+			r.metrics.preparationErrors[1].Add(1)
+			logger.ErrorContext(ctx, "SLO extrema preparation failed", "error", derivedErrorDetail(extremaErr))
+		}
 		repaired, repairErr := r.repairRetainedSeries(ctx, time.Now)
 		if repaired && repairErr == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
@@ -126,7 +134,7 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 		if worked && err == nil && ctx.Err() == nil {
 			r.metrics.historyJobs.Add(1)
 		}
-		if (worked && err == nil || repaired && repairErr == nil || seriesWorked && seriesErr == nil) && ctx.Err() == nil {
+		if (extremaWorked && extremaErr == nil || worked && err == nil || repaired && repairErr == nil || seriesWorked && seriesErr == nil) && ctx.Err() == nil {
 			continue
 		}
 		if !time.Now().Before(nextSummaries) && ctx.Err() == nil {

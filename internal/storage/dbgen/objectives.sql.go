@@ -418,8 +418,16 @@ func (q *Queries) InsertSlo(ctx context.Context, arg InsertSloParams) error {
 }
 
 const insertSloDefinition = `-- name: InsertSloDefinition :exec
+WITH definition AS (
 INSERT INTO public.almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from,historical_requested_by,historical_requested_at)
 VALUES ($1,1,$2,$3,$4,$11::text::numeric(38,12),$5,$6,$7,$8,$9,$10)
+RETURNING slo_id, revision, service_id, sli_id, measurement_revision, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at
+)
+INSERT INTO public.almanac_slo_extrema_cursor
+    (slo_id,definition_revision,measurement_revision,calculation_version,built_through,next_attempt_at)
+SELECT d.slo_id,d.revision,d.measurement_revision,'occurrences-operational-v1',
+       date_trunc('hour',GREATEST(d.evaluation_valid_from,m.effective_from) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',d.activated_at
+FROM definition d JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
 `
 
 type InsertSloDefinitionParams struct {
