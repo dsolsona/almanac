@@ -198,7 +198,13 @@ func verifySLIMalformedBatchIsAtomic(t *testing.T, client *http.Client, baseURL,
 	var lease string
 	var generation, revision, measurement int64
 	var created, start, end time.Time
-	if err := db.QueryRow(t.Context(), `SELECT lease_id, session_generation, configuration_revision, measurement_revision, agent_created_at, interval_start, interval_end FROM public.almanac_sli_coverage WHERE sli_id=$1 AND outcome='observed' ORDER BY interval_start DESC LIMIT 1`, sliID).Scan(&lease, &generation, &revision, &measurement, &created, &start, &end); err != nil {
+	if err := db.QueryRow(t.Context(), `SELECT observation.lease_id,observation.session_generation,observation.configuration_revision,
+		observation.measurement_revision,observation.agent_created_at,observation.interval_start,
+		observation.interval_start+source.polling_interval_seconds*interval '1 second' AS interval_end
+		FROM public.almanac_sli_observations observation
+		JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=observation.sli_id AND measurement.revision=observation.measurement_revision
+		JOIN public.almanac_datasources source ON source.id=measurement.datasource_id
+		WHERE observation.sli_id=$1 AND observation.outcome='observed' ORDER BY observation.interval_start DESC LIMIT 1`, sliID).Scan(&lease, &generation, &revision, &measurement, &created, &start, &end); err != nil {
 		t.Fatal("read SLI batch fixture failed")
 	}
 	delivery := uuid.NewString()
@@ -418,7 +424,7 @@ func createSLIJourneySLI(t *testing.T, binary, dir string, journey connectedAgen
 	// Settling is fixed at 60 s and the cadence is 15 s, so the first interval lands within about 90 s.
 	for deadline := time.Now().Add(150 * time.Second); time.Now().Before(deadline); {
 		var observed int
-		if err := db.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1 AND outcome='observed'`, document.Result.SLI.ID).Scan(&observed); err == nil && observed > 0 {
+		if err := db.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_observations WHERE sli_id=$1 AND outcome='observed'`, document.Result.SLI.ID).Scan(&observed); err == nil && observed > 0 {
 			return document.Result.SLI.ID
 		}
 		select {
@@ -437,9 +443,12 @@ func verifyPersistedSLIJourneyObservation(t *testing.T, databaseURL, sliID, agen
 	var good, total, outcome, persistedAgent string
 	var start, end time.Time
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
-		err := db.QueryRow(t.Context(), `SELECT v.good_count::text, v.total_count::text, c.outcome, c.agent_id::text, c.interval_start, c.interval_end
-			FROM public.almanac_sli_coverage c JOIN public.almanac_sli_observation_values v
-			USING (interval_start, sli_id, measurement_revision) WHERE c.sli_id=$1 ORDER BY c.interval_start DESC LIMIT 1`, sliID).Scan(&good, &total, &outcome, &persistedAgent, &start, &end)
+		err := db.QueryRow(t.Context(), `SELECT c.good_count::text,c.total_count::text,c.outcome,c.agent_id::text,c.interval_start,
+			c.interval_start+source.polling_interval_seconds*interval '1 second' AS interval_end
+			FROM public.almanac_sli_observations c
+			JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=c.sli_id AND measurement.revision=c.measurement_revision
+			JOIN public.almanac_datasources source ON source.id=measurement.datasource_id
+			WHERE c.sli_id=$1 AND c.outcome='observed' ORDER BY c.interval_start DESC LIMIT 1`, sliID).Scan(&good, &total, &outcome, &persistedAgent, &start, &end)
 		if err == nil {
 			if good != "99.000000000000" || total != "100.000000000000" || outcome != "observed" || persistedAgent != agentID || end.Sub(start) != 15*time.Second {
 				t.Fatalf("persisted SLI journey observation differs: good=%s total=%s outcome=%s source_agent_matches=%t cadence=%s", good, total, safeDiagnosticToken(outcome), persistedAgent == agentID, end.Sub(start))

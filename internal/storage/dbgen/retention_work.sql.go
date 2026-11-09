@@ -199,22 +199,11 @@ func (q *Queries) LockRetentionWork(ctx context.Context, arg LockRetentionWorkPa
 }
 
 const retentionHasDependencies = `-- name: RetentionHasDependencies :one
-SELECT coalesce(EXISTS (
-    SELECT 1 FROM public.almanac_derived_dirty_ranges d WHERE d.range_start<$1::timestamptz
-      AND d.range_end>$2::timestamptz AND d.last_error IS DISTINCT FROM 'retention_expired'
-) OR EXISTS (
-    SELECT 1 FROM public.almanac_slo_history_jobs j WHERE j.state<>'failed'
-      AND j.retention_start<$1::timestamptz
-      AND greatest(j.range_end,j.evaluated_through)>$2::timestamptz
-) OR EXISTS (
-    SELECT 1 FROM public.almanac_slo_series_repair r
-    WHERE r.cursor_at<$1::timestamptz AND r.end_at>$2::timestamptz
-      AND r.lease_until>$3::timestamptz
- ) OR EXISTS (
-    SELECT 1 FROM public.almanac_slo_series_tile_work w
-    WHERE w.range_end>$2::timestamptz AND w.range_start<$1::timestamptz
-      AND w.lease_until>$3::timestamptz
-),false)::boolean AS blocked
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_derived_dirty_ranges d
+    WHERE d.range_start<$1::timestamptz AND d.range_end>$2::timestamptz
+      AND d.last_error IS DISTINCT FROM 'retention_expired' AND d.lease_until>$3::timestamptz
+)::boolean AS blocked
 `
 
 type RetentionHasDependenciesParams struct {
@@ -223,6 +212,7 @@ type RetentionHasDependenciesParams struct {
 	Now        pgtype.Timestamptz `json:"now"`
 }
 
+// Expired inputs need no derived preparation, but an active source lease must finish or expire.
 func (q *Queries) RetentionHasDependencies(ctx context.Context, arg RetentionHasDependenciesParams) (bool, error) {
 	row := q.db.QueryRow(ctx, retentionHasDependencies, arg.RangeEnd, arg.RangeStart, arg.Now)
 	var blocked bool

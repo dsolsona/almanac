@@ -2029,7 +2029,7 @@ func (e SloOperationalSeriesKind) Valid() bool {
 const (
 	Aggregate SloPreparationJobStage = "aggregate"
 	Current   SloPreparationJobStage = "current"
-	History   SloPreparationJobStage = "history"
+	Extrema   SloPreparationJobStage = "extrema"
 )
 
 // Valid indicates whether the value is a known member of the SloPreparationJobStage enum.
@@ -2039,7 +2039,7 @@ func (e SloPreparationJobStage) Valid() bool {
 		return true
 	case Current:
 		return true
-	case History:
+	case Extrema:
 		return true
 	default:
 		return false
@@ -3664,12 +3664,11 @@ type SloOperationalOverviewPage struct {
 	GroupCounts SloUrgencyCounts             `json:"group_counts"`
 	Items       []SloOperationalOverviewItem `json:"items"`
 
-	// NextCursor Empty string when this snapshot has no further page.
+	// NextCursor Keyset cursor after this page; empty when no further row was found.
 	NextCursor string `json:"next_cursor"`
 
-	// PreviousCursor Signed cursor for the previous page of this same snapshot
-	PreviousCursor string             `json:"previous_cursor"`
-	SnapshotId     openapi_types.UUID `json:"snapshot_id"`
+	// PreviousCursor Keyset cursor before this page; empty on the first page.
+	PreviousCursor string `json:"previous_cursor"`
 }
 
 // SloOperationalQuality defines model for SloOperationalQuality.
@@ -5149,9 +5148,9 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
 	CreateSlo(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+	// GetSloOperationalOverview Read a keyset-paginated operational SLO overview
 	//
-	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 	//
 	// Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
 	GetSloOperationalOverview(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6501,9 +6500,9 @@ func (c *Client) CreateSlo(ctx context.Context, params *CreateSloParams, body Cr
 	return c.Client.Do(req)
 }
 
-// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+// GetSloOperationalOverview Read a keyset-paginated operational SLO overview
 //
-// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 //
 // Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
 func (c *Client) GetSloOperationalOverview(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10826,9 +10825,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
 	CreateSloWithResponse(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSloResponse, error)
 
-	// GetSloOperationalOverviewWithResponse Read a snapshot-paginated operational SLO overview
+	// GetSloOperationalOverviewWithResponse Read a keyset-paginated operational SLO overview
 	//
-	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -13549,8 +13548,6 @@ type GetSloOperationalOverviewResponse struct {
 	ApplicationproblemJSON401 *Problem
 	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
 	ApplicationproblemJSON403 *Problem
-	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
-	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
 	ApplicationproblemJSON503 *Problem
 }
@@ -13573,11 +13570,6 @@ func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON401() *Probl
 // GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
 func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON403() *Problem {
 	return r.ApplicationproblemJSON403
-}
-
-// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
-func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON409() *Problem {
-	return r.ApplicationproblemJSON409
 }
 
 // GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
@@ -15514,9 +15506,9 @@ func (c *ClientWithResponses) CreateSloWithResponse(ctx context.Context, params 
 	return ParseCreateSloResponse(rsp)
 }
 
-// GetSloOperationalOverviewWithResponse Read a snapshot-paginated operational SLO overview
+// GetSloOperationalOverviewWithResponse Read a keyset-paginated operational SLO overview
 //
-// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -17913,13 +17905,6 @@ func ParseGetSloOperationalOverviewResponse(rsp *http.Response) (*GetSloOperatio
 		}
 		response.ApplicationproblemJSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSON409 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18817,7 +18802,7 @@ type ServerInterface interface {
 	// CreateSlo Create a single-indicator occurrence SLO
 	// (POST /api/v1/slos)
 	CreateSlo(w http.ResponseWriter, r *http.Request, params CreateSloParams)
-	// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+	// GetSloOperationalOverview Read a keyset-paginated operational SLO overview
 	// (GET /api/v1/slos/overview)
 	GetSloOperationalOverview(w http.ResponseWriter, r *http.Request, params GetSloOperationalOverviewParams)
 	// GetSlo Read an SLO definition

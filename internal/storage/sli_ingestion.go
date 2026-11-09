@@ -199,34 +199,45 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 			return result, nil
 		}
 		status = "duplicate"
-		observationID, err = uuid.Parse(coverage.ObservationID.String())
-		if err != nil {
-			return result, errors.New("storage: canonical observation identifier is invalid")
+		if coverage.ObservationID.Valid {
+			observationID = coverage.ObservationID.Bytes
+		} else {
+			observationID = canonicalObservationID(sliID.String(), measurementRevision, item.IntervalStart)
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return result, operationError(ctx, "storage: canonical SLI coverage lookup failed", err)
 	} else {
-		if err := state.queries.InsertSliCoverage(ctx, dbgen.InsertSliCoverageParams{
-			IntervalStart: timestamp(item.IntervalStart), SliID: sliID, MeasurementRevision: measurementRevision,
-			IntervalEnd: intervalEnd, Outcome: string(item.Outcome.State), ResultDigest: resultDigest[:],
-			ErrorCode: nullableString(item.Outcome.ErrorCode), MissingComponents: missingComponents,
-			ExecutionID: mustPGUUID(item.ExecutionID), DeliveryID: deliveryID, ObservationID: uuidToPG(observationID),
-			AgentID: state.agentID, SessionGeneration: generation, ConfigurationRevision: configurationRevision,
-			LeaseID: item.LeaseID, AgentCreatedAt: timestamp(item.CreatedAt), RecordedAt: timestamp(now),
-		}); err != nil {
-			return result, operationError(ctx, "storage: SLI coverage insert failed", err)
-		}
+		var good, total pgtype.Text
 		if item.Outcome.State == sli.OutcomeObserved {
-			good, total, countErr := sli.ValidateCounts(item.Outcome.GoodCount, item.Outcome.TotalCount)
-			if countErr != nil {
+			goodValue, totalValue, err := sli.ValidateCounts(item.Outcome.GoodCount, item.Outcome.TotalCount)
+			if err != nil {
 				return result, ErrObservationInvalid
 			}
-			if err := state.queries.InsertSliObservationValue(ctx, dbgen.InsertSliObservationValueParams{
-				IntervalStart: timestamp(item.IntervalStart), SliID: sliID, MeasurementRevision: measurementRevision,
-				GoodCount: good, TotalCount: total,
-			}); err != nil {
-				return result, operationError(ctx, "storage: SLI values insert failed", err)
-			}
+			good, total = nullableString(goodValue), nullableString(totalValue)
+		}
+		sourceGeneration, err := state.queries.AdvanceSliSourceGeneration(ctx, dbgen.AdvanceSliSourceGenerationParams{
+			SliID: sliID, MeasurementRevision: measurementRevision, RecordedAt: timestamp(now),
+		})
+		if err != nil {
+			return result, operationError(ctx, "storage: SLI source generation update failed", err)
+		}
+		observationID = canonicalObservationID(sliID.String(), measurementRevision, item.IntervalStart)
+		if err := state.queries.InsertSliObservation(ctx, dbgen.InsertSliObservationParams{
+			IntervalStart: timestamp(item.IntervalStart), SliID: sliID, MeasurementRevision: measurementRevision,
+			Outcome: string(item.Outcome.State), ResultDigest: resultDigest[:], GoodCount: good, TotalCount: total,
+			ErrorCode: nullableString(item.Outcome.ErrorCode), MissingComponents: missingComponents,
+			ExecutionID: mustPGUUID(item.ExecutionID), DeliveryID: deliveryID,
+			AgentID: state.agentID, SessionGeneration: generation, ConfigurationRevision: configurationRevision,
+			LeaseID: item.LeaseID, AgentCreatedAt: timestamp(item.CreatedAt), RecordedAt: timestamp(now),
+			IngestionGeneration: sourceGeneration,
+		}); err != nil {
+			return result, operationError(ctx, "storage: SLI observation insert failed", err)
+		}
+		if err := state.queries.MarkSliObservation(ctx, dbgen.MarkSliObservationParams{
+			SliID: sliID, MeasurementRevision: measurementRevision, Generation: sourceGeneration,
+			IntervalStart: timestamp(item.IntervalStart), IntervalEnd: intervalEnd, RecordedAt: timestamp(now),
+		}); err != nil {
+			return result, operationError(ctx, "storage: SLI observation marking failed", err)
 		}
 	}
 	if err := state.queries.InsertSliDeliveryReceipt(ctx, dbgen.InsertSliDeliveryReceiptParams{
@@ -265,16 +276,14 @@ func prepareSliPartitions(ctx context.Context, tx pgx.Tx, now time.Time) error {
 	for _, suffix := range suffixes {
 		start := months[suffix]
 		end := start.AddDate(0, 1, 0)
-		for _, table := range []string{"almanac_sli_coverage", "almanac_sli_observation_values"} {
-			partition := table + "_" + suffix
-			if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", "almanac-sli-partition:"+partition); err != nil {
-				return err
-			}
-			statement := fmt.Sprintf("CREATE TABLE IF NOT EXISTS public.%s PARTITION OF public.%s FOR VALUES FROM ('%s') TO ('%s')",
-				partition, table, start.Format("2006-01-02 15:04:05Z07:00"), end.Format("2006-01-02 15:04:05Z07:00"))
-			if _, err := tx.Exec(ctx, statement); err != nil {
-				return err
-			}
+		partition := "almanac_sli_observations_" + suffix
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", "almanac-sli-partition:"+partition); err != nil {
+			return err
+		}
+		statement := fmt.Sprintf("CREATE TABLE IF NOT EXISTS public.%s PARTITION OF public.almanac_sli_observations FOR VALUES FROM ('%s') TO ('%s')",
+			partition, start.Format("2006-01-02 15:04:05Z07:00"), end.Format("2006-01-02 15:04:05Z07:00"))
+		if _, err := tx.Exec(ctx, statement); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -318,4 +327,9 @@ func nullableString(value string) pgtype.Text {
 func mustPGUUID(value string) pgtype.UUID {
 	parsed, _ := canonicalUUID(value)
 	return parsed
+}
+
+// The canonical key survives receipt expiry without a second stored identifier.
+func canonicalObservationID(sliID string, revision int64, start time.Time) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceOID, fmt.Appendf(nil, "%s:%d:%d", sliID, revision, start.UnixMicro()))
 }

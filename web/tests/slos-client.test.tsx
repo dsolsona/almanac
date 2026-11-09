@@ -132,8 +132,8 @@ it('shows safe guidance for an invalid historical start without echoing server t
 
 it('requests server-filtered operational pages and rejects incomplete operational projections', async () => {
  const fetcher=vi.fn()
-  .mockResolvedValueOnce(new Response(JSON.stringify({snapshot_id:id,items:[],group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}))
-  .mockResolvedValueOnce(new Response(JSON.stringify({snapshot_id:id,items:null,group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
+  .mockResolvedValueOnce(new Response(JSON.stringify({items:[],group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}))
+  .mockResolvedValueOnce(new Response(JSON.stringify({items:null,group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
  vi.stubGlobal('fetch',fetcher);
  await expect(sloClient.overview({q:'checkout api',service_id:id,urgency:'watch',limit:25,cursor:'opaque'})).resolves.toMatchObject({group_counts:{watch:3}});
  const [url,init]=fetcher.mock.calls[0]!;
@@ -154,9 +154,9 @@ it('cancels an operational response when its streamed body exceeds the fixed 20 
  expect(cancelled).toBe(true);
 });
 
-it('describes list resource failures without suggesting a graph range and never retries the quota',async()=>{
- const fetcher=vi.fn(async()=>new Response(JSON.stringify({code:'resource_limit'}),{status:503}));
+it('restarts invalid overview cursors without retrying them',async()=>{
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({code:'invalid_request'}),{status:400}));
  vi.stubGlobal('fetch',fetcher);
- await expect(sloClient.overview({q:'demo'})).rejects.toThrow('The SLO list is temporarily at its resource limit. Try Refresh shortly.');
+ await expect(sloClient.overview({q:'demo',cursor:'invalid'})).rejects.toThrow('The SLO list changed. Refresh to restart from the first page.');
  expect(fetcher).toHaveBeenCalledOnce();
 });

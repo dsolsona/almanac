@@ -141,7 +141,6 @@ SELECT d.service_id,
     AND g.source_generation=coalesce(source.generation,0)
     AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
     AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-    AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
     AND p.payload#>>'{current,quality,state}'='complete'
     AND p.payload#>>'{current,quality,freshness}'='fresh'
     AND p.payload#>>'{current,performance,provisional}'='false',false)
@@ -199,7 +198,6 @@ SELECT d.service_id,
     AND g.source_generation=coalesce(source.generation,0)
     AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($11::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
     AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $11::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-    AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
     AND p.payload#>>'{current,quality,state}'='complete'
     AND p.payload#>>'{current,quality,freshness}'='fresh'
     AND p.payload#>>'{current,performance,provisional}'='false',false)

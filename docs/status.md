@@ -1,3 +1,61 @@
+Lean SLO implementation, 2026-11-09: the maintainer selected PR [#72](https://github.com/dsolsona/almanac/pull/72)
+commit `b7d8a5c` as authoritative, accepted its design and requested all tasks with
+stacked PR delivery. ADR-0040/0041/0042 and SPEC-0020 acceptance is recorded without
+changing their selected scope. [F9-T01](tasks/F9-T01.md) is verified and in review in
+`.worktrees/lean-slo-quick-wins` on `perf/lean-slo-quick-wins`, based on `b7d8a5c`;
+[F9-T06](tasks/F9-T06.md)'s baseline records page timings and storage, with
+minute samples and statement counters still unverified.
+Commits, push and PR publication are authorized; merge is not. No measured
+savings are claimed yet. F9-T01 passed `make check` (241 s), the final
+`make test-integration` (79 s) and all 15 `make test-e2e` journeys (4.6 min).
+
+[F9-T02](tasks/F9-T02.md) is published as draft [PR #75](https://github.com/dsolsona/almanac/pull/75)
+from `.worktrees/lean-slo-extrema`, branch `feat/lean-slo-extrema`, with checkpoints `c82b2a4` and `bae6456` above
+F9-T01's verified `484647d`. The extrema worker, detail reader, pinned values,
+diagnostics, retry and cleanup are implemented. The old current/list pipeline
+remains until F9-T03. The latest `make check` passes, including storage integration
+in 132.630 seconds and 82 browser checks in 2.4 minutes; checkpoint `bae6456`
+also passes race integration (storage 218.763 seconds) and all 15 E2E journeys
+(4.2 minutes). The native stack is verified as #72 → #73 → #75. The 35-day
+performance run passed all five checks in 8.9 minutes: cold p95 was 395/304 ms
+for the SLO list/detail and 236/253 ms for the SLI list/detail. A later CI race
+failure exposed an oversized dense worker transaction; the follow-up caps each
+turn at the existing 960-input budget. Its `make test` and full race integration
+pass, with storage integration taking 160.925 seconds. Full 20-SLO 35/365-day
+equivalence and savings
+are not claimed; F9-T02 remains in progress and the PR remains draft.
+
+[F9-T03](tasks/F9-T03.md) is published as draft [PR #76](https://github.com/dsolsona/almanac/pull/76)
+from `.worktrees/lean-slo-switch` on
+`feat/lean-slo-switch`, based on `bc718bf`. Current refresh now uses hourly extrema
+for list sparklines; the old workers and queries are removed, migration 0046 drops
+their seven tables, and the remaining loops use due-time queries. Checkpoint
+`c8ab6c7` passes `make check` (storage 74.394 seconds, 437 frontend tests and
+82 browser checks in 1.9 minutes), all 15 E2E journeys (4.0 minutes), and all
+five 35-day performance checks (9.4 minutes). Cold p95 is 333/252 ms for the
+SLO list/detail and 164/212 ms for the SLI list/detail; the independent budget
+comparison passes. Required CI is green and the native stack is verified as
+#72 → #73 → #75 → #76. Resource counters, full fleet equivalence, 365-day
+performance and the preview-copy migration rehearsal remain outstanding;
+T03 stays in progress and merge is unauthorized.
+
+[F9-T04](tasks/F9-T04.md) is implemented above PR #76 in
+`.worktrees/lean-slo-observations` on `feat/lean-slo-observations`. Canonical
+observations and counts share one table, ingestion marks derived work explicitly,
+and the preserving copy commits and verifies bounded batches before removing legacy
+storage. Race integration passes (storage 207.661 seconds), `make check` passes
+(storage 102.014 seconds and 82 browser cases), and all 15 container journeys pass
+in 4.0 minutes. The preview-copy migration rehearsal and final integrated performance
+seed remain pending; the task remains in progress and merge is unauthorized.
+
+[F9-T05](tasks/F9-T05.md) is implemented above PR #77 (`754682e`) in
+`.worktrees/lean-slo-keyset` on `feat/slo-overview-keyset`. The overview now uses
+filter-bound keyset cursors and per-request counts; snapshot admission, archives
+and `snapshot_id` are removed with generated browser/CLI contract updates.
+`make check` passes (437 frontend tests, storage 100.621 seconds and 82 browser
+cases), and all 15 container journeys pass in 4.3 minutes. The integrated 35-day
+performance run remains pending, so the task remains in progress.
+
 # Delivery status
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:

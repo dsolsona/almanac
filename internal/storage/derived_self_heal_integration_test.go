@@ -13,9 +13,11 @@ import (
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// selfHealFixture is one SLI with three hours of one-minute interval records (values optional) and a
+// selfHealFixture is one SLI with three hours of atomic observations and a
 // clock the test moves, for the ADR-0034 recovery tests.
 type selfHealFixture struct {
 	f            agentFixture
@@ -25,14 +27,22 @@ type selfHealFixture struct {
 	historyStart time.Time
 	at           time.Time
 	now          time.Time
+	cadence      time.Duration
 }
 
 func (s *selfHealFixture) clock() time.Time { return s.now }
 
 func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFixture {
+	return newSelfHealFixtureCadence(t, name, withValues, time.Minute)
+}
+
+func newSelfHealFixtureCadence(t *testing.T, name string, withValues bool, cadence time.Duration) *selfHealFixture {
 	t.Helper()
+	if !withValues {
+		t.Fatal("observed fixture rows require their counts")
+	}
 	f := newAgentFixture(t)
-	s := &selfHealFixture{f: f, now: f.base.Add(5 * time.Second)}
+	s := &selfHealFixture{f: f, now: f.base.Add(5 * time.Second), cadence: cadence}
 	issued, created := createOwnershipAgent(t, f, name+"-agent")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"collect", "connection_test", "query_preview"}}})
 	if err != nil {
@@ -47,8 +57,10 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resume, grant.Generation, 1, s.clock); err != nil {
 		t.Fatal(err)
 	}
+	settings := datasource.DefaultSettings(name+"-metrics", "Self-heal Metrics", "https://metrics.example.test", created.Agent.ID)
+	settings.PollingIntervalSeconds = int(cadence / time.Second)
 	source, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: DatasourceProof{SessionVerifier: f.verifier},
-		Settings: datasource.DefaultSettings(name+"-metrics", "Self-heal Metrics", "https://metrics.example.test", created.Agent.ID),
+		Settings: settings,
 		Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, IdempotencyKey: name + "-source", RequestID: name + "-source", Now: s.clock})
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +72,7 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 		t.Fatal(err)
 	}
 	s.sliID = measurement.ID
-	s.historyStart = f.base.Add(time.Hour)
+	s.historyStart = ceilSliBoundary(f.base.Add(time.Hour), cadence)
 	s.at = s.historyStart.Add(3 * time.Hour)
 	s.conn = integrationConnect(t, f.databaseURL)
 	t.Cleanup(func() { closeIntegrationConn(s.conn) })
@@ -71,16 +83,13 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 	if err := s.conn.QueryRow(t.Context(), `SELECT lease_id FROM public.almanac_agent_execution_grants WHERE agent_id=$1 AND generation=$2 ORDER BY configuration_revision LIMIT 1`, created.Agent.ID, grant.Generation).Scan(&leaseID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point, $1, 1, point + interval '1 minute', 'observed', decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + interval '1 minute'
-FROM generate_series($5::timestamptz, $6::timestamptz - interval '1 minute', interval '1 minute') point`,
-		s.sliID, created.Agent.ID, grant.Generation, leaseID, s.historyStart, s.at); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, `
+INSERT INTO public.almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point, $1, 1, 'observed', 990, 1000, decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + make_interval(secs=>$7)
+FROM generate_series($5::timestamptz, $6::timestamptz - make_interval(secs=>$7), make_interval(secs=>$7)) point`,
+		s.sliID, created.Agent.ID, grant.Generation, leaseID, s.historyStart, s.at, cadence.Seconds()); err != nil {
 		t.Fatal(err)
-	}
-	if withValues {
-		s.insertValues(t)
 	}
 	s.now = s.at
 	s.runtime, err = OpenRuntime(t.Context(), f.databaseURL)
@@ -89,17 +98,6 @@ FROM generate_series($5::timestamptz, $6::timestamptz - interval '1 minute', int
 	}
 	t.Cleanup(s.runtime.Close)
 	return s
-}
-
-// insertValues commits 990 good of 1,000 for every interval, so every full window attains exactly 99%.
-func (s *selfHealFixture) insertValues(t *testing.T) {
-	t.Helper()
-	if _, err := s.conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT point, $1, 1, 990, 1000 FROM generate_series($2::timestamptz, $3::timestamptz - interval '1 minute', interval '1 minute') point`,
-		s.sliID, s.historyStart, s.at); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // drain runs the aggregator until nothing it may claim now remains.
@@ -120,6 +118,12 @@ func (s *selfHealFixture) drain(t *testing.T, stage string) {
 // createSLO creates a one-hour-window 99% SLO evaluated from the start of the history.
 func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	t.Helper()
+	window := ((time.Hour + s.cadence - 1) / s.cadence) * s.cadence
+	return s.createSLOWithHistory(t, name, window, s.historyStart)
+}
+
+func (s *selfHealFixture) createSLOWithHistory(t *testing.T, name string, window time.Duration, validFrom time.Time) string {
+	t.Helper()
 	var verifier [32]byte
 	verifier[0] = 98
 	if _, err := IssueSession(t.Context(), s.f.databaseURL, IssueSessionInput{UserID: s.f.userID, ExpectedCredentialEpoch: s.f.epoch,
@@ -132,9 +136,8 @@ func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	validFrom := s.historyStart
 	_, objective, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: name + "-slo", DisplayName: "Self-heal SLO",
-		ServiceID: service.ID, SliID: s.sliID, Target: "0.99", RollingWindowSeconds: int64(time.Hour / time.Second), EvaluationValidFrom: &validFrom,
+		ServiceID: service.ID, SliID: s.sliID, Target: "0.99", RollingWindowSeconds: int64(window / time.Second), EvaluationValidFrom: &validFrom,
 		IdempotencyKey: name + "-slo", RequestID: name + "-slo", Now: s.clock}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -142,9 +145,7 @@ func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	return objective.ID
 }
 
-// buildHistory runs the workers the background loops run (current values, which admit the repair; the
-// aggregator, which healing may need; the repair itself) until the SLO's retained history is complete,
-// moving the clock a minute per round as time passing would. It returns the last error seen.
+// buildHistory runs aggregation, current refresh and extrema until the closed hours are complete.
 func (s *selfHealFixture) buildHistory(t *testing.T, sloID string) error {
 	t.Helper()
 	var lastErr error
@@ -153,11 +154,11 @@ func (s *selfHealFixture) buildHistory(t *testing.T, sloID string) error {
 		if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
 			lastErr = err
 		}
-		if _, err := s.runtime.repairRetainedSeries(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
+		if _, err := s.runtime.buildSloExtrema(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
 			lastErr = err
 		}
 		remaining := true
-		if err := s.conn.QueryRow(t.Context(), `SELECT cursor_at<end_at FROM public.almanac_slo_series_repair WHERE slo_id=$1`, sloID).Scan(&remaining); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err := s.conn.QueryRow(t.Context(), `SELECT built_through<$2 OR coalesce(dirty_from<LEAST(dirty_to,$2),false) FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, sloID, s.now.Truncate(time.Hour)).Scan(&remaining); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			t.Fatal(err)
 		}
 		if !remaining {
@@ -171,32 +172,37 @@ func (s *selfHealFixture) buildHistory(t *testing.T, sloID string) error {
 	return lastErr
 }
 
-// requireExactHistory checks that every retained point after the first full window attains exactly 99%.
+// requireExactHistory checks each selected closed-hour mark against the fixture's exact 99% ratio.
 func (s *selfHealFixture) requireExactHistory(t *testing.T, sloID string) {
 	t.Helper()
 	var points, wrong int
-	if err := s.conn.QueryRow(t.Context(), `SELECT count(*), count(*) FILTER (WHERE (payload::jsonb #>> '{current,performance,attainment}') IS DISTINCT FROM '0.990000000000')
-FROM public.almanac_slo_series_points WHERE slo_id=$1 AND evaluation_at>$2::timestamptz + interval '1 hour' AND evaluation_at<=$3`, sloID, s.historyStart, s.at).Scan(&points, &wrong); err != nil {
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*), count(*) FILTER (
+WHERE (mark->>'observed')::bigint IS DISTINCT FROM 60
+OR (mark->>'good')::numeric IS DISTINCT FROM 59400
+OR (mark->>'total')::numeric IS DISTINCT FROM 60000)
+FROM public.almanac_slo_extrema e CROSS JOIN LATERAL jsonb_array_elements(e.lanes#>'{window,marks}') mark
+WHERE slo_id=$1 AND resolution_seconds=3600
+AND (mark->>'at')::timestamptz>$2::timestamptz+interval '1 hour' AND (mark->>'at')::timestamptz<=$3`, sloID, s.historyStart, s.at).Scan(&points, &wrong); err != nil {
 		t.Fatal(err)
 	}
-	if points < 100 || wrong != 0 {
-		t.Fatalf("retained points after the first full window: %d, with attainment other than 99%%: %d", points, wrong)
+	if points < 2 || wrong != 0 {
+		t.Fatalf("extrema marks after the first full window: %d, with attainment other than 99%%: %d", points, wrong)
 	}
 }
 
-// ADR-0034: the performance seed of 2026-11-06 committed interval records before their values; the
-// aggregator ran in between and stored zero totals for observed intervals, and every calculation that
-// read them failed until its work stopped for good. This reproduces that order: records, aggregation,
-// values, then an SLO with a historical start whose long history must still be built correctly.
-func TestIntegrationDerivedDataHealsWhenValuesArriveAfterAggregation(t *testing.T) {
+// Canonical observed rows cannot enter aggregation without their exact counts.
+func TestIntegrationDerivedDataRejectsMissingObservationValues(t *testing.T) {
 	t.Parallel()
-	s := newSelfHealFixture(t, "self-heal-late", false)
-	s.drain(t, "before values")
-	s.insertValues(t)
-	s.drain(t, "after values")
-	sloID := s.createSLO(t, "self-heal-late")
+	s := newSelfHealFixture(t, "self-heal-atomic", true)
+	s.drain(t, "atomic observations")
+	_, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_sli_observations SET good_count=NULL
+WHERE sli_id=$1 AND interval_start=$2`, s.sliID, s.historyStart)
+	if failure, ok := errors.AsType[*pgconn.PgError](err); !ok || failure.Code != "23514" {
+		t.Fatalf("observed row without counts was accepted: %v", err)
+	}
+	sloID := s.createSLO(t, "self-heal-atomic")
 	if err := s.buildHistory(t, sloID); err != nil {
-		t.Fatalf("retained history never completed; last error: %v", err)
+		t.Fatalf("atomic observation history never completed: %v", err)
 	}
 	s.requireExactHistory(t, sloID)
 }
@@ -230,21 +236,21 @@ func TestIntegrationDerivedRetriesContinueStopAndRestart(t *testing.T) {
 	}
 	claim := func() bool {
 		t.Helper()
-		_, err := s.runtime.repairRetainedSeries(t.Context(), s.clock)
+		_, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
 		if err != nil && !errors.Is(err, ErrDerivedPending) {
 			t.Fatalf("repair: %v", err)
 		}
 		var leased bool
-		if err := s.conn.QueryRow(t.Context(), `SELECT attempts=0 AND failing_since IS NULL FROM public.almanac_slo_series_repair WHERE slo_id=$1`, sloID).Scan(&leased); err != nil {
+		if err := s.conn.QueryRow(t.Context(), `SELECT attempts=0 AND failing_since IS NULL FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, sloID).Scan(&leased); err != nil {
 			t.Fatal(err)
 		}
 		return leased
 	}
-	// Each step rewinds the repair to the start of the history, so there is work left to claim.
+	// Each step rewinds the extrema cursor to the start of the history, so there is work left to claim.
 	setState := func(attempts int, failingSince *time.Time, next time.Time) {
 		t.Helper()
-		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET attempts=$2,failing_since=$3,next_attempt_at=$4,lease_until=NULL,cursor_at=$5 WHERE slo_id=$1`,
-			sloID, attempts, failingSince, next, s.historyStart); err != nil {
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=$2,failing_since=$3,next_attempt_at=$4,lease_until=NULL,built_through=$5 WHERE slo_id=$1`,
+			sloID, attempts, failingSince, next, s.historyStart.Truncate(time.Hour)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -289,23 +295,22 @@ func TestIntegrationDerivedRetriesContinueStopAndRestart(t *testing.T) {
 		want         time.Duration
 	}{{1, 0, 2 * time.Second}, {4, 0, 16 * time.Second}, {5, time.Hour, 5 * time.Minute}, {5, 2 * 24 * time.Hour, time.Hour}} {
 		since := s.now.Add(-step.failingSince)
-		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET attempts=$2,failing_since=$3,lease_epoch=lease_epoch+1 WHERE slo_id=$1`, sloID, step.attempts, &since); err != nil {
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=$2,failing_since=$3,lease_epoch=lease_epoch+1 WHERE slo_id=$1`, sloID, step.attempts, &since); err != nil {
 			t.Fatal(err)
 		}
 		var row struct {
-			defRev, measRev, epoch int64
-			version                string
+			id             pgtype.UUID
+			epoch, version int64
 		}
-		if err := s.conn.QueryRow(t.Context(), `SELECT definition_revision,measurement_revision,lease_epoch,calculation_version FROM public.almanac_slo_series_repair WHERE slo_id=$1`, sloID).Scan(&row.defRev, &row.measRev, &row.epoch, &row.version); err != nil {
+		if err := s.conn.QueryRow(t.Context(), `SELECT id,lease_epoch,version FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, sloID).Scan(&row.id, &row.epoch, &row.version); err != nil {
 			t.Fatal(err)
 		}
-		id, _ := canonicalUUID(sloID)
-		if err := dbgen.New(s.conn).FailRetainedSeriesRepair(t.Context(), dbgen.FailRetainedSeriesRepairParams{SloID: id, DefinitionRevision: row.defRev,
-			MeasurementRevision: row.measRev, CalculationVersion: row.version, LeaseEpoch: row.epoch, Column6: timestamp(s.now), Reason: "test_failure"}); err != nil {
+		if err := dbgen.New(s.conn).FailSloExtremaCursor(t.Context(), dbgen.FailSloExtremaCursorParams{ID: row.id,
+			Version: row.version, LeaseEpoch: row.epoch, Now: timestamp(s.now), Reason: "test_failure"}); err != nil {
 			t.Fatal(err)
 		}
 		var next time.Time
-		if err := s.conn.QueryRow(t.Context(), `SELECT next_attempt_at FROM public.almanac_slo_series_repair WHERE slo_id=$1`, sloID).Scan(&next); err != nil {
+		if err := s.conn.QueryRow(t.Context(), `SELECT next_attempt_at FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, sloID).Scan(&next); err != nil {
 			t.Fatal(err)
 		}
 		if got := next.Sub(s.now); got != step.want {
@@ -325,11 +330,14 @@ func TestIntegrationDerivedFailureStateSurvivesWaitsAndShowsBlockedSources(t *te
 	if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
 		t.Fatal(err)
 	}
-	id, _ := canonicalUUID(sloID)
 	q := dbgen.New(s.conn)
-	repair := func() (attempts int, epoch int64, version string) {
+	var id pgtype.UUID
+	if err := s.conn.QueryRow(t.Context(), `SELECT id FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, sloID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	repair := func() (attempts int, epoch, version int64) {
 		t.Helper()
-		if err := s.conn.QueryRow(t.Context(), `SELECT attempts,lease_epoch,calculation_version FROM public.almanac_slo_series_repair WHERE slo_id=$1`, sloID).Scan(&attempts, &epoch, &version); err != nil {
+		if err := s.conn.QueryRow(t.Context(), `SELECT attempts,lease_epoch,version FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, sloID).Scan(&attempts, &epoch, &version); err != nil {
 			t.Fatal(err)
 		}
 		return attempts, epoch, version
@@ -337,12 +345,11 @@ func TestIntegrationDerivedFailureStateSurvivesWaitsAndShowsBlockedSources(t *te
 
 	// Failing at the cap: a temporary wait keeps all five failures.
 	hourAgo := s.now.Add(-time.Hour)
-	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET attempts=5,failing_since=$2,cursor_at=$3 WHERE slo_id=$1`, sloID, hourAgo, s.historyStart); err != nil {
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=5,failing_since=$2,built_through=$3 WHERE slo_id=$1`, sloID, hourAgo, s.historyStart.Truncate(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	_, epoch, version := repair()
-	if err := q.DeferRetainedSeriesRepair(t.Context(), dbgen.DeferRetainedSeriesRepairParams{SloID: id, DefinitionRevision: 1, MeasurementRevision: 1,
-		CalculationVersion: version, LeaseEpoch: epoch, NextAttemptAt: timestamp(s.now)}); err != nil {
+	if err := q.DeferSloExtremaCursor(t.Context(), dbgen.DeferSloExtremaCursorParams{ID: id, Version: version, LeaseEpoch: epoch, NextAttemptAt: timestamp(s.now)}); err != nil {
 		t.Fatal(err)
 	}
 	if attempts, _, _ := repair(); attempts != 5 {
@@ -351,10 +358,10 @@ func TestIntegrationDerivedFailureStateSurvivesWaitsAndShowsBlockedSources(t *te
 
 	// Four failures over eight days of waits: not stopped, still claimed.
 	eightDaysAgo := s.now.Add(-8 * 24 * time.Hour)
-	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET attempts=4,failing_since=$2,next_attempt_at=$3,lease_until=NULL WHERE slo_id=$1`, sloID, eightDaysAgo, s.now.Add(-time.Second)); err != nil {
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=4,failing_since=$2,next_attempt_at=$3,lease_until=NULL WHERE slo_id=$1`, sloID, eightDaysAgo, s.now.Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.runtime.repairRetainedSeries(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
+	if _, err := s.runtime.buildSloExtrema(t.Context(), s.clock); err != nil && !errors.Is(err, ErrDerivedPending) {
 		t.Fatal(err)
 	}
 	if attempts, _, _ := repair(); attempts != 0 {

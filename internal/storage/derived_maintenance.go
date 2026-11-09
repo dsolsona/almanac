@@ -15,38 +15,60 @@ import (
 // cannot indefinitely retain expired snapshots. It shares the bounded derived
 // pool and performs bounded, cancellable batches without adding connections.
 func (r *Runtime) RunDerivedMaintenance(ctx context.Context, logger *slog.Logger) {
-	ticks := time.NewTicker(time.Second)
-	defer ticks.Stop()
 	var nextDiscovery, nextPartitions, nextConsistency time.Time
-	for {
+	for ctx.Err() == nil {
 		now := time.Now().UTC()
-		if err := r.cleanupDerivedSnapshots(ctx, now); err != nil && ctx.Err() == nil {
-			logger.ErrorContext(ctx, "derived snapshot cleanup failed", "error", derivedErrorDetail(err))
+		conn, err := r.Acquire(ctx, DerivedTraffic)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.ErrorContext(ctx, "derived maintenance scheduling failed", "error", derivedErrorDetail(err))
+			}
+			if !waitDerived(ctx, now.Add(time.Second)) {
+				return
+			}
+			continue
 		}
-		if !now.Before(nextPartitions) {
+		due, err := dbgen.New(conn).ReadDerivedMaintenanceDue(ctx, dbgen.ReadDerivedMaintenanceDueParams{Now: timestamp(now), DiscoveryAt: timestamp(nextDiscovery), PartitionsAt: timestamp(nextPartitions), ConsistencyAt: timestamp(nextConsistency)})
+		conn.Release()
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.ErrorContext(ctx, "derived maintenance scheduling failed", "error", derivedErrorDetail(err))
+			}
+			if !waitDerived(ctx, now.Add(time.Second)) {
+				return
+			}
+			continue
+		}
+		if due.CleanupDue {
+			if err := r.cleanupDerivedSnapshots(ctx, now); err != nil && ctx.Err() == nil {
+				logger.ErrorContext(ctx, "derived snapshot cleanup failed", "error", derivedErrorDetail(err))
+			}
+		}
+		if due.PartitionsDue {
 			if err := r.prepareObservationPartitions(ctx, now); err != nil && ctx.Err() == nil {
 				logger.ErrorContext(ctx, "observation partition maintenance failed", "error", derivedErrorDetail(err))
+				nextPartitions = now.Add(time.Second)
 			} else {
 				nextPartitions = now.Add(time.Hour)
 			}
 		}
-		if !now.Before(nextDiscovery) {
+		if due.DiscoveryDue {
 			if err := r.discoverRetention(ctx, now); err != nil && ctx.Err() == nil {
 				logger.ErrorContext(ctx, "retention discovery failed", "error", derivedErrorDetail(err))
 			}
 			nextDiscovery = now.Add(time.Minute)
 		}
-		if !now.Before(nextConsistency) {
+		if due.ConsistencyDue {
 			r.reportDerivedConsistency(ctx, logger, now)
 			nextConsistency = now.Add(time.Minute)
 		}
-		if _, err := r.applyRetentionPreview(ctx, now); err != nil && !errors.Is(err, errRetentionBlocked) && ctx.Err() == nil {
-			logger.ErrorContext(ctx, "retention maintenance failed", "error", derivedErrorDetail(err))
+		if due.RetentionDue {
+			if _, err := r.applyRetentionPreview(ctx, now); err != nil && !errors.Is(err, errRetentionBlocked) && ctx.Err() == nil {
+				logger.ErrorContext(ctx, "retention maintenance failed", "error", derivedErrorDetail(err))
+			}
 		}
-		select {
-		case <-ctx.Done():
+		if !waitDerived(ctx, maxTime(due.NextDue.Time, now.Add(10*time.Millisecond))) {
 			return
-		case <-ticks.C:
 		}
 	}
 }
@@ -84,15 +106,11 @@ func (r *Runtime) cleanupDerivedSnapshots(ctx context.Context, now time.Time) (r
 	}
 	defer conn.Release()
 	q := dbgen.New(conn)
-	if err := q.DeleteExpiredSloOverviewSnapshots(bounded, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
+	if _, err := q.DeleteExpiredSloExtrema(bounded, timestamp(now.Add(-365*24*time.Hour))); err != nil {
 		return err
 	}
 	if _, err := q.DeleteExpiredDerivedGenerations(bounded, timestamp(now.Add(-5*time.Minute))); err != nil {
 		return err
 	}
-	if _, err := q.DeleteExpiredSloDisplayBlocks(bounded, timestamp(now.Add(-5*time.Minute))); err != nil {
-		return err
-	}
-	_, err = q.DeleteExpiredSloProjectionPayloads(bounded, timestamp(now.Add(-5*time.Minute)))
-	return err
+	return nil
 }

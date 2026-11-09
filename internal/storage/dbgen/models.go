@@ -287,27 +287,6 @@ type AlmanacSli struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AlmanacSliCoverage struct {
-	IntervalStart         pgtype.Timestamptz `json:"interval_start"`
-	SliID                 pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision   int64              `json:"measurement_revision"`
-	IntervalEnd           pgtype.Timestamptz `json:"interval_end"`
-	Outcome               string             `json:"outcome"`
-	ResultDigest          []byte             `json:"result_digest"`
-	ErrorCode             pgtype.Text        `json:"error_code"`
-	MissingComponents     []string           `json:"missing_components"`
-	ExecutionID           pgtype.UUID        `json:"execution_id"`
-	DeliveryID            pgtype.UUID        `json:"delivery_id"`
-	ObservationID         pgtype.UUID        `json:"observation_id"`
-	AgentID               pgtype.UUID        `json:"agent_id"`
-	SessionGeneration     int64              `json:"session_generation"`
-	ConfigurationRevision int64              `json:"configuration_revision"`
-	LeaseID               string             `json:"lease_id"`
-	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
-	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
-	IngestionGeneration   int64              `json:"ingestion_generation"`
-}
-
 type AlmanacSliCreateReceipt struct {
 	ActorID        pgtype.UUID        `json:"actor_id"`
 	IdempotencyKey string             `json:"idempotency_key"`
@@ -380,12 +359,25 @@ type AlmanacSliMeasurement struct {
 	LastAttemptedIntervalEnd pgtype.Timestamptz `json:"last_attempted_interval_end"`
 }
 
-type AlmanacSliObservationValue struct {
-	IntervalStart       pgtype.Timestamptz `json:"interval_start"`
-	SliID               pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	GoodCount           pgtype.Numeric     `json:"good_count"`
-	TotalCount          pgtype.Numeric     `json:"total_count"`
+type AlmanacSliObservation struct {
+	SliID                 pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision   int64              `json:"measurement_revision"`
+	IntervalStart         pgtype.Timestamptz `json:"interval_start"`
+	Outcome               string             `json:"outcome"`
+	GoodCount             pgtype.Numeric     `json:"good_count"`
+	TotalCount            pgtype.Numeric     `json:"total_count"`
+	ResultDigest          []byte             `json:"result_digest"`
+	ErrorCode             pgtype.Text        `json:"error_code"`
+	MissingComponents     []string           `json:"missing_components"`
+	ExecutionID           pgtype.UUID        `json:"execution_id"`
+	DeliveryID            pgtype.UUID        `json:"delivery_id"`
+	AgentID               pgtype.UUID        `json:"agent_id"`
+	SessionGeneration     int64              `json:"session_generation"`
+	ConfigurationRevision int64              `json:"configuration_revision"`
+	LeaseID               string             `json:"lease_id"`
+	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
+	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
+	IngestionGeneration   int64              `json:"ingestion_generation"`
 }
 
 type AlmanacSliOwnershipEpoch struct {
@@ -433,7 +425,6 @@ type AlmanacSloCurrentProjection struct {
 	SortName           string      `json:"sort_name"`
 	Urgency            string      `json:"urgency"`
 	Payload            []byte      `json:"payload"`
-	PayloadDigest      []byte      `json:"payload_digest"`
 	BudgetHistoryState pgtype.Text `json:"budget_history_state"`
 }
 
@@ -465,26 +456,38 @@ type AlmanacSloDerivedGeneration struct {
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
 }
 
-type AlmanacSloDisplayBlock struct {
+type AlmanacSloExtrema struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	ResolutionSeconds   int32              `json:"resolution_seconds"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	SourceGeneration    int64              `json:"source_generation"`
+	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	Lanes               []byte             `json:"lanes"`
+}
+
+type AlmanacSloExtremaCursor struct {
+	ID                  pgtype.UUID        `json:"id"`
 	SloID               pgtype.UUID        `json:"slo_id"`
 	DefinitionRevision  int64              `json:"definition_revision"`
 	MeasurementRevision int64              `json:"measurement_revision"`
 	CalculationVersion  string             `json:"calculation_version"`
-	Lane                string             `json:"lane"`
-	WindowSeconds       int64              `json:"window_seconds"`
-	FreshnessGraceUs    int64              `json:"freshness_grace_us"`
-	RangeStart          pgtype.Timestamptz `json:"range_start"`
-	RangeEnd            pgtype.Timestamptz `json:"range_end"`
-	IncludeStart        bool               `json:"include_start"`
-	SourceGeneration    int64              `json:"source_generation"`
-	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-	Payload             []byte             `json:"payload"`
-	PayloadDigest       []byte             `json:"payload_digest"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AlmanacSloHistoryAdmission struct {
-	Singleton bool `json:"singleton"`
+	BuiltThrough        pgtype.Timestamptz `json:"built_through"`
+	DirtyFrom           pgtype.Timestamptz `json:"dirty_from"`
+	DirtyTo             pgtype.Timestamptz `json:"dirty_to"`
+	Version             int64              `json:"version"`
+	Attempts            int32              `json:"attempts"`
+	LeaseEpoch          int64              `json:"lease_epoch"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError           pgtype.Text        `json:"last_error"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
 }
 
 type AlmanacSloHistoryBlock struct {
@@ -497,137 +500,6 @@ type AlmanacSloHistoryBlock struct {
 	Kind              string             `json:"kind"`
 	BudgetSparkline   []byte             `json:"budget_sparkline"`
 	PayloadBytes      pgtype.Int8        `json:"payload_bytes"`
-}
-
-type AlmanacSloHistoryJob struct {
-	ID                  pgtype.UUID        `json:"id"`
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	SourceGeneration    int64              `json:"source_generation"`
-	CalculationVersion  string             `json:"calculation_version"`
-	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
-	RangeStart          pgtype.Timestamptz `json:"range_start"`
-	RangeEnd            pgtype.Timestamptz `json:"range_end"`
-	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
-	Kind                string             `json:"kind"`
-	State               string             `json:"state"`
-	Attempts            int32              `json:"attempts"`
-	LeaseEpoch          int64              `json:"lease_epoch"`
-	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
-	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	LastError           pgtype.Text        `json:"last_error"`
-	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
-	FailingSince        pgtype.Timestamptz `json:"failing_since"`
-}
-
-type AlmanacSloOverviewSnapshot struct {
-	ID                     pgtype.UUID        `json:"id"`
-	CursorSecret           []byte             `json:"cursor_secret"`
-	ActorID                pgtype.UUID        `json:"actor_id"`
-	SessionVerifier        []byte             `json:"session_verifier"`
-	Role                   string             `json:"role"`
-	QueryText              string             `json:"query_text"`
-	ServiceID              pgtype.UUID        `json:"service_id"`
-	Urgency                pgtype.Text        `json:"urgency"`
-	PageLimit              int32              `json:"page_limit"`
-	GroupCounts            []byte             `json:"group_counts"`
-	State                  string             `json:"state"`
-	PayloadBytes           int32              `json:"payload_bytes"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
-	PublicationFingerprint []byte             `json:"publication_fingerprint"`
-}
-
-type AlmanacSloOverviewSnapshotItem struct {
-	SnapshotID        pgtype.UUID `json:"snapshot_id"`
-	Ordinal           int32       `json:"ordinal"`
-	Urgency           string      `json:"urgency"`
-	Payload           []byte      `json:"payload"`
-	PayloadBytes      int32       `json:"payload_bytes"`
-	ProjectionDigest  []byte      `json:"projection_digest"`
-	ProjectionCurrent bool        `json:"projection_current"`
-}
-
-type AlmanacSloProjectionPayload struct {
-	Digest       []byte             `json:"digest"`
-	Payload      []byte             `json:"payload"`
-	Urgency      string             `json:"urgency"`
-	PayloadBytes int32              `json:"payload_bytes"`
-	PublishedAt  pgtype.Timestamptz `json:"published_at"`
-}
-
-type AlmanacSloSeriesPoint struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	ExclusionRevision   int64              `json:"exclusion_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	EvaluationAt        pgtype.Timestamptz `json:"evaluation_at"`
-	SourceGeneration    int64              `json:"source_generation"`
-	PublishedAt         pgtype.Timestamptz `json:"published_at"`
-	Payload             []byte             `json:"payload"`
-}
-
-type AlmanacSloSeriesRepair struct {
-	SloID                    pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision       int64              `json:"definition_revision"`
-	MeasurementRevision      int64              `json:"measurement_revision"`
-	CalculationVersion       string             `json:"calculation_version"`
-	CursorAt                 pgtype.Timestamptz `json:"cursor_at"`
-	EndAt                    pgtype.Timestamptz `json:"end_at"`
-	Version                  int64              `json:"version"`
-	Attempts                 int32              `json:"attempts"`
-	LeaseEpoch               int64              `json:"lease_epoch"`
-	LeaseUntil               pgtype.Timestamptz `json:"lease_until"`
-	NextAttemptAt            pgtype.Timestamptz `json:"next_attempt_at"`
-	LastError                pgtype.Text        `json:"last_error"`
-	ID                       pgtype.UUID        `json:"id"`
-	ManualRetriedAt          pgtype.Timestamptz `json:"manual_retried_at"`
-	CoherentThrough          pgtype.Timestamptz `json:"coherent_through"`
-	CoherentSourceGeneration int64              `json:"coherent_source_generation"`
-	FailingSince             pgtype.Timestamptz `json:"failing_since"`
-}
-
-type AlmanacSloSeriesTile struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	ExclusionRevision   int64              `json:"exclusion_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	ResolutionSeconds   int32              `json:"resolution_seconds"`
-	RangeStart          pgtype.Timestamptz `json:"range_start"`
-	RangeEnd            pgtype.Timestamptz `json:"range_end"`
-	SourceGeneration    int64              `json:"source_generation"`
-	PointCount          int32              `json:"point_count"`
-	Payload             []byte             `json:"payload"`
-	PublishedAt         pgtype.Timestamptz `json:"published_at"`
-	PayloadDigest       []byte             `json:"payload_digest"`
-	CompactPayload      []byte             `json:"compact_payload"`
-}
-
-type AlmanacSloSeriesTileWork struct {
-	ID                  pgtype.UUID        `json:"id"`
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	ExclusionRevision   int64              `json:"exclusion_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	ResolutionSeconds   int32              `json:"resolution_seconds"`
-	RangeStart          pgtype.Timestamptz `json:"range_start"`
-	RangeEnd            pgtype.Timestamptz `json:"range_end"`
-	Version             int64              `json:"version"`
-	SourceGeneration    int64              `json:"source_generation"`
-	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
-	Attempts            int32              `json:"attempts"`
-	LeaseEpoch          int64              `json:"lease_epoch"`
-	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
-	LastError           pgtype.Text        `json:"last_error"`
-	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
-	SummaryOnly         bool               `json:"summary_only"`
-	FailingSince        pgtype.Timestamptz `json:"failing_since"`
 }
 
 type AlmanacUser struct {

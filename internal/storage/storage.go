@@ -133,6 +133,9 @@ func UpgradeWithMigrations(ctx context.Context, databaseURL string, migrations [
 	result.DatabaseSchemaVersion = version
 	for _, migration := range migrations[len(history):] {
 		if err := applyMigration(ctx, conn, migration); err != nil {
+			if errors.Is(err, errObservationMigrationCounts) || errors.Is(err, errObservationMigrationInterval) || errors.Is(err, errObservationMigrationMismatch) {
+				return UpgradeResult{}, err
+			}
 			message := fmt.Sprintf("storage: migration %d failed", migration.Version)
 			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && safeSQLState(pgErr.Code) {
 				message += " (SQLSTATE " + pgErr.Code + ")"
@@ -236,6 +239,11 @@ func applyMigration(ctx context.Context, conn *pgx.Conn, migration Migration) er
 	}
 	if _, err := tx.Exec(ctx, "SET LOCAL statement_timeout = '25s'"); err != nil {
 		return err
+	}
+	if migration.Name == "0048_merge_sli_observations.sql" {
+		if err := copyLegacySliObservations(ctx, tx, conn.Config()); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(ctx, migration.SQL, pgx.QueryExecModeSimpleProtocol); err != nil {
 		return err

@@ -134,13 +134,14 @@ func (sink *journeyTraceSink) observeCollection(t *testing.T, databaseURL, sliID
 	t.Cleanup(client.CloseIdleConnections)
 	sink.probe = func(ctx context.Context, since time.Time) (progress traceOutageProgress, err error) {
 		err = db.QueryRow(ctx, `WITH previous AS (
-			SELECT max(interval_start) AS start FROM public.almanac_sli_coverage
+			SELECT max(interval_start) AS start FROM public.almanac_sli_observations
 			WHERE sli_id=$1 AND recorded_at < $2
 		), samples AS (
-			SELECT c.*, v.good_count, v.total_count,
-			lag(c.interval_end) OVER (ORDER BY c.interval_start) AS prior_end
-			FROM public.almanac_sli_coverage c LEFT JOIN public.almanac_sli_observation_values v
-			USING (sli_id, measurement_revision, interval_start)
+			SELECT c.*,(c.interval_start+source.polling_interval_seconds*interval '1 second') AS interval_end,
+			lag(c.interval_start+source.polling_interval_seconds*interval '1 second') OVER (ORDER BY c.interval_start) AS prior_end
+			FROM public.almanac_sli_observations c
+			JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=c.sli_id AND measurement.revision=c.measurement_revision
+			JOIN public.almanac_datasources source ON source.id=measurement.datasource_id
 			WHERE c.sli_id=$1 AND c.interval_start >= (SELECT start FROM previous)
 		) SELECT count(*) FILTER (WHERE recorded_at >= $2), count(*) FILTER (WHERE recorded_at >= $2 AND (
 			c.outcome <> 'observed' OR c.agent_id <> $3::uuid OR

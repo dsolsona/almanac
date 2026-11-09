@@ -25,7 +25,7 @@ beforeAll(async()=>{
  await import('../src/components/charts/TimelineChartView.tsx');
  await vi.dynamicImportSettled();
 });
-beforeEach(()=>{vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){} unobserve(){}});mocks.serverTime.mockResolvedValue(Date.parse('2026-10-02T00:00:00Z'));mocks.overview.mockResolvedValue({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});mocks.operational.mockResolvedValue(operationalDetail());mocks.services.mockResolvedValue({items:[],next_cursor:''});});
+beforeEach(()=>{vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){} unobserve(){}});mocks.serverTime.mockResolvedValue(Date.parse('2026-10-02T00:00:00Z'));mocks.overview.mockResolvedValue({items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});mocks.operational.mockResolvedValue(operationalDetail());mocks.services.mockResolvedValue({items:[],next_cursor:''});});
 it('starts status and history before the definition resolves, without a duplicate history read',async()=>{
  const id='33333333-3333-3333-3333-333333333333';
  history.replaceState({},'',`/slos/${id}`);
