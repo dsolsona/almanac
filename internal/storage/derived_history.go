@@ -391,6 +391,14 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	}
 	input.Runtime.metrics.historyMisses.Add(1)
 	calculation.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
+	if !calculation.overviewOnly {
+		reader := &extremaReader{retainedSeriesReader: *calculation.retainedReader}
+		base := extremaWindowInput(row, source, now, retention.Time)
+		if err := reader.prepare(ctx, base, bound); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+		calculation.retainedReader = &reader.retainedSeriesReader
+	}
 	result, err = buildSloOperationalDetail(ctx, q, row, source, calculation)
 	if err != nil {
 		return api.SloOperationalDetail{}, err

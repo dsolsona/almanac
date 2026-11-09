@@ -132,19 +132,7 @@ func (lane extremaLane) samples(ctx context.Context, input slo.WindowInput, star
 			index > 0 && !lane.Marks[index-1].At.Before(mark.At) {
 			return nil, ErrDerivedFailed
 		}
-		good, goodOK := new(big.Rat).SetString(mark.Good)
-		total, totalOK := new(big.Rat).SetString(mark.Total)
-		if !goodOK || !totalOK {
-			return nil, ErrDerivedFailed
-		}
-		atInput := input
-		atInput.At = mark.At
-		if !mark.RetentionStart.IsZero() {
-			atInput.RetentionStart = mark.RetentionStart
-		}
-		value, err := slo.EvaluateOperationalTotals(ctx, atInput, slo.WindowTotals{Good: good, Total: total,
-			Observed: mark.Observed, KnownEmpty: mark.KnownEmpty, ZeroTraffic: mark.ZeroTraffic,
-			FirstObservation: mark.FirstObservation, LastObservation: mark.LastObservation, LatestReceipt: mark.LatestReceipt})
+		value, err := mark.result(ctx, input)
 		if err != nil {
 			return nil, err
 		}
@@ -174,4 +162,19 @@ func (lane extremaLane) samples(ctx context.Context, input slo.WindowInput, star
 		return nil, err
 	}
 	return samples, nil
+}
+
+func (mark extremaMark) result(ctx context.Context, input slo.WindowInput) (slo.WindowResult, error) {
+	good, goodOK := new(big.Rat).SetString(mark.Good)
+	total, totalOK := new(big.Rat).SetString(mark.Total)
+	if !goodOK || !totalOK {
+		return slo.WindowResult{}, ErrDerivedFailed
+	}
+	input.At = mark.At
+	if !mark.RetentionStart.IsZero() {
+		input.RetentionStart = mark.RetentionStart
+	}
+	return slo.EvaluateOperationalTotals(ctx, input, slo.WindowTotals{Good: good, Total: total, Observed: mark.Observed,
+		KnownEmpty: mark.KnownEmpty, ZeroTraffic: mark.ZeroTraffic, FirstObservation: mark.FirstObservation,
+		LastObservation: mark.LastObservation, LatestReceipt: mark.LatestReceipt})
 }

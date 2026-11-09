@@ -95,13 +95,25 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 			t.Fatal("retained tiles did not drain their bounded fixture")
 		}
 	}
+	for attempt := range 1000 {
+		worked, err := runtime.buildSloExtrema(t.Context(), clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !worked {
+			break
+		}
+		if attempt == 999 {
+			t.Fatal("extrema bootstrap did not drain its bounded fixture")
+		}
+	}
 	prepared, err := readOperationalDetailForTest(t.Context(), databaseURL, input)
 	if err != nil || prepared.Generation == nil || prepared.HistoryPreparation != nil {
 		t.Fatalf("history was not published: %v", err)
 	}
 	verifyDetachedRetainedSnapshot(t, databaseURL, input, prepared)
 	verifyRetainedTileWire(t, conn, pgID, prepared.EffectiveAt.Truncate(time.Hour).Add(-time.Hour))
-	verifyRetainedSelectedValues(t, databaseURL, proof, id, clock, prepared)
+	verifyRetainedSelectedValues(t, runtime, databaseURL, proof, id, clock, prepared)
 	verifyIncrementalRetainedAvailability(t, databaseURL, pgID, prepared.EffectiveAt)
 	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
 		for index := range min(len(prepared.ComplianceSeries.Days), len(oracle.ComplianceSeries.Days)) {
@@ -565,8 +577,9 @@ func verifyRetainedWorkRecovery(t *testing.T, runtime *Runtime, databaseURL stri
 	}
 }
 
-func verifyRetainedSelectedValues(t *testing.T, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, value api.SloOperationalDetail) {
+func verifyRetainedSelectedValues(t *testing.T, runtime *Runtime, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, value api.SloOperationalDetail) {
 	t.Helper()
+	ctx := runtime.Bind(t.Context())
 	canonical := make(map[time.Time]api.SloOperationalDetail)
 	cadence := time.Duration(value.Objective.CadenceSeconds) * time.Second
 	for name, samples := range map[string][]api.SloOperationalSample{
@@ -586,7 +599,7 @@ func verifyRetainedSelectedValues(t *testing.T, databaseURL string, proof Dataso
 			if !exists {
 				from := at.Add(-cadence)
 				var err error
-				oracle, err = readOperationalDetailForTest(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
+				oracle, err = readOperationalDetailForTest(ctx, databaseURL, OperationalDetailInput{Proof: proof, ID: id,
 					Now: clock, At: &at, Start: &from, End: &at, BurnWindow: 3600})
 				if err != nil || len(oracle.AttainmentSeries.Samples) != 1 {
 					t.Fatalf("canonical selected-point evaluation: %v", err)

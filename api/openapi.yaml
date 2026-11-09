@@ -1310,7 +1310,7 @@ components:
       required: [id, stage, state, attempts, next_attempt_at, error_code]
       properties:
         id: {type: string, format: uuid}
-        stage: {type: string, enum: [current, history, aggregate]}
+        stage: {type: string, enum: [current, history, aggregate, extrema]}
         state: {type: string, enum: [pending, running, failed]}
         attempts: {type: integer, minimum: 0, maximum: 5}
         next_attempt_at: {type: string, format: date-time}

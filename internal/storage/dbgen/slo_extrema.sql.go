@@ -45,13 +45,22 @@ func (q *Queries) AdvanceSloExtremaCursor(ctx context.Context, arg AdvanceSloExt
 }
 
 const claimSloExtremaCursor = `-- name: ClaimSloExtremaCursor :one
-WITH candidate AS (
+WITH expired AS (
+    UPDATE public.almanac_slo_extrema_cursor w
+    SET lease_until=NULL,failing_since=coalesce(w.failing_since,$2::timestamptz),last_error='extrema_lease_expired',
+        next_attempt_at=$2::timestamptz+CASE
+          WHEN coalesce(w.failing_since,$2::timestamptz)>$2::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END
+    WHERE w.calculation_version=$3 AND w.attempts>=5 AND w.lease_until<=$2::timestamptz
+      AND EXISTS (SELECT 1 FROM public.almanac_slos s WHERE s.id=w.slo_id AND s.definition_revision=w.definition_revision)
+    RETURNING w.id
+), candidate AS (
     SELECT w.id FROM public.almanac_slo_extrema_cursor w
     JOIN public.almanac_slos s ON s.id=w.slo_id AND s.definition_revision=w.definition_revision
-    WHERE w.calculation_version=$2
-      AND (w.built_through<$3::timestamptz OR w.dirty_from<LEAST(w.dirty_to,$3::timestamptz))
-      AND (w.attempts<5 OR w.failing_since IS NULL OR w.failing_since>$4::timestamptz-interval '7 days')
-      AND w.next_attempt_at<=$4::timestamptz AND (w.lease_until IS NULL OR w.lease_until<=$4::timestamptz)
+    WHERE w.calculation_version=$3
+      AND NOT EXISTS (SELECT 1 FROM expired e WHERE e.id=w.id)
+      AND (w.built_through<$4::timestamptz OR w.dirty_from<LEAST(w.dirty_to,$4::timestamptz))
+      AND (w.attempts<5 OR w.failing_since IS NULL OR w.failing_since>$2::timestamptz-interval '7 days')
+      AND w.next_attempt_at<=$2::timestamptz AND (w.lease_until IS NULL OR w.lease_until<=$2::timestamptz)
     ORDER BY w.next_attempt_at,w.slo_id LIMIT 1 FOR UPDATE OF w SKIP LOCKED
 )
 UPDATE public.almanac_slo_extrema_cursor w
@@ -61,17 +70,17 @@ FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision
 
 type ClaimSloExtremaCursorParams struct {
 	LeaseUntil         pgtype.Timestamptz `json:"lease_until"`
+	Now                pgtype.Timestamptz `json:"now"`
 	CalculationVersion string             `json:"calculation_version"`
 	ClosedThrough      pgtype.Timestamptz `json:"closed_through"`
-	Now                pgtype.Timestamptz `json:"now"`
 }
 
 func (q *Queries) ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (AlmanacSloExtremaCursor, error) {
 	row := q.db.QueryRow(ctx, claimSloExtremaCursor,
 		arg.LeaseUntil,
+		arg.Now,
 		arg.CalculationVersion,
 		arg.ClosedThrough,
-		arg.Now,
 	)
 	var i AlmanacSloExtremaCursor
 	err := row.Scan(
@@ -132,6 +141,34 @@ DELETE FROM public.almanac_slo_extrema e WHERE
 
 func (q *Queries) DeleteExpiredSloExtrema(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredSloExtrema, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const ensureSloExtremaCursors = `-- name: EnsureSloExtremaCursors :execrows
+INSERT INTO public.almanac_slo_extrema_cursor
+    (slo_id,definition_revision,measurement_revision,calculation_version,built_through,next_attempt_at)
+SELECT d.slo_id,d.revision,d.measurement_revision,$1,
+       date_trunc('hour',GREATEST(d.evaluation_valid_from,m.effective_from,$2::timestamptz-interval '365 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',$2::timestamptz
+FROM public.almanac_slos s
+JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.almanac_slo_extrema_cursor w WHERE w.slo_id=d.slo_id AND w.definition_revision=d.revision
+      AND w.measurement_revision=d.measurement_revision AND w.calculation_version=$1)
+ORDER BY d.slo_id LIMIT 1000
+ON CONFLICT DO NOTHING
+`
+
+type EnsureSloExtremaCursorsParams struct {
+	CalculationVersion string             `json:"calculation_version"`
+	Now                pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) EnsureSloExtremaCursors(ctx context.Context, arg EnsureSloExtremaCursorsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, ensureSloExtremaCursors, arg.CalculationVersion, arg.Now)
 	if err != nil {
 		return 0, err
 	}
@@ -271,37 +308,68 @@ func (q *Queries) ReadSloExtremaHours(ctx context.Context, arg ReadSloExtremaHou
 
 const readSloExtremaParts = `-- name: ReadSloExtremaParts :many
 WITH requested AS (
-    SELECT unnest($5::timestamptz[]) AS start_at,unnest($6::timestamptz[]) AS end_at,
-           unnest($7::integer[]) AS resolution,generate_subscripts($5::timestamptz[],1)::integer AS ordinal
+    SELECT unnest($1::timestamptz[]) AS start_at,unnest($2::timestamptz[]) AS end_at,
+           unnest($3::integer[]) AS resolution,unnest($4::boolean[]) AS graph,
+           generate_subscripts($1::timestamptz[],1)::integer AS ordinal
+), selected AS MATERIALIZED (
+    SELECT r.start_at, r.end_at, r.resolution, r.graph, r.ordinal,e.retention_start,e.source_generation,e.published_at,e.lanes,
+           (e.slo_id IS NOT NULL AND w.built_through>=r.end_at
+             AND NOT coalesce(w.dirty_from<r.end_at AND w.dirty_to>r.start_at,false))::boolean AS ready,
+           coalesce(w.attempts>=5,false)::boolean AS failing
+    FROM requested r
+    LEFT JOIN public.almanac_slo_extrema e ON e.slo_id=$5 AND e.definition_revision=$6
+      AND e.measurement_revision=$7 AND e.calculation_version=$8
+      AND e.exclusion_revision=0 AND e.resolution_seconds=r.resolution AND e.range_start=r.start_at AND e.range_end=r.end_at
+    LEFT JOIN public.almanac_slo_extrema_cursor w ON w.slo_id=$5 AND w.definition_revision=$6
+      AND w.measurement_revision=$7 AND w.calculation_version=$8
+), transitions AS MATERIALIZED (
+    -- Keep the first partial day intact until its eligible hours are reduced together.
+    SELECT lane.key,count(*) AS total
+    FROM selected s CROSS JOIN LATERAL jsonb_each(s.lanes) lane(key,value)
+    CROSS JOIN LATERAL jsonb_array_elements(lane.value->'marks') mark
+    WHERE s.ready AND s.graph AND s.start_at>=$9::timestamptz
+      AND coalesce(jsonb_array_length(mark->'labels'),0)=0
+    GROUP BY lane.key
+), projected AS MATERIALIZED (
+    SELECT s.ordinal,s.start_at,s.end_at,s.resolution,s.retention_start,s.source_generation,s.published_at,s.ready,s.failing,
+           CASE WHEN NOT s.ready THEN NULL
+             WHEN NOT s.graph THEN jsonb_build_object('compliance',s.lanes->'compliance')
+             ELSE (SELECT jsonb_object_agg(lane.key,CASE
+               WHEN n.total>1500 AND s.start_at>=$9::timestamptz AND jsonb_array_length(lane.value->'marks')>4
+               THEN lane.value || jsonb_build_object('coarse',true,'marks',(
+                 SELECT jsonb_agg(mark ORDER BY ordinal) FROM jsonb_array_elements(lane.value->'marks') WITH ORDINALITY marks(mark,ordinal)
+                 WHERE jsonb_array_length(mark->'labels')>0))
+               ELSE lane.value END)
+               FROM jsonb_each(s.lanes) lane(key,value) LEFT JOIN transitions n ON n.key=lane.key)
+           END AS lanes
+    FROM selected s
+), bounded AS (
+    SELECT ordinal, start_at, end_at, resolution, retention_start, source_generation, published_at, ready, failing, lanes,coalesce(sum(octet_length(lanes::text)) OVER (),0)::bigint AS payload_bytes FROM projected
 )
-SELECT r.ordinal,r.start_at,r.end_at,r.resolution,e.retention_start,e.source_generation,e.published_at,e.lanes,
-       (e.slo_id IS NOT NULL AND NOT coalesce(w.dirty_from<r.end_at AND w.dirty_to>r.start_at,false))::boolean AS ready,
-       coalesce(w.attempts>=5,false)::boolean AS failing,
-       coalesce(sum(octet_length(e.lanes::text)) OVER (),0)::bigint AS payload_bytes
-FROM requested r
-LEFT JOIN public.almanac_slo_extrema e ON e.slo_id=$1 AND e.definition_revision=$2
-  AND e.measurement_revision=$3 AND e.calculation_version=$4
-  AND e.exclusion_revision=0 AND e.resolution_seconds=r.resolution AND e.range_start=r.start_at AND e.range_end=r.end_at
-LEFT JOIN public.almanac_slo_extrema_cursor w ON w.slo_id=$1 AND w.definition_revision=$2
-  AND w.measurement_revision=$3 AND w.calculation_version=$4
-ORDER BY r.ordinal
+SELECT ordinal,start_at::timestamptz AS range_start,end_at::timestamptz AS range_end,resolution::integer AS resolution,
+       retention_start,source_generation,published_at,
+       CASE WHEN payload_bytes<=20971520 THEN lanes ELSE '{}'::jsonb END AS lanes,
+       coalesce(ready,false)::boolean AS ready,failing,payload_bytes
+FROM bounded ORDER BY ordinal
 `
 
 type ReadSloExtremaPartsParams struct {
+	Starts              []pgtype.Timestamptz `json:"starts"`
+	Ends                []pgtype.Timestamptz `json:"ends"`
+	Resolutions         []int32              `json:"resolutions"`
+	Graph               []bool               `json:"graph"`
 	SloID               pgtype.UUID          `json:"slo_id"`
 	DefinitionRevision  int64                `json:"definition_revision"`
 	MeasurementRevision int64                `json:"measurement_revision"`
 	CalculationVersion  string               `json:"calculation_version"`
-	Starts              []pgtype.Timestamptz `json:"starts"`
-	Ends                []pgtype.Timestamptz `json:"ends"`
-	Resolutions         []int32              `json:"resolutions"`
+	CoarseFrom          pgtype.Timestamptz   `json:"coarse_from"`
 }
 
 type ReadSloExtremaPartsRow struct {
 	Ordinal          int32              `json:"ordinal"`
-	StartAt          interface{}        `json:"start_at"`
-	EndAt            interface{}        `json:"end_at"`
-	Resolution       interface{}        `json:"resolution"`
+	RangeStart       pgtype.Timestamptz `json:"range_start"`
+	RangeEnd         pgtype.Timestamptz `json:"range_end"`
+	Resolution       int32              `json:"resolution"`
 	RetentionStart   pgtype.Timestamptz `json:"retention_start"`
 	SourceGeneration pgtype.Int8        `json:"source_generation"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
@@ -313,13 +381,15 @@ type ReadSloExtremaPartsRow struct {
 
 func (q *Queries) ReadSloExtremaParts(ctx context.Context, arg ReadSloExtremaPartsParams) ([]ReadSloExtremaPartsRow, error) {
 	rows, err := q.db.Query(ctx, readSloExtremaParts,
+		arg.Starts,
+		arg.Ends,
+		arg.Resolutions,
+		arg.Graph,
 		arg.SloID,
 		arg.DefinitionRevision,
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
-		arg.Starts,
-		arg.Ends,
-		arg.Resolutions,
+		arg.CoarseFrom,
 	)
 	if err != nil {
 		return nil, err
@@ -330,8 +400,8 @@ func (q *Queries) ReadSloExtremaParts(ctx context.Context, arg ReadSloExtremaPar
 		var i ReadSloExtremaPartsRow
 		if err := rows.Scan(
 			&i.Ordinal,
-			&i.StartAt,
-			&i.EndAt,
+			&i.RangeStart,
+			&i.RangeEnd,
 			&i.Resolution,
 			&i.RetentionStart,
 			&i.SourceGeneration,

@@ -90,6 +90,7 @@ type Querier interface {
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
+	EnsureSloExtremaCursors(ctx context.Context, arg EnsureSloExtremaCursorsParams) (int64, error)
 	// A crash on the last permitted attempt must become an observable failure,
 	// rather than remaining running forever with an unclaimable expired lease.
 	ExhaustExpiredSloHistoryJobs(ctx context.Context, failingSince pgtype.Timestamptz) (int64, error)
@@ -313,6 +314,7 @@ type Querier interface {
 	RetryFailedSloHistoryJob(ctx context.Context, arg RetryFailedSloHistoryJobParams) (int64, error)
 	RetryRetainedRepair(ctx context.Context, arg RetryRetainedRepairParams) (int64, error)
 	RetryRetainedTile(ctx context.Context, arg RetryRetainedTileParams) (int64, error)
+	RetrySloExtrema(ctx context.Context, arg RetrySloExtremaParams) (int64, error)
 	RetrySourceAggregate(ctx context.Context, arg RetrySourceAggregateParams) (int64, error)
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)

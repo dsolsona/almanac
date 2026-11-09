@@ -84,6 +84,9 @@ func (r *Runtime) cleanupDerivedSnapshots(ctx context.Context, now time.Time) (r
 	}
 	defer conn.Release()
 	q := dbgen.New(conn)
+	if _, err := q.DeleteExpiredSloExtrema(bounded, timestamp(now.Add(-365*24*time.Hour))); err != nil {
+		return err
+	}
 	if err := q.DeleteExpiredSloOverviewSnapshots(bounded, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
 		return err
 	}

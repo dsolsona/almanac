@@ -2029,6 +2029,7 @@ func (e SloOperationalSeriesKind) Valid() bool {
 const (
 	Aggregate SloPreparationJobStage = "aggregate"
 	Current   SloPreparationJobStage = "current"
+	Extrema   SloPreparationJobStage = "extrema"
 	History   SloPreparationJobStage = "history"
 )
 
@@ -2038,6 +2039,8 @@ func (e SloPreparationJobStage) Valid() bool {
 	case Aggregate:
 		return true
 	case Current:
+		return true
+	case Extrema:
 		return true
 	case History:
 		return true

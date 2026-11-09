@@ -127,6 +127,12 @@ func (s *selfHealFixture) drain(t *testing.T, stage string) {
 // createSLO creates a one-hour-window 99% SLO evaluated from the start of the history.
 func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	t.Helper()
+	window := ((time.Hour + s.cadence - 1) / s.cadence) * s.cadence
+	return s.createSLOWithHistory(t, name, window, s.historyStart)
+}
+
+func (s *selfHealFixture) createSLOWithHistory(t *testing.T, name string, window time.Duration, validFrom time.Time) string {
+	t.Helper()
 	var verifier [32]byte
 	verifier[0] = 98
 	if _, err := IssueSession(t.Context(), s.f.databaseURL, IssueSessionInput{UserID: s.f.userID, ExpectedCredentialEpoch: s.f.epoch,
@@ -139,8 +145,6 @@ func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	validFrom := s.historyStart
-	window := ((time.Hour + s.cadence - 1) / s.cadence) * s.cadence
 	_, objective, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: name + "-slo", DisplayName: "Self-heal SLO",
 		ServiceID: service.ID, SliID: s.sliID, Target: "0.99", RollingWindowSeconds: int64(window / time.Second), EvaluationValidFrom: &validFrom,
 		IdempotencyKey: name + "-slo", RequestID: name + "-slo", Now: s.clock}, true)
