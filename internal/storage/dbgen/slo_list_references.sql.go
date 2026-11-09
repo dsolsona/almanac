@@ -11,37 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteExpiredSloProjectionPayloads = `-- name: DeleteExpiredSloProjectionPayloads :execrows
-WITH expired AS (
-    SELECT a.digest FROM public.almanac_slo_projection_payloads a
-    WHERE a.published_at<$1
-      AND NOT EXISTS(SELECT 1 FROM public.almanac_slo_current_projections p WHERE p.payload_digest=a.digest)
-      AND NOT EXISTS(SELECT 1 FROM public.almanac_slo_overview_snapshot_items i WHERE i.projection_digest=a.digest)
-    ORDER BY a.published_at,a.digest LIMIT 1000 FOR UPDATE SKIP LOCKED
-)
-DELETE FROM public.almanac_slo_projection_payloads a USING expired e WHERE a.digest=e.digest
-`
-
-func (q *Queries) DeleteExpiredSloProjectionPayloads(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredSloProjectionPayloads, publishedAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const materializeSloOverviewReferences = `-- name: MaterializeSloOverviewReferences :one
-WITH scope AS MATERIALIZED (
-    SELECT s.id,lower(s.name) AS sort_name,p.payload_digest,a.urgency AS published_urgency,
+const listSloOverviewPage = `-- name: ListSloOverviewPage :many
+WITH scope AS (
+    SELECT s.id,lower(s.name) AS sort_name,p.payload AS projection_payload,p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND a.digest IS NOT NULL
+             AND g.calculation_version=$7 AND p.slo_id IS NOT NULL
              AND g.source_generation<=coalesce(source.generation,0)
-             AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
+             AND g.evaluated_through>=$8::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND a.digest IS NOT NULL
+             AND g.calculation_version=$7 AND p.slo_id IS NOT NULL
              AND g.source_generation=coalesce(source.generation,0)
-             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current,
+             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($8::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
+             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $8::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current,
            jsonb_build_object('slo',jsonb_build_object(
                'id',s.id,'name',s.name,'display_name',s.display_name,'version',s.version::text,'definition_revision',d.revision::text,
                'service_id',d.service_id,'service_display_name',service.display_name,'sli_id',d.sli_id,'sli_display_name',measurement.display_name,
@@ -56,11 +37,10 @@ WITH scope AS MATERIALIZED (
                '_source_failed',EXISTS (
                    SELECT 1 FROM public.almanac_derived_dirty_ranges dirty
                    WHERE dirty.sli_id=d.sli_id AND dirty.measurement_revision=d.measurement_revision AND dirty.attempts>=5
-                     AND (dirty.lease_until IS NULL OR dirty.lease_until<=$2::timestamptz)
+                     AND (dirty.lease_until IS NULL OR dirty.lease_until<=$8::timestamptz)
                      AND dependency.full_start<dependency.full_end
                      AND dirty.range_start<dependency.full_end AND dirty.range_end>dependency.full_start
-               ))::jsonb AS metadata,
-           a.digest AS archived_digest
+               ))::jsonb AS metadata
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     JOIN public.almanac_services service ON service.id=d.service_id
@@ -68,90 +48,110 @@ WITH scope AS MATERIALIZED (
     JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
     CROSS JOIN LATERAL (
         SELECT 3600::bigint/gcd(3600::bigint,d.cadence_seconds::bigint)*d.cadence_seconds AS grid,
-               to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at
+               to_timestamp(floor(extract(epoch FROM $8::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at
     ) boundary
     CROSS JOIN LATERAL (
         SELECT to_timestamp(ceil(extract(epoch FROM greatest(
                    boundary.at-greatest(d.rolling_window_seconds,CASE WHEN 21600%d.cadence_seconds=0 THEN 21600 ELSE 0 END)*interval '1 second',
-                   d.evaluation_valid_from,m.effective_from,$2::timestamptz-interval '365 days'))/boundary.grid)*boundary.grid) AS full_start,
+                   d.evaluation_valid_from,m.effective_from,$8::timestamptz-interval '365 days'))/boundary.grid)*boundary.grid) AS full_start,
                to_timestamp(floor(extract(epoch FROM boundary.at)/boundary.grid)*boundary.grid) AS full_end
     ) dependency
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
-    LEFT JOIN public.almanac_slo_projection_payloads a ON a.digest=p.payload_digest
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
     LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision
-      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
-    WHERE ($3::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower($3::text))>0)
-      AND ($4::uuid IS NULL OR d.service_id=$4::uuid)
-    ORDER BY s.id LIMIT 10001
-), classified AS MATERIALIZED (
-    SELECT id, sort_name, payload_digest, published_urgency, usable, current, metadata, archived_digest,CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency,
+      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$7
+    WHERE ($9::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower($9::text))>0)
+      AND ($10::uuid IS NULL OR d.service_id=$10::uuid)
+), classified AS (
+    SELECT id, sort_name, projection_payload, published_urgency, usable, current, metadata,CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency,
            CASE WHEN current THEN 'ready'
                 WHEN NOT usable THEN 'unavailable'
                 WHEN (metadata->>'_preparation_failed')::boolean OR (metadata->>'_source_failed')::boolean THEN 'failed'
                 ELSE 'stale' END::text AS current_state
     FROM scope
-), counts AS (
-    SELECT count(*)::bigint AS definitions,
-           jsonb_build_object('needs_attention',count(*) FILTER (WHERE urgency='needs_attention'),
-               'watch',count(*) FILTER (WHERE urgency='watch'),'healthy',count(*) FILTER (WHERE urgency='healthy')) AS group_counts
+
+), ranked AS (
+    SELECT id, sort_name, projection_payload, published_urgency, usable, current, metadata, urgency, current_state,CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END::integer AS rank
     FROM classified
-), selected AS MATERIALIZED (
-    SELECT id, sort_name, payload_digest, published_urgency, usable, current, metadata, archived_digest, urgency, current_state,row_number() OVER (ORDER BY CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END,sort_name,id)-1 AS ordinal,
-           (metadata||jsonb_build_object('urgency',urgency,'current_state',current_state))::jsonb AS payload
-    FROM classified WHERE ($5::text IS NULL OR urgency=$5::text)
-), sizes AS (
-    SELECT count(*)::bigint AS selected_count,coalesce(sum(octet_length(payload::text)+32),0)::bigint AS payload_bytes FROM selected
-), inserted AS (
-    INSERT INTO public.almanac_slo_overview_snapshot_items
-        (snapshot_id,ordinal,urgency,payload,payload_bytes,projection_digest,projection_current)
-    SELECT $6::uuid,s.ordinal,s.urgency,s.payload,octet_length(s.payload::text)+32,s.archived_digest,s.current
-    FROM selected s WHERE (SELECT definitions FROM counts)<=10000 AND (SELECT payload_bytes FROM sizes)<=16777216
-    RETURNING ordinal
-), finished AS (
-    UPDATE public.almanac_slo_overview_snapshots snapshot
-    SET state='ready',group_counts=c.group_counts,payload_bytes=z.payload_bytes::integer
-    FROM counts c,sizes z
-    WHERE snapshot.id=$6 AND snapshot.state='preparing'
-      AND c.definitions<=10000 AND z.payload_bytes<=16777216 AND (SELECT count(*) FROM inserted)=z.selected_count
-    RETURNING snapshot.id
 )
-SELECT c.definitions,z.selected_count,z.payload_bytes,(SELECT count(*) FROM finished)::integer AS finished
-FROM counts c CROSS JOIN sizes z
+SELECT id,sort_name,rank,
+       (coalesce(projection_payload,'{}'::jsonb)||metadata||jsonb_build_object('urgency',urgency,'current_state',current_state))::jsonb AS payload,
+       usable::boolean AS projection_valid,current::boolean AS projection_current,
+       coalesce((metadata->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
+       coalesce((metadata->>'_source_failed')::boolean,false)::boolean AS source_failed
+FROM ranked
+WHERE ($1::text IS NULL OR urgency=$1::text)
+  AND ($2::uuid IS NULL OR CASE WHEN $3::boolean
+       THEN (rank,sort_name,id)<($4::integer,$5::text,$2::uuid)
+       ELSE (rank,sort_name,id)>($4::integer,$5::text,$2::uuid) END)
+ORDER BY CASE WHEN $3::boolean THEN rank END DESC,
+         CASE WHEN $3::boolean THEN sort_name END DESC,
+         CASE WHEN $3::boolean THEN id END DESC,
+         rank,sort_name,id
+LIMIT $6
 `
 
-type MaterializeSloOverviewReferencesParams struct {
+type ListSloOverviewPageParams struct {
+	Urgency            pgtype.Text        `json:"urgency"`
+	AfterID            pgtype.UUID        `json:"after_id"`
+	Reverse            bool               `json:"reverse"`
+	AfterRank          int32              `json:"after_rank"`
+	AfterSortName      string             `json:"after_sort_name"`
+	PageLimit          int32              `json:"page_limit"`
 	CalculationVersion string             `json:"calculation_version"`
 	Now                pgtype.Timestamptz `json:"now"`
 	QueryText          pgtype.Text        `json:"query_text"`
 	ServiceID          pgtype.UUID        `json:"service_id"`
-	Urgency            pgtype.Text        `json:"urgency"`
-	SnapshotID         pgtype.UUID        `json:"snapshot_id"`
 }
 
-type MaterializeSloOverviewReferencesRow struct {
-	Definitions   int64 `json:"definitions"`
-	SelectedCount int64 `json:"selected_count"`
-	PayloadBytes  int64 `json:"payload_bytes"`
-	Finished      int32 `json:"finished"`
+type ListSloOverviewPageRow struct {
+	ID                pgtype.UUID `json:"id"`
+	SortName          string      `json:"sort_name"`
+	Rank              int32       `json:"rank"`
+	Payload           []byte      `json:"payload"`
+	ProjectionValid   bool        `json:"projection_valid"`
+	ProjectionCurrent bool        `json:"projection_current"`
+	PreparationFailed bool        `json:"preparation_failed"`
+	SourceFailed      bool        `json:"source_failed"`
 }
 
-func (q *Queries) MaterializeSloOverviewReferences(ctx context.Context, arg MaterializeSloOverviewReferencesParams) (MaterializeSloOverviewReferencesRow, error) {
-	row := q.db.QueryRow(ctx, materializeSloOverviewReferences,
+func (q *Queries) ListSloOverviewPage(ctx context.Context, arg ListSloOverviewPageParams) ([]ListSloOverviewPageRow, error) {
+	rows, err := q.db.Query(ctx, listSloOverviewPage,
+		arg.Urgency,
+		arg.AfterID,
+		arg.Reverse,
+		arg.AfterRank,
+		arg.AfterSortName,
+		arg.PageLimit,
 		arg.CalculationVersion,
 		arg.Now,
 		arg.QueryText,
 		arg.ServiceID,
-		arg.Urgency,
-		arg.SnapshotID,
 	)
-	var i MaterializeSloOverviewReferencesRow
-	err := row.Scan(
-		&i.Definitions,
-		&i.SelectedCount,
-		&i.PayloadBytes,
-		&i.Finished,
-	)
-	return i, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSloOverviewPageRow{}
+	for rows.Next() {
+		var i ListSloOverviewPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SortName,
+			&i.Rank,
+			&i.Payload,
+			&i.ProjectionValid,
+			&i.ProjectionCurrent,
+			&i.PreparationFailed,
+			&i.SourceFailed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

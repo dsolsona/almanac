@@ -2,10 +2,9 @@ package storage
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"math/big"
@@ -28,19 +27,10 @@ import (
 )
 
 const (
-	operationalCalculationVersion  = "occurrences-operational-v1"
-	sloOverviewTTL                 = 2 * time.Minute
-	sloOverviewSessionLimit        = 4
-	sloOverviewInstallationLimit   = 64
-	sloOverviewCleanupBatch        = 100
-	sloOperationalFactsLimit       = 2_500_000
-	sloOverviewDefinitionLimit     = 10_000
-	sloOverviewProjectionByteLimit = 16 << 20
-	sloOverviewMinimumBytes        = 16 << 10
-	sloOverviewSessionByteLimit    = sloOverviewSessionLimit * sloOverviewProjectionByteLimit
-	sloOverviewInstallationBytes   = sloOverviewInstallationLimit * sloOverviewProjectionByteLimit
-	sloOperationalSeriesLimit      = 1500
-	sloOperationalReadAttempts     = 3
+	operationalCalculationVersion = "occurrences-operational-v1"
+	sloOperationalFactsLimit      = 2_500_000
+	sloOperationalSeriesLimit     = 1500
+	sloOperationalReadAttempts    = 3
 )
 
 var (
@@ -53,13 +43,6 @@ var (
 
 func validOperationalQuery(query string) bool {
 	return utf8.ValidString(query) && utf8.RuneCountInString(query) <= 128
-}
-
-func addProjectionPayloadBytes(total, added int) (int, error) {
-	if added < 0 || total < 0 || total > sloOverviewProjectionByteLimit-added {
-		return total, ErrOperationalResource
-	}
-	return total + added, nil
 }
 
 func retryOperationalRead(ctx context.Context, attempt func() error) error {
@@ -83,7 +66,6 @@ type OperationalOverviewInput struct {
 	Proof            DatasourceProof
 	Query, ServiceID string
 	Urgency, Cursor  string
-	snapshotID       string
 	Limit            int
 	Now              func() time.Time
 }
@@ -308,30 +290,18 @@ func unavailableOperationalSamples(start, end time.Time, cadence time.Duration, 
 }
 
 type overviewCursor struct {
-	SnapshotID string `json:"s"`
-	Offset     int    `json:"o"`
-	MAC        string `json:"m"`
+	Rank    int    `json:"r"`
+	Name    string `json:"n"`
+	ID      string `json:"i"`
+	Filter  string `json:"f"`
+	Reverse bool   `json:"b"`
 }
 
-type overviewSnapshot struct {
-	ID              pgtype.UUID
-	ActorID         pgtype.UUID
-	SessionVerifier []byte
-	Role            string
-	QueryText       string
-	ServiceID       pgtype.UUID
-	Urgency         pgtype.Text
-	PageLimit       int32
-	GroupCounts     []byte
-	State           string
-	ExpiresAt       pgtype.Timestamptz
-}
-
-// ReadSloOperationalOverview returns a fixed-expiry, actor/session-bound page.
+// ReadSloOperationalOverview reads one authorized page and its current group counts.
 func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input OperationalOverviewInput) (api.SloOperationalOverviewPage, error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "slo.overview.read")
 	defer span.End()
-	if input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) || input.Limit < 0 || input.Limit > 200 || !validOperationalQuery(input.Query) || len(input.Cursor) > 512 {
+	if input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) || input.Limit < 0 || input.Limit > 200 || !validOperationalQuery(input.Query) || len(input.Cursor) > 2048 {
 		return api.SloOperationalOverviewPage{}, ErrOperationalRange
 	}
 	if input.Limit == 0 {
@@ -342,196 +312,34 @@ func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input O
 		return api.SloOperationalOverviewPage{}, ErrOperationalRange
 	}
 	if input.ServiceID != "" {
-		if _, ok := canonicalUUID(input.ServiceID); !ok {
+		id, ok := canonicalUUID(input.ServiceID)
+		if !ok {
 			return api.SloOperationalOverviewPage{}, ErrOperationalRange
 		}
-	}
-	var reservedID uuid.UUID
-	cleanupFailedRead := func(readErr error) error {
-		if reservedID == uuid.Nil {
-			return readErr
-		}
-		// A cancelled browser request must not occupy a session snapshot slot
-		// until expiry. Release only the reservation created by this request.
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
-		defer cancel()
-		return errors.Join(readErr, deleteSloOverviewSnapshot(cleanupCtx, databaseURL, input, reservedID))
-	}
-	if input.Cursor == "" && input.snapshotID == "" {
-		var id uuid.UUID
-		var role string
-		var reused bool
-		var err error
-		err = retryOperationalRead(ctx, func() error {
-			id, role, reused, err = reserveSloOverviewSnapshot(ctx, databaseURL, input)
-			return err
-		})
-		if err != nil {
-			return api.SloOperationalOverviewPage{}, err
-		}
-		if !reused {
-			reservedID = id
-			err = retryOperationalRead(ctx, func() error {
-				return materializeSloOverviewSnapshot(ctx, databaseURL, input, id, role)
-			})
-			if err != nil {
-				return api.SloOperationalOverviewPage{}, cleanupFailedRead(err)
-			}
-		}
-		input.snapshotID = id.String()
+		input.ServiceID = id.String()
 	}
 	var result api.SloOperationalOverviewPage
 	err := retryOperationalRead(ctx, func() error {
-		var attemptErr error
-		result, attemptErr = readSloOverviewPage(ctx, databaseURL, input)
-		return attemptErr
-	})
-	if err != nil {
-		return result, cleanupFailedRead(err)
-	}
-	return result, nil
-}
-
-func reserveSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput) (uuid.UUID, string, bool, error) {
-	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{}, "administrator", "editor", "viewer")
-	if err != nil {
-		return uuid.Nil, "", false, err
-	}
-	defer closeInitialOwnerConnection(conn)
-	defer rollbackTransaction(tx)
-	now := normalizedAgentNow(input.Now)
-	// Ready reads do not consume admission. Check before the global admission
-	// lock so ten independent users are not serialized behind each other's reads.
-	if id, reused, err := findReusableOverview(ctx, q, input, now, user.ID, user.Role); err != nil {
-		return uuid.Nil, "", false, err
-	} else if reused {
-		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-			return uuid.Nil, "", false, err
-		}
-		return uuid.UUID(id.Bytes), user.Role, true, nil
-	}
-	// Filter changes may overlap briefly while the preceding HTTP request is
-	// being cancelled. Serialize admission without mistaking that overlap for
-	// an exhausted snapshot budget; keep the wait bounded and cancellable.
-	if _, err = tx.Exec(ctx, "SET LOCAL lock_timeout = '250ms'"); err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview admission timeout setup failed", err)
-	}
-	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission', 0))"); err != nil {
-		if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "55P03" {
-			return uuid.Nil, "", false, ErrOperationalResource
-		}
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview admission lock failed", err)
-	}
-	if err = q.DeleteExpiredSloOverviewSnapshots(ctx, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview snapshot cleanup failed", err)
-	}
-	if id, reused, err := findReusableOverview(ctx, q, input, now, user.ID, user.Role); err != nil {
-		return uuid.Nil, "", false, err
-	} else if reused {
-		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-			return uuid.Nil, "", false, err
-		}
-		return uuid.UUID(id.Bytes), user.Role, true, nil
-	}
-	usage, err := q.SloOverviewSnapshotUsage(ctx, dbgen.SloOverviewSnapshotUsageParams{
-		ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], Now: timestamp(now),
-		ReservedBytes: sloOverviewProjectionByteLimit, MinimumBytes: sloOverviewMinimumBytes,
-	})
-	if err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview resource accounting failed", err)
-	}
-	if !canReserveOverview(usage) {
-		return uuid.Nil, "", false, ErrOperationalResource
-	}
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return uuid.Nil, "", false, errors.New("storage: overview snapshot identifier unavailable")
-	}
-	cursorSecret := make([]byte, 32)
-	if _, err = rand.Read(cursorSecret); err != nil {
-		return uuid.Nil, "", false, errors.New("storage: overview cursor secret unavailable")
-	}
-	var serviceID pgtype.UUID
-	if input.ServiceID != "" {
-		parsed, _ := canonicalUUID(input.ServiceID)
-		serviceID = parsed
-	}
-	var urgency pgtype.Text
-	if input.Urgency != "" {
-		urgency = pgtype.Text{String: input.Urgency, Valid: true}
-	}
-	counts, _ := json.Marshal(api.SloUrgencyCounts{})
-	if err = q.InsertSloOverviewSnapshot(ctx, dbgen.InsertSloOverviewSnapshotParams{
-		ID: uuidToPG(id), CursorSecret: cursorSecret, ActorID: user.ID, SessionVerifier: input.Proof.SessionVerifier[:], Role: user.Role,
-		QueryText: strings.TrimSpace(input.Query), ServiceID: serviceID, Urgency: urgency, PageLimit: int32(input.Limit),
-		GroupCounts: counts, CreatedAt: timestamp(now), ExpiresAt: timestamp(now.Add(sloOverviewTTL)),
-	}); err != nil {
-		return uuid.Nil, "", false, readTransactionError(ctx, "storage: overview snapshot reservation failed", err)
-	}
-	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-		return uuid.Nil, "", false, err
-	}
-	return id, user.Role, false, nil
-}
-
-func materializeSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput, snapshotID uuid.UUID, expectedRole string) error {
-	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
-	if err != nil {
+		var err error
+		result, err = readSloOverviewPage(ctx, databaseURL, input)
 		return err
-	}
-	defer closeInitialOwnerConnection(conn)
-	defer rollbackTransaction(tx)
-	if user.Role != expectedRole {
-		return ErrAgentForbidden
-	}
-	now := normalizedAgentNow(input.Now)
-	reservation, err := q.GetSloOverviewSnapshot(ctx, uuidToPG(snapshotID))
-	if err != nil {
-		return readTransactionError(ctx, "storage: overview reservation read failed", err)
-	}
-	if reservation.ActorID != user.ID || !slices.Equal(reservation.SessionVerifier, input.Proof.SessionVerifier[:]) || reservation.Role != user.Role || !now.Before(reservation.ExpiresAt.Time) || reservation.State != "preparing" {
-		return ErrOperationalSnapshotOld
-	}
-	serviceID, urgency := overviewScopeFilters(input)
-	stats, err := q.MaterializeSloOverviewReferences(ctx, dbgen.MaterializeSloOverviewReferencesParams{SnapshotID: uuidToPG(snapshotID),
-		CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ServiceID: serviceID,
-		QueryText: pgtype.Text{String: input.Query, Valid: input.Query != ""}, Urgency: urgency})
-	if err != nil {
-		if failure, ok := errors.AsType[*pgconn.PgError](err); ok && failure.Code == "23503" && failure.ConstraintName == "almanac_slo_overview_snapshot_items_projection_digest_fkey" {
-			return errReadSerialization
-		}
-		return readTransactionError(ctx, "storage: overview reference publication failed", err)
-	}
-	if stats.Definitions > sloOverviewDefinitionLimit || stats.PayloadBytes > sloOverviewProjectionByteLimit || stats.Finished != 1 {
-		return ErrOperationalResource
-	}
-	if stats.SelectedCount > int64(input.Limit) {
-		fingerprint, err := overviewScopeFingerprint(ctx, q, input, now)
-		if err != nil {
-			return err
-		}
-		if err := q.SetSloOverviewFingerprint(ctx, dbgen.SetSloOverviewFingerprintParams{ID: uuidToPG(snapshotID), PublicationFingerprint: fingerprint.Fingerprint}); err != nil {
-			return readTransactionError(ctx, "storage: overview fingerprint persistence failed", err)
-		}
-	}
-	return finishAgentRead(ctx, tx, input.Now, started, user, installation, session)
+	})
+	return result, err
 }
 
 func readSloOverviewPage(ctx context.Context, databaseURL string, input OperationalOverviewInput) (api.SloOperationalOverviewPage, error) {
-	cursor := overviewCursor{SnapshotID: input.snapshotID, Offset: 0}
+	filters, _ := json.Marshal([]any{input.Query, input.ServiceID, input.Urgency, input.Limit})
+	digest := sha256.Sum256(filters)
+	filter := hex.EncodeToString(digest[:])
+	cursor := overviewCursor{Filter: filter}
+	var afterID pgtype.UUID
 	if input.Cursor != "" {
 		var valid bool
 		cursor, valid = decodeOverviewCursor(input.Cursor)
-		if !valid {
+		if !valid || cursor.Filter != filter {
 			return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
 		}
-	}
-	if cursor.Offset < 0 || cursor.Offset > sloOverviewDefinitionLimit {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
-	}
-	id, valid := canonicalUUID(cursor.SnapshotID)
-	if !valid {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
+		afterID, _ = canonicalUUID(cursor.ID)
 	}
 	conn, q, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
 	if err != nil {
@@ -540,42 +348,23 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
 	now := normalizedAgentNow(input.Now)
-	if err = q.DeleteExpiredSloOverviewSnapshots(ctx, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
-		return api.SloOperationalOverviewPage{}, readTransactionError(ctx, "storage: overview snapshot cleanup failed", err)
-	}
-	snapshotRow, err := q.GetSloOverviewSnapshot(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshotOld
-	}
+	serviceID, urgency := overviewScopeFilters(input)
+	query := pgtype.Text{String: input.Query, Valid: input.Query != ""}
+	totals, err := q.CountSloOverviewGroups(ctx, dbgen.CountSloOverviewGroupsParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ServiceID: serviceID, QueryText: query})
 	if err != nil {
-		return api.SloOperationalOverviewPage{}, readTransactionError(ctx, "storage: overview snapshot read failed", err)
+		return api.SloOperationalOverviewPage{}, readTransactionError(ctx, "storage: overview counts read failed", err)
 	}
-	if !now.Before(snapshotRow.ExpiresAt.Time) {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshotOld
-	}
-	if snapshotRow.ActorID != user.ID || !slices.Equal(snapshotRow.SessionVerifier, input.Proof.SessionVerifier[:]) || snapshotRow.Role != user.Role || snapshotRow.QueryText != strings.TrimSpace(input.Query) || snapshotRow.PageLimit != int32(input.Limit) || cursor.Offset%input.Limit != 0 {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
-	}
-	if snapshotRow.ServiceID.Valid != (input.ServiceID != "") || snapshotRow.ServiceID.Valid && snapshotRow.ServiceID.String() != input.ServiceID || snapshotRow.Urgency.Valid != (input.Urgency != "") || snapshotRow.Urgency.Valid && snapshotRow.Urgency.String != input.Urgency {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
-	}
-	if snapshotRow.State != "ready" {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshotOld
-	}
-	if input.Cursor != "" && !validOverviewCursor(snapshotRow.CursorSecret, cursor) {
-		return api.SloOperationalOverviewPage{}, ErrOperationalSnapshot
-	}
-	var counts api.SloUrgencyCounts
-	if json.Unmarshal(snapshotRow.GroupCounts, &counts) != nil {
-		return api.SloOperationalOverviewPage{}, errors.New("storage: invalid overview snapshot counts")
-	}
-	rows, err := q.ListSloOverviewSnapshotItems(ctx, dbgen.ListSloOverviewSnapshotItemsParams{SnapshotID: id, Ordinal: int32(cursor.Offset), Limit: int32(input.Limit + 1)})
+	counts := api.SloUrgencyCounts{NeedsAttention: totals.NeedsAttention, Watch: totals.Watch, Healthy: totals.Healthy}
+	rows, err := q.ListSloOverviewPage(ctx, dbgen.ListSloOverviewPageParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ServiceID: serviceID, QueryText: query, Urgency: urgency, AfterRank: int32(cursor.Rank), AfterSortName: cursor.Name, AfterID: afterID, Reverse: cursor.Reverse, PageLimit: int32(input.Limit + 1)})
 	if err != nil {
 		return api.SloOperationalOverviewPage{}, readTransactionError(ctx, "storage: overview page read failed", err)
 	}
 	more := len(rows) > input.Limit
 	if more {
 		rows = rows[:input.Limit]
+	}
+	if cursor.Reverse {
+		slices.Reverse(rows)
 	}
 	items := make([]api.SloOperationalOverviewItem, 0, len(rows))
 	for _, row := range rows {
@@ -589,7 +378,7 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 				item.CurrentState = new(api.SloOperationalOverviewItemCurrentState("ready"))
 			}
 		} else if row.ProjectionValid && item.Generation != nil && item.CurrentState != nil && (*item.CurrentState == "stale" || *item.CurrentState == "failed") {
-			boundary := floorSliBoundary(snapshotRow.CreatedAt.Time.UTC(), time.Duration(item.Slo.CadenceSeconds)*time.Second)
+			boundary := floorSliBoundary(now, time.Duration(item.Slo.CadenceSeconds)*time.Second)
 			item.Generation.CalculationLagSeconds = float32(max(0, boundary.Sub(item.Generation.EvaluatedThrough).Seconds()))
 			history := api.SloOperationalOverviewItemBudgetHistoryState("preparing")
 			if *item.CurrentState == "failed" {
@@ -603,74 +392,42 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 			} else if row.SourceFailed {
 				reason = "source_aggregate_failed"
 			}
-			item = unavailableOverviewItem(item, snapshotRow.CreatedAt.Time.UTC(), reason)
+			item = unavailableOverviewItem(item, now, reason)
 		}
 		items = append(items, item)
 	}
-	next := ""
-	previous := ""
-	if cursor.Offset > 0 {
-		previousOffset := max(0, cursor.Offset-input.Limit)
-		previous = encodeOverviewCursor(snapshotRow.CursorSecret, overviewCursor{SnapshotID: id.String(), Offset: previousOffset})
-	}
-	if more {
-		next = encodeOverviewCursor(snapshotRow.CursorSecret, overviewCursor{SnapshotID: id.String(), Offset: cursor.Offset + len(items)})
-	} else if input.Cursor == "" {
-		// A single page has no continuation to pin. Release it so ordinary
-		// filter changes cannot exhaust the cursor-snapshot admission budget.
-		if err = q.DeleteSloOverviewSnapshot(ctx, id); err != nil {
-			return api.SloOperationalOverviewPage{}, readTransactionError(ctx, "storage: single-page overview snapshot cleanup failed", err)
+
+	next, previous := "", ""
+	if len(rows) > 0 {
+		key := func(row dbgen.ListSloOverviewPageRow, reverse bool) string {
+			return encodeOverviewCursor(overviewCursor{Rank: int(row.Rank), Name: row.SortName, ID: row.ID.String(), Filter: filter, Reverse: reverse})
+		}
+		if (!cursor.Reverse && more) || (cursor.Reverse && input.Cursor != "") {
+			next = key(rows[len(rows)-1], false)
+		}
+		if (cursor.Reverse && more) || (!cursor.Reverse && input.Cursor != "") {
+			previous = key(rows[0], true)
 		}
 	}
-	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalOverviewPage{}, err
 	}
-	return api.SloOperationalOverviewPage{SnapshotId: uuid.UUID(id.Bytes), Items: items, GroupCounts: counts, NextCursor: next, PreviousCursor: previous}, nil
+	return api.SloOperationalOverviewPage{Items: items, GroupCounts: counts, NextCursor: next, PreviousCursor: previous}, nil
 }
 
-func deleteSloOverviewSnapshot(ctx context.Context, databaseURL string, input OperationalOverviewInput, id uuid.UUID) error {
-	conn, queries, tx, user, installation, session, started, err := beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{}, "administrator", "editor", "viewer")
-	if err != nil {
-		return err
-	}
-	defer closeInitialOwnerConnection(conn)
-	defer rollbackTransaction(tx)
-	if _, err = tx.Exec(ctx, "DELETE FROM public.almanac_slo_overview_snapshots WHERE id=$1 AND actor_id=$2 AND session_verifier=$3", uuidToPG(id), user.ID, input.Proof.SessionVerifier[:]); err != nil {
-		return readTransactionError(ctx, "storage: failed overview reservation cleanup", err)
-	}
-	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-		return err
-	}
-	_ = queries
-	return nil
-}
-
-func encodeOverviewCursor(secret []byte, value overviewCursor) string {
-	value.MAC = overviewCursorMAC(secret, value)
+func encodeOverviewCursor(value overviewCursor) string {
 	raw, _ := json.Marshal(value)
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
 func decodeOverviewCursor(value string) (overviewCursor, bool) {
-	raw, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(raw) > 256 {
-		return overviewCursor{}, false
-	}
 	var cursor overviewCursor
-	if json.Unmarshal(raw, &cursor) != nil || cursor.SnapshotID == "" || cursor.MAC == "" {
-		return overviewCursor{}, false
+	raw, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil || len(value) > 2048 || base64.RawURLEncoding.EncodeToString(raw) != value || json.Unmarshal(raw, &cursor, json.RejectUnknownMembers(true)) != nil {
+		return cursor, false
 	}
-	return cursor, true
-}
-
-func validOverviewCursor(secret []byte, cursor overviewCursor) bool {
-	return hmac.Equal([]byte(cursor.MAC), []byte(overviewCursorMAC(secret, cursor)))
-}
-
-func overviewCursorMAC(secret []byte, cursor overviewCursor) string {
-	mac := hmac.New(sha256.New, secret)
-	_, _ = mac.Write([]byte(cursor.SnapshotID + ":" + strconv.Itoa(cursor.Offset)))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	digest, err := hex.DecodeString(cursor.Filter)
+	return cursor, err == nil && len(digest) == 32 && cursor.Rank >= 0 && cursor.Rank <= 2 && sli.ValidName(cursor.Name) && canonicalUUIDCheck(cursor.ID)
 }
 
 func evaluateOperationalAt(ctx context.Context, base slo.WindowInput, at time.Time, duration time.Duration) (slo.WindowResult, error) {

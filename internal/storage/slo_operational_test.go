@@ -11,54 +11,8 @@ import (
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/slo"
-	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-func TestOverviewAdmissionBoundsWorkAndBytesRatherThanRecentViews(t *testing.T) {
-	for _, test := range []struct {
-		name  string
-		usage dbgen.SloOverviewSnapshotUsageRow
-		want  bool
-	}{
-		{"empty", dbgen.SloOverviewSnapshotUsageRow{}, true},
-		{"five small completed lists", dbgen.SloOverviewSnapshotUsageRow{SessionBytes: 5 * 18744, InstallationBytes: 5 * 18744}, true},
-		{"four builds", dbgen.SloOverviewSnapshotUsageRow{SessionBuilds: 4}, false},
-		{"sixty four installation builds", dbgen.SloOverviewSnapshotUsageRow{InstallationBuilds: 64}, false},
-		{"last session reservation fits", dbgen.SloOverviewSnapshotUsageRow{SessionBuilds: 3, SessionBytes: 48 << 20}, true},
-		{"session reservation exceeds by one byte", dbgen.SloOverviewSnapshotUsageRow{SessionBytes: (48 << 20) + 1}, false},
-		{"last installation reservation fits", dbgen.SloOverviewSnapshotUsageRow{InstallationBuilds: 63, InstallationBytes: 1008 << 20}, true},
-		{"installation reservation exceeds by one byte", dbgen.SloOverviewSnapshotUsageRow{InstallationBytes: (1008 << 20) + 1}, false},
-		{"overflowing persisted usage", dbgen.SloOverviewSnapshotUsageRow{SessionBytes: 1<<63 - 1}, false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := canReserveOverview(test.usage); got != test.want {
-				t.Fatalf("reservation allowed=%v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestOverviewCursorIsBoundToSnapshotOffsetAndSecret(t *testing.T) {
-	secret := []byte("01234567890123456789012345678901")
-	cursor := overviewCursor{SnapshotID: "a842b928-2799-47d2-992c-ed7836b80111", Offset: 50}
-	encoded := encodeOverviewCursor(secret, cursor)
-	decoded, ok := decodeOverviewCursor(encoded)
-	if !ok || decoded.SnapshotID != cursor.SnapshotID || decoded.Offset != cursor.Offset || !validOverviewCursor(secret, decoded) {
-		t.Fatalf("round-trip cursor = %+v, %v", decoded, ok)
-	}
-	decoded.Offset++
-	if validOverviewCursor(secret, decoded) {
-		t.Fatal("cursor accepted a modified offset")
-	}
-	decoded.Offset = cursor.Offset
-	if validOverviewCursor([]byte("11234567890123456789012345678901"), decoded) {
-		t.Fatal("cursor accepted another snapshot secret")
-	}
-	if _, ok := decodeOverviewCursor(encoded + "!"); ok {
-		t.Fatal("cursor decoder accepted invalid base64")
-	}
-}
 
 func TestOperationalBucketBoundariesCoverExactRange(t *testing.T) {
 	start := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
@@ -123,15 +77,6 @@ func TestOperationalRetryAndCancellationAreBounded(t *testing.T) {
 	}
 	if !errors.Is(readTransactionError(ctx, "test", &pgconn.PgError{Code: "40001"}), errReadSerialization) {
 		t.Fatal("serialization failure was not classified for retry")
-	}
-}
-
-func TestOperationalProjectionPayloadBound(t *testing.T) {
-	if got, err := addProjectionPayloadBytes(sloOverviewProjectionByteLimit-1, 1); err != nil || got != sloOverviewProjectionByteLimit {
-		t.Fatalf("exact payload boundary = %d, %v", got, err)
-	}
-	if _, err := addProjectionPayloadBytes(sloOverviewProjectionByteLimit-1, 2); !errors.Is(err, ErrOperationalResource) {
-		t.Fatalf("over payload limit error=%v", err)
 	}
 }
 

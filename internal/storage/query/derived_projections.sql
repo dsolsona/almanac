@@ -76,18 +76,17 @@ VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id;
 
 -- name: PublishDerivedCurrentProjection :execrows
--- The digest remains an archive/snapshot identity until F9-T05, not a read-time integrity check.
 WITH value AS (
     SELECT sqlc.arg(payload)::jsonb || CASE WHEN sqlc.narg(budget_cache)::jsonb IS NULL THEN '{}'::jsonb
       ELSE jsonb_build_object('_budget_cache',sqlc.narg(budget_cache)::jsonb) END AS payload
 )
 INSERT INTO public.almanac_slo_current_projections
-    (slo_id, generation_id, service_id, sort_name, urgency, payload,payload_digest)
+    (slo_id, generation_id, service_id, sort_name, urgency, payload)
 SELECT sqlc.arg(slo_id),sqlc.arg(generation_id),sqlc.arg(service_id),sqlc.arg(sort_name),sqlc.arg(urgency),
-       value.payload,sha256(convert_to(value.payload::text,'UTF8')) FROM value
+       value.payload FROM value
 ON CONFLICT (slo_id) DO UPDATE
 SET generation_id=EXCLUDED.generation_id, service_id=EXCLUDED.service_id,
-    sort_name=EXCLUDED.sort_name, urgency=EXCLUDED.urgency, payload=EXCLUDED.payload,payload_digest=EXCLUDED.payload_digest
+    sort_name=EXCLUDED.sort_name, urgency=EXCLUDED.urgency, payload=EXCLUDED.payload
 WHERE EXISTS (
     SELECT 1 FROM public.almanac_slo_derived_generations old_generation,
                   public.almanac_slo_derived_generations new_generation

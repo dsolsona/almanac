@@ -130,7 +130,11 @@ func objectivesCommand(parent context.Context, kind string, args []string, stdou
 			return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("a flag is not valid for this operation"))
 		}
 	}
-	if output != "json" && output != "text" || profile == "" || timeout <= 0 || timeout > 2*time.Minute || limit < 1 || limit > 200 || len(cursor) > 512 || !printable(cursor) {
+	cursorLimit := 512
+	if action == "overview" {
+		cursorLimit = 2048
+	}
+	if output != "json" && output != "text" || profile == "" || timeout <= 0 || timeout > 2*time.Minute || limit < 1 || limit > 200 || len(cursor) > cursorLimit || !printable(cursor) {
 		return writeDatasourceFailure(stdout, stderr, operation, jsonOut, datasourceInvalid("invalid output, profile, deadline or pagination"))
 	}
 	if (action == "get" || action == "update" || action == "delete" || action == "evaluate" || action == "operational") && !validCLIUUID(id) || serviceID != "" && !validCLIUUID(serviceID) {

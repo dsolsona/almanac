@@ -373,7 +373,7 @@ func validOperationalSample(value api.SloOperationalSample) bool {
 }
 func validOperationalOverview(data []byte) bool {
 	var value api.SloOperationalOverviewPage
-	if !fields(data, "snapshot_id", "items", "group_counts", "next_cursor", "previous_cursor") || json.Unmarshal(data, &value) != nil || value.SnapshotId.String() == "00000000-0000-0000-0000-000000000000" || value.Items == nil || len(value.Items) > 200 || len(value.NextCursor) > 512 || len(value.PreviousCursor) > 512 || value.GroupCounts.NeedsAttention < 0 || value.GroupCounts.Watch < 0 || value.GroupCounts.Healthy < 0 {
+	if !fields(data, "items", "group_counts", "next_cursor", "previous_cursor") || json.Unmarshal(data, &value) != nil || value.Items == nil || len(value.Items) > 200 || len(value.NextCursor) > 2048 || len(value.PreviousCursor) > 2048 || value.GroupCounts.NeedsAttention < 0 || value.GroupCounts.Watch < 0 || value.GroupCounts.Healthy < 0 {
 		return false
 	}
 	for _, item := range value.Items {

@@ -52,6 +52,7 @@ sql:
       - internal/storage/migrations/0046_drop_point_pipeline.sql
       - internal/storage/migrations/0047_create_merged_observations.sql
       - internal/storage/migrations/0048_merge_sli_observations.sql
+      - internal/storage/migrations/0049_drop_overview_snapshots.sql
     gen:
       go:
         package: dbgen

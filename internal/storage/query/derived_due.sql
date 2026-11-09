@@ -71,14 +71,9 @@ FROM cursor_due,missing;
 WITH cleanup AS (
     SELECT min(at) AS at FROM (
         SELECT min(range_end)+interval '365 days' AS at FROM public.almanac_slo_extrema
-        UNION ALL SELECT min(expires_at) FROM public.almanac_slo_overview_snapshots
         UNION ALL SELECT min(g.published_at)+interval '5 minutes 1 microsecond'
             FROM public.almanac_slo_derived_generations g
             WHERE NOT EXISTS (SELECT 1 FROM public.almanac_slo_current_projections p WHERE p.generation_id=g.id)
-        UNION ALL SELECT min(a.published_at)+interval '5 minutes 1 microsecond'
-            FROM public.almanac_slo_projection_payloads a
-            WHERE NOT EXISTS (SELECT 1 FROM public.almanac_slo_current_projections p WHERE p.payload_digest=a.digest)
-              AND NOT EXISTS (SELECT 1 FROM public.almanac_slo_overview_snapshot_items i WHERE i.projection_digest=a.digest)
     ) expiry
 ), retention AS (
     SELECT min(GREATEST(next_attempt_at,lease_until,sqlc.arg(now)::timestamptz)) AS at

@@ -30,8 +30,7 @@ WITH dirty AS (
  FROM unnest(ARRAY['public.almanac_sli_hourly_aggregates','public.almanac_derived_dirty_ranges',
  'public.almanac_sli_source_generations','public.almanac_slo_derived_generations','public.almanac_slo_current_projections',
  'public.almanac_slo_current_failures','public.almanac_slo_history_blocks','public.almanac_derived_cache_usage',
- 'public.almanac_slo_overview_snapshots','public.almanac_slo_overview_snapshot_items',
- 'public.almanac_slo_projection_payloads','public.almanac_slo_extrema','public.almanac_slo_extrema_cursor']) table_name
+ 'public.almanac_slo_extrema','public.almanac_slo_extrema_cursor']) table_name
 )
 SELECT dirty.total AS dirty_keys,dirty.failed AS failed_keys,dirty.age AS oldest_dirty_seconds,
  extrema.total AS extrema_keys,extrema.failed AS failed_extrema_keys,extrema.age AS oldest_extrema_seconds,

@@ -1,12 +1,12 @@
--- name: MaterializeSloOverviewReferences :one
-WITH scope AS MATERIALIZED (
-    SELECT s.id,lower(s.name) AS sort_name,p.payload_digest,a.urgency AS published_urgency,
+-- name: ListSloOverviewPage :many
+WITH scope AS (
+    SELECT s.id,lower(s.name) AS sort_name,p.payload AS projection_payload,p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND a.digest IS NOT NULL
+             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND a.digest IS NOT NULL
+             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current,
@@ -27,8 +27,7 @@ WITH scope AS MATERIALIZED (
                      AND (dirty.lease_until IS NULL OR dirty.lease_until<=sqlc.arg(now)::timestamptz)
                      AND dependency.full_start<dependency.full_end
                      AND dirty.range_start<dependency.full_end AND dirty.range_end>dependency.full_start
-               ))::jsonb AS metadata,
-           a.digest AS archived_digest
+               ))::jsonb AS metadata
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     JOIN public.almanac_services service ON service.id=d.service_id
@@ -46,54 +45,35 @@ WITH scope AS MATERIALIZED (
     ) dependency
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
-    LEFT JOIN public.almanac_slo_projection_payloads a ON a.digest=p.payload_digest
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
     LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision
       AND f.measurement_revision=d.measurement_revision AND f.calculation_version=sqlc.arg(calculation_version)
     WHERE (sqlc.narg(query_text)::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower(sqlc.narg(query_text)::text))>0)
       AND (sqlc.narg(service_id)::uuid IS NULL OR d.service_id=sqlc.narg(service_id)::uuid)
-    ORDER BY s.id LIMIT 10001
-), classified AS MATERIALIZED (
+), classified AS (
     SELECT *,CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency,
            CASE WHEN current THEN 'ready'
                 WHEN NOT usable THEN 'unavailable'
                 WHEN (metadata->>'_preparation_failed')::boolean OR (metadata->>'_source_failed')::boolean THEN 'failed'
                 ELSE 'stale' END::text AS current_state
     FROM scope
-), counts AS (
-    SELECT count(*)::bigint AS definitions,
-           jsonb_build_object('needs_attention',count(*) FILTER (WHERE urgency='needs_attention'),
-               'watch',count(*) FILTER (WHERE urgency='watch'),'healthy',count(*) FILTER (WHERE urgency='healthy')) AS group_counts
-    FROM classified
-), selected AS MATERIALIZED (
-    SELECT *,row_number() OVER (ORDER BY CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END,sort_name,id)-1 AS ordinal,
-           (metadata||jsonb_build_object('urgency',urgency,'current_state',current_state))::jsonb AS payload
-    FROM classified WHERE (sqlc.narg(urgency)::text IS NULL OR urgency=sqlc.narg(urgency)::text)
-), sizes AS (
-    SELECT count(*)::bigint AS selected_count,coalesce(sum(octet_length(payload::text)+32),0)::bigint AS payload_bytes FROM selected
-), inserted AS (
-    INSERT INTO public.almanac_slo_overview_snapshot_items
-        (snapshot_id,ordinal,urgency,payload,payload_bytes,projection_digest,projection_current)
-    SELECT sqlc.arg(snapshot_id)::uuid,s.ordinal,s.urgency,s.payload,octet_length(s.payload::text)+32,s.archived_digest,s.current
-    FROM selected s WHERE (SELECT definitions FROM counts)<=10000 AND (SELECT payload_bytes FROM sizes)<=16777216
-    RETURNING ordinal
-), finished AS (
-    UPDATE public.almanac_slo_overview_snapshots snapshot
-    SET state='ready',group_counts=c.group_counts,payload_bytes=z.payload_bytes::integer
-    FROM counts c,sizes z
-    WHERE snapshot.id=sqlc.arg(snapshot_id) AND snapshot.state='preparing'
-      AND c.definitions<=10000 AND z.payload_bytes<=16777216 AND (SELECT count(*) FROM inserted)=z.selected_count
-    RETURNING snapshot.id
-)
-SELECT c.definitions,z.selected_count,z.payload_bytes,(SELECT count(*) FROM finished)::integer AS finished
-FROM counts c CROSS JOIN sizes z;
 
--- name: DeleteExpiredSloProjectionPayloads :execrows
-WITH expired AS (
-    SELECT a.digest FROM public.almanac_slo_projection_payloads a
-    WHERE a.published_at<$1
-      AND NOT EXISTS(SELECT 1 FROM public.almanac_slo_current_projections p WHERE p.payload_digest=a.digest)
-      AND NOT EXISTS(SELECT 1 FROM public.almanac_slo_overview_snapshot_items i WHERE i.projection_digest=a.digest)
-    ORDER BY a.published_at,a.digest LIMIT 1000 FOR UPDATE SKIP LOCKED
+), ranked AS (
+    SELECT *,CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END::integer AS rank
+    FROM classified
 )
-DELETE FROM public.almanac_slo_projection_payloads a USING expired e WHERE a.digest=e.digest;
+SELECT id,sort_name,rank,
+       (coalesce(projection_payload,'{}'::jsonb)||metadata||jsonb_build_object('urgency',urgency,'current_state',current_state))::jsonb AS payload,
+       usable::boolean AS projection_valid,current::boolean AS projection_current,
+       coalesce((metadata->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
+       coalesce((metadata->>'_source_failed')::boolean,false)::boolean AS source_failed
+FROM ranked
+WHERE (sqlc.narg(urgency)::text IS NULL OR urgency=sqlc.narg(urgency)::text)
+  AND (sqlc.narg(after_id)::uuid IS NULL OR CASE WHEN sqlc.arg(reverse)::boolean
+       THEN (rank,sort_name,id)<(sqlc.arg(after_rank)::integer,sqlc.arg(after_sort_name)::text,sqlc.narg(after_id)::uuid)
+       ELSE (rank,sort_name,id)>(sqlc.arg(after_rank)::integer,sqlc.arg(after_sort_name)::text,sqlc.narg(after_id)::uuid) END)
+ORDER BY CASE WHEN sqlc.arg(reverse)::boolean THEN rank END DESC,
+         CASE WHEN sqlc.arg(reverse)::boolean THEN sort_name END DESC,
+         CASE WHEN sqlc.arg(reverse)::boolean THEN id END DESC,
+         rank,sort_name,id
+LIMIT sqlc.arg(page_limit);

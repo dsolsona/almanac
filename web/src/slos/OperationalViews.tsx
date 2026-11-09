@@ -230,7 +230,7 @@ export function OperationalOverviewView({locationKey,canWrite,onCreate,onLocatio
   }
   function restartSnapshot(){apply({});}
   function refresh(){beginJourney(locationKey,false,true);if(cursor){onLocationChange(updateQuery(locationKey,{},['cursor','previous_cursor']));return;}setRefreshCount(value=>value+1);}
-  const snapshotExpired=error.includes('snapshot expired');
+  const snapshotExpired=error.includes('snapshot expired')||error.includes('SLO list changed');
   const hasPrevious=Boolean(page?.previous_cursor);
   const lastConfirmedAt=page?.items.map(item=>item.current.evaluation_at).sort().at(-1);
   const totalCount=page?Object.values(page.group_counts).reduce((sum,count)=>sum+count,0):0;

@@ -98,8 +98,8 @@ stale, or failed when the update has exhausted its budget. This calculation stat
 is separate from the original observations' freshness. Never show an unconfirmed
 Healthy badge/group: retain prior Needs attention, otherwise use Watch. Definition,
 measurement or calculation-version mismatches, corrupt payloads and values older
-than the retained horizon remain unavailable. Pinned pages preserve their selected
-values/state as of snapshot creation. Currentness and all latency gates still apply.
+than the retained horizon remain unavailable. Pinned exact-value pages preserve
+their selected values/state. Currentness and all latency gates still apply.
 
 Under the controlled workload, p95 time from accepted commit to its affected current
 summary becoming visible is at most 10 seconds. Clock-driven status must advance
@@ -130,13 +130,15 @@ resolution summaries retain extrema/gaps and are keyed independently of moving
 page ranges. A graph's display period is separate from its burn window: a year of
 1-hour or 6-hour burn is a historical range, not a year-long burn calculation.
 
-Global
-filters, urgency counts, ordering and pagination pin one coherent generation or
-immutable set of generation references. A cursor cannot mix updates between pages;
-expired generations return an explicit expired-cursor error. Background publication
-cannot change an already pinned response/export. Invalidated Healthy values cannot
-be presented as fresh or used to infer alert recovery. Authorization is checked on
-every request and exact-value page, including retained snapshots.
+Under accepted [ADR-0042](../adr/0042-keyset-overview-pagination.md), overview
+filters, urgency counts and ordering are evaluated per request. Opaque keyset
+cursors bind the filters and page limit and seek by urgency rank, lowercase name
+and UUID, in either direction. Rows can repeat or be skipped when urgency changes
+between pages; each row retains its own generation evidence. The overview has no
+`snapshot_id` or snapshot admission. Exact-value pages and exports stay pinned;
+background publication cannot change those results. Invalidated Healthy values
+cannot be presented as fresh or used to infer alert recovery. Authorization is
+checked on every request and exact-value page, including retained snapshots.
 
 Current summary and history can be requested independently; each identifies its
 generation. When presented as one coherent result, they must agree on the pinned
@@ -145,16 +147,11 @@ or versioned during the API contract review; do not silently alter generated typ
 
 ### Browser behavior
 
-Pagination admission clarification accepted by the maintainer on 2026-11-01:
-completed list versions remain immutable for two minutes and do not consume
-concurrent build slots. Admit at most four building snapshots per actor/session
-and 64 per installation. Reserve 16 MiB per building snapshot; charge completed
-snapshots their payload size with a 16-KiB minimum metadata charge. Combined
-usage is bounded to 64 MiB per actor/session and 1 GiB per installation, retaining
-the previous worst-case storage budgets. Keep the 16-MiB/10,000-objective per-result
-limits, scope binding and unexpired cursors. Lists must not automatically poll
-preparing history or consume new versions without an explicit user action.
-This replaces the former cap of four/64 completed and building versions together.
+ADR-0042 replaces the 2026-11-01 list snapshot admission clarification. Overview
+pages use the existing 10/20-row controls, default 50/max 200 API limit and
+filter-bound cursors of at most 2,048 bytes. There are no snapshot slots, byte
+reservations, fingerprints or full-result materializations. Lists must not
+automatically poll preparing history or refresh without an explicit user action.
 
 On 2026-11-01 the maintainer clarified that the acceptance device is reasonably
 capable, without artificial CPU slowdown. Record real hardware and measure the
@@ -294,8 +291,9 @@ Do not increase pool sizes, timeouts or retry counts to hide unbounded query wor
   without lost work, duplicate contributions or mixed generations.
 - AC-04: Currentness advances within its budget after ingestion and clock ticks;
   preparation, invalidation and worker failures cannot become apparent success.
-- AC-05: Group counts/order/filtering and exact-value pages remain coherent across
-  concurrent publication, cursor expiry and permission revocation.
+- AC-05: Overview group counts/order/filtering match each request's rows under
+  ADR-0042 keyset semantics; exact-value pages remain pinned across concurrent
+  publication and cursor expiry. Every page rechecks permission revocation.
 - AC-06: Live ingestion/scheduling remains within the isolation budgets while
   historical rebuilding, concurrent users and partition maintenance run.
 - AC-07: Shared browser requests, independent sections, cancellation and bounded
