@@ -189,7 +189,8 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 				t.Fatal("retained tile reduction exceeded the fixture's hour/day bound")
 			}
 		}
-		for attempt := range fixture.days + 3 {
+		maxExtremaTurns := fixture.days*24 + 2
+		for attempt := range maxExtremaTurns {
 			worked, err := runtime.buildSloExtrema(t.Context(), clock)
 			if err != nil {
 				t.Fatal(err)
@@ -197,8 +198,8 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 			if !worked {
 				break
 			}
-			if attempt == fixture.days+2 {
-				t.Fatal("extrema preparation exceeded the fixture's daily bound")
+			if attempt == maxExtremaTurns-1 {
+				t.Fatal("extrema preparation exceeded the fixture's hourly bound")
 			}
 		}
 		verifyRetainedTileWire(t, conn, pgID, end.Truncate(time.Hour).Add(-time.Hour))

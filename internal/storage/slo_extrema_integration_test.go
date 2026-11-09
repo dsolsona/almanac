@@ -80,7 +80,7 @@ func TestIntegrationExtremaDailyCompositionMatchesFullCanonicalSweep(t *testing.
 			}
 			s.now = utcDayStart(s.at).Add(24 * time.Hour)
 			s.drain(t, "daily extrema source")
-			for range 10 {
+			for range 25 {
 				worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
 				if err != nil {
 					t.Fatal(err)
@@ -188,13 +188,31 @@ func verifyExtremaWorkerCadence(t *testing.T, cadence time.Duration) {
 	s := newSelfHealFixtureCadence(t, "extrema-worker", true, cadence)
 	id := s.createSLO(t, "extrema-worker")
 	s.drain(t, "extrema source")
-	for range 10 {
+	for turn := range 10 {
 		worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !worked {
 			break
+		}
+		if turn == 0 {
+			var through time.Time
+			var hours int
+			if err := s.conn.QueryRow(t.Context(), `SELECT built_through,
+(SELECT count(*) FROM public.almanac_slo_extrema WHERE slo_id=$1 AND resolution_seconds=3600)
+FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, id).Scan(&through, &hours); err != nil {
+				t.Fatal(err)
+			}
+			start := s.historyStart.Truncate(time.Hour)
+			inputs := 0
+			window := ((time.Hour + cadence - 1) / cadence) * cadence
+			for at := floorSliBoundary(start, cadence).Add(cadence); !at.After(through); at = at.Add(cadence) {
+				inputs += len(retainedRepairDurations(window, cadence))
+			}
+			if !through.After(start) || inputs > derivedWindowBatchLimit || hours != int(through.Sub(start)/time.Hour) {
+				t.Fatalf("first claim exceeds its exact-input budget or loses hourly rows: through=%s inputs=%d hours=%d", through, inputs, hours)
+			}
 		}
 	}
 	q := dbgen.New(s.conn)

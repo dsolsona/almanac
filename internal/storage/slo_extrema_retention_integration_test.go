@@ -33,7 +33,7 @@ func TestIntegrationLateExtremaRebuildUsesCurrentCutoffAndPreservesNeighbour(t *
 	s.drain(t, "retention extrema source")
 	drain := func() {
 		t.Helper()
-		for range 40 {
+		for range 29*24 + 2 {
 			worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
 			if err != nil {
 				t.Fatal(err)

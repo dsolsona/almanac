@@ -17,7 +17,12 @@ remains until F9-T03. The latest `make check` passes, including storage integrat
 in 132.630 seconds and 82 browser checks in 2.4 minutes; checkpoint `bae6456`
 also passes race integration (storage 218.763 seconds) and all 15 E2E journeys
 (4.2 minutes). The native stack is verified as #72 → #73 → #75. The 35-day
-performance run is in progress. Full 20-SLO 35/365-day equivalence and savings
+performance run passed all five checks in 8.9 minutes: cold p95 was 395/304 ms
+for the SLO list/detail and 236/253 ms for the SLI list/detail. A later CI race
+failure exposed an oversized dense worker transaction; the follow-up caps each
+turn at the existing 960-input budget. Its `make test` and full race integration
+pass, with storage integration taking 160.925 seconds. Full 20-SLO 35/365-day
+equivalence and savings
 are not claimed; F9-T02 remains in progress and the PR remains draft.
 
 # Delivery status
