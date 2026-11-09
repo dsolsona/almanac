@@ -4,7 +4,7 @@
 - Created: 2026-11-09
 - Accepted: 2026-11-09
 - Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; merge remains unauthorized
-- Implementation: not started
+- Implementation: in progress
 - Related ADRs: [ADR-0040](../adr/0040-cumulative-sums-and-compact-extrema.md), [ADR-0041](../adr/0041-one-observation-table-with-cumulative-sums.md) (independent), [ADR-0042](../adr/0042-keyset-overview-pagination.md) (optional)
 - Plan: [Lean SLO derived data](../plans/0030-lean-slo-derived-data.md)
 - Supersedes / superseded by: amends SPEC-0006, SPEC-0007, SPEC-0010 and SPEC-0019 as listed below; supersedes no spec entirely. The file name keeps the first draft's title for link stability.
@@ -236,7 +236,31 @@ rebuilt makes windows that contain it pending or failed, never successful.
 
 ## Verification evidence
 
-Not verified yet.
+The application is implemented through keyset pagination at `87965aa`
+([PR #78](https://github.com/dsolsona/almanac/pull/78)), with the SLI-history
+ordering correction at `2484b92`
+([PR #79](https://github.com/dsolsona/almanac/pull/79)). The first integrated
+35-day run exposed that missing index despite passing the 1,000-ms gate; its
+query-plan regression failed at 200,002 visits and now stays under 256.
+This does not establish the unrun acceptance cases below or authorize merge.
+
+| Criteria | Available evidence |
+| --- | --- |
+| AC-01/AC-02 | Exact canonical-oracle, daily composition, non-divisor cadence and dense-transition cases pass in storage integration. Full 20-SLO 35/365-day response equivalence is not yet demonstrated. |
+| AC-03/AC-04/AC-05 | Late-write bounds, untouched-neighbour retention, duplicate/conflict state, lease fencing and recovery cases pass; the merged-observation candidate passes race integration in 207.661 seconds. |
+| AC-06 | Preview-copy preserving migration rehearsal remains unrun. The separate observation merge passes a 200,000-row exact-value interrupted/resumed copy with five-second batch bounds. |
+| AC-07 | [F9-T06](../tasks/F9-T06.md) records baseline/pre-index/final allocated snapshots. Final 35-day canonical allocation is 946,724,864 bytes and derived allocation 32,030,720 bytes (14.71%/88.55% below baseline). Actual-minute WAL samples are recorded; statement counters are unavailable and the 365-day comparison remains unrun. |
+| AC-08 | Final `make test-perf PERF_DAYS=35` passes all six checks in 7.5 minutes. Cold p95 is 427/279 ms for SLO list/detail and 200/215 ms for SLI list/detail; all cold/warm p95 values are below 500 ms. Read-plan tests cover the 400-row/7,200-endpoint year bounds; a real 365-day fixture remains unverified. |
+| AC-09/AC-10 | Diagnostics/retry and 364-day late-retention cases pass in integration. The latter preserves its untouched neighbour and checks 38,820 expired intervals with exact retained totals. |
+
+The index-corrected checkpoint passes `make check`: 437 frontend tests,
+storage integration in 101.019 seconds and 82 browser cases in 1.9 minutes.
+Its application parent passes all 15 isolated container journeys in 4.3 minutes
+and all four CI checks. Detailed commands,
+diagnosed failures and remaining gaps are kept in
+[F9-T02](../tasks/F9-T02.md), [F9-T03](../tasks/F9-T03.md),
+[F9-T04](../tasks/F9-T04.md), [F9-T05](../tasks/F9-T05.md) and
+[F9-T06](../tasks/F9-T06.md).
 
 ## Change notes
 

@@ -56,6 +56,23 @@ and `snapshot_id` are removed with generated browser/CLI contract updates.
 cases), and all 15 container journeys pass in 4.3 minutes. The integrated 35-day
 performance run remains pending, so the task remains in progress.
 
+Final lean-SLO 35-day verification, 2026-11-09: observation storage is published
+in [PR #77](https://github.com/dsolsona/almanac/pull/77), keyset pagination in
+[PR #78](https://github.com/dsolsona/almanac/pull/78), and the measured SLI-list
+ordering correction in [PR #79](https://github.com/dsolsona/almanac/pull/79).
+All four CI checks are green on those application checkpoints. The final
+`make test-perf PERF_DAYS=35` passes six checks in 7.5 minutes on `2484b92`:
+cold p95 is 427/279 ms for SLO list/detail and 200/215 ms for SLI list/detail;
+every cold/warm p95 is below 500 ms. The initial integrated run's SLI-list
+regression is preserved, with a failing-then-passing 200,000-row plan check.
+Canonical allocation is 946,724,864 bytes and derived allocation 32,030,720 bytes,
+14.71% and 88.55% below the recorded baseline snapshot. Actual-minute WAL samples
+and per-table/index totals are in [F9-T06](tasks/F9-T06.md). These are 35-day
+snapshot figures, without production/yearly or WAL-savings extrapolation.
+The 365-day run, preview-copy rehearsal, full-fleet response equivalence,
+performance late-write/retention scenarios and unavailable statement counters
+remain open acceptance gaps. No PR has been merged.
+
 # Delivery status
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:
