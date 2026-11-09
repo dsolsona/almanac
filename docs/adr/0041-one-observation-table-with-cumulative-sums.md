@@ -1,11 +1,11 @@
-# ADR-0041: One observation table with explicit marking and cumulative sums
+# ADR-0041: One observation table with explicit marking
 
 - Status: proposed
 - Created: 2026-11-09
 - Accepted: pending
 - Approval: pending
 - Related specs: [SPEC-0020](../specs/0020-cumulative-slo-calculation.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0003](../specs/0003-ingestion-and-recovery.md)
-- Supersedes / superseded by: resolves open questions 1, 2 and 3 of [ADR-0034](0034-self-healing-derived-data.md); amends the two-table layout of [SPEC-0007](../specs/0007-storage-and-retention.md)
+- Supersedes / superseded by: resolves open questions 1, 2 and 3 of [ADR-0034](0034-self-healing-derived-data.md); amends the two-table layout of [SPEC-0007](../specs/0007-storage-and-retention.md). Independent of [ADR-0040](0040-cumulative-sums-and-compact-extrema.md); the file name keeps the first draft's title for link stability.
 
 ## Context
 
@@ -19,8 +19,9 @@ sli_id, measurement_revision)` is never the access path, so each table carries a
 second index on `(sli_id, interval_start)`; every aggregation joins the two tables;
 and the per-row provenance is about half of each coverage row.
 
-ADR-0040 needs a place for cumulative sums. They belong on the observation row,
-which makes this the moment to settle the layout.
+The first draft of this record also added cumulative sums to the row. ADR-0040 no
+longer needs them, so they are withdrawn; this record is now a storage tidy-up
+that can land independently, before or after ADR-0040.
 
 ## Decision
 
@@ -28,67 +29,32 @@ Proposal. One partitioned table `almanac_sli_observations` with primary key
 `(sli_id, measurement_revision, interval_start)`, monthly range partitions on
 `interval_start`, nullable `good_count`/`total_count` constrained to be present
 exactly when the outcome is `observed`, no stored interval end and no separate
-observation identifier. Cumulative columns `cum_good`, `cum_total`, `cum_observed`,
-`cum_known_empty` and `cum_zero_traffic` hold running totals since the revision
-start (or the fixed retained/admissible boundary on upgrade when older inputs have
-expired) and are all null until the cumulative worker has processed the row. The
-anchor never treats unknown earlier history as zero; SPEC-0020's historical
-baselines preserve those window inputs. One partial index on observed rows
-supports first/last-observation lookups.
+observation identifier. One partial index on observed rows supports first/last
+observation lookups. Provenance columns stay on the row; moving them to receipts
+would change receipt retention in SPEC-0007 and is a separate decision.
 
 The storage function that accepts an observation advances the source generation,
-lowers the revision's `cumulative_through` to the new interval start and marks the
-affected SLOs' extrema cursors, in the acceptance transaction. There are no
-ingestion triggers. Explicit dirty-hour marking remains for the independent exact
-hourly fallback. Until T04 removes retained readers, the transaction also rewinds
-legacy repair and increments its version, preserving both removed triggers'
-effects. Duplicate and conflicting deliveries change nothing, as today.
-
-Cumulative columns after `cumulative_through` are untrusted even when non-null.
-SPEC-0020 separates windows before, across and after that cursor. Use bounded raw
-sums or the existing exact hourly fallback rather than waiting for unrelated
-historical suffix repair. Hourly aggregates, dirty-hour work and readiness fences
-remain. Source generation and lease epoch fence worker acknowledgment against
-concurrent ingestion.
-
-Provenance columns (`execution_id`, `delivery_id`, `agent_id`, `session_generation`,
-`configuration_revision`, `lease_id`, `agent_created_at`, `result_digest`) stay on
-the row for now; moving them to receipts is a separate decision because it changes
-the receipt retention in SPEC-0007.
+marks the dirty hour and widens the affected SLOs' extrema cursors (or, before
+ADR-0040 lands, rewinds the series repair cursor) in the acceptance transaction.
+There are no ingestion triggers. Duplicate and conflicting deliveries change
+nothing, as today.
 
 ## Alternatives considered
 
-- Keep two tables and add cumulative columns to the values table: observed-only
-  rows cannot carry counts of known-empty intervals, so cumulative counts would
-  need the join anyway. Rejected.
+- Keep two tables: the join and the second index remain, and a row without its
+  values stays representable. Rejected.
 - Keep the triggers: they guarantee marking for every write path, but there is one
   write path and the hidden logic already caused one incident. Rejected.
-- A separate cumulative table keyed like the observations: doubles the row count
-  for no isolation benefit. Rejected. The bounded retained-prefix checkpoint
-  archive has a different purpose: historical inputs after canonical expiry.
-- Gate long current windows on revision-wide repair: rejected; unaffected-range
-  availability requires independent exact fallback.
 
 ## Consequences
 
-- Coverage and values merge into one canonical table. Cumulative fields, indexes,
-  retained hourly fallback and shared prefix evidence all count in F9-T06. The
-  earlier roughly one-third saving is an estimate, not a verified result.
-- The migration copies existing coverage and values into the new table partition
-  by partition, computes initial cumulative sums, then drops the old tables and
-  triggers. It must run on the maintainer's preview without losing observations
-  and must be resumable.
-- Retention drops whole partitions as today only after cumulative values through
-  the boundary are verified and fenced. Store the floor atomically with the drop.
-  One floor is insufficient for older rolling windows: preserve per-SLI prefix
-  checkpoints with temporal evidence across the required historical lookback,
-  following SPEC-0020. Canonical APIs still enforce the published 365-day cutoff.
-- Existing historical prefixes whose raw inputs expired before upgrade need
-  verified per-endpoint baselines before old points are removed. Never substitute
-  zero or today's raw cutoff for that evidence. Prefix storage and the retained
-  hourly fallback are proposed corrections and await acceptance with this ADR.
-- T02 provisionally uses migration 0045, after existing main migration 0044;
-  recheck the integrated tip and contiguous numbering before implementation.
+- Two fewer indexes and one fewer table on the largest data; every aggregation
+  reads one table. Raw storage per SLI-year falls by roughly a third; F9-T06
+  measures it.
+- The migration copies coverage and values into the new table partition by
+  partition, verifies counts and values, then drops the old tables and triggers.
+  It must be resumable and preserve the maintainer's data.
+- Retention drops whole partitions as today.
 
 ## Revisit conditions
 
