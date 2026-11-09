@@ -191,9 +191,8 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 	} else {
 		return true, finishRetentionCleanup(bounded, tx, locked, work, now)
 	}
-	// Match ingestion's coverage-before-values order. ONLY avoids locking all
-	// child partitions while dependencies and catalog identities are rechecked.
-	if _, err := tx.Exec(bounded, "LOCK TABLE ONLY public.almanac_sli_coverage, ONLY public.almanac_sli_observation_values IN ACCESS EXCLUSIVE MODE"); err != nil {
+	// ONLY avoids locking all child partitions while catalog identities are rechecked.
+	if _, err := tx.Exec(bounded, "LOCK TABLE ONLY public.almanac_sli_observations IN ACCESS EXCLUSIVE MODE"); err != nil {
 		return true, err
 	}
 	rows, err := locked.ListCanonicalRetentionPartitions(bounded)
@@ -230,12 +229,6 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 		return true, errRetentionBlocked
 	}
 	for _, part := range preview.Partitions {
-		// Detach removes inherited FK dependencies from still-retained values partitions.
-		if part.Parent == "almanac_sli_coverage" {
-			if _, err := tx.Exec(bounded, "ALTER TABLE public.almanac_sli_coverage DETACH PARTITION "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
-				return true, err
-			}
-		}
 		if _, err := tx.Exec(bounded, "DROP TABLE "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
 			return true, err
 		}

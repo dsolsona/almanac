@@ -37,8 +37,7 @@ WITH dirty AS (
  LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
 ), canonical_size AS (
  SELECT coalesce(sum(pg_total_relation_size(relid)),0)::bigint AS bytes
- FROM (SELECT tree.relid FROM pg_partition_tree('public.almanac_sli_coverage') AS tree(relid,parentrelid,isleaf,level) WHERE tree.isleaf
- UNION ALL SELECT tree.relid FROM pg_partition_tree('public.almanac_sli_observation_values') AS tree(relid,parentrelid,isleaf,level) WHERE tree.isleaf) partitions
+ FROM pg_partition_tree('public.almanac_sli_observations') AS tree(relid,parentrelid,isleaf,level) WHERE tree.isleaf
 ), derived_size AS (
  SELECT coalesce(sum(pg_total_relation_size(table_name::regclass)),0)::bigint AS bytes
  FROM unnest(ARRAY['public.almanac_sli_hourly_aggregates','public.almanac_derived_dirty_ranges',

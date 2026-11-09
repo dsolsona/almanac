@@ -14,14 +14,16 @@ import (
 const aggregateSloObservations = `-- name: AggregateSloObservations :one
 SELECT count(*) FILTER (WHERE c.outcome='observed')::bigint AS observed_intervals,
        count(*) FILTER (WHERE c.outcome='complete_empty')::bigint AS known_empty_intervals,
-       count(*) FILTER (WHERE c.outcome='observed' AND v.total_count=0)::bigint AS zero_traffic_intervals,
-       COALESCE(sum(v.good_count), 0)::text AS good, COALESCE(sum(v.total_count), 0)::text AS total,
+       count(*) FILTER (WHERE c.outcome='observed' AND c.total_count=0)::bigint AS zero_traffic_intervals,
+       COALESCE(sum(c.good_count), 0)::text AS good, COALESCE(sum(c.total_count), 0)::text AS total,
        (min(c.interval_start) FILTER (WHERE c.outcome='observed'))::timestamptz AS first_observation_at,
-       (max(c.interval_end) FILTER (WHERE c.outcome='observed'))::timestamptz AS last_observation_at,
+       (max(c.interval_start+datasource.polling_interval_seconds*interval '1 second') FILTER (WHERE c.outcome='observed'))::timestamptz AS last_observation_at,
        max(c.recorded_at)::timestamptz AS latest_receipt_at
-FROM public.almanac_sli_coverage c
-LEFT JOIN public.almanac_sli_observation_values v ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision
-WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start >= $3 AND c.interval_end <= $4
+FROM public.almanac_sli_observations c
+JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
+JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start>=$3::timestamptz
+  AND c.interval_start+datasource.polling_interval_seconds*interval '1 second'<=$4::timestamptz
   AND c.outcome IN ('observed','complete_empty')
 `
 
@@ -623,10 +625,13 @@ func (q *Queries) ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloO
 }
 
 const listSloTimelineFacts = `-- name: ListSloTimelineFacts :many
-SELECT c.interval_start,c.interval_end,c.outcome,COALESCE(v.good_count, 0)::text AS good,COALESCE(v.total_count, 0)::text AS total,c.recorded_at
-FROM public.almanac_sli_coverage c
-LEFT JOIN public.almanac_sli_observation_values v ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision
-WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start >= $3 AND c.interval_end <= $4
+SELECT c.interval_start,(c.interval_start+datasource.polling_interval_seconds*interval '1 second')::timestamptz AS interval_end,
+       c.outcome,COALESCE(c.good_count, 0)::text AS good,COALESCE(c.total_count, 0)::text AS total,c.recorded_at
+FROM public.almanac_sli_observations c
+JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
+JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start>=$3::timestamptz
+  AND c.interval_start+datasource.polling_interval_seconds*interval '1 second'<=$4::timestamptz
   AND c.outcome IN ('observed','complete_empty') ORDER BY c.interval_start
 `
 

@@ -16,6 +16,9 @@ type Querier interface {
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
 	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
+	// The measurement lock serializes acceptance. All three writes share that
+	// transaction, after replay/conflict checks; a failed insert rolls this back.
+	AdvanceSliSourceGeneration(ctx context.Context, arg AdvanceSliSourceGenerationParams) (int64, error)
 	AdvanceSloExtremaCursor(ctx context.Context, arg AdvanceSloExtremaCursorParams) (int64, error)
 	AgentConfigurationRevisionExists(ctx context.Context, arg AgentConfigurationRevisionExistsParams) (bool, error)
 	AgentHasAssignedDatasources(ctx context.Context, agentID pgtype.UUID) (bool, error)
@@ -120,6 +123,7 @@ type Querier interface {
 	GetPublishedCurrentProjection(ctx context.Context, arg GetPublishedCurrentProjectionParams) (GetPublishedCurrentProjectionRow, error)
 	GetService(ctx context.Context, id pgtype.UUID) (AlmanacService, error)
 	GetSli(ctx context.Context, id pgtype.UUID) (GetSliRow, error)
+	// A retained interval can outlive its receipt; callers derive the canonical ID when NULL.
 	GetSliCoverageByCanonicalInterval(ctx context.Context, arg GetSliCoverageByCanonicalIntervalParams) (GetSliCoverageByCanonicalIntervalRow, error)
 	GetSlo(ctx context.Context, id pgtype.UUID) (GetSloRow, error)
 	GetSloOperationalContext(ctx context.Context, arg GetSloOperationalContextParams) (GetSloOperationalContextRow, error)
@@ -157,12 +161,11 @@ type Querier interface {
 	InsertSession(ctx context.Context, arg InsertSessionParams) (pgtype.UUID, error)
 	InsertSessionAudit(ctx context.Context, arg InsertSessionAuditParams) error
 	InsertSli(ctx context.Context, arg InsertSliParams) error
-	InsertSliCoverage(ctx context.Context, arg InsertSliCoverageParams) error
 	InsertSliCreateReceipt(ctx context.Context, arg InsertSliCreateReceiptParams) error
 	InsertSliDeliveryReceipt(ctx context.Context, arg InsertSliDeliveryReceiptParams) error
 	InsertSliExecutionAttempt(ctx context.Context, arg InsertSliExecutionAttemptParams) error
 	InsertSliMeasurement(ctx context.Context, arg InsertSliMeasurementParams) error
-	InsertSliObservationValue(ctx context.Context, arg InsertSliObservationValueParams) error
+	InsertSliObservation(ctx context.Context, arg InsertSliObservationParams) error
 	InsertSliOwnershipEpoch(ctx context.Context, arg InsertSliOwnershipEpochParams) error
 	InsertSlo(ctx context.Context, arg InsertSloParams) error
 	InsertSloDefinition(ctx context.Context, arg InsertSloDefinitionParams) error
@@ -188,6 +191,7 @@ type Querier interface {
 	ListServiceSloStates(ctx context.Context, arg ListServiceSloStatesParams) ([]ListServiceSloStatesRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
 	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)
+	// Enrich only a bounded canonical page; missing receipt IDs use the caller's natural-key fallback.
 	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
 	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
 	ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloOverviewSnapshotItemsParams) ([]ListSloOverviewSnapshotItemsRow, error)
@@ -227,6 +231,7 @@ type Querier interface {
 	// read from the raw observations. Nothing is marked for an SLI with no accepted observations.
 	MarkDerivedHoursDirty(ctx context.Context, arg MarkDerivedHoursDirtyParams) error
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
+	MarkSliObservation(ctx context.Context, arg MarkSliObservationParams) error
 	MaterializeSloOverviewReferences(ctx context.Context, arg MaterializeSloOverviewReferencesParams) (MaterializeSloOverviewReferencesRow, error)
 	OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error)
 	// Preview counts stop at 1001; the report labels these as lower bounds.
@@ -253,8 +258,7 @@ type Querier interface {
 	ReadSloDerivedStates(ctx context.Context, arg ReadSloDerivedStatesParams) (ReadSloDerivedStatesRow, error)
 	ReadSloExtremaHours(ctx context.Context, arg ReadSloExtremaHoursParams) ([]AlmanacSloExtrema, error)
 	ReadSloExtremaParts(ctx context.Context, arg ReadSloExtremaPartsParams) ([]ReadSloExtremaPartsRow, error)
-	// Hours with an observed interval whose values are not committed yet are not stored: the aggregate
-	// would count the interval with zero totals (ADR-0034). They are returned so the caller defers them.
+	// Keep the defensive missing-value result for the caller; canonical row constraints now prevent it.
 	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) ([]RebuildDerivedBatchRow, error)
 	RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error)
 	RecordCurrentPreparationFailure(ctx context.Context, arg RecordCurrentPreparationFailureParams) error

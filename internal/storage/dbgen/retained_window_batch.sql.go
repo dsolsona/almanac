@@ -12,24 +12,29 @@ import (
 )
 
 const readRetainedWindowBatch = `-- name: ReadRetainedWindowBatch :many
-WITH requested AS MATERIALIZED (
-    SELECT generate_series(1,cardinality($1::timestamptz[]))::integer AS ordinal,
-           unnest($1::timestamptz[]) AS window_end,
-           unnest($2::timestamptz[]) AS full_start,
-           unnest($3::timestamptz[]) AS full_end,
-           unnest($4::timestamptz[]) AS edge_a_start,
-           unnest($5::timestamptz[]) AS edge_a_end,
-           unnest($6::timestamptz[]) AS edge_b_start,
-           unnest($7::timestamptz[]) AS edge_b_end
+WITH measurement AS MATERIALIZED (
+    SELECT datasource.polling_interval_seconds
+    FROM public.almanac_sli_measurements m
+    JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+    WHERE m.sli_id=$1 AND m.revision=$2
+), requested AS MATERIALIZED (
+    SELECT generate_series(1,cardinality($3::timestamptz[]))::integer AS ordinal,
+           unnest($3::timestamptz[]) AS window_end,
+           unnest($4::timestamptz[]) AS full_start,
+           unnest($5::timestamptz[]) AS full_end,
+           unnest($6::timestamptz[]) AS edge_a_start,
+           unnest($7::timestamptz[]) AS edge_a_end,
+           unnest($8::timestamptz[]) AS edge_b_start,
+           unnest($9::timestamptz[]) AS edge_b_end
 ), interiors AS MATERIALIZED (
     SELECT DISTINCT full_start,full_end FROM requested
 ), totals AS MATERIALIZED (
     SELECT i.full_start,i.full_end,a.good, a.total, a.observed, a.known_empty, a.zero_traffic, a.first_observation, a.last_observation, a.latest_receipt,
            NOT EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges d
-               WHERE d.sli_id=$8 AND d.measurement_revision=$9
+               WHERE d.sli_id=$1 AND d.measurement_revision=$2
                  AND i.full_start<i.full_end AND d.range_start<i.full_end AND d.range_end>i.full_start) AS prepared,
            EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges d
-               WHERE d.sli_id=$8 AND d.measurement_revision=$9
+               WHERE d.sli_id=$1 AND d.measurement_revision=$2
                  AND i.full_start<i.full_end AND d.range_start<i.full_end AND d.range_end>i.full_start
                  AND d.attempts>=5 AND (d.lease_until IS NULL OR d.lease_until<=$10::timestamptz)) AS exhausted
     FROM interiors i CROSS JOIN LATERAL (
@@ -41,7 +46,7 @@ WITH requested AS MATERIALIZED (
                max(h.last_observation_at)::timestamptz AS last_observation,
                max(h.latest_receipt_at)::timestamptz AS latest_receipt
         FROM public.almanac_sli_hourly_aggregates h
-        WHERE h.sli_id=$8 AND h.measurement_revision=$9
+        WHERE h.sli_id=$1 AND h.measurement_revision=$2
           AND h.hour_start>=i.full_start AND h.hour_start<i.full_end
     ) a
 ), edge_ranges AS MATERIALIZED (
@@ -69,18 +74,15 @@ WITH requested AS MATERIALIZED (
            CASE WHEN c.outcome='observed' AND c.total_count=0 THEN 1 ELSE 0 END::bigint AS zero_traffic,
            CASE WHEN c.outcome='observed' THEN c.interval_start END AS first_observation,
            CASE WHEN c.outcome='observed' THEN c.interval_end END AS last_observation,c.recorded_at AS latest_receipt
-    FROM anchors a
+    FROM anchors a CROSS JOIN measurement m
     -- Preserve a parameterized range scan for each anchor, not a year-wide join.
     CROSS JOIN LATERAL (
-        SELECT c.interval_start,c.interval_end,c.outcome,c.recorded_at,v.good_count,v.total_count
-        FROM public.almanac_sli_coverage c
-        LEFT JOIN LATERAL (
-            SELECT v.good_count,v.total_count FROM public.almanac_sli_observation_values v
-            WHERE v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision AND v.interval_start=c.interval_start
-              AND v.interval_start>=a.start_at AND v.interval_start<a.end_at LIMIT 1
-        ) v ON true
-        WHERE c.sli_id=$8 AND c.measurement_revision=$9
-          AND c.interval_start>=a.start_at AND c.interval_start<a.end_at AND c.interval_end<=a.end_at
+        SELECT c.interval_start,(c.interval_start+m.polling_interval_seconds*interval '1 second')::timestamptz AS interval_end,
+               c.outcome,c.recorded_at,c.good_count,c.total_count
+        FROM public.almanac_sli_observations c
+        WHERE c.sli_id=$1 AND c.measurement_revision=$2
+          AND c.interval_start>=a.start_at AND c.interval_start<a.end_at
+          AND c.interval_start+m.polling_interval_seconds*interval '1 second'<=a.end_at
         OFFSET 0
     ) c
     UNION ALL
@@ -114,6 +116,8 @@ ORDER BY r.ordinal
 `
 
 type ReadRetainedWindowBatchParams struct {
+	SliID               pgtype.UUID          `json:"sli_id"`
+	MeasurementRevision int64                `json:"measurement_revision"`
 	WindowEnds          []pgtype.Timestamptz `json:"window_ends"`
 	FullStarts          []pgtype.Timestamptz `json:"full_starts"`
 	FullEnds            []pgtype.Timestamptz `json:"full_ends"`
@@ -121,8 +125,6 @@ type ReadRetainedWindowBatchParams struct {
 	EdgeAEnds           []pgtype.Timestamptz `json:"edge_a_ends"`
 	EdgeBStarts         []pgtype.Timestamptz `json:"edge_b_starts"`
 	EdgeBEnds           []pgtype.Timestamptz `json:"edge_b_ends"`
-	SliID               pgtype.UUID          `json:"sli_id"`
-	MeasurementRevision int64                `json:"measurement_revision"`
 	Now                 pgtype.Timestamptz   `json:"now"`
 }
 
@@ -144,6 +146,8 @@ type ReadRetainedWindowBatchRow struct {
 // interior once; only cadence-aligned boundary fragments use canonical rows.
 func (q *Queries) ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedWindowBatchParams) ([]ReadRetainedWindowBatchRow, error) {
 	rows, err := q.db.Query(ctx, readRetainedWindowBatch,
+		arg.SliID,
+		arg.MeasurementRevision,
 		arg.WindowEnds,
 		arg.FullStarts,
 		arg.FullEnds,
@@ -151,8 +155,6 @@ func (q *Queries) ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedW
 		arg.EdgeAEnds,
 		arg.EdgeBStarts,
 		arg.EdgeBEnds,
-		arg.SliID,
-		arg.MeasurementRevision,
 		arg.Now,
 	)
 	if err != nil {

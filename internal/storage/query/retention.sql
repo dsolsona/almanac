@@ -11,7 +11,7 @@ WITH partitions AS (
     JOIN pg_catalog.pg_class child ON child.oid=inheritance.inhrelid
     JOIN pg_catalog.pg_namespace child_schema ON child_schema.oid=child.relnamespace
     WHERE parent_schema.nspname='public' AND child_schema.nspname='public' AND child.relkind IN ('r','p','f')
-      AND parent.relname IN ('almanac_sli_coverage','almanac_sli_observation_values')
+      AND parent.relname='almanac_sli_observations'
 )
 SELECT oid::bigint AS relation_id,partition_name,parent_name,(bounds[1])::timestamptz AS range_start,
        (bounds[2])::timestamptz AS range_end,bytes,estimated_rows

@@ -83,10 +83,10 @@ func verifyRetainedIngestionWatermark(t *testing.T, databaseURL string, row dbge
 		t.Fatal(err)
 	}
 	var minimum, maximum int64
-	if err := conn.QueryRow(t.Context(), `SELECT min(ingestion_generation),max(ingestion_generation) FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision).Scan(&minimum, &maximum); err != nil || minimum <= 0 || maximum != before {
+	if err := conn.QueryRow(t.Context(), `SELECT min(ingestion_generation),max(ingestion_generation) FROM public.almanac_sli_observations WHERE sli_id=$1 AND measurement_revision=$2`, row.SliID, row.MeasurementRevision).Scan(&minimum, &maximum); err != nil || minimum <= 0 || maximum != before {
 		t.Fatalf("accepted intervals lack their atomic source watermark: %d..%d / %d: %v", minimum, maximum, before, err)
 	}
-	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_coverage SELECT * FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2 LIMIT 1 ON CONFLICT DO NOTHING`, row.SliID, row.MeasurementRevision); err != nil {
+	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observations SELECT * FROM public.almanac_sli_observations WHERE sli_id=$1 AND measurement_revision=$2 LIMIT 1 ON CONFLICT DO NOTHING`, row.SliID, row.MeasurementRevision); err != nil {
 		t.Fatal(err)
 	}
 	after, err := q.GetDerivedSourceGeneration(t.Context(), params)

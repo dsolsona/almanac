@@ -270,7 +270,11 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 	run(4, "services", "get", "--service-id="+unused.Id.String())
 	db := testpostgres.Connect(t, databaseURL)
 	var start, end time.Time
-	if err := db.QueryRow(t.Context(), `SELECT interval_start, interval_end FROM public.almanac_sli_coverage WHERE sli_id=$1 AND outcome='observed' ORDER BY interval_start DESC LIMIT 1`, sliID).Scan(&start, &end); err != nil {
+	if err := db.QueryRow(t.Context(), `SELECT observation.interval_start,observation.interval_start+source.polling_interval_seconds*interval '1 second' AS interval_end
+		FROM public.almanac_sli_observations observation
+		JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=observation.sli_id AND measurement.revision=observation.measurement_revision
+		JOIN public.almanac_datasources source ON source.id=measurement.datasource_id
+		WHERE observation.sli_id=$1 AND observation.outcome='observed' ORDER BY observation.interval_start DESC LIMIT 1`, sliID).Scan(&start, &end); err != nil {
 		t.Fatal("observed SLI interval unavailable")
 	}
 	sloInput := writeInput("objective-slo.json", map[string]any{"name": "cli-availability", "display_name": "CLI Availability", "service_id": serviceID, "sli_id": sliID, "target": "0.999", "rolling_window_seconds": 2592000, "evaluation_valid_from": start.UTC().Format(time.RFC3339Nano)})

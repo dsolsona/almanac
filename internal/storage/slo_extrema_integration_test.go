@@ -16,12 +16,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const extremaCoverageInsert = `INSERT INTO public.almanac_sli_coverage
-(interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,
-execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT $2,c.sli_id,c.measurement_revision,$2::timestamptz+interval '1 minute','complete_empty',c.result_digest,'{}',
-gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,$2,$3
-FROM public.almanac_sli_coverage c WHERE c.sli_id=$1 LIMIT 1 ON CONFLICT DO NOTHING`
+const extremaCoverageInsert = `INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,result_digest,missing_components,
+execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT $2,c.sli_id,c.measurement_revision,'complete_empty',c.result_digest,'{}',
+gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,$2,$3
+FROM public.almanac_sli_observations c WHERE c.sli_id=$1 LIMIT 1 ON CONFLICT DO NOTHING`
 
 func TestIntegrationExtremaLeaseFencesReclaimsAndArrivals(t *testing.T) {
 	t.Parallel()
@@ -51,7 +51,7 @@ func TestIntegrationExtremaLeaseFencesReclaimsAndArrivals(t *testing.T) {
 		t.Fatalf("superseded worker published: %d, %v", count, err)
 	}
 	late := s.at.Add(10 * time.Minute)
-	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, late, s.now.Add(time.Hour)); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, extremaCoverageInsert, s.sliID, late, s.now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	count, err = q.AdvanceSloExtremaCursor(t.Context(), dbgen.AdvanceSloExtremaCursorParams{ID: second.ID, Version: second.Version, LeaseEpoch: second.LeaseEpoch,
@@ -72,10 +72,7 @@ func TestIntegrationExtremaDailyCompositionMatchesFullCanonicalSweep(t *testing.
 			cadence := time.Duration(seconds) * time.Second
 			s := newSelfHealFixtureCadence(t, "extrema-day", true, cadence)
 			id := s.createSLO(t, "extrema-day")
-			if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_sli_coverage SET outcome='complete_empty' WHERE sli_id=$1 AND interval_start=$2`, s.sliID, s.historyStart); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observation_values WHERE sli_id=$1 AND interval_start=$2`, s.sliID, s.historyStart); err != nil {
+			if _, err := execObservationFixture(t, s.conn, s.sliID, `UPDATE public.almanac_sli_observations SET outcome='complete_empty',good_count=NULL,total_count=NULL,ingestion_generation=0 WHERE sli_id=$1 AND interval_start=$2`, s.sliID, s.historyStart); err != nil {
 				t.Fatal(err)
 			}
 			s.now = utcDayStart(s.at).Add(24 * time.Hour)
@@ -286,6 +283,9 @@ failing_since=$2::timestamptz-interval '8 days' WHERE slo_id=$1`, id, s.now.Trun
 	if _, err := tx.Exec(t.Context(), insert, s.sliID, late, s.now); err != nil {
 		t.Fatal(err)
 	}
+	if err := markObservationFixture(t.Context(), tx, s.sliID); err != nil {
+		t.Fatal(err)
+	}
 	var from, to time.Time
 	var version int64
 	var attempts int
@@ -298,7 +298,7 @@ failing_since=$2::timestamptz-interval '8 days' WHERE slo_id=$1`, id, s.now.Trun
 	if err := tx.Commit(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.conn.Exec(t.Context(), insert, s.sliID, late, s.now); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, insert, s.sliID, late, s.now); err != nil {
 		t.Fatal(err)
 	}
 	var duplicateVersion int64

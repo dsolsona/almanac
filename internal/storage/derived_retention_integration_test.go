@@ -90,7 +90,7 @@ func verifyDerivedRetainedHistoryRegression(t *testing.T, fixture retainedHistor
 		if err := tx.Commit(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		// Keep real triggers and every interval; report setup separately.
+		// Keep every atomic raw interval and acceptance marking; report setup separately.
 		const seedBatch = time.Hour
 		for chunkStart := start; chunkStart.Before(end); chunkStart = chunkStart.Add(seedBatch) {
 			chunkEnd := chunkStart.Add(seedBatch)
@@ -101,16 +101,14 @@ func verifyDerivedRetainedHistoryRegression(t *testing.T, fixture retainedHistor
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := batch.Exec(t.Context(), `INSERT INTO public.almanac_sli_coverage
-(interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point,$1,1,point+$7::bigint*interval '1 second','observed',decode(repeat('cd',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$2,$3,1,$4,point,point+$7::bigint*interval '1 second'
-FROM generate_series($5::timestamptz,$6::timestamptz-$7::bigint*interval '1 second',$7::bigint*interval '1 second') point`, measurement.ID, created.Agent.ID, grant.Generation, leaseID, chunkStart, chunkEnd, fixture.cadence); err != nil {
+			if _, err := batch.Exec(t.Context(), `INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,$1,1,'observed',CASE WHEN point>=$8::timestamptz-interval '2 hours' THEN 98.125 ELSE 99.999 END,100.125,decode(repeat('cd',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$2,$3,1,$4,point,point+$7::bigint*interval '1 second'
+FROM generate_series($5::timestamptz,$6::timestamptz-$7::bigint*interval '1 second',$7::bigint*interval '1 second') point`, measurement.ID, created.Agent.ID, grant.Generation, leaseID, chunkStart, chunkEnd, fixture.cadence, end); err != nil {
 				rollbackTransaction(batch)
 				t.Fatal(err)
 			}
-			if _, err := batch.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT interval_start,$1,1,CASE WHEN interval_start>=$2::timestamptz-interval '2 hours' THEN 98.125 ELSE 99.999 END,100.125
-FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND interval_start>=$3 AND interval_start<$4`, measurement.ID, end, chunkStart, chunkEnd); err != nil {
+			if err := markObservationFixture(t.Context(), batch, measurement.ID); err != nil {
 				rollbackTransaction(batch)
 				t.Fatal(err)
 			}

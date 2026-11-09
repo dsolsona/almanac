@@ -71,22 +71,18 @@ func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testin
 	}
 	seed := func(measurement SliRecord, bad bool) {
 		t.Helper()
-		_, seedErr := conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point, $1, 1, point + interval '1 minute', 'observed', decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + interval '1 minute'
-FROM generate_series($5::timestamptz, $6::timestamptz - interval '1 minute', interval '1 minute') point
+		_, seedErr := execObservationFixture(t, conn, measurement.ID, `
+INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+ execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,$1,1,'observed',
+ CASE WHEN NOT $8 THEN 1000 WHEN point=$6::timestamptz-interval '1 minute' THEN 990
+ WHEN point>=$6::timestamptz-interval '6 hours' AND point<$6::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END,
+ CASE WHEN NOT $8 THEN 1000 WHEN point=$6::timestamptz-interval '1 minute' THEN 1000
+ WHEN point>=$6::timestamptz-interval '6 hours' AND point<$6::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END,
+ decode(repeat('ab',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$2,$3,1,$4,point,point+interval '1 minute'
+FROM generate_series($5::timestamptz,$6::timestamptz-interval '1 minute',interval '1 minute') point
 WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID, grant.Generation, leaseID, historyStart, at, missingAt, bad)
-		if seedErr != nil {
-			t.Fatal(seedErr)
-		}
-		_, seedErr = conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT point, $1, 1,
-       CASE WHEN NOT $2 THEN 1000 WHEN point = $3::timestamptz - interval '1 minute' THEN 990 WHEN point >= $3::timestamptz - interval '6 hours' AND point < $3::timestamptz - interval '6 hours' + interval '5 minutes' THEN 1000 ELSE 0 END,
-       CASE WHEN NOT $2 THEN 1000 WHEN point = $3::timestamptz - interval '1 minute' THEN 1000 WHEN point >= $3::timestamptz - interval '6 hours' AND point < $3::timestamptz - interval '6 hours' + interval '5 minutes' THEN 1000 ELSE 0 END
-FROM generate_series($4::timestamptz, $3::timestamptz - interval '1 minute', interval '1 minute') point
-WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyStart, missingAt)
 		if seedErr != nil {
 			t.Fatal(seedErr)
 		}
@@ -195,13 +191,10 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 		t.Fatal(err)
 	}
 	readAt = readAt.Add(time.Second)
-	if _, err := conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',decode(repeat('cd',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$6::timestamptz)`, missingAt, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID, at); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES ($1,$2,1,1000,1000)`, missingAt, goodSLI.ID); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `
+INSERT INTO public.almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+VALUES ($1::timestamptz,$2,1,'observed',1000,1000,decode(repeat('cd',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$6::timestamptz)`, missingAt, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID, at); err != nil {
 		t.Fatal(err)
 	}
 	secondInput := OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}
@@ -315,14 +308,14 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if detail.Current.Performance.Total == nil || *detail.Current.Performance.Total != "6000.000000000000" || detail.Current.Performance.Good == nil || *detail.Current.Performance.Good != "5990.000000000000" {
 		t.Fatalf("six-hour current totals = good:%v total:%v", detail.Current.Performance.Good, detail.Current.Performance.Total)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=CASE WHEN interval_start >= $3::timestamptz - interval '1 hour' THEN 1000 ELSE 0 END,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, badSLI.ID, start, at); err != nil {
+	if _, err := execObservationFixture(t, conn, badSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,good_count=CASE WHEN interval_start >= $3::timestamptz - interval '1 hour' THEN 1000 ELSE 0 END,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, badSLI.ID, start, at); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=990,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,good_count=990,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
 		t.Fatal(err)
 	}
 	var finalHourGood, finalHourTotal string
-	if err := conn.QueryRow(t.Context(), `SELECT sum(good_count)::text,sum(total_count)::text FROM public.almanac_sli_observation_values WHERE sli_id=$1 AND interval_start >= $2::timestamptz - interval '1 hour' AND interval_start < $2`, badSLI.ID, at).Scan(&finalHourGood, &finalHourTotal); err != nil || !sameDecimal(finalHourGood, "60000") || !sameDecimal(finalHourTotal, "60000") {
+	if err := conn.QueryRow(t.Context(), `SELECT sum(good_count)::text,sum(total_count)::text FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start >= $2::timestamptz - interval '1 hour' AND interval_start < $2`, badSLI.ID, at).Scan(&finalHourGood, &finalHourTotal); err != nil || !sameDecimal(finalHourGood, "60000") || !sameDecimal(finalHourTotal, "60000") {
 		t.Fatalf("standalone final-hour success = %s/%s, %v", finalHourGood, finalHourTotal, err)
 	}
 	dailyRange := OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow}
@@ -348,13 +341,13 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 		!shortenedDaily.ComplianceSeries.Days[0].Performance.Provisional || shortenedDaily.ComplianceSeries.Days[0].Explanation != "shortened_window" || shortenedDaily.ComplianceSummary.UnknownDays != 1 {
 		t.Fatalf("shortened daily rolling result = %+v / %+v, %v", shortenedDaily.ComplianceSeries, shortenedDaily.ComplianceSummary, err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET
+	if _, err := execObservationFixture(t, conn, badSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,
 good_count=CASE WHEN interval_start=$2::timestamptz-interval '1 minute' THEN 990 WHEN interval_start >= $2::timestamptz-interval '6 hours' AND interval_start < $2::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END,
 total_count=CASE WHEN interval_start=$2::timestamptz-interval '1 minute' THEN 1000 WHEN interval_start >= $2::timestamptz-interval '6 hours' AND interval_start < $2::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END
 WHERE sli_id=$1 AND interval_start >= $3 AND interval_start < $2`, badSLI.ID, at, start); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=1000,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,good_count=1000,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
 		t.Fatal(err)
 	}
 	activationOnly := createSLO("operational-activation-only", goodSLI.ID, at)
@@ -385,13 +378,10 @@ WHERE sli_id=$1 AND interval_start >= $3 AND interval_start < $2`, badSLI.ID, at
 	if err := partitionTx.Commit(t.Context()); err != nil {
 		t.Fatalf("commit old-fact partitions: %v", err)
 	}
-	if _, err := conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',decode(repeat('ef',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$1::timestamptz + interval '1 minute')`, irrelevantOldFact, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES ($1,$2,1,1000,1000)`, irrelevantOldFact, goodSLI.ID); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `
+INSERT INTO public.almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+VALUES ($1::timestamptz,$2,1,'observed',1000,1000,decode(repeat('ef',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$1::timestamptz + interval '1 minute')`, irrelevantOldFact, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID); err != nil {
 		t.Fatal(err)
 	}
 	longObjective := createSLO("operational-long-horizon", goodSLI.ID, longHistory)

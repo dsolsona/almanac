@@ -62,7 +62,7 @@ func canonicalRetentionImpact(rows []dbgen.ListCanonicalRetentionPartitionsRow, 
 		}
 		start, end := row.RangeStart.Time.UTC(), row.RangeEnd.Time.UTC()
 		month := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC)
-		if row.ParentName != "almanac_sli_coverage" && row.ParentName != "almanac_sli_observation_values" ||
+		if row.ParentName != "almanac_sli_observations" ||
 			!start.Equal(month) || !end.Equal(start.AddDate(0, 1, 0)) || row.PartitionName != row.ParentName+"_"+start.Format("200601") {
 			impact.UnsupportedPartitions = append(impact.UnsupportedPartitions, row.PartitionName)
 			continue
@@ -81,17 +81,7 @@ func canonicalRetentionImpact(rows []dbgen.ListCanonicalRetentionPartitionsRow, 
 		impact.Bytes += row.Bytes
 	}
 	slices.SortFunc(impact.Partitions, func(a, b retentionPartition) int {
-		if order := a.Start.Compare(b.Start); order != 0 {
-			return order
-		}
-		// Values reference coverage. Never propose removing coverage first.
-		if a.Parent == b.Parent {
-			return 0
-		}
-		if a.Parent == "almanac_sli_observation_values" {
-			return -1
-		}
-		return 1
+		return a.Start.Compare(b.Start)
 	})
 	return impact, nil
 }

@@ -287,27 +287,6 @@ type AlmanacSli struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AlmanacSliCoverage struct {
-	IntervalStart         pgtype.Timestamptz `json:"interval_start"`
-	SliID                 pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision   int64              `json:"measurement_revision"`
-	IntervalEnd           pgtype.Timestamptz `json:"interval_end"`
-	Outcome               string             `json:"outcome"`
-	ResultDigest          []byte             `json:"result_digest"`
-	ErrorCode             pgtype.Text        `json:"error_code"`
-	MissingComponents     []string           `json:"missing_components"`
-	ExecutionID           pgtype.UUID        `json:"execution_id"`
-	DeliveryID            pgtype.UUID        `json:"delivery_id"`
-	ObservationID         pgtype.UUID        `json:"observation_id"`
-	AgentID               pgtype.UUID        `json:"agent_id"`
-	SessionGeneration     int64              `json:"session_generation"`
-	ConfigurationRevision int64              `json:"configuration_revision"`
-	LeaseID               string             `json:"lease_id"`
-	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
-	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
-	IngestionGeneration   int64              `json:"ingestion_generation"`
-}
-
 type AlmanacSliCreateReceipt struct {
 	ActorID        pgtype.UUID        `json:"actor_id"`
 	IdempotencyKey string             `json:"idempotency_key"`
@@ -380,12 +359,25 @@ type AlmanacSliMeasurement struct {
 	LastAttemptedIntervalEnd pgtype.Timestamptz `json:"last_attempted_interval_end"`
 }
 
-type AlmanacSliObservationValue struct {
-	IntervalStart       pgtype.Timestamptz `json:"interval_start"`
-	SliID               pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	GoodCount           pgtype.Numeric     `json:"good_count"`
-	TotalCount          pgtype.Numeric     `json:"total_count"`
+type AlmanacSliObservation struct {
+	SliID                 pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision   int64              `json:"measurement_revision"`
+	IntervalStart         pgtype.Timestamptz `json:"interval_start"`
+	Outcome               string             `json:"outcome"`
+	GoodCount             pgtype.Numeric     `json:"good_count"`
+	TotalCount            pgtype.Numeric     `json:"total_count"`
+	ResultDigest          []byte             `json:"result_digest"`
+	ErrorCode             pgtype.Text        `json:"error_code"`
+	MissingComponents     []string           `json:"missing_components"`
+	ExecutionID           pgtype.UUID        `json:"execution_id"`
+	DeliveryID            pgtype.UUID        `json:"delivery_id"`
+	AgentID               pgtype.UUID        `json:"agent_id"`
+	SessionGeneration     int64              `json:"session_generation"`
+	ConfigurationRevision int64              `json:"configuration_revision"`
+	LeaseID               string             `json:"lease_id"`
+	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
+	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
+	IngestionGeneration   int64              `json:"ingestion_generation"`
 }
 
 type AlmanacSliOwnershipEpoch struct {
