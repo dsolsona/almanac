@@ -7,7 +7,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"math/big"
-	"slices"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sli"
-	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
 
@@ -175,7 +173,7 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	})
 	var page api.SloOperationalOverviewPage
 	for refresh := range 5 {
-		page, err = ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
+		page, err = readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
 		if err != nil {
 			t.Fatalf("single-page refresh %d: %v", refresh+1, err)
 		}
@@ -187,14 +185,11 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	if page.GroupCounts.NeedsAttention != 1 || page.GroupCounts.Watch != 1 || page.GroupCounts.Healthy != 1 || len(page.Items) != 3 || page.NextCursor != "" {
 		t.Fatalf("overview groups/items = %+v/%d cursor=%q", page.GroupCounts, len(page.Items), page.NextCursor)
 	}
-	first, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
+	first, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 	if err != nil || first.NextCursor == "" || first.PreviousCursor != "" {
 		t.Fatalf("first paginated overview = %+v, %v", first, err)
 	}
-	if _, _, err := loadOperationalFacts(t.Context(), dbgen.New(conn), operationalStreamKey(goodSLI.ID, 1), operationalStream{cadence: 60}, historyStart, at, 1); !errors.Is(err, ErrOperationalResource) {
-		t.Fatalf("row cap sentinel = %v, want resource limit", err)
-	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Query: "different", Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Query: "different", Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
 		t.Fatalf("snapshot filter binding error = %v", err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slos SET display_name='Healthy metadata changed',version=version+1,updated_at=$2 WHERE id=$1`, healthy.ID, at); err != nil {
@@ -210,24 +205,24 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 		t.Fatal(err)
 	}
 	secondInput := OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}
-	second, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, secondInput)
+	second, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, secondInput)
 	if err != nil || second.NextCursor == "" || second.PreviousCursor == "" {
 		t.Fatalf("second paginated overview = %+v, %v", second, err)
 	}
-	replayedSecond, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, secondInput)
+	replayedSecond, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, secondInput)
 	if err != nil || len(replayedSecond.Items) != 1 || replayedSecond.Items[0].Slo.Id != second.Items[0].Slo.Id || replayedSecond.NextCursor != second.NextCursor {
 		t.Fatalf("replayed second page = %+v, %v", replayedSecond, err)
 	}
-	previousPage, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: second.PreviousCursor, Now: readNow})
+	previousPage, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: second.PreviousCursor, Now: readNow})
 	if err != nil || len(previousPage.Items) != 1 || previousPage.Items[0].Slo.Id != first.Items[0].Slo.Id {
 		t.Fatalf("previous page = %+v, %v", previousPage, err)
 	}
 	thirdInput := OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: second.NextCursor, Now: readNow}
-	third, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, thirdInput)
+	third, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, thirdInput)
 	if err != nil || len(third.Items) != 1 || third.Items[0].Slo.Name != healthy.Name || third.Items[0].Slo.DisplayName != healthy.DisplayName || third.NextCursor != "" {
 		t.Fatalf("third page did not retain snapshot metadata: %+v, %v", third, err)
 	}
-	replayedThird, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, thirdInput)
+	replayedThird, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, thirdInput)
 	if err != nil || len(replayedThird.Items) != 1 || replayedThird.Items[0].Slo.DisplayName != healthy.DisplayName {
 		t.Fatalf("replayed final page = %+v, %v", replayedThird, err)
 	}
@@ -240,7 +235,7 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if !oldGapMarker {
 		t.Fatal("snapshot omitted the interior historical gap marker")
 	}
-	refreshed, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Query: healthy.Name, Now: readNow})
+	refreshed, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Query: healthy.Name, Now: readNow})
 	if err != nil || len(refreshed.Items) != 1 || refreshed.Items[0].Slo.DisplayName != "Healthy metadata changed" {
 		t.Fatalf("refreshed overview after late write = %+v, %v", refreshed, err)
 	}
@@ -254,12 +249,12 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 		t.Fatalf("multi-page snapshot retention count = %d, %v", multiPageSnapshots, err)
 	}
 	for snapshotIndex := range 6 {
-		admitted, admissionErr := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
+		admitted, admissionErr := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 		if admissionErr != nil || admitted.NextCursor == "" {
 			t.Fatalf("admission snapshot %d = %+v, %v", snapshotIndex+2, admitted, admissionErr)
 		}
 	}
-	replayedAfterReads, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow})
+	replayedAfterReads, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow})
 	if err != nil || replayedAfterReads.SnapshotId != first.SnapshotId || len(replayedAfterReads.Items) != 1 {
 		t.Fatalf("old cursor after seven ready snapshots = %+v, %v", replayedAfterReads, err)
 	}
@@ -288,7 +283,7 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if err != nil || usage.SessionBuilds != 4 || usage.SessionBytes != 64<<20 {
 		t.Fatalf("reserved build accounting = %+v, %v", usage, err)
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow}); err != nil {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow}); err != nil {
 		t.Fatalf("another session's builds blocked a small ready view: %v", err)
 	}
 	if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2`, f.userID, buildingVerifier[:]); err != nil {
@@ -297,17 +292,17 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='editor' WHERE id=$1`, f.userID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
 		t.Fatalf("role-bound snapshot cursor error = %v", err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='administrator' WHERE id=$1`, f.userID); err != nil {
 		t.Fatal(err)
 	}
 	expiredNow := at.Add(sloOverviewTTL + time.Microsecond)
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: func() time.Time { return expiredNow }}); !errors.Is(err, ErrOperationalSnapshotOld) {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: func() time.Time { return expiredNow }}); !errors.Is(err, ErrOperationalSnapshotOld) {
 		t.Fatalf("expired snapshot cursor error = %v", err)
 	}
-	detail, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow})
+	detail, err := readOperationalDetailForTest(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +326,7 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 		t.Fatalf("standalone final-hour success = %s/%s, %v", finalHourGood, finalHourTotal, err)
 	}
 	dailyRange := OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow}
-	violatedDaily, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, dailyRange)
+	violatedDaily, err := readOperationalDetailForTest(t.Context(), f.databaseURL, dailyRange)
 	if err != nil {
 		t.Fatalf("daily violated detail: %v", err)
 	}
@@ -342,13 +337,13 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 		t.Fatalf("completed rolling violation = %+v / %+v", violatedDaily.ComplianceSeries, violatedDaily.ComplianceSummary)
 	}
 	dailyRange.ID = healthy.ID
-	metDaily, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, dailyRange)
+	metDaily, err := readOperationalDetailForTest(t.Context(), f.databaseURL, dailyRange)
 	if err != nil || len(metDaily.ComplianceSeries.Days) != 1 || metDaily.ComplianceSeries.Days[0].Status != api.SloDailyComplianceDayStatusMet || metDaily.ComplianceSummary.MetDays != 1 ||
 		metDaily.ComplianceSeries.Days[0].Performance.Attainment == nil || !sameDecimal(*metDaily.ComplianceSeries.Days[0].Performance.Attainment, "0.99") {
 		t.Fatalf("completed rolling exact target result = %+v / %+v, %v", metDaily.ComplianceSeries, metDaily.ComplianceSummary, err)
 	}
 	dailyRange.ID = watch.ID
-	shortenedDaily, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, dailyRange)
+	shortenedDaily, err := readOperationalDetailForTest(t.Context(), f.databaseURL, dailyRange)
 	if err != nil || len(shortenedDaily.ComplianceSeries.Days) != 1 || shortenedDaily.ComplianceSeries.Days[0].Status != api.SloDailyComplianceDayStatusUnknown ||
 		!shortenedDaily.ComplianceSeries.Days[0].Performance.Provisional || shortenedDaily.ComplianceSeries.Days[0].Explanation != "shortened_window" || shortenedDaily.ComplianceSummary.UnknownDays != 1 {
 		t.Fatalf("shortened daily rolling result = %+v / %+v, %v", shortenedDaily.ComplianceSeries, shortenedDaily.ComplianceSummary, err)
@@ -363,7 +358,7 @@ WHERE sli_id=$1 AND interval_start >= $3 AND interval_start < $2`, badSLI.ID, at
 		t.Fatal(err)
 	}
 	activationOnly := createSLO("operational-activation-only", goodSLI.ID, at)
-	activationDetail, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: activationOnly.ID, Now: readNow})
+	activationDetail, err := readOperationalDetailForTest(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: activationOnly.ID, Now: readNow})
 	if err != nil {
 		t.Fatalf("new objective detail with pre-validity SLI facts: %v", err)
 	}
@@ -403,25 +398,11 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if longObjective.ID == "" {
 		t.Fatal("long-horizon objective was not created")
 	}
-	_, streams, err := loadOperationalDefinitions(t.Context(), dbgen.New(conn), OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow}, at)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stream := streams[operationalStreamKey(goodSLI.ID, 1)]
-	wantStart := floorSliBoundary(at.Add(-7*24*time.Hour-6*time.Hour), time.Minute)
-	if !stream.factStart.Equal(wantStart) {
-		t.Fatalf("overview source horizon = %s, want 7 d chart + 6 h window = %s", stream.factStart, wantStart)
-	}
-	boundedFacts, boundedCount, err := loadOperationalFacts(t.Context(), dbgen.New(conn), operationalStreamKey(goodSLI.ID, 1), stream, stream.factStart, at, 500)
-	oldIncluded := slices.ContainsFunc(boundedFacts, func(fact slo.Observation) bool { return fact.Start.Equal(irrelevantOldFact) })
-	if err != nil || boundedCount != 420 || oldIncluded {
-		t.Fatalf("bounded horizon loaded irrelevant history: count=%d oldIncluded=%t err=%v", boundedCount, oldIncluded, err)
-	}
 	readAt = expiredNow
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow}); err != nil {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow}); err != nil {
 		t.Fatalf("overview with out-of-horizon old fact: %v", err)
 	}
-	forbidden, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
+	forbidden, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 	if err != nil || forbidden.NextCursor == "" {
 		t.Fatalf("revocation fixture snapshot = %+v, %v", forbidden, err)
 	}
@@ -429,7 +410,7 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if revoked, err := RevokeSession(t.Context(), f.databaseURL, freshVerifier, revokedAt, "revoke-operational-session"); err != nil || !revoked {
 		t.Fatalf("revoke operational session = %t, %v", revoked, err)
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: forbidden.NextCursor, Now: func() time.Time { return revokedAt.Add(time.Second) }}); !errors.Is(err, ErrInvalidSession) {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: forbidden.NextCursor, Now: func() time.Time { return revokedAt.Add(time.Second) }}); !errors.Is(err, ErrInvalidSession) {
 		t.Fatalf("revoked session snapshot error = %v", err)
 	}
 	groups := map[string]string{}

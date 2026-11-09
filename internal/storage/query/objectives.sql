@@ -82,26 +82,6 @@ LEFT JOIN public.almanac_sli_observation_values v ON v.interval_start=c.interval
 WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.interval_start >= $3 AND c.interval_end <= $4
   AND c.outcome IN ('observed','complete_empty') ORDER BY c.interval_start;
 
--- name: ListOperationalSloDefinitions :many
-SELECT s.id, s.name, s.display_name, s.version, s.definition_revision,
-       s.created_at, s.updated_at, d.service_id, service.display_name AS service_display_name,
-       d.sli_id, sli.name AS sli_name, sli.display_name AS sli_display_name,
-       d.measurement_revision, d.target::text AS target, d.rolling_window_seconds,
-       d.cadence_seconds, d.activated_at, d.evaluation_valid_from,
-       d.historical_requested_by, d.historical_requested_at,
-       measurement.effective_from AS sli_valid_from, measurement.good_query, measurement.total_query,
-       datasource.id AS datasource_id, datasource.display_name AS datasource_display_name,
-       datasource.polling_interval_seconds, datasource.settling_delay_seconds
-FROM public.almanac_slos s
-JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-JOIN public.almanac_services service ON service.id=d.service_id
-JOIN public.almanac_slis sli ON sli.id=d.sli_id
-JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=d.sli_id AND measurement.revision=d.measurement_revision
-JOIN public.almanac_datasources datasource ON datasource.id=measurement.datasource_id
-WHERE (sqlc.narg(query_text)::text IS NULL OR strpos(lower(s.name || ' ' || s.display_name), lower(sqlc.narg(query_text)::text)) > 0)
-  AND (sqlc.narg(service_id)::uuid IS NULL OR d.service_id=sqlc.narg(service_id)::uuid)
-ORDER BY lower(s.name), s.id LIMIT $1;
-
 -- name: GetSloOperationalContext :one
 SELECT sli.id AS sli_id, sli.name AS sli_name, sli.display_name AS sli_display_name,
        m.revision AS measurement_revision, m.good_query, m.total_query,
@@ -111,24 +91,6 @@ FROM public.almanac_sli_measurements m
 JOIN public.almanac_slis sli ON sli.id=m.sli_id
 JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
 WHERE m.sli_id=$1 AND m.revision=$2;
-
--- name: ListOperationalSloFacts :many
-SELECT c.interval_start, c.interval_end, c.outcome,
-       CASE WHEN c.outcome='observed' THEN COALESCE(v.good_count::text, '') ELSE '' END::text AS good,
-       CASE WHEN c.outcome='observed' THEN COALESCE(v.total_count::text, '') ELSE '' END::text AS total,
-       c.recorded_at
-FROM public.almanac_sli_coverage c
-LEFT JOIN LATERAL (
-    SELECT value.good_count, value.total_count
-    FROM public.almanac_sli_observation_values value
-    WHERE value.interval_start=c.interval_start
-      AND value.sli_id=sqlc.arg(sli_id) AND value.measurement_revision=sqlc.arg(measurement_revision)
-      AND value.interval_start >= sqlc.arg(interval_start) AND value.interval_start < sqlc.arg(interval_end)
-    LIMIT 1
-) v ON true
-WHERE c.sli_id=sqlc.arg(sli_id) AND c.measurement_revision=sqlc.arg(measurement_revision)
-  AND c.interval_start >= sqlc.arg(interval_start) AND c.interval_start < sqlc.arg(interval_end) AND c.interval_end <= sqlc.arg(interval_end)
-ORDER BY c.interval_start LIMIT sqlc.arg('limit');
 
 -- name: DeleteExpiredSloOverviewSnapshots :exec
 WITH expired AS (

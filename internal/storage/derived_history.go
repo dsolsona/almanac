@@ -255,12 +255,14 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	}
 	at, start, end := job.EvaluatedThrough.Time.UTC(), job.RangeStart.Time.UTC(), job.RangeEnd.Time.UTC()
 	now := clock().UTC()
-	cache := &sloDisplayCache{q: q, row: row, sourceGeneration: sourceGeneration, now: now}
-	input := OperationalDetailInput{displayCache: cache, overviewOnly: job.Kind == "overview", Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)}
-	if input.overviewOnly {
-		input.displayCache = nil
-		input.retainedReader = &retainedSeriesReader{q: q, row: row, source: contextRow, now: now}
+	if job.Kind != "overview" {
+		if _, err := q.CompleteSloHistoryJob(bounded, dbgen.CompleteSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch}); err != nil {
+			return err
+		}
+		return tx.Commit(bounded)
 	}
+	input := OperationalDetailInput{overviewOnly: true, retainedReader: &retainedSeriesReader{q: q, row: row, source: contextRow, now: now},
+		Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)}
 	value, err := buildSloOperationalDetail(bounded, q, row, contextRow, input)
 	if err != nil {
 		return err

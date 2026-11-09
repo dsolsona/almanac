@@ -172,7 +172,7 @@ func TestRetainedAttainmentMatchesCanonicalSingleInterval(t *testing.T) {
 			if state != "missing" {
 				base.Observations = []slo.Observation{fact}
 			}
-			canonical, _, _, err := buildAttainmentSamples(t.Context(), base, start, end, time.Minute, "1")
+			canonical, _, _, err := buildCanonicalAttainmentSamples(t.Context(), base, start, end, time.Minute, "1")
 			if err != nil || len(canonical) != 1 {
 				t.Fatal("canonical interval unavailable", err)
 			}

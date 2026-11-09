@@ -37,7 +37,7 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 	}
 	end := oracle.EffectiveAt
 	start := end.Add(-time.Duration(oracle.Objective.CadenceSeconds) * time.Second)
-	interval, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id, Now: clock, At: &end, Start: &start, End: &end, BurnWindow: 3600})
+	interval, err := readOperationalDetailForTest(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id, Now: clock, At: &end, Start: &start, End: &end, BurnWindow: 3600})
 	if err != nil || len(interval.AttainmentSeries.Samples) != 1 {
 		t.Fatalf("canonical interval oracle failed: %v", err)
 	}
@@ -335,7 +335,7 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 	for _, point := range points {
 		at := point.Current.EvaluationAt
 		from := at.Add(-cadence)
-		canonical, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
+		canonical, err := readOperationalDetailForTest(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
 			Now: clock, At: &at, Start: &from, End: &at, BurnWindow: 3600})
 		if err != nil || len(canonical.AttainmentSeries.Samples) != 1 {
 			t.Fatalf("canonical historical oracle failed: %v", err)

@@ -12,7 +12,9 @@ optional [ADR-0042](../adr/0042-keyset-overview-pagination.md).
 **Spec:** [SPEC-0020](../specs/0020-cumulative-slo-calculation.md) and the
 accepted contracts it amends.
 **Base:** `ea501bc` on `main`. On 2026-11-09 the maintainer delegated the design
-decision to the primary agent; the documents remain proposed until accepted.
+decision to the primary agent. The maintainer subsequently selected `b7d8a5c`
+as authoritative and authorized implementation of all tasks through stacked PRs.
+Merge remains unauthorized.
 
 ## Constraints and review focus
 

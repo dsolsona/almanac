@@ -1,9 +1,9 @@
 # ADR-0041: One observation table with explicit marking
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-09
-- Accepted: pending
-- Approval: pending
+- Accepted: 2026-11-09
+- Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; merge remains unauthorized
 - Related specs: [SPEC-0020](../specs/0020-cumulative-slo-calculation.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0003](../specs/0003-ingestion-and-recovery.md)
 - Supersedes / superseded by: resolves open questions 1, 2 and 3 of [ADR-0034](0034-self-healing-derived-data.md); amends the two-table layout of [SPEC-0007](../specs/0007-storage-and-retention.md). Independent of [ADR-0040](0040-cumulative-sums-and-compact-extrema.md); the file name keeps the first draft's title for link stability.
 
