@@ -65,3 +65,6 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0037](0037-immediate-datasource-reassignment.md) | Reassign datasources without waiting for the previous agent | accepted |
 | [ADR-0038](0038-datasource-configuration-acknowledgement.md) | Finish datasource updates on configuration acknowledgement | accepted |
 | [ADR-0039](0039-cancel-pending-datasource-reassignment.md) | Cancel pending datasource reassignment without another pending move | accepted |
+| [ADR-0040](0040-cumulative-sums-and-compact-extrema.md) | Serve SLO history from cumulative sums and compact extrema | proposed |
+| [ADR-0041](0041-one-observation-table-with-cumulative-sums.md) | One observation table with explicit marking and cumulative sums | proposed |
+| [ADR-0042](0042-keyset-overview-pagination.md) | Keyset pagination for the SLO overview | proposed |
