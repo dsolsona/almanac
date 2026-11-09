@@ -25,11 +25,19 @@ pass, with storage integration taking 160.925 seconds. Full 20-SLO 35/365-day
 equivalence and savings
 are not claimed; F9-T02 remains in progress and the PR remains draft.
 
-[F9-T03](tasks/F9-T03.md) is in progress in `.worktrees/lean-slo-switch` on
+[F9-T03](tasks/F9-T03.md) is published as draft [PR #76](https://github.com/dsolsona/almanac/pull/76)
+from `.worktrees/lean-slo-switch` on
 `feat/lean-slo-switch`, based on `bc718bf`. Current refresh now uses hourly extrema
 for list sparklines; the old workers and queries are removed, migration 0046 drops
-their seven tables, and the remaining loops use due-time queries. Integrated
-verification and delivery are pending; no T03 acceptance is claimed yet.
+their seven tables, and the remaining loops use due-time queries. Checkpoint
+`c8ab6c7` passes `make check` (storage 74.394 seconds, 437 frontend tests and
+82 browser checks in 1.9 minutes), all 15 E2E journeys (4.0 minutes), and all
+five 35-day performance checks (9.4 minutes). Cold p95 is 333/252 ms for the
+SLO list/detail and 164/212 ms for the SLI list/detail; the independent budget
+comparison passes. Required CI is green and the native stack is verified as
+#72 → #73 → #75 → #76. Resource counters, full fleet equivalence, 365-day
+performance and the preview-copy migration rehearsal remain outstanding;
+T03 stays in progress and merge is unauthorized.
 
 # Delivery status
 
