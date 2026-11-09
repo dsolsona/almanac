@@ -1117,7 +1117,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            stage: "current" | "history" | "aggregate" | "extrema";
+            stage: "aggregate" | "extrema" | "current";
             /** @enum {string} */
             state: "pending" | "running" | "failed";
             attempts: number;

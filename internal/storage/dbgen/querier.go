@@ -12,11 +12,8 @@ import (
 
 type Querier interface {
 	AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDerivedBatchParams) error
-	AcknowledgeRetainedTileWork(ctx context.Context, arg AcknowledgeRetainedTileWorkParams) (int64, error)
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
-	AdmitSloHistoryJob(ctx context.Context, arg AdmitSloHistoryJobParams) (int64, error)
-	AdvanceRetainedSeriesRepair(ctx context.Context, arg AdvanceRetainedSeriesRepairParams) (int64, error)
 	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	AdvanceSloExtremaCursor(ctx context.Context, arg AdvanceSloExtremaCursorParams) (int64, error)
@@ -29,22 +26,16 @@ type Querier interface {
 	AggregateSloObservations(ctx context.Context, arg AggregateSloObservationsParams) (AggregateSloObservationsRow, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
 	ArchiveService(ctx context.Context, arg ArchiveServiceParams) (int64, error)
-	AttachPreparedBudgetSparkline(ctx context.Context, arg AttachPreparedBudgetSparklineParams) (int64, error)
-	BudgetPreparationExhausted(ctx context.Context, arg BudgetPreparationExhaustedParams) (bool, error)
 	CatalogFilteredServiceCount(ctx context.Context, arg CatalogFilteredServiceCountParams) (int64, error)
 	CatalogServiceCounts(ctx context.Context) (CatalogServiceCountsRow, error)
 	ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDirtyBatchParams) ([]AlmanacDerivedDirtyRange, error)
-	ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetainedSeriesRepairParams) (AlmanacSloSeriesRepair, error)
-	ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTileWorkParams) (AlmanacSloSeriesTileWork, error)
 	ClaimRetentionWork(ctx context.Context, arg ClaimRetentionWorkParams) (AlmanacRetentionWork, error)
 	ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (AlmanacSloExtremaCursor, error)
-	ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error)
 	ClearCurrentPreparationFailure(ctx context.Context, sloID pgtype.UUID) error
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)
 	CompleteAcknowledgedDatasourceReassignments(ctx context.Context, arg CompleteAcknowledgedDatasourceReassignmentsParams) ([]CompleteAcknowledgedDatasourceReassignmentsRow, error)
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CompleteRetentionWork(ctx context.Context, arg CompleteRetentionWorkParams) (int64, error)
-	CompleteSloHistoryJob(ctx context.Context, arg CompleteSloHistoryJobParams) (int64, error)
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountActiveServiceIDs(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
 	CountManagedUsers(ctx context.Context, arg CountManagedUsersParams) (int64, error)
@@ -56,8 +47,6 @@ type Querier interface {
 	DeferCurrentPreparation(ctx context.Context, arg DeferCurrentPreparationParams) error
 	// Hours waiting for their observation values: retry soon without counting an attempt (ADR-0034).
 	DeferDerivedBatch(ctx context.Context, arg DeferDerivedBatchParams) error
-	DeferRetainedSeriesRepair(ctx context.Context, arg DeferRetainedSeriesRepairParams) error
-	DeferRetainedTileWork(ctx context.Context, arg DeferRetainedTileWorkParams) error
 	DeferRetentionWork(ctx context.Context, arg DeferRetentionWorkParams) error
 	DeferSloExtremaCursor(ctx context.Context, arg DeferSloExtremaCursorParams) error
 	DeleteAcknowledgedAgentHandoffConfiguration(ctx context.Context, arg DeleteAcknowledgedAgentHandoffConfigurationParams) (int64, error)
@@ -70,13 +59,11 @@ type Querier interface {
 	DeleteExpiredDatasourceDiagnosticReceipt(ctx context.Context, arg DeleteExpiredDatasourceDiagnosticReceiptParams) (int64, error)
 	DeleteExpiredDatasourceReceipt(ctx context.Context, arg DeleteExpiredDatasourceReceiptParams) (int64, error)
 	DeleteExpiredDerivedGenerations(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error)
-	DeleteExpiredRetainedPoints(ctx context.Context, arg DeleteExpiredRetainedPointsParams) (int64, error)
+	// Only source work that was fenced as expired can release its old aggregates.
 	DeleteExpiredRetainedSourceHours(ctx context.Context, arg DeleteExpiredRetainedSourceHoursParams) (int64, error)
 	DeleteExpiredRetainedSourceWork(ctx context.Context, arg DeleteExpiredRetainedSourceWorkParams) (int64, error)
-	DeleteExpiredRetainedTileWork(ctx context.Context, arg DeleteExpiredRetainedTileWorkParams) (int64, error)
-	DeleteExpiredRetainedTiles(ctx context.Context, arg DeleteExpiredRetainedTilesParams) (int64, error)
+	DeleteExpiredRetentionExtrema(ctx context.Context, arg DeleteExpiredRetentionExtremaParams) (int64, error)
 	DeleteExpiredSliCreateReceipt(ctx context.Context, arg DeleteExpiredSliCreateReceiptParams) error
-	DeleteExpiredSloDisplayBlocks(ctx context.Context, updatedAt pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSloExtrema(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error)
 	DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error
 	DeleteExpiredSloProjectionPayloads(ctx context.Context, publishedAt pgtype.Timestamptz) (int64, error)
@@ -91,22 +78,12 @@ type Querier interface {
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
 	EnsureSloExtremaCursors(ctx context.Context, arg EnsureSloExtremaCursorsParams) (int64, error)
-	// A crash on the last permitted attempt must become an observable failure,
-	// rather than remaining running forever with an unclaimable expired lease.
-	ExhaustExpiredSloHistoryJobs(ctx context.Context, failingSince pgtype.Timestamptz) (int64, error)
 	ExhaustRetentionWork(ctx context.Context, nextAttemptAt pgtype.Timestamptz) error
-	// Expired leases are fenced before removing their facts. Retained failure rows
-	// remain inspectable and cannot be manually retried against deleted inputs.
-	ExpireRetentionHistoryJobs(ctx context.Context, arg ExpireRetentionHistoryJobsParams) (int64, error)
 	ExpireRetentionSourceWork(ctx context.Context, arg ExpireRetentionSourceWorkParams) (int64, error)
-	ExtendRetainedSeriesRepair(ctx context.Context, arg ExtendRetainedSeriesRepairParams) error
 	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
-	FailRetainedSeriesRepair(ctx context.Context, arg FailRetainedSeriesRepairParams) error
-	FailRetainedTileWork(ctx context.Context, arg FailRetainedTileWorkParams) error
 	FailRetentionWork(ctx context.Context, arg FailRetentionWorkParams) error
 	FailSloExtremaCursor(ctx context.Context, arg FailSloExtremaCursorParams) error
-	FailSloHistoryJob(ctx context.Context, arg FailSloHistoryJobParams) (int64, error)
 	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
@@ -194,7 +171,6 @@ type Querier interface {
 	InsertUserChallenge(ctx context.Context, arg InsertUserChallengeParams) error
 	InsertUserReceipt(ctx context.Context, arg InsertUserReceiptParams) error
 	LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDatasourceGrantExpiryParams) (pgtype.Timestamptz, error)
-	LatestPreparedBudgetSparkline(ctx context.Context, arg LatestPreparedBudgetSparklineParams) (LatestPreparedBudgetSparklineRow, error)
 	LatestSliAcceptedAt(ctx context.Context, arg LatestSliAcceptedAtParams) (pgtype.Timestamptz, error)
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
 	ListAgentDatasourceDependencies(ctx context.Context, arg ListAgentDatasourceDependenciesParams) ([]AlmanacDatasource, error)
@@ -229,7 +205,6 @@ type Querier interface {
 	LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
 	LockDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error)
 	LockDatasourceReassignmentAgents(ctx context.Context, agentIds []pgtype.UUID) ([]pgtype.UUID, error)
-	LockHistoryAdmission(ctx context.Context) error
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
 	LockLatestAgentOwnership(ctx context.Context, agentID pgtype.UUID) (AlmanacAgentOwnership, error)
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
@@ -257,41 +232,27 @@ type Querier interface {
 	// Preview counts stop at 1001; the report labels these as lower bounds.
 	PreviewCalculatedRetention(ctx context.Context, arg PreviewCalculatedRetentionParams) (PreviewCalculatedRetentionRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
+	// The digest remains an archive/snapshot identity until F9-T05, not a read-time integrity check.
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
-	PublishRetainedSloPoint(ctx context.Context, arg PublishRetainedSloPointParams) (int64, error)
-	PublishRetainedSloPointBatch(ctx context.Context, arg PublishRetainedSloPointBatchParams) ([]AlmanacSloSeriesTileWork, error)
-	PublishRetainedTile(ctx context.Context, arg PublishRetainedTileParams) (int64, error)
-	PublishRetainedTileSummary(ctx context.Context, arg PublishRetainedTileSummaryParams) (int64, error)
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
-	QueueDueBudgetHistory(ctx context.Context, arg QueueDueBudgetHistoryParams) (int64, error)
-	QueueRetainedTileSummaries(ctx context.Context, arg QueueRetainedTileSummariesParams) (int64, error)
+	ReadDerivedDue(ctx context.Context, arg ReadDerivedDueParams) (ReadDerivedDueRow, error)
+	ReadDerivedMaintenanceDue(ctx context.Context, arg ReadDerivedMaintenanceDueParams) (ReadDerivedMaintenanceDueRow, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
+	ReadExtremaDue(ctx context.Context, arg ReadExtremaDueParams) (ReadExtremaDueRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
-	ReadRetainedEdgePoints(ctx context.Context, arg ReadRetainedEdgePointsParams) ([]ReadRetainedEdgePointsRow, error)
-	// Per-interval commit generations distinguish genuinely new coverage from facts
-	// already included in a historical point, independently of receipt timestamps.
-	ReadRetainedLateTotals(ctx context.Context, arg ReadRetainedLateTotalsParams) ([]ReadRetainedLateTotalsRow, error)
-	// Validate newer source hours once per requested scope, then test each tile
-	// against that bounded set. Keep the same per-tile generation/overlap fences.
-	// Materialize UTF-8 once for both the byte budget and binary wire payload.
-	ReadRetainedParts(ctx context.Context, arg ReadRetainedPartsParams) ([]ReadRetainedPartsRow, error)
-	ReadRetainedSeriesTiles(ctx context.Context, arg ReadRetainedSeriesTilesParams) ([]ReadRetainedSeriesTilesRow, error)
-	ReadRetainedSloPoint(ctx context.Context, arg ReadRetainedSloPointParams) (ReadRetainedSloPointRow, error)
-	ReadRetainedTilePoints(ctx context.Context, arg ReadRetainedTilePointsParams) ([]ReadRetainedTilePointsRow, error)
-	ReadRetainedTileSummaryInput(ctx context.Context, id pgtype.UUID) (ReadRetainedTileSummaryInputRow, error)
 	// Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct
 	// interior once; only cadence-aligned boundary fragments use canonical rows.
 	ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedWindowBatchParams) ([]ReadRetainedWindowBatchRow, error)
 	ReadServiceCatalogFields(ctx context.Context, dollar_1 []pgtype.UUID) ([]ReadServiceCatalogFieldsRow, error)
+	ReadSloBudgetExtremaState(ctx context.Context, arg ReadSloBudgetExtremaStateParams) (ReadSloBudgetExtremaStateRow, error)
 	// Each active SLO is stopped (some of its work failed for seven days), failing (some of its work failed
 	// five times in a row), catching up (its current values or retained history are behind) or up to date.
 	ReadSloDerivedStates(ctx context.Context, arg ReadSloDerivedStatesParams) (ReadSloDerivedStatesRow, error)
 	ReadSloExtremaHours(ctx context.Context, arg ReadSloExtremaHoursParams) ([]AlmanacSloExtrema, error)
 	ReadSloExtremaParts(ctx context.Context, arg ReadSloExtremaPartsParams) ([]ReadSloExtremaPartsRow, error)
-	ReadSloHistoryPreparationState(ctx context.Context, arg ReadSloHistoryPreparationStateParams) (ReadSloHistoryPreparationStateRow, error)
 	// Hours with an observed interval whose values are not committed yet are not stored: the aggregate
 	// would count the interval with zero totals (ADR-0034). They are returned so the caller defers them.
 	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) ([]RebuildDerivedBatchRow, error)
@@ -300,20 +261,16 @@ type Querier interface {
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
 	RecordUserSignIn(ctx context.Context, arg RecordUserSignInParams) error
 	RedeemUserPassword(ctx context.Context, arg RedeemUserPasswordParams) (AlmanacUser, error)
-	ReleaseRetainedTileWork(ctx context.Context, arg ReleaseRetainedTileWorkParams) error
-	ReleaseSloHistoryForDependencies(ctx context.Context, arg ReleaseSloHistoryForDependenciesParams) (int64, error)
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
 	ReplaceServiceDependenciesDelete(ctx context.Context, serviceID pgtype.UUID) error
 	ReplaceServiceDependenciesInsert(ctx context.Context, arg ReplaceServiceDependenciesInsertParams) error
 	// ADR-0034: work that stopped after seven days of continuous failure starts again once its SLI has
 	// received observations since the failures began. Dirty hours restart in the ingestion trigger.
 	RestartStoppedDerivedWork(ctx context.Context, now pgtype.Timestamptz) (int64, error)
+	// Expired inputs need no derived preparation, but an active source lease must finish or expire.
 	RetentionHasDependencies(ctx context.Context, arg RetentionHasDependenciesParams) (bool, error)
 	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
 	RetryCurrentSloPreparation(ctx context.Context, arg RetryCurrentSloPreparationParams) (int64, error)
-	RetryFailedSloHistoryJob(ctx context.Context, arg RetryFailedSloHistoryJobParams) (int64, error)
-	RetryRetainedRepair(ctx context.Context, arg RetryRetainedRepairParams) (int64, error)
-	RetryRetainedTile(ctx context.Context, arg RetryRetainedTileParams) (int64, error)
 	RetrySloExtrema(ctx context.Context, arg RetrySloExtremaParams) (int64, error)
 	RetrySourceAggregate(ctx context.Context, arg RetrySourceAggregateParams) (int64, error)
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
@@ -327,9 +284,6 @@ type Querier interface {
 	SetDatasourceReassignmentUnavailable(ctx context.Context, arg SetDatasourceReassignmentUnavailableParams) (int64, error)
 	SetServiceCatalogMetadata(ctx context.Context, arg SetServiceCatalogMetadataParams) error
 	SetSloOverviewFingerprint(ctx context.Context, arg SetSloOverviewFingerprintParams) error
-	// A repair cursor's expired prefix can be skipped, but its retained tail stays
-	// admitted. Bumping both fences prevents an old lease from moving it backwards.
-	SkipExpiredRetainedRepairs(ctx context.Context, arg SkipExpiredRetainedRepairsParams) (int64, error)
 	SloOverviewSnapshotUsage(ctx context.Context, arg SloOverviewSnapshotUsageParams) (SloOverviewSnapshotUsageRow, error)
 	// Old handoffs may have prepublished a later boundary; shorten its predecessor too.
 	SupersedeFutureSliOwnershipEpochs(ctx context.Context, arg SupersedeFutureSliOwnershipEpochsParams) error

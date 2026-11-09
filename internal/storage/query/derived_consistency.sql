@@ -11,30 +11,13 @@ WITH changed AS (
     FROM changed c WHERE f.slo_id=c.slo_id AND f.definition_revision=c.definition_revision AND f.measurement_revision=c.measurement_revision
       AND f.attempts>=5 AND f.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>f.failing_since
     RETURNING 1
-), repair_work AS (
-    UPDATE public.almanac_slo_series_repair w SET attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
-    FROM changed c WHERE w.slo_id=c.slo_id AND w.definition_revision=c.definition_revision AND w.measurement_revision=c.measurement_revision
-      AND w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
-    RETURNING 1
-), tile_work AS (
-    UPDATE public.almanac_slo_series_tile_work w SET attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
-    FROM changed c WHERE w.slo_id=c.slo_id AND w.definition_revision=c.definition_revision AND w.measurement_revision=c.measurement_revision
-      AND w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
-    RETURNING 1
-), history_work AS (
-    UPDATE public.almanac_slo_history_jobs j SET state='pending',attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
-    FROM changed c WHERE j.slo_id=c.slo_id AND j.definition_revision=c.definition_revision AND j.measurement_revision=c.measurement_revision
-      AND j.state='failed' AND j.last_error IS DISTINCT FROM 'retention_expired'
-      AND j.attempts>=5 AND j.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>j.failing_since
-    RETURNING 1
 ), extrema_work AS (
     UPDATE public.almanac_slo_extrema_cursor w SET attempts=0,failing_since=NULL,next_attempt_at=sqlc.arg(now)::timestamptz
     FROM changed c WHERE w.slo_id=c.slo_id AND w.definition_revision=c.definition_revision AND w.measurement_revision=c.measurement_revision
       AND w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
     RETURNING 1
 )
-SELECT ((SELECT count(*) FROM current_work)+(SELECT count(*) FROM repair_work)
-       +(SELECT count(*) FROM tile_work)+(SELECT count(*) FROM history_work)+(SELECT count(*) FROM extrema_work))::bigint AS restarted;
+SELECT ((SELECT count(*) FROM current_work)+(SELECT count(*) FROM extrema_work))::bigint AS restarted;
 
 -- name: ReadSloDerivedStates :one
 -- Each active SLO is stopped (some of its work failed for seven days), failing (some of its work failed
@@ -43,22 +26,21 @@ WITH slo AS (
     SELECT s.id,d.revision,d.measurement_revision,d.cadence_seconds,
            coalesce(source.generation,0) AS source_generation,g.id AS generation_id,g.definition_revision AS g_revision,
            g.measurement_revision AS g_measurement_revision,g.calculation_version AS g_calculation_version,g.source_generation AS g_source_generation,
-           g.evaluated_through
+           g.evaluated_through,g.retention_start,w.id AS cursor_id,w.built_through
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
+    LEFT JOIN public.almanac_slo_extrema_cursor w ON w.slo_id=s.id AND w.definition_revision=d.revision
+      AND w.measurement_revision=d.measurement_revision AND w.calculation_version=sqlc.arg(calculation_version)
 ), work AS (
     SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_current_failures
-    UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_series_repair WHERE cursor_at<end_at
-    UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_series_tile_work
+        WHERE calculation_version=sqlc.arg(calculation_version)
     UNION ALL SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.attempts,w.failing_since FROM public.almanac_slo_extrema_cursor w
         WHERE w.calculation_version=sqlc.arg(calculation_version)
           AND (w.built_through<date_trunc('hour',sqlc.arg(now)::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
             OR w.dirty_from<LEAST(w.dirty_to,date_trunc('hour',sqlc.arg(now)::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'))
-    UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_history_jobs
-        WHERE last_error IS DISTINCT FROM 'retention_expired'
     UNION ALL SELECT d.slo_id,d.revision,d.measurement_revision,dirty.attempts,dirty.failing_since
         FROM public.almanac_derived_dirty_ranges dirty
         JOIN public.almanac_slo_definitions d ON d.sli_id=dirty.sli_id AND d.measurement_revision=dirty.measurement_revision
@@ -70,6 +52,8 @@ WITH slo AS (
            bool_or(w.slo_id IS NOT NULL) AS queued,
            bool_or(s.generation_id IS NULL OR s.g_revision<>s.revision OR s.g_measurement_revision<>s.measurement_revision
                OR s.g_calculation_version<>sqlc.arg(calculation_version)::text OR s.g_source_generation<>s.source_generation
+               OR s.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/s.cadence_seconds)*s.cadence_seconds)
+               OR s.cursor_id IS NULL OR s.built_through<date_trunc('hour',sqlc.arg(now)::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                OR s.evaluated_through<to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/s.cadence_seconds)*s.cadence_seconds)) AS behind
     FROM slo s
     LEFT JOIN work w ON w.slo_id=s.id AND w.definition_revision=s.revision AND w.measurement_revision=s.measurement_revision

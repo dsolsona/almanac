@@ -2030,7 +2030,6 @@ const (
 	Aggregate SloPreparationJobStage = "aggregate"
 	Current   SloPreparationJobStage = "current"
 	Extrema   SloPreparationJobStage = "extrema"
-	History   SloPreparationJobStage = "history"
 )
 
 // Valid indicates whether the value is a known member of the SloPreparationJobStage enum.
@@ -2041,8 +2040,6 @@ func (e SloPreparationJobStage) Valid() bool {
 	case Current:
 		return true
 	case Extrema:
-		return true
-	case History:
 		return true
 	default:
 		return false

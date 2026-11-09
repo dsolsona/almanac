@@ -570,9 +570,9 @@ func (q *Queries) ListServices(ctx context.Context, arg ListServicesParams) ([]A
 
 const listSloOverviewSnapshotItems = `-- name: ListSloOverviewSnapshotItems :many
 SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
-       coalesce(a.digest=sha256(convert_to(a.payload::text,'UTF8')),false)::boolean AS projection_valid,
+       (a.digest IS NOT NULL)::boolean AS projection_valid,
        (i.projection_current AND (i.projection_digest IS NULL OR
-           a.digest=sha256(convert_to(a.payload::text,'UTF8'))))::boolean AS projection_current,
+           a.digest IS NOT NULL))::boolean AS projection_current,
        coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
        coalesce((i.payload->>'_source_failed')::boolean,false)::boolean AS source_failed
 FROM public.almanac_slo_overview_snapshot_items i

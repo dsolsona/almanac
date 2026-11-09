@@ -11,31 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const budgetPreparationExhausted = `-- name: BudgetPreparationExhausted :one
-SELECT EXISTS(SELECT 1 FROM public.almanac_slo_history_jobs j
-WHERE j.slo_id=$1 AND j.definition_revision=$2 AND j.measurement_revision=$3
-  AND j.calculation_version=$4 AND j.kind='overview' AND j.state='failed')
-`
-
-type BudgetPreparationExhaustedParams struct {
-	SloID               pgtype.UUID `json:"slo_id"`
-	DefinitionRevision  int64       `json:"definition_revision"`
-	MeasurementRevision int64       `json:"measurement_revision"`
-	CalculationVersion  string      `json:"calculation_version"`
-}
-
-func (q *Queries) BudgetPreparationExhausted(ctx context.Context, arg BudgetPreparationExhaustedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, budgetPreparationExhausted,
-		arg.SloID,
-		arg.DefinitionRevision,
-		arg.MeasurementRevision,
-		arg.CalculationVersion,
-	)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const findReusableSloOverviewSnapshot = `-- name: FindReusableSloOverviewSnapshot :one
 SELECT id FROM public.almanac_slo_overview_snapshots
 WHERE actor_id=$1 AND session_verifier=$2 AND role=$3
@@ -88,9 +63,9 @@ WITH scope AS (
            EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges dirty WHERE dirty.sli_id=d.sli_id
              AND dirty.measurement_revision=d.measurement_revision AND dirty.attempts>=5
              AND (dirty.lease_until IS NULL OR dirty.lease_until<=$2::timestamptz)) AS source_failed,
-           EXISTS(SELECT 1 FROM public.almanac_slo_history_jobs j WHERE j.slo_id=s.id AND j.definition_revision=d.revision
-             AND j.measurement_revision=d.measurement_revision AND j.calculation_version=$1
-             AND j.kind='overview' AND j.state='failed') AS budget_failed,
+           EXISTS(SELECT 1 FROM public.almanac_slo_extrema_cursor w WHERE w.slo_id=s.id AND w.definition_revision=d.revision
+             AND w.measurement_revision=d.measurement_revision AND w.calculation_version=$1
+             AND w.attempts>=5) AS budget_failed,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
              AND g.calculation_version=$1
              AND g.source_generation=coalesce(source.generation,0)
@@ -139,60 +114,6 @@ func (q *Queries) OperationalScopeFingerprint(ctx context.Context, arg Operation
 	var i OperationalScopeFingerprintRow
 	err := row.Scan(&i.Fingerprint, &i.DefinitionCount, &i.Current)
 	return i, err
-}
-
-const queueDueBudgetHistory = `-- name: QueueDueBudgetHistory :execrows
-WITH wanted AS (
-    SELECT s.id, d.revision, d.measurement_revision, coalesce(source.generation,0) AS source_generation,
-           to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at,
-           to_timestamp(floor((floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds-604800)/d.cadence_seconds)*d.cadence_seconds) AS start
-           ,to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds) AS retention_start
-    FROM public.almanac_slos s
-    JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
-    JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-    LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
-    WHERE p.budget_history_state<>'ready'
-)
-INSERT INTO public.almanac_slo_history_jobs
-    (slo_id,definition_revision,measurement_revision,source_generation,evaluated_through,range_start,range_end,burn_window_seconds,state,next_attempt_at,created_at,kind,calculation_version,retention_start)
-SELECT w.id,w.revision,w.measurement_revision,w.source_generation,w.at,w.start,w.at,3600,'pending',$1::timestamptz,$1::timestamptz,'overview',$2,w.retention_start
-FROM wanted w
-WHERE NOT EXISTS (
-    SELECT 1 FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
-    WHERE g.slo_id=w.id AND g.definition_revision=w.revision AND g.measurement_revision=w.measurement_revision
-      AND g.source_generation=w.source_generation AND g.evaluated_through=w.at
-      AND g.calculation_version=$2 AND g.retention_start=w.retention_start
-      AND b.range_start=w.start AND b.range_end=w.at AND b.burn_window_seconds=3600 AND b.budget_sparkline IS NOT NULL
-)
-AND NOT EXISTS (
-    SELECT 1 FROM public.almanac_slo_history_jobs failed WHERE failed.slo_id=w.id AND failed.definition_revision=w.revision
-    AND failed.measurement_revision=w.measurement_revision AND failed.kind='overview' AND failed.state='failed'
-    AND failed.calculation_version=$2
-)
-AND NOT EXISTS (
-    SELECT 1 FROM public.almanac_slo_history_jobs queued
-    WHERE queued.slo_id=w.id AND queued.definition_revision=w.revision AND queued.measurement_revision=w.measurement_revision
-      AND queued.source_generation=w.source_generation AND queued.evaluated_through=w.at
-      AND queued.kind='overview' AND queued.calculation_version=$2
-      AND queued.retention_start=w.retention_start
-)
-AND (SELECT count(*) FROM public.almanac_slo_history_jobs queued WHERE queued.slo_id=w.id)<8
-ORDER BY w.id
-LIMIT greatest(0,64-(SELECT count(*) FROM public.almanac_slo_history_jobs))
-ON CONFLICT (slo_id,definition_revision,measurement_revision,source_generation,evaluated_through,range_start,range_end,burn_window_seconds,kind,calculation_version,retention_start) DO NOTHING
-`
-
-type QueueDueBudgetHistoryParams struct {
-	Now                pgtype.Timestamptz `json:"now"`
-	CalculationVersion string             `json:"calculation_version"`
-}
-
-func (q *Queries) QueueDueBudgetHistory(ctx context.Context, arg QueueDueBudgetHistoryParams) (int64, error) {
-	result, err := q.db.Exec(ctx, queueDueBudgetHistory, arg.Now, arg.CalculationVersion)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const setSloOverviewFingerprint = `-- name: SetSloOverviewFingerprint :exec

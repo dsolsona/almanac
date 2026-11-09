@@ -498,14 +498,6 @@ func buildCanonicalOperationalDetail(ctx context.Context, facts []slo.Observatio
 		FreshnessGrace: cadence + time.Duration(contextRow.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds)),
 		Target:         sli.NormalizeDecimal(row.Target), Observations: facts}
 	rolling, attainment, daily := buildCanonicalSamples, buildCanonicalAttainmentSamples, buildCanonicalDailyCompliance
-	if input.overviewOnly {
-		samples, err := rolling(ctx, base, rangeStart, rangeEnd, window, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", 30)
-		if err != nil {
-			return api.SloOperationalDetail{}, err
-		}
-		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
-			BudgetSeries: api.SloOperationalSeries{Kind: "rolling_budget", Samples: samples}}, nil
-	}
 	evaluate := func(duration time.Duration) (slo.WindowResult, error) {
 		return evaluateOperationalAt(ctx, base, effectiveAt, duration)
 	}

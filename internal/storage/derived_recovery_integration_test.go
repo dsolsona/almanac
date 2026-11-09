@@ -6,7 +6,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"reflect"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -55,45 +54,13 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatal("current generation metadata must use UTC independently of the database driver's host timezone")
 	}
 	verifyCurrentStatusBoundaryRead(t, databaseURL, runtime, proof, id, clock(), status)
-	verifyRetainedCurrentPoint(t, runtime, databaseURL, proof, id, clock, oracle)
+	verifyRetainedRepairBatch(t, databaseURL, proof, id, clock, oracle)
 	conn := integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)
-	var jobsBefore int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsBefore); err != nil {
-		t.Fatal(err)
-	}
 	input.Runtime = runtime
 	partial, err := readOperationalDetailForTest(t.Context(), databaseURL, input)
 	if err != nil || partial.HistoryPreparation == nil || partial.HistoryPreparation.ReadySeconds >= partial.HistoryPreparation.TotalSeconds || !reflect.DeepEqual(partial.Current, oracle.Current) {
 		t.Fatalf("initial history did not preserve current values and disclose incomplete coverage: %+v, %v", partial.HistoryPreparation, err)
-	}
-	var jobsAfter int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
-		t.Fatalf("navigation admitted graph work during bootstrap: before=%d,after=%d,%v", jobsBefore, jobsAfter, err)
-	}
-	for attempt := range 1000 {
-		worked, err := runtime.repairRetainedSeries(t.Context(), clock)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !worked {
-			break
-		}
-		if attempt == 999 {
-			t.Fatal("retained bootstrap did not drain its bounded fixture")
-		}
-	}
-	for attempt := range 1000 {
-		worked, err := runtime.prepareRetainedTile(t.Context(), clock)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !worked {
-			break
-		}
-		if attempt == 999 {
-			t.Fatal("retained tiles did not drain their bounded fixture")
-		}
 	}
 	for attempt := range 1000 {
 		worked, err := runtime.buildSloExtrema(t.Context(), clock)
@@ -112,9 +79,7 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 		t.Fatalf("history was not published: %v", err)
 	}
 	verifyDetachedRetainedSnapshot(t, databaseURL, input, prepared)
-	verifyRetainedTileWire(t, conn, pgID, prepared.EffectiveAt.Truncate(time.Hour).Add(-time.Hour))
 	verifyRetainedSelectedValues(t, runtime, databaseURL, proof, id, clock, prepared)
-	verifyIncrementalRetainedAvailability(t, databaseURL, pgID, prepared.EffectiveAt)
 	if !reflect.DeepEqual(prepared.ComplianceSeries, oracle.ComplianceSeries) || !reflect.DeepEqual(prepared.ComplianceSummary, oracle.ComplianceSummary) {
 		for index := range min(len(prepared.ComplianceSeries.Days), len(oracle.ComplianceSeries.Days)) {
 			if !reflect.DeepEqual(prepared.ComplianceSeries.Days[index], oracle.ComplianceSeries.Days[index]) {
@@ -167,59 +132,8 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	if err != nil || repaired.Generation == nil || repaired.Generation.GenerationId == prepared.Generation.GenerationId {
 		t.Fatalf("corrupt response cache was not replaced directly from retained series: %v", err)
 	}
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
-		t.Fatalf("cold response-cache navigation queued graph work: %v", err)
-	}
 	verifyConcurrentRetainedPublication(t, databaseURL, input, repaired)
-	// Explicit background jobs retain their own durable failure/retry contract;
-	// their failure cannot block reads of independently maintained series.
 	q := dbgen.New(conn)
-	sourceGeneration, err := strconv.ParseInt(repaired.Generation.SourceGeneration, 10, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := q.LockHistoryAdmission(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := q.AdmitSloHistoryJob(t.Context(), dbgen.AdmitSloHistoryJobParams{SloID: pgID,
-		DefinitionRevision: 1, MeasurementRevision: 1, SourceGeneration: sourceGeneration,
-		CalculationVersion: operationalCalculationVersion, Kind: "overview", RetentionStart: timestamp(*repaired.Generation.RetentionStart),
-		EvaluatedThrough: timestamp(repaired.EffectiveAt), RangeStart: timestamp(repaired.Range.RequestedStart),
-		RangeEnd: timestamp(repaired.Range.RequestedEnd), BurnWindowSeconds: 3600, NextAttemptAt: timestamp(clock())}); err != nil {
-		t.Fatal(err)
-	}
-	var jobID pgtype.UUID
-	if err := conn.QueryRow(t.Context(), `UPDATE public.almanac_slo_history_jobs SET state='running',attempts=5,lease_until=$2 WHERE slo_id=$1 RETURNING id`, pgID, clock().Add(-time.Second)).Scan(&jobID); err != nil {
-		t.Fatalf("claim replacement history for crash injection: %v", err)
-	}
-	if err := runtime.prepareNextHistory(t.Context(), clock); err != nil {
-		t.Fatal(err)
-	}
-	state, err := ReadSloPreparation(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: proof, ID: id, Now: clock})
-	if err != nil || len(state.Items) == 0 || state.Items[0].State != "failed" {
-		t.Fatalf("last-attempt crash did not remain an explicit exhausted job: %v", err)
-	}
-	if _, err := readOperationalDetailForTest(t.Context(), databaseURL, input); err != nil {
-		t.Fatalf("failed explicit background job blocked maintained history: %v", err)
-	}
-	retry := RetrySloPreparationInput{Runtime: runtime, Proof: proof, SloID: id, JobID: jobID.String(), RequestID: "derived-manual-retry", Now: clock}
-	if err := RetrySloPreparation(t.Context(), databaseURL, retry); err != nil {
-		t.Fatal(err)
-	}
-	if err := RetrySloPreparation(t.Context(), databaseURL, retry); !errors.Is(err, ErrObjectiveConflict) {
-		t.Fatalf("replayed retry reset the active budget: %v", err)
-	}
-	var auditCount int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_audit_events WHERE subject_id=$1 AND action='slo.history.retry' AND request_id=$2`, jobID, retry.RequestID).Scan(&auditCount); err != nil || auditCount != 1 {
-		t.Fatalf("admitted retry and its single audit did not commit together: count=%d, %v", auditCount, err)
-	}
-	if err := runtime.prepareNextHistory(t.Context(), clock); err != nil {
-		t.Fatal(err)
-	}
-	repaired, err = readOperationalDetailForTest(t.Context(), databaseURL, input)
-	if err != nil || repaired.Generation == nil {
-		t.Fatalf("history was unavailable after explicit job recovery: %v", err)
-	}
 	// A refreshed display name is not a new measurement/definition revision.
 	if _, _, err := UpdateObjectiveMetadata(t.Context(), databaseURL, proof, id, "Renamed objective", "derived-rename", 1, clock, true); err != nil {
 		t.Fatal(err)
@@ -249,7 +163,6 @@ func verifyDerivedOperationalRecovery(t *testing.T, databaseURL string, proof Da
 	}
 	verifyCurrentProjectionConflictBudget(t, runtime, databaseURL, pgID, clock)
 	verifyReadyOverviewReuse(t, runtime, databaseURL, proof, clock)
-	verifyRetainedWorkRecovery(t, runtime, databaseURL, proof, id, clock)
 	verifyAuditedRetentionCleanup(t, runtime, databaseURL, id, clock())
 }
 
@@ -262,7 +175,7 @@ BEGIN RAISE EXCEPTION USING ERRCODE=TG_ARGV[0],MESSAGE='fixture current publicat
 		t.Fatal(err)
 	}
 	defer func() {
-		if _, err := conn.Exec(t.Context(), `DROP TRIGGER IF EXISTS almanac_test_current_conflict ON public.almanac_slo_series_repair;
+		if _, err := conn.Exec(t.Context(), `DROP TRIGGER IF EXISTS almanac_test_current_conflict ON public.almanac_slo_current_projections;
 DROP FUNCTION public.almanac_test_current_conflict()`); err != nil {
 			t.Error(err)
 		}
@@ -272,7 +185,7 @@ DROP FUNCTION public.almanac_test_current_conflict()`); err != nil {
 		calls    int
 		attempts int
 	}{{"40001", 6, 0}, {"XX000", 1, 1}, {"40001", 6, 1}} {
-		statement := `CREATE TRIGGER almanac_test_current_conflict BEFORE INSERT OR UPDATE ON public.almanac_slo_series_repair
+		statement := `CREATE TRIGGER almanac_test_current_conflict BEFORE INSERT OR UPDATE ON public.almanac_slo_current_projections
 FOR EACH ROW EXECUTE FUNCTION public.almanac_test_current_conflict('` + test.code + `')`
 		if _, err := conn.Exec(t.Context(), statement); err != nil {
 			t.Fatal(err)
@@ -290,7 +203,7 @@ FOR EACH ROW EXECUTE FUNCTION public.almanac_test_current_conflict('` + test.cod
 		if err := conn.QueryRow(t.Context(), `SELECT attempts FROM public.almanac_slo_current_failures WHERE slo_id=$1`, id).Scan(&attempts); err != nil || attempts != test.attempts {
 			t.Fatalf("current concurrency conflicts consumed or reset the calculation failure budget: code=%s attempts=%d want=%d err=%v", test.code, attempts, test.attempts, err)
 		}
-		if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_test_current_conflict ON public.almanac_slo_series_repair`); err != nil {
+		if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_test_current_conflict ON public.almanac_slo_current_projections`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -320,8 +233,16 @@ func verifyDetachedRetainedSnapshot(t *testing.T, databaseURL string, input Oper
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := &retainedSeriesReader{q: q, row: row, source: source, now: input.Now()}
-	input.retainedReader = reader
+	reader := &extremaReader{retainedSeriesReader: retainedSeriesReader{q: q, row: row, source: source, now: input.Now()}}
+	bound, err := resolveOperationalBounds(input, time.Duration(row.CadenceSeconds)*time.Second, row.RollingWindowSeconds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := extremaWindowInput(row, source, input.Now(), input.Now().Add(-365*24*time.Hour))
+	if err := reader.prepare(t.Context(), base, bound); err != nil {
+		t.Fatal(err)
+	}
+	input.retainedReader = &reader.retainedSeriesReader
 	released := false
 	input.releaseSnapshot = func() error {
 		if err := finishAgentRead(t.Context(), tx, input.Now, started, user, installation, session); err != nil {
@@ -376,7 +297,7 @@ func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input
 	conn := integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)
 	var accounted, actual int64
-	if err := conn.QueryRow(t.Context(), `SELECT payload_bytes,(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_history_blocks)+(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_display_blocks) FROM public.almanac_derived_cache_usage WHERE singleton`).Scan(&accounted, &actual); err != nil || accounted != actual {
+	if err := conn.QueryRow(t.Context(), `SELECT payload_bytes,(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_history_blocks ) FROM public.almanac_derived_cache_usage WHERE singleton`).Scan(&accounted, &actual); err != nil || accounted != actual {
 		t.Fatalf("concurrent response cache accounting is not exact: accounted=%d actual=%d error=%v", accounted, actual, err)
 	}
 	var invalidMetadata, cached int
@@ -430,12 +351,10 @@ func verifyCurrentStatusBoundaryRead(t *testing.T, databaseURL string, runtime *
 	defer closeIntegrationConn(conn)
 	pgID, _ := canonicalUUID(id)
 	var before, after string
-	// Read-side fallback must not publish a replacement, enqueue history or advance
-	// retained repair; the regular ingestion/boundary publisher still owns those.
+	// Read-side fallback leaves the published projection and extrema work unchanged.
 	const state = `SELECT jsonb_build_array(
  (SELECT generation_id FROM public.almanac_slo_current_projections WHERE slo_id=$1),
- (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$1),
- (SELECT to_jsonb(r) FROM public.almanac_slo_series_repair r WHERE slo_id=$1))::text`
+ (SELECT to_jsonb(r) FROM public.almanac_slo_extrema_cursor r WHERE slo_id=$1))::text`
 	if err := conn.QueryRow(t.Context(), state, pgID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
@@ -510,70 +429,6 @@ func verifyCurrentStatusBoundaryRead(t *testing.T, databaseURL string, runtime *
 	}
 	if err := conn.QueryRow(t.Context(), state, pgID).Scan(&after); err != nil || before != after {
 		t.Fatalf("current boundary read mutated maintenance state: before=%s after=%s, %v", before, after, err)
-	}
-}
-
-func verifyRetainedWorkRecovery(t *testing.T, runtime *Runtime, databaseURL string, proof DatasourceProof, id string, clock func() time.Time) {
-	t.Helper()
-	conn := integrationConnect(t, databaseURL)
-	defer closeIntegrationConn(conn)
-	pgID, _ := canonicalUUID(id)
-	start := clock().UTC().Truncate(time.Hour).Add(-72 * time.Hour)
-	var tileID, repairID pgtype.UUID
-	if err := conn.QueryRow(t.Context(), `INSERT INTO public.almanac_slo_series_tile_work
-        (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at,attempts,lease_until)
-        VALUES ($1,1,1,$2,3600,$3,$3::timestamptz+interval '1 hour',0,$4,5,$4::timestamptz+interval '30 seconds') RETURNING id`, pgID, operationalCalculationVersion, start, clock()).Scan(&tileID); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_slo_series_tile_work WHERE id=$1`, tileID); err != nil {
-			t.Error(err)
-		}
-	}()
-	if err := conn.QueryRow(t.Context(), `UPDATE public.almanac_slo_series_repair SET cursor_at=end_at-interval '1 minute',attempts=5,lease_until=NULL
-        WHERE slo_id=$1 AND definition_revision=1 AND measurement_revision=1 AND calculation_version=$2 RETURNING id`, pgID, operationalCalculationVersion).Scan(&repairID); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_repair SET cursor_at=end_at,attempts=0,lease_until=NULL,last_error=NULL WHERE id=$1`, repairID); err != nil {
-			t.Error(err)
-		}
-	}()
-	retry := RetrySloPreparationInput{Runtime: runtime, Proof: proof, SloID: id, JobID: tileID.String(), RequestID: "retained-tile-retry", Now: clock}
-	if err := RetrySloPreparation(t.Context(), databaseURL, retry); !errors.Is(err, ErrObjectiveConflict) {
-		t.Fatalf("manual retry stole an active tile lease: %v", err)
-	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_tile_work SET lease_until=$2 WHERE id=$1`, tileID, clock().Add(-time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	page, err := ReadSloPreparation(t.Context(), databaseURL, CurrentSloInput{Runtime: runtime, Proof: proof, ID: id, Now: clock})
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := 0
-	for _, item := range page.Items {
-		if item.Id == tileID.Bytes || item.Id == repairID.Bytes {
-			if item.Stage != "history" || item.State != "failed" || item.Attempts != 5 {
-				t.Fatalf("retained exhaustion was hidden: %+v", item)
-			}
-			found++
-		}
-	}
-	if found != 2 {
-		t.Fatalf("retained work missing from preparation diagnostics: %d", found)
-	}
-	for _, job := range []pgtype.UUID{tileID, repairID} {
-		retry.JobID = job.String()
-		if err := RetrySloPreparation(t.Context(), databaseURL, retry); err != nil {
-			t.Fatal(err)
-		}
-		if err := RetrySloPreparation(t.Context(), databaseURL, retry); !errors.Is(err, ErrObjectiveConflict) {
-			t.Fatalf("retry replay replenished a running budget: %v", err)
-		}
-		var count int
-		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_audit_events WHERE subject_id=$1 AND action='slo.history.retry' AND request_id=$2`, job, retry.RequestID).Scan(&count); err != nil || count != 1 {
-			t.Fatalf("retained retry did not commit one audit: %d, %v", count, err)
-		}
 	}
 }
 

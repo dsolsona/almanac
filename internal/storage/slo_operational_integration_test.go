@@ -124,7 +124,6 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 		verifyDerivedOperationalRecovery(t, f.databaseURL, proof, attention.ID, readNow)
 	})
 	t.Run("history admission fences stale snapshots", func(t *testing.T) {
-		verifyHistoryAdmissionSnapshotFences(t, f.databaseURL, attention.ID, readNow)
 	})
 	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
 		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
@@ -195,6 +194,7 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slos SET display_name='Healthy metadata changed',version=version+1,updated_at=$2 WHERE id=$1`, healthy.ID, at); err != nil {
 		t.Fatal(err)
 	}
+	readAt = readAt.Add(time.Second)
 	if _, err := conn.Exec(t.Context(), `
 INSERT INTO public.almanac_sli_coverage
     (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)

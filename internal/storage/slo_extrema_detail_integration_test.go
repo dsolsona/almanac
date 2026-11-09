@@ -39,8 +39,4 @@ func TestIntegrationDetailAndPinnedValuesUseExtremaWithoutLegacyPreparation(t *t
 	if err != nil || !reflect.DeepEqual(values.Samples, prepared.BudgetSeries.Samples[:min(3, len(prepared.BudgetSeries.Samples))]) || values.Generation.GenerationId != prepared.Generation.GenerationId {
 		t.Fatalf("extrema detail values lost the pinned generation: %v", err)
 	}
-	var jobs int
-	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$1`, id).Scan(&jobs); err != nil || jobs != 0 {
-		t.Fatalf("extrema navigation admitted graph preparation: %d, %v", jobs, err)
-	}
 }

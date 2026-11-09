@@ -17,8 +17,18 @@ remains until F9-T03. The latest `make check` passes, including storage integrat
 in 132.630 seconds and 82 browser checks in 2.4 minutes; checkpoint `bae6456`
 also passes race integration (storage 218.763 seconds) and all 15 E2E journeys
 (4.2 minutes). The native stack is verified as #72 → #73 → #75. The 35-day
-performance run is in progress. Full 20-SLO 35/365-day equivalence and savings
+performance run passed all five checks in 8.9 minutes: cold p95 was 395/304 ms
+for the SLO list/detail and 236/253 ms for the SLI list/detail. The independent
+current-budget comparison also passed. A later CI race failure in the dense
+extrema worker is being addressed without changing timeouts or fixture density.
+Full 20-SLO 35/365-day equivalence and savings
 are not claimed; F9-T02 remains in progress and the PR remains draft.
+
+[F9-T03](tasks/F9-T03.md) is in progress in `.worktrees/lean-slo-switch` on
+`feat/lean-slo-switch`, based on `d3fe7b1`. Current refresh now uses hourly extrema
+for list sparklines; the old workers and queries are removed, migration 0046 drops
+their seven tables, and the remaining loops use due-time queries. Integrated
+verification and delivery are pending; no T03 acceptance is claimed yet.
 
 # Delivery status
 

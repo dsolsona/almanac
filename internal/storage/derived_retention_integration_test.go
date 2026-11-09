@@ -146,50 +146,12 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 			t.Fatal(err)
 		}
 		input := OperationalDetailInput{Runtime: runtime, Proof: proof, ID: objective.ID, Start: &start, End: &end, At: &end, BurnWindow: 3600, Now: clock}
-		var jobsBefore, jobsAfter int
-		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsBefore); err != nil {
-			t.Fatal(err)
-		}
 		if partial, err := readOperationalDetailForTest(t.Context(), f.databaseURL, input); err != nil || partial.HistoryPreparation == nil || partial.HistoryPreparation.ReadySeconds >= partial.HistoryPreparation.TotalSeconds {
 			t.Fatalf("explicit retained bootstrap was not disclosed: %+v, %v", partial.HistoryPreparation, err)
 		}
-		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
-			t.Fatalf("navigation admitted graph jobs during retained bootstrap: %d -> %d, %v", jobsBefore, jobsAfter, err)
-		}
 		logRetainedRepairPlan(t, conn, objective.ID, end.Add(-retainedRepairSpan(28*24*time.Hour, time.Duration(fixture.cadence)*time.Second)), end, clock())
-		repairStarted := time.Now()
-		for attempt := range fixture.days*24 + 2 {
-			worked, err := runtime.repairRetainedSeries(t.Context(), clock)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !worked {
-				break
-			}
-			if attempt%24 == 0 {
-				t.Logf("retained repair cadence=%ds chunks=%d elapsed=%s", fixture.cadence, attempt+1, time.Since(repairStarted))
-			}
-			if attempt == fixture.days*24+1 {
-				t.Fatal("retained repair exceeded the fixture's hourly bound")
-			}
-		}
-		tileStarted := time.Now()
-		for attempt := range fixture.days*25 + 2 {
-			worked, err := runtime.prepareRetainedTile(t.Context(), clock)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !worked {
-				break
-			}
-			if attempt%24 == 0 {
-				t.Logf("retained tiles cadence=%ds chunks=%d elapsed=%s", fixture.cadence, attempt+1, time.Since(tileStarted))
-			}
-			if attempt == fixture.days*25+1 {
-				t.Fatal("retained tile reduction exceeded the fixture's hour/day bound")
-			}
-		}
-		for attempt := range fixture.days + 3 {
+		maxExtremaTurns := fixture.days*24 + 2
+		for attempt := range maxExtremaTurns {
 			worked, err := runtime.buildSloExtrema(t.Context(), clock)
 			if err != nil {
 				t.Fatal(err)
@@ -197,11 +159,10 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 			if !worked {
 				break
 			}
-			if attempt == fixture.days+2 {
-				t.Fatal("extrema preparation exceeded the fixture's daily bound")
+			if attempt == maxExtremaTurns-1 {
+				t.Fatal("extrema preparation exceeded the fixture's hourly bound")
 			}
 		}
-		verifyRetainedTileWire(t, conn, pgID, end.Truncate(time.Hour).Add(-time.Hour))
 		if err := runtime.refreshCurrentProjection(t.Context(), pgID, clock); err != nil {
 			t.Fatal(err)
 		}

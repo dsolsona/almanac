@@ -64,7 +64,7 @@ func TestDerivedFailureCodesDoNotExposeDatabaseDiagnostics(t *testing.T) {
 		{ErrOperationalResource, "derived_resource_limit"},
 		{errors.New("private connection URL"), "history_preparation_failed"},
 	} {
-		if got := derivedFailureCode(test.err); got != test.want {
+		if got := derivedFailureReason(test.err, "history_preparation_failed"); got != test.want {
 			t.Fatalf("failure code=%q want %q", got, test.want)
 		}
 	}

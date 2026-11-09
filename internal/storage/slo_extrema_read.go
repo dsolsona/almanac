@@ -26,6 +26,11 @@ func (r *extremaReader) prepare(ctx context.Context, base slo.WindowInput, bound
 	if err != nil {
 		return err
 	}
+	return r.preparePlan(ctx, base, bound, plan)
+}
+
+func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, bound operationalBounds, plan extremaReadPlan) error {
+	var err error
 	parts := make([]retainedReadPart, 0, len(plan.stored))
 	valid := maxTime(base.ValidFrom, base.SliValidFrom)
 	for _, part := range plan.stored {
@@ -147,7 +152,6 @@ func (r *extremaReader) prepare(ctx context.Context, base slo.WindowInput, bound
 	} else {
 		r.first = &first[0]
 	}
-	r.firstLoaded = true
 	days := api.SloDailyComplianceSeries{Kind: "daily_compliance", Days: []api.SloDailyComplianceDay{}}
 	revision := strconv.FormatInt(r.row.DefinitionRevision, 10)
 	for _, part := range plan.days {
@@ -191,7 +195,6 @@ func (r *extremaReader) prepare(ctx context.Context, base slo.WindowInput, bound
 	}
 	r.daySummary.EvaluableDays = r.daySummary.MetDays + r.daySummary.ViolatedDays
 	r.days = &days
-	r.parts = []retainedReadPart{}
 	trace.SpanFromContext(ctx).SetAttributes(attribute.Int("almanac.extrema.rows", r.rowsRead), attribute.Int("almanac.extrema.live_endpoints", r.liveEndpoints))
 	return nil
 }

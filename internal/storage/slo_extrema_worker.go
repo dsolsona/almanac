@@ -89,10 +89,7 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 	if work.DirtyFrom.Valid && work.DirtyFrom.Time.Before(start) {
 		start = maxTime(work.DirtyFrom.Time, retention.Truncate(time.Hour))
 	}
-	end := closed
-	if dayEnd := utcDayStart(start).Add(24 * time.Hour); dayEnd.Before(end) {
-		end = dayEnd
-	}
+	end := extremaBuildEnd(start, closed, time.Duration(row.RollingWindowSeconds)*time.Second, time.Duration(row.CadenceSeconds)*time.Second)
 	if work.DirtyFrom.Valid && !start.Before(work.DirtyFrom.Time) && work.DirtyTo.Time.Before(end) {
 		end = ceilSliBoundary(work.DirtyTo.Time, time.Hour)
 	}
@@ -137,6 +134,19 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 		return true, ErrDerivedPending
 	}
 	return true, tx.Commit(bounded)
+}
+
+func extremaBuildEnd(start, closed time.Time, window, cadence time.Duration) time.Time {
+	// Whole hours share the existing exact-input budget within the five-second turn.
+	span := max(time.Hour, retainedRepairSpan(window, cadence).Truncate(time.Hour))
+	end := start.Add(span)
+	if dayEnd := utcDayStart(start).Add(24 * time.Hour); dayEnd.Before(end) {
+		end = dayEnd
+	}
+	if closed.Before(end) {
+		end = closed
+	}
+	return end
 }
 
 func buildExtremaHour(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, base slo.WindowInput, start time.Time) (extremaLanes, error) {

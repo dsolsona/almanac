@@ -97,29 +97,16 @@ func readOperationalOverviewForTest(ctx context.Context, databaseURL string, inp
 		return api.SloOperationalOverviewPage{}, err
 	}
 	for range 1000 {
-		repaired, err := runtime.repairRetainedSeries(ctx, input.Now)
+		worked, err := runtime.buildSloExtrema(ctx, input.Now)
 		if err != nil {
-			return api.SloOperationalOverviewPage{}, err
-		}
-		tiled, err := runtime.prepareRetainedTile(ctx, input.Now)
-		if err != nil {
-			return api.SloOperationalOverviewPage{}, err
-		}
-		if !repaired && !tiled {
-			break
-		}
-	}
-	if err := runtime.queueDueBudgetHistory(ctx, input.Now()); err != nil {
-		return api.SloOperationalOverviewPage{}, err
-	}
-	for range 1000 {
-		worked := false
-		if err := runtime.prepareHistory(ctx, input.Now, &worked); err != nil {
 			return api.SloOperationalOverviewPage{}, err
 		}
 		if !worked {
 			break
 		}
+	}
+	if err := runtime.refreshCurrentProjections(ctx, input.Now); err != nil {
+		return api.SloOperationalOverviewPage{}, err
 	}
 	input.Runtime = runtime
 	return ReadSloOperationalOverview(ctx, databaseURL, input)

@@ -44,17 +44,10 @@ func verifyAuditedRetentionCleanup(t *testing.T, runtime *Runtime, databaseURL, 
 	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES ($3,$1,$2,90,100)`, row.SliID, row.MeasurementRevision, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_slo_series_points
-        (slo_id,definition_revision,measurement_revision,calculation_version,evaluation_at,source_generation,published_at,payload)
-        SELECT slo_id,definition_revision,measurement_revision,calculation_version,$2,source_generation,$2,payload
-        FROM public.almanac_slo_series_points WHERE slo_id=$1 ORDER BY evaluation_at DESC LIMIT 1`, pgID, old); err != nil {
-		t.Fatal(err)
-	}
-	var tileWork pgtype.UUID
-	if err := tx.QueryRow(t.Context(), `INSERT INTO public.almanac_slo_series_tile_work
-        (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,next_attempt_at,lease_until)
-        VALUES ($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',0,$6,$6::timestamptz+interval '10 minutes') RETURNING id`,
-		pgID, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion, old.Truncate(time.Hour), now).Scan(&tileWork); err != nil {
+	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_slo_extrema
+(slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,retention_start,published_at,lanes)
+VALUES ($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',0,$5,$6,'{}')`,
+		pgID, row.DefinitionRevision, row.MeasurementRevision, operationalCalculationVersion, old.Truncate(time.Hour), now); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(t.Context()); err != nil {
@@ -73,33 +66,17 @@ func verifyAuditedRetentionCleanup(t *testing.T, runtime *Runtime, databaseURL, 
 		t.Fatal(err)
 	}
 	var preview retentionImpact
-	if err := json.Unmarshal(previewBytes, &preview); err != nil || len(preview.Partitions) != 2 || preview.CalculatedRowsAtLeast["points"] != 1 || preview.PreviewRowLimit != 1000 {
+	if err := json.Unmarshal(previewBytes, &preview); err != nil || len(preview.Partitions) != 2 || preview.CalculatedRowsAtLeast["extrema"] != 1 || preview.PreviewRowLimit != 1000 {
 		t.Fatalf("committed preview omitted canonical/calculated impact: %+v, %v", preview, err)
 	}
 	if worked, err := runtime.applyRetentionPreview(t.Context(), now); err != nil || worked {
 		t.Fatalf("new preview was applied before its grace period: %t, %v", worked, err)
 	}
-	blocked := false
-	for range 4 {
-		_, err := runtime.applyRetentionPreview(t.Context(), now.Add(time.Minute))
-		if errors.Is(err, errRetentionBlocked) {
-			blocked = true
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if !blocked {
-		t.Fatal("retention ignored an active tile lease")
-	}
-	var canonicalAfter int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1`, row.SliID).Scan(&canonicalAfter); err != nil || canonicalAfter != canonicalBefore {
-		t.Fatal("blocked retention removed canonical data")
-	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_series_tile_work SET lease_until=$2 WHERE id=$1`, tileWork, now); err != nil {
+	// Expired raw partitions can be removed while unrelated extrema work is leased.
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET lease_until=$2 WHERE slo_id=$1`, pgID, now.Add(10*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
+	var canonicalAfter int
 	for attempt := range 8 {
 		if _, err := runtime.applyRetentionPreview(t.Context(), now.Add(2*time.Minute)); err != nil {
 			t.Fatal(err)
@@ -128,7 +105,7 @@ func verifyAuditedRetentionCleanup(t *testing.T, runtime *Runtime, databaseURL, 
 		t.Fatalf("retention preview/apply outcomes were not independently durable: %d, %v", audit, err)
 	}
 	var deleted int64
-	if err := conn.QueryRow(t.Context(), `SELECT (cleanup_counts->>'points')::bigint FROM public.almanac_retention_work WHERE id=$1`, plan).Scan(&deleted); err != nil || deleted != 1 {
+	if err := conn.QueryRow(t.Context(), `SELECT (cleanup_counts->>'extrema')::bigint FROM public.almanac_retention_work WHERE id=$1`, plan).Scan(&deleted); err != nil || deleted != 1 {
 		t.Fatalf("retention lost its actual calculated cleanup count: %d, %v", deleted, err)
 	}
 	// A recreated relation with the same name/bounds is a different deletion scope.

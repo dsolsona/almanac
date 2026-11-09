@@ -43,7 +43,8 @@ SELECT interval_start,sli_id,measurement_revision,990,1000 FROM public.almanac_s
 		t.Fatal(err)
 	}
 	s.drain(t, "dense extrema source")
-	for turn := range 40 {
+	const maxTurns = 14*24 + 2
+	for turn := range maxTurns {
 		worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
 		if err != nil {
 			t.Fatal(err)
@@ -51,7 +52,7 @@ SELECT interval_start,sli_id,measurement_revision,990,1000 FROM public.almanac_s
 		if !worked {
 			break
 		}
-		if turn == 39 {
+		if turn == maxTurns-1 {
 			t.Fatal("dense extrema fixture did not finish bounded work")
 		}
 	}

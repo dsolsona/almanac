@@ -69,6 +69,17 @@ func TestOperationalBucketBoundariesCoverExactRange(t *testing.T) {
 	}
 }
 
+func TestUnavailableSamplesRespectCadenceEndpointsInShortParts(t *testing.T) {
+	start := time.Date(2026, 11, 1, 1, 0, 0, 0, time.UTC)
+	if samples := unavailableOperationalSamples(start, start.Add(59*time.Minute), 2*time.Hour, "1", 1, "history_preparing"); len(samples) != 0 {
+		t.Fatalf("part without a cadence endpoint produced %d samples", len(samples))
+	}
+	samples := unavailableOperationalSamples(start, start.Add(time.Hour), 2*time.Hour, "1", 1, "history_preparing")
+	if len(samples) != 1 || !samples[0].EvaluationAt.Equal(start.Add(time.Hour)) || samples[0].Quality.State != "unavailable" {
+		t.Fatalf("short part lost its cadence endpoint: %+v", samples)
+	}
+}
+
 func TestOperationalQueryLimitCountsUnicodeCharacters(t *testing.T) {
 	if !validOperationalQuery(strings.Repeat("界", 128)) {
 		t.Fatal("valid 128-character query was rejected due to its UTF-8 byte length")

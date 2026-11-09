@@ -14,6 +14,38 @@ import (
 	"github.com/dsolsona/almanac/internal/slo"
 )
 
+func TestExtremaBuildEndBoundsEvaluationWork(t *testing.T) {
+	day := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name                                 string
+		cadence                              time.Duration
+		startHour, availableHours, wantHours int
+	}{
+		{"no closed hours", time.Minute, 0, 0, 0},
+		{"small backlog", time.Minute, 0, 2, 2},
+		{"15 seconds", 15 * time.Second, 0, 48, 1},
+		{"60 seconds", time.Minute, 0, 48, 4},
+		{"70 seconds", 70 * time.Second, 0, 48, 9},
+		{"7200 seconds", 2 * time.Hour, 0, 48, 24},
+		{"day boundary", time.Minute, 23, 48, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			start := day.Add(time.Duration(test.startHour) * time.Hour)
+			end := extremaBuildEnd(start, start.Add(time.Duration(test.availableHours)*time.Hour), 28*24*time.Hour, test.cadence)
+			if !end.Equal(start.Add(time.Duration(test.wantHours) * time.Hour)) {
+				t.Fatalf("build ends at %s, want %d hours after %s", end, test.wantHours, start)
+			}
+			inputs := 0
+			for at := floorSliBoundary(start, test.cadence).Add(test.cadence); !at.After(end); at = at.Add(test.cadence) {
+				inputs += len(retainedRepairDurations(28*24*time.Hour, test.cadence))
+			}
+			if inputs > derivedWindowBatchLimit {
+				t.Fatalf("one turn evaluates %d inputs, limit %d", inputs, derivedWindowBatchLimit)
+			}
+		})
+	}
+}
+
 func TestDailyExtremaMarkKeepsOriginalCutoff(t *testing.T) {
 	day := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	at := day.Add(time.Hour)

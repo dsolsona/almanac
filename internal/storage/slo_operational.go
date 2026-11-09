@@ -93,7 +93,6 @@ type OperationalDetailInput struct {
 	historyPublication *retainedHistoryPublication
 	releaseSnapshot    func() error
 	currentOnly        bool
-	overviewOnly       bool
 	Runtime            *Runtime
 	Proof              DatasourceProof
 	ID                 string
@@ -292,7 +291,10 @@ func sloRecordDTO(value SloRecord) api.Slo {
 }
 
 func unavailableOperationalSamples(start, end time.Time, cadence time.Duration, revision string, buckets int, reason string) []api.SloOperationalSample {
-	ticks := int(end.Sub(start) / cadence)
+	ticks := int(floorSliBoundary(end, cadence).Sub(floorSliBoundary(start, cadence)) / cadence)
+	if ticks <= 0 {
+		return []api.SloOperationalSample{}
+	}
 	buckets = min(max(1, buckets), ticks)
 	boundaries := bucketBoundaries(start, end, ticks, buckets, cadence)
 	samples := make([]api.SloOperationalSample, 0, buckets)
@@ -853,14 +855,6 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		FreshnessGrace: cadence + time.Duration(contextRow.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds)),
 		Target:         sli.NormalizeDecimal(row.Target)}
 	rolling, attainment, daily := input.retainedReader.rolling, input.retainedReader.attainment, input.retainedReader.daily
-	if input.overviewOnly {
-		samples, err := rolling(ctx, base, rangeStart, rangeEnd, window, cadence, strconv.FormatInt(row.DefinitionRevision, 10), "remaining_fraction", 30)
-		if err != nil {
-			return api.SloOperationalDetail{}, err
-		}
-		return api.SloOperationalDetail{Objective: sloRecordDTO(sloRecord(row)), EffectiveAt: effectiveAt, CalculationVersion: operationalCalculationVersion,
-			BudgetSeries: api.SloOperationalSeries{Kind: "rolling_budget", Samples: samples}}, nil
-	}
 	var currentWindows map[time.Duration]slo.WindowResult
 	if input.currentOnly || input.retainedReader != nil {
 		currentWindows = make(map[time.Duration]slo.WindowResult)
@@ -945,12 +939,6 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 			Burn1h: burn1h, Burn6h: burn6h, Exhaustion: exhaustionValue(currentResult, burn1h, burn1hResult)}, nil
 	}
 	if reader := input.retainedReader; reader != nil && input.releaseSnapshot != nil {
-		if err := reader.read(ctx, base, rangeStart, rangeEnd); err != nil {
-			return api.SloOperationalDetail{}, err
-		}
-		if err := reader.readFirst(ctx, base, rangeStart, cadence); err != nil {
-			return api.SloOperationalDetail{}, err
-		}
 		days, summary, err := daily(ctx, base, rangeStart, rangeEnd, effectiveAt,
 			uuid.UUID(row.ID.Bytes), strconv.FormatInt(row.DefinitionRevision, 10), sli.NormalizeDecimal(row.Target), window, cadence)
 		if err != nil {
