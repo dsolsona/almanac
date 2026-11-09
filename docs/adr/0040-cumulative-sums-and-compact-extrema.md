@@ -5,7 +5,7 @@
 - Accepted: pending
 - Approval: pending
 - Related specs: [SPEC-0020](../specs/0020-cumulative-slo-calculation.md), [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md)
-- Supersedes / superseded by: proposes to supersede the retained point/tile series of [ADR-0025](0025-fast-operational-journeys-and-tracing.md), the hourly aggregates, history jobs and display blocks of [ADR-0024](0024-precomputed-operational-reads.md), and to reduce the queues governed by [ADR-0034](0034-self-healing-derived-data.md) to two cursors. Depends on [ADR-0041](0041-one-observation-table-with-cumulative-sums.md).
+- Supersedes / superseded by: proposes to supersede the retained point/tile series of [ADR-0025](0025-fast-operational-journeys-and-tracing.md), history jobs and display blocks of [ADR-0024](0024-precomputed-operational-reads.md), while retaining exact hourly aggregates and dirty-hour work under [ADR-0034](0034-self-healing-derived-data.md). Depends on [ADR-0041](0041-one-observation-table-with-cumulative-sums.md).
 
 ## Context
 
@@ -34,80 +34,111 @@ are larger and more churn-prone than necessary.
 
 ## Decision
 
-Proposal. Replace the retained point and tile series with two structures:
+Proposal. Replace bulk retained points and tiles with cumulative inputs and compact
+extrema, retaining the evidence and fallback required for correctness:
 
-1. **Cumulative sums on the observation rows** (ADR-0041). Each observation row
-   carries the running sums of good, total, observed, known-empty and zero-traffic
-   counts since the start of its measurement revision. Any cadence-aligned window
-   is the difference of two rows, found by two index lookups. A late or corrected
-   observation invalidates the sums from its interval forward; a worker recomputes
-   them forward in bounded chunks, tracked by one cursor per SLI revision.
-2. **Compact extrema rows** per SLO, per UTC hour and per UTC day. A row stores,
-   for each lane (rolling window, 1 h burn, 6 h burn, attainment), the endpoint
-   offset and exact counts of the first, last, minimum and maximum evaluation, the
-   quality states and freshness present, and the quality-transition offsets. A
-   daily row also stores the day-end compliance evaluation. Rows are about 1 KB;
-   a year is about 9 MB per SLO. One cursor per SLO tracks the hours to rebuild.
+1. **Cumulative sums on observations** (ADR-0041). Trusted window boundaries use
+   two prefix lookups. A late observation invalidates the suffix; one cursor per
+   SLI revision repairs it in bounded, generation-fenced chunks. Small unprocessed
+   windows use exact raw sums, with distinct cases before/across/after the cursor.
+   Larger windows use the existing exact hourly aggregates and bounded raw edges.
+   Dirty-hour work stays independently current, so old backfill cannot gate an
+   unaffected current window behind a revision-wide cumulative repair.
+2. **Hourly and daily extrema** per SLO. Each retained mark includes exact counts,
+   first/last observation and receipt times, and the original retained-input
+   boundary. Both sides of retained quality transitions carry complete marks,
+   deduplicated with first/last/min/max; the existing reducer and presence-set
+   fallback apply. Offsets use elapsed seconds from the UTC bucket, preserving
+   canonical endpoints for cadences that do not divide an hour/day or exceed an
+   hour. Daily compliance stores its actual cadence endpoint and UTC day-end.
+   One cursor per SLO tracks affected hours and days.
+3. **Historical prefix evidence.** Per-SLI cumulative checkpoints retain the
+   lookback before the canonical floor needed to rebuild any retained endpoint.
+   They are derived evidence, not queryable canonical observations. For inputs
+   already expired at upgrade, compact per-endpoint baselines preserve existing
+   retained totals and temporal evidence; repair adds only generation-fenced late
+   deltas, as `preserveRetainedPrefixes` does today. SPEC-0020 defines capture,
+   pruning and migration coverage. Four extrema and one floor cannot replace it.
 
-Reads compose a graph from extrema rows for closed hours or days and evaluate open
-hours and non-aligned edges live with cumulative lookups. Values shown to users
-are recomputed from stored exact counts with the canonical evaluator; nothing is
-averaged, rounded or reconstructed from plotted values. Current status, both burn
-windows and the attainment interval are eight lookups per SLO per cadence tick.
+Reads compose closed hours/days from extrema, partial days from hourly rows and
+bounded open edges from exact inputs. Sample values are evaluated from complete
+marks and their historical evidence boundary. Nothing is averaged, rounded or
+reconstructed from plotted values. F9-T06 measures lookup/fallback cost; there is
+no fixed eight-lookup promise during repair.
 
-Removed when this is in place: `almanac_slo_series_points`, `almanac_slo_series_tiles`,
-`almanac_slo_series_tile_work`, `almanac_slo_series_repair`, `almanac_sli_hourly_aggregates`,
-`almanac_derived_dirty_ranges`, `almanac_slo_display_blocks`, `almanac_slo_history_jobs`
-and the coverage triggers, with their Go code. Kept: current projections and their
-generations, current failures, the pinned detail payload used by exact-value pages
-(five-minute lifetime) and the overview snapshot tables, unless
-[ADR-0042](0042-keyset-overview-pagination.md) is accepted.
+Remove after verified replacement: `almanac_slo_series_points`,
+`almanac_slo_series_tiles`, `almanac_slo_series_tile_work`,
+`almanac_slo_series_repair`, `almanac_slo_display_blocks`,
+`almanac_slo_history_jobs` and the coverage ingestion triggers, with obsolete code.
+During T02/T03 explicit ingestion still marks dirty hours and rewinds legacy
+repair in the same acceptance transaction. Do not drop old point tables before
+all required historical baselines are verified.
 
-Also decided here, because they fall out of the same change:
+Keep exact hourly aggregates and dirty-hour work, prefix checkpoints/baselines,
+current projections/generations/failures, the pinned detail payload and its byte
+accounting (five-minute lifetime), and overview snapshots unless ADR-0042 is
+accepted. There are two new cursors plus retained dirty-hour work, not a
+two-cursor-only pipeline.
 
-- The open hour is never materialized; it is always evaluated live. Until this
-  ADR is implemented, hourly tile work is deferred to the end of its hour, as daily
-  tile work already is, which removes the per-minute tile rebuilds at no risk.
-- The seven-day list sparkline is composed from hourly extrema when an hour closes
-  and only its last bucket is refreshed per cadence tick.
-- Stored payloads are no longer re-hashed on read. Generation keys and PostgreSQL
-  checksums are the integrity mechanism; a digest is kept only on the pinned
-  exact-value payload.
-- Workers wake on the next due time rather than polling every second when idle.
-- Code reachable only when no runtime is configured, the raw-fact sweep builders,
-  display blocks and detail-kind history jobs are deleted.
+Also proposed:
+
+- The open hour is evaluated live. Before this ADR is implemented, defer hourly
+  tile work until the hour closes, as daily work already is. T01's equivalence
+  tests must prove the retained reader still supplies the same values.
+- The seven-day sparkline uses hourly extrema, refreshing its last bucket at each
+  cadence tick and rebuilding covered hours after corrections.
+- Retained payloads no longer re-hash on read except pinned exact-value payloads.
+  Generation fences remain; PostgreSQL checksums do not replace semantic evidence
+  or the retained pinned-cache byte budget.
+- Workers wake on due time within existing polling/latency bounds.
+- Remove verified production-dead fallback/sweep code, display blocks and
+  detail-kind history jobs. Keep numerical helpers used by retained/new readers.
 
 ## Alternatives considered
 
-- Keep the series but shrink the samples to the eight fields the UI uses: about a
-  five-fold saving, but the per-minute churn, the repair cursor and the tile queue
-  remain. Rejected as a half measure.
-- Hourly aggregates with prefix sums at hour resolution only: edges still scan up
-  to 120 raw rows per window and extrema need the raw rows anyway. Rejected; the
-  per-row sums cost about 60 bytes per observation and remove the edge scans.
-- Recompute every cadence endpoint on read: a year graph needs 525,600 evaluations
-  per lane. Rejected; extrema rows exist precisely to avoid this.
+- Keep verbose points and tiles: preserves behavior but retains the measured
+  duplication and write amplification. Replace only after full equivalence.
+- Gate every read on one cumulative cursor and remove hourly aggregates: rejected
+  after review. One old insertion invalidates later prefixes even for unaffected
+  current windows. Reuse the exact hourly fallback instead of introducing another
+  cumulative coordinate model or a correction journal.
+- Keep four extrema and one revision floor without historical prefix evidence:
+  rejected after review. Once older raw inputs expire they cannot reproduce every
+  candidate endpoint needed to reselect extrema after late data.
+- Recompute every cadence endpoint on read: a year needs 525,600 evaluations per
+  lane at 60 s. Rejected; maintained extrema keep ordinary graph reads bounded.
 - Another storage engine: no measured justification; ADR-0025's reasoning holds.
 
 ## Consequences
 
-- Derived storage per SLO-year falls from gigabytes to about 9 MB; canonical rows
-  grow by about 60 bytes. Background writes between observations fall to one
-  cumulative extension and, once per hour, one extrema row per SLO.
-- Any range, burn window or cold read is a bounded number of index lookups; no
-  cache miss or preparation phase exists for normal navigation.
-- A late observation costs a forward recomputation of cumulative sums from its
-  interval, chunked per partition. Rare very late data is proportionally more
-  expensive than today's one-hour rebuild; it remains bounded and resumable.
-- `latest_receipt_at` in window quality becomes the receipt time of the window's
-  last observed interval rather than the maximum receipt time in the window. It is
-  receipt metadata and does not enter any calculation; SPEC-0020 records it.
-- SPEC-0019 AC-12 and the SPEC-0007 amendment that require persisting a year of
-  calculated points are replaced by the extrema and cumulative contracts; the
-  observable guarantees (year of history, exact drill-down, extrema and gaps,
-  survival across restart) are unchanged.
-- The migration is preserving: new structures are built from existing observations
-  before old ones are dropped; no operator data is deleted by this decision.
+- The original 1 KB/extrema-row and 9 MB/SLO-year estimates omitted temporal
+  fields, transitions, prefix evidence, indexes and fallback storage. They are
+  withdrawn as total-size claims. F9-T06 must establish actual savings, including
+  the temporary migration baseline cache. Prefix size scales with cadence and
+  applicable historical lookback; canonical retention remains 365 days.
+- Forward cumulative repair remains bounded and resumable, and can be expensive
+  for very old data. Independent hourly fallback preserves current reads and
+  current-first admission while it catches up. Ordinary navigation still cannot
+  wait for queued preparation.
+- The proposed last-interval receipt shortcut is withdrawn. Keep the existing
+  maximum receipt watermark, including upgrade baselines whose older raw receipt
+  inputs have expired. Hourly temporal summaries and bounded edges supply it;
+  counts alone cannot establish this metadata.
+- SPEC-0019 AC-12 and SPEC-0007's required persisted-point representation become
+  extrema/cumulative/prefix contracts. A year of exact history, gap visibility,
+  pinned values, restart survival and late correction remain requirements.
+- Migration preserves canonical observations and historical evidence. Verify
+  values, temporal fields and provenance as well as counts before destructive
+  cutover. Provisional migrations follow existing main migration 0044: T02 0045,
+  T03 0046, T04 0047, optional T05 0048. Recheck contiguous numbering at each task.
+
+## Review corrections
+
+The 2026-11-09 revision corrects trusted cumulative bounds, complete marks and
+transitions, historical prefix preservation, staged legacy invalidation,
+unaffected-range availability, arbitrary-cadence offsets and migration numbering.
+These decisions remain proposed; authorization to revise the documents is not
+acceptance or authorization to implement them.
 
 ## Revisit conditions
 

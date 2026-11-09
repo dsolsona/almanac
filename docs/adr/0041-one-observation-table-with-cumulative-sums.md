@@ -30,13 +30,26 @@ Proposal. One partitioned table `almanac_sli_observations` with primary key
 exactly when the outcome is `observed`, no stored interval end and no separate
 observation identifier. Cumulative columns `cum_good`, `cum_total`, `cum_observed`,
 `cum_known_empty` and `cum_zero_traffic` hold running totals since the revision
-start and are all null until the cumulative worker has processed the row. One
-partial index on observed rows supports first/last-observation lookups.
+start (or the fixed retained/admissible boundary on upgrade when older inputs have
+expired) and are all null until the cumulative worker has processed the row. The
+anchor never treats unknown earlier history as zero; SPEC-0020's historical
+baselines preserve those window inputs. One partial index on observed rows
+supports first/last-observation lookups.
 
 The storage function that accepts an observation advances the source generation,
 lowers the revision's `cumulative_through` to the new interval start and marks the
 affected SLOs' extrema cursors, in the acceptance transaction. There are no
-triggers. Duplicate and conflicting deliveries change nothing, as today.
+ingestion triggers. Explicit dirty-hour marking remains for the independent exact
+hourly fallback. Until T04 removes retained readers, the transaction also rewinds
+legacy repair and increments its version, preserving both removed triggers'
+effects. Duplicate and conflicting deliveries change nothing, as today.
+
+Cumulative columns after `cumulative_through` are untrusted even when non-null.
+SPEC-0020 separates windows before, across and after that cursor. Use bounded raw
+sums or the existing exact hourly fallback rather than waiting for unrelated
+historical suffix repair. Hourly aggregates, dirty-hour work and readiness fences
+remain. Source generation and lease epoch fence worker acknowledgment against
+concurrent ingestion.
 
 Provenance columns (`execution_id`, `delivery_id`, `agent_id`, `session_generation`,
 `configuration_revision`, `lease_id`, `agent_created_at`, `result_digest`) stay on
@@ -51,20 +64,31 @@ the receipt retention in SPEC-0007.
 - Keep the triggers: they guarantee marking for every write path, but there is one
   write path and the hidden logic already caused one incident. Rejected.
 - A separate cumulative table keyed like the observations: doubles the row count
-  for no isolation benefit. Rejected.
+  for no isolation benefit. Rejected. The bounded retained-prefix checkpoint
+  archive has a different purpose: historical inputs after canonical expiry.
+- Gate long current windows on revision-wide repair: rejected; unaffected-range
+  availability requires independent exact fallback.
 
 ## Consequences
 
-- Two fewer indexes and one fewer table on the largest data; every window read is
-  one table. Raw storage per SLI-year falls by roughly a third after the cumulative
-  columns are added.
+- Coverage and values merge into one canonical table. Cumulative fields, indexes,
+  retained hourly fallback and shared prefix evidence all count in F9-T06. The
+  earlier roughly one-third saving is an estimate, not a verified result.
 - The migration copies existing coverage and values into the new table partition
   by partition, computes initial cumulative sums, then drops the old tables and
   triggers. It must run on the maintainer's preview without losing observations
   and must be resumable.
-- Retention drops whole partitions as today. Before a partition is dropped the
-  cumulative values at its upper boundary are stored on the revision row as the
-  retained floor so later windows keep their exact totals.
+- Retention drops whole partitions as today only after cumulative values through
+  the boundary are verified and fenced. Store the floor atomically with the drop.
+  One floor is insufficient for older rolling windows: preserve per-SLI prefix
+  checkpoints with temporal evidence across the required historical lookback,
+  following SPEC-0020. Canonical APIs still enforce the published 365-day cutoff.
+- Existing historical prefixes whose raw inputs expired before upgrade need
+  verified per-endpoint baselines before old points are removed. Never substitute
+  zero or today's raw cutoff for that evidence. Prefix storage and the retained
+  hourly fallback are proposed corrections and await acceptance with this ADR.
+- T02 provisionally uses migration 0045, after existing main migration 0044;
+  recheck the integrated tip and contiguous numbering before implementation.
 
 ## Revisit conditions
 

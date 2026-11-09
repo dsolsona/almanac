@@ -54,15 +54,25 @@ to keep them coherent. Proposed in [ADR-0040](adr/0040-cumulative-sums-and-compa
 [ADR-0041](adr/0041-one-observation-table-with-cumulative-sums.md), optional
 [ADR-0042](adr/0042-keyset-overview-pagination.md) and draft
 [SPEC-0020](specs/0020-cumulative-slo-calculation.md): cumulative sums on the
-observation rows plus compact per-hour and per-day extrema rows, about 9 MB per
-SLO-year, with two cursors instead of five queues. [plan 0030](plans/0030-lean-slo-derived-data.md)
+observation rows plus compact per-hour and per-day extrema rows.
+The maintainer requested corrections to the seven branch-review findings on
+2026-11-09. The revised proposal defines trusted cumulative boundary cases,
+complete mark/transition temporal evidence, historical prefix checkpoints and
+finite upgrade baselines, explicit legacy invalidation through T03, independent
+exact hourly fallback during distant repair, elapsed-second cadence offsets and
+contiguous migrations after existing 0044. Hourly aggregates/dirty work remain
+alongside the two new cursors. The earlier 9 MB/SLO-year total omitted required
+evidence and indexes and is withdrawn pending complete F9-T06 measurements.
+ADRs remain proposed and SPEC-0020 draft; document revision is not acceptance.
+[plan 0030](plans/0030-lean-slo-derived-data.md)
 and tasks F9-T01 to F9-T06 are written; F9-T01 and the F9-T06 baseline are ready
-inside accepted contracts, the rest wait for acceptance. Nothing is implemented or
-committed. Not measured: sizes and churn on a populated database (the local
-Postgres container was not running and the dev database is empty); F9-T06 covers it.
-Side observation: the local app container is restarting with "backend ownership
-acquisition failed" because its Postgres container is not running; `make run`
-should restore it.
+inside accepted contracts, the rest wait for acceptance. No application change is
+implemented or verified. The design snapshot is `a8f457d`, based on `ea501bc`;
+review corrections are local documentation changes. Not measured: sizes and churn
+on a populated database (the initial review had no running Postgres or populated
+dev fixture); F9-T06 covers it. The earlier local-container restart observation
+belongs to that review snapshot; this document revision makes no current runtime
+health claim and does not change the maintainer's stack.
 
 
 PR [#68](https://github.com/dsolsona/almanac/pull/68) Greptile follow-up, 2026-11-08:

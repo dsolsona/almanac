@@ -182,7 +182,10 @@ proposed in [ADR-0040](../adr/0040-cumulative-sums-and-compact-extrema.md),
 [ADR-0041](../adr/0041-one-observation-table-with-cumulative-sums.md) and optional
 [ADR-0042](../adr/0042-keyset-overview-pagination.md) with [SPEC-0020](../specs/0020-cumulative-slo-calculation.md).
 [F9-T01](F9-T01.md) defers open-hour tile rebuilds and deletes production-dead code
-inside accepted contracts. [F9-T02](F9-T02.md) merges observations into one table with
-cumulative sums, [F9-T03](F9-T03.md) adds extrema rows and the new detail read path,
-[F9-T04](F9-T04.md) moves current status over and drops the old pipeline, [F9-T05](F9-T05.md)
-is keyset pagination if ADR-0042 is accepted, and [F9-T06](F9-T06.md) records before/after measurements.
+inside accepted contracts. [F9-T02](F9-T02.md) merges observations into one table with cumulative sums,
+shared prefix checkpoints and independent exact hourly fallback, while preserving
+legacy invalidation. [F9-T03](F9-T03.md) adds complete extrema marks, upgrade prefix
+baselines and the new detail reader. [F9-T04](F9-T04.md) switches current status and
+drops obsolete bulk point/tile machinery after historical evidence is verified;
+hourly fallback and prefix evidence remain. [F9-T05](F9-T05.md) is optional keyset
+pagination, and [F9-T06](F9-T06.md) records complete before/after measurements.
