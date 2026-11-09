@@ -178,7 +178,7 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request, requestID s
 			return
 		}
 		settings, password, token, valid := mapWrite(write)
-		if !valid {
+		if !valid || (write.CancelReassignment != nil && *write.CancelReassignment) {
 			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
 			return
 		}
@@ -241,7 +241,8 @@ func (h *Handler) detail(w http.ResponseWriter, r *http.Request, requestID strin
 		version, _ := strconv.ParseInt(versionText, 10, 64)
 		updated, err := storage.UpdateDatasource(r.Context(), h.databaseURL, h.secrets, storage.UpdateDatasourceInput{
 			Proof: proof, DatasourceID: datasourceID, ExpectedVersion: version, Settings: settings,
-			Password: password, Token: token, RequestID: requestID, Now: h.now,
+			CancelReassignment: write.CancelReassignment != nil && *write.CancelReassignment,
+			Password:           password, Token: token, RequestID: requestID, Now: h.now,
 		})
 		if err != nil {
 			h.writeStorageError(w, err, requestID)

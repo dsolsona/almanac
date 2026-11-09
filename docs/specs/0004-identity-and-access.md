@@ -112,7 +112,8 @@ UI visibility is not an authorization boundary. Human roles apply deployment-wid
 | --- | --- | --- | --- | --- | --- |
 | Read services, SLI/SLO definitions, measurements, reports | Yes | Yes | Yes | Assigned execution definitions only | Explicit definition scope only |
 | Create/edit/delete services, SLIs, SLOs, alert rules; import/export | No | Yes | Yes | No | No |
-| Edit datasources, credentials, assignments; run connection diagnostics | No | No | Yes | Execute assigned work only | No |
+| Edit datasource connectivity/credentials; run connection diagnostics | No | No | Yes | Execute assigned work only | No |
+| Change datasource agent assignment; list safe agent summaries | No | Yes | Yes | No | No |
 | Preview SLI queries through an existing datasource | No | Yes | Yes | Execute assigned work only | No |
 | Request/cancel ordinary backfill | No | Yes | Yes | Execute assigned ranges only | Explicit historical ingest only |
 | Manually retrigger exhausted repair | No | No | Yes | Execute assigned ranges only | No |
@@ -305,14 +306,16 @@ buffered live results. Historical results require a currently valid chunk lease
 and generation, including at commit; expiry or cancellation denies their acceptance. A still-owned assignment may retain explicitly recorded delivery
 authority for old intervals, but that record grants no new execution. Disabling the identity
 or explicitly withdrawing the execution grant denies delayed acceptance as well.
-Reassignment fences old-owner writes immediately, including delayed submissions;
-normal datasource reassignment waits for outstanding execution authority to expire.
+Datasource reassignment by an editor/admin immediately changes assignment and
+publishes both configurations under [ADR-0037](../adr/0037-immediate-datasource-reassignment.md).
+It fences every old-agent submission for the datasource, including delayed results
+and receipt replay, without waiting for outstanding execution authority to expire.
 Process replacement instead follows [ADR-0022](../adr/0022-restartable-agent-ownership.md):
 a compatible cold start with a valid credential and fresh proof immediately advances
 ownership generation and fences the prior process, without waiting for offline expiry.
-A forced datasource reassignment requires explicit acknowledgment of possible query
-overlap and does not restore old-owner ingestion rights. Other replay limits
-belong to the protocol and ingestion contracts.
+An unreachable old agent may still query until its offline lease expires; ordinary
+assignment does not require a separate force action. Other replay limits belong
+to the protocol and ingestion contracts.
 
 For example, agent A collects 09:59 under revision 1, rotates its token at 10:00,
 and submits at 10:02. The old revoked token fails; its replacement may succeed if

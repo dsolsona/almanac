@@ -25,7 +25,8 @@
 .ds-head__copy .app-breadcrumbs { margin-bottom: var(--space-2); }
 .ds-head__title { margin: 0; }
 .ds-head__status { margin: var(--space-2) 0 0; }
-.ds-head__status .ui-mark { font-size: .9375rem; }
+.ds-head__status .ui-mark { max-width: 100%; font-size: .9375rem; }
+.ds-head__status .ui-mark__row, .ds-tile__v .ui-mark__row { white-space: normal; overflow-wrap: anywhere; }
 .ds-head__meta { margin: var(--space-1) 0 0; color: var(--text-3); font: .75rem/1.9 var(--mono); overflow-wrap: anywhere; }
 .ds-head__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding-top: 6px; }
 

@@ -19,6 +19,12 @@ error budgets and burn rates, reporting, and alerting.
 
 ## Ownership and authorization
 
+- All task work must use a dedicated git worktree under the repository's already
+  ignored `.worktrees/` directory. This includes code, documentation, agent rules,
+  configuration and reviews. Create or verify the task's own worktree and branch
+  before editing; do not ask for separate worktree permission. Use the primary
+  checkout only for git-state inspection and worktree management, never task edits.
+  Preserve unrelated changes when moving existing work into its worktree.
 - Use one primary agent, normally Sol or Astra, for planning, implementation,
   debugging, tests, review and delivery. No mandatory Luna delegation or separate
   permission for primary-agent implementation. Model selection belongs to runtime

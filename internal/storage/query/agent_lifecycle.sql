@@ -71,7 +71,7 @@ VALUES (sqlc.arg(actor_id), sqlc.arg(operation), sqlc.arg(idempotency_key), sqlc
 
 -- name: AgentHasDatasourceDependencies :one
 SELECT EXISTS (SELECT 1 FROM public.almanac_datasources WHERE agent_id = sqlc.arg(agent_id))
-    OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = sqlc.arg(agent_id) OR target_agent_id = sqlc.arg(agent_id));
+    OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE target_configuration_revision = 0 AND (source_agent_id = sqlc.arg(agent_id) OR target_agent_id = sqlc.arg(agent_id)));
 
 -- name: ArchiveAgent :one
 UPDATE public.almanac_agents SET enabled = false, deleted_at = sqlc.arg(updated_at),

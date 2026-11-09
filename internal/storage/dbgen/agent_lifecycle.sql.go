@@ -13,7 +13,7 @@ import (
 
 const agentHasDatasourceDependencies = `-- name: AgentHasDatasourceDependencies :one
 SELECT EXISTS (SELECT 1 FROM public.almanac_datasources WHERE agent_id = $1)
-    OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = $1 OR target_agent_id = $1)
+    OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE target_configuration_revision = 0 AND (source_agent_id = $1 OR target_agent_id = $1))
 `
 
 func (q *Queries) AgentHasDatasourceDependencies(ctx context.Context, agentID pgtype.UUID) (pgtype.Bool, error) {

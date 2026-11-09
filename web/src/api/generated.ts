@@ -1789,7 +1789,7 @@ export interface components {
             /** Format: date-time */
             authority_expires_at: string;
             /** @enum {string} */
-            state: "waiting_for_previous_agent" | "replacement_unavailable";
+            state: "waiting_for_previous_agent" | "replacement_unavailable" | "waiting_for_configuration" | "waiting_for_collection";
         };
         DatasourceTLS: {
             insecure_skip_verify: boolean;
@@ -1822,6 +1822,8 @@ export interface components {
             polling_interval_seconds: number;
             /** Format: uuid */
             agent_id: string;
+            /** @description Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed. */
+            cancel_reassignment?: boolean;
         };
         SecretAction: {
             /** @enum {string} */

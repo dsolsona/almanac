@@ -52,11 +52,12 @@ function validDatasource(value: unknown): value is Datasource {
   if (Object.hasOwn(value, 'reassignment')) {
     const move = value.reassignment;
     if (!object(move) || !exactKeys(move, ['source_agent_id', 'target_agent_id', 'requested_at', 'authority_expires_at', 'state'])
-      || typeof move.source_agent_id !== 'string' || !UUID.test(move.source_agent_id) || move.source_agent_id !== value.agent_id
+      || typeof move.source_agent_id !== 'string' || !UUID.test(move.source_agent_id) || ![move.source_agent_id, move.target_agent_id].includes(value.agent_id)
       || typeof move.target_agent_id !== 'string' || !UUID.test(move.target_agent_id) || move.target_agent_id === move.source_agent_id
       || typeof move.requested_at !== 'string' || !Number.isFinite(Date.parse(move.requested_at))
       || typeof move.authority_expires_at !== 'string' || !Number.isFinite(Date.parse(move.authority_expires_at))
-      || typeof move.state !== 'string' || !['waiting_for_previous_agent', 'replacement_unavailable'].includes(move.state)) return false;
+      || (['waiting_for_configuration', 'waiting_for_collection'].includes(String(move.state)) && move.target_agent_id !== value.agent_id)
+      || typeof move.state !== 'string' || !['waiting_for_previous_agent', 'replacement_unavailable', 'waiting_for_configuration', 'waiting_for_collection'].includes(move.state)) return false;
   }
   let endpoint: URL;
   try { endpoint = new URL(String(value.endpoint)); } catch { return false; }

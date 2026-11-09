@@ -11,7 +11,8 @@ or [annotation](../../../../docs/specs/0017-slo-timeline-annotations.md) contrac
 - Check units, precision/range, intermediate arithmetic, rounding and comparisons
   against the numerical contract, especially at classification boundaries.
 - Verify explicit evaluation time, interval inclusion, alignment and revision
-  boundaries. Exercise daylight-saving and civil-calendar transitions where relevant.
+  boundaries. Reason through daylight-saving and civil-calendar transitions and
+  inspect existing coverage where relevant.
 - Trace missing, partial, stale, empty, zero-traffic and expired inputs through the
   defined quality and freshness rules. Check that unavailable evidence cannot be
   mistaken for a successful measurement or alert recovery.

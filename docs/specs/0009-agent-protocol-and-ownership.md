@@ -182,18 +182,24 @@ operators should configure one desired replica per agent identity.
 Agents negotiate `almanac.agent.v2` for drain-before-acknowledgement semantics,
 falling back to `almanac.agent.v1` with older peers. A v2 agent installs the removal
 configuration, cancels affected collection tasks and waits for their completion before
-acknowledging. Only a v2 acknowledgement for the current generation and exact removal
-revision can shorten the authority wait; v1 acknowledgements wait for expiry.
+acknowledging. This provides orderly cancellation, but datasource replacement does
+not wait for that acknowledgement under [ADR-0037](../adr/0037-immediate-datasource-reassignment.md).
 
-Datasource reassignment atomically marks the pending transition and freezes renewal
-of the affected old execution grants. It normally waits until that recorded authority
-expires, then activates the new agent. Other unaffected grants may renew. Definition
-changes similarly freeze superseded grant renewal while waiting for acknowledgment
-or expiry. Force reassignment records an explicit warning
-that both may query until old lease expiry, increments generation, and rejects all
-old-owner writes immediately. The system prevents duplicate accepted measurements;
-it cannot physically cancel a disconnected old process instantly. This is an explicit
-exception to normal single-owner execution, never silent duplication.
+Datasource reassignment follows [ADR-0037](../adr/0037-immediate-datasource-reassignment.md):
+an editor/admin immediately changes assignment and publishes new configuration to
+both agents. The old agent receives no moved datasource on reconnect. Reject every
+subsequent old-agent submission for it, including buffered results and receipt replay;
+preserve accepted history and unrelated grants. The replacement does not wait for
+old authority expiry or acknowledgement. Its configuration and canonical ownership
+bounds authorize collection without changing measurement revisions. Show Updating
+until the replacement acknowledges its current configuration,
+then Active, independently of measurement freshness under
+[ADR-0038](../adr/0038-datasource-configuration-acknowledgement.md). Connected v2
+agents reconcile immediately on the WebSocket notice without waiting for a
+heartbeat. See SPEC-0018 for management states. An unreachable
+old process may still query until lease expiry, but cannot submit accepted results
+for the moved datasource. Definition edits retain their separate acknowledgement
+and expiry rules; this policy does not change their activation bounds.
 
 ## Configuration and delayed results
 
@@ -214,6 +220,15 @@ revision and empty production measurement grant exactly match that lease. A
 configuration notice never causes credentials or queries to use a revision that
 the current grant does not authorize. This also lets a same-process reconnect with
 an older grant reach heartbeat renewal before fetching the newer snapshot.
+
+A v2 agent that has not yet applied any configuration immediately sends a heartbeat
+when its initial fetch reports configuration unavailable. Before the ordinary
+10-second minimum renewal interval, the backend permits this refresh only for the
+current authenticated generation, with applied revision zero in both runtime and
+heartbeat, and a desired revision newer than the current grant. Existing lease,
+nonce, sequence and credential checks still apply. The refreshed grant authorizes
+the initial snapshot; an unchanged revision cannot repeatedly bypass the interval.
+
 
 For query/cadence edits, prepublish the new settings and effective interval bounds.
 Activate only at a common boundary after the agent acknowledges those bounds or its

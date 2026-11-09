@@ -12,18 +12,24 @@ import (
 )
 
 const activateDatasourceAgent = `-- name: ActivateDatasourceAgent :one
-UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1, updated_at = $3
-WHERE id = $1 AND version < 9223372036854775807 RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at
+UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1, updated_at = $3, assignment_configuration_revision = $4
+WHERE id = $1 AND version < 9223372036854775807 RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision
 `
 
 type ActivateDatasourceAgentParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	AgentID   pgtype.UUID        `json:"agent_id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID                              pgtype.UUID        `json:"id"`
+	AgentID                         pgtype.UUID        `json:"agent_id"`
+	UpdatedAt                       pgtype.Timestamptz `json:"updated_at"`
+	AssignmentConfigurationRevision int64              `json:"assignment_configuration_revision"`
 }
 
 func (q *Queries) ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error) {
-	row := q.db.QueryRow(ctx, activateDatasourceAgent, arg.ID, arg.AgentID, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, activateDatasourceAgent,
+		arg.ID,
+		arg.AgentID,
+		arg.UpdatedAt,
+		arg.AssignmentConfigurationRevision,
+	)
 	var i AlmanacDatasource
 	err := row.Scan(
 		&i.ID,
@@ -45,6 +51,7 @@ func (q *Queries) ActivateDatasourceAgent(ctx context.Context, arg ActivateDatas
 		&i.AgentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AssignmentConfigurationRevision,
 	)
 	return i, err
 }
@@ -67,7 +74,7 @@ func (q *Queries) AgentHasLiveOwnership(ctx context.Context, arg AgentHasLiveOwn
 }
 
 const agentHasPendingReassignments = `-- name: AgentHasPendingReassignments :one
-SELECT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = $1 UNION ALL SELECT 1 FROM public.almanac_agent_handoff_configurations WHERE agent_id = $1)
+SELECT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = $1 AND target_configuration_revision = 0)
 `
 
 func (q *Queries) AgentHasPendingReassignments(ctx context.Context, sourceAgentID pgtype.UUID) (bool, error) {
@@ -101,43 +108,6 @@ func (q *Queries) AgentHasUnsettledCurrentLease(ctx context.Context, arg AgentHa
 	return exists, err
 }
 
-const bumpDatasourceVersion = `-- name: BumpDatasourceVersion :one
-UPDATE public.almanac_datasources SET version = version + 1, updated_at = $2
-WHERE id = $1 AND version < 9223372036854775807 RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at
-`
-
-type BumpDatasourceVersionParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) BumpDatasourceVersion(ctx context.Context, arg BumpDatasourceVersionParams) (AlmanacDatasource, error) {
-	row := q.db.QueryRow(ctx, bumpDatasourceVersion, arg.ID, arg.UpdatedAt)
-	var i AlmanacDatasource
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.DisplayName,
-		&i.Version,
-		&i.Provider,
-		&i.ConfigurationFormat,
-		&i.Endpoint,
-		&i.Tls,
-		&i.AuthenticationMode,
-		&i.AuthenticationUsername,
-		&i.PasswordEnvelope,
-		&i.PasswordRevision,
-		&i.TokenEnvelope,
-		&i.TokenRevision,
-		&i.PollingIntervalSeconds,
-		&i.SettlingDelaySeconds,
-		&i.AgentID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const closeSliOwnershipEpoch = `-- name: CloseSliOwnershipEpoch :execrows
 UPDATE public.almanac_sli_ownership_epochs SET ends_at = $3
 WHERE sli_id = $1 AND measurement_revision = $2 AND ends_at IS NULL
@@ -155,6 +125,51 @@ func (q *Queries) CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwners
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const completeAcknowledgedDatasourceReassignments = `-- name: CompleteAcknowledgedDatasourceReassignments :many
+DELETE FROM public.almanac_datasource_reassignments pending
+WHERE pending.target_agent_id = $1
+  AND pending.target_configuration_revision > 0
+  AND pending.target_configuration_revision <= $2::bigint
+  AND EXISTS (SELECT 1 FROM public.almanac_datasources datasource
+      WHERE datasource.id = pending.datasource_id AND datasource.agent_id = pending.target_agent_id)
+  AND EXISTS (SELECT 1 FROM public.almanac_agent_runtime_status runtime
+      WHERE runtime.agent_id = pending.target_agent_id AND runtime.generation = $3
+        AND runtime.applied_configuration_revision >= pending.target_configuration_revision)
+RETURNING datasource_id, actor_id, request_id
+`
+
+type CompleteAcknowledgedDatasourceReassignmentsParams struct {
+	AgentID               pgtype.UUID `json:"agent_id"`
+	ConfigurationRevision int64       `json:"configuration_revision"`
+	Generation            int64       `json:"generation"`
+}
+
+type CompleteAcknowledgedDatasourceReassignmentsRow struct {
+	DatasourceID pgtype.UUID `json:"datasource_id"`
+	ActorID      pgtype.UUID `json:"actor_id"`
+	RequestID    string      `json:"request_id"`
+}
+
+func (q *Queries) CompleteAcknowledgedDatasourceReassignments(ctx context.Context, arg CompleteAcknowledgedDatasourceReassignmentsParams) ([]CompleteAcknowledgedDatasourceReassignmentsRow, error) {
+	rows, err := q.db.Query(ctx, completeAcknowledgedDatasourceReassignments, arg.AgentID, arg.ConfigurationRevision, arg.Generation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CompleteAcknowledgedDatasourceReassignmentsRow{}
+	for rows.Next() {
+		var i CompleteAcknowledgedDatasourceReassignmentsRow
+		if err := rows.Scan(&i.DatasourceID, &i.ActorID, &i.RequestID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteAcknowledgedAgentHandoffConfiguration = `-- name: DeleteAcknowledgedAgentHandoffConfiguration :execrows
@@ -232,7 +247,7 @@ func (q *Queries) GetCurrentSliOwnershipEpoch(ctx context.Context, arg GetCurren
 }
 
 const getDatasourceReassignment = `-- name: GetDatasourceReassignment :one
-SELECT datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, drained_at, retry_at, state, actor_id, request_id FROM public.almanac_datasource_reassignments WHERE datasource_id = $1
+SELECT datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, drained_at, retry_at, state, actor_id, request_id, target_configuration_revision FROM public.almanac_datasource_reassignments WHERE datasource_id = $1
 `
 
 func (q *Queries) GetDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error) {
@@ -252,27 +267,29 @@ func (q *Queries) GetDatasourceReassignment(ctx context.Context, datasourceID pg
 		&i.State,
 		&i.ActorID,
 		&i.RequestID,
+		&i.TargetConfigurationRevision,
 	)
 	return i, err
 }
 
 const insertDatasourceReassignment = `-- name: InsertDatasourceReassignment :exec
 INSERT INTO public.almanac_datasource_reassignments
-(datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, retry_at, state, actor_id, request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $4, 'waiting_for_previous_agent', $9, $10)
+(datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, retry_at, state, actor_id, request_id, target_configuration_revision)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $4, 'waiting_for_configuration', $9, $10, $11)
 `
 
 type InsertDatasourceReassignmentParams struct {
-	DatasourceID        pgtype.UUID        `json:"datasource_id"`
-	SourceAgentID       pgtype.UUID        `json:"source_agent_id"`
-	TargetAgentID       pgtype.UUID        `json:"target_agent_id"`
-	RequestedAt         pgtype.Timestamptz `json:"requested_at"`
-	AuthorityExpiresAt  pgtype.Timestamptz `json:"authority_expires_at"`
-	RemovalRevision     int64              `json:"removal_revision"`
-	SourceConfigVersion int64              `json:"source_config_version"`
-	UsesV2Removal       bool               `json:"uses_v2_removal"`
-	ActorID             pgtype.UUID        `json:"actor_id"`
-	RequestID           string             `json:"request_id"`
+	DatasourceID                pgtype.UUID        `json:"datasource_id"`
+	SourceAgentID               pgtype.UUID        `json:"source_agent_id"`
+	TargetAgentID               pgtype.UUID        `json:"target_agent_id"`
+	RequestedAt                 pgtype.Timestamptz `json:"requested_at"`
+	AuthorityExpiresAt          pgtype.Timestamptz `json:"authority_expires_at"`
+	RemovalRevision             int64              `json:"removal_revision"`
+	SourceConfigVersion         int64              `json:"source_config_version"`
+	UsesV2Removal               bool               `json:"uses_v2_removal"`
+	ActorID                     pgtype.UUID        `json:"actor_id"`
+	RequestID                   string             `json:"request_id"`
+	TargetConfigurationRevision int64              `json:"target_configuration_revision"`
 }
 
 func (q *Queries) InsertDatasourceReassignment(ctx context.Context, arg InsertDatasourceReassignmentParams) error {
@@ -287,6 +304,7 @@ func (q *Queries) InsertDatasourceReassignment(ctx context.Context, arg InsertDa
 		arg.UsesV2Removal,
 		arg.ActorID,
 		arg.RequestID,
+		arg.TargetConfigurationRevision,
 	)
 	return err
 }
@@ -342,8 +360,8 @@ func (q *Queries) LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDat
 }
 
 const listAgentDatasourceDependencies = `-- name: ListAgentDatasourceDependencies :many
-SELECT d.id, d.name, d.display_name, d.version, d.provider, d.configuration_format, d.endpoint, d.tls, d.authentication_mode, d.authentication_username, d.password_envelope, d.password_revision, d.token_envelope, d.token_revision, d.polling_interval_seconds, d.settling_delay_seconds, d.agent_id, d.created_at, d.updated_at FROM public.almanac_datasources d
-WHERE (d.agent_id = $1 OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = d.id AND (r.source_agent_id = $1 OR r.target_agent_id = $1)))
+SELECT d.id, d.name, d.display_name, d.version, d.provider, d.configuration_format, d.endpoint, d.tls, d.authentication_mode, d.authentication_username, d.password_envelope, d.password_revision, d.token_envelope, d.token_revision, d.polling_interval_seconds, d.settling_delay_seconds, d.agent_id, d.created_at, d.updated_at, d.assignment_configuration_revision FROM public.almanac_datasources d
+WHERE (d.agent_id = $1 OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = d.id AND r.target_configuration_revision = 0 AND (r.source_agent_id = $1 OR r.target_agent_id = $1)))
   AND (d.created_at, d.id) > ($2::timestamptz, $3::uuid)
 ORDER BY d.created_at, d.id LIMIT $4
 `
@@ -389,6 +407,7 @@ func (q *Queries) ListAgentDatasourceDependencies(ctx context.Context, arg ListA
 			&i.AgentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AssignmentConfigurationRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -442,7 +461,7 @@ func (q *Queries) ListDatasourceSliMeasurements(ctx context.Context, datasourceI
 
 const listReadyDatasourceReassignments = `-- name: ListReadyDatasourceReassignments :many
 SELECT datasource_id, source_agent_id, target_agent_id FROM public.almanac_datasource_reassignments
-WHERE (drained_at IS NOT NULL OR authority_expires_at <= $1) AND retry_at <= $1 ORDER BY retry_at, requested_at, datasource_id LIMIT 50
+WHERE retry_at <= $1 ORDER BY retry_at, requested_at, datasource_id LIMIT 50
 `
 
 type ListReadyDatasourceReassignmentsRow struct {
@@ -451,8 +470,8 @@ type ListReadyDatasourceReassignmentsRow struct {
 	TargetAgentID pgtype.UUID `json:"target_agent_id"`
 }
 
-func (q *Queries) ListReadyDatasourceReassignments(ctx context.Context, authorityExpiresAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error) {
-	rows, err := q.db.Query(ctx, listReadyDatasourceReassignments, authorityExpiresAt)
+func (q *Queries) ListReadyDatasourceReassignments(ctx context.Context, retryAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error) {
+	rows, err := q.db.Query(ctx, listReadyDatasourceReassignments, retryAt)
 	if err != nil {
 		return nil, err
 	}
@@ -472,7 +491,7 @@ func (q *Queries) ListReadyDatasourceReassignments(ctx context.Context, authorit
 }
 
 const lockDatasourceReassignment = `-- name: LockDatasourceReassignment :one
-SELECT datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, drained_at, retry_at, state, actor_id, request_id FROM public.almanac_datasource_reassignments WHERE datasource_id = $1 FOR UPDATE
+SELECT datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, drained_at, retry_at, state, actor_id, request_id, target_configuration_revision FROM public.almanac_datasource_reassignments WHERE datasource_id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error) {
@@ -492,8 +511,34 @@ func (q *Queries) LockDatasourceReassignment(ctx context.Context, datasourceID p
 		&i.State,
 		&i.ActorID,
 		&i.RequestID,
+		&i.TargetConfigurationRevision,
 	)
 	return i, err
+}
+
+const lockDatasourceReassignmentAgents = `-- name: LockDatasourceReassignmentAgents :many
+SELECT id FROM public.almanac_agents
+WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE
+`
+
+func (q *Queries) LockDatasourceReassignmentAgents(ctx context.Context, agentIds []pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, lockDatasourceReassignmentAgents, agentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markDatasourceReassignmentDrained = `-- name: MarkDatasourceReassignmentDrained :execrows
@@ -562,6 +607,44 @@ func (q *Queries) SetDatasourceReassignmentUnavailable(ctx context.Context, arg 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const supersedeFutureSliOwnershipEpochs = `-- name: SupersedeFutureSliOwnershipEpochs :exec
+WITH removed AS (
+    DELETE FROM public.almanac_sli_ownership_epochs AS future
+    WHERE future.sli_id = $2 AND future.measurement_revision = $3
+      AND future.starts_at >= $1
+)
+UPDATE public.almanac_sli_ownership_epochs AS preceding SET ends_at = $1
+WHERE preceding.sli_id = $2 AND preceding.measurement_revision = $3
+  AND preceding.starts_at < $1 AND preceding.ends_at > $1
+`
+
+type SupersedeFutureSliOwnershipEpochsParams struct {
+	StartsAt            pgtype.Timestamptz `json:"starts_at"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+}
+
+// Old handoffs may have prepublished a later boundary; shorten its predecessor too.
+func (q *Queries) SupersedeFutureSliOwnershipEpochs(ctx context.Context, arg SupersedeFutureSliOwnershipEpochsParams) error {
+	_, err := q.db.Exec(ctx, supersedeFutureSliOwnershipEpochs, arg.StartsAt, arg.SliID, arg.MeasurementRevision)
+	return err
+}
+
+const updateDatasourceReassignmentProgress = `-- name: UpdateDatasourceReassignmentProgress :exec
+UPDATE public.almanac_datasource_reassignments SET state = $2, retry_at = $3 WHERE datasource_id = $1
+`
+
+type UpdateDatasourceReassignmentProgressParams struct {
+	DatasourceID pgtype.UUID        `json:"datasource_id"`
+	State        string             `json:"state"`
+	RetryAt      pgtype.Timestamptz `json:"retry_at"`
+}
+
+func (q *Queries) UpdateDatasourceReassignmentProgress(ctx context.Context, arg UpdateDatasourceReassignmentProgressParams) error {
+	_, err := q.db.Exec(ctx, updateDatasourceReassignmentProgress, arg.DatasourceID, arg.State, arg.RetryAt)
+	return err
 }
 
 const updateSourceRemovalRevisions = `-- name: UpdateSourceRemovalRevisions :exec

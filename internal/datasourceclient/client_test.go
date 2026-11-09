@@ -130,6 +130,16 @@ func TestDatasourceResponseValidationRejectsSecretValues(t *testing.T) {
 	if validDatasource([]byte(strings.Replace(string(pending), "waiting_for_previous_agent", "unknown", 1))) {
 		t.Fatal("unknown reassignment state accepted")
 	}
+	for _, state := range []string{"waiting_for_configuration", "waiting_for_collection"} {
+		current := strings.Replace(string(pending), "waiting_for_previous_agent", state, 1)
+		if validDatasource([]byte(current)) {
+			t.Fatal("former owner accepted for immediate reassignment")
+		}
+		current = strings.Replace(current, `"agent_id":"b13e0739-3c86-4a7f-b7e5-c15e9626e71c"`, `"agent_id":"9c5b4ef2-75e8-4e76-a4de-baa6a4d77277"`, 1)
+		if !validDatasource([]byte(current)) {
+			t.Fatalf("replacement assignment rejected in %s", state)
+		}
+	}
 	unsafe := []byte(strings.Replace(string(valid), `"token_configured":true}`, `"token_configured":true,"token":"private-token"}`, 1))
 	if validDatasource(unsafe) {
 		t.Fatal("datasource containing a plaintext token was accepted")

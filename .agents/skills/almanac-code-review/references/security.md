@@ -51,8 +51,9 @@ reachable defects and evidence, and a code review does not establish OWASP compl
   revocation and ownership proofs. A heartbeat or valid identifier does not authorize
   an observation submission or release of datasource credentials.
 - Trace secrets through serialization, HTTP headers, errors, logs, traces, command
-  arguments and artifacts. Test final output with synthetic values, including nested
-  serialized strings; a redaction marker does not prove the secret was removed.
+  arguments and artifacts. Inspect output handling and existing tests with synthetic
+  values, including nested serialized strings; a redaction marker does not prove
+  the secret was removed. Do not execute payloads during review.
 - Check key/ciphertext binding and credential handling on restore against the current policy.
   Inspect unsafe deserialization and oversized or deeply nested inputs for execution,
   validation bypass or resource exhaustion. Ordinary validated JSON decoding is not

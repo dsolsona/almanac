@@ -22,6 +22,7 @@ const loadSlosPage = () => import('../slos/SlosPage.tsx').then((module) => ({ de
 if (location.pathname.startsWith('/slis')) void loadSlisPage().catch(() => {});
 else if(location.pathname.startsWith('/services'))void loadServicesPage().catch(()=>{});
 else if (location.pathname.startsWith('/slos')) void loadSlosPage().catch(() => {});
+else if (location.pathname.startsWith('/settings')) void import('../settings/SettingsPage.tsx').catch(() => {});
 const emptyAgentDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '' };
 
 class ScreenBoundary extends Component<{ screen: string; children: ReactNode }, { failed: boolean }> {

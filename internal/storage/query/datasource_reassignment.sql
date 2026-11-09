@@ -6,8 +6,8 @@ SELECT * FROM public.almanac_datasource_reassignments WHERE datasource_id = $1 F
 
 -- name: InsertDatasourceReassignment :exec
 INSERT INTO public.almanac_datasource_reassignments
-(datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, retry_at, state, actor_id, request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $4, 'waiting_for_previous_agent', $9, $10);
+(datasource_id, source_agent_id, target_agent_id, requested_at, authority_expires_at, removal_revision, source_config_version, uses_v2_removal, retry_at, state, actor_id, request_id, target_configuration_revision)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $4, 'waiting_for_configuration', $9, $10, $11);
 
 -- name: MarkDatasourceReassignmentDrained :execrows
 UPDATE public.almanac_datasource_reassignments SET drained_at = $3
@@ -22,7 +22,7 @@ WHERE datasource_id = $1;
 
 -- name: ListReadyDatasourceReassignments :many
 SELECT datasource_id, source_agent_id, target_agent_id FROM public.almanac_datasource_reassignments
-WHERE (drained_at IS NOT NULL OR authority_expires_at <= $1) AND retry_at <= $1 ORDER BY retry_at, requested_at, datasource_id LIMIT 50;
+WHERE retry_at <= $1 ORDER BY retry_at, requested_at, datasource_id LIMIT 50;
 
 -- name: LatestDatasourceGrantExpiry :one
 SELECT COALESCE(max(grant_row.valid_until), sqlc.arg(now)::timestamptz)::timestamptz AS expires_at
@@ -36,22 +36,48 @@ WHERE grant_row.agent_id = sqlc.arg(agent_id)
     WHERE measurement.datasource_id = sqlc.arg(datasource_id)
   );
 
--- name: BumpDatasourceVersion :one
-UPDATE public.almanac_datasources SET version = version + 1, updated_at = $2
+-- name: ActivateDatasourceAgent :one
+UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1, updated_at = $3, assignment_configuration_revision = $4
 WHERE id = $1 AND version < 9223372036854775807 RETURNING *;
 
--- name: ActivateDatasourceAgent :one
-UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1, updated_at = $3
-WHERE id = $1 AND version < 9223372036854775807 RETURNING *;
+-- name: LockDatasourceReassignmentAgents :many
+SELECT id FROM public.almanac_agents
+WHERE id = ANY(sqlc.arg(agent_ids)::uuid[]) ORDER BY id FOR UPDATE;
 
 -- name: ListAgentDatasourceDependencies :many
 SELECT d.* FROM public.almanac_datasources d
-WHERE (d.agent_id = sqlc.arg(agent_id) OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = d.id AND (r.source_agent_id = sqlc.arg(agent_id) OR r.target_agent_id = sqlc.arg(agent_id))))
+WHERE (d.agent_id = sqlc.arg(agent_id) OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = d.id AND r.target_configuration_revision = 0 AND (r.source_agent_id = sqlc.arg(agent_id) OR r.target_agent_id = sqlc.arg(agent_id))))
   AND (d.created_at, d.id) > (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_id)::uuid)
 ORDER BY d.created_at, d.id LIMIT sqlc.arg(row_limit);
 
 -- name: AgentHasPendingReassignments :one
-SELECT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = $1 UNION ALL SELECT 1 FROM public.almanac_agent_handoff_configurations WHERE agent_id = $1);
+SELECT EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments WHERE source_agent_id = $1 AND target_configuration_revision = 0);
+
+-- name: UpdateDatasourceReassignmentProgress :exec
+UPDATE public.almanac_datasource_reassignments SET state = $2, retry_at = $3 WHERE datasource_id = $1;
+
+-- name: SupersedeFutureSliOwnershipEpochs :exec
+-- Old handoffs may have prepublished a later boundary; shorten its predecessor too.
+WITH removed AS (
+    DELETE FROM public.almanac_sli_ownership_epochs AS future
+    WHERE future.sli_id = sqlc.arg(sli_id) AND future.measurement_revision = sqlc.arg(measurement_revision)
+      AND future.starts_at >= sqlc.arg(starts_at)
+)
+UPDATE public.almanac_sli_ownership_epochs AS preceding SET ends_at = sqlc.arg(starts_at)
+WHERE preceding.sli_id = sqlc.arg(sli_id) AND preceding.measurement_revision = sqlc.arg(measurement_revision)
+  AND preceding.starts_at < sqlc.arg(starts_at) AND preceding.ends_at > sqlc.arg(starts_at);
+
+-- name: CompleteAcknowledgedDatasourceReassignments :many
+DELETE FROM public.almanac_datasource_reassignments pending
+WHERE pending.target_agent_id = sqlc.arg(agent_id)
+  AND pending.target_configuration_revision > 0
+  AND pending.target_configuration_revision <= sqlc.arg(configuration_revision)::bigint
+  AND EXISTS (SELECT 1 FROM public.almanac_datasources datasource
+      WHERE datasource.id = pending.datasource_id AND datasource.agent_id = pending.target_agent_id)
+  AND EXISTS (SELECT 1 FROM public.almanac_agent_runtime_status runtime
+      WHERE runtime.agent_id = pending.target_agent_id AND runtime.generation = sqlc.arg(generation)
+        AND runtime.applied_configuration_revision >= pending.target_configuration_revision)
+RETURNING datasource_id, actor_id, request_id;
 
 -- name: AgentHasUnsettledCurrentLease :one
 SELECT EXISTS (

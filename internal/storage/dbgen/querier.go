@@ -30,7 +30,6 @@ type Querier interface {
 	ArchiveService(ctx context.Context, arg ArchiveServiceParams) (int64, error)
 	AttachPreparedBudgetSparkline(ctx context.Context, arg AttachPreparedBudgetSparklineParams) (int64, error)
 	BudgetPreparationExhausted(ctx context.Context, arg BudgetPreparationExhaustedParams) (bool, error)
-	BumpDatasourceVersion(ctx context.Context, arg BumpDatasourceVersionParams) (AlmanacDatasource, error)
 	CatalogFilteredServiceCount(ctx context.Context, arg CatalogFilteredServiceCountParams) (int64, error)
 	CatalogServiceCounts(ctx context.Context) (CatalogServiceCountsRow, error)
 	ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDirtyBatchParams) ([]AlmanacDerivedDirtyRange, error)
@@ -40,6 +39,7 @@ type Querier interface {
 	ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error)
 	ClearCurrentPreparationFailure(ctx context.Context, sloID pgtype.UUID) error
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)
+	CompleteAcknowledgedDatasourceReassignments(ctx context.Context, arg CompleteAcknowledgedDatasourceReassignmentsParams) ([]CompleteAcknowledgedDatasourceReassignmentsRow, error)
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CompleteRetentionWork(ctx context.Context, arg CompleteRetentionWorkParams) (int64, error)
 	CompleteSloHistoryJob(ctx context.Context, arg CompleteSloHistoryJobParams) (int64, error)
@@ -203,7 +203,7 @@ type Querier interface {
 	ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error)
 	ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
-	ListReadyDatasourceReassignments(ctx context.Context, authorityExpiresAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
+	ListReadyDatasourceReassignments(ctx context.Context, retryAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
 	ListRetentionScopes(ctx context.Context) ([][]byte, error)
 	ListServiceSloStates(ctx context.Context, arg ListServiceSloStatesParams) ([]ListServiceSloStatesRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
@@ -224,6 +224,7 @@ type Querier interface {
 	LockAgentSessionRead(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
 	LockDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error)
+	LockDatasourceReassignmentAgents(ctx context.Context, agentIds []pgtype.UUID) ([]pgtype.UUID, error)
 	LockHistoryAdmission(ctx context.Context) error
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
 	LockLatestAgentOwnership(ctx context.Context, agentID pgtype.UUID) (AlmanacAgentOwnership, error)
@@ -323,11 +324,14 @@ type Querier interface {
 	// admitted. Bumping both fences prevents an old lease from moving it backwards.
 	SkipExpiredRetainedRepairs(ctx context.Context, arg SkipExpiredRetainedRepairsParams) (int64, error)
 	SloOverviewSnapshotUsage(ctx context.Context, arg SloOverviewSnapshotUsageParams) (SloOverviewSnapshotUsageRow, error)
+	// Old handoffs may have prepublished a later boundary; shorten its predecessor too.
+	SupersedeFutureSliOwnershipEpochs(ctx context.Context, arg SupersedeFutureSliOwnershipEpochsParams) error
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UpdateAgentAppliedConfiguration(ctx context.Context, arg UpdateAgentAppliedConfigurationParams) (int64, error)
 	UpdateAgentDesiredConfigurationRevision(ctx context.Context, arg UpdateAgentDesiredConfigurationRevisionParams) (int64, error)
 	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
 	UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error)
+	UpdateDatasourceReassignmentProgress(ctx context.Context, arg UpdateDatasourceReassignmentProgressParams) error
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
 	UpdateManagedUser(ctx context.Context, arg UpdateManagedUserParams) (AlmanacUser, error)
 	UpdateServiceCatalog(ctx context.Context, arg UpdateServiceCatalogParams) (AlmanacService, error)

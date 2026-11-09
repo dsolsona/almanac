@@ -7,7 +7,7 @@
 - Applicable ADRs: relative links
 - Depends on: task IDs and accepted integrated revisions, or none
 - Base revision: exact commit
-- Worktree/branch: current task branch; isolated worktree for delegated edits
+- Worktree/branch: mandatory dedicated `.worktrees/<task>` worktree and task branch; no edits in the primary checkout
 - Integration/commit authorization: state current scope; no push by default
 
 ## Outcome and non-goals

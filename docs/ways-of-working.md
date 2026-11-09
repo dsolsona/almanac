@@ -8,6 +8,14 @@ verification and publication requirements still apply.
 
 ## Ownership and optional delegation
 
+Every task must run in its own git worktree under the repository's ignored
+`.worktrees/` directory, including documentation, rules, configuration and review
+work. Create or verify that worktree and its branch before editing. This is a
+maintainer requirement, not an optional setup step requiring another confirmation.
+The primary checkout is only for git-state inspection and worktree management.
+When relocating existing work, verify its contents before removing the original
+task changes; leave unrelated files untouched.
+
 The primary agent owns planning, implementation, debugging, tests, review,
 integration and truthful delivery status. It can implement directly without a
 separate maintainer approval. Use the configured Sol/Astra model; documentation
@@ -49,7 +57,8 @@ implementers/workers. Those terms do not require separate agents for new work.
 
 1. Read [AGENTS.md](../AGENTS.md), applicable directory instructions and
    [status](status.md). Inspect git state and preserve unrelated edits.
-2. Find the active plan/task and relevant accepted specs/ADRs. Inspect recent commits,
+2. Create or verify the task's dedicated `.worktrees/` worktree and branch, then
+   find the active plan/task and relevant accepted specs/ADRs. Inspect recent commits,
    worktrees and, during stacked delivery, open PR bases/heads. Main's status may lag
    verified unmerged work; inspect the active branch's task/evidence before repeating it.
 3. Confirm the next dependency revision, ownership and verification context. Do not

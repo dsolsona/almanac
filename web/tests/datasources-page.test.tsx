@@ -46,6 +46,112 @@ function installFetch(agentItems: Record<string, unknown>[] = [{ id: agentID, na
 afterEach(() => { cleanup(); history.replaceState({}, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('datasource page', () => {
+  it.each([false, true])('clears Updating and enables diagnostics after acknowledgement (initially offline: %s)', async (initiallyOffline) => {
+    history.replaceState({}, '', `/datasources/${sourceID}`);
+    const runtime = { reachability: initiallyOffline ? 'unreachable' : 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] };
+    const agent = { id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime };
+    const calls = installFetch([agent]);
+    const delegate = globalThis.fetch;
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === `/api/v1/datasources/${sourceID}` && init?.method === 'GET') {
+        reads += 1;
+        return response({ ...source(), ...(reads === 1 ? { reassignment: { source_agent_id: 'a6ad8995-d902-41b8-886c-bb7d5897104a', target_agent_id: agentID, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T12:00:00Z', state: 'waiting_for_configuration' } } : {}) }, 200, { ETag: `"datasource:${sourceID}:4"` });
+      }
+      if (String(input).startsWith('/api/v1/agents') && reads > 1) return response({ items: [{ ...agent, runtime: { ...runtime, reachability: 'connected' } }], next_cursor: '' });
+      return delegate(input, init);
+    }));
+    render(<DatasourcesPage context={admin} />);
+    expect(await screen.findByRole('heading', { name: 'Updating datasource' })).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Updating datasource' })).not.toBeInTheDocument(), { timeout: 2500 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run preview' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled();
+    expect(document.querySelector('.ds-head__status')).toHaveTextContent('Active');
+    expect(reads).toBe(2);
+    expect(calls.some((call) => call.url.startsWith('/api/v1/providers'))).toBe(true);
+  });
+
+  it('keeps a newer agent choice when a pending status request finishes late', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    const runtime = { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] };
+    installFetch([{ id: agentID, display_name: 'West collector', enabled: true, runtime }, { id: target, display_name: 'Replacement', enabled: true, runtime }]);
+    const delegate = globalThis.fetch;
+    let reads = 0;
+    let finish!: (value: Response) => void;
+    let statusSignal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === `/api/v1/datasources/${sourceID}` && init?.method === 'GET') {
+        if (++reads > 1) { statusSignal = init.signal ?? undefined; return new Promise<Response>((resolve) => { finish = resolve; }); }
+        return response({ ...source(), reassignment: { source_agent_id: target, target_agent_id: agentID, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T12:00:00Z', state: 'waiting_for_configuration' } }, 200, { ETag: `"datasource:${sourceID}:4"` });
+      }
+      return delegate(input, init);
+    }));
+    render(<DatasourcesPage context={admin} />);
+    await screen.findByRole('heading', { name: 'Updating datasource' });
+    await waitFor(() => expect(reads).toBe(2), { timeout: 2500 });
+    await user.click(within(screen.getByRole('region', { name: 'Agent' })).getByRole('button', { name: 'Change' }));
+    await user.click(screen.getByLabelText('Assigned agent'));
+    await user.click(screen.getByRole('option', { name: /Replacement/ }));
+    expect(statusSignal?.aborted).toBe(true);
+    await act(async () => { finish(response(source(), 200, { ETag: `"datasource:${sourceID}:4"` })); });
+    expect(screen.getByRole('heading', { name: 'Updating datasource' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Agent' })).toHaveTextContent('Replacement');
+    expect(screen.getByRole('button', { name: 'Save settings' })).toBeEnabled();
+  });
+
+  it('refreshes a completed assignment when cancellation loses the race to acknowledgement', async () => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    installFetch(); const delegate = globalThis.fetch;
+    let canceled = false;
+    let cancelBody: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === `/api/v1/datasources/${sourceID}`) {
+        if (init?.method === 'PUT') {
+          cancelBody = JSON.parse(String(init.body)); canceled = true;
+          return response({ code: 'conflict', message: 'completed before cancellation' }, 409);
+        }
+        return response({ ...source(), agent_id: target, ...(!canceled ? { reassignment: { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T12:00:00Z', state: 'waiting_for_configuration' } } : {}) }, 200, { ETag: `"datasource:${sourceID}:4"` });
+      }
+      return delegate(input, init);
+    }));
+    render(<DatasourcesPage context={admin} />);
+    await user.click(await screen.findByRole('button', { name: 'Move back to previous agent' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Updating datasource' })).not.toBeInTheDocument());
+    expect(cancelBody.cancel_reassignment).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Move back to previous agent' })).not.toBeInTheDocument();
+    expect(screen.getByText('The move completed before cancellation. Showing the current assignment.')).toBeVisible();
+  });
+
+  it.each(['waiting_for_configuration', 'waiting_for_collection', 'replacement_unavailable'])('lets an editor choose another agent during %s without editing connection settings', async (state) => {
+    const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+    const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+    const runtime = { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['collect', 'connection_test', 'query_preview'] }] };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.startsWith('/api/v1/agents')) return response({ items: [{ id: agentID, display_name: 'West collector', enabled: true, runtime }, { id: target, display_name: 'Replacement', enabled: true, runtime }], next_cursor: '' });
+      if (path.startsWith('/api/v1/providers') || path.startsWith('/api/v1/slis')) return response({ items: [], next_cursor: '' });
+      if (init?.method === 'PUT') return response({ ...source(), version: '5' }, 200, { ETag: `"datasource:${sourceID}:5"` });
+      return response({ ...source(), agent_id: target, reassignment: { source_agent_id: agentID, target_agent_id: target, requested_at: '2026-10-22T12:00:00Z', authority_expires_at: '2026-10-22T12:00:00Z', state } }, 200, { ETag: `"datasource:${sourceID}:4"` });
+    });
+    vi.stubGlobal('fetch', fetcher); render(<DatasourcesPage context={editor} />);
+    expect(await screen.findByRole('heading', { name: state === 'replacement_unavailable' ? 'Agent unavailable' : 'Updating datasource' })).toBeVisible();
+    if (state === 'replacement_unavailable') {
+      expect(document.querySelector('.ds-head__status')).toHaveTextContent('Not collecting');
+      expect(screen.queryByRole('heading', { name: 'Updating datasource' })).not.toBeInTheDocument();
+    } else expect(screen.getByText('Waiting for Replacement to apply its configuration.')).toBeVisible();
+    expect(screen.queryByText(/waiting until/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Prometheus endpoint')).toBeDisabled();
+    await user.click(within(screen.getByRole('region', { name: 'Agent' })).getByRole('button', { name: 'Change' }));
+    await user.click(screen.getByLabelText('Assigned agent'));
+    await user.click(screen.getByRole('option', { name: /West collector/ }));
+    await user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true));
+    const request = fetcher.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({ agent_id: agentID, endpoint: source().endpoint, authentication: { token_secret: { action: 'retain' } } });
+  });
+
   it.each([true, false])('reconciles an uncertain cancellation when pending is %s', async (stillPending) => {
     const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
     const target = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
@@ -67,7 +173,7 @@ describe('datasource page', () => {
     await user.click(screen.getByRole('button', { name: 'Reconcile save' }));
     expect(await screen.findByText(stillPending ? /reassignment is still pending/ : /Review its current assignment/)).toHaveAttribute('role', 'status');
     expect(screen.queryByText('Reassignment canceled.')).not.toBeInTheDocument();
-    expect(Boolean(screen.queryByRole('heading', { name: 'Moving datasource' }))).toBe(stillPending);
+    expect(Boolean(screen.queryByRole('heading', { name: 'Updating datasource' }))).toBe(stillPending);
   });
   it('keeps a stale cancellation blocked and tells the user to refresh', async () => {
     const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
@@ -83,7 +189,7 @@ describe('datasource page', () => {
     render(<DatasourcesPage context={admin} />);
     await user.click(await screen.findByRole('button', { name: 'Cancel reassignment' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Refresh it');
-    expect(screen.getByRole('heading', { name: 'Moving datasource' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Updating datasource' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Cancel reassignment' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Refresh reassignment' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel reassignment' })).toBeEnabled());
@@ -102,11 +208,11 @@ describe('datasource page', () => {
       return response({ ...source(), agent_id: target, version: '5' }, 200, { ETag: `"datasource:${sourceID}:5"` });
     }));
     render(<DatasourcesPage context={admin} />);
-    expect(await screen.findByText(/Almanac will start Replacement after West stops collecting/)).toBeVisible();
-    expect(screen.getByText(/replacement may start later/)).toBeVisible();
+    expect(await screen.findByText(/Waiting for Replacement to apply its configuration/)).toBeVisible();
+    expect(screen.getByText(/replacement can start without waiting for the previous agent/)).toBeVisible();
     expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('West')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Refresh reassignment' }));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Moving datasource' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Updating datasource' })).not.toBeInTheDocument());
     expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('Replacement')).toBeVisible();
   });
   it('shows pending reassignment and cancels with the source and current version', async () => {
@@ -122,8 +228,8 @@ describe('datasource page', () => {
       return response(current, 200, { ETag: `"datasource:${sourceID}:4"` });
     });
     vi.stubGlobal('fetch', fetcher); render(<DatasourcesPage context={admin} />);
-    expect(await screen.findByRole('heading', { name: 'Moving datasource' })).toBeVisible();
-    expect(screen.getByText('Replacement is unavailable. Cancel this reassignment before choosing another collector.')).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Agent unavailable' })).toBeVisible();
+    expect(screen.getByText('Replacement is unavailable. Choose another agent below or refresh after it recovers.')).toBeVisible();
     expect(screen.getByLabelText('Prometheus endpoint')).toBeDisabled();
     expect(within(screen.getByRole('region', { name: 'Agent' })).getByText('West collector')).toBeVisible();
     expect(screen.queryByText('Datasource settings saved.')).not.toBeInTheDocument();
@@ -420,7 +526,7 @@ describe('datasource page', () => {
     expect(preview).toBeDisabled();
     await waitFor(() => expect(preview).not.toBeDisabled(), { timeout: 5000 });
     expect(screen.queryByText(/^The assigned agent is applying datasource settings(?: \(revision \d+ of \d+\))?\. Preview will be available when it finishes\.$/)).not.toBeInTheDocument();
-    expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
+    expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(true);
   });
 
   it('offers readiness retry after an offline status and recovers when the agent reconnects', async () => {
@@ -567,8 +673,8 @@ describe('datasource page', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith('/api/v1/agents')) return response({ items: [
-        { id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } },
-        { id: offlineID, name: 'east', display_name: 'East collector', enabled: true, runtime: { reachability: 'unreachable', last_heartbeat_at: new Date(Date.now() - 7200_000).toISOString(), capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['connection_test', 'query_preview'] }] } },
+        { id: agentID, name: 'west', display_name: 'West collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['collect', 'connection_test', 'query_preview'] }] } },
+        { id: offlineID, name: 'east', display_name: 'East collector', enabled: true, runtime: { reachability: 'unreachable', last_heartbeat_at: new Date(Date.now() - 7200_000).toISOString(), capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['collect', 'connection_test', 'query_preview'] }] } },
       ], next_cursor: '' });
       if (url.startsWith('/api/v1/slis')) return response({ items: [{ id: 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c', name: 'request-success', display_name: 'Request success', version: '2', measurement_revision: '1', datasource_id: sourceID, datasource_version: '4', agent_id: agentID, agent_reachability: 'connected', collection_progress: 'idle', measurement_kind: 'event_counts', component_mode: 'interval_count', good_query: 'good', total_query: 'total', polling_interval_seconds: 60, settling_delay_seconds: 60, effective_from: '2026-10-27T12:00:00Z', activated_at: '2026-10-27T12:00:00Z', activation_state: 'active', freshness: 'fresh', latest_observation: null, last_attempt_at: null, last_observation_at: null, next_expected_execution_at: null, created_at: '2026-10-27T12:00:00Z', updated_at: '2026-10-27T12:00:00Z', datasource_display_name: 'Production metrics', recent_measurements: [], linked_slos: { items: [], total_count: 0 } }], next_cursor: '' });
       return response({ items: [source(), second], next_cursor: '' });
@@ -579,7 +685,7 @@ describe('datasource page', () => {
     expect(screen.queryByText(/all times UTC/)).not.toBeInTheDocument();
     expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Datasource', 'Health', 'Agent', 'Cadence', 'SLIs']);
     const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows[0]).toHaveTextContent('Healthy');
+    expect(rows[0]).toHaveTextContent('Active');
     expect(rows[0]).not.toHaveTextContent('agent connected');
     expect(rows[1]).toHaveTextContent('Not collecting');
     expect(rows[1]).toHaveTextContent('agent unreachable for 2 h');
@@ -667,4 +773,32 @@ describe('datasource page', () => {
     await user.click(screen.getByRole('button', { name: 'Keep saved token' }));
     expect(screen.getByText('Set')).toBeVisible();
   });
+});
+
+it.each(['active', 'unavailable', 'empty'])('handles collection-only replacements when SLI usage is %s', async (usage) => {
+ const targetID = 'a6ad8995-d902-41b8-886c-bb7d5897104a';
+ const user = userEvent.setup(); history.replaceState({}, '', `/datasources/${sourceID}`);
+ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+ const url = String(input);
+ if (url.startsWith('/api/v1/agents')) return response({ items: [
+ { id: agentID, display_name: 'Original collector', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['collect'] }] } },
+ { id: targetID, display_name: 'Collection only', enabled: true, runtime: { reachability: 'connected', capabilities: [{ provider: 'prometheus', configuration_formats: ['prometheus-http-v1'], operations: ['collect'] }] } }
+ ], next_cursor: '' });
+ if (url.startsWith('/api/v1/providers')) return response({ items: [] });
+ if (url === `/api/v1/datasources/${sourceID}`) return response(source(), 200, { ETag: `"datasource:${sourceID}:4"` });
+if (url.startsWith('/api/v1/slis') && usage === 'unavailable') return response({ code: 'unavailable' }, 503);
+ if (url.startsWith('/api/v1/slis') && usage === 'empty') return response({ items: [], next_cursor: '' });
+ if (url.startsWith('/api/v1/slis')) return response({ items: [{ id: 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c', name: 'request-success', display_name: 'Request success', version: '2', measurement_revision: '1', datasource_id: sourceID, datasource_version: '4', agent_id: agentID, agent_reachability: 'connected', collection_progress: 'idle', measurement_kind: 'event_counts', component_mode: 'interval_count', good_query: 'good', total_query: 'total', polling_interval_seconds: 60, settling_delay_seconds: 60, effective_from: '2026-10-27T12:00:00Z', activated_at: '2026-10-27T12:00:00Z', activation_state: 'active', freshness: 'fresh', latest_observation: null, last_attempt_at: null, last_observation_at: null, next_expected_execution_at: null, created_at: '2026-10-27T12:00:00Z', updated_at: '2026-10-27T12:00:00Z', datasource_display_name: 'Production metrics', recent_measurements: [], linked_slos: { items: [], total_count: 0 } }], next_cursor: '' });
+ return response({ items: [], next_cursor: '' });
+ }));
+ render(<DatasourcesPage context={editor} />);
+ await screen.findByRole('heading', { name: 'Production metrics' });
+ await user.click(within(screen.getByRole('region', { name: 'Agent' })).getByRole('button', { name: 'Change' }));
+ await user.click(screen.getByLabelText('Assigned agent'));
+ await waitFor(() => {
+  const option = screen.getByRole('option', { name: /Collection only/ });
+  if (usage === 'empty') expect(option).toHaveAttribute('aria-disabled', 'true');
+  else expect(option).not.toHaveAttribute('aria-disabled', 'true');
+ });
+ expect(document.querySelector('.ds-head__status')).toHaveTextContent(usage === 'empty' ? 'Needs attention' : 'Active');
 });

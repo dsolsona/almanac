@@ -100,7 +100,7 @@ func (q *Queries) FindDatasourceReceipt(ctx context.Context, arg FindDatasourceR
 }
 
 const getDatasource = `-- name: GetDatasource :one
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at FROM public.almanac_datasources WHERE id = $1
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision FROM public.almanac_datasources WHERE id = $1
 `
 
 func (q *Queries) GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
@@ -126,6 +126,7 @@ func (q *Queries) GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDat
 		&i.AgentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AssignmentConfigurationRevision,
 	)
 	return i, err
 }
@@ -198,7 +199,7 @@ INSERT INTO public.almanac_datasources (
     $13, $14, $15,
     $16, $17, $18
 )
-RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at
+RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision
 `
 
 type InsertDatasourceParams struct {
@@ -264,6 +265,7 @@ func (q *Queries) InsertDatasource(ctx context.Context, arg InsertDatasourcePara
 		&i.AgentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AssignmentConfigurationRevision,
 	)
 	return i, err
 }
@@ -323,7 +325,7 @@ func (q *Queries) InsertDatasourceReceipt(ctx context.Context, arg InsertDatasou
 }
 
 const listDatasources = `-- name: ListDatasources :many
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at FROM public.almanac_datasources
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision FROM public.almanac_datasources
 WHERE ($1::uuid IS NULL OR agent_id = $1)
   AND (created_at, id) > ($2::timestamptz, $3::uuid)
 ORDER BY created_at, id
@@ -371,6 +373,7 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 			&i.AgentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AssignmentConfigurationRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -383,7 +386,7 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 }
 
 const lockDatasource = `-- name: LockDatasource :one
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
@@ -409,6 +412,7 @@ func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDa
 		&i.AgentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AssignmentConfigurationRevision,
 	)
 	return i, err
 }
@@ -446,7 +450,7 @@ SET name = $1, display_name = $2, version = version + 1,
     settling_delay_seconds = $14, agent_id = $15,
     updated_at = $16
 WHERE id = $17 AND version = $18
-RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at
+RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision
 `
 
 type UpdateDatasourceParams struct {
@@ -512,6 +516,7 @@ func (q *Queries) UpdateDatasource(ctx context.Context, arg UpdateDatasourcePara
 		&i.AgentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AssignmentConfigurationRevision,
 	)
 	return i, err
 }

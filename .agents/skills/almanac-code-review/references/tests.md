@@ -55,7 +55,8 @@ Read [testing](../../../../docs/testing.md) and
 - Verify explicit clocks, per-test databases/ports, synchronization, deterministic
   ordering and isolation from host environment, credentials and filesystem state.
   Separate legitimate condition polling from rerunning a failed test into green.
-- Preserve focused reproduction, failure diagnostics and the required final gates.
+- Inspect existing reproduction evidence, failure diagnostics and final-gate results.
+  Read tests and fixtures without running them or adding review-only reproductions.
   Do not recommend retries, relaxed assertions or larger timeouts to conceal failure.
 - Check suite responsibilities against the current test guide; keep detailed state
   matrices in the appropriate lower layer and user journeys focused on visible outcomes.

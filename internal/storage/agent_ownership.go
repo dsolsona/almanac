@@ -334,6 +334,7 @@ func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credenti
 		(len(latest.LastNonce) > 0 && subtle.ConstantTimeCompare(latest.LastNonce, nonce[:]) == 1) {
 		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
 	}
+	var currentConfigurationRevision int64
 	if heartbeat != nil {
 		current, currentErr := state.queries.GetAgentExecutionGrantBySequence(ctx, dbgen.GetAgentExecutionGrantBySequenceParams{
 			AgentID: state.agentID, Generation: generation, RenewalSequence: latest.RenewalSequence,
@@ -341,9 +342,24 @@ func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credenti
 		if currentErr != nil || current.LeaseID != heartbeat.LeaseID {
 			return AgentOwnershipResult{}, errors.Join(ErrAgentOwnershipDenied, currentErr)
 		}
+		currentConfigurationRevision = current.ConfigurationRevision
 	}
 	if now.Before(latest.RenewedAt.Time.Add(agentMinimumRenewalInterval)) {
-		return AgentOwnershipResult{}, ErrAgentOwnershipDenied
+		if heartbeat == nil || heartbeat.AppliedConfigurationRevision != 0 {
+			return AgentOwnershipResult{}, ErrAgentOwnershipDenied
+		}
+		runtime, err := state.queries.GetAgentRuntimeStatus(ctx, state.agentID)
+		if err != nil {
+			return AgentOwnershipResult{}, errors.Join(ErrAgentOwnershipDenied, err)
+		}
+		configuration, err := state.queries.GetAgentConfiguration(ctx, state.agentID)
+		if err != nil {
+			return AgentOwnershipResult{}, err
+		}
+		// An initial grant may be overtaken before the agent can apply its first snapshot.
+		if runtime.Generation != generation || runtime.Protocol != agentprotocol.ProtocolV2 || runtime.AppliedConfigurationRevision != 0 || configuration.Revision <= currentConfigurationRevision {
+			return AgentOwnershipResult{}, ErrAgentOwnershipDenied
+		}
 	}
 	newExpiry := earlierTime(now.Add(time.Hour), effectiveAgentCredentialExpiry(state.credential))
 	if !now.Before(newExpiry) || newExpiry.Before(latest.ExpiresAt.Time) {
@@ -762,6 +778,9 @@ func RecordAgentConfigurationAppliedProtocol(ctx context.Context, databaseURL, c
 	}
 	if updated != 1 {
 		return ErrAgentOwnershipDenied
+	}
+	if err := completeAcknowledgedDatasourceReassignments(ctx, state.queries, state.agentID, revision, generation, now); err != nil {
+		return operationError(ctx, "storage: datasource configuration acknowledgement failed", err)
 	}
 	if protocol == agentprotocol.ProtocolV2 {
 		if _, err := state.queries.DeleteAcknowledgedAgentHandoffConfiguration(ctx, dbgen.DeleteAcknowledgedAgentHandoffConfigurationParams{AgentID: state.agentID, Revision: revision}); err != nil {

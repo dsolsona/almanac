@@ -44,14 +44,15 @@ type CreateDatasourceInput struct {
 }
 
 type UpdateDatasourceInput struct {
-	Proof           DatasourceProof
-	DatasourceID    string
-	ExpectedVersion int64
-	Settings        datasource.Settings
-	Password        datasource.SecretAction
-	Token           datasource.SecretAction
-	RequestID       string
-	Now             func() time.Time
+	CancelReassignment bool
+	Proof              DatasourceProof
+	DatasourceID       string
+	ExpectedVersion    int64
+	Settings           datasource.Settings
+	Password           datasource.SecretAction
+	Token              datasource.SecretAction
+	RequestID          string
+	Now                func() time.Time
 }
 
 type DatasourcePage struct {
@@ -462,7 +463,7 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if !valid || input.ExpectedVersion <= 0 || input.Now == nil || input.Settings.Validate() != nil || input.RequestID == "" || input.Proof.SessionVerifier == ([32]byte{}) {
 		return DatasourceRecord{}, ErrInvalidAgentInput
 	}
-	conn, queries, tx, user, installation, session, now, err := beginDatasourceAdminWrite(ctx, databaseURL, input.Proof.SessionVerifier, input.Now)
+	conn, queries, tx, user, installation, session, now, err := beginAgentReadWithRoles(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, "administrator", "editor")
 	if err != nil {
 		return DatasourceRecord{}, err
 	}
@@ -479,7 +480,17 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 		return DatasourceRecord{}, ErrDatasourceConflict
 	}
 	newAgentID, _ := canonicalUUID(input.Settings.AgentID)
-	if err := lockDatasourceAgents(ctx, queries, observed.AgentID, newAgentID); err != nil {
+	participants := []pgtype.UUID{observed.AgentID, newAgentID}
+	if newAgentID == observed.AgentID {
+		pending, err := queries.GetDatasourceReassignment(ctx, id)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return DatasourceRecord{}, err
+		}
+		if err == nil && pending.TargetConfigurationRevision == 0 {
+			participants = append(participants, pending.TargetAgentID)
+		}
+	}
+	if err := lockDatasourceAgents(ctx, queries, participants...); err != nil {
 		return DatasourceRecord{}, err
 	}
 	current, err := queries.LockDatasource(ctx, id)
@@ -492,8 +503,14 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if current.Version != input.ExpectedVersion || current.AgentID != observed.AgentID {
 		return DatasourceRecord{}, ErrDatasourceConflict
 	}
+	if user.Role == "editor" && !datasourceAssignmentOnly(current, input) {
+		return DatasourceRecord{}, ErrAgentForbidden
+	}
 	if result, handled, err := handleDatasourceReassignment(ctx, queries, tx, current, input, user, installation, session, now, secrets); handled {
 		return result, err
+	}
+	if user.Role == "editor" {
+		return DatasourceRecord{}, ErrAgentForbidden
 	}
 	if pending, err := queries.AgentHasPendingReassignments(ctx, current.AgentID); err != nil {
 		return DatasourceRecord{}, err
