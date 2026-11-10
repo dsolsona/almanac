@@ -1,0 +1,179 @@
+{
+  "budget_ms": 1000,
+  "fleet": {
+    "size": 20,
+    "days": 35
+  },
+  "summary": [
+    {
+      "page": "slo.list",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 364,
+      "p95_ms": 404,
+      "max_ms": 404
+    },
+    {
+      "page": "slo.list",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 173,
+      "p95_ms": 233,
+      "max_ms": 233
+    },
+    {
+      "page": "slo.detail",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 330,
+      "p95_ms": 343,
+      "max_ms": 343
+    },
+    {
+      "page": "slo.detail",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 51,
+      "p95_ms": 81,
+      "max_ms": 81
+    },
+    {
+      "page": "sli.list",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 200,
+      "p95_ms": 250,
+      "max_ms": 250
+    },
+    {
+      "page": "sli.list",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 54,
+      "p95_ms": 74,
+      "max_ms": 74
+    },
+    {
+      "page": "sli.detail",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 207,
+      "p95_ms": 246,
+      "max_ms": 246
+    },
+    {
+      "page": "sli.detail",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 54,
+      "p95_ms": 102,
+      "max_ms": 102
+    }
+  ],
+  "samples": {
+    "slo.list": {
+      "cold": [
+        348,
+        399,
+        364,
+        377,
+        373,
+        376,
+        339,
+        404,
+        333,
+        331
+      ],
+      "warm": [
+        186,
+        203,
+        169,
+        182,
+        173,
+        161,
+        169,
+        233,
+        200,
+        164
+      ]
+    },
+    "slo.detail": {
+      "cold": [
+        298,
+        340,
+        330,
+        242,
+        343,
+        337,
+        277,
+        333,
+        341,
+        322
+      ],
+      "warm": [
+        81,
+        53,
+        51,
+        52,
+        41,
+        45,
+        48,
+        55,
+        51,
+        46
+      ]
+    },
+    "sli.list": {
+      "cold": [
+        202,
+        200,
+        250,
+        197,
+        193,
+        218,
+        193,
+        191,
+        243,
+        226
+      ],
+      "warm": [
+        74,
+        58,
+        55,
+        53,
+        54,
+        59,
+        57,
+        54,
+        52,
+        54
+      ]
+    },
+    "sli.detail": {
+      "cold": [
+        224,
+        176,
+        207,
+        228,
+        206,
+        206,
+        243,
+        204,
+        216,
+        246
+      ],
+      "warm": [
+        52,
+        57,
+        55,
+        102,
+        53,
+        55,
+        55,
+        54,
+        51,
+        51
+      ]
+    }
+  }
+}
