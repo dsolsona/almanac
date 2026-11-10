@@ -17,13 +17,18 @@ and a two-minute lifetime. A page shows 10 or 20 rows.
 
 ## Decision
 
-Proposal. Read the overview directly from `almanac_slo_current_projections`
-ordered by urgency rank, lowercase name and id, filtered by query text and
-service, with an opaque keyset cursor holding the last row's ordering key. Group
-counts are one aggregate over the same filtered set, computed per request. Each
-row's `current_state` is classified inline as the materialization query does
-today. The `snapshot_id` response field is removed or made nullable during the
-API contract review.
+Proposal. Read the overview from `almanac_slos` joined to current definitions,
+left-joined to `almanac_slo_current_projections` so an SLO without a projection
+appears as unavailable in rows and counts, ordered by urgency rank, lowercase
+name and id, filtered by query text and service. The opaque cursor encodes the
+ordering key of a boundary row, the filter digest and the direction: the next
+cursor carries the last displayed row, the previous cursor the first, and a
+reverse scan is re-sorted before it is returned. Group counts are one aggregate
+over the same filtered set, computed per request. Each row's `current_state` is
+classified inline as the materialization query does today. `snapshot_id`
+becomes optional in the schema; the web client ships with the backend and is
+updated in the same change, the CLI client never read it, and the field is
+removed in a later contract version under ADR-0009.
 
 Semantics change: rows may move between pages while the user is paging, so a row
 can appear on two pages or on none, and group counts reflect the moment of each
