@@ -30,7 +30,7 @@ type Querier interface {
 	CatalogServiceCounts(ctx context.Context) (CatalogServiceCountsRow, error)
 	ClaimDerivedDirtyBatch(ctx context.Context, arg ClaimDerivedDirtyBatchParams) ([]AlmanacDerivedDirtyRange, error)
 	ClaimRetentionWork(ctx context.Context, arg ClaimRetentionWorkParams) (AlmanacRetentionWork, error)
-	ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (AlmanacSloExtremaCursor, error)
+	ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (ClaimSloExtremaCursorRow, error)
 	ClearCurrentPreparationFailure(ctx context.Context, sloID pgtype.UUID) error
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)
 	CompleteAcknowledgedDatasourceReassignments(ctx context.Context, arg CompleteAcknowledgedDatasourceReassignmentsParams) ([]CompleteAcknowledgedDatasourceReassignmentsRow, error)

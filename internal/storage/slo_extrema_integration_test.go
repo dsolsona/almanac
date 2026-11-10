@@ -28,7 +28,7 @@ func TestIntegrationExtremaLeaseFencesReclaimsAndArrivals(t *testing.T) {
 	s := newSelfHealFixture(t, "extrema-lease", true)
 	id := s.createSLO(t, "extrema-lease")
 	q := dbgen.New(s.conn)
-	claim := func() (dbgen.AlmanacSloExtremaCursor, error) {
+	claim := func() (dbgen.ClaimSloExtremaCursorRow, error) {
 		return q.ClaimSloExtremaCursor(t.Context(), dbgen.ClaimSloExtremaCursorParams{
 			CalculationVersion: operationalCalculationVersion, Now: timestamp(s.now), ClosedThrough: timestamp(s.now.Truncate(time.Hour)), LeaseUntil: timestamp(s.now.Add(30 * time.Second))})
 	}
@@ -50,6 +50,13 @@ func TestIntegrationExtremaLeaseFencesReclaimsAndArrivals(t *testing.T) {
 	if err != nil || count != 0 {
 		t.Fatalf("superseded worker published: %d, %v", count, err)
 	}
+	if err := q.DeferSloExtremaCursor(t.Context(), dbgen.DeferSloExtremaCursorParams{ID: first.ID, Version: first.Version, LeaseEpoch: first.LeaseEpoch, PriorAttempts: first.PriorAttempts, Now: timestamp(s.now), NextAttemptAt: timestamp(s.now.Add(time.Second))}); err != nil {
+		t.Fatal(err)
+	}
+	var active bool
+	if err := s.conn.QueryRow(t.Context(), `SELECT lease_until IS NOT NULL AND lease_epoch=$2 FROM public.almanac_slo_extrema_cursor WHERE id=$1`, second.ID, second.LeaseEpoch).Scan(&active); err != nil || !active {
+		t.Fatalf("superseded worker released the replacement lease: %v", err)
+	}
 	late := s.at.Add(10 * time.Minute)
 	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, late, s.now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
@@ -63,6 +70,46 @@ func TestIntegrationExtremaLeaseFencesReclaimsAndArrivals(t *testing.T) {
 	if err := s.conn.QueryRow(t.Context(), `SELECT dirty_from FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, id).Scan(&from); err != nil || !from.Equal(late.Truncate(time.Hour)) {
 		t.Fatalf("new invalidation disappeared: %s, %v", from, err)
 	}
+}
+
+func TestIntegrationExtremaReaderPreservesEvictionExtremum(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "extrema-eviction", true)
+	start := s.historyStart
+	end := start.Add(time.Hour)
+	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observation_values WHERE sli_id=$1 AND interval_start>=$2`, s.sliID, start.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_coverage WHERE sli_id=$1 AND interval_start>=$2`, s.sliID, start.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=CASE WHEN interval_start=$2 THEN 0 ELSE 100 END,total_count=100 WHERE sli_id=$1`, s.sliID, start); err != nil {
+		t.Fatal(err)
+	}
+	s.now = end.Add(7 * time.Minute)
+	s.at = s.now
+	id := s.createSLOWithHistory(t, "extrema-eviction", 2*time.Minute, start)
+	s.drain(t, "eviction sources")
+	for range 2 {
+		if _, err := s.runtime.buildSloExtrema(t.Context(), s.clock); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var verifier [32]byte
+	verifier[0] = 98
+	detail, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, OperationalDetailInput{Runtime: s.runtime, Proof: DatasourceProof{SessionVerifier: verifier}, ID: id, At: &end, Start: &start, End: &end, BurnWindow: 3600, Now: s.clock})
+	if err != nil || detail.HistoryPreparation != nil {
+		t.Fatalf("retained eviction history unavailable: %v", err)
+	}
+	for _, sample := range detail.BudgetSeries.Samples {
+		if sample.EvaluationAt.Equal(start.Add(3 * time.Minute)) {
+			if sample.Good == nil || sample.Total == nil || *sample.Good != "100.000000000000" || *sample.Total != "100.000000000000" || sample.Quality.MissingIntervals != 1 {
+				t.Fatalf("evicting the bad interval lost the exact 100/100 extremum beside a gap: %+v", sample)
+			}
+			return
+		}
+	}
+	t.Fatal("retained reader dropped the eviction extremum at the third minute")
 }
 
 func TestIntegrationExtremaDailyCompositionMatchesFullCanonicalSweep(t *testing.T) {
