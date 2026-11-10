@@ -7,7 +7,7 @@ outside-diff review comments. Valid findings cover retry/lease fencing,
 first-day preparation bounds, retained daily and eviction comparisons,
 sparkline readiness, original receipt identities/digests during migration,
 standalone index availability, empty-page recovery, compatibility UUIDs,
-cursor limits and expired-row existence. Accepted design tradeoffs remain
+cursor limits, expired-row existence and locked-cursor backoff. Accepted design tradeoffs remain
 explicit in ADR-0040/0041/0042 and SPEC-0020. Each PR is ready for review;
 implementation acceptance gaps below remain open and no merge is authorized.
 
@@ -18,9 +18,19 @@ comparisons pass integration on `5f3ae0e` (storage 118.668 seconds); the initial
 propagation attempt exposed a missing test import, corrected before that pass.
 Legacy overview preparation on PR #73 now defers pending retained tiles
 (`6f0fdf3`, storage integration 66.887 seconds); PR #76 retires that job.
-The latest client UUID validation and final performance checks are pending.
+Client UUID validation passes, including missing/null/zero/malformed responses.
+The combined `9fc80a6` stack passes `make check` (307 seconds observed,
+storage 115.763 seconds, 441 frontend tests and 82 browser cases in 1.9 minutes).
+The locked-cursor regression reproduced 50 queries in 250 ms and now passes
+its four-query bound with prompt cancellation; the late-gap test also proves
+the original marker existed before repair. The 35-day benchmark on `82baf7a`
+passes six checks in 7.2 minutes: cold p95 is 404/343 ms for SLO list/detail and
+250/246 ms for SLI list/detail. This measurement precedes the final no-claim
+backoff correction; no later performance result is inferred.
 A browser CI failure on PR #76's prior `89359aa` timed out in charts/services/
-settings and closed browser contexts; it is not dismissed by local success.
+settings and closed browser contexts remains recorded. Subsequent fast/browser
+CI passed; all four application CI checks passed on `82baf7a`. CI for the later
+published heads is tracked separately and is not inferred from these checkpoints.
 Review amendments affect unreleased migrations only; released 0001–0044 and
 operator databases are unchanged. Historical performance JSON is now preserved
 under `docs/evidence/lean-slo/`, linked from [F9-T06](tasks/F9-T06.md).
