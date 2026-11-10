@@ -127,6 +127,10 @@ first closed day, synthesize missing hours wholly before validity or retention
 arithmetically, retaining first/last and validity-transition marks without
 querying source windows. Missing eligible hours remain pending.
 
+Reads also synthesize hours and completed days wholly before validity without
+requiring stored rows. Their samples and daily compliance are not-applicable;
+the worker does not materialize days before the first eligible day.
+
 Target: each closed hour is built within 5 minutes for every SLO at the
 1,000-SLO fixture. Rebuild cost after a late observation is at most
 `(window + 7 h) / 1 h` hourly rows plus their days.
