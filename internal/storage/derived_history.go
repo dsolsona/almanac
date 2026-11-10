@@ -35,7 +35,7 @@ func preparedHistoryMatches(value api.SloOperationalDetail, key dbgen.FindPrepar
 		value.EffectiveAt.Equal(key.EvaluatedThrough.Time) &&
 		value.Range.RequestedStart.Equal(key.RangeStart.Time) &&
 		value.Range.RequestedEnd.Equal(key.RangeEnd.Time) &&
-		(key.Kind == "overview" || (value.BurnSeries.BurnWindowSeconds != nil && *value.BurnSeries.BurnWindowSeconds == api.SloOperationalSeriesBurnWindowSeconds(key.BurnWindowSeconds))) &&
+		(value.BurnSeries.BurnWindowSeconds != nil && *value.BurnSeries.BurnWindowSeconds == api.SloOperationalSeriesBurnWindowSeconds(key.BurnWindowSeconds)) &&
 		value.Urgency.Valid()
 }
 
@@ -94,246 +94,64 @@ func resolveOperationalBounds(input OperationalDetailInput, cadence time.Duratio
 }
 
 func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
-	ticks := time.NewTicker(time.Second)
-	defer ticks.Stop()
-	var nextSummaries time.Time
-	for {
-		extremaWorked, extremaErr := r.buildSloExtrema(ctx, time.Now)
-		if extremaWorked && extremaErr == nil && ctx.Err() == nil {
-			r.metrics.historyJobs.Add(1)
-		}
-		if extremaErr != nil && !derivedTemporary(ctx, extremaErr) && ctx.Err() == nil {
-			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "SLO extrema preparation failed", "error", derivedErrorDetail(extremaErr))
-		}
-		repaired, repairErr := r.repairRetainedSeries(ctx, time.Now)
-		if repaired && repairErr == nil && ctx.Err() == nil {
-			r.metrics.historyJobs.Add(1)
-		}
-		if repairErr != nil && !derivedTemporary(ctx, repairErr) && ctx.Err() == nil {
-			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "retained SLO series repair failed", "error", derivedErrorDetail(repairErr))
-		}
-		seriesWorked, seriesErr := r.prepareRetainedTile(ctx, time.Now)
-		if seriesErr != nil && !derivedTemporary(ctx, seriesErr) && ctx.Err() == nil {
-			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "retained SLO tile preparation failed", "error", derivedErrorDetail(seriesErr))
-		}
-		if seriesWorked && seriesErr == nil && ctx.Err() == nil {
-			r.metrics.historyJobs.Add(1)
-		}
-		if err := r.queueDueBudgetHistory(ctx, time.Now()); err != nil && ctx.Err() == nil {
-			logger.ErrorContext(ctx, "SLO overview history admission failed", "error", derivedErrorDetail(err))
-		}
-		worked := false
-		err := r.prepareHistory(ctx, time.Now, &worked)
-		if err != nil && !derivedTemporary(ctx, err) && ctx.Err() == nil {
-			r.metrics.preparationErrors[1].Add(1)
-			logger.ErrorContext(ctx, "SLO history preparation failed", "error", derivedErrorDetail(err))
-		}
-		if worked && err == nil && ctx.Err() == nil {
-			r.metrics.historyJobs.Add(1)
-		}
-		if (extremaWorked && extremaErr == nil || worked && err == nil || repaired && repairErr == nil || seriesWorked && seriesErr == nil) && ctx.Err() == nil {
+	for ctx.Err() == nil {
+		now := time.Now().UTC()
+		conn, err := r.Acquire(ctx, DerivedTraffic)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.ErrorContext(ctx, "SLO extrema scheduling failed", "error", derivedErrorDetail(err))
+			}
+			if !waitDerived(ctx, now.Add(time.Second)) {
+				return
+			}
 			continue
 		}
-		if !time.Now().Before(nextSummaries) && ctx.Err() == nil {
-			queued, summaryErr := r.queueRetainedTileSummaries(ctx, time.Now())
-			nextSummaries = time.Now().Add(30 * time.Second)
-			if summaryErr != nil {
-				logger.ErrorContext(ctx, "retained tile summary admission failed", "error", derivedErrorDetail(summaryErr))
+		due, err := dbgen.New(conn).ReadExtremaDue(ctx, dbgen.ReadExtremaDueParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
+		conn.Release()
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.ErrorContext(ctx, "SLO extrema scheduling failed", "error", derivedErrorDetail(err))
 			}
-			if queued > 0 && summaryErr == nil {
-				nextSummaries = time.Time{}
+			if !waitDerived(ctx, now.Add(time.Second)) {
+				return
+			}
+			continue
+		}
+		if due.EnsureCursorsDue {
+			conn, err := r.Acquire(ctx, DerivedTraffic)
+			if err == nil {
+				_, err = dbgen.New(conn).EnsureSloExtremaCursors(ctx, dbgen.EnsureSloExtremaCursorsParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
+				conn.Release()
+			}
+			if err != nil && ctx.Err() == nil {
+				logger.ErrorContext(ctx, "SLO extrema cursor discovery failed", "error", derivedErrorDetail(err))
+				if !waitDerived(ctx, now.Add(time.Second)) {
+					return
+				}
 				continue
 			}
 		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticks.C:
+		if due.ExtremaDue {
+			worked, err := r.buildSloExtrema(ctx, time.Now)
+			if err != nil && ctx.Err() == nil && !derivedTemporary(ctx, err) {
+				r.metrics.preparationErrors[1].Add(1)
+				logger.ErrorContext(ctx, "SLO extrema preparation failed", "error", derivedErrorDetail(err))
+			}
+			if worked && err == nil {
+				r.metrics.extremaBatches.Add(1)
+				continue
+			}
+			if !worked && err == nil {
+				if !waitDerived(ctx, time.Now().Add(time.Second)) {
+					return
+				}
+				continue
+			}
 		}
-	}
-}
-
-func (r *Runtime) prepareNextHistory(ctx context.Context, clock func() time.Time) (resultErr error) {
-	return r.prepareHistory(ctx, clock, nil)
-}
-
-func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, worked *bool) (resultErr error) {
-	ctx, span := telemetry.Tracer().Start(ctx, "derived.history.prepare")
-	outcome := "idle"
-	defer func() { finishDerivedTrace(ctx, span, resultErr, outcome) }()
-	conn, err := r.Acquire(ctx, DerivedTraffic)
-	if err != nil {
-		return err
-	}
-	q := dbgen.New(conn)
-	if _, err := q.ExhaustExpiredSloHistoryJobs(ctx, timestamp(clock())); err != nil {
-		conn.Release()
-		return err
-	}
-	job, err := q.ClaimSloHistoryJob(ctx, dbgen.ClaimSloHistoryJobParams{Now: timestamp(clock()), LeaseUntil: timestamp(clock().Add(45 * time.Second))})
-	if errors.Is(err, pgx.ErrNoRows) {
-		conn.Release()
-		return nil
-	}
-	conn.Release()
-	if err != nil {
-		return err
-	}
-	outcome = "executing"
-	if span.IsRecording() {
-		span.SetAttributes(attribute.String("almanac.work.key", historyTraceKey(dbgen.FindPreparedSloHistoryParams{SloID: job.SloID, DefinitionRevision: job.DefinitionRevision, MeasurementRevision: job.MeasurementRevision,
-			SourceGeneration: job.SourceGeneration, EvaluatedThrough: job.EvaluatedThrough, RangeStart: job.RangeStart, RangeEnd: job.RangeEnd, BurnWindowSeconds: job.BurnWindowSeconds, Kind: job.Kind, CalculationVersion: job.CalculationVersion, RetentionStart: job.RetentionStart})), attribute.Int("almanac.work.attempt", int(job.Attempts)))
-		if wait := clock().Sub(job.NextAttemptAt.Time).Milliseconds(); wait >= 0 {
-			span.SetAttributes(attribute.Int64("almanac.queue.wait_ms", wait))
-		} else {
-			span.SetAttributes(attribute.Bool("almanac.queue.clock_skew", true))
-		}
-		if age := clock().Sub(job.CreatedAt.Time).Milliseconds(); age >= 0 {
-			span.SetAttributes(attribute.Int64("almanac.queue.age_ms", age))
-		}
-	}
-	if worked != nil {
-		*worked = true
-	}
-	// The source range this job reads, for rebuilding it if its aggregates prove inconsistent.
-	var facts derivedFactsRange
-	defer func() {
-		if resultErr == nil {
+		if !waitDerived(ctx, maxTime(due.NextDue.Time, now.Add(10*time.Millisecond))) {
 			return
 		}
-		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		failureConn, err := r.Acquire(cleanup, DerivedTraffic)
-		if err != nil {
-			resultErr = errors.Join(resultErr, err)
-			return
-		}
-		defer failureConn.Release()
-		resultErr = errors.Join(resultErr, facts.rebuildIfInconsistent(cleanup, dbgen.New(failureConn), resultErr, clock()))
-		if derivedTemporary(ctx, resultErr) {
-			_, err = dbgen.New(failureConn).ReleaseSloHistoryForDependencies(cleanup, dbgen.ReleaseSloHistoryForDependenciesParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch, NextAttemptAt: timestamp(clock().Add(2 * time.Second))})
-			resultErr = errors.Join(resultErr, err)
-			return
-		}
-		_, err = dbgen.New(failureConn).FailSloHistoryJob(cleanup, dbgen.FailSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch,
-			Column3: timestamp(clock()), LastError: pgtype.Text{String: derivedFailureCode(resultErr), Valid: true}})
-		resultErr = errors.Join(resultErr, err)
-	}()
-	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	conn, err = r.Acquire(bounded, DerivedTraffic)
-	if err != nil {
-		return err
 	}
-	defer conn.Release()
-	tx, err := conn.BeginTx(bounded, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-	if err != nil {
-		return err
-	}
-	defer rollbackTransaction(tx)
-	if _, err := tx.Exec(bounded, "SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off"); err != nil {
-		return err
-	}
-	q = dbgen.New(tx)
-	row, err := q.GetSlo(bounded, job.SloID)
-	if err != nil {
-		return err
-	}
-	facts = derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision,
-		from: job.RangeStart.Time.Add(-time.Duration(row.RollingWindowSeconds) * time.Second), to: job.RangeEnd.Time}
-	sourceGeneration, err := q.GetDerivedSourceGeneration(bounded, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
-	if errors.Is(err, pgx.ErrNoRows) {
-		sourceGeneration = 0
-	} else if err != nil {
-		return err
-	}
-	if row.DefinitionRevision != job.DefinitionRevision || row.MeasurementRevision != job.MeasurementRevision || sourceGeneration != job.SourceGeneration || job.CalculationVersion != operationalCalculationVersion {
-		outcome = "obsolete"
-		if _, err := q.CompleteSloHistoryJob(bounded, dbgen.CompleteSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch}); err != nil {
-			return err
-		}
-		return tx.Commit(bounded)
-	}
-	contextRow, err := q.GetSloOperationalContext(bounded, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
-	if err != nil {
-		return err
-	}
-	at, start, end := job.EvaluatedThrough.Time.UTC(), job.RangeStart.Time.UTC(), job.RangeEnd.Time.UTC()
-	now := clock().UTC()
-	if job.Kind != "overview" {
-		if _, err := q.CompleteSloHistoryJob(bounded, dbgen.CompleteSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch}); err != nil {
-			return err
-		}
-		return tx.Commit(bounded)
-	}
-	input := OperationalDetailInput{overviewOnly: true, retainedReader: &retainedSeriesReader{q: q, row: row, source: contextRow, now: now},
-		Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)}
-	value, err := buildSloOperationalDetail(bounded, q, row, contextRow, input)
-	if err != nil {
-		return err
-	}
-	if input.retainedReader.pending {
-		return ErrDerivedPending
-	}
-	generationID, err := q.InsertDerivedGeneration(bounded, dbgen.InsertDerivedGenerationParams{SloID: job.SloID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
-		SourceGeneration: sourceGeneration, CalculationVersion: value.CalculationVersion, EvaluatedThrough: job.EvaluatedThrough, RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), PublishedAt: timestamp(clock())})
-	if err != nil {
-		return err
-	}
-	stamp := generationStamp(generationID, sourceGeneration, row.DefinitionRevision, row.MeasurementRevision, value.CalculationVersion, at, clock(), ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
-	value.Generation = &stamp
-	payload, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	if len(payload) > 20<<20 {
-		return ErrOperationalResource
-	}
-	var sparkline []byte
-	if job.Kind == "overview" {
-		sparkline, err = json.Marshal(value.BudgetSeries.Samples)
-		if err != nil {
-			return err
-		}
-	}
-	if err := q.InsertPreparedSloHistory(bounded, dbgen.InsertPreparedSloHistoryParams{GenerationID: generationID, RangeStart: job.RangeStart, RangeEnd: job.RangeEnd, BurnWindowSeconds: job.BurnWindowSeconds, Payload: payload, Kind: job.Kind, BudgetSparkline: sparkline}); err != nil {
-		return err
-	}
-	if sparkline != nil {
-		stamp := generationStamp(generationID, sourceGeneration, row.DefinitionRevision, row.MeasurementRevision, value.CalculationVersion, at, clock(), ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
-		metadata, err := json.Marshal(stamp)
-		if err != nil {
-			return err
-		}
-		if _, err := q.AttachPreparedBudgetSparkline(bounded, dbgen.AttachPreparedBudgetSparklineParams{RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration, At: job.EvaluatedThrough, Samples: sparkline, HistoryGeneration: metadata}); err != nil {
-			return err
-		}
-	}
-	completed, err := q.CompleteSloHistoryJob(bounded, dbgen.CompleteSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch})
-	if err != nil {
-		return err
-	}
-	if completed != 1 {
-		return errors.New("storage: history publication lost its lease")
-	}
-	if _, err := q.DeleteExpiredDerivedGenerations(bounded, timestamp(clock().Add(-5*time.Minute))); err != nil {
-		return err
-	}
-	if _, err := q.DeleteExpiredSloDisplayBlocks(bounded, timestamp(clock().Add(-5*time.Minute))); err != nil {
-		return err
-	}
-	resultErr = tx.Commit(bounded)
-	if resultErr == nil {
-		outcome = "published"
-	}
-	return resultErr
-}
-
-func derivedFailureCode(err error) string {
-	return derivedFailureReason(err, "history_preparation_failed")
 }
 
 type retainedHistoryPublication struct {
@@ -356,9 +174,6 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		finishDerivedTrace(ctx, span, resultErr, state)
 	}()
 	kind := "retained_detail"
-	if input.overviewOnly {
-		kind = "overview"
-	}
 	now := normalizedAgentNow(input.Now)
 	calculation := input
 	calculation.Now = func() time.Time { return now }
@@ -398,14 +213,12 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		input.Runtime.metrics.historyMisses.Add(1)
 	}
 	calculation.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
-	if !calculation.overviewOnly {
-		reader := &extremaReader{retainedSeriesReader: *calculation.retainedReader}
-		base := extremaWindowInput(row, source, now, retention.Time)
-		if err := reader.prepare(ctx, base, bound); err != nil {
-			return api.SloOperationalDetail{}, err
-		}
-		calculation.retainedReader = &reader.retainedSeriesReader
+	reader := &extremaReader{retainedSeriesReader: *calculation.retainedReader}
+	base := extremaWindowInput(row, source, now, retention.Time)
+	if err := reader.prepare(ctx, base, bound); err != nil {
+		return api.SloOperationalDetail{}, err
 	}
+	calculation.retainedReader = &reader.retainedSeriesReader
 	result, err = buildSloOperationalDetail(ctx, q, row, source, calculation)
 	if err != nil {
 		return api.SloOperationalDetail{}, err

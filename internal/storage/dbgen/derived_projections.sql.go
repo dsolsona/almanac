@@ -90,7 +90,6 @@ SELECT ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_histor
          AND g.measurement_revision=d.measurement_revision
          AND g.calculation_version=$1
          AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-         AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
          AND g.source_generation=coalesce(source.generation,0)
          AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)),false)::boolean AS current
 FROM public.almanac_slos s
@@ -190,11 +189,17 @@ LEFT JOIN public.almanac_slo_current_failures f
     AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
 WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failing_since>$2::timestamptz-interval '7 days') AND f.next_attempt_at<=$2::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
+   OR g.measurement_revision<>d.measurement_revision
    OR g.calculation_version<>$1
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-   OR p.payload_digest IS DISTINCT FROM sha256(convert_to(p.payload::text,'UTF8'))
    OR g.source_generation<>coalesce(source.generation,0)
-   OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds))
+   OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
+   OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
+      WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
+        AND e.calculation_version=$1 AND e.exclusion_revision=0 AND e.resolution_seconds=3600
+        AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AND e.published_at>coalesce((p.payload#>>'{_budget_cache,published_at}')::timestamptz,'-infinity'::timestamptz)))
 ORDER BY f.next_attempt_at NULLS FIRST, g.evaluated_through NULLS FIRST, s.id LIMIT $3
 `
 
@@ -225,9 +230,14 @@ func (q *Queries) ListDueDerivedObjectives(ctx context.Context, arg ListDueDeriv
 }
 
 const publishDerivedCurrentProjection = `-- name: PublishDerivedCurrentProjection :execrows
+WITH value AS (
+    SELECT $6::jsonb || CASE WHEN $7::jsonb IS NULL THEN '{}'::jsonb
+      ELSE jsonb_build_object('_budget_cache',$7::jsonb) END AS payload
+)
 INSERT INTO public.almanac_slo_current_projections
     (slo_id, generation_id, service_id, sort_name, urgency, payload,payload_digest)
-VALUES ($1,$2,$3,$4,$5,$6,sha256(convert_to($6::jsonb::text,'UTF8')))
+SELECT $1,$2,$3,$4,$5,
+       value.payload,sha256(convert_to(value.payload::text,'UTF8')) FROM value
 ON CONFLICT (slo_id) DO UPDATE
 SET generation_id=EXCLUDED.generation_id, service_id=EXCLUDED.service_id,
     sort_name=EXCLUDED.sort_name, urgency=EXCLUDED.urgency, payload=EXCLUDED.payload,payload_digest=EXCLUDED.payload_digest
@@ -248,8 +258,10 @@ type PublishDerivedCurrentProjectionParams struct {
 	SortName     string      `json:"sort_name"`
 	Urgency      string      `json:"urgency"`
 	Payload      []byte      `json:"payload"`
+	BudgetCache  []byte      `json:"budget_cache"`
 }
 
+// The digest remains an archive/snapshot identity until F9-T05, not a read-time integrity check.
 func (q *Queries) PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, publishDerivedCurrentProjection,
 		arg.SloID,
@@ -258,6 +270,7 @@ func (q *Queries) PublishDerivedCurrentProjection(ctx context.Context, arg Publi
 		arg.SortName,
 		arg.Urgency,
 		arg.Payload,
+		arg.BudgetCache,
 	)
 	if err != nil {
 		return 0, err

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"strconv"
 	"time"
@@ -19,66 +18,6 @@ import (
 func generationStamp(id pgtype.UUID, source, definition, measurement int64, version string, at, published, retention time.Time) api.DerivedGeneration {
 	return api.DerivedGeneration{GenerationId: openapi_types.UUID(id.Bytes), SourceGeneration: strconv.FormatInt(source, 10), DefinitionRevision: strconv.FormatInt(definition, 10),
 		MeasurementRevision: strconv.FormatInt(measurement, 10), ExclusionRevision: "0", CalculationVersion: version, EvaluatedThrough: at.UTC(), PublishedAt: published.UTC(), RetentionStart: new(retention.UTC()), CalculationLagSeconds: 0}
-}
-
-func attachLatestBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOperationalOverviewItem, row dbgen.GetSloRow, source int64, at, now time.Time) error {
-	state := api.SloOperationalOverviewItemBudgetHistoryState("preparing")
-	item.BudgetHistoryState = &state
-	failed, err := q.BudgetPreparationExhausted(ctx, dbgen.BudgetPreparationExhaustedParams{SloID: row.ID,
-		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion})
-	if err != nil {
-		return err
-	}
-	if failed {
-		state = "unavailable"
-	}
-	start := floorSliBoundary(at.Add(-7*24*time.Hour), time.Duration(row.CadenceSeconds)*time.Second)
-	cached, err := q.LatestPreparedBudgetSparkline(ctx, dbgen.LatestPreparedBudgetSparklineParams{RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SpanSeconds: int64(at.Sub(start) / time.Second), At: timestamp(at), CalculationVersion: operationalCalculationVersion})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if len(cached.BudgetSparkline) == 0 {
-		state = "unavailable"
-		return nil
-	}
-	if json.Unmarshal(cached.BudgetSparkline, &item.BudgetSparkline) != nil || len(item.BudgetSparkline) > 120 {
-		item.BudgetSparkline = []api.SloOperationalSample{}
-		_, err := q.DeleteCorruptPreparedSloHistory(ctx, cached.ID)
-		return err
-	}
-	stamp := generationStamp(cached.ID, cached.SourceGeneration, cached.DefinitionRevision, cached.MeasurementRevision, cached.CalculationVersion, cached.EvaluatedThrough.Time, cached.PublishedAt.Time, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
-	stamp.CalculationLagSeconds = float32(max(0, at.Sub(cached.EvaluatedThrough.Time).Seconds()))
-	item.BudgetHistoryGeneration = &stamp
-	if cached.SourceGeneration == source && cached.EvaluatedThrough.Time.Equal(at) {
-		state = "ready"
-	}
-	return nil
-}
-
-func (r *Runtime) queueDueBudgetHistory(ctx context.Context, now time.Time) error {
-	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	conn, err := r.Acquire(bounded, DerivedTraffic)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	tx, err := conn.BeginTx(bounded, pgx.TxOptions{})
-	if err != nil {
-		return err
-	}
-	defer rollbackTransaction(tx)
-	q := dbgen.New(tx)
-	if err := q.LockHistoryAdmission(bounded); err != nil {
-		return err
-	}
-	if _, err := q.QueueDueBudgetHistory(bounded, dbgen.QueueDueBudgetHistoryParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(now)}); err != nil {
-		return err
-	}
-	return tx.Commit(bounded)
 }
 
 func overviewScopeFilters(input OperationalOverviewInput) (pgtype.UUID, pgtype.Text) {

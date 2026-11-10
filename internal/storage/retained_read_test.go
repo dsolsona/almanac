@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"reflect"
 	"slices"
@@ -17,12 +16,8 @@ func TestRetainedDailyReusesTheProtectedGraphRead(t *testing.T) {
 	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(24 * time.Hour)
 	day := api.SloDailyComplianceDay{DayStart: start, DayEnd: end, DefinitionRevision: "1", Status: "met"}
-	payload, err := json.Marshal(day)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reader := retainedSeriesReader{parts: []retainedReadPart{{start: start, end: end, resolution: 86400}},
-		stored: []dbgen.ReadRetainedPartsRow{{Ordinal: 1, RangeStart: timestamp(start), RangeEnd: timestamp(end), Ready: true, CompliancePayload: payload}}}
+	reader := retainedSeriesReader{days: &api.SloDailyComplianceSeries{Days: []api.SloDailyComplianceDay{day}},
+		daySummary: api.SloDailyComplianceSummary{MetDays: 1, EvaluableDays: 1}}
 	// No query handle: a second database read cannot satisfy this cached day.
 	series, summary, err := reader.daily(t.Context(), slo.WindowInput{Cadence: time.Minute}, start, end, end, day.SloId, "1", "0.99", 24*time.Hour, time.Minute)
 	if err != nil || len(series.Days) != 1 || series.Days[0].Status != "met" || !series.Days[0].DayEnd.Equal(end) || summary.MetDays != 1 || summary.EvaluableDays != 1 {
@@ -124,9 +119,11 @@ func TestRetainedYearReadBoundsCoverageAndEdgeWork(t *testing.T) {
 	}
 }
 
-func TestRetainedTileCannotHideCorruptionAsEmptyHistory(t *testing.T) {
+func TestExtremaCannotHideCorruptionAsEmptyHistory(t *testing.T) {
 	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := decodeRetainedTile([]byte(`{}`), retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600}, "1"); !errors.Is(err, ErrDerivedFailed) {
+	reader := extremaReader{}
+	if _, err := reader.decode(t.Context(), slo.WindowInput{Cadence: time.Minute}, retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600},
+		dbgen.ReadSloExtremaPartsRow{Lanes: []byte(`{}`), RetentionStart: timestamp(start)}); !errors.Is(err, ErrDerivedFailed) {
 		t.Fatal("corrupt empty tile was displayed as absent history")
 	}
 }
@@ -245,7 +242,7 @@ func TestRetainedExpiredRegionDoesNotWaitForDeletedTiles(t *testing.T) {
 	reader := retainedSeriesReader{row: dbgen.GetSloRow{Target: "0.99", DefinitionRevision: 1, RollingWindowSeconds: 86400}}
 	base := slo.WindowInput{Now: start.Add(366 * 24 * time.Hour), ValidFrom: start.Add(-24 * time.Hour), SliValidFrom: start.Add(-24 * time.Hour),
 		RetentionStart: start.Add(24 * time.Hour), Cadence: time.Minute, Target: "0.99", FreshnessGrace: 2 * time.Minute}
-	tile, err := reader.loadPart(t.Context(), base, retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600}, dbgen.ReadRetainedPartsRow{})
+	tile, err := reader.beforeValidity(t.Context(), base, retainedReadPart{start: start, end: start.Add(time.Hour), resolution: 3600})
 	if err != nil || len(tile.Budget) == 0 {
 		t.Fatalf("expired history waited for unavailable tiles: %v", err)
 	}
@@ -254,13 +251,13 @@ func TestRetainedExpiredRegionDoesNotWaitForDeletedTiles(t *testing.T) {
 			t.Fatal("expired history invented retained observations")
 		}
 	}
-	points, err := reader.points(t.Context(), base, start.Add(-time.Minute), start)
-	if err != nil || len(points) != 1 || points[0].Current.Quality.ExpiredIntervals == 0 {
+	point, err := reader.unobservedPoint(t.Context(), base, start)
+	if err != nil || point.Current.Quality.ExpiredIntervals == 0 {
 		t.Fatalf("exact starting endpoint waited for an expired point: %v", err)
 	}
 	base.RetentionStart = start.Add(30 * time.Second)
-	points, err = reader.points(t.Context(), base, start, start.Add(time.Minute))
-	if err != nil || len(points) != 1 || points[0].Current.Quality.ExpiredIntervals == 0 || points[0].Current.Performance.Good != nil {
+	point, err = reader.unobservedPoint(t.Context(), base, start.Add(time.Minute))
+	if err != nil || point.Current.Quality.ExpiredIntervals == 0 || point.Current.Performance.Good != nil {
 		t.Fatalf("partially expired cadence boundary waited for an unretained endpoint: %v", err)
 	}
 }

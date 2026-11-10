@@ -184,9 +184,6 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	t.Run("derived aggregate, durable preparation and recovery", func(t *testing.T) {
 		verifyDerivedOperationalRecovery(t, f.databaseURL, proof, attention.ID, readNow)
 	})
-	t.Run("history admission fences stale snapshots", func(t *testing.T) {
-		verifyHistoryAdmissionSnapshotFences(t, f.databaseURL, attention.ID, readNow)
-	})
 	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
 		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
 	})
@@ -246,6 +243,19 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	if page.GroupCounts.NeedsAttention != 1 || page.GroupCounts.Watch != 1 || page.GroupCounts.Healthy != 1 || len(page.Items) != 3 || page.NextCursor != "" {
 		t.Fatalf("overview groups/items = %+v/%d cursor=%q", page.GroupCounts, len(page.Items), page.NextCursor)
 	}
+	gapMarker := false
+	for _, item := range page.Items {
+		if item.Slo.Name == healthy.Name {
+			for _, sample := range item.BudgetSparkline {
+				if sample.State == "partial" && !sample.EvaluationAt.Before(missingAt) && sample.EvaluationAt.Before(missingAt.Add(6*time.Hour+time.Minute)) {
+					gapMarker = true
+				}
+			}
+		}
+	}
+	if !gapMarker {
+		t.Fatal("overview omitted the historical gap marker before the late write")
+	}
 	first, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 	if err != nil || first.NextCursor == "" || first.PreviousCursor != "" {
 		t.Fatalf("first paginated overview = %+v, %v", first, err)
@@ -256,6 +266,7 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slos SET display_name='Healthy metadata changed',version=version+1,updated_at=$2 WHERE id=$1`, healthy.ID, at); err != nil {
 		t.Fatal(err)
 	}
+	readAt = readAt.Add(time.Second)
 	if _, err := conn.Exec(t.Context(), `
 INSERT INTO public.almanac_sli_coverage
     (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)

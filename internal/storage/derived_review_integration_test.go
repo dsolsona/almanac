@@ -10,7 +10,6 @@ import (
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -55,7 +54,7 @@ FROM public.almanac_slo_definitions d JOIN public.almanac_slos s ON s.id=d.slo_i
 			t.Error(err)
 			return
 		}
-		for _, table := range []string{"almanac_slo_series_tile_work", "almanac_slo_series_tiles", "almanac_slo_series_repair", "almanac_slo_series_points", "almanac_slo_current_projections", "almanac_slo_history_jobs", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
+		for _, table := range []string{"almanac_slo_extrema", "almanac_slo_extrema_cursor", "almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
 			key := "slo_id"
 			if table == "almanac_slos" {
 				key = "id"
@@ -68,83 +67,6 @@ FROM public.almanac_slo_definitions d JOIN public.almanac_slos s ON s.id=d.slo_i
 		if err := tx.Commit(t.Context()); err != nil {
 			t.Error(err)
 		}
-	}
-}
-
-func verifyHistoryAdmissionSnapshotFences(t *testing.T, databaseURL, template string, clock func() time.Time) {
-	for _, global := range []bool{false, true} {
-		t.Run(fmt.Sprintf("global=%v", global), func(t *testing.T) {
-			conn := integrationConnect(t, databaseURL)
-			defer closeIntegrationConn(conn)
-			ids, cleanup := cloneReviewObjectives(t, conn, template, "review-cap", 9)
-			defer cleanup()
-			var existing int
-			if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&existing); err != nil || existing >= 56 {
-				t.Fatalf("fixture history queue: %d, %v", existing, err)
-			}
-			seed := 7
-			if global {
-				seed = 63 - existing
-			}
-			admit := func(q *dbgen.Queries, id pgtype.UUID, offset int) (int64, error) {
-				at := clock().Add(-time.Duration(offset) * time.Minute)
-				return q.AdmitSloHistoryJob(t.Context(), dbgen.AdmitSloHistoryJobParams{SloID: id, DefinitionRevision: 1, MeasurementRevision: 1,
-					CalculationVersion: operationalCalculationVersion, RetentionStart: timestamp(clock().Add(-365 * 24 * time.Hour)), Kind: "detail",
-					EvaluatedThrough: timestamp(at), RangeStart: timestamp(at.Add(-time.Hour)), RangeEnd: timestamp(at), BurnWindowSeconds: 3600, NextAttemptAt: timestamp(clock())})
-			}
-			for i := range seed {
-				index := 0
-				if i >= 7 {
-					index = 1 + (i-7)/8
-				}
-				if changed, err := admit(dbgen.New(conn), ids[index], i+10); err != nil || changed != 1 {
-					t.Fatalf("seed history admission: %d, %v", changed, err)
-				}
-			}
-			other := integrationConnect(t, databaseURL)
-			defer closeIntegrationConn(other)
-			first, err := conn.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer rollbackTransaction(first)
-			second, err := other.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer rollbackTransaction(second)
-			// Establish both old snapshots before the first contender commits.
-			for _, tx := range []pgx.Tx{first, second} {
-				var count int
-				if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&count); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := dbgen.New(first).LockHistoryAdmission(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-			if changed, err := admit(dbgen.New(first), ids[0], 1); err != nil || changed != 1 {
-				t.Fatalf("first contender: %d, %v", changed, err)
-			}
-			if err := first.Commit(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-			err = dbgen.New(second).LockHistoryAdmission(t.Context())
-			if failure, ok := errors.AsType[*pgconn.PgError](err); !ok || failure.Code != "40001" {
-				t.Fatalf("stale admission snapshot was not fenced: %v", err)
-			}
-			if err := second.Rollback(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-			// A fresh transaction must see the full global/per-objective queue.
-			id := ids[0]
-			if global {
-				id = ids[8] // A different objective also cannot exceed global64.
-			}
-			if changed, err := admit(dbgen.New(other), id, 2); err != nil || changed != 0 {
-				t.Fatalf("fresh admission exceeded its cap: %d, %v", changed, err)
-			}
-		})
 	}
 }
 
