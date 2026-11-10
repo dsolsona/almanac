@@ -4,6 +4,7 @@ package storage
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -66,7 +67,7 @@ func TestIntegrationExtremaAbandonedFifthLeaseBacksOff(t *testing.T) {
 	s := newSelfHealFixture(t, "extrema-crash", true)
 	id := s.createSLO(t, "extrema-crash")
 	q := dbgen.New(s.conn)
-	claim := func() (dbgen.AlmanacSloExtremaCursor, error) {
+	claim := func() (dbgen.ClaimSloExtremaCursorRow, error) {
 		return q.ClaimSloExtremaCursor(t.Context(), dbgen.ClaimSloExtremaCursorParams{
 			CalculationVersion: operationalCalculationVersion, Now: timestamp(s.now), ClosedThrough: timestamp(s.now.Truncate(time.Hour)), LeaseUntil: timestamp(s.now.Add(30 * time.Second))})
 	}
@@ -161,6 +162,46 @@ func TestIntegrationConsistencyRecreatesMissingExtremaCursor(t *testing.T) {
 	var through time.Time
 	if err := s.conn.QueryRow(t.Context(), `SELECT built_through FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, id).Scan(&through); err != nil || !through.Equal(s.historyStart.Truncate(time.Hour)) {
 		t.Fatalf("consistency check did not recreate bounded history work: %s, %v", through, err)
+	}
+}
+
+func TestIntegrationExtremaVersionConflictsReleaseOnlyTheirLease(t *testing.T) {
+	for _, priorAttempts := range []int{0, 4, 5} {
+		t.Run(strconv.Itoa(priorAttempts), func(t *testing.T) {
+			t.Parallel()
+			s := newSelfHealFixture(t, "extrema-version-conflict", true)
+			id := s.createSLO(t, "extrema-version-conflict")
+			if priorAttempts > 0 {
+				if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=$3,failing_since=$2::timestamptz-interval '1 hour',last_error='extrema_build_failed' WHERE slo_id=$1`, id, s.now, priorAttempts); err != nil {
+					t.Fatal(err)
+				}
+			}
+			q := dbgen.New(s.conn)
+			for range 6 {
+				work, err := q.ClaimSloExtremaCursor(t.Context(), dbgen.ClaimSloExtremaCursorParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(s.now), ClosedThrough: timestamp(s.now.Truncate(time.Hour)), LeaseUntil: timestamp(s.now.Add(30 * time.Second))})
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Ingestion changes version after claim, before the worker's snapshot.
+				if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET version=version+1 WHERE id=$1`, work.ID); err != nil {
+					t.Fatal(err)
+				}
+				deferWork := dbgen.DeferSloExtremaCursorParams{ID: work.ID, Version: work.Version, LeaseEpoch: work.LeaseEpoch, PriorAttempts: work.PriorAttempts, Now: timestamp(s.now), NextAttemptAt: timestamp(s.now.Add(time.Second))}
+				if err := q.DeferSloExtremaCursor(t.Context(), deferWork); err != nil {
+					t.Fatal(err)
+				}
+				var lease pgtype.Timestamptz
+				var attempts int
+				var next time.Time
+				if err := s.conn.QueryRow(t.Context(), `SELECT lease_until,attempts,next_attempt_at FROM public.almanac_slo_extrema_cursor WHERE id=$1`, work.ID).Scan(&lease, &attempts, &next); err != nil {
+					t.Fatal(err)
+				}
+				if lease.Valid || attempts != priorAttempts || priorAttempts == 5 && next.Before(s.now.Add(5*time.Minute)) {
+					t.Fatalf("version conflict consumed or reset the failure budget: prior=%d lease=%+v attempts=%d next=%s", priorAttempts, lease, attempts, next)
+				}
+				s.now = next
+			}
+		})
 	}
 }
 
