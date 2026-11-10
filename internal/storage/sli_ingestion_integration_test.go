@@ -407,8 +407,8 @@ USING(sli_id,measurement_revision) WHERE s.sli_id=$1 AND s.measurement_revision=
 	if err != nil {
 		t.Fatalf("evaluate SLO: %v", err)
 	}
-	if evaluation.Performance.Attainment == nil || *evaluation.Performance.Attainment != "0.990000000000" || evaluation.Performance.State != "unknown" || !evaluation.Performance.Provisional || evaluation.Quality.ObservedIntervals != 1 || evaluation.Quality.MissingIntervals == 0 {
-		t.Fatalf("partial SLO evaluation: %+v %+v", evaluation.Performance, evaluation.Quality)
+	if evaluation.Performance.Attainment == nil || *evaluation.Performance.Attainment != "0.990000000000" || evaluation.Performance.State != "violated" || evaluation.Performance.Provisional || evaluation.Quality.ObservedIntervals != 1 || evaluation.Quality.MissingIntervals != 0 {
+		t.Fatalf("complete due SLO evaluation: %+v %+v", evaluation.Performance, evaluation.Quality)
 	}
 	if evaluation.Quality.Freshness != "fresh" {
 		t.Fatalf("settled latest observation unexpectedly stale: %+v", evaluation.Quality)
@@ -526,7 +526,11 @@ WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=
 	if err != nil {
 		t.Fatalf("create zero SLO: %v", err)
 	}
-	zeroEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: zeroSlo.ID, Now: clock})
+	zeroLive, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: zeroSlo.ID, Now: clock})
+	if err != nil || zeroLive.Quality.State != "zero_traffic" || zeroLive.Performance.Provisional || zeroLive.Performance.Attainment != nil || zeroLive.Quality.MissingIntervals != 0 {
+		t.Fatalf("due zero-traffic window must not imply success or missing data: %+v %v", zeroLive, err)
+	}
+	zeroEvaluation, err := EvaluateSlo(t.Context(), f.databaseURL, EvaluateSloInput{Proof: proof, ID: zeroSlo.ID, At: &now, Now: clock})
 	if err != nil || !zeroEvaluation.Performance.Provisional || zeroEvaluation.Performance.Reason == nil || *zeroEvaluation.Performance.Reason != "incomplete_measurements" || zeroEvaluation.Quality.MissingIntervals == 0 {
 		t.Fatalf("zero traffic with missing intervals: %+v %v", zeroEvaluation, err)
 	}

@@ -112,13 +112,14 @@ func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testin
 	}
 	badSLI := createSLI("operational-bad")
 	goodSLI := createSLI("operational-good")
+	partialSLI := createSLI("operational-partial")
 	start := f.base.Add(6 * time.Hour)
 	at := start.Add(6 * time.Hour)
 	historyStart := start.Add(-time.Hour)
 	missingAt := start.Add(-30 * time.Minute)
 	conn := integrationConnect(t, f.databaseURL)
 	defer closeIntegrationConn(conn)
-	for _, measurement := range []SliRecord{badSLI, goodSLI} {
+	for _, measurement := range []SliRecord{badSLI, goodSLI, partialSLI} {
 		if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_measurements SET effective_from=$1 WHERE sli_id=$2 AND revision=1`, historyStart, measurement.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -147,6 +148,10 @@ WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID,
 	}
 	seed(badSLI, true)
 	seed(goodSLI, false)
+	seed(partialSLI, false)
+	if _, err := execObservationFixture(t, conn, partialSLI.ID, `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2`, partialSLI.ID, at.Add(-15*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 	now = at
 	var freshVerifier [32]byte
 	freshVerifier[0] = 99
@@ -171,7 +176,7 @@ WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID,
 	}
 	attention := createSLO("operational-attention", badSLI.ID, start)
 	healthy := createSLO("operational-healthy", goodSLI.ID, historyStart)
-	watch := createSLO("operational-watch", goodSLI.ID, at.Add(-30*time.Minute))
+	watch := createSLO("operational-watch", partialSLI.ID, at.Add(-30*time.Minute))
 	readAt := at
 	readNow := func() time.Time { return readAt }
 	t.Run("derived aggregate, durable preparation and recovery", func(t *testing.T) {

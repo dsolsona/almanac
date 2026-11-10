@@ -860,7 +860,11 @@ paths:
       summary: Read current operational evaluation and bounded history
       description: >-
         Current evaluation is calculated at `at` (default server now), which must
-        be a UTC microsecond-precision instant no later than server now. The chart
+        be a UTC microsecond-precision instant no later than server now. Without at,
+        current objective and burn windows cover due eligible measurements, including
+        complete intervals already received early; their actual endpoints are disclosed
+        separately from snapshot evaluation_at. Pending collection is not a data gap.
+        Explicit at and historical series retain exact cadence-aligned endpoints. The chart
         range is independent of the current objective window: start/end must be
         supplied together, are UTC and cadence aligned, have end no later than
         effective at, and span a positive interval of at most 365 days. If omitted,
@@ -929,6 +933,8 @@ paths:
       description: >-
         This ephemeral current evaluation reads the summary and bounded timeline in one
         repeatable-read snapshot. It is not a retained report or a commit watermark.
+        Without at, the effective end uses the same due/received measurement cutoff
+        as current operational status. Explicit at evaluates its exact cadence boundary.
         Both timeline bounds must be provided together, aligned to cadence, within the
         objective window and at most 1500 intervals. Future evaluation times are rejected.
       security: [{SessionCookie: []}]
@@ -1365,7 +1371,7 @@ components:
       type: object
       required: [evaluation_at, window, quality, performance]
       properties:
-        evaluation_at: {type: string, format: date-time}
+        evaluation_at: {type: string, format: date-time, description: Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.}
         window: {$ref: '#/components/schemas/SloEvaluationWindow'}
         quality: {$ref: '#/components/schemas/SloOperationalQuality'}
         performance: {$ref: '#/components/schemas/SloEvaluationPerformance'}

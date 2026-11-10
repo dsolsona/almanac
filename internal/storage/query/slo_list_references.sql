@@ -9,7 +9,8 @@ WITH scope AS (
              AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current,
+             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
+             AND coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>sqlc.arg(now)::timestamptz,false)::boolean AS current,
            jsonb_build_object('slo',jsonb_build_object(
                'id',s.id,'name',s.name,'display_name',s.display_name,'version',s.version::text,'definition_revision',d.revision::text,
                'service_id',d.service_id,'service_display_name',service.display_name,'sli_id',d.sli_id,'sli_display_name',measurement.display_name,

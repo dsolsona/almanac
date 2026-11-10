@@ -810,7 +810,7 @@ export interface paths {
         };
         /**
          * Read current operational evaluation and bounded history
-         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. Without at, current objective and burn windows cover due eligible measurements, including complete intervals already received early; their actual endpoints are disclosed separately from snapshot evaluation_at. Pending collection is not a data gap. Explicit at and historical series retain exact cadence-aligned endpoints. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
          */
         get: operations["getSloOperationalDetail"];
         put?: never;
@@ -851,7 +851,7 @@ export interface paths {
         };
         /**
          * Evaluate a rolling occurrence objective
-         * @description This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+         * @description This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Without at, the effective end uses the same due/received measurement cutoff as current operational status. Explicit at evaluates its exact cadence boundary. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
          */
         get: operations["evaluateSlo"];
         put?: never;
@@ -1195,7 +1195,10 @@ export interface components {
             provisional: boolean;
         };
         SloOperationalValue: {
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.
+             */
             evaluation_at: string;
             window: components["schemas"]["SloEvaluationWindow"];
             quality: components["schemas"]["SloOperationalQuality"];

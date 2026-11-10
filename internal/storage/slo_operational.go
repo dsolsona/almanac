@@ -488,12 +488,17 @@ func applyOperationalDefinitionWindow(value *api.SloOperationalValue, activatedA
 }
 
 func burnValue(result slo.WindowResult, seconds int) api.SloBurnValue {
-	quality, performance := operationalQuality(result), operationalPerformance(result)
+	value := eligibleBurnValue(result, seconds)
 	if result.EligibleStart.After(result.EffectiveStart) {
 		reason := "incomplete_measurements"
-		quality.Reason, performance.Reason, performance.Provisional = &reason, &reason, true
+		value.Quality.Reason, value.Performance.Reason, value.Performance.Provisional = &reason, &reason, true
 	}
-	return api.SloBurnValue{WindowSeconds: api.SloBurnValueWindowSeconds(seconds), Start: result.RequestedStart, End: result.End, Quality: quality, Performance: performance}
+	return value
+}
+
+func eligibleBurnValue(result slo.WindowResult, seconds int) api.SloBurnValue {
+	return api.SloBurnValue{WindowSeconds: api.SloBurnValueWindowSeconds(seconds), Start: result.RequestedStart, End: result.End,
+		Quality: operationalQuality(result), Performance: operationalPerformance(result)}
 }
 
 func unavailableBurn(seconds int, at time.Time, reason string) api.SloBurnValue {
@@ -617,6 +622,13 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		return api.SloOperationalDetail{}, err
 	}
 	requestedAt, effectiveAt, rangeStart, rangeEnd := bound.requestedAt, bound.effectiveAt, bound.start, bound.end
+	measurementEnd := effectiveAt
+	if input.At == nil {
+		measurementEnd, err = liveSloEvaluationEnd(ctx, q, row, requestedAt, contextRow.SettlingDelaySeconds)
+		if err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+	}
 	window := time.Duration(row.RollingWindowSeconds) * time.Second
 	base := slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
 		RetentionStart: now.Add(-sli.ObservationRetention), Cadence: cadence,
@@ -639,7 +651,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 				continue
 			}
 			value := base
-			value.At, value.Duration = effectiveAt, duration
+			value.At, value.Duration = measurementEnd, duration
 			inputs = append(inputs, value)
 			currentWindows[duration] = slo.WindowResult{}
 		}
@@ -663,23 +675,37 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		}
 	}
 	evaluate := func(duration time.Duration) (slo.WindowResult, error) {
+		var result slo.WindowResult
+		var err error
 		if currentWindows != nil {
-			return currentWindows[duration], nil
+			result = currentWindows[duration]
+		} else {
+			result, err = evaluateOperationalAt(ctx, base, measurementEnd, duration)
 		}
-		return evaluateOperationalAt(ctx, base, effectiveAt, duration)
+		if input.At == nil && result.LastObservation != nil {
+			result.Freshness = "fresh"
+			if requestedAt.After(result.LastObservation.Add(base.FreshnessGrace)) {
+				result.Freshness = "stale"
+			}
+		}
+		return result, err
 	}
 	currentResult, err := evaluate(window)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	burn1h := unavailableBurn(3600, effectiveAt, "cadence_mismatch")
+	burnEvaluation := burnValue
+	if input.At == nil {
+		burnEvaluation = eligibleBurnValue
+	}
 	var burn1hResult *slo.WindowResult
 	if time.Hour%cadence == 0 {
 		result, evalErr := evaluate(time.Hour)
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
-		burn1h = burnValue(result, 3600)
+		burn1h = burnEvaluation(result, 3600)
 		burn1hResult = &result
 	}
 	burn6h := unavailableBurn(21600, effectiveAt, "cadence_mismatch")
@@ -688,9 +714,10 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
-		burn6h = burnValue(result, 21600)
+		burn6h = burnEvaluation(result, 21600)
 	}
 	current := operationalValue(currentResult)
+	current.EvaluationAt = effectiveAt
 	current.Window.RequestedStart = requestedAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
 	applyOperationalDefinitionWindow(&current, row.ActivatedAt.Time.UTC(), row.EvaluationValidFrom.Time.UTC(), row.HistoricalRequestedBy, row.HistoricalRequestedAt)
 	urgency := slo.ClassifyOperational(slo.OperationalState{QualityState: currentResult.State, Freshness: currentResult.Freshness, PerformanceState: currentResult.Performance,

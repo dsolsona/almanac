@@ -1,5 +1,10 @@
 # SPEC-0019: Backend performance and derived data
 
+> Accepted amendment, 2026-11-10: [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md)
+> defines live current status from due eligible measurements, separately from
+> snapshot publication time. Current and prepared live caches expire at freshness
+> deadlines; explicit historical endpoints and pinned exact values retain their contracts.
+
 > Accepted amendment, 2026-11-09: [ADR-0042](../adr/0042-keyset-overview-pagination.md)
 > supersedes the overview's coherent multi-page snapshot and admission rules.
 > Overview pages read live rows with per-row generation stamps, filter-bound

@@ -70,6 +70,48 @@ function operationalDetail(requestedStart='2026-10-01T00:00:00Z',requestedEnd='2
  return {evaluation_id:'44444444-4444-4444-4444-444444444444',requested_at:end,effective_at:end,calculation_version:'slo-v1',snapshot_kind:'current_operational_read',objective:definition,context:{sli_id:definition.sli_id,sli_name:'request_success',sli_display_name:definition.sli_display_name,datasource_id:'55555555-5555-5555-5555-555555555555',datasource_display_name:'Metrics',measurement_revision:'1',polling_interval_seconds:60,settling_delay_seconds:60,good_query:'sum(good)',total_query:'sum(total)'},current,urgency:'healthy',leading_reason:{code:'on_track',provisional:false},reasons:[{code:'on_track',provisional:false}],burn_1h:{window_seconds:3600,start:'2026-10-07T23:00:00Z',end,quality,performance},burn_6h:{window_seconds:21600,start:'2026-10-07T18:00:00Z',end,quality,performance},exhaustion:{state:'unavailable',remaining_events:'99',bad_events_per_hour:'0.1',hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[],reason:'No finite estimate'},range:{requested_start:requestedStart,requested_end:requestedEnd,effective_start:requestedStart,effective_end:requestedEnd,source_cadence_seconds:60,resolution_seconds:60,reduced:false,max_samples_per_series:1500,bucket_bounds:'half_open'},attainment_series:empty('attainment',null),budget_series:empty('rolling_budget',null),burn_series:empty('burn',3600),compliance_series:{kind:'daily_compliance',days:[]},compliance_summary:{met_days:0,violated_days:0,evaluable_days:0,unknown_days:0,not_applicable_days:0}} as unknown as OperationalDetail;
 }
 
+it('explains complete recent eligibility separately from status and shows the measurement cutoff',async()=>{
+ const detail=operationalDetail();
+ detail.current.window.evaluation_valid_from='2026-10-07T23:49:00Z';
+ detail.current.window.eligible_start='2026-10-07T23:49:00Z';
+ detail.current.window.end='2026-10-07T23:58:00Z';
+ detail.current.quality.expected_intervals=9;
+ detail.current.quality.observed_intervals=9;
+ vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
+ vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:{generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:0}});
+ render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ const status=await screen.findByRole('region',{name:'Current SLO status'});
+ expect(status).toHaveTextContent('Why it is healthy');
+ expect(status).toHaveTextContent('9 of 9 due intervals collected');
+ expect(status).toHaveTextContent('Measurements through');
+ expect(status.querySelector('time[datetime="2026-10-07T23:49:00Z"]')).toBeVisible();
+ expect(status.querySelector('time[datetime="2026-10-07T23:58:00Z"]')).toBeVisible();
+ expect(status).not.toHaveTextContent('Partial data');
+});
+
+it('labels a new SLO with no due interval Waiting for data rather than Partial data',async()=>{
+ vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
+ const detail=operationalDetail();
+ vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:'11111111-1111-4111-8111-111111111111',items:[{slo:definition,current:detail.current,urgency:'watch',leading_reason:{code:'not_yet_eligible',provisional:false},reasons:[{code:'not_yet_eligible',provisional:false}],burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]}],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
+ expect(await screen.findByText('Waiting for data')).toBeVisible();
+ expect(screen.queryByText('Partial data')).not.toBeInTheDocument();
+});
+
+it('does not claim no intervals are due when collection coverage is unavailable',async()=>{
+ const detail=operationalDetail();
+ detail.current.quality={...detail.current.quality,state:'unavailable',expected_intervals:0,observed_intervals:0,coverage:null,reason:'history_preparing'};
+ detail.urgency='watch';
+ detail.leading_reason={code:'evaluation_unavailable',provisional:false};
+ detail.reasons=[detail.leading_reason];
+ vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
+ vi.spyOn(sloClient,'current').mockRejectedValue(new Error('Current status is unavailable'));
+ render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ const status=await screen.findByRole('region',{name:'Current SLO status'});
+ expect(status).toHaveTextContent('Collection coverage is unavailable.');
+ expect(status).not.toHaveTextContent('No intervals are due yet.');
+});
+
 it('shows server group counts and sends submitted filters through the operational endpoint',async()=>{
  const detail=operationalDetail();
  const items=['needs_attention','watch','healthy'].map((urgency,index)=>({

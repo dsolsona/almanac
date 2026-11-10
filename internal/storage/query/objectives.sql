@@ -104,3 +104,12 @@ FROM public.almanac_sli_measurements m
 JOIN public.almanac_slis sli ON sli.id=m.sli_id
 JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
 WHERE m.sli_id=$1 AND m.revision=$2;
+
+-- name: ReadSloReadyTailEnd :one
+SELECT coalesce(max(interval_start+sqlc.arg(cadence_seconds)::integer*interval '1 second'), sqlc.arg(due_end)::timestamptz)::timestamptz AS ready_end
+FROM public.almanac_sli_observations
+WHERE sli_id=sqlc.arg(sli_id) AND measurement_revision=sqlc.arg(measurement_revision)
+  AND interval_start>=sqlc.arg(due_end)::timestamptz
+  AND interval_start<sqlc.arg(requested_end)::timestamptz
+  AND interval_start+sqlc.arg(cadence_seconds)::integer*interval '1 second'<=sqlc.arg(requested_end)::timestamptz
+  AND outcome IN ('observed','complete_empty');

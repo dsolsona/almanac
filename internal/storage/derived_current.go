@@ -225,7 +225,10 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(item)
+	payload, err := json.Marshal(struct {
+		api.SloOperationalOverviewItem
+		ValidUntil time.Time `json:"_current_valid_until"`
+	}{SloOperationalOverviewItem: item, ValidUntil: currentCacheDeadline(row, contextRow, now, detail.Current.Quality, detail.Burn1h.Quality, detail.Burn6h.Quality)})
 	if err != nil {
 		return err
 	}

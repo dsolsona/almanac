@@ -1,5 +1,7 @@
 # SPEC-0012: User interface
 
+> Accepted amendment, 2026-11-10: [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md) separates SLO age, pending collection and actual gaps. Complete fresh eligible data can show Healthy immediately; show Waiting for data before the first interval is due, Partial data for real coverage gaps, and Budget exhausted for an observed negative budget. Disclose evaluation start, actual measurement cutoff and observed/expected interval counts independently of the status chip. Preserve existing geometry and historical compliance semantics.
+
 > Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
 
 > Accepted amendment, 2026-11-04 (Crit session `9a46588aaaa4`): [ADR-0028](../adr/0028-unified-operational-ui.md)

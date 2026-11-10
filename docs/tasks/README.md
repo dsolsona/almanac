@@ -187,3 +187,7 @@ hourly aggregates and the new detail reader, [F9-T03](F9-T03.md) moves current s
 and the sparkline over and drops the old pipeline, [F9-T04](F9-T04.md) merges the
 observation tables with explicit marking, [F9-T05](F9-T05.md) is keyset pagination,
 and [F9-T06](F9-T06.md) records before/after measurements.
+
+[F3-T12](F3-T12.md) implements useful SLO status from complete due eligible
+measurements under [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md)
+and [plan 0031](../plans/0031-slo-eligible-status.md), stacked above the lean-SLO work.

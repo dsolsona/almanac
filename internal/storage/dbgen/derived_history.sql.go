@@ -47,15 +47,17 @@ SELECT b.payload, b.payload_digest, g.id AS generation_id, g.published_at
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
 WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
-  AND g.calculation_version=$9
-  AND g.retention_start=$10
-  AND g.published_at>=$11::timestamptz-interval '5 minutes'
+  AND g.calculation_version=$11
+  AND g.retention_start=$12
+  AND g.published_at>=$10::timestamptz-interval '5 minutes'
   AND g.source_generation=$4 AND g.evaluated_through=$5
   AND b.range_start=$6 AND b.range_end=$7 AND b.burn_window_seconds=$8
-  AND b.kind=$12
+  AND b.kind=$13
 )
 SELECT payload,generation_id,published_at FROM candidates
 WHERE payload->'history_preparation' IS NULL
+  AND coalesce(payload->'_live','false'::jsonb)=to_jsonb($9::boolean)
+  AND (NOT $9::boolean OR coalesce((payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>$10::timestamptz)
   AND payload_digest=sha256(convert_to(payload::text,'UTF8'))
 ORDER BY published_at DESC LIMIT 1
 `
@@ -69,9 +71,10 @@ type FindPreparedSloHistoryParams struct {
 	RangeStart          pgtype.Timestamptz `json:"range_start"`
 	RangeEnd            pgtype.Timestamptz `json:"range_end"`
 	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
+	Live                bool               `json:"live"`
+	Now                 pgtype.Timestamptz `json:"now"`
 	CalculationVersion  string             `json:"calculation_version"`
 	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-	Now                 pgtype.Timestamptz `json:"now"`
 	Kind                string             `json:"kind"`
 }
 
@@ -92,9 +95,10 @@ func (q *Queries) FindPreparedSloHistory(ctx context.Context, arg FindPreparedSl
 		arg.RangeStart,
 		arg.RangeEnd,
 		arg.BurnWindowSeconds,
+		arg.Live,
+		arg.Now,
 		arg.CalculationVersion,
 		arg.RetentionStart,
-		arg.Now,
 		arg.Kind,
 	)
 	var i FindPreparedSloHistoryRow

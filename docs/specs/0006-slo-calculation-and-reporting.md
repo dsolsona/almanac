@@ -1,5 +1,7 @@
 # SPEC-0006: SLO calculation and reporting
 
+> Accepted amendment, 2026-11-10: [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md) lets fresh, complete eligible live measurements establish Healthy before a full rolling window exists. Default current reads use a clock-derived collection deadline (settling delay, stable dispatch phase and one cadence completion allowance); snapshot time remains separate from actual measurement bounds. Pending intervals are not missing. Explicit historical `at` requests and daily compliance retain their existing endpoints and rules. Earlier SLI history remains an explicit opt-in.
+
 > Accepted amendment, 2026-10-30: Operational reads use exact derived generations with calculation/source/revision evidence. Heavy maintenance runs asynchronously; ordinary page reads do not wait for jobs. Current summaries and historical SLO points are maintained on ingestion and due time boundaries, with explicit freshness. Aggregate and cached results must equal the canonical evaluator at identical bounds.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the

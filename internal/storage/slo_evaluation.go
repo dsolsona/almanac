@@ -111,6 +111,12 @@ func evaluateSloAttempt(ctx context.Context, databaseURL string, input EvaluateS
 	}
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	end := floorSliBoundary(requested, cadence)
+	if input.At == nil {
+		end, err = liveSloEvaluationEnd(ctx, q, row, requested, measurement.SettlingDelaySeconds)
+		if err != nil {
+			return api.SloEvaluation{}, err
+		}
+	}
 	windowDuration := time.Duration(row.RollingWindowSeconds) * time.Second
 	start := end.Add(-windowDuration)
 	requestedStart := requested.Add(-windowDuration)
