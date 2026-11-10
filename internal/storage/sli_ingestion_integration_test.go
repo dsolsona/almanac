@@ -201,6 +201,12 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("failed attempt: %+v", result)
 	}
+	var marked int
+	if err := conn.QueryRow(t.Context(), `SELECT
+(SELECT count(*) FROM public.almanac_sli_source_generations WHERE sli_id=$1)+
+(SELECT count(*) FROM public.almanac_derived_dirty_ranges WHERE sli_id=$1)`, record.ID).Scan(&marked); err != nil || marked != 0 {
+		t.Fatalf("failed execution marked derived work: %d %v", marked, err)
+	}
 	var cursor time.Time
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(item.IntervalEnd) {
 		t.Fatalf("persisted attempt cursor = %v, %v", cursor, err)
@@ -489,13 +495,30 @@ USING(sli_id,measurement_revision) WHERE s.sli_id=$1 AND s.measurement_revision=
 	item.IntervalStart = item.IntervalEnd
 	item.IntervalEnd = item.IntervalStart.Add(15 * time.Second)
 	item.Outcome = sli.ExecutionOutcome{State: sli.OutcomeIncomplete, MissingComponents: []string{"good"}}
+	beforeAttempt := markState()
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("incomplete attempt: %+v", result)
 	}
+	if markState() != beforeAttempt {
+		t.Fatal("incomplete execution changed generations, dirty hours or extrema cursors")
+	}
 	item.DeliveryID, item.ExecutionID = uuid.NewString(), uuid.NewString()
 	item.Outcome = sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "0", TotalCount: "0"}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=5,failing_since=$2,last_error='extrema_build_failed',next_attempt_at=$2::timestamptz+interval '5 minutes'
+WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=$1)`, record.ID, now); err != nil {
+		t.Fatal(err)
+	}
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("zero traffic after incomplete: %+v", result)
+	}
+	var preserved bool
+	if err := conn.QueryRow(t.Context(), `SELECT count(*)>0 AND bool_and(w.attempts=5 AND w.failing_since=$2 AND w.next_attempt_at=$2::timestamptz+interval '5 minutes' AND w.last_error='extrema_build_failed')
+FROM public.almanac_slo_extrema_cursor w JOIN public.almanac_slo_definitions d ON d.slo_id=w.slo_id AND d.revision=w.definition_revision WHERE d.sli_id=$1`, record.ID, now).Scan(&preserved); err != nil || !preserved {
+		t.Fatalf("canonical API acceptance reset extrema retry backoff: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=0,failing_since=NULL,last_error=NULL,next_attempt_at=$2
+WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=$1)`, record.ID, now); err != nil {
+		t.Fatal(err)
 	}
 	zeroFrom := item.IntervalStart
 	zeroInput := CreateObjectiveInput{Proof: proof, Name: "zero-window", DisplayName: "Zero window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 120, EvaluationValidFrom: &zeroFrom, IdempotencyKey: "zero-window", RequestID: "zero-window", Now: clock}
@@ -719,6 +742,13 @@ USING(sli_id,measurement_revision) WHERE s.sli_id=$1 AND s.measurement_revision=
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
 	recreateLegacyObservationTables(t, conn)
+	if _, err := conn.Exec(t.Context(), `CREATE TEMP TABLE expected_migrated_observation_ids AS
+SELECT c.agent_id,c.delivery_id,c.observation_id,r.payload_digest,r.replay_until FROM public.almanac_sli_coverage c
+LEFT JOIN public.almanac_sli_delivery_receipts r ON r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id;
+DELETE FROM public.almanac_sli_delivery_receipts r USING public.almanac_sli_coverage c
+WHERE r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.Exec(t.Context(), "DROP TABLE public.almanac_sli_observations"); err != nil {
 		t.Fatal(err)
 	}
@@ -754,6 +784,13 @@ USING(sli_id,measurement_revision) WHERE s.sli_id=$1 AND s.measurement_revision=
 	}
 	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
+	}
+	var changedIDs int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM expected_migrated_observation_ids e
+LEFT JOIN public.almanac_sli_delivery_receipts r USING(agent_id,delivery_id)
+WHERE e.observation_id IS DISTINCT FROM r.observation_id
+OR (e.payload_digest IS NOT NULL AND (e.payload_digest IS DISTINCT FROM r.payload_digest OR e.replay_until IS DISTINCT FROM r.replay_until))`).Scan(&changedIDs); err != nil || changedIDs != 0 {
+		t.Fatalf("upgrade changed externally visible observation identifiers: %d %v", changedIDs, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {
 		t.Fatalf("backfilled cursor = %v, %v", cursor, err)

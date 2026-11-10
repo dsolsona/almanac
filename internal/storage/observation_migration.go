@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -23,6 +26,7 @@ const observationMigrationColumns = "sli_id,measurement_revision,interval_start,
 const observationMigrationSource = `SELECT c.sli_id,c.measurement_revision,c.interval_start,c.outcome,
 v.good_count,v.total_count,c.result_digest,c.error_code,c.missing_components,c.execution_id,c.delivery_id,
 c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,c.agent_created_at,c.recorded_at,c.ingestion_generation,
+c.observation_id,c.interval_end,
 c.interval_end<>c.interval_start+datasource.polling_interval_seconds*interval '1 second' AS invalid_interval,
 (c.outcome='observed')<>(v.good_count IS NOT NULL AND v.total_count IS NOT NULL)
  OR (c.outcome<>'observed' AND (v.good_count IS NOT NULL OR v.total_count IS NOT NULL)) AS invalid_counts
@@ -135,7 +139,9 @@ WHERE o.interval_start>=$4::timestamptz AND o.interval_start<$5::timestamptz
 UNION ALL (SELECT ` + columns + ` FROM copied EXCEPT SELECT ` + columns + ` FROM legacy)
 )
 SELECT (SELECT count(*) FROM legacy)=(SELECT count(*) FROM copied)
- AND NOT EXISTS(SELECT 1 FROM difference)`
+ AND NOT EXISTS(SELECT 1 FROM difference)
+ AND NOT EXISTS(SELECT 1 FROM legacy l LEFT JOIN public.almanac_sli_delivery_receipts r
+ ON r.agent_id=l.agent_id AND r.delivery_id=l.delivery_id WHERE r.observation_id IS DISTINCT FROM l.observation_id)`
 	var lastSli pgtype.UUID
 	var lastRevision int64
 	var lastStart pgtype.Timestamptz
@@ -164,6 +170,9 @@ SELECT (SELECT count(*) FROM legacy)=(SELECT count(*) FROM copied)
 		}
 		if err == nil && count > 0 && (!lastSli.Valid || !lastStart.Valid) {
 			err = errObservationMigrationMismatch
+		}
+		if err == nil && count > 0 {
+			err = copyLegacyObservationReceipts(bounded, tx, batchSource, args)
 		}
 		if err == nil && count > 0 {
 			var matches bool
@@ -199,4 +208,58 @@ SELECT (SELECT count(*) FROM legacy)=(SELECT count(*) FROM copied)
 		return errObservationMigrationMismatch
 	}
 	return nil
+}
+
+func copyLegacyObservationReceipts(ctx context.Context, tx pgx.Tx, source string, args []any) error {
+	rows, err := tx.Query(ctx, `WITH legacy AS (`+source+`)
+SELECT l.observation_id,l.agent_id,l.delivery_id,l.sli_id,l.measurement_revision,l.interval_start,
+l.session_generation,l.lease_id,l.configuration_revision,l.recorded_at,l.execution_id::text,l.agent_created_at,
+l.interval_end,l.outcome,coalesce(l.good_count::text,''),coalesce(l.total_count::text,''),
+coalesce(l.error_code,''),l.missing_components
+FROM legacy l LEFT JOIN public.almanac_sli_delivery_receipts r ON r.agent_id=l.agent_id AND r.delivery_id=l.delivery_id
+WHERE r.delivery_id IS NULL`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var batch pgx.Batch
+	for rows.Next() {
+		var receipt dbgen.InsertSliDeliveryReceiptParams
+		var item sli.ObservationItem
+		var outcome string
+		if err := rows.Scan(&receipt.ObservationID, &receipt.AgentID, &receipt.DeliveryID, &receipt.SliID, &receipt.MeasurementRevision, &receipt.IntervalStart,
+			&receipt.SessionGeneration, &receipt.LeaseID, &receipt.ConfigurationRevision, &receipt.CreatedAt, &item.ExecutionID, &item.CreatedAt,
+			&item.IntervalEnd, &outcome, &item.Outcome.GoodCount, &item.Outcome.TotalCount, &item.Outcome.ErrorCode, &item.Outcome.MissingComponents); err != nil {
+			return err
+		}
+		item.DeliveryID, item.SLIID, item.LeaseID = receipt.DeliveryID.String(), receipt.SliID.String(), receipt.LeaseID
+		item.MeasurementRevision = strconv.FormatInt(receipt.MeasurementRevision, 10)
+		item.SessionGeneration = strconv.FormatInt(receipt.SessionGeneration, 10)
+		item.ConfigurationRevision = strconv.FormatInt(receipt.ConfigurationRevision, 10)
+		item.IntervalStart, item.Outcome.State = receipt.IntervalStart.Time, sli.OutcomeState(outcome)
+		digest, err := sliObservationPayloadDigest(item)
+		if err != nil {
+			return err
+		}
+		batch.Queue(`INSERT INTO public.almanac_sli_delivery_receipts
+(delivery_id,payload_digest,sli_id,measurement_revision,interval_start,delivery_status,observation_id,replay_until,
+agent_id,session_generation,lease_id,configuration_revision,created_at)
+VALUES($1,$2,$3,$4,$5,'accepted',$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(agent_id,delivery_id) DO NOTHING`,
+			receipt.DeliveryID, digest[:], receipt.SliID, receipt.MeasurementRevision, receipt.IntervalStart, receipt.ObservationID,
+			timestamp(receipt.CreatedAt.Time.Add(sli.ObservationReplayWindow)), receipt.AgentID, receipt.SessionGeneration, receipt.LeaseID, receipt.ConfigurationRevision, receipt.CreatedAt)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if batch.Len() == 0 {
+		return nil
+	}
+	results := tx.SendBatch(ctx, &batch)
+	for range batch.Len() {
+		if _, err := results.Exec(); err != nil {
+			return errors.Join(err, results.Close())
+		}
+	}
+	return results.Close()
 }

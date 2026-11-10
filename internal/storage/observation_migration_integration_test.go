@@ -69,6 +69,12 @@ FOR EACH ROW EXECUTE FUNCTION public.almanac_test_interrupt_observation_copy('`+
 	if count != 200_000 || good != "19824691.357802400000" || total != "20000000.000000200000" {
 		t.Fatalf("copy changed exact rows/values: %d %s/%s", count, good, total)
 	}
+	var lostIDs int
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c
+LEFT JOIN public.almanac_sli_delivery_receipts r ON r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id
+WHERE r.observation_id IS DISTINCT FROM c.observation_id`).Scan(&lostIDs); err != nil || lostIDs != 0 {
+		t.Fatalf("copy lost original observation identifiers without legacy receipts: %d %v", lostIDs, err)
+	}
 	t.Logf("200000 legacy observations copied with five-second batch bounds and interrupted-prefix recovery in %s", time.Since(started))
 }
 
