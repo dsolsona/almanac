@@ -180,7 +180,7 @@ WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID,
 	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
 		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
 	})
-	t.Run("cancelled filter releases its reserved snapshot", func(t *testing.T) {
+	t.Run("cancelled overview read returns deadline exceeded", func(t *testing.T) {
 		lockTx, err := conn.Begin(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -208,12 +208,25 @@ WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID,
 	if page.GroupCounts.NeedsAttention != 1 || page.GroupCounts.Watch != 1 || page.GroupCounts.Healthy != 1 || len(page.Items) != 3 || page.NextCursor != "" {
 		t.Fatalf("overview groups/items = %+v/%d cursor=%q", page.GroupCounts, len(page.Items), page.NextCursor)
 	}
+	gapMarker := false
+	for _, item := range page.Items {
+		if item.Slo.Name == healthy.Name {
+			for _, sample := range item.BudgetSparkline {
+				if sample.State == "partial" && !sample.EvaluationAt.Before(missingAt) && sample.EvaluationAt.Before(missingAt.Add(6*time.Hour+time.Minute)) {
+					gapMarker = true
+				}
+			}
+		}
+	}
+	if !gapMarker {
+		t.Fatal("overview omitted the historical gap marker before the late write")
+	}
 	first, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 	if err != nil || first.NextCursor == "" || first.PreviousCursor != "" {
 		t.Fatalf("first paginated overview = %+v, %v", first, err)
 	}
 	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Query: "different", Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
-		t.Fatalf("snapshot filter binding error = %v", err)
+		t.Fatalf("cursor filter binding error = %v", err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slos SET display_name='Healthy metadata changed',version=version+1,updated_at=$2 WHERE id=$1`, healthy.ID, at); err != nil {
 		t.Fatal(err)
@@ -253,7 +266,7 @@ VALUES ($1::timestamptz,$2,1,'observed',1000,1000,decode(repeat('cd',32),'hex'),
 	}
 	for _, sample := range refreshed.Items[0].BudgetSparkline {
 		if sample.State == "partial" && !sample.EvaluationAt.Before(missingAt) && sample.EvaluationAt.Before(missingAt.Add(6*time.Hour+time.Minute)) {
-			t.Fatal("new snapshot kept the cleared historical gap marker")
+			t.Fatal("refreshed overview kept the cleared historical gap marker")
 		}
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='editor' WHERE id=$1`, f.userID); err != nil {
