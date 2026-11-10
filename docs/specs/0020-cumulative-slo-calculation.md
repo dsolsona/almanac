@@ -87,7 +87,8 @@ freshness values of all endpoints in the range. A lane whose window is not a
 multiple of the cadence is `null`. A range with no endpoint (cadence longer than
 the range) stores lanes with empty `marks` and empty sets. Expected, expired and
 missing counts are not stored; the reader recomputes them from `at`, the lane
-window, validity and the row's `retention_start`.
+window, validity and the mark's `retention_start` when present, otherwise the
+row's boundary.
 
 Minimum and maximum compare the exact attainment `good/total` by cross
 multiplication; ties keep the earlier endpoint; zero-traffic endpoints do not
@@ -143,7 +144,8 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   the batched query, at most 7,200 endpoints per read; a pending live edge
   reports the existing `history_preparing` reason. Each mark becomes a sample by
   calling `slo.EvaluateOperationalTotals` with the mark's sums, counts and
-  times, `At = at`, the lane window and `RetentionStart = row.retention_start`,
+  times, `At = at`, the lane window and `RetentionStart` from the mark when
+  present, otherwise from the row,
   then `operationalSample`. Display buckets select with `reduceRetainedDisplay`
   and union presence sets into `display_coverage`. The API sample shape is
   unchanged. `history_preparation` reports ready/total seconds over the
@@ -176,9 +178,10 @@ lifetime. Retention previews and audit entries are unchanged.
 ### Migration
 
 Migration A (F9-T02) creates `almanac_slo_extrema` and the cursor table, seeds
-each cursor with `built_through` at the SLO's eligible start, and retargets the
-series-invalidation trigger to the cursor; the point, tile and repair pipeline
-keeps running. The worker builds history from existing aggregates and raw rows.
+each cursor with `built_through` at the SLO's eligible start, and extends the
+series-invalidation trigger to widen the extrema cursor while retaining its
+series-repair invalidation. The point, tile and repair pipeline keeps running.
+The worker builds history from existing aggregates and raw rows.
 Migration B (F9-T03) drops the old tables after every consumer has switched.
 Both run under the existing explicit upgrade step and preserve the maintainer's
 data. Provisional numbers are 0045 and 0046 after main's 0044; recheck the tip.

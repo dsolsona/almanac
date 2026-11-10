@@ -25,10 +25,10 @@ ordering key of a boundary row, the filter digest and the direction: the next
 cursor carries the last displayed row, the previous cursor the first, and a
 reverse scan is re-sorted before it is returned. Group counts are one aggregate
 over the same filtered set, computed per request. Each row's `current_state` is
-classified inline as the materialization query does today. `snapshot_id`
-becomes optional in the schema; the web client ships with the backend and is
-updated in the same change, the CLI client never read it, and the field is
-removed in a later contract version under ADR-0009.
+classified inline as the materialization query does today. The v1 response keeps
+a valid, nonzero UUID in the deprecated `snapshot_id` field because existing CLI
+clients validate it. It identifies the response, without storing or pinning a
+list snapshot. Removal requires a later contract version under ADR-0009.
 
 Semantics change: rows may move between pages while the user is paging, so a row
 can appear on two pages or on none, and group counts reflect the moment of each
@@ -39,8 +39,10 @@ request. This is the ordinary behaviour of paginated operational lists.
 - Keep snapshots but drop the fingerprint reuse: keeps the stable-page guarantee
   at lower cost; still four tables and a lock. Reasonable fallback if the guarantee
   is wanted.
-- Snapshot only when the filtered set exceeds one page: already implemented; the
-  cost remains for every installation above 20 SLOs.
+- Snapshot only when the filtered set exceeds one page: would avoid creation for
+  small results. Today even single-page results reserve and materialize a
+  snapshot, then delete it after the read. The alternative retains that cost for
+  every filtered set above the requested page size.
 
 ## Consequences
 
