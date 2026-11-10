@@ -1,0 +1,196 @@
+{
+  "start": {
+    "at": "2026-11-09T22:14:13.066277+00:00",
+    "wal_lsn": "0/1ECEA48",
+    "pg_stat_statements_installed": false,
+    "shared_preload_libraries": "",
+    "compute_query_id": "auto",
+    "pg_stat_statements_track": null,
+    "pg_stat_statements_preloaded": false,
+    "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+    "statements": null
+  },
+  "seed_and_page_timings": {
+    "start": {
+      "at": "2026-11-09T22:14:13.066277+00:00",
+      "wal_lsn": "0/1ECEA48",
+      "pg_stat_statements_installed": false,
+      "shared_preload_libraries": "",
+      "compute_query_id": "auto",
+      "pg_stat_statements_track": null,
+      "pg_stat_statements_preloaded": false,
+      "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+      "statements": null
+    },
+    "end": {
+      "at": "2026-11-09T22:19:40.993758+00:00",
+      "wal_lsn": "0/92219F70",
+      "pg_stat_statements_installed": false,
+      "shared_preload_libraries": "",
+      "compute_query_id": "auto",
+      "pg_stat_statements_track": null,
+      "pg_stat_statements_preloaded": false,
+      "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+      "statements": null
+    },
+    "seconds": 327.927,
+    "wal_bytes": 2419373352,
+    "wal_bytes_per_hour": 26560008987.36609,
+    "statements": null,
+    "statements_per_minute": null
+  },
+  "sizes": [
+    {
+      "name": "almanac_sli_observations",
+      "kind": "canonical",
+      "table_bytes": 561594368,
+      "index_bytes": 385130496,
+      "total_bytes": 946724864
+    },
+    {
+      "name": "almanac_derived_cache_usage",
+      "kind": "derived",
+      "table_bytes": 8192,
+      "index_bytes": 16384,
+      "total_bytes": 24576
+    },
+    {
+      "name": "almanac_derived_dirty_ranges",
+      "kind": "derived",
+      "table_bytes": 32768,
+      "index_bytes": 5537792,
+      "total_bytes": 5570560
+    },
+    {
+      "name": "almanac_sli_hourly_aggregates",
+      "kind": "derived",
+      "table_bytes": 2596864,
+      "index_bytes": 1646592,
+      "total_bytes": 4243456
+    },
+    {
+      "name": "almanac_sli_source_generations",
+      "kind": "derived",
+      "table_bytes": 40960,
+      "index_bytes": 16384,
+      "total_bytes": 57344
+    },
+    {
+      "name": "almanac_slo_current_failures",
+      "kind": "derived",
+      "table_bytes": 16384,
+      "index_bytes": 16384,
+      "total_bytes": 32768
+    },
+    {
+      "name": "almanac_slo_current_projections",
+      "kind": "derived",
+      "table_bytes": 450560,
+      "index_bytes": 65536,
+      "total_bytes": 516096
+    },
+    {
+      "name": "almanac_slo_derived_generations",
+      "kind": "derived",
+      "table_bytes": 131072,
+      "index_bytes": 57344,
+      "total_bytes": 188416
+    },
+    {
+      "name": "almanac_slo_extrema",
+      "kind": "derived",
+      "table_bytes": 17539072,
+      "index_bytes": 3489792,
+      "total_bytes": 21028864
+    },
+    {
+      "name": "almanac_slo_extrema_cursor",
+      "kind": "derived",
+      "table_bytes": 81920,
+      "index_bytes": 188416,
+      "total_bytes": 270336
+    },
+    {
+      "name": "almanac_slo_history_blocks",
+      "kind": "derived",
+      "table_bytes": 65536,
+      "index_bytes": 32768,
+      "total_bytes": 98304
+    }
+  ],
+  "windows": [
+    {
+      "phase": "ingesting",
+      "start": {
+        "at": "2026-11-09T22:19:41.309994+00:00",
+        "wal_lsn": "0/92219F70",
+        "pg_stat_statements_installed": false,
+        "shared_preload_libraries": "",
+        "compute_query_id": "auto",
+        "pg_stat_statements_track": null,
+        "pg_stat_statements_preloaded": false,
+        "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+        "statements": null
+      },
+      "end": {
+        "at": "2026-11-09T22:20:41.474696+00:00",
+        "wal_lsn": "0/92280BD8",
+        "pg_stat_statements_installed": false,
+        "shared_preload_libraries": "",
+        "compute_query_id": "auto",
+        "pg_stat_statements_track": null,
+        "pg_stat_statements_preloaded": false,
+        "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+        "statements": null
+      },
+      "seconds": 60.165,
+      "wal_bytes": 420968,
+      "wal_bytes_per_hour": 25188810.77038145,
+      "statements": null,
+      "statements_per_minute": null,
+      "observations_accepted": 20,
+      "wal_bytes_per_accepted_row": 21048.4,
+      "statements_per_accepted_row": null,
+      "statements_per_minute_per_slo": null
+    },
+    {
+      "phase": "idle",
+      "start": {
+        "at": "2026-11-09T22:20:41.902165+00:00",
+        "wal_lsn": "0/92280BD8",
+        "pg_stat_statements_installed": false,
+        "shared_preload_libraries": "",
+        "compute_query_id": "auto",
+        "pg_stat_statements_track": null,
+        "pg_stat_statements_preloaded": false,
+        "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+        "statements": null
+      },
+      "end": {
+        "at": "2026-11-09T22:21:42.064933+00:00",
+        "wal_lsn": "0/922DEAC0",
+        "pg_stat_statements_installed": false,
+        "shared_preload_libraries": "",
+        "compute_query_id": "auto",
+        "pg_stat_statements_track": null,
+        "pg_stat_statements_preloaded": false,
+        "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+        "statements": null
+      },
+      "seconds": 60.162,
+      "wal_bytes": 384744,
+      "wal_bytes_per_hour": 23022479.30587414,
+      "statements": null,
+      "statements_per_minute": null,
+      "observations_accepted": 0,
+      "wal_bytes_per_accepted_row": null,
+      "statements_per_accepted_row": null,
+      "statements_per_minute_per_slo": null
+    }
+  ],
+  "seed_wal_scope": "setup, synthetic bulk history, preparation and page timings; not comparable to steady ingestion",
+  "window_scope": "idle means no agent ingestion; background work may still be catching up",
+  "accepted_row_scope": "rows recorded_at in [start,end); WAL covers fixture PostgreSQL, statements cover its app DB, including background work; zero-row ratios are null",
+  "runtime_metrics": "unavailable: metrics listener is disabled in the normal Compose stack",
+  "statement_scope": "all fixture-database statements, including sampler calls; null when counters are unavailable"
+}
