@@ -2,6 +2,100 @@
 
 .DEFAULT_GOAL := setup
 
+define MAKE_HELP
+Almanac: make TARGET [OPTION=value]
+
+Start and daily use
+  help                  Show this command guide; starts no services
+  bootstrap             First app startup: build, initialize data and start HTTPS
+  run                   Build/start the local app and its dependencies
+  start                 Alias for run
+  stop                  Stop the local app and agent; preserve data
+  logs                  Show app logs from the local stack
+  credentials           Print the initial administrator password
+
+Development tools
+  setup                 Build the dev image and install Go/npm dependencies once
+  shell                 Open the development container; CMD runs one command
+  stop-dev              Remove dev fixtures; keep dependency caches
+  agent-seed            Create the reusable local-dev agent credential
+  agent                 Run an agent with a privately pasted credential
+
+Testing (automatically enters the development container)
+  test                  Formatting, generated code, docs and Go/web unit tests
+  test-integration      Integration tests against PostgreSQL and real binaries
+  test-browser          UI catalogue/theme/size checks and production build
+  test-e2e              Critical journeys on a fresh isolated application stack
+  test-perf             Seeded SLO/SLI browser timings and exact-value checks
+  check                 Run test, test-integration and test-browser
+  verify                Alias for check
+  coverage              Unit/integration coverage in .local/coverage/
+
+Build and generation (run inside make shell)
+  build                 Build web assets and the app/agent binaries
+  generate              Generate code or format Go; choose GENERATE_MODE below
+  preview               Start the Vite development server
+
+Container images
+  images                Build local app, agent and development images
+  publish               Build/push app and agent images to IMAGE_REGISTRY
+
+Optional Firecracker microVMs (Linux host; Docker runs inside each VM)
+  vm-base               Build/rebuild shared dependencies; VM adopts an existing seed
+  vm-setup              Clone the base; copy the checkout and available host logins
+  vm-run                Clone/start a worker and launch Codex in the background
+  vm-list               List running, stopped and partially prepared VMs
+  vm-start              Boot an existing VM and wait for SSH
+  vm-codex              Attach to the worker's Codex terminal
+  vm-ssh                Open a guest shell
+  vm-collect            Retrieve commits/edits/new files without applying them
+  vm-stop               Orderly shutdown; keep disk and credentials
+  vm-delete             Permanently delete one VM; explicit VM=name is required
+
+Useful options
+  ALMANAC_PORT=18088     Local app HTTPS port; reuse it for later app commands
+  CMD="go version"      Command to run with make shell
+  SOCKET=1              Give the dev shell access to its host Docker socket
+  UPDATE_LOCK=1         Update npm lockfiles during make setup
+  RACE=1                Enable Go race detection for test/test-integration
+  ARGS="-g agent"       Select Playwright E2E/performance tests
+  PERF_DAYS=35           Seeded history length for test-perf
+  PERF_RUNS=10           Browser loads per page for test-perf
+  E2E_MIN_FREE_GB=10     Minimum host free disk space before E2E/performance suites
+  GENERATE_MODE=api     api | sqlc | format | go-guidelines
+  IMAGE_TAG=tag         Image tag (default: git describe)
+  IMAGE_PLATFORMS=list  Publish platforms (default: linux/amd64,linux/arm64)
+  IMAGE_REGISTRY=path   Required registry/repository prefix for publish
+  VM=name               Creation uses a random two-word name when omitted
+  VM_PROMPT="task"      Codex task; default stdin: type it, Enter, then Ctrl-D
+  VM_REPO=/path         Checkout snapshot to copy (default: current checkout)
+  VM_CPUS=2             New named VM vCPUs
+  VM_MEMORY_MIB=4096    New named VM memory
+  VM_DISK_GIB=80        Base disk size; clones inherit it
+  FIRECRACKER_STATE_DIR Shared private directory for bases and VM state
+
+Examples
+  make bootstrap
+  make setup && make check
+  make shell CMD="make build"
+  make shell CMD="make generate GENERATE_MODE=sqlc"
+  make test-e2e ARGS="-g agent"
+  make vm-base
+  make vm-run VM_PROMPT="Investigate the API issue"
+  cat task.txt | make vm-run
+  make vm-codex VM=fuzzy-tiger
+
+Existing VM commands default to almanac; delete always requires a name.
+Build/generate/preview use the dev image toolchains; setup is the default target.
+Advanced overrides: GO, GOFMT, SQLC, OAPI_CODEGEN, GO_GUIDELINES, GOFLAGS,
+ALMANAC_DEV_UID and ALMANAC_DEV_GID. See docs/commands.md and docs/firecracker.md.
+endef
+
+.PHONY: help
+help: export ALMANAC_MAKE_HELP := $(value MAKE_HELP)
+help:
+	@printf '%s\n' "$$ALMANAC_MAKE_HELP"
+
 # Go comes from the dev image's PATH. An inherited GOROOT can make that driver
 # execute a different installation's compiler, despite GOTOOLCHAIN=local.
 unexport GOROOT
@@ -177,6 +271,7 @@ _test:
 	python3 scripts/check-image-pins.py
 	python3 scripts/local-agent-tty-test.py
 	python3 scripts/firecracker-setup-test.py
+	python3 scripts/make-help-test.py
 	cd web && node scripts/check-local-agent.mjs
 	cd web && npm run typecheck
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts

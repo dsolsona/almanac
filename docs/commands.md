@@ -5,6 +5,10 @@ Everything builds, tests and ships through Docker
 [ADR-0033](adr/0033-simple-test-suite.md). The host needs Docker (Engine, Desktop or Colima) and
 `make`.
 
+Run `make help` for a grouped terminal reference to all public targets, common
+options and examples. It works before setup and starts no services. Use this
+page for the full workflow and execution rules.
+
 ## Command discipline
 
 - Check the current environment's approval rules before running a command. This page records the
@@ -30,6 +34,7 @@ make vm-base VM=seed              # adopt/warm this seed and stop it before seal
 make vm-setup VM=api              # CoW clone, independent checkout and host logins
 make vm-run VM=api VM_PROMPT='Describe your task' # Codex in background
 cat task.txt | make vm-run        # generate a random name such as fuzzy-tiger
+make vm-run                      # type the task, Enter, then Ctrl-D to launch
 cat task.txt | make vm-run VM=ui  # prompt from stdin by default
 make vm-list                     # running, stopped and partial guests
 make vm-start VM=api

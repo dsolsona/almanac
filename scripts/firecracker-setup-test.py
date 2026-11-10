@@ -5,7 +5,9 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import pty
 import re
+import select
 import shutil
 import subprocess
 import tempfile
@@ -49,6 +51,25 @@ with tempfile.TemporaryDirectory(prefix="almanac-firecracker-") as directory:
     assert result.returncode != 0 and "prompt" in result.stderr.lower(), result.stderr
     result = run("run", "api", "--prompt", "", env=env)
     assert result.returncode != 0 and not state.exists(), result.stderr
+
+    # An interactive stdin prompt must explain the wait before any VM is created.
+    terminal, terminal_input = pty.openpty()
+    interactive = subprocess.Popen(
+        ["bash", str(script), "run", "--prompt", "-"], env=env,
+        stdin=terminal_input, stdout=terminal_input, stderr=terminal_input,
+        start_new_session=True,
+    )
+    try:
+        readable, _, _ = select.select([terminal], [], [], 1)
+        assert readable, "interactive run silently waits for stdin"
+        message = os.read(terminal, 4096).decode()
+        assert "task" in message.lower() and "Ctrl-D" in message, message
+        assert not state.exists(), "waiting for a task created VM state"
+    finally:
+        interactive.terminate()
+        interactive.wait(timeout=5)
+        os.close(terminal)
+        os.close(terminal_input)
 
     # Sealing a dependency image must remove seed identity/work without deleting caches.
     seed = Path(directory) / "seed-filesystem"

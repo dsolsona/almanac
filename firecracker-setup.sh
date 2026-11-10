@@ -902,6 +902,9 @@ main() {
                 (( $# >= 2 && prompt_given == 0 )) || fail '--prompt needs one value and may appear only once'
                 prompt_given=1
                 if [[ $2 == - ]]; then
+                    if [[ -t 0 ]]; then
+                        printf 'Enter the task, then press Enter followed by Ctrl-D to launch (Ctrl-C cancels):\n' >&2
+                    fi
                     if IFS= read -r -d '' prompt; then fail 'prompt must be text without NUL bytes'; fi
                 else prompt=$2; fi
                 [[ $prompt =~ [^[:space:]] ]] || fail 'prompt must not be empty'
