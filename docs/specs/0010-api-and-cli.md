@@ -1,5 +1,11 @@
 # SPEC-0010: API and CLI
 
+> Accepted amendment, 2026-11-09: [ADR-0042](../adr/0042-keyset-overview-pagination.md)
+> replaces overview snapshots with live, filter-bound keyset pages and per-request
+> counts. Rows may move between pages. The v1 response retains a valid nonzero
+> deprecated `snapshot_id` UUID for existing CLI clients; it identifies the
+> response without pinning list contents. Detail exact-value pages keep their pin.
+
 > Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
 
 > Accepted amendment, 2026-11-01: The existing operational detail endpoint accepts

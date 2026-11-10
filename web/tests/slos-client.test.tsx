@@ -132,8 +132,8 @@ it('shows safe guidance for an invalid historical start without echoing server t
 
 it('requests server-filtered operational pages and rejects incomplete operational projections', async () => {
  const fetcher=vi.fn()
-  .mockResolvedValueOnce(new Response(JSON.stringify({items:[],group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}))
-  .mockResolvedValueOnce(new Response(JSON.stringify({items:null,group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
+  .mockResolvedValueOnce(new Response(JSON.stringify({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}))
+  .mockResolvedValueOnce(new Response(JSON.stringify({items:null,snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
  vi.stubGlobal('fetch',fetcher);
  await expect(sloClient.overview({q:'checkout api',service_id:id,urgency:'watch',limit:25,cursor:'opaque'})).resolves.toMatchObject({group_counts:{watch:3}});
  const [url,init]=fetcher.mock.calls[0]!;

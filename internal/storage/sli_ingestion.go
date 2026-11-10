@@ -100,28 +100,10 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 		return result, nil
 	}
 	result.ReplayAgeSeconds = max(0, int(now.Sub(item.CreatedAt).Seconds()))
-	payload := struct {
-		Version               int                  `json:"version"`
-		DeliveryID            string               `json:"delivery_id"`
-		ExecutionID           string               `json:"execution_id"`
-		CreatedAt             time.Time            `json:"created_at"`
-		LeaseID               string               `json:"lease_id"`
-		ConfigurationRevision string               `json:"configuration_revision"`
-		SessionGeneration     string               `json:"session_generation"`
-		SLIID                 string               `json:"sli_id"`
-		MeasurementRevision   string               `json:"measurement_revision"`
-		IntervalStart         time.Time            `json:"interval_start"`
-		IntervalEnd           time.Time            `json:"interval_end"`
-		Outcome               sli.ExecutionOutcome `json:"outcome"`
-	}{1, item.DeliveryID, item.ExecutionID, item.CreatedAt.UTC(), item.LeaseID,
-		item.ConfigurationRevision, item.SessionGeneration, item.SLIID, item.MeasurementRevision,
-		item.IntervalStart.UTC(), item.IntervalEnd.UTC(), sli.CanonicalOutcome(item.Outcome)}
-	payloadBytes, err := json.Marshal(payload)
+	payloadDigest, err := sliObservationPayloadDigest(item)
 	if err != nil {
 		return result, ErrObservationInvalid
 	}
-	payloadDigest := sha256.Sum256(payloadBytes)
-	clear(payloadBytes)
 	canonical := struct {
 		Version             int                  `json:"version"`
 		SLIID               string               `json:"sli_id"`

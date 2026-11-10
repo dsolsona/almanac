@@ -4,7 +4,7 @@ WITH cursor AS (
     WHERE w.slo_id=sqlc.arg(slo_id) AND w.definition_revision=sqlc.arg(definition_revision)
       AND w.measurement_revision=sqlc.arg(measurement_revision) AND w.calculation_version=sqlc.arg(calculation_version)
 ), hours AS (
-    SELECT e.published_at,
+    SELECT e.published_at,e.range_start,
            (w.built_through>=e.range_end AND NOT coalesce(w.dirty_from<e.range_end AND w.dirty_to>e.range_start,false)) AS ready
     FROM public.almanac_slo_extrema e LEFT JOIN cursor w ON true
     WHERE e.slo_id=sqlc.arg(slo_id) AND e.definition_revision=sqlc.arg(definition_revision)
@@ -18,7 +18,7 @@ WITH cursor AS (
       AND g.measurement_revision=sqlc.arg(measurement_revision) AND g.calculation_version=sqlc.arg(calculation_version)
 )
 SELECT (SELECT max(published_at) FROM hours)::timestamptz AS published_at,
-       (SELECT count(*) FROM hours WHERE ready)::bigint AS ready_hours,
+       (SELECT count(*) FROM hours WHERE ready AND range_start>=sqlc.arg(eligible_start)::timestamptz)::bigint AS ready_hours,
        coalesce((SELECT attempts>=5 FROM cursor),false)::boolean AS failing,
        coalesce((SELECT payload->'budget_sparkline' FROM prior),'[]'::jsonb)::jsonb AS samples,
        coalesce((SELECT payload->'_budget_cache' FROM prior),'null'::jsonb)::jsonb AS cache;

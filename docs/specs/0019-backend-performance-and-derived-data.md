@@ -1,5 +1,12 @@
 # SPEC-0019: Backend performance and derived data
 
+> Accepted amendment, 2026-11-09: [ADR-0042](../adr/0042-keyset-overview-pagination.md)
+> supersedes the overview's coherent multi-page snapshot and admission rules.
+> Overview pages read live rows with per-row generation stamps, filter-bound
+> keyset cursors and per-request group counts; rows can move between pages.
+> The deprecated v1 `snapshot_id` stays a valid nonzero response UUID for CLI
+> compatibility. Detail exact-value payloads remain generation-pinned.
+
 - Status: accepted
 - Created: 2026-10-30
 - Accepted: 2026-10-30; amended 2026-10-31 after maintainer approval of the performance/tracing intervention in Crit
