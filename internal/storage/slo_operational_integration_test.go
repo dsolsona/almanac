@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"math/big"
+	"reflect"
 	"testing"
 	"time"
 
@@ -16,6 +17,66 @@ import (
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
+
+func TestIntegrationRetainedDailyMetAndShortenedMatchRawOracle(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "daily-retained-oracle", true)
+	end := utcDayStart(s.at).Add(24 * time.Hour)
+	if _, err := s.conn.Exec(t.Context(), `WITH added AS (
+INSERT INTO public.almanac_sli_coverage
+(interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,c.sli_id,c.measurement_revision,point+interval '1 minute','observed',c.result_digest,'{}',
+gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,point+interval '1 minute',point+interval '1 minute'
+FROM (SELECT * FROM public.almanac_sli_coverage WHERE sli_id=$1 LIMIT 1)c
+CROSS JOIN generate_series($2::timestamptz-interval '1 hour',$2::timestamptz-interval '1 minute',interval '1 minute')point
+RETURNING interval_start,sli_id,measurement_revision)
+INSERT INTO public.almanac_sli_observation_values SELECT interval_start,sli_id,measurement_revision,990,1000 FROM added`, s.sliID, end); err != nil {
+		t.Fatal(err)
+	}
+	s.now = end.Add(90 * time.Second)
+	s.at = s.now
+	met := s.createSLO(t, "daily-met")
+	var verifier [32]byte
+	verifier[0] = 98
+	proof := DatasourceProof{SessionVerifier: verifier}
+	row, err := dbgen.New(s.conn).GetSlo(t.Context(), mustPGUUID(met))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shortFrom := end.Add(-30 * time.Minute)
+	_, shortSLO, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: "daily-shortened", DisplayName: "Daily shortened", ServiceID: row.ServiceID.String(), SliID: s.sliID, Target: "0.99", RollingWindowSeconds: 3600, EvaluationValidFrom: &shortFrom, IdempotencyKey: "daily-shortened", RequestID: "daily-shortened", Now: s.clock}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readOperationalOverviewForTest(t.Context(), s.f.databaseURL, OperationalOverviewInput{Proof: proof, Now: s.clock}); err != nil {
+		t.Fatal(err)
+	}
+	for range 1000 {
+		worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !worked {
+			break
+		}
+	}
+	start := end.Add(-24 * time.Hour)
+	for _, fixture := range []struct{ id, status, reason string }{{met, "met", ""}, {shortSLO.ID, "unknown", "shortened_window"}} {
+		input := OperationalDetailInput{Proof: proof, ID: fixture.id, At: &end, Start: &start, End: &end, BurnWindow: 3600, Now: s.clock}
+		want, err := readOperationalDetailForTest(t.Context(), s.f.databaseURL, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Runtime = s.runtime
+		got, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, input)
+		if err != nil || got.HistoryPreparation != nil || !reflect.DeepEqual(got.ComplianceSeries, want.ComplianceSeries) || !reflect.DeepEqual(got.ComplianceSummary, want.ComplianceSummary) {
+			t.Fatalf("retained daily %s differs from raw fixture: got=%+v want=%+v err=%v", fixture.status, got.ComplianceSeries, want.ComplianceSeries, err)
+		}
+		if len(got.ComplianceSeries.Days) != 1 || string(got.ComplianceSeries.Days[0].Status) != fixture.status || fixture.reason != "" && got.ComplianceSeries.Days[0].Explanation != fixture.reason {
+			t.Fatalf("unexpected daily fixture: %+v", got.ComplianceSeries)
+		}
+	}
+}
 
 func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testing.T) {
 	t.Parallel()
