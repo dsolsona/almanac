@@ -1,5 +1,9 @@
 # SLO eligible status implementation plan
 
+**Status:** Complete. The maintainer merged PR #82 in stack 74 on 2026-11-10;
+`main` at `89b9eb2` has the verified `10e5723` file tree. [F3-T12](../tasks/F3-T12.md)
+is done. Separate lean-SLO acceptance work remains in [F9-T06](../tasks/F9-T06.md).
+
 **Goal:** A fresh SLO with complete due measurements can be Healthy without waiting
 for its full rolling window, while actual collection gaps remain visible.
 
@@ -20,7 +24,7 @@ time separately from actual measurement-window bounds.
 - No shell redirects, new command wrappers, auth bypass or relaxed checks.
 - Explicit historical endpoints and daily compliance keep their existing contracts.
 - Missing, stale, expired and zero-traffic observations never establish success.
-- Verified stacked PR against `fix/slo-expired-history`; merging remains unauthorized.
+- Verified stacked PR against `fix/slo-expired-history`; the maintainer merged it.
 
 ## Review focus
 
@@ -54,9 +58,11 @@ Files: `web/src/slos/OperationalViews.tsx`, `web/tests/slo-operational.test.tsx`
 - [x] Run `make check`, then `make test-e2e`, then `make test-perf PERF_DAYS=35` sequentially. Record exact results, durations and gaps; do not touch the maintainer's running deployment.
 - [x] Review the whole branch and fix confirmed findings.
 
-Delivery: commit/push and create a PR against `fix/slo-expired-history`, add it to
-native stack 74 and verify head/base/membership and required CI. Publication and
-published-head CI evidence are recorded on the PR; local evidence is in
+Delivery completed: [PR #82](https://github.com/dsolsona/almanac/pull/82) was
+published against `fix/slo-expired-history`, verified as position 10 in native
+stack 74, and merged by the maintainer. All four required CI checks passed on
+`10e5723`. Publication and published-head CI evidence are recorded on the PR;
+local evidence is in
 [F3-T12](../tasks/F3-T12.md).
 
 Execution is inline under the repository's single-primary workflow. The maintainer

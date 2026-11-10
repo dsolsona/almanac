@@ -1,3 +1,21 @@
+Merged stack closeout, 2026-11-10: the maintainer merged PRs #72, #73 and
+#75–#82 in stack 74, then requested completed task records be closed.
+`main` at `89b9eb22d061f25b4d120902b907ea0f726486c3` has exactly the same
+file tree as verified PR #82 head `10e5723`. [F9-T01](tasks/F9-T01.md),
+[F9-T02](tasks/F9-T02.md), [F9-T03](tasks/F9-T03.md),
+[F9-T04](tasks/F9-T04.md), [F9-T05](tasks/F9-T05.md) and
+[F3-T12](tasks/F3-T12.md) are done as merged implementation work.
+[Plan 0031](plans/0031-slo-eligible-status.md) is complete; the implementation
+steps of [plan 0030](plans/0030-lean-slo-derived-data.md) are complete.
+[F9-T06](tasks/F9-T06.md) remains in progress and owns the unrun 365-day,
+full-fleet response-equivalence, late-data/retention benchmark, preview-copy
+migration and SQL statement-rate acceptance evidence. No criterion is waived.
+All four required PR #82 checks passed in
+[run 42860341391](https://github.com/dsolsona/almanac/actions/runs/42860341391).
+All four post-merge application checks also pass on `89b9eb2`.
+Historical checkpoints below retain their
+original failures, measurements and then-current merge/publication state.
+
 Eligible SLO status, 2026-11-10: [F3-T12](tasks/F3-T12.md) implements the
 maintainer-approved [ADR-0043](adr/0043-slo-status-from-due-eligible-measurements.md)
 on `fix/slo-eligible-status`, above PR #81 (`a283ab1`). Complete fresh due

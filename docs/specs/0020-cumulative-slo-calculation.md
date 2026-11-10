@@ -8,8 +8,9 @@
 - Status: accepted
 - Created: 2026-11-09
 - Accepted: 2026-11-09
-- Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; merge remains unauthorized
+- Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; maintainer merged stack 74 on 2026-11-10
 - Implementation: in progress
+- Verification: implementation merged at `89b9eb2`; acceptance remains in progress under [F9-T06](../tasks/F9-T06.md), including full-fleet equivalence, preview-copy rehearsal, statement rates and 365-day evidence
 - Related ADRs: [ADR-0040](../adr/0040-cumulative-sums-and-compact-extrema.md), [ADR-0041](../adr/0041-one-observation-table-with-cumulative-sums.md) (independent), [ADR-0042](../adr/0042-keyset-overview-pagination.md) (optional)
 - Plan: [Lean SLO derived data](../plans/0030-lean-slo-derived-data.md)
 - Supersedes / superseded by: amends SPEC-0006, SPEC-0007, SPEC-0010 and SPEC-0019 as listed below; supersedes no spec entirely. The file name keeps the first draft's title for link stability.
