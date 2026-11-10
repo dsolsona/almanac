@@ -14,6 +14,9 @@ States: `draft` → `ready` → `in_progress` → `review` → `done`; any activ
 subagent completion requests primary-agent review. Only integrated, verified work is
 `done`; task records do not require delegation.
 
+[F1-T21](F1-T21.md) tracks the optional prepared Firecracker development workers
+and the remaining real base/clone verification.
+
 The [visual foundation plan](../plans/0001-visual-foundation.md) is complete.
 [F1-T01](F1-T01.md) establishes the shared controls, local catalogue and focused
 verification harness. [F1-T02](F1-T02.md) adds calendars, switches and continuous

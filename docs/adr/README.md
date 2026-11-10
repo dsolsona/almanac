@@ -65,3 +65,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0037](0037-immediate-datasource-reassignment.md) | Reassign datasources without waiting for the previous agent | accepted |
 | [ADR-0038](0038-datasource-configuration-acknowledgement.md) | Finish datasource updates on configuration acknowledgement | accepted |
 | [ADR-0039](0039-cancel-pending-datasource-reassignment.md) | Cancel pending datasource reassignment without another pending move | accepted |
+| [ADR-0040](0040-prepared-firecracker-development-workers.md) | Prepared Firecracker development workers | accepted |

@@ -1,5 +1,11 @@
 # Delivery status
 
+Optional development tooling, 2026-11-10: [F1-T21](tasks/F1-T21.md) implements
+prepared Firecracker bases, CoW workers, authentication and lifecycle Make targets
+on `feat/firecracker-multi`. Offline checks pass; real base creation and concurrent
+clone boot remain unverified because host sudo authentication was unavailable.
+The maintainer authorized a local commit; publication and merging remain unauthorized.
+
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:
 the end-to-end settings first-visit check recorded 1,041 ms against the 1,000 ms
 budget. The datasource recovery journey passed. A failing production browser

@@ -1,5 +1,7 @@
 .PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
 
+.DEFAULT_GOAL := setup
+
 # Go comes from the dev image's PATH. An inherited GOROOT can make that driver
 # execute a different installation's compiler, despite GOTOOLCHAIN=local.
 unexport GOROOT
@@ -14,12 +16,40 @@ DEV_COMPOSE := docker compose -f compose.dev.yaml
 export ALMANAC_DEV_UID ?= $(shell id -u)
 export ALMANAC_DEV_GID ?= $(shell id -g)
 
-# Build the dev image for this user, pull the fixture image, check both against the daemon's
+# Optional Linux microVM lifecycle. Prompts default to stdin; no host Docker socket is shared.
+export VM ?=
+export VM_REPO ?= $(CURDIR)
+export VM_PROMPT ?= -
+override export VM_PROMPT := $(value VM_PROMPT)
+.PHONY: vm-base vm-setup vm-run vm-list vm-start vm-ssh vm-codex vm-stop vm-delete vm-collect
+vm-base:
+	@bash firecracker-setup.sh base $${VM:+"$$VM"} --repo "$$VM_REPO"
+vm-setup:
+	@bash firecracker-setup.sh setup $${VM:+"$$VM"} --repo "$$VM_REPO"
+vm-run:
+	@bash firecracker-setup.sh run $${VM:+"$$VM"} --repo "$$VM_REPO" --prompt "$$VM_PROMPT"
+vm-list:
+	@bash firecracker-setup.sh list
+vm-start:
+	@bash firecracker-setup.sh start "$${VM:-almanac}"
+vm-ssh:
+	@bash firecracker-setup.sh ssh "$${VM:-almanac}"
+vm-codex:
+	@bash firecracker-setup.sh codex "$${VM:-almanac}"
+vm-stop:
+	@bash firecracker-setup.sh stop "$${VM:-almanac}"
+vm-delete:
+	@test -n "$$VM" || { echo 'Use make vm-delete VM=NAME; deletion is permanent' >&2; exit 2; }
+	@bash firecracker-setup.sh delete "$$VM"
+vm-collect:
+	@bash firecracker-setup.sh collect "$${VM:-almanac}"
+
+# Build the dev image for this user, pull the fixture images, check all against the daemon's
 # platform and warm the Go module and npm caches inside the container. Network-capable.
 setup:
 	@set -eu; case "$${UPDATE_LOCK:-}" in ''|1) ;; *) echo 'UPDATE_LOCK must be 1 or unset' >&2; exit 2;; esac; \
 	  $(DEV_COMPOSE) build dev; \
-	  $(DEV_COMPOSE) pull --quiet postgres; \
+	  $(DEV_COMPOSE) pull --quiet postgres victoriatraces; \
 	  daemon=$$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}'); \
 	  for image in $$($(DEV_COMPOSE) config --images); do \
 	    actual=$$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$$image"); \
@@ -146,6 +176,7 @@ _test:
 	python3 scripts/check-docs.py
 	python3 scripts/check-image-pins.py
 	python3 scripts/local-agent-tty-test.py
+	python3 scripts/firecracker-setup-test.py
 	cd web && node scripts/check-local-agent.mjs
 	cd web && npm run typecheck
 	cd web && ./node_modules/.bin/vitest run --config vitest.config.ts

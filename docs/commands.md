@@ -18,6 +18,49 @@ Everything builds, tests and ships through Docker
 
 ## Catalog
 
+### Optional Firecracker development host
+
+On x86_64 Linux, [the Firecracker guide](firecracker.md) describes a private
+development VM whose Docker daemon and containers run inside the guest:
+
+```sh
+bash firecracker-setup.sh check   # read-only host prerequisite check
+make vm-base                     # build/rebuild dependencies from a fresh seed; uses sudo
+make vm-base VM=seed              # adopt/warm this seed and stop it before sealing the base
+make vm-setup VM=api              # CoW clone, independent checkout and host logins
+make vm-run VM=api VM_PROMPT='Describe your task' # Codex in background
+cat task.txt | make vm-run        # generate a random name such as fuzzy-tiger
+cat task.txt | make vm-run VM=ui  # prompt from stdin by default
+make vm-list                     # running, stopped and partial guests
+make vm-start VM=api
+make vm-ssh VM=api                # guest terminal
+make vm-codex VM=api              # attach to Codex
+make vm-stop VM=api               # preserve disk
+make vm-delete VM=api             # permanently delete one guest; explicit VM required
+make vm-collect VM=api            # retrieve changes without applying them
+bash firecracker-setup.sh setup api # direct script equivalent; requires a base
+bash firecracker-setup.sh start   # boot the prepared disk; uses sudo
+bash firecracker-setup.sh ssh     # guest terminal
+bash firecracker-setup.sh codex   # guest Codex in tmux
+bash firecracker-setup.sh run api --prompt 'Describe your task' # named background Codex; first use clones the base
+bash firecracker-setup.sh run ui --prompt - # read the task from stdin
+bash firecracker-setup.sh codex api # attach to that worker's terminal
+bash firecracker-setup.sh collect api # retrieve commits, tracked changes and new files; apply nothing
+bash firecracker-setup.sh status  # read-only running/stopped status
+bash firecracker-setup.sh stop    # orderly shutdown and owned network cleanup; preserves disk
+```
+
+These optional host commands do not replace the Docker application commands
+below; run those from the guest checkout. Unnamed `setup`, `run` and `base` reserve
+a random adjective-animal name and print it. Other lifecycle commands default to
+the original `almanac` guest; deletion requires an explicit name.
+`VM_REPO=/path/to/checkout` (or script `--repo`) selects the source
+snapshot for base preparation or first setup/run. Host `gh` and file-based Codex
+logins are copied privately to workers. Base definitions, rebuild semantics and
+credential limits are in [the guide](firecracker.md).
+
+### Application and verification
+
 The maintainer approved this catalog with ADR-0033 on 2026-11-05; it replaces the earlier
 `make verify MODE=…` catalog.
 
