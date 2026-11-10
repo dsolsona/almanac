@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -85,6 +86,19 @@ UPDATE public.almanac_slo_current_projections p SET urgency=c.urgency,payload=c.
 	if err != nil {
 		t.Fatal(err)
 	}
+	wire, err := json.Marshal(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compatibility struct {
+		SnapshotID string `json:"snapshot_id"`
+	}
+	if err := json.Unmarshal(wire, &compatibility); err != nil {
+		t.Fatal(err)
+	}
+	if _, valid := canonicalUUID(compatibility.SnapshotID); !valid || compatibility.SnapshotID == "00000000-0000-0000-0000-000000000000" {
+		t.Errorf("v1 response broke existing CLI snapshot validation: %q", compatibility.SnapshotID)
+	}
 	for _, change := range []func(*OperationalOverviewInput){
 		func(in *OperationalOverviewInput) { in.Query = "another" },
 		func(in *OperationalOverviewInput) { in.ServiceID = first.Items[0].Slo.ServiceId.String() },
@@ -119,6 +133,45 @@ UPDATE public.almanac_slo_current_projections p SET urgency=c.urgency,payload=c.
 	}
 	if !seen {
 		t.Fatal("cursor retained the old urgency snapshot")
+	}
+	for _, reverse := range []bool{false, true} {
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections SET urgency='watch',payload=jsonb_set(payload,'{urgency}','"watch"')`); err != nil {
+			t.Fatal(err)
+		}
+		input.Cursor = ""
+		first, err := ReadSloOperationalOverview(t.Context(), s.f.databaseURL, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Cursor = first.NextCursor
+		boundary, urgency, operator := "keyset-row-009", "needs_attention", ">"
+		if reverse {
+			second, err := ReadSloOperationalOverview(t.Context(), s.f.databaseURL, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input.Cursor = second.PreviousCursor
+			boundary, urgency, operator = "keyset-row-010", "healthy", "<"
+		}
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections p SET urgency=$1,payload=jsonb_set(p.payload,'{urgency}',to_jsonb($1::text))
+FROM public.almanac_slos s WHERE s.id=p.slo_id AND s.name LIKE 'keyset-row-%' AND s.name `+operator+` $2`, urgency, boundary); err != nil {
+			t.Fatal(err)
+		}
+		empty, err := ReadSloOperationalOverview(t.Context(), s.f.databaseURL, input)
+		if err != nil || len(empty.Items) != 0 {
+			t.Fatalf("reverse=%v expected moved rows to leave an empty page: %d %v", reverse, len(empty.Items), err)
+		}
+		input.Cursor = empty.PreviousCursor
+		if reverse {
+			input.Cursor = empty.NextCursor
+		}
+		if input.Cursor == "" {
+			t.Fatalf("reverse=%v empty page stranded the pager", reverse)
+		}
+		recovered, err := ReadSloOperationalOverview(t.Context(), s.f.databaseURL, input)
+		if err != nil || len(recovered.Items) == 0 {
+			t.Fatalf("reverse=%v recovery cursor did not reach live rows: %v", reverse, err)
+		}
 	}
 	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_users SET enabled=false WHERE id=$1`, s.f.userID); err != nil {
 		t.Fatal(err)

@@ -3669,6 +3669,10 @@ type SloOperationalOverviewPage struct {
 
 	// PreviousCursor Keyset cursor before this page; empty on the first page.
 	PreviousCursor string `json:"previous_cursor"`
+
+	// SnapshotId Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	SnapshotId openapi_types.UUID `json:"snapshot_id"`
 }
 
 // SloOperationalQuality defines model for SloOperationalQuality.

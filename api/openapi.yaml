@@ -1281,8 +1281,9 @@ components:
         next_cursor: {type: string}
     SloOperationalOverviewPage:
       type: object
-      required: [items, group_counts, next_cursor, previous_cursor]
+      required: [snapshot_id, items, group_counts, next_cursor, previous_cursor]
       properties:
+        snapshot_id: {type: string, format: uuid, deprecated: true, description: Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.}
         items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SloOperationalOverviewItem'}}
         group_counts: {$ref: '#/components/schemas/SloUrgencyCounts'}
         next_cursor: {type: string, maxLength: 2048, description: Keyset cursor after this page; empty when no further row was found.}

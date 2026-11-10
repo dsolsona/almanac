@@ -1096,6 +1096,12 @@ export interface components {
             next_cursor: string;
         };
         SloOperationalOverviewPage: {
+            /**
+             * Format: uuid
+             * @deprecated
+             * @description Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.
+             */
+            snapshot_id: string;
             items: components["schemas"]["SloOperationalOverviewItem"][];
             group_counts: components["schemas"]["SloUrgencyCounts"];
             /** @description Keyset cursor after this page; empty when no further row was found. */
