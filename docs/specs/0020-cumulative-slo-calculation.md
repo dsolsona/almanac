@@ -122,6 +122,11 @@ marks with the same rules, including transitions across hour boundaries, and
 adding `compliance`. Hours and days inside a dirty range are rebuilt and replace
 their rows conditionally on `source_generation` and lease epoch.
 
+The first built hour is the UTC-hour floor of the eligible start. To compose its
+first closed day, synthesize missing hours wholly before validity or retention
+arithmetically, retaining first/last and validity-transition marks without
+querying source windows. Missing eligible hours remain pending.
+
 Target: each closed hour is built within 5 minutes for every SLO at the
 1,000-SLO fixture. Rebuild cost after a late observation is at most
 `(window + 7 h) / 1 h` hourly rows plus their days.
@@ -132,10 +137,13 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   window, 1 h, 6 h and the attainment interval from the batched query at the
   effective time. The current refresh no longer publishes a point or extends a
   repair cursor.
-- **List sparkline**: 30 buckets over 7 days. Closed hours use hourly rows; the
+- **List sparkline**: 30 buckets over a seven-day span anchored at the last full
+  sparkline build. Closed hours use hourly rows; the
   open hour uses the current value. Rebuilt in the current refresh when an hour
   closes or a covered row's `published_at` changed; otherwise only the last
-  bucket is replaced. Stored in the projection payload as today;
+  bucket is replaced. The starting endpoint and closed bucket bounds keep that
+  build's anchor until the next closed-through hour or covered publication
+  changes; the display is not a cadence-sliding seven-day query. Stored in the projection payload as today;
   `budget_history_state` is `ready` unless a covering hour is missing, then
   `preparing`, or its cursor is exhausted, then `unavailable`.
 - **Detail graphs**: ranges over 28 days use daily rows for closed days and
@@ -150,6 +158,8 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   and union presence sets into `display_coverage`. The API sample shape is
   unchanged. `history_preparation` reports ready/total seconds over the
   requested range, counting dirty holes as not ready.
+  Historical live edges use today's retained facts and explicitly count expired
+  prefixes; an untouched stored mark still uses its own original boundary.
 - **Daily compliance**: from daily rows; the current day is unfinished as today.
 - **Exact-value pages**: the detail payload is pinned for five minutes under a
   generation as today; its digest is computed at insertion and checked on read.
@@ -159,6 +169,9 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   reason; retry resets the addressed item. The one-minute consistency check and
   metrics classify SLOs as up to date, catching up, failing or stopped from the
   same rows; `derived_bytes` sums the remaining derived tables and indexes.
+  Storage helpers may omit a shared `Runtime` for unpooled reads, but this does
+  not start repair workers. Backend startup owns those loops; cold history stays
+  explicitly preparing until they publish it, including for unpooled callers.
 
 ### Workers and polling
 
