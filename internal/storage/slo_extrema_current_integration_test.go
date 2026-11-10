@@ -4,11 +4,13 @@ package storage
 
 import (
 	"encoding/json/v2"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
 
 func TestIntegrationCurrentUsesExtremaSparklineWithoutLegacyWork(t *testing.T) {
@@ -60,6 +62,44 @@ WHERE relnamespace='public'::regnamespace AND relname=ANY(ARRAY[
 	if item.BudgetHistoryState == nil || *item.BudgetHistoryState != "ready" || len(item.BudgetSparkline) == 0 || len(item.BudgetSparkline) > 120 {
 		t.Fatalf("ready extrema do not supply the list sparkline: state=%v samples=%d", item.BudgetHistoryState, len(item.BudgetSparkline))
 	}
+	verifyFixtureSparkline(t, s, item)
+	// A retained hour before validity still participates in due-work detection.
+	s.now = s.now.Add(time.Second)
+	q := dbgen.New(s.conn)
+	row, err := q.GetSlo(t.Context(), mustPGUUID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := extremaWindowInput(row, source, s.now, s.now.Add(-365*24*time.Hour))
+	prefix, err := buildExtremaHour(t.Context(), q, row, base, s.historyStart.Truncate(time.Hour).Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadPrefix, err := json.Marshal(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(t.Context(), `INSERT INTO public.almanac_slo_extrema
+(slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,retention_start,published_at,lanes)
+SELECT slo_id,definition_revision,measurement_revision,calculation_version,3600,$2::timestamptz-interval '1 hour',$2,source_generation,retention_start,$3,$4
+FROM public.almanac_slo_extrema WHERE slo_id=$1 AND resolution_seconds=3600 LIMIT 1`, id, s.historyStart.Truncate(time.Hour), s.now, payloadPrefix); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil {
+		t.Fatal(err)
+	}
+	due, err := q.ReadDerivedDue(t.Context(), dbgen.ReadDerivedDueParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(s.now), MetricsAt: timestamp(s.now.Add(time.Minute))})
+	if err != nil || due.CurrentDue {
+		t.Fatalf("pre-validity publication left current work continuously due: %+v %v", due, err)
+	}
+	objectives, err := q.ListDueDerivedObjectives(t.Context(), dbgen.ListDueDerivedObjectivesParams{CalculationVersion: operationalCalculationVersion, Now: timestamp(s.now), BatchLimit: 100})
+	if err != nil || len(objectives) != 0 {
+		t.Fatalf("pre-validity publication repeatedly selected objective: %d %v", len(objectives), err)
+	}
 	before := append([]api.SloOperationalSample(nil), item.BudgetSparkline...)
 	s.now = s.now.Add(time.Minute)
 	if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil {
@@ -83,9 +123,13 @@ WHERE relnamespace='public'::regnamespace AND relname=ANY(ARRAY[
 			newClosed = append(newClosed, sample)
 		}
 	}
-	if !reflect.DeepEqual(oldClosed, newClosed) || !item.BudgetSparkline[len(item.BudgetSparkline)-1].EvaluationAt.Equal(s.now) {
-		t.Fatal("cadence refresh changed closed buckets or failed to replace the last bucket")
+	if !reflect.DeepEqual(oldClosed, newClosed) {
+		t.Fatal("cadence refresh changed closed buckets")
 	}
+	if !item.BudgetSparkline[len(item.BudgetSparkline)-1].EvaluationAt.Equal(floorSliBoundary(s.now, s.cadence)) {
+		t.Fatal("cadence refresh failed to replace the last bucket at the cadence boundary")
+	}
+	verifyFixtureSparkline(t, s, item)
 }
 
 func TestIntegrationLateExtremaRebuildRefreshesCoveredSparkline(t *testing.T) {
@@ -127,6 +171,7 @@ func TestIntegrationLateExtremaRebuildRefreshesCoveredSparkline(t *testing.T) {
 	}
 	drain()
 	before := refresh()
+	verifyFixtureSparkline(t, s, before)
 	late := s.at.Add(-3*24*time.Hour + 10*time.Minute)
 	s.now = s.now.Add(time.Second)
 	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, late, s.now); err != nil {
@@ -139,6 +184,7 @@ func TestIntegrationLateExtremaRebuildRefreshesCoveredSparkline(t *testing.T) {
 	}
 	drain()
 	after := refresh()
+	verifyFixtureSparkline(t, s, after)
 	if after.BudgetHistoryState == nil || *after.BudgetHistoryState != "ready" || reflect.DeepEqual(before.BudgetSparkline, after.BudgetSparkline) {
 		t.Fatal("rebuilt covered hour did not refresh the sparkline at the same cadence boundary")
 	}
@@ -161,5 +207,32 @@ func TestIntegrationLateExtremaRebuildRefreshesCoveredSparkline(t *testing.T) {
 	}
 	if !reflect.DeepEqual(unaffected(before.BudgetSparkline), unaffected(after.BudgetSparkline)) {
 		t.Fatal("late rebuild changed unrelated sparkline buckets")
+	}
+}
+
+func verifyFixtureSparkline(t *testing.T, s *selfHealFixture, item api.SloOperationalOverviewItem) {
+	t.Helper()
+	closedNumeric := 0
+	for _, sample := range item.BudgetSparkline {
+		// This fixture has 990/1000 once per minute in [historyStart, at).
+		from := maxTime(sample.EvaluationAt.Add(-time.Hour), s.historyStart)
+		through := sample.EvaluationAt
+		if through.After(s.at) {
+			through = s.at
+		}
+		observed := max(int64(0), int64(through.Sub(from)/time.Minute))
+		if observed == 0 {
+			continue
+		}
+		if sample.Quality.ObservedIntervals != observed || sample.Good == nil || sample.Total == nil ||
+			*sample.Good != fmt.Sprintf("%d.000000000000", observed*990) || *sample.Total != fmt.Sprintf("%d.000000000000", observed*1000) {
+			t.Fatalf("sparkline differs from independent fixture totals at %s: observed=%d sample=%+v", sample.EvaluationAt, observed, sample)
+		}
+		if !sample.EvaluationAt.After(s.now.Truncate(time.Hour)) {
+			closedNumeric++
+		}
+	}
+	if closedNumeric == 0 {
+		t.Fatal("sparkline oracle exercised no closed-hour numeric value")
 	}
 }
