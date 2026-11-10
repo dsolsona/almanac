@@ -53,6 +53,26 @@ under `docs/evidence/lean-slo/`, linked from [F9-T06](tasks/F9-T06.md).
 Earlier delivery checkpoints follow; their draft/measurement statements describe
 those checkpoints, not current PR readiness or completion of remaining criteria.
 
+PR #73 CodeRabbit follow-up, 2026-11-10: `7b9ba35` guards optional-runtime
+history hit/miss metrics, removes dead oracle assignments and clarifies that
+measurement roots follow the measured schema. The nil-pointer regression first
+failed, then passed on both the original pipeline and integrated extrema stack.
+Both review threads have replies and are resolved. After propagation through
+PRs #75–#81, `make check` passes in an observed 290 seconds and all 15 isolated
+container journeys pass in 4.1 minutes (301 seconds observed). See
+[F9-T01](tasks/F9-T01.md). Later PR #72 clarifications are now integrated through the stack;
+benchmarks were not repeated at that checkpoint and merge remains unauthorized.
+
+Lean SLO retention review follow-up, 2026-11-10: `fix/slo-expired-history` in
+`.worktrees/lean-slo-expired-history`, based on `5e19912`, corrects permanently
+pending historical reads after extrema cleanup. Absent expired hours and compliance
+days use arithmetic expired outcomes; available rows retain their original inputs.
+The authorized detail-read regression reproduced the defect. Final `make check`
+passes in an observed 261 seconds, including storage integration in 100.760 seconds,
+437 frontend tests and 82 browser checks. Sequential `make test-e2e` passes all
+15 isolated container journeys in 3.7 minutes (observed command duration 278 seconds).
+See [F9-T02](tasks/F9-T02.md). Merge remains unauthorized.
+
 Lean SLO implementation, 2026-11-09: the maintainer selected PR [#72](https://github.com/dsolsona/almanac/pull/72)
 commit `b7d8a5c` as authoritative, accepted its design and requested all tasks with
 stacked PR delivery. ADR-0040/0041/0042 and SPEC-0020 acceptance is recorded without

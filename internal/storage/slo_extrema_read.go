@@ -33,6 +33,7 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 	var err error
 	parts := make([]retainedReadPart, 0, len(plan.stored))
 	valid := maxTime(base.ValidFrom, base.SliValidFrom)
+	unobservedThrough := maxTime(valid, ceilSliBoundary(base.RetentionStart, base.Cadence))
 	for _, part := range plan.stored {
 		if part.end.After(valid) {
 			parts = append(parts, part)
@@ -93,7 +94,7 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 		case !floorSliBoundary(part.end, base.Cadence).After(floorSliBoundary(part.start, base.Cadence)):
 		case row.Ready:
 			tile, err = r.decode(ctx, base, part, row)
-		case !part.end.After(valid):
+		case !floorSliBoundary(part.end, base.Cadence).After(valid) || !row.RetentionStart.Valid && !floorSliBoundary(part.end, base.Cadence).After(unobservedThrough):
 			tile, err = r.beforeValidity(ctx, base, part)
 		case row.Failing:
 			r.failed = true
@@ -157,7 +158,7 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 	for _, part := range plan.days {
 		var day api.SloDailyComplianceDay
 		row := stored[part]
-		if !floorSliBoundary(part.end, base.Cadence).After(valid) {
+		if !floorSliBoundary(part.end, base.Cadence).After(valid) || !row.RetentionStart.Valid && !floorSliBoundary(part.end, base.Cadence).After(unobservedThrough) {
 			value, err := evaluateOperationalAt(ctx, base, floorSliBoundary(part.end, base.Cadence), base.Duration)
 			if err != nil {
 				return err

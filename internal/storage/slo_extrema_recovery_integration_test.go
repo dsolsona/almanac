@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -224,5 +225,104 @@ FROM generate_series($3::timestamptz-interval '2 hours',$3::timestamptz+interval
 	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE range_end<=$2),count(*) FILTER(WHERE range_end>$2)
 FROM public.almanac_slo_extrema WHERE slo_id=$1`, id, s.now.Add(-365*24*time.Hour)).Scan(&expired, &retained); err != nil || expired != 0 || retained != 2 {
 		t.Fatalf("cleanup removed a retained boundary or kept expired rows: expired=%d retained=%d, %v", expired, retained, err)
+	}
+}
+
+func TestIntegrationExtremaDetailReportsExpiredHistoryAfterCleanup(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "extrema-expired-read", true)
+	id := s.createSLO(t, "extrema-expired-read")
+	end := utcDayStart(s.historyStart).Add(48 * time.Hour)
+	start := end.Add(-24 * time.Hour)
+	s.now = end.Add(7 * time.Minute)
+	if err := s.buildHistory(t, id); err != nil {
+		t.Fatal(err)
+	}
+	var stored int
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_extrema WHERE slo_id=$1 AND range_end<=$2`, id, end).Scan(&stored); err != nil || stored == 0 {
+		t.Fatalf("fixture has no retained history to expire: rows=%d, %v", stored, err)
+	}
+	s.now = end.Add(366 * 24 * time.Hour)
+	var verifier [32]byte
+	verifier[0] = 99
+	if _, err := IssueSession(t.Context(), s.f.databaseURL, IssueSessionInput{UserID: s.f.userID, ExpectedCredentialEpoch: s.f.epoch,
+		ExpectedCredentialRevision: s.f.revision, Verifier: verifier, Now: s.now, RequestID: "extrema-expired-read"}); err != nil {
+		t.Fatal(err)
+	}
+	input := OperationalDetailInput{Runtime: s.runtime, Proof: DatasourceProof{SessionVerifier: verifier},
+		ID: id, At: &end, Start: &start, End: &end, BurnWindow: 21600, Now: s.clock}
+	before, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, input)
+	if err != nil || before.HistoryPreparation != nil || len(before.BudgetSeries.Samples) == 0 {
+		t.Fatalf("available retained rows should remain readable: %v", err)
+	}
+	for _, sample := range before.BudgetSeries.Samples {
+		// The requested starting endpoint is a live edge, not a retained row.
+		if sample.EvaluationAt.After(start) && (sample.Quality.MissingIntervals != 60 || sample.Quality.ExpiredIntervals != 0) {
+			t.Fatal("advancing retention changed an untouched retained row")
+		}
+	}
+	if len(before.ComplianceSeries.Days) != 1 || before.ComplianceSeries.Days[0].Quality.MissingIntervals != 60 || before.ComplianceSeries.Days[0].Quality.ExpiredIntervals != 0 {
+		t.Fatal("advancing retention changed an untouched compliance day")
+	}
+	for _, failed := range []bool{false, true} {
+		attempts, reason := 0, "history_preparing"
+		if failed {
+			attempts, reason = 5, "history_preparation_failed"
+		}
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET dirty_from=$2,dirty_to=$3,attempts=$4 WHERE slo_id=$1`, id, start, end, attempts); err != nil {
+			t.Fatal(err)
+		}
+		s.now = s.now.Add(time.Minute)
+		dirty, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, input)
+		if err != nil || dirty.HistoryPreparation == nil || dirty.HistoryPreparation.Failed != failed {
+			t.Fatalf("retained dirty rows were incorrectly declared expired: failed=%v preparation=%+v err=%v", failed, dirty.HistoryPreparation, err)
+		}
+		for _, sample := range dirty.BudgetSeries.Samples {
+			if sample.EvaluationAt.After(start) && (sample.State != "missing" || sample.Quality.State != "unavailable" || sample.Quality.Reason == nil || *sample.Quality.Reason != reason) {
+				t.Fatalf("dirty retained sample lost its preparation state: %+v", sample)
+			}
+		}
+		if len(dirty.ComplianceSeries.Days) != 1 || dirty.ComplianceSeries.Days[0].Explanation != reason {
+			t.Fatal("dirty retained compliance day lost its preparation state")
+		}
+	}
+	if err := s.runtime.cleanupDerivedSnapshots(t.Context(), s.now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_extrema WHERE slo_id=$1 AND range_end<=$2`, id, end).Scan(&stored); err != nil || stored != 0 {
+		t.Fatalf("retention did not remove the requested history: rows=%d, %v", stored, err)
+	}
+	// A different burn selection forces a fresh read rather than the earlier pin.
+	input.BurnWindow = 3600
+	detail, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.HistoryPreparation != nil {
+		t.Errorf("expired history can never finish preparation: %+v", detail.HistoryPreparation)
+	}
+	for _, lane := range []struct {
+		name    string
+		samples []api.SloOperationalSample
+		expired int64
+	}{{"budget", detail.BudgetSeries.Samples, 60}, {"burn", detail.BurnSeries.Samples, 60}, {"attainment", detail.AttainmentSeries.Samples, 1}} {
+		if len(lane.samples) == 0 {
+			t.Errorf("%s has no expired samples", lane.name)
+		}
+		for _, sample := range lane.samples {
+			if sample.State != "expired" || sample.Quality.State != "expired_history" || sample.Quality.ExpiredIntervals != lane.expired ||
+				sample.Quality.MissingIntervals != 0 || sample.Quality.ObservedIntervals != 0 {
+				t.Errorf("%s at %s lost expired interval counts: %+v", lane.name, sample.EvaluationAt, sample.Quality)
+				break
+			}
+		}
+	}
+	if len(detail.ComplianceSeries.Days) != 1 {
+		t.Fatalf("expected one completed compliance day, got %d", len(detail.ComplianceSeries.Days))
+	}
+	day := detail.ComplianceSeries.Days[0]
+	if day.Status != "unknown" || day.Explanation != "expired_history" || day.Quality.State != "expired_history" ||
+		day.Quality.ExpiredIntervals != 60 || day.Quality.MissingIntervals != 0 || day.Quality.ObservedIntervals != 0 {
+		t.Errorf("expired compliance day became pending or missing: %+v", day)
 	}
 }

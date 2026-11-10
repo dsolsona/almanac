@@ -164,9 +164,21 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   and union presence sets into `display_coverage`. The API sample shape is
   unchanged. `history_preparation` reports ready/total seconds over the
   requested range, counting dirty holes as not ready.
+  If a closed row is absent and its last cadence endpoint is at or before the
+  current retention cutoff rounded up to the cadence, compute the expired
+  outcome arithmetically instead of reporting preparation. This includes an
+  endpoint after the raw cutoff but at its cadence-rounded boundary. Untouched
+  ready retained rows keep their original inputs and cutoff until rebuilt or
+  removed by cleanup; existing dirty/failed rows keep their
+  preparation/failure outcome.
   Historical live edges use today's retained facts and explicitly count expired
   prefixes; an untouched stored mark still uses its own original boundary.
 - **Daily compliance**: from daily rows; the current day is unfinished as today.
+  A missing completed day whose last cadence endpoint is at or before the
+  cadence-rounded cutoff uses arithmetic expired inputs rather than pending
+  preparation. Validity still takes precedence: a wholly pre-validity day is
+  `not_applicable`, and a partially eligible day may report `shortened_window`
+  as its compliance explanation even when its quality counts expired intervals.
 - **Exact-value pages**: the detail payload is pinned for five minutes under a
   generation as today; its digest is computed at insertion and checked on read.
   No other read recomputes a digest.
