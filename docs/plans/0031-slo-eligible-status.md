@@ -37,22 +37,27 @@ Files: `internal/sli/observations.go`, `internal/sli/definition_test.go`,
 `internal/storage/slo_operational.go`, `internal/storage/slo_evaluation.go`,
 storage unit/integration tests.
 
-- [ ] Add failing deterministic deadline, shortened-eligibility, waiting and real-gap tests; run `make test` and capture the failures.
-- [ ] Add `sli.LatestDueEnd(now time.Time, id string, cadenceSeconds, settlingSeconds int) time.Time` using the accepted fixed allowance. Apply it only to live current reads; preserve explicit historical `at` behavior.
-- [ ] Evaluate current objective/1h/6h windows at the same due endpoint, disclose their bounds and retain current snapshot/generation time. Compare freshness to actual request time. Remove shortened-history-only Watch/burn unavailability; keep negative-budget and real-gap qualifications.
+- [x] Add failing deterministic deadline, shortened-eligibility, waiting and real-gap tests; run `make test` and capture the failures.
+- [x] Add `sli.LatestDueEnd(now time.Time, id string, cadenceSeconds, settlingSeconds int) time.Time` using the accepted fixed allowance. Apply it only to live current reads; preserve explicit historical `at` behavior.
+- [x] Evaluate current objective/1h/6h windows at the same due endpoint, disclose their bounds and retain current snapshot/generation time. Compare freshness to actual request time. Remove shortened-history-only Watch/burn unavailability; keep negative-budget and real-gap qualifications.
 - Already received complete intervals may advance that endpoint. Read only the bounded tail after the fixed clock deadline, using the canonical observation table; this prevents both a frozen outage horizon and withholding data that has already arrived.
-- [ ] Add PostgreSQL regression coverage for nine 99/100 observations: 98% gives 50% remaining and 0.5x burn, with complete eligible coverage; a later missing interval remains partial and stopped collection becomes stale. Compare default API/CLI arithmetic with explicit canonical evaluation at the disclosed cutoff.
-- [ ] Run `make test-integration`; diagnose every failure before another run.
+- [x] Add PostgreSQL regression coverage for nine 99/100 observations: 98% gives 50% remaining and 0.5x burn, with complete eligible coverage; a later missing interval remains partial and stopped collection becomes stale. Compare default API/CLI arithmetic with explicit canonical evaluation at the disclosed cutoff.
+- [x] Run `make test-integration`; diagnose every failure before another run.
 
 ## Task 2: User-visible explanation and delivery
 
 Files: `web/src/slos/OperationalViews.tsx`, `web/tests/slo-operational.test.tsx`,
 `web/e2e/collection.spec.ts`, accepted docs and task/status records.
 
-- [ ] Add failing status/copy tests and a real collection journey for a new 98% SLO. Assert Healthy and exact budget/burn without full-window history; cover Waiting, Partial data and Budget exhausted.
-- [ ] Show evaluation start, actual cutoff and observed/expected counts in the existing detail status area. Preserve retained layout and single-chip lists.
-- [ ] Run `make check`, then `make test-e2e`, then `make test-perf PERF_DAYS=35` sequentially. Record exact results, durations and gaps; do not touch the maintainer's running deployment.
-- [ ] Review the whole branch and fix confirmed findings. Commit/push and create a PR against `fix/slo-expired-history`, add it to native stack 74 and verify head/base/membership and required CI.
+- [x] Add failing status/copy tests and a real collection journey for a new 98% SLO. Assert Healthy and exact budget/burn without full-window history; cover Waiting, Partial data and Budget exhausted.
+- [x] Show evaluation start, actual cutoff and observed/expected counts in the existing detail status area. Preserve retained layout and single-chip lists.
+- [x] Run `make check`, then `make test-e2e`, then `make test-perf PERF_DAYS=35` sequentially. Record exact results, durations and gaps; do not touch the maintainer's running deployment.
+- [x] Review the whole branch and fix confirmed findings.
+
+Delivery: commit/push and create a PR against `fix/slo-expired-history`, add it to
+native stack 74 and verify head/base/membership and required CI. Publication and
+published-head CI evidence are recorded on the PR; local evidence is in
+[F3-T12](../tasks/F3-T12.md).
 
 Execution is inline under the repository's single-primary workflow. The maintainer
 approved the described policy in conversation; no repeated approval is required.

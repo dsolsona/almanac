@@ -1,3 +1,19 @@
+Eligible SLO status, 2026-11-10: [F3-T12](tasks/F3-T12.md) implements the
+maintainer-approved [ADR-0043](adr/0043-slo-status-from-due-eligible-measurements.md)
+on `fix/slo-eligible-status`, above PR #81 (`a283ab1`). Complete fresh due
+measurements can establish Healthy before the full rolling window exists;
+pending collection is distinct from actual gaps, and the cutoff advances during
+outages. Detail shows eligibility start, cutoff and due interval counts.
+Application `7714899` passes `make check` (447 frontend tests, storage
+116.434 s, 82 browser cases in 1.9 min), all 16 container E2E journeys (5.4 min),
+and six 35-day performance checks (6.6 min). Cold p95 is 332/266 ms for SLO
+list/detail and 172/193 ms for SLI list/detail. Both themes and 1440/360 px
+views pass the new 98% SLO journey with exact 50% budget and 0.5x burn.
+Independent review findings are fixed and regression-tested. Native-stack
+publication and published-head CI evidence belong to the PR; these local results
+do not imply those checks pass. Operator deployment/data remain unchanged, and
+larger/year-long acceptance gaps in earlier tasks remain open. No merge is authorized.
+
 Settings first-visit CI correction, 2026-11-10: application `557a5ef` fixes the
 reported PR [#73](https://github.com/dsolsona/almanac/pull/73) failure. Public
 route assets load from HTML preloads, prefetched modules render immediately,
