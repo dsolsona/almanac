@@ -15,6 +15,7 @@ import tempfile
 import tarfile
 import termios
 import time
+import tomllib
 
 
 root = Path(__file__).resolve().parent.parent
@@ -637,16 +638,22 @@ for path in sys.argv[3:-1]:
 ''')
     (tools / "ssh").write_text('''#!/usr/bin/env python3
 import os, subprocess, sys
-assert sys.argv[3] == 'dev', sys.argv
+args = sys.argv[3:]
+if args[0] == '-t':
+    args = args[1:]
+assert args[0] == 'dev', args
 if os.environ.get('FAKE_SSH_FAIL'):
     sys.exit(255)
-if sys.argv[4:] == ['bash', '-s']:
+if args[1:] == ['bash', '-s']:
     program = sys.stdin.read().replace('/home/dev', os.environ['FAKE_GUEST_HOME'])
     result = subprocess.run(['bash', '-s'], input=program, text=True)
 else:
-    assert len(sys.argv) == 5, sys.argv
-    command = sys.argv[4].replace('/home/dev', os.environ['FAKE_GUEST_HOME'])
-    result = subprocess.run(['bash', '-c', command], stdin=sys.stdin)
+    if len(args) == 1:
+        command = 'exec "$SHELL" -l'
+    else:
+        assert len(args) == 2, args
+        command = args[1].replace('/home/dev', os.environ['FAKE_GUEST_HOME'])
+    result = subprocess.run(['bash', '-c', command], stdin=sys.stdin, cwd=os.environ['FAKE_GUEST_HOME'])
 sys.exit(result.returncode)
 ''')
     for tool in tools.iterdir():
@@ -721,6 +728,35 @@ with open(os.environ['FAKE_ARGV'], 'w') as f:
         tool.chmod(0o700)
     transport_env = dict(env, PATH=str(tools) + os.pathsep + os.environ["PATH"],
                          FAKE_GUEST_HOME=str(guest_home), FAKE_ARGV=str(state / "argv.json"))
+    # A manual Codex launch from vm-ssh needs the checkout cwd and saved trust.
+    login_shell = tools / "guest-login-shell"
+    login_shell.write_text("#!/bin/sh\npwd -P\n")
+    login_shell.chmod(0o700)
+    (state / "ready").touch()
+    guest_config = guest_home / ".codex/config.toml"
+    shell_program = '''source "$1"
+check() { :; }
+start() { :; }
+main ssh
+'''
+    for previous in (None, 'cli_auth_credentials_store = "file"\n', 'model = "fixture-model"\n'):
+        if previous is None:
+            guest_config.unlink(missing_ok=True)
+        else:
+            guest_config.write_text(previous)
+        result = subprocess.run(
+            ["bash", "-c", shell_program, "test", str(script)],
+            env=dict(transport_env, SHELL=str(login_shell)), text=True, capture_output=True, timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == str(guest_checkout), "guest shell opened outside the task worktree"
+        if previous and previous.startswith("model"):
+            assert guest_config.read_text() == previous, "guest preferences were overwritten"
+        else:
+            config = tomllib.loads(guest_config.read_text())
+            assert config["projects"] == {str(guest_home / "almanac"): {"trust_level": "trusted"}}
+            assert config["cli_auth_credentials_store"] == "file"
+            assert guest_config.stat().st_mode & 0o777 == 0o600
     result = subprocess.run(
         ["bash", "-c", 'source "$1"; state=$2; prompt=$3; launch_agent',
          "test", str(script), str(state), payload],

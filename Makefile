@@ -47,7 +47,7 @@ Optional Firecracker microVMs (Linux host; Docker runs inside each VM)
   vm-list               List running, stopped and partially prepared VMs
   vm-start              Boot an existing VM and wait for SSH
   vm-codex              Attach to the worker's Codex terminal
-  vm-ssh                Open a guest shell
+  vm-ssh                Open a guest shell in the task worktree
   vm-collect            Retrieve commits/edits/new files without applying them
   vm-stop               Orderly shutdown; keep disk and credentials
   vm-delete             Permanently delete one VM; explicit VM=name is required

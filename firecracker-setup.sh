@@ -25,7 +25,7 @@ Usage: ./firecracker-setup.sh ACTION [NAME] [--prompt TEXT|-] [--repo PATH]
   base    Warm a seed with make setup, stop it and publish a reusable CoW base.
   check   Check host prerequisites without changing anything.
   start   Boot the existing guest and wait for SSH.
-  ssh     Open a shell as dev (starts the guest if necessary).
+  ssh     Open a dev shell in the task worktree (starts the guest if necessary).
   codex   Attach to Codex in tmux (starts the guest if necessary).
   run     Prepare/start a named guest and launch Codex in background; needs --prompt.
   collect Retrieve commits, tracked edits and new files without applying them.
@@ -563,8 +563,6 @@ PY
         "$rootfs/home/dev/.ssh" "$rootfs/home/dev/.codex"
     sudo install -m 600 "$state/id_ed25519.pub" "$rootfs/root/.ssh/authorized_keys"
     sudo install -m 600 -o "$uid" -g "$gid" "$state/id_ed25519.pub" "$rootfs/home/dev/.ssh/authorized_keys"
-    printf 'cli_auth_credentials_store = "file"\n' | sudo tee "$rootfs/home/dev/.codex/config.toml" >/dev/null
-    sudo chown "$uid:$gid" "$rootfs/home/dev/.codex/config.toml"
     sudo ssh-keygen -q -t ed25519 -N '' -f "$rootfs/etc/ssh/ssh_host_ed25519_key"
     sudo cat "$rootfs/etc/ssh/ssh_host_ed25519_key.pub" > "$state/guest-host-key.pub"
     # These files are recreated rather than following possible guest symlinks.
@@ -620,8 +618,6 @@ printf 'dev ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/almanac-dev
 chmod 440 /etc/sudoers.d/almanac-dev
 install -d -m 700 -o dev -g dev /home/dev/.ssh /home/dev/.codex
 install -m 600 -o dev -g dev /root/.ssh/authorized_keys /home/dev/.ssh/authorized_keys
-printf 'cli_auth_credentials_store = "file"\n' > /home/dev/.codex/config.toml
-chown dev:dev /home/dev/.codex/config.toml
 GUEST
     install_codex
 }
@@ -789,6 +785,23 @@ GUEST
     printf 'Prepared base: %s\nSeed %s is stopped and preserved. New workers skip make setup.\n' "$image" "$name"
 )
 
+configure_guest_codex() {
+    ssh_guest dev bash -s <<'GUEST'
+set -euo pipefail
+umask 077
+config=/home/dev/.codex/config.toml
+auth_setting='cli_auth_credentials_store = "file"'
+# Upgrade only the original launcher default.
+if [[ -L $config ]] || { [[ -e $config ]] && ! cmp -s "$config" <(printf '%s\n' "$auth_setting"); }; then
+    exit 0
+fi
+temp=$(mktemp "$config.XXXXXX")
+trap 'rm -f -- "$temp"' EXIT
+printf '%s\n\n[projects."/home/dev/almanac"]\ntrust_level = "trusted"\n' "$auth_setting" > "$temp"
+mv -T -- "$temp" "$config"
+GUEST
+}
+
 setup() {
     if [[ -f $state/ready ]]; then
         printf 'Guest already prepared; its checkout, disk and credentials were preserved.\n'
@@ -814,6 +827,7 @@ setup() {
         copy_checkout
         touch "$state/checkout-copied"
     fi
+    configure_guest_codex
     if [[ ${1:-} != seed ]]; then
         local auth=${CODEX_HOME:-$HOME/.codex}/auth.json
         if [[ -s $auth ]]; then
@@ -980,10 +994,10 @@ main() {
         ssh|codex)
             [[ -f $state/ready ]] || fail 'run setup first'
             start
-            if [[ $action == codex ]]; then launch_agent; fi
+            if [[ $action == codex ]]; then launch_agent; else configure_guest_codex; fi
             # Interactive sessions must not hold the lifecycle lock.
             flock -u 9
-            if [[ $action == ssh ]]; then ssh_guest -t dev;
+            if [[ $action == ssh ]]; then ssh_guest -t dev 'cd /home/dev/almanac/.worktrees/codex && exec "$SHELL" -l';
             else ssh_guest -t dev 'tmux attach-session -t codex'; fi
             ;;
     esac

@@ -119,7 +119,6 @@ Development is ready without another `make setup`:
 ```sh
 make vm-ssh VM=api
 # Inside the guest:
-cd /home/dev/almanac/.worktrees/codex
 make test
 ```
 
@@ -230,9 +229,10 @@ a grant of access to host files or the host Docker daemon. See the
 [Codex permission guidance](https://developers.openai.com/codex/noninteractive/).
 An existing Codex session is attached unchanged; supplying a new prompt while
 it exists is rejected. Quit that session before starting a new task in the same VM.
-The launcher marks `/home/dev/almanac` as trusted, which is the common Git root
-of the task worktree, so a new background worker does not wait at repository
-trust onboarding.
+`make vm-ssh` opens the task worktree. The launcher saves trust for its common
+Git root, `/home/dev/almanac`, in the guest's Codex config so typing `codex` there
+uses the same trust as a background worker. Opening a shell also applies this
+setting to older guests with the original launcher config.
 
 Each guest inherits the base's warmed Docker images and dependency caches.
 Several copied ChatGPT auth caches may require fresh logins after token rotation;
