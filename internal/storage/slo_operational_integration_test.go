@@ -15,6 +15,7 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
 
 func TestIntegrationRetainedDailyMetAndShortenedMatchRawOracle(t *testing.T) {
