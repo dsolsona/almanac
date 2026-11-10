@@ -1,3 +1,13 @@
+Lean SLO retention review follow-up, 2026-11-10: `fix/slo-expired-history` in
+`.worktrees/lean-slo-expired-history`, based on `5e19912`, corrects permanently
+pending historical reads after extrema cleanup. Absent expired hours and compliance
+days use arithmetic expired outcomes; available rows retain their original inputs.
+The authorized detail-read regression reproduced the defect. Final `make check`
+passes in an observed 261 seconds, including storage integration in 100.760 seconds,
+437 frontend tests and 82 browser checks. Sequential `make test-e2e` passes all
+15 isolated container journeys in 3.7 minutes (observed command duration 278 seconds).
+See [F9-T02](tasks/F9-T02.md). Merge remains unauthorized.
+
 Lean SLO implementation, 2026-11-09: the maintainer selected PR [#72](https://github.com/dsolsona/almanac/pull/72)
 commit `b7d8a5c` as authoritative, accepted its design and requested all tasks with
 stacked PR delivery. ADR-0040/0041/0042 and SPEC-0020 acceptance is recorded without

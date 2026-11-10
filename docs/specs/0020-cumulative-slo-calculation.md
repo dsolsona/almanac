@@ -149,7 +149,13 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   and union presence sets into `display_coverage`. The API sample shape is
   unchanged. `history_preparation` reports ready/total seconds over the
   requested range, counting dirty holes as not ready.
+  If a closed row is absent and its last cadence endpoint is at or before the
+  current retention cutoff, compute the expired outcome arithmetically instead
+  of reporting preparation. Available retained rows keep their original inputs
+  and cutoff until cleanup removes them.
 - **Daily compliance**: from daily rows; the current day is unfinished as today.
+  A missing completed day before the retention cutoff reports expired history,
+  rather than pending preparation.
 - **Exact-value pages**: the detail payload is pinned for five minutes under a
   generation as today; its digest is computed at insertion and checked on read.
   No other read recomputes a digest.
