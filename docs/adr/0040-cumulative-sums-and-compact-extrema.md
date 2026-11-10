@@ -79,6 +79,10 @@ Proposal.
    AC-12's "coherent late corrections" is read as: a correction is coherent with
    the facts that exist when it is applied. It does not require reproducing
    totals from facts that retention has already removed.
+   Arbitrary live-edge endpoints use the same cold-evaluation rule: expired
+   inputs are explicit even when a neighbouring stored mark still has its
+   original complete totals. Stored marks keep their exact original inputs;
+   they cannot supply a different endpoint's missing prefix or be interpolated.
 5. **Triggers stay** until ADR-0041 replaces them. During the cutover the
    series-invalidation trigger does both jobs: it keeps rewinding the repair
    cursor for the old point pipeline and widens the extrema cursor's dirty range.
