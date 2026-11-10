@@ -46,6 +46,27 @@ restored app and agent against the existing schema-44 database and passed host
 HTTPS readiness. The primary checkout still only knows schema 43; local startup
 must use the candidate worktree until integration. Commit, publication and merge
 remain unauthorized.
+SLI/SLO efficiency review, 2026-11-09: the arithmetic is exact and no numerical
+defect was found. The derived layer stores each computed value several times as
+verbose JSON (one retained point measures 3,633 bytes; about 1.9 GB of points and
+3 GB of tiles per SLO-year at 60 s, estimated from the schema) and runs five queues
+to keep them coherent. A first draft proposed cumulative sums; a branch review the
+same day found stale-sum, retention-floor, global-fence and cadence-offset defects
+in it, and the maintainer delegated the design decision to the primary agent.
+The proposal in [ADR-0040](adr/0040-cumulative-sums-and-compact-extrema.md) and
+draft [SPEC-0020](specs/0020-cumulative-slo-calculation.md) now keeps the exact
+hourly aggregates and batched window query as the only source path and replaces
+points, tiles, summaries, the repair cursor and history jobs with compact extrema
+rows holding complete evaluation inputs, built by one cursor per SLO; late data
+beyond the retention cutoff uses the explicit expired outcome. Estimated derived
+size is about 50 MB per SLO-year, to be measured by F9-T06. Independent proposals:
+[ADR-0041](adr/0041-one-observation-table-with-cumulative-sums.md) merges the
+observation tables with explicit marking; [ADR-0042](adr/0042-keyset-overview-pagination.md)
+is keyset list pagination. [Plan 0030](plans/0030-lean-slo-derived-data.md) and
+tasks F9-T01 to F9-T06 are written; F9-T01 and the F9-T06 baseline are ready inside
+accepted contracts, the rest wait for acceptance. Nothing is implemented. Published
+as PR [#72](https://github.com/dsolsona/almanac/pull/72) on `design/lean-slo-derived-data`,
+base `ea501bc`; merge is not authorized.
 
 PR [#68](https://github.com/dsolsona/almanac/pull/68) Greptile follow-up, 2026-11-08:
 six current findings are corrected with failing-then-passing regressions: remote
