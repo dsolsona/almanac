@@ -903,9 +903,12 @@ main() {
                 prompt_given=1
                 if [[ $2 == - ]]; then
                     if [[ -t 0 ]]; then
+                        local line
                         printf 'Enter the task, then press Enter followed by Ctrl-D to launch (Ctrl-C cancels):\n' >&2
+                        while IFS= read -e -r line; do prompt+="$line"$'\n'; done
+                    elif IFS= read -r -d '' prompt; then
+                        fail 'prompt must be text without NUL bytes'
                     fi
-                    if IFS= read -r -d '' prompt; then fail 'prompt must be text without NUL bytes'; fi
                 else prompt=$2; fi
                 [[ $prompt =~ [^[:space:]] ]] || fail 'prompt must not be empty'
                 shift 2 ;;

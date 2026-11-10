@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check the Firecracker launcher's offline safety boundaries without privileges."""
+import fcntl
 import hashlib
 import ipaddress
 import json
@@ -12,6 +13,8 @@ import shutil
 import subprocess
 import tempfile
 import tarfile
+import termios
+import time
 
 
 root = Path(__file__).resolve().parent.parent
@@ -52,24 +55,57 @@ with tempfile.TemporaryDirectory(prefix="almanac-firecracker-") as directory:
     result = run("run", "api", "--prompt", "", env=env)
     assert result.returncode != 0 and not state.exists(), result.stderr
 
-    # An interactive stdin prompt must explain the wait before any VM is created.
-    terminal, terminal_input = pty.openpty()
-    interactive = subprocess.Popen(
-        ["bash", str(script), "run", "--prompt", "-"], env=env,
-        stdin=terminal_input, stdout=terminal_input, stderr=terminal_input,
-        start_new_session=True,
-    )
-    try:
-        readable, _, _ = select.select([terminal], [], [], 1)
-        assert readable, "interactive run silently waits for stdin"
-        message = os.read(terminal, 4096).decode()
-        assert "task" in message.lower() and "Ctrl-D" in message, message
-        assert not state.exists(), "waiting for a task created VM state"
-    finally:
-        interactive.terminate()
-        interactive.wait(timeout=5)
-        os.close(terminal)
-        os.close(terminal_input)
+    # Real terminal editing and EOF/cancellation must finish before any VM work.
+    def own_terminal():
+        os.setsid()
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+
+    terminal_parser = '''source "$1"
+check() { printf '%s' "$prompt" > "$CAPTURE_TYPED_TASK"; exit 0; }
+main run --prompt -
+'''
+    for cancel in (False, True):
+        terminal, terminal_input = pty.openpty()
+        original_terminal = termios.tcgetattr(terminal_input)
+        capture = Path(directory) / f"typed-task-{cancel}"
+        interactive = subprocess.Popen(
+            ["bash", "-c", terminal_parser, "test", str(script)],
+            env=dict(env, TERM="xterm-256color", INPUTRC="/dev/null", CAPTURE_TYPED_TASK=str(capture)),
+            stdin=terminal_input, stdout=terminal_input, stderr=terminal_input,
+            preexec_fn=own_terminal,
+        )
+        try:
+            readable, _, _ = select.select([terminal], [], [], 1)
+            assert readable, "interactive run silently waits for stdin"
+            message = os.read(terminal, 4096).decode()
+            assert "task" in message.lower() and "Ctrl-D" in message, message
+            assert not state.exists(), "waiting for a task created VM state"
+            deadline = time.monotonic() + 1
+            while termios.tcgetattr(terminal_input)[3] & termios.ICANON:
+                assert time.monotonic() < deadline, "line editor did not start"
+                time.sleep(0.005)
+            if cancel:
+                os.write(terminal, b"unfinished\x03")
+            else:
+                os.write(terminal, b"Sessions expire quicklx\x7fy.\nMake them laster\x7f\x7f longerx\x08.\ncodx\x1b[De\n\x04")
+            try:
+                interactive.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                raise AssertionError("terminal input did not finish after Ctrl-C/Ctrl-D") from None
+            if cancel:
+                assert interactive.returncode != 0 and not capture.exists()
+            else:
+                tail = os.read(terminal, 4096) if select.select([terminal], [], [], 0)[0] else b""
+                assert interactive.returncode == 0, tail
+                assert capture.read_text() == "Sessions expire quickly.\nMake them last longer.\ncodex\n"
+            assert termios.tcgetattr(terminal_input) == original_terminal, "terminal settings were not restored"
+            assert not state.exists(), "terminal parser started VM setup"
+        finally:
+            if interactive.poll() is None:
+                interactive.kill()
+                interactive.wait(timeout=5)
+            os.close(terminal)
+            os.close(terminal_input)
 
     # Sealing a dependency image must remove seed identity/work without deleting caches.
     seed = Path(directory) / "seed-filesystem"

@@ -204,8 +204,9 @@ bash firecracker-setup.sh stop ui
 ```
 
 `--prompt -` reads all of stdin before setup begins, preserving quotes and
-newlines. Bare `make vm-run` reads the task interactively: type it, press Enter,
-then Ctrl-D to launch; Ctrl-C cancels. The launcher displays these instructions
+newlines. Bare `make vm-run` reads the task interactively with Backspace and
+cursor editing: type it, press Enter, then Ctrl-D to launch; Ctrl-C cancels.
+The launcher displays these instructions
 before waiting and creates no VM until a nonempty task is supplied. To pass the
 task directly, use `make vm-run VM_PROMPT='Your task here'`.
 Inline script prompts are a single shell argument; quote them normally.
