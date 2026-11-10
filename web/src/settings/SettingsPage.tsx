@@ -61,7 +61,8 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
       } catch(err) {if(!controller.signal.aborted)setError(err instanceof Error?err.message:'Account settings could not be loaded.');}
       finally {if(!controller.signal.aborted){setReadPending(false);setReadPath(path);}}
     };
-    const timer=setTimeout(()=>void read(),list&&search?150:0);
+    const timer=list&&search?setTimeout(()=>void read(),150):undefined;
+    if(timer===undefined)void read();
     return()=>{clearTimeout(timer);controller.abort();};
   },[path,search,status,roleFilter,limit,offset,cursors,refresh,context.session?.user_id]); // callbacks and CSRF changes must not discard a draft
 

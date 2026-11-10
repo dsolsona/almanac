@@ -4,7 +4,7 @@ import { ApplicationShell, Button, Panel, TextField, ThemeToggle } from '../comp
 import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
 import { journeyContentReady, routeName, telemetrySession } from '../telemetry/client.ts';
-import { ModuleView } from '../components/ModuleView.tsx';
+import { ModuleView, preloadModule } from '../components/ModuleView.tsx';
 import type { CommandResult, ManagedUser } from '../settings/client.ts';
 
 const loadServicesPage=()=>import('../services/ServicesPage.tsx').then(module=>({default:module.ServicesPage}));
@@ -19,10 +19,10 @@ const loadSlosPage = () => import('../slos/SlosPage.tsx').then((module) => ({ de
 
 // Fetch public route code while checking the session; protected data still waits
 // for authorization, and the screen boundary handles an actual module failure.
-if (location.pathname.startsWith('/slis')) void loadSlisPage().catch(() => {});
-else if(location.pathname.startsWith('/services'))void loadServicesPage().catch(()=>{});
-else if (location.pathname.startsWith('/slos')) void loadSlosPage().catch(() => {});
-else if (location.pathname.startsWith('/settings')) void loadSettingsPage().catch(() => {});
+if (location.pathname.startsWith('/slis')) void preloadModule(loadSlisPage).catch(() => {});
+else if(location.pathname.startsWith('/services'))void preloadModule(loadServicesPage).catch(()=>{});
+else if (location.pathname.startsWith('/slos')) void preloadModule(loadSlosPage).catch(() => {});
+else if (location.pathname.startsWith('/settings')) void preloadModule(loadSettingsPage).catch(() => {});
 const emptyAgentDraft: AgentSafeDraft = { name: '', displayName: '', lifetime: '' };
 
 class ScreenBoundary extends Component<{ screen: string; children: ReactNode }, { failed: boolean }> {
