@@ -141,6 +141,12 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 				r.metrics.extremaBatches.Add(1)
 				continue
 			}
+			if !worked && err == nil {
+				if !waitDerived(ctx, time.Now().Add(time.Second)) {
+					return
+				}
+				continue
+			}
 		}
 		if !waitDerived(ctx, maxTime(due.NextDue.Time, now.Add(10*time.Millisecond))) {
 			return
