@@ -141,8 +141,9 @@ Under accepted [ADR-0042](../adr/0042-keyset-overview-pagination.md), overview
 filters, urgency counts and ordering are evaluated per request. Opaque keyset
 cursors bind the filters and page limit and seek by urgency rank, lowercase name
 and UUID, in either direction. Rows can repeat or be skipped when urgency changes
-between pages; each row retains its own generation evidence. The overview has no
-`snapshot_id` or snapshot admission. Exact-value pages and exports stay pinned;
+between pages; each row retains its own generation evidence. The overview keeps
+the required deprecated nonzero `snapshot_id` response UUID without snapshot
+admission. Exact-value pages and exports stay pinned;
 background publication cannot change those results. Invalidated Healthy values
 cannot be presented as fresh or used to infer alert recovery. Authorization is
 checked on every request and exact-value page, including retained snapshots.
