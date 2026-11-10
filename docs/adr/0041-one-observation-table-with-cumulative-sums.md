@@ -69,6 +69,13 @@ records its receipt, as today.
   bounded committed batches that verify counts and values and can resume after
   interruption; a final step drops the old tables and triggers only after
   verification. It must preserve the maintainer's data.
+- This is an explicit maintenance upgrade under SPEC-0013: back up, stop and
+  drain the backend, run `almanac db upgrade`, then start the compatible backend.
+  Ingestion is unavailable during the copy. Interrupted upgrades keep the legacy
+  write fence and source tables; rerun the same upgrade to resume before starting
+  the backend. Agent buffers and execution leases are finite, so a long outage
+  can leave collection gaps; report them as missing and use best-effort repair
+  under SPEC-0003. The upgrade does not guarantee continuous collection.
 - Retention drops whole partitions as today.
 
 ## Revisit conditions
