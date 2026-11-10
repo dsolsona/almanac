@@ -24,7 +24,9 @@ name and id, filtered by query text and service. The opaque cursor encodes the
 ordering key of a boundary row, the filter digest and the direction: the next
 cursor carries the last displayed row, the previous cursor the first, and a
 reverse scan is re-sorted before it is returned. Group counts are one aggregate
-over the same filtered set, computed per request. Each row's `current_state` is
+over the same filtered set, computed per request. Page rows and counts share one
+repeatable-read transaction, so publication cannot split their read snapshot.
+Each row's `current_state` is
 classified inline as the materialization query does today. The v1 response keeps
 a valid, nonzero UUID in the deprecated `snapshot_id` field because existing CLI
 clients validate it. It identifies the response, without storing or pinning a
@@ -33,6 +35,14 @@ list snapshot. Removal requires a later contract version under ADR-0009.
 Semantics change: rows may move between pages while the user is paging, so a row
 can appear on two pages or on none, and group counts reflect the moment of each
 request. This is the ordinary behaviour of paginated operational lists.
+
+Transition plan: deploy the backend and bundled web client together. This is the
+intentional v1 pagination-semantics amendment selected for the lean-SLO stack;
+the cross-page freeze is withdrawn, while the response UUID remains compatible.
+Document row movement in release notes. Pre-upgrade snapshot cursors return the
+existing invalid-cursor response and callers restart from the first page. A later
+contract version is required to remove `snapshot_id`; this decision does not
+restore per-session snapshots or add another overview endpoint.
 
 ## Alternatives considered
 

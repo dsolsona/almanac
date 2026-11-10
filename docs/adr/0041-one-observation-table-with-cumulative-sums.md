@@ -45,8 +45,11 @@ they are, they need their own interval representation, since no cadence can
 reconstruct their ends.
 
 The storage function that accepts an observation advances the source generation,
-marks the dirty hour and widens the affected SLOs' extrema cursors (or, before
-ADR-0040 lands, rewinds the series repair cursor) in the acceptance transaction.
+marks the dirty hour and updates every live history pipeline in the acceptance
+transaction: extrema cursor widening and legacy series-repair rewinding while
+both exist, only the remaining cursor after cutover. The selected F9 delivery
+order lands this change after F9-T03 removes the legacy pipeline; another order
+must preserve both effects during overlap and adapt F9-T02's invalidation path.
 There are no ingestion triggers. Duplicate and conflicting deliveries change no
 canonical row and mark no derived work; a duplicate with a new delivery ID still
 records its receipt, as today.
