@@ -31,7 +31,7 @@ func TestColdNavigationPreloadsOnlyItsPublicRouteDependencies(t *testing.T) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	for _, route := range []string{"/slos", "/slos/new", "/slos/00000000-0000-0000-0000-000000000001", "/slis", "/agents"} {
+	for _, route := range []string{"/slos", "/slos/new", "/slos/00000000-0000-0000-0000-000000000001", "/slis", "/agents", "/settings", "/settings/account", "/settings/password", "/settings/users", "/settings/users/new", "/settings/users/00000000-0000-0000-0000-000000000001"} {
 		for _, compressed := range []bool{false, true} {
 			request := httptest.NewRequest(http.MethodGet, route, nil)
 			if compressed {
@@ -53,6 +53,7 @@ func TestColdNavigationPreloadsOnlyItsPublicRouteDependencies(t *testing.T) {
 				t.Fatalf("document %s: status %d, %v", route, response.Code, err)
 			}
 			for module, want := range map[string]bool{
+				"src/settings/SettingsPage.tsx":                 settingsPath.MatchString(route),
 				"src/slos/SlosPage.tsx":                         strings.HasPrefix(route, "/slos"),
 				"src/slis/SlisPage.tsx":                         route == "/slis",
 				"src/components/charts/TimelineChartView.tsx":   sloDetailPath.MatchString(route),

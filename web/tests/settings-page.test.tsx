@@ -22,6 +22,16 @@ function SettingsPage({context}:{context:AuthContext}) {
  return <><SettingsView context={context} onIssuedLink={setIssued}/>{issued&&<AccountLinkDialog issued={issued} onClose={()=>setIssued(null)}/>}</>;
 }
 
+it.each(['/settings/account','/settings/users'])('starts the authorized read immediately on %s',path=>{
+ history.replaceState({},'',path);
+ const fetcher=vi.fn(()=>new Promise<Response>(()=>{}));vi.stubGlobal('fetch',fetcher);
+ vi.useFakeTimers();
+ try {
+  render(<SettingsPage context={admin}/>);
+  expect(fetcher).toHaveBeenCalledOnce();
+ } finally {cleanup();vi.useRealTimers();}
+});
+
 it('puts the role chip, theme choice and password footer action on the account page',async()=>{
  history.replaceState({},'','/settings/account');
  vi.stubGlobal('fetch',vi.fn(async()=>response(profile)));
