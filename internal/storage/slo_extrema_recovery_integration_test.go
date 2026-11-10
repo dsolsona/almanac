@@ -223,6 +223,28 @@ func TestIntegrationExtremaDetailReportsExpiredHistoryAfterCleanup(t *testing.T)
 	if len(before.ComplianceSeries.Days) != 1 || before.ComplianceSeries.Days[0].Quality.MissingIntervals != 60 || before.ComplianceSeries.Days[0].Quality.ExpiredIntervals != 0 {
 		t.Fatal("advancing retention changed an untouched compliance day")
 	}
+	for _, failed := range []bool{false, true} {
+		attempts, reason := 0, "history_preparing"
+		if failed {
+			attempts, reason = 5, "history_preparation_failed"
+		}
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET dirty_from=$2,dirty_to=$3,attempts=$4 WHERE slo_id=$1`, id, start, end, attempts); err != nil {
+			t.Fatal(err)
+		}
+		s.now = s.now.Add(time.Minute)
+		dirty, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, input)
+		if err != nil || dirty.HistoryPreparation == nil || dirty.HistoryPreparation.Failed != failed {
+			t.Fatalf("retained dirty rows were incorrectly declared expired: failed=%v preparation=%+v err=%v", failed, dirty.HistoryPreparation, err)
+		}
+		for _, sample := range dirty.BudgetSeries.Samples {
+			if sample.EvaluationAt.After(start) && (sample.State != "missing" || sample.Quality.State != "unavailable" || sample.Quality.Reason == nil || *sample.Quality.Reason != reason) {
+				t.Fatalf("dirty retained sample lost its preparation state: %+v", sample)
+			}
+		}
+		if len(dirty.ComplianceSeries.Days) != 1 || dirty.ComplianceSeries.Days[0].Explanation != reason {
+			t.Fatal("dirty retained compliance day lost its preparation state")
+		}
+	}
 	if err := s.runtime.cleanupDerivedSnapshots(t.Context(), s.now); err != nil {
 		t.Fatal(err)
 	}
