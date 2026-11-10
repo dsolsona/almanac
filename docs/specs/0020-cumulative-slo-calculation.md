@@ -37,7 +37,7 @@ Applied on acceptance; identifiers of unchanged criteria stay stable.
 | SPEC-0006 | No formula or watermark change. |
 | SPEC-0007 | Retained points and tiles are removed; extrema rows are the required cache of calculated history. Hourly aggregates stay. A rebuilt historical hour evaluates against the cutoff in force at rebuild; untouched rows keep their original boundary. |
 | SPEC-0010 | No endpoint or schema change except `/slos/{id}/preparation` job stages `aggregate`, `extrema` and `current`; `snapshot_id` only if ADR-0042 is accepted. |
-| SPEC-0019 | AC-12 is satisfied by extrema rows. "Work and resource budgets" paragraphs about tiles, summaries, wire encodings, display blocks and representation upgrades are replaced by this spec. Exact aggregates and invalidation, pools, admission, latency, currentness, pagination admission (unless ADR-0042) and browser rules are unchanged. |
+| SPEC-0019 | AC-12 is satisfied by extrema rows; its "coherent late corrections" means coherent with the facts that exist when the correction is applied. "Work and resource budgets" paragraphs about tiles, summaries, wire encodings, display blocks and representation upgrades are replaced by this spec. In "Currentness", "corrupt payloads remain unavailable" is met by JSON validation and generation-key checks; stored digests are kept only on pinned exact-value payloads. Exact aggregates and invalidation, pools, admission, latency, currentness budgets, pagination admission (unless ADR-0042) and browser rules are unchanged. |
 | ADR-0034 | Retry, temporary-error, consistency-check and visibility rules apply unchanged to the dirty-hour work, the extrema cursor and the current refresh. |
 
 ## Behavior and contracts
@@ -76,6 +76,7 @@ A mark `M` is the complete input of one evaluation at one endpoint:
 | `first_observation_at`, `last_observation_at` | First observed interval start and last observed interval end; present exactly when `observed > 0` |
 | `latest_receipt_at` | Maximum receipt time over observed and known-empty contributions, or absent |
 | `state`, `quality`, `freshness` | The sample state, quality state and freshness the evaluator produced at build |
+| `retention_start` | Optional; present when the mark was evaluated under a boundary different from the row's, as happens when a daily row combines hours rebuilt at different times. The reader uses it over the row's value. |
 
 `marks` is ordered by `at` and contains exactly the endpoints the existing
 reducer selects: first, last, minimum, maximum and both endpoints of every
@@ -86,7 +87,8 @@ freshness values of all endpoints in the range. A lane whose window is not a
 multiple of the cadence is `null`. A range with no endpoint (cadence longer than
 the range) stores lanes with empty `marks` and empty sets. Expected, expired and
 missing counts are not stored; the reader recomputes them from `at`, the lane
-window, validity and the row's `retention_start`.
+window, validity and the mark's `retention_start` when present, otherwise the
+row's boundary.
 
 Minimum and maximum compare the exact attainment `good/total` by cross
 multiplication; ties keep the earlier endpoint; zero-traffic endpoints do not
@@ -102,8 +104,11 @@ One row per SLO revision: `built_through`, `dirty_from`, `dirty_to`, and the
 ADR-0034 work columns. The series-invalidation trigger (or, after ADR-0041, the
 storage function) sets `dirty_from = LEAST(dirty_from, hour(t))` and
 `dirty_to = GREATEST(dirty_to, hour(t) + max(window, 6 h) + 1 h)` for every SLO
-whose current definition uses the revision, in the acceptance transaction.
-Duplicates and conflicts mark nothing.
+whose current definition uses the revision, in the acceptance transaction. While
+the old point pipeline is still deployed the same trigger also rewinds the
+series repair cursor, so old tiles cannot stay falsely ready; that update goes
+away with the pipeline. Duplicates and conflicts mark nothing; a duplicate with
+a new delivery ID still records its receipt.
 
 The worker claims a cursor and builds hours in `[dirty_from, min(dirty_to, last
 closed hour))`, then hours in `[built_through, last closed hour)`, at most 24
@@ -139,7 +144,8 @@ Target: each closed hour is built within 5 minutes for every SLO at the
   the batched query, at most 7,200 endpoints per read; a pending live edge
   reports the existing `history_preparing` reason. Each mark becomes a sample by
   calling `slo.EvaluateOperationalTotals` with the mark's sums, counts and
-  times, `At = at`, the lane window and `RetentionStart = row.retention_start`,
+  times, `At = at`, the lane window and `RetentionStart` from the mark when
+  present, otherwise from the row,
   then `operationalSample`. Display buckets select with `reduceRetainedDisplay`
   and union presence sets into `display_coverage`. The API sample shape is
   unchanged. `history_preparation` reports ready/total seconds over the
@@ -172,9 +178,10 @@ lifetime. Retention previews and audit entries are unchanged.
 ### Migration
 
 Migration A (F9-T02) creates `almanac_slo_extrema` and the cursor table, seeds
-each cursor with `built_through` at the SLO's eligible start, and retargets the
-series-invalidation trigger to the cursor; the point, tile and repair pipeline
-keeps running. The worker builds history from existing aggregates and raw rows.
+each cursor with `built_through` at the SLO's eligible start, and extends the
+series-invalidation trigger to widen the extrema cursor while retaining its
+series-repair invalidation. The point, tile and repair pipeline keeps running.
+The worker builds history from existing aggregates and raw rows.
 Migration B (F9-T03) drops the old tables after every consumer has switched.
 Both run under the existing explicit upgrade step and preserve the maintainer's
 data. Provisional numbers are 0045 and 0046 after main's 0044; recheck the tip.
@@ -204,7 +211,8 @@ rebuilt makes windows that contain it pending or failed, never successful.
 - AC-03: A late observation up to 365 days old rebuilds exactly the hours in
   `[t, t + max(window, 6 h) + 1 h)` and their days, within the currentness
   budgets, while unaffected current windows stay usable throughout.
-- AC-04: Duplicate and conflicting deliveries change no extrema row or cursor.
+- AC-04: Duplicate and conflicting deliveries change no canonical row, extrema
+  row or cursor; a duplicate with a new delivery ID still records its receipt.
 - AC-05: Each crash point (before and after claim, after an hourly commit, before
   acknowledgment) recovers without lost or duplicate work; concurrent ingestion
   during a build cannot be acknowledged away.
@@ -212,9 +220,11 @@ rebuilt makes windows that contain it pending or failed, never successful.
   observation and aggregate, produces matching current statuses and, after the
   worker catches up, matching graphs for every SLO except endpoints whose window
   reaches before the raw cutoff, which show `expired_history` for that part.
-- AC-07: On identical 35-day and 365-day fixtures, derived bytes by table and
-  index are reported against the pre-change baseline and show the reduction;
-  background statements per minute per SLO are below 20 while idle.
+- AC-07: On the 35-day fixture, derived bytes by table and index are reported
+  against the pre-change baseline and show the reduction; on the 365-day fixture
+  absolute sizes are reported, since the old pipeline at that scale exceeds the
+  test host and no pre-change baseline is required. Background statements per
+  minute per SLO are below 20 while idle.
 - AC-08: `make test-perf` at `PERF_DAYS=35` and `PERF_DAYS=365` passes the
   existing page budgets; a 1y detail read reads at most 400 extrema rows and
   evaluates at most 7,200 live endpoints.
