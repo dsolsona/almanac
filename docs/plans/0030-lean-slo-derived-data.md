@@ -1,5 +1,10 @@
 # Lean SLO derived data implementation plan
 
+**Status, 2026-11-10:** Implementation tasks F9-T01–T05 are done after the
+maintainer merged stack 74 through PR #82 into `main` at `89b9eb2` and requested
+task closeout. F9-T06 remains in progress for the unrun acceptance criteria;
+closing implementation tasks does not waive that verification.
+
 Implement with one primary agent per task; tasks 1, 4, 5 and the baseline of
 task 6 can run concurrently with the main chain in separate worktrees.
 
@@ -14,7 +19,7 @@ accepted contracts it amends.
 **Base:** `ea501bc` on `main`. On 2026-11-09 the maintainer delegated the design
 decision to the primary agent. The maintainer subsequently selected `b7d8a5c`
 as authoritative and authorized implementation of all tasks through stacked PRs.
-Merge remains unauthorized.
+The maintainer merged the stack on 2026-11-10; the agent did not merge it.
 
 ## Constraints and review focus
 
@@ -42,44 +47,49 @@ T05 keyset pagination (ADR-0042, independent) ───────────�
 
 ## Task 1: Quick wins inside accepted contracts ([F9-T01](../tasks/F9-T01.md))
 
-- [ ] Defer hourly tile work to the end of its hour; verify the open hour is
+- [x] Defer hourly tile work to the end of its hour; verify the open hour is
   still served from points.
-- [ ] Delete production-dead code: the no-runtime read branch, raw-fact overview
+- [x] Delete production-dead code: the no-runtime read branch, raw-fact overview
   candidates, sweep builders, the display-block cache and detail-kind history
   jobs. Keep the helpers the retained reader and current refresh use.
-- [ ] `make test`, `make test-integration`, `make test-e2e`.
+- [x] `make test`, `make test-integration`, `make test-e2e`.
 
 ## Task 2: Extrema rows and the new detail read path ([F9-T02](../tasks/F9-T02.md))
 
-- [ ] Migration `0045`: extrema table, cursor table, trigger retargeted to the cursor.
-- [ ] Extrema worker on the batched query and the existing reducer; new reader
+- [x] Migration `0045`: extrema table, cursor table, trigger retargeted to the cursor.
+- [x] Extrema worker on the batched query and the existing reducer; new reader
   composing graphs, compliance and pinned payloads from rows plus live edges.
-- [ ] AC-01 and AC-02 equivalence against the retained reader; AC-03, AC-04,
-  AC-05, AC-10; switch the detail endpoint; `make test-perf` at 35 and 365 days.
+- [x] Switch the detail endpoint; exact-oracle, cadence, retention and recovery
+  integration cases pass, with the 35-day browser performance gate.
+- Full-fleet AC-01/AC-02 equivalence and 365-day performance remain in F9-T06.
 
 ## Task 3: Current status, sparkline and removal of the old pipeline ([F9-T03](../tasks/F9-T03.md))
 
-- [ ] Current refresh without point publication; sparkline from hourly rows;
+- [x] Current refresh without point publication; sparkline from hourly rows;
   diagnostics and consistency check over dirty hours, extrema and current;
   due-time wake; digest recompute removed.
-- [ ] Migration `0046` drops points, tiles, tile work, repair, display blocks,
+- [x] Migration `0046` drops points, tiles, tile work, repair, display blocks,
   history jobs and the admission singleton; code and queries deleted.
-- [ ] `make check`, `make test-e2e`, `make test-perf`; AC-06 to AC-09.
+- [x] `make check`, `make test-e2e`, `make test-perf PERF_DAYS=35`.
+- Remaining AC-06/AC-07/AC-08 evidence is tracked in F9-T06.
 
 ## Task 4: One observation table ([F9-T04](../tasks/F9-T04.md), after ADR-0041 is accepted)
 
-- [ ] Migration (next free number): merged table, explicit marking, drop of the
+- [x] Migration: merged table, explicit marking, drop of the
   old tables, triggers and redundant indexes.
-- [ ] Ingestion and every query rewritten; AC on duplicates, marking and rehearsal.
+- [x] Ingestion and every query rewritten; duplicate/marking and interrupted-copy
+  integration cases pass. Preview-copy rehearsal remains in F9-T06.
 
 ## Task 5: Keyset overview pagination ([F9-T05](../tasks/F9-T05.md), after ADR-0042 is accepted)
 
-- [ ] Page and count queries, cursor encoding, API contract review for `snapshot_id`.
-- [ ] Remove the snapshot tables, admission lock, fingerprint and byte budgets.
+- [x] Page and count queries, cursor encoding, API contract review for `snapshot_id`.
+- [x] Remove the snapshot tables, admission lock, fingerprint and byte budgets.
 
 ## Task 6: Before/after evidence ([F9-T06](../tasks/F9-T06.md))
 
-- [ ] Before task 2: record canonical and derived bytes by table and index,
-  statements per minute and page timings on the seeded fleet at `PERF_DAYS=35`.
+- [x] Record baseline and after-checkpoint bytes by table/index and browser page
+  timings on the seeded 35-day fleet, preserving collector limitations.
+- [ ] Measure idle/ingesting statement rates; existing counters were unavailable.
 - [ ] After task 3: repeat, add `PERF_DAYS=365`, include a late-data rebuild and
   a retention advance, and record the results in SPEC-0020 and status.
+- [ ] Complete full-fleet response equivalence and preview-copy migration evidence.
