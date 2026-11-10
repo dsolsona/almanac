@@ -1,5 +1,11 @@
 # SPEC-0007: Storage and retention
 
+> Accepted amendment, 2026-11-09: [ADR-0041](../adr/0041-one-observation-table-with-cumulative-sums.md)
+> keeps a retained canonical observation's original public identifier in its
+> delivery receipt for the observation's lifetime. Upgrades restore missing
+> receipt mappings before dropping legacy rows. Replay eligibility still expires
+> after seven days; retaining identity does not extend the replay window.
+
 > Accepted amendment, 2026-10-30: Exact hourly count/coverage aggregates and current/history projections are required caches. Canonical retention remains 365 days. Durable dirty ranges, fenced publication, pooled connections and separate admission budgets follow the accepted stabilization contract.
 > [SPEC-0019](0019-backend-performance-and-derived-data.md) defines the governing
 > behavior and additional acceptance criteria AC-01 through AC-09, approved by the

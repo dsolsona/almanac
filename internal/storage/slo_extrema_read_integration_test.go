@@ -145,6 +145,9 @@ func verifyExtremaDetailReaders(t *testing.T, q *dbgen.Queries, row dbgen.GetSlo
 		{"attainment", base.Cadence, got.AttainmentSeries.Samples},
 	} {
 		if lane.duration%base.Cadence != 0 {
+			if lane.name != "burn" || !reflect.DeepEqual(lane.samples, want.BurnSeries.Samples) {
+				t.Fatalf("%s cadence-mismatch samples differ from the raw evaluator", lane.name)
+			}
 			continue
 		}
 		if len(lane.samples) == 0 || len(lane.samples) > sloOperationalSeriesLimit {

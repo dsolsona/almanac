@@ -33,6 +33,8 @@ CREATE TABLE public.almanac_sli_observations (
 
 CREATE INDEX almanac_sli_observations_observed_idx
 ON public.almanac_sli_observations(sli_id,measurement_revision,interval_start DESC) WHERE outcome='observed';
+CREATE INDEX almanac_sli_observations_history_idx
+ON public.almanac_sli_observations(sli_id,interval_start DESC,recorded_at DESC);
 -- Retained leases and late receipts have consumers independent of interval order.
 CREATE INDEX almanac_sli_observations_lease_idx ON public.almanac_sli_observations(lease_id);
 CREATE INDEX almanac_sli_observations_receipt_idx

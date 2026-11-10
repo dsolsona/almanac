@@ -58,7 +58,9 @@ Proposal.
    of every state, quality or freshness transition. Each selected endpoint stores
    its absolute time, labels, exact good/total sums, interval counts, first and
    last observation times, receipt watermark and sample state. The row stores the
-   retention boundary used when it was built. A daily row also stores the
+   retention boundary used when it was built; a mark whose hour was rebuilt under
+   a different boundary carries its own, so a daily row composed from hours built
+   at different times still re-evaluates each mark exactly. A daily row also stores the
    day-end compliance evaluation at its actual cadence endpoint. One cursor per
    SLO tracks the hours to build or rebuild. SPEC-0020 defines the shape.
 3. **Reads compose from rows plus bounded live edges.** Closed hours and days
@@ -73,9 +75,14 @@ Proposal.
    SPEC-0019 allows. Rows that are not rebuilt keep their original values and
    boundary. No checkpoint, floor or baseline table exists. On upgrade, extrema
    are built from the inputs that exist; endpoints whose windows reach before the
-   raw cutoff show `expired_history` for that part, once, visibly.
-5. **Triggers stay** until ADR-0041 replaces them; the series-invalidation
-   trigger is retargeted from the repair cursor to the extrema cursor.
+   raw cutoff show `expired_history` for that part, once, visibly. SPEC-0019
+   AC-12's "coherent late corrections" is read as: a correction is coherent with
+   the facts that exist when it is applied. It does not require reproducing
+   totals from facts that retention has already removed.
+5. **Triggers stay** until ADR-0041 replaces them. During the cutover the
+   series-invalidation trigger does both jobs: it keeps rewinding the repair
+   cursor for the old point pipeline and widens the extrema cursor's dirty range.
+   The repair update is removed together with the old pipeline.
 
 Removed when this is in place: `almanac_slo_series_points`, `almanac_slo_series_tiles`,
 `almanac_slo_series_tile_work`, `almanac_slo_series_repair`, `almanac_slo_display_blocks`,
@@ -94,6 +101,9 @@ Also decided here:
 - The seven-day list sparkline is composed from hourly extrema rows when an hour
   closes or is rebuilt; only its last bucket is refreshed per cadence tick.
 - No read recomputes a payload digest except the pinned exact-value payload.
+  SPEC-0019's rule that corrupt payloads remain unavailable is met by JSON
+  validation and generation-key checks on every read; SPEC-0020 amends that
+  sentence accordingly.
 - Workers wake on the next due time instead of polling every second when idle.
 - Code reachable only when no runtime is configured, the raw-fact sweep builders,
   display blocks and detail-kind history jobs are deleted.
