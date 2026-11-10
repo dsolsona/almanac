@@ -246,7 +246,7 @@ func (h *Handler) operationalOverview(w http.ResponseWriter, r *http.Request, re
 			}
 			input.Limit = limit
 		case "cursor":
-			if value == "" || len(value) > 512 {
+			if value == "" || len(value) > 2048 {
 				problem(w, 400, "invalid_request", requestID)
 				return
 			}

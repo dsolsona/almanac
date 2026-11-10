@@ -6,7 +6,7 @@ the guest. The host's Docker socket and filesystem are not mounted into it.
 Almanac still builds and tests through its existing Docker workflow
 ([ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)).
 Prepared bases and worker isolation follow
-[ADR-0040](adr/0040-prepared-firecracker-development-workers.md).
+[ADR-0044](adr/0044-prepared-firecracker-development-workers.md).
 
 The launcher supports independent named x86_64 Linux guests on one host. It uses
 Firecracker's jailer, an Ubuntu 24.04 filesystem and a Docker-capable Linux 6.18

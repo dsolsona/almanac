@@ -1,7 +1,8 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { api, expectOk, unique } from '../e2e/support/api.ts';
 import { psql, startAgent } from '../e2e/support/stack.ts';
+import { resourceSnapshot, writeResources } from './resources.ts';
 
 // Performance fixture (ADR-0033): one page of 20 SLIs and 20 SLOs with PERF_DAYS of one-minute history.
 // A real agent collects every SLI first, so retained history carries real collection provenance; the
@@ -14,14 +15,16 @@ const TARGET = 0.999;
 const TOTAL = 10_000;
 const GOOD = [10_000, 9_995, 9_990, 9_980, 9_950];
 const expectedBudget = (good: number) => `${Math.round((1 - (1 - good / TOTAL) / (1 - TARGET)) * 100)}%`;
+const markObservations = readFileSync(new URL('../../internal/storage/testdata/mark_observation_fixture.sql', import.meta.url), 'utf8');
 
 test('seed the performance fleet', async ({ page }) => {
   test.setTimeout(30 * 60_000);
+  writeResources({ start: resourceSnapshot() });
   await page.goto('/');
 
   const agentName = unique('perf-agent');
   const registered = await expectOk(api(page, 'POST', '/api/v1/agents', { name: agentName, display_name: 'Performance agent' }));
-  startAgent(registered.body.token);
+  const agentContainer = startAgent(registered.body.token);
   const agentID: string = registered.body.agent.id;
   await expect.poll(async () => (await api(page, 'GET', `/api/v1/agents/${agentID}`)).body.runtime?.reachability, { timeout: 60_000 }).toBe('connected');
 
@@ -52,27 +55,25 @@ test('seed the performance fleet', async ({ page }) => {
       .filter((state: string) => !state.endsWith(':observed'));
   }, { timeout: 5 * 60_000, intervals: [5_000] }).toEqual([]);
 
+  if (slis.some((sli) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sli.id))) throw new Error('invalid performance fixture SLI identifier');
   const ids = `ARRAY[${slis.map((sli) => `'${sli.id}'`).join(',')}]::uuid[]`;
+  const marking = slis.map((sli) => markObservations.replaceAll('$1', `'${sli.id}'::uuid`)).join('\n');
   const goods = slis.map((sli) => `('${sli.id}'::uuid, ${sli.good})`).join(',');
   const start = psql(`SELECT to_char(date_trunc('minute', now() AT TIME ZONE 'UTC') - interval '${DAYS} days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
   const chunks: string[] = [];
   for (let day = 0; day <= DAYS; day += 1) {
     const from = `'${start}'::timestamptz + interval '${day} days'`;
     const to = `'${start}'::timestamptz + interval '${day + 1} days'`;
-    // Records and values commit together, as ingestion does; the aggregator must never see one without the other.
+    // Keep every interval and its work marking in the same fixture transaction.
     chunks.push(`BEGIN;
-INSERT INTO public.almanac_sli_coverage
-(interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,
- execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point,p.sli_id,p.measurement_revision,point+interval '1 minute','observed',decode(repeat('ab',32),'hex'),'{}',
- gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),p.agent_id,p.session_generation,p.configuration_revision,p.lease_id,point,point+interval '1 minute'
+INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+ execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,p.sli_id,p.measurement_revision,'observed',p.good,${TOTAL},decode(repeat('ab',32),'hex'),'{}',
+ gen_random_uuid(),gen_random_uuid(),p.agent_id,p.session_generation,p.configuration_revision,p.lease_id,point,point+interval '1 minute'
 FROM public.perf_proofs p CROSS JOIN LATERAL generate_series(${from}, least(${to}, p.first_live) - interval '1 minute', interval '1 minute') point
 ON CONFLICT DO NOTHING;
-INSERT INTO public.almanac_sli_observation_values (interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT c.interval_start,c.sli_id,c.measurement_revision,p.good,${TOTAL}
-FROM public.almanac_sli_coverage c JOIN public.perf_proofs p USING (sli_id,measurement_revision)
-WHERE c.interval_start >= ${from} AND c.interval_start < least(${to}, p.first_live) AND c.outcome='observed'
-ON CONFLICT DO NOTHING;
+${marking}
 COMMIT;`);
   }
   // The fixture's own table lives in this disposable stack's database; each statement runs as its own call.
@@ -81,14 +82,13 @@ DROP TABLE IF EXISTS public.perf_proofs;
 CREATE UNLOGGED TABLE public.perf_proofs AS
 SELECT proof.*, g.good, first.first_live FROM (
   SELECT DISTINCT ON (sli_id) sli_id,measurement_revision,agent_id,session_generation,configuration_revision,lease_id
-  FROM public.almanac_sli_coverage WHERE sli_id = ANY(${ids}) AND outcome='observed' ORDER BY sli_id, interval_start DESC
+  FROM public.almanac_sli_observations WHERE sli_id = ANY(${ids}) AND outcome='observed' ORDER BY sli_id, interval_start DESC
 ) proof
 JOIN (VALUES ${goods}) AS g(sli_id, good) USING (sli_id)
-JOIN (SELECT sli_id, min(interval_start) AS first_live FROM public.almanac_sli_coverage WHERE sli_id = ANY(${ids}) GROUP BY sli_id) first USING (sli_id);
+JOIN (SELECT sli_id, min(interval_start) AS first_live FROM public.almanac_sli_observations WHERE sli_id = ANY(${ids}) GROUP BY sli_id) first USING (sli_id);
 DO $$ DECLARE month date; BEGIN
   FOR month IN SELECT generate_series(date_trunc('month', '${start}'::timestamptz), now(), interval '1 month')::date LOOP
-    EXECUTE format('CREATE TABLE IF NOT EXISTS public.%I PARTITION OF public.almanac_sli_coverage FOR VALUES FROM (%L) TO (%L)', 'almanac_sli_coverage_' || to_char(month, 'YYYYMM'), month, month + interval '1 month');
-    EXECUTE format('CREATE TABLE IF NOT EXISTS public.%I PARTITION OF public.almanac_sli_observation_values FOR VALUES FROM (%L) TO (%L)', 'almanac_sli_observation_values_' || to_char(month, 'YYYYMM'), month, month + interval '1 month');
+    EXECUTE format('CREATE TABLE IF NOT EXISTS public.%I PARTITION OF public.almanac_sli_observations FOR VALUES FROM (%L) TO (%L)', 'almanac_sli_observations_' || to_char(month, 'YYYYMM'), month, month + interval '1 month');
   END LOOP;
 END $$;
 UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli_id = ANY(${ids});
@@ -121,5 +121,5 @@ UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli
       item.budget_history_state === 'ready' && item.current.performance.remaining_fraction !== null).length;
   }, { timeout: 20 * 60_000, intervals: [10_000] }).toBe(SIZE);
 
-  writeFileSync('perf/.fleet.json', JSON.stringify({ days: DAYS, size: SIZE, slis, slos }, null, 2));
+  writeFileSync('perf/.fleet.json', JSON.stringify({ days: DAYS, size: SIZE, slis, slos, agentContainer }, null, 2));
 });

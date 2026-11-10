@@ -3,12 +3,36 @@ import { api, expectOk, unique } from './support/api.ts';
 
 test('an administrator creates a user, shares setup, and controls real account access', async ({ page, browser },testInfo) => {
   const name = unique('Sam Rivera'), email = `${unique('sam')}@example.test`;
+  await page.addInitScript(() => {
+    const timing = { formUsableMs: 0, longTasks: [] as { start: number; duration: number }[] };
+    Object.assign(window, { settingsLoadTiming: timing });
+    new PerformanceObserver(list => {
+      timing.longTasks.push(...list.getEntries().map(entry => ({ start: entry.startTime, duration: entry.duration })));
+    }).observe({ type: 'longtask', buffered: true });
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('#full-name') && document.querySelector('[role="radiogroup"]')) {
+        timing.formUsableMs = performance.now();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document, { childList: true, subtree: true });
+  });
   const accountStarted=performance.now();
   await page.goto('/settings/account');
-  await expect(page.getByRole('heading', { name:'Your account',exact:true })).toBeVisible();
-  await expect(page.getByRole('radiogroup',{name:'Theme',exact:true})).toBeVisible();
-  await expect(page.getByLabel('Full name',{exact:true})).toBeVisible();await page.evaluate(()=>document.fonts.ready);
+  await Promise.all([
+    expect(page.getByRole('heading', { name:'Your account',exact:true })).toBeVisible(),
+    expect(page.getByRole('radiogroup',{name:'Theme',exact:true})).toBeVisible(),
+    expect(page.getByLabel('Full name',{exact:true})).toBeVisible(),
+  ]);
+  await page.evaluate(()=>document.fonts.ready);
   const accountUsableMs=performance.now()-accountStarted;
+  const accountTrace = await page.evaluate(() => ({
+    ...(window as unknown as { settingsLoadTiming: { formUsableMs: number; longTasks: { start: number; duration: number }[] } }).settingsLoadTiming,
+    resources: performance.getEntriesByType('resource').map(entry => {
+      const resource = entry as PerformanceResourceTiming;
+      return { path: new URL(resource.name).pathname, start: resource.startTime, end: resource.responseEnd };
+    }),
+  }));
   await page.getByRole('radio',{name:'Dark',exact:true}).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await page.getByRole('radio',{name:'Light',exact:true}).click();
@@ -16,7 +40,9 @@ test('an administrator creates a user, shares setup, and controls real account a
   await page.getByRole('link',{name:'Users',exact:true}).click();
   await expect(page.locator('.settings-table tbody tr').first()).toBeVisible();await page.evaluate(()=>document.fonts.ready);
   const usersUsableMs=performance.now()-usersStarted;
-  await testInfo.attach('settings first-visit timings',{body:JSON.stringify({fixture:'isolated real HTTP/PostgreSQL, initial user directory',accountUsableMs,usersUsableMs}),contentType:'application/json'});
+  const timings = {fixture:'isolated real HTTP/PostgreSQL, initial user directory',accountUsableMs,usersUsableMs,accountTrace};
+  console.info('Settings first-visit timings:',JSON.stringify(timings));
+  await testInfo.attach('settings first-visit timings',{body:JSON.stringify(timings),contentType:'application/json'});
   expect(accountUsableMs).toBeLessThan(1000);expect(usersUsableMs).toBeLessThan(1000);
   await page.getByRole('button',{name:'Add user',exact:true}).click();
   await page.getByLabel('Full name',{exact:true}).fill(name);

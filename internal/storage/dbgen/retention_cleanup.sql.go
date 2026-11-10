@@ -40,38 +40,6 @@ func (q *Queries) AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetent
 	return result.RowsAffected(), nil
 }
 
-const deleteExpiredRetainedPoints = `-- name: DeleteExpiredRetainedPoints :execrows
-WITH expired AS (
- SELECT p.slo_id,p.definition_revision,p.measurement_revision,p.exclusion_revision,p.calculation_version,p.evaluation_at
- FROM public.almanac_slo_series_points p
- WHERE p.evaluation_at>$1::timestamptz AND p.evaluation_at<=$2::timestamptz
-   AND NOT EXISTS (SELECT 1 FROM public.almanac_slo_series_tile_work w
-       WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision AND w.measurement_revision=p.measurement_revision
-         AND w.exclusion_revision=p.exclusion_revision AND w.calculation_version=p.calculation_version
-         AND p.evaluation_at>w.range_start AND p.evaluation_at<=w.range_end)
-   AND NOT EXISTS (SELECT 1 FROM public.almanac_slo_series_repair w
-       WHERE w.slo_id=p.slo_id AND w.definition_revision=p.definition_revision AND w.measurement_revision=p.measurement_revision
-         AND w.calculation_version=p.calculation_version AND w.cursor_at<p.evaluation_at AND w.end_at>=p.evaluation_at)
- ORDER BY p.evaluation_at LIMIT 1000 FOR UPDATE OF p SKIP LOCKED
-)
-DELETE FROM public.almanac_slo_series_points p USING expired e
-WHERE (p.slo_id,p.definition_revision,p.measurement_revision,p.exclusion_revision,p.calculation_version,p.evaluation_at)
-    =(e.slo_id,e.definition_revision,e.measurement_revision,e.exclusion_revision,e.calculation_version,e.evaluation_at)
-`
-
-type DeleteExpiredRetainedPointsParams struct {
-	RangeStart pgtype.Timestamptz `json:"range_start"`
-	RangeEnd   pgtype.Timestamptz `json:"range_end"`
-}
-
-func (q *Queries) DeleteExpiredRetainedPoints(ctx context.Context, arg DeleteExpiredRetainedPointsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredRetainedPoints, arg.RangeStart, arg.RangeEnd)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteExpiredRetainedSourceHours = `-- name: DeleteExpiredRetainedSourceHours :execrows
 WITH expired AS (
  SELECT h.sli_id,h.measurement_revision,h.hour_start FROM public.almanac_sli_hourly_aggregates h
@@ -91,6 +59,7 @@ type DeleteExpiredRetainedSourceHoursParams struct {
 	RangeEnd   pgtype.Timestamptz `json:"range_end"`
 }
 
+// Only source work that was fenced as expired can release its old aggregates.
 func (q *Queries) DeleteExpiredRetainedSourceHours(ctx context.Context, arg DeleteExpiredRetainedSourceHoursParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredRetainedSourceHours, arg.RangeStart, arg.RangeEnd)
 	if err != nil {
@@ -123,82 +92,25 @@ func (q *Queries) DeleteExpiredRetainedSourceWork(ctx context.Context, arg Delet
 	return result.RowsAffected(), nil
 }
 
-const deleteExpiredRetainedTileWork = `-- name: DeleteExpiredRetainedTileWork :execrows
+const deleteExpiredRetentionExtrema = `-- name: DeleteExpiredRetentionExtrema :execrows
 WITH expired AS (
- SELECT id FROM public.almanac_slo_series_tile_work
+ SELECT slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start
+ FROM public.almanac_slo_extrema
  WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz
-   AND (lease_until IS NULL OR lease_until<=$3::timestamptz)
- ORDER BY id LIMIT 1000 FOR UPDATE SKIP LOCKED
+ ORDER BY range_end LIMIT 1000 FOR UPDATE SKIP LOCKED
 )
-DELETE FROM public.almanac_slo_series_tile_work w USING expired e WHERE w.id=e.id
+DELETE FROM public.almanac_slo_extrema e USING expired old
+WHERE (e.slo_id,e.definition_revision,e.measurement_revision,e.exclusion_revision,e.calculation_version,e.resolution_seconds,e.range_start)
+    =(old.slo_id,old.definition_revision,old.measurement_revision,old.exclusion_revision,old.calculation_version,old.resolution_seconds,old.range_start)
 `
 
-type DeleteExpiredRetainedTileWorkParams struct {
-	RangeStart pgtype.Timestamptz `json:"range_start"`
-	RangeEnd   pgtype.Timestamptz `json:"range_end"`
-	Now        pgtype.Timestamptz `json:"now"`
-}
-
-func (q *Queries) DeleteExpiredRetainedTileWork(ctx context.Context, arg DeleteExpiredRetainedTileWorkParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredRetainedTileWork, arg.RangeStart, arg.RangeEnd, arg.Now)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteExpiredRetainedTiles = `-- name: DeleteExpiredRetainedTiles :execrows
-WITH expired AS (
- SELECT t.slo_id,t.definition_revision,t.measurement_revision,t.exclusion_revision,t.calculation_version,t.resolution_seconds,t.range_start
- FROM public.almanac_slo_series_tiles t
- WHERE t.range_end>$1::timestamptz AND t.range_end<=$2::timestamptz
-   AND NOT EXISTS (SELECT 1 FROM public.almanac_slo_series_tile_work w
-       WHERE w.slo_id=t.slo_id AND w.definition_revision=t.definition_revision AND w.measurement_revision=t.measurement_revision
-         AND w.exclusion_revision=t.exclusion_revision AND w.calculation_version=t.calculation_version
-         AND w.resolution_seconds=t.resolution_seconds AND w.range_start=t.range_start)
- ORDER BY t.range_end LIMIT 1000 FOR UPDATE OF t SKIP LOCKED
-)
-DELETE FROM public.almanac_slo_series_tiles t USING expired e
-WHERE (t.slo_id,t.definition_revision,t.measurement_revision,t.exclusion_revision,t.calculation_version,t.resolution_seconds,t.range_start)
-    =(e.slo_id,e.definition_revision,e.measurement_revision,e.exclusion_revision,e.calculation_version,e.resolution_seconds,e.range_start)
-`
-
-type DeleteExpiredRetainedTilesParams struct {
+type DeleteExpiredRetentionExtremaParams struct {
 	RangeStart pgtype.Timestamptz `json:"range_start"`
 	RangeEnd   pgtype.Timestamptz `json:"range_end"`
 }
 
-func (q *Queries) DeleteExpiredRetainedTiles(ctx context.Context, arg DeleteExpiredRetainedTilesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredRetainedTiles, arg.RangeStart, arg.RangeEnd)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const expireRetentionHistoryJobs = `-- name: ExpireRetentionHistoryJobs :execrows
-WITH expired AS (
- SELECT id FROM public.almanac_slo_history_jobs
- WHERE retention_start<$1::timestamptz
-   AND greatest(range_end,evaluated_through)>$2::timestamptz
-   AND state<>'failed' AND (lease_until IS NULL OR lease_until<=$3::timestamptz)
- ORDER BY id LIMIT 1000 FOR UPDATE SKIP LOCKED
-)
-UPDATE public.almanac_slo_history_jobs j SET state='failed',attempts=5,lease_until=NULL,
- lease_epoch=j.lease_epoch+1,last_error='retention_expired'
-FROM expired e WHERE j.id=e.id
-`
-
-type ExpireRetentionHistoryJobsParams struct {
-	RangeEnd   pgtype.Timestamptz `json:"range_end"`
-	RangeStart pgtype.Timestamptz `json:"range_start"`
-	Now        pgtype.Timestamptz `json:"now"`
-}
-
-// Expired leases are fenced before removing their facts. Retained failure rows
-// remain inspectable and cannot be manually retried against deleted inputs.
-func (q *Queries) ExpireRetentionHistoryJobs(ctx context.Context, arg ExpireRetentionHistoryJobsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, expireRetentionHistoryJobs, arg.RangeEnd, arg.RangeStart, arg.Now)
+func (q *Queries) DeleteExpiredRetentionExtrema(ctx context.Context, arg DeleteExpiredRetentionExtremaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredRetentionExtrema, arg.RangeStart, arg.RangeEnd)
 	if err != nil {
 		return 0, err
 	}
@@ -239,9 +151,7 @@ func (q *Queries) ExpireRetentionSourceWork(ctx context.Context, arg ExpireReten
 }
 
 const hasCalculatedRetentionRows = `-- name: HasCalculatedRetentionRows :one
-SELECT (EXISTS (SELECT 1 FROM public.almanac_slo_series_points WHERE evaluation_at>$1::timestamptz AND evaluation_at<=$2::timestamptz)
- OR EXISTS (SELECT 1 FROM public.almanac_slo_series_tiles WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz)
- OR EXISTS (SELECT 1 FROM public.almanac_slo_series_tile_work WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz)
+SELECT (EXISTS (SELECT 1 FROM public.almanac_slo_extrema WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz)
  OR EXISTS (SELECT 1 FROM public.almanac_sli_hourly_aggregates WHERE hour_start>=$1::timestamptz AND hour_start<$2::timestamptz)
  OR EXISTS (SELECT 1 FROM public.almanac_derived_dirty_ranges WHERE range_start>=$1::timestamptz AND range_start<$2::timestamptz))::boolean AS remaining
 `
@@ -260,9 +170,7 @@ func (q *Queries) HasCalculatedRetentionRows(ctx context.Context, arg HasCalcula
 
 const previewCalculatedRetention = `-- name: PreviewCalculatedRetention :one
 SELECT
- (SELECT count(*) FROM (SELECT 1 FROM public.almanac_slo_series_points WHERE evaluation_at>$1::timestamptz AND evaluation_at<=$2::timestamptz LIMIT 1001) p)::bigint AS points,
- (SELECT count(*) FROM (SELECT 1 FROM public.almanac_slo_series_tiles WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz LIMIT 1001) t)::bigint AS tiles,
- (SELECT count(*) FROM (SELECT 1 FROM public.almanac_slo_series_tile_work WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz LIMIT 1001) w)::bigint AS tile_work,
+ (SELECT count(*) FROM (SELECT 1 FROM public.almanac_slo_extrema WHERE range_end>$1::timestamptz AND range_end<=$2::timestamptz LIMIT 1001) e)::bigint AS extrema,
  (SELECT count(*) FROM (SELECT 1 FROM public.almanac_sli_hourly_aggregates WHERE hour_start>=$1::timestamptz AND hour_start<$2::timestamptz LIMIT 1001) h)::bigint AS source_hours
 `
 
@@ -272,9 +180,7 @@ type PreviewCalculatedRetentionParams struct {
 }
 
 type PreviewCalculatedRetentionRow struct {
-	Points      int64 `json:"points"`
-	Tiles       int64 `json:"tiles"`
-	TileWork    int64 `json:"tile_work"`
+	Extrema     int64 `json:"extrema"`
 	SourceHours int64 `json:"source_hours"`
 }
 
@@ -282,41 +188,6 @@ type PreviewCalculatedRetentionRow struct {
 func (q *Queries) PreviewCalculatedRetention(ctx context.Context, arg PreviewCalculatedRetentionParams) (PreviewCalculatedRetentionRow, error) {
 	row := q.db.QueryRow(ctx, previewCalculatedRetention, arg.RangeStart, arg.RangeEnd)
 	var i PreviewCalculatedRetentionRow
-	err := row.Scan(
-		&i.Points,
-		&i.Tiles,
-		&i.TileWork,
-		&i.SourceHours,
-	)
+	err := row.Scan(&i.Extrema, &i.SourceHours)
 	return i, err
-}
-
-const skipExpiredRetainedRepairs = `-- name: SkipExpiredRetainedRepairs :execrows
-WITH expired AS (
- SELECT w.id,LEAST(w.end_at,to_timestamp(ceil(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)) AS through
- FROM public.almanac_slo_series_repair w
- JOIN public.almanac_slo_definitions d ON d.slo_id=w.slo_id AND d.revision=w.definition_revision
- WHERE w.cursor_at<$2::timestamptz AND w.cursor_at<w.end_at
-   AND (w.lease_until IS NULL OR w.lease_until<=$3::timestamptz)
- ORDER BY w.id LIMIT 1000 FOR UPDATE OF w SKIP LOCKED
-)
-UPDATE public.almanac_slo_series_repair w SET cursor_at=e.through,lease_until=NULL,
- version=w.version+1,lease_epoch=w.lease_epoch+1,last_error='retention_expired'
-FROM expired e WHERE w.id=e.id AND w.cursor_at<e.through
-`
-
-type SkipExpiredRetainedRepairsParams struct {
-	Cutoff   pgtype.Timestamptz `json:"cutoff"`
-	RangeEnd pgtype.Timestamptz `json:"range_end"`
-	Now      pgtype.Timestamptz `json:"now"`
-}
-
-// A repair cursor's expired prefix can be skipped, but its retained tail stays
-// admitted. Bumping both fences prevents an old lease from moving it backwards.
-func (q *Queries) SkipExpiredRetainedRepairs(ctx context.Context, arg SkipExpiredRetainedRepairsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, skipExpiredRetainedRepairs, arg.Cutoff, arg.RangeEnd, arg.Now)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }

@@ -180,3 +180,17 @@ to [F3-T10](F3-T10.md).
 [F8-T01](F8-T01.md) implements the approved service catalog under [plan 0028](../plans/0028-service-catalog.md).
 
 [F2-T33](F2-T33.md) replaces lease-waiting datasource moves with immediate editor/admin reassignment under ADR-0037; ADR-0038 completes Updating on configuration acknowledgement, with freshness separate. ADR-0039 finishes cancellation without a reverse pending move and preserves strict cancellation intent across ACK races.
+F9 is the lean SLO derived-data work under [plan 0030](../plans/0030-lean-slo-derived-data.md),
+proposed in [ADR-0040](../adr/0040-cumulative-sums-and-compact-extrema.md) with
+[SPEC-0020](../specs/0020-cumulative-slo-calculation.md); [ADR-0041](../adr/0041-one-observation-table-with-cumulative-sums.md)
+and [ADR-0042](../adr/0042-keyset-overview-pagination.md) are independent decisions.
+[F9-T01](F9-T01.md) defers open-hour tile rebuilds and deletes production-dead code
+inside accepted contracts. [F9-T02](F9-T02.md) adds extrema rows over the existing
+hourly aggregates and the new detail reader, [F9-T03](F9-T03.md) moves current status
+and the sparkline over and drops the old pipeline, [F9-T04](F9-T04.md) merges the
+observation tables with explicit marking, [F9-T05](F9-T05.md) is keyset pagination,
+and [F9-T06](F9-T06.md) records before/after measurements.
+
+[F3-T12](F3-T12.md) implements useful SLO status from complete due eligible
+measurements under [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md)
+and [plan 0031](../plans/0031-slo-eligible-status.md), stacked above the lean-SLO work.

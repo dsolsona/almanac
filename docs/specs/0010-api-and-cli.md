@@ -1,5 +1,11 @@
 # SPEC-0010: API and CLI
 
+> Accepted amendment, 2026-11-09: [ADR-0042](../adr/0042-keyset-overview-pagination.md)
+> replaces overview snapshots with live, filter-bound keyset pages and per-request
+> counts. Rows may move between pages. The v1 response retains a valid nonzero
+> deprecated `snapshot_id` UUID for existing CLI clients; it identifies the
+> response without pinning list contents. Detail exact-value pages keep their pin.
+
 > Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.
 
 > Accepted amendment, 2026-11-01: The existing operational detail endpoint accepts
@@ -104,7 +110,12 @@ requested page limit is an upper bound: if the exact enriched response would exc
 the cap, return its largest fitting prefix with a cursor immediately after that row.
 A one-record page must fit within the declared per-field bounds; otherwise the
 response violates the contract. Projection fields remain complete and exact. Other
-response limits remain independent.
+response limits remain independent. Under accepted
+[ADR-0042](../adr/0042-keyset-overview-pagination.md), the SLO overview uses
+filter/limit-bound keyset cursors up to 512 bytes in urgency rank, lowercase
+name and UUID order, with reverse traversal for previous pages. Its response
+has per-row generations and a required deprecated nonzero `snapshot_id` response
+UUID; rows can move between requests, and that identifier does not freeze them.
 Public names are validated and immutable
 where referenced by OpenSLO; renaming display text is separate. Maximum body defaults
 1 MiB management/4 MiB ingestion; OpenSLO import explicitly allows 5 MiB and 1,000

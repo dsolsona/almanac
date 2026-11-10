@@ -18,14 +18,14 @@ it('keeps last-known numbers visible with stale status, evaluation time and fail
  const detail=operationalDetail();
  const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:60};
  const item:OperationalOverview['items'][number]={slo:definition,current:detail.current,current_state:'stale',generation,urgency:'watch',leading_reason:detail.leading_reason,reasons:detail.reasons,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]};
- const read=vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ const read=vi.spyOn(sloClient,'overview').mockResolvedValue({items:[item],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
  const view=render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  expect(await screen.findByText('Stale')).toBeVisible();
  expect(document.querySelector('.app-slo-budget b')).toHaveTextContent('99%');
  expect(document.querySelector('.app-slo-burn b')).toHaveTextContent('0.1×');
  expect(document.querySelector('time')).toHaveAttribute('datetime',detail.current.evaluation_at);
  expect(document.querySelector('.slo-reference-status')).toHaveAttribute('data-status','stale');
- read.mockResolvedValue({snapshot_id:sloID,items:[{...item,current_state:'failed'}],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ read.mockResolvedValue({items:[{...item,current_state:'failed'}],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
  fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));
  expect(await screen.findByText(/Update failed/)).toBeVisible();
  expect(document.querySelector('.app-slo-budget b')).toHaveTextContent('99%');
@@ -70,15 +70,56 @@ function operationalDetail(requestedStart='2026-10-01T00:00:00Z',requestedEnd='2
  return {evaluation_id:'44444444-4444-4444-4444-444444444444',requested_at:end,effective_at:end,calculation_version:'slo-v1',snapshot_kind:'current_operational_read',objective:definition,context:{sli_id:definition.sli_id,sli_name:'request_success',sli_display_name:definition.sli_display_name,datasource_id:'55555555-5555-5555-5555-555555555555',datasource_display_name:'Metrics',measurement_revision:'1',polling_interval_seconds:60,settling_delay_seconds:60,good_query:'sum(good)',total_query:'sum(total)'},current,urgency:'healthy',leading_reason:{code:'on_track',provisional:false},reasons:[{code:'on_track',provisional:false}],burn_1h:{window_seconds:3600,start:'2026-10-07T23:00:00Z',end,quality,performance},burn_6h:{window_seconds:21600,start:'2026-10-07T18:00:00Z',end,quality,performance},exhaustion:{state:'unavailable',remaining_events:'99',bad_events_per_hour:'0.1',hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[],reason:'No finite estimate'},range:{requested_start:requestedStart,requested_end:requestedEnd,effective_start:requestedStart,effective_end:requestedEnd,source_cadence_seconds:60,resolution_seconds:60,reduced:false,max_samples_per_series:1500,bucket_bounds:'half_open'},attainment_series:empty('attainment',null),budget_series:empty('rolling_budget',null),burn_series:empty('burn',3600),compliance_series:{kind:'daily_compliance',days:[]},compliance_summary:{met_days:0,violated_days:0,evaluable_days:0,unknown_days:0,not_applicable_days:0}} as unknown as OperationalDetail;
 }
 
+it('explains complete recent eligibility separately from status and shows the measurement cutoff',async()=>{
+ const detail=operationalDetail();
+ detail.current.window.evaluation_valid_from='2026-10-07T23:49:00Z';
+ detail.current.window.eligible_start='2026-10-07T23:49:00Z';
+ detail.current.window.end='2026-10-07T23:58:00Z';
+ detail.current.quality.expected_intervals=9;
+ detail.current.quality.observed_intervals=9;
+ vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
+ vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:{generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:0}});
+ render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ const status=await screen.findByRole('region',{name:'Current SLO status'});
+ expect(status).toHaveTextContent('Why it is healthy');
+ expect(status).toHaveTextContent('9 of 9 due intervals collected');
+ expect(status).toHaveTextContent('Measurements through');
+ expect(status.querySelector('time[datetime="2026-10-07T23:49:00Z"]')).toBeVisible();
+ expect(status.querySelector('time[datetime="2026-10-07T23:58:00Z"]')).toBeVisible();
+ expect(status).not.toHaveTextContent('Partial data');
+});
+
+it('labels a new SLO with no due interval Waiting for data rather than Partial data',async()=>{
+ vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
+ const detail=operationalDetail();
+ vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:'11111111-1111-4111-8111-111111111111',items:[{slo:definition,current:detail.current,urgency:'watch',leading_reason:{code:'not_yet_eligible',provisional:false},reasons:[{code:'not_yet_eligible',provisional:false}],burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]}],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
+ expect(await screen.findByText('Waiting for data')).toBeVisible();
+ expect(screen.queryByText('Partial data')).not.toBeInTheDocument();
+});
+
+it('does not claim no intervals are due when collection coverage is unavailable',async()=>{
+ const detail=operationalDetail();
+ detail.current.quality={...detail.current.quality,state:'unavailable',expected_intervals:0,observed_intervals:0,coverage:null,reason:'history_preparing'};
+ detail.urgency='watch';
+ detail.leading_reason={code:'evaluation_unavailable',provisional:false};
+ detail.reasons=[detail.leading_reason];
+ vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
+ vi.spyOn(sloClient,'current').mockRejectedValue(new Error('Current status is unavailable'));
+ render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
+ const status=await screen.findByRole('region',{name:'Current SLO status'});
+ expect(status).toHaveTextContent('Collection coverage is unavailable.');
+ expect(status).not.toHaveTextContent('No intervals are due yet.');
+});
+
 it('shows server group counts and sends submitted filters through the operational endpoint',async()=>{
- const id='11111111-1111-1111-1111-111111111111';
  const detail=operationalDetail();
  const items=['needs_attention','watch','healthy'].map((urgency,index)=>({
   slo:{...definition,id:`11111111-1111-1111-1111-11111111111${index}`},current:detail.current,
   urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,
   burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[],
  }));
- const fetcher=vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(new URL(String(input),'https://localhost').pathname==='/api/v1/services'?{items:[],next_cursor:''}:{snapshot_id:id,items,group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
+ const fetcher=vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(new URL(String(input),'https://localhost').pathname==='/api/v1/services'?{items:[],next_cursor:''}:{items,snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
  vi.stubGlobal('fetch',fetcher);
  history.replaceState({},'','/slos');
  const updateLocation=vi.fn();
@@ -100,7 +141,7 @@ it('never polls preparing first pages and leaves cursor pages pinned until expli
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({items:[],next_cursor:''}),{status:200})));
  const detail=operationalDetail();
  const item={slo:definition,current:detail.current,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[],budget_history_state:'preparing' as const};
- const read=vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[item],group_counts:{needs_attention:0,watch:0,healthy:1},next_cursor:'page-two',previous_cursor:''});
+ const read=vi.spyOn(sloClient,'overview').mockResolvedValue({items:[item],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:1},next_cursor:'page-two',previous_cursor:''});
  const view=render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await act(async()=>{});
  expect(read).toHaveBeenCalledTimes(1);
@@ -148,7 +189,7 @@ it('clears confirmed data on revocation and rejects late independent history com
 
 it('renders the SLO list while service filters are still loading',async()=>{
  vi.spyOn(sloClient,'services').mockImplementation(()=>new Promise(()=>undefined));
- vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as OperationalOverview);
+ vi.spyOn(sloClient,'overview').mockResolvedValue({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as OperationalOverview);
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  expect(await screen.findByRole('heading',{name:'No SLOs yet'})).toBeVisible();
 });
@@ -158,7 +199,7 @@ it('shows one empty-state message without empty urgency tables or false paginati
   const path=new URL(String(input),'https://localhost').pathname;
   return path==='/api/v1/services'
    ? new Response(JSON.stringify({items:[],next_cursor:''}),{status:200})
-   : new Response(JSON.stringify({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''}),{status:200});
+   : new Response(JSON.stringify({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''}),{status:200});
  });
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
@@ -167,17 +208,16 @@ it('shows one empty-state message without empty urgency tables or false paginati
  expect(screen.queryByRole('navigation',{name:'SLO result pages'})).not.toBeInTheDocument();
 });
 
-it('uses the signed previous cursor from the same server snapshot',async()=>{
- const id='11111111-1111-1111-1111-111111111111';
- const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const query=new URL(String(input),'http://localhost').searchParams;const second=query.get('cursor')==='next-token';return new Response(JSON.stringify({snapshot_id:id,items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:second?'':'next-token',previous_cursor:second?'signed-first-page-token':''}),{status:200});});
+it('uses the previous keyset cursor returned by the server',async()=>{
+ const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const query=new URL(String(input),'http://localhost').searchParams;const second=query.get('cursor')==='next-token';return new Response(JSON.stringify({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:second?'':'next-token',previous_cursor:second?'signed-first-page-token':''}),{status:200});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const onLocationChange=vi.fn();const props={canWrite:false,onCreate:()=>undefined,onLocationChange};
  const view=render(<OperationalOverviewView {...props} locationKey="/slos"/>);await screen.findByRole('heading',{name:'No SLOs yet'});expect(screen.getByRole('button',{name:'‹ Previous'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Next ›'}));expect(onLocationChange).toHaveBeenCalledWith('/slos?cursor=next-token');
  view.rerender(<OperationalOverviewView {...props} locationKey="/slos?cursor=next-token"/>);await waitFor(()=>expect(screen.getByRole('button',{name:'‹ Previous'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'‹ Previous'}));expect(onLocationChange).toHaveBeenLastCalledWith('/slos?cursor=signed-first-page-token');
 });
 
-it('refreshes a later overview page from a fresh first-page snapshot and retains active filters',async()=>{
+it('refreshes a later overview page from the first page and retains active filters',async()=>{
  const seen:URLSearchParams[]=[];
- const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const url=new URL(String(input),'https://localhost');if(url.pathname==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});seen.push(url.searchParams);return new Response(JSON.stringify({snapshot_id:'11111111-1111-1111-1111-111111111111',items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'next-page',previous_cursor:'previous-page'}),{status:200});});
+ const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const url=new URL(String(input),'https://localhost');if(url.pathname==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});seen.push(url.searchParams);return new Response(JSON.stringify({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'next-page',previous_cursor:'previous-page'}),{status:200});});
  vi.stubGlobal('fetch',fetcher);const filters='q=checkout&service_id=55555555-5555-5555-5555-555555555555&urgency=watch';const later=`/slos?${filters}&cursor=page-two&previous_cursor=page-one`;history.replaceState({},'',later);const onLocationChange=vi.fn();const props={canWrite:false,onCreate:()=>undefined,onLocationChange};
  const view=render(<OperationalOverviewView {...props} locationKey={later}/>);await screen.findByText('No SLOs match these filters.');fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));const first=`/slos?${filters}`;expect(onLocationChange).toHaveBeenCalledWith(first);view.rerender(<OperationalOverviewView {...props} locationKey={first}/>);await waitFor(()=>expect(seen).toHaveLength(2));expect(seen[0]?.get('cursor')).toBe('page-two');expect(seen[1]?.has('cursor')).toBe(false);expect(seen[1]?.get('q')).toBe('checkout');expect(seen[1]?.get('service_id')).toBe('55555555-5555-5555-5555-555555555555');expect(seen[1]?.get('urgency')).toBe('watch');
 });
@@ -198,7 +238,7 @@ it('marks retained overview values with their last confirmed evaluation after a 
   current:{evaluation_at:evaluatedAt,window,quality,performance},leading_reason:{code:'stale_observations',provisional:false},reasons:[{code:'stale_observations',provisional:false},{code:'complete_window_violation',provisional:false}],urgency:'needs_attention',
   burn_1h:{window_seconds:3600,start:'2026-10-29T11:00:00Z',end:evaluatedAt,quality,performance},burn_6h:{window_seconds:21600,start:'2026-10-29T06:00:00Z',end:evaluatedAt,quality,performance},
   exhaustion:{state:'unavailable',remaining_events:null,bad_events_per_hour:null,hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[]},budget_sparkline:[]};
- const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const path=new URL(String(input),'https://localhost').pathname;if(path==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});reads++;if(reads===1)return new Response(JSON.stringify({snapshot_id:id,items:[item],group_counts:{needs_attention:1,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as unknown as OperationalOverview),{status:200});return new Response(JSON.stringify({message:'refresh failed'}),{status:503});});
+ const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const path=new URL(String(input),'https://localhost').pathname;if(path==='/api/v1/services')return new Response(JSON.stringify({items:[],next_cursor:''}),{status:200});reads++;if(reads===1)return new Response(JSON.stringify({items:[item],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:1,watch:0,healthy:0},next_cursor:'',previous_cursor:''} as unknown as OperationalOverview),{status:200});return new Response(JSON.stringify({message:'refresh failed'}),{status:503});});
  vi.stubGlobal('fetch',fetcher);history.replaceState({},'','/slos');const props={canWrite:false,onCreate:()=>undefined,onLocationChange:vi.fn()};
  render(<OperationalOverviewView {...props} locationKey="/slos"/>);expect(await screen.findByRole('link',{name:/^Checkout$/})).toBeVisible();expect(document.querySelector('.slo-reference-status')).toHaveAttribute('title','Observations are stale; Complete window is below target');fireEvent.click(screen.getByRole('button',{name:'Refresh SLOs'}));
  expect(document.querySelector('.app-slo-status .ui-status-chip')).toHaveTextContent(/^Not reporting$/);expect(screen.getByText('Observations are stale; Complete window is below target')).toBeInTheDocument();
@@ -210,7 +250,7 @@ it('triage tiles show server group counts, toggle the urgency filter and never l
  const generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:60};
  const item:OperationalOverview['items'][number]={slo:definition,current:detail.current,current_state:'stale',generation,urgency:'watch',leading_reason:{code:'budget_below_half',provisional:false},reasons:[{code:'budget_below_half',provisional:false}],burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]};
  vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
- vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:2,watch:1,healthy:4},next_cursor:'',previous_cursor:''});
+ vi.spyOn(sloClient,'overview').mockResolvedValue({items:[item],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:2,watch:1,healthy:4},next_cursor:'',previous_cursor:''});
  const updateLocation=vi.fn();
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={updateLocation}/>);
  const tiles=await screen.findByRole('group',{name:'Filter by urgency'});
@@ -227,7 +267,7 @@ it('names the status from the leading reason and keeps every reason in the title
   {code:'high_1h_burn',label:'Burning fast'},{code:'complete_window_violation',label:'Breached'},{code:'stale_observations',label:'Not reporting'},{code:'low_observed_budget',label:'Low budget'},
  ].map((entry,index)=>({slo:{...definition,id:`11111111-1111-1111-1111-11111111111${index}`,display_name:`SLO ${index}`},current:detail.current,urgency:'needs_attention' as const,leading_reason:{code:entry.code as never,provisional:false},reasons:[{code:entry.code as never,provisional:false},{code:'budget_below_half' as const,provisional:false}],burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]}));
  vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
- vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items,group_counts:{needs_attention:4,watch:0,healthy:0},next_cursor:'',previous_cursor:''});
+ vi.spyOn(sloClient,'overview').mockResolvedValue({items,snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:4,watch:0,healthy:0},next_cursor:'',previous_cursor:''});
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={()=>undefined}/>);
  await screen.findByRole('link',{name:'SLO 0'});
  const statuses=[...document.querySelectorAll('.app-slo-row .slo-reference-status')];
@@ -240,7 +280,7 @@ it('opens an SLO from anywhere on its row unless text is selected or an inner li
  const detail=operationalDetail();
  const item={slo:definition,current:detail.current,urgency:'watch' as const,leading_reason:detail.leading_reason,reasons:detail.reasons,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,exhaustion:detail.exhaustion,budget_sparkline:[]} as unknown as OperationalOverview['items'][number];
  vi.spyOn(sloClient,'services').mockResolvedValue({items:[],next_cursor:''});
- vi.spyOn(sloClient,'overview').mockResolvedValue({snapshot_id:sloID,items:[item],group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
+ vi.spyOn(sloClient,'overview').mockResolvedValue({items:[item],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:1,healthy:0},next_cursor:'',previous_cursor:''});
  const open=vi.fn();
  render(<OperationalOverviewView locationKey="/slos" canWrite={false} onCreate={()=>undefined} onLocationChange={open}/>);
  await screen.findByRole('link',{name:'Checkout'});

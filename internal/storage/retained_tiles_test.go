@@ -1,10 +1,8 @@
 package storage
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"reflect"
-	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -42,17 +40,6 @@ func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		appendRetainedTile(&hours, tile)
-		if hour == 7 {
-			body, err := marshalRetainedTileSummary(tile, from, from.Add(time.Hour), "0.99", 7)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var summary retainedTileSummary
-			var restored []api.SloOperationalSample
-			if json.Unmarshal(body, &summary) != nil || len(summary.FineWire) != 5 || json.Unmarshal([]byte(summary.FineWire["attainment"]), &restored) != nil || len(restored) != len(tile.Attainment) {
-				t.Fatal("hourly wire dropped finer gap-boundary samples")
-			}
-		}
 	}
 	want, err := compactRetainedTile(raw, start, start.Add(24*time.Hour), "0.99")
 	if err != nil {
@@ -61,28 +48,6 @@ func TestRetainedDailyReductionMatchesRawPoints(t *testing.T) {
 	got, err := compactRetainedTile(hours, start, start.Add(24*time.Hour), "0.99")
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("hourly composition changed exact extrema, ties or cross-hour gaps: %v", err)
-	}
-	body, err := marshalRetainedTileSummary(want, start, start.Add(24*time.Hour), "0.99", 7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var summary retainedTileSummary
-	if json.Unmarshal(body, &summary) != nil || summary.SourceGeneration != 7 || summary.Transitions != ([4]int32{7, 7, 7, 7}) || summary.FineWire != nil {
-		t.Fatal("summary changed the source or independent quality-transition count")
-	}
-	for _, name := range []string{"attainment", "budget", "burn_1h", "burn_6h"} {
-		var lane []api.SloOperationalSample
-		if err := json.Unmarshal([]byte(summary.Wire[name]), &lane); err != nil {
-			t.Fatal("summary wire is invalid", err)
-		}
-		if len(lane) != 3 || !lane[0].EvaluationAt.Equal(start.Add(time.Minute)) || !lane[1].EvaluationAt.Equal(start.Add(10*time.Minute)) || !lane[2].EvaluationAt.Equal(start.Add(24*time.Hour)) {
-			t.Fatal("summary lost the first, last or exact unrounded extrema")
-		}
-		for _, sample := range lane {
-			if sample.DisplayCoverage == nil || !slices.Contains(sample.DisplayCoverage.States, "missing") || !slices.Contains(sample.DisplayCoverage.States, "observed") || !slices.Contains(sample.DisplayCoverage.Freshness, "stale") {
-				t.Fatal("summary hid a gap or a stale observation")
-			}
-		}
 	}
 }
 

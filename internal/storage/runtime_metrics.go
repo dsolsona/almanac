@@ -21,7 +21,7 @@ import (
 type runtimeMetrics struct {
 	queries           [3]queryMetrics
 	sourceKeys        atomic.Uint64
-	historyJobs       atomic.Uint64
+	extremaBatches    atomic.Uint64
 	preparationErrors [2]atomic.Uint64
 	historyHits       atomic.Uint64
 	historyMisses     atomic.Uint64
@@ -208,8 +208,8 @@ func (r *Runtime) MetricsHandler() http.Handler {
 			metric(&body, "almanac_db_query_duration_seconds_bucket", labels+`,le="+Inf"`, q.count.Load())
 		}
 		metric(&body, "almanac_derived_source_keys_total", "", r.metrics.sourceKeys.Load())
-		metric(&body, "almanac_derived_history_jobs_total", "", r.metrics.historyJobs.Load())
-		for index, stage := range [...]string{"aggregate", "history"} {
+		metric(&body, "almanac_derived_extrema_batches_total", "", r.metrics.extremaBatches.Load())
+		for index, stage := range [...]string{"aggregate", "extrema"} {
 			metric(&body, "almanac_derived_preparation_errors_total", fmt.Sprintf(`stage=%q`, stage), r.metrics.preparationErrors[index].Load())
 		}
 		metric(&body, "almanac_derived_history_cache_hits_total", "", r.metrics.historyHits.Load())
@@ -224,9 +224,9 @@ func (r *Runtime) MetricsHandler() http.Handler {
 			metric(&body, "almanac_derived_dirty_keys", "", snapshot.DirtyKeys)
 			metric(&body, "almanac_derived_failed_keys", "", snapshot.FailedKeys)
 			metric(&body, "almanac_derived_oldest_dirty_seconds", "", snapshot.OldestDirtySeconds)
-			metric(&body, "almanac_derived_history_jobs", "", snapshot.HistoryJobs)
-			metric(&body, "almanac_derived_failed_history_jobs", "", snapshot.FailedHistoryJobs)
-			metric(&body, "almanac_derived_oldest_history_seconds", "", snapshot.OldestHistorySeconds)
+			metric(&body, "almanac_derived_extrema_keys", "", snapshot.ExtremaKeys)
+			metric(&body, "almanac_derived_failed_extrema_keys", "", snapshot.FailedExtremaKeys)
+			metric(&body, "almanac_derived_oldest_extrema_seconds", "", snapshot.OldestExtremaSeconds)
 			metric(&body, "almanac_derived_current_lag_seconds", "", snapshot.CurrentLagSeconds)
 			metric(&body, "almanac_derived_pending_current", "", snapshot.PendingCurrent)
 		}

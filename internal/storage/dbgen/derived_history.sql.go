@@ -11,170 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const admitSloHistoryJob = `-- name: AdmitSloHistoryJob :execrows
-INSERT INTO public.almanac_slo_history_jobs
-    (slo_id,definition_revision,measurement_revision,source_generation,evaluated_through,
-     range_start,range_end,burn_window_seconds,state,next_attempt_at,created_at,kind,calculation_version,retention_start)
-SELECT $1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$9,$10,$11,$12
-WHERE (SELECT count(*) FROM public.almanac_slo_history_jobs) < 64
-  AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$1) < 8
-  AND NOT EXISTS (
-      SELECT 1 FROM public.almanac_slo_history_jobs failed
-      WHERE failed.slo_id=$1 AND failed.definition_revision=$2 AND failed.measurement_revision=$3
-        AND failed.state='failed' AND failed.burn_window_seconds=$8
-        AND failed.kind=$10
-        AND failed.calculation_version=$11
-        AND failed.range_end-failed.range_start=$7::timestamptz-$6::timestamptz
-  )
-ON CONFLICT (slo_id,definition_revision,measurement_revision,source_generation,evaluated_through,range_start,range_end,burn_window_seconds,kind,calculation_version,retention_start)
-DO NOTHING
-`
-
-type AdmitSloHistoryJobParams struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	SourceGeneration    int64              `json:"source_generation"`
-	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
-	RangeStart          pgtype.Timestamptz `json:"range_start"`
-	RangeEnd            pgtype.Timestamptz `json:"range_end"`
-	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
-	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
-	Kind                string             `json:"kind"`
-	CalculationVersion  string             `json:"calculation_version"`
-	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-}
-
-func (q *Queries) AdmitSloHistoryJob(ctx context.Context, arg AdmitSloHistoryJobParams) (int64, error) {
-	result, err := q.db.Exec(ctx, admitSloHistoryJob,
-		arg.SloID,
-		arg.DefinitionRevision,
-		arg.MeasurementRevision,
-		arg.SourceGeneration,
-		arg.EvaluatedThrough,
-		arg.RangeStart,
-		arg.RangeEnd,
-		arg.BurnWindowSeconds,
-		arg.NextAttemptAt,
-		arg.Kind,
-		arg.CalculationVersion,
-		arg.RetentionStart,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const attachPreparedBudgetSparkline = `-- name: AttachPreparedBudgetSparkline :execrows
-WITH replacement AS (
-    SELECT p.slo_id,jsonb_set(jsonb_set(jsonb_set(p.payload,'{budget_sparkline}',$1::jsonb),
-        '{budget_history_generation}',$2::jsonb),'{budget_history_state}',
-        to_jsonb(CASE WHEN g.source_generation=$3::bigint AND g.evaluated_through=$4::timestamptz AND g.retention_start=$5 THEN 'ready'::text ELSE 'preparing'::text END)) AS payload
-    FROM public.almanac_slo_current_projections p JOIN public.almanac_slo_derived_generations g ON p.generation_id=g.id
-    WHERE p.slo_id=$6 AND g.definition_revision=$7
-      AND g.measurement_revision=$8
-      AND p.payload_digest=sha256(convert_to(p.payload::text,'UTF8'))
-)
-UPDATE public.almanac_slo_current_projections p
-SET payload=r.payload,payload_digest=sha256(convert_to(r.payload::text,'UTF8'))
-FROM replacement r WHERE p.slo_id=r.slo_id
-`
-
-type AttachPreparedBudgetSparklineParams struct {
-	Samples             []byte             `json:"samples"`
-	HistoryGeneration   []byte             `json:"history_generation"`
-	SourceGeneration    int64              `json:"source_generation"`
-	At                  pgtype.Timestamptz `json:"at"`
-	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-}
-
-func (q *Queries) AttachPreparedBudgetSparkline(ctx context.Context, arg AttachPreparedBudgetSparklineParams) (int64, error) {
-	result, err := q.db.Exec(ctx, attachPreparedBudgetSparkline,
-		arg.Samples,
-		arg.HistoryGeneration,
-		arg.SourceGeneration,
-		arg.At,
-		arg.RetentionStart,
-		arg.SloID,
-		arg.DefinitionRevision,
-		arg.MeasurementRevision,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const claimSloHistoryJob = `-- name: ClaimSloHistoryJob :one
-WITH candidate AS (
-    SELECT id FROM public.almanac_slo_history_jobs
-    WHERE (state <> 'failed' OR (last_error IS DISTINCT FROM 'retention_expired'
-           AND (attempts < 5 OR failing_since IS NULL OR failing_since > $2::timestamptz-interval '7 days')))
-      AND next_attempt_at <= $2::timestamptz
-      AND (lease_until IS NULL OR lease_until <= $2::timestamptz)
-    ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
-)
-UPDATE public.almanac_slo_history_jobs j
-SET state='running', attempts=LEAST(j.attempts+1,5), lease_epoch=j.lease_epoch+1,
-    lease_until=$1::timestamptz
-FROM candidate c WHERE j.id=c.id RETURNING j.id, j.slo_id, j.definition_revision, j.measurement_revision, j.source_generation, j.calculation_version, j.retention_start, j.evaluated_through, j.range_start, j.range_end, j.burn_window_seconds, j.kind, j.state, j.attempts, j.lease_epoch, j.lease_until, j.next_attempt_at, j.created_at, j.last_error, j.manual_retried_at, j.failing_since
-`
-
-type ClaimSloHistoryJobParams struct {
-	LeaseUntil pgtype.Timestamptz `json:"lease_until"`
-	Now        pgtype.Timestamptz `json:"now"`
-}
-
-func (q *Queries) ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error) {
-	row := q.db.QueryRow(ctx, claimSloHistoryJob, arg.LeaseUntil, arg.Now)
-	var i AlmanacSloHistoryJob
-	err := row.Scan(
-		&i.ID,
-		&i.SloID,
-		&i.DefinitionRevision,
-		&i.MeasurementRevision,
-		&i.SourceGeneration,
-		&i.CalculationVersion,
-		&i.RetentionStart,
-		&i.EvaluatedThrough,
-		&i.RangeStart,
-		&i.RangeEnd,
-		&i.BurnWindowSeconds,
-		&i.Kind,
-		&i.State,
-		&i.Attempts,
-		&i.LeaseEpoch,
-		&i.LeaseUntil,
-		&i.NextAttemptAt,
-		&i.CreatedAt,
-		&i.LastError,
-		&i.ManualRetriedAt,
-		&i.FailingSince,
-	)
-	return i, err
-}
-
-const completeSloHistoryJob = `-- name: CompleteSloHistoryJob :execrows
-DELETE FROM public.almanac_slo_history_jobs WHERE id=$1 AND lease_epoch=$2 AND state='running'
-`
-
-type CompleteSloHistoryJobParams struct {
-	ID         pgtype.UUID `json:"id"`
-	LeaseEpoch int64       `json:"lease_epoch"`
-}
-
-func (q *Queries) CompleteSloHistoryJob(ctx context.Context, arg CompleteSloHistoryJobParams) (int64, error) {
-	result, err := q.db.Exec(ctx, completeSloHistoryJob, arg.ID, arg.LeaseEpoch)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteCorruptPreparedSloHistory = `-- name: DeleteCorruptPreparedSloHistory :execrows
 DELETE FROM public.almanac_slo_history_blocks WHERE generation_id=$1
 `
@@ -205,66 +41,23 @@ func (q *Queries) DeleteExpiredDerivedGenerations(ctx context.Context, published
 	return result.RowsAffected(), nil
 }
 
-const exhaustExpiredSloHistoryJobs = `-- name: ExhaustExpiredSloHistoryJobs :execrows
-UPDATE public.almanac_slo_history_jobs
-SET state='failed', lease_until=NULL, last_error='history_lease_expired', failing_since=coalesce(failing_since,$1),
-    next_attempt_at=$1::timestamptz+CASE WHEN coalesce(failing_since,$1)>$1::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END
-WHERE state='running' AND attempts>=5 AND lease_until <= $1
-`
-
-// A crash on the last permitted attempt must become an observable failure,
-// rather than remaining running forever with an unclaimable expired lease.
-func (q *Queries) ExhaustExpiredSloHistoryJobs(ctx context.Context, failingSince pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, exhaustExpiredSloHistoryJobs, failingSince)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const failSloHistoryJob = `-- name: FailSloHistoryJob :execrows
-UPDATE public.almanac_slo_history_jobs
-SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,
-    lease_until=NULL,next_attempt_at=$3::timestamptz+CASE WHEN attempts<5 THEN power(2,attempts)*interval '1 second' WHEN coalesce(failing_since,$3::timestamptz)>$3::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END,
-    failing_since=coalesce(failing_since,$3::timestamptz),last_error=$4
-WHERE id=$1 AND lease_epoch=$2
-`
-
-type FailSloHistoryJobParams struct {
-	ID         pgtype.UUID        `json:"id"`
-	LeaseEpoch int64              `json:"lease_epoch"`
-	Column3    pgtype.Timestamptz `json:"column_3"`
-	LastError  pgtype.Text        `json:"last_error"`
-}
-
-func (q *Queries) FailSloHistoryJob(ctx context.Context, arg FailSloHistoryJobParams) (int64, error) {
-	result, err := q.db.Exec(ctx, failSloHistoryJob,
-		arg.ID,
-		arg.LeaseEpoch,
-		arg.Column3,
-		arg.LastError,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const findPreparedSloHistory = `-- name: FindPreparedSloHistory :one
 WITH candidates AS MATERIALIZED (
 SELECT b.payload, b.payload_digest, g.id AS generation_id, g.published_at
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
 WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
-  AND g.calculation_version=$9
-  AND g.retention_start=$10
-  AND g.published_at>=$11::timestamptz-interval '5 minutes'
+  AND g.calculation_version=$11
+  AND g.retention_start=$12
+  AND g.published_at>=$10::timestamptz-interval '5 minutes'
   AND g.source_generation=$4 AND g.evaluated_through=$5
   AND b.range_start=$6 AND b.range_end=$7 AND b.burn_window_seconds=$8
-  AND b.kind=$12
+  AND b.kind=$13
 )
 SELECT payload,generation_id,published_at FROM candidates
 WHERE payload->'history_preparation' IS NULL
+  AND coalesce(payload->'_live','false'::jsonb)=to_jsonb($9::boolean)
+  AND (NOT $9::boolean OR coalesce((payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>$10::timestamptz)
   AND payload_digest=sha256(convert_to(payload::text,'UTF8'))
 ORDER BY published_at DESC LIMIT 1
 `
@@ -278,9 +71,10 @@ type FindPreparedSloHistoryParams struct {
 	RangeStart          pgtype.Timestamptz `json:"range_start"`
 	RangeEnd            pgtype.Timestamptz `json:"range_end"`
 	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
+	Live                bool               `json:"live"`
+	Now                 pgtype.Timestamptz `json:"now"`
 	CalculationVersion  string             `json:"calculation_version"`
 	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-	Now                 pgtype.Timestamptz `json:"now"`
 	Kind                string             `json:"kind"`
 }
 
@@ -301,9 +95,10 @@ func (q *Queries) FindPreparedSloHistory(ctx context.Context, arg FindPreparedSl
 		arg.RangeStart,
 		arg.RangeEnd,
 		arg.BurnWindowSeconds,
+		arg.Live,
+		arg.Now,
 		arg.CalculationVersion,
 		arg.RetentionStart,
-		arg.Now,
 		arg.Kind,
 	)
 	var i FindPreparedSloHistoryRow
@@ -337,77 +132,6 @@ func (q *Queries) InsertPreparedSloHistory(ctx context.Context, arg InsertPrepar
 		arg.Kind,
 		arg.BudgetSparkline,
 	)
-	return err
-}
-
-const latestPreparedBudgetSparkline = `-- name: LatestPreparedBudgetSparkline :one
-SELECT (b.payload->'budget_series'->'samples')::jsonb AS budget_sparkline,g.id,g.source_generation,g.definition_revision,g.measurement_revision,
-       g.exclusion_revision,g.calculation_version,g.evaluated_through,g.published_at
-FROM public.almanac_slo_history_blocks b
-JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
-WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
-  AND g.calculation_version=$4
-  AND b.burn_window_seconds=3600 AND b.range_end-b.range_start=$5::bigint*interval '1 second'
-  AND b.kind='overview'
-  AND g.retention_start=$6
-  AND g.evaluated_through <= $7::timestamptz
-  AND b.payload_digest=sha256(convert_to(b.payload::text,'UTF8'))
-ORDER BY g.evaluated_through DESC,g.source_generation DESC,g.published_at DESC LIMIT 1
-`
-
-type LatestPreparedBudgetSparklineParams struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	SpanSeconds         int64              `json:"span_seconds"`
-	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-	At                  pgtype.Timestamptz `json:"at"`
-}
-
-type LatestPreparedBudgetSparklineRow struct {
-	BudgetSparkline     []byte             `json:"budget_sparkline"`
-	ID                  pgtype.UUID        `json:"id"`
-	SourceGeneration    int64              `json:"source_generation"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	ExclusionRevision   int64              `json:"exclusion_revision"`
-	CalculationVersion  string             `json:"calculation_version"`
-	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
-	PublishedAt         pgtype.Timestamptz `json:"published_at"`
-}
-
-func (q *Queries) LatestPreparedBudgetSparkline(ctx context.Context, arg LatestPreparedBudgetSparklineParams) (LatestPreparedBudgetSparklineRow, error) {
-	row := q.db.QueryRow(ctx, latestPreparedBudgetSparkline,
-		arg.SloID,
-		arg.DefinitionRevision,
-		arg.MeasurementRevision,
-		arg.CalculationVersion,
-		arg.SpanSeconds,
-		arg.RetentionStart,
-		arg.At,
-	)
-	var i LatestPreparedBudgetSparklineRow
-	err := row.Scan(
-		&i.BudgetSparkline,
-		&i.ID,
-		&i.SourceGeneration,
-		&i.DefinitionRevision,
-		&i.MeasurementRevision,
-		&i.ExclusionRevision,
-		&i.CalculationVersion,
-		&i.EvaluatedThrough,
-		&i.PublishedAt,
-	)
-	return i, err
-}
-
-const lockHistoryAdmission = `-- name: LockHistoryAdmission :exec
-UPDATE public.almanac_slo_history_admission SET singleton=true WHERE singleton
-`
-
-func (q *Queries) LockHistoryAdmission(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, lockHistoryAdmission)
 	return err
 }
 
@@ -477,87 +201,4 @@ func (q *Queries) ReadPreparedSloValuePage(ctx context.Context, arg ReadPrepared
 		&i.PageValues,
 	)
 	return i, err
-}
-
-const readSloHistoryPreparationState = `-- name: ReadSloHistoryPreparationState :one
-SELECT EXISTS (
-    SELECT 1 FROM public.almanac_slo_history_jobs failed
-    WHERE failed.slo_id=$1 AND failed.definition_revision=$2
-      AND failed.measurement_revision=$3 AND failed.state='failed'
-      AND failed.kind=$4
-      AND failed.calculation_version=$5
-      AND failed.burn_window_seconds=$6
-      AND failed.range_end-failed.range_start=$7::timestamptz-$8::timestamptz
-) AS exhausted, EXISTS (
-    SELECT 1 FROM public.almanac_slo_history_jobs queued
-    WHERE queued.slo_id=$1 AND queued.definition_revision=$2
-      AND queued.measurement_revision=$3 AND queued.source_generation=$9
-      AND queued.evaluated_through=$10 AND queued.range_start=$8
-      AND queued.range_end=$7 AND queued.burn_window_seconds=$6
-      AND queued.kind=$4
-      AND queued.calculation_version=$5 AND queued.retention_start=$11
-) AS queued
-`
-
-type ReadSloHistoryPreparationStateParams struct {
-	SloID               pgtype.UUID        `json:"slo_id"`
-	DefinitionRevision  int64              `json:"definition_revision"`
-	MeasurementRevision int64              `json:"measurement_revision"`
-	Kind                string             `json:"kind"`
-	CalculationVersion  string             `json:"calculation_version"`
-	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
-	RangeEnd            pgtype.Timestamptz `json:"range_end"`
-	RangeStart          pgtype.Timestamptz `json:"range_start"`
-	SourceGeneration    int64              `json:"source_generation"`
-	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
-	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
-}
-
-type ReadSloHistoryPreparationStateRow struct {
-	Exhausted bool `json:"exhausted"`
-	Queued    bool `json:"queued"`
-}
-
-func (q *Queries) ReadSloHistoryPreparationState(ctx context.Context, arg ReadSloHistoryPreparationStateParams) (ReadSloHistoryPreparationStateRow, error) {
-	row := q.db.QueryRow(ctx, readSloHistoryPreparationState,
-		arg.SloID,
-		arg.DefinitionRevision,
-		arg.MeasurementRevision,
-		arg.Kind,
-		arg.CalculationVersion,
-		arg.BurnWindowSeconds,
-		arg.RangeEnd,
-		arg.RangeStart,
-		arg.SourceGeneration,
-		arg.EvaluatedThrough,
-		arg.RetentionStart,
-	)
-	var i ReadSloHistoryPreparationStateRow
-	err := row.Scan(&i.Exhausted, &i.Queued)
-	return i, err
-}
-
-const retryFailedSloHistoryJob = `-- name: RetryFailedSloHistoryJob :execrows
-UPDATE public.almanac_slo_history_jobs target
-SET state='pending',attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,
-    next_attempt_at=$3,manual_retried_at=$3,last_error=NULL,failing_since=NULL
-WHERE target.id=$1 AND target.slo_id=$2 AND target.state='failed'
-  AND target.last_error IS DISTINCT FROM 'retention_expired'
-  AND (target.manual_retried_at IS NULL OR target.manual_retried_at<=$3::timestamptz-interval '1 minute')
-  AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE state<>'failed')<64
-  AND (SELECT count(*) FROM public.almanac_slo_history_jobs WHERE slo_id=$2 AND state<>'failed')<8
-`
-
-type RetryFailedSloHistoryJobParams struct {
-	ID            pgtype.UUID        `json:"id"`
-	SloID         pgtype.UUID        `json:"slo_id"`
-	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-}
-
-func (q *Queries) RetryFailedSloHistoryJob(ctx context.Context, arg RetryFailedSloHistoryJobParams) (int64, error) {
-	result, err := q.db.Exec(ctx, retryFailedSloHistoryJob, arg.ID, arg.SloID, arg.NextAttemptAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }

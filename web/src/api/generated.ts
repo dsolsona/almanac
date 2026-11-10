@@ -709,8 +709,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read a snapshot-paginated operational SLO overview
-         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+         * Read a keyset-paginated operational SLO overview
+         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
          */
         get: operations["getSloOperationalOverview"];
         put?: never;
@@ -770,7 +770,7 @@ export interface paths {
         };
         /**
          * Read bounded preparation progress and exhausted-job diagnostics
-         * @description Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+         * @description Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
          */
         get: operations["getSloPreparation"];
         put?: never;
@@ -792,7 +792,7 @@ export interface paths {
         put?: never;
         /**
          * Give one exhausted preparation job another bounded attempt budget
-         * @description Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+         * @description Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
          */
         post: operations["retrySloPreparation"];
         delete?: never;
@@ -810,7 +810,7 @@ export interface paths {
         };
         /**
          * Read current operational evaluation and bounded history
-         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+         * @description Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. Without at, current objective and burn windows cover due eligible measurements, including complete intervals already received early; their actual endpoints are disclosed separately from snapshot evaluation_at. Pending collection is not a data gap. Explicit at and historical series retain exact cadence-aligned endpoints. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
          */
         get: operations["getSloOperationalDetail"];
         put?: never;
@@ -851,7 +851,7 @@ export interface paths {
         };
         /**
          * Evaluate a rolling occurrence objective
-         * @description This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+         * @description This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Without at, the effective end uses the same due/received measurement cutoff as current operational status. Explicit at evaluates its exact cadence boundary. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
          */
         get: operations["evaluateSlo"];
         put?: never;
@@ -1096,13 +1096,17 @@ export interface components {
             next_cursor: string;
         };
         SloOperationalOverviewPage: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @deprecated
+             * @description Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.
+             */
             snapshot_id: string;
             items: components["schemas"]["SloOperationalOverviewItem"][];
             group_counts: components["schemas"]["SloUrgencyCounts"];
-            /** @description Empty string when this snapshot has no further page. */
+            /** @description Keyset cursor after this page; empty when no further row was found. */
             next_cursor: string;
-            /** @description Signed cursor for the previous page of this same snapshot */
+            /** @description Keyset cursor before this page; empty on the first page. */
             previous_cursor: string;
         };
         SloUrgencyCounts: {
@@ -1117,7 +1121,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            stage: "current" | "history" | "aggregate";
+            stage: "aggregate" | "extrema" | "current";
             /** @enum {string} */
             state: "pending" | "running" | "failed";
             attempts: number;
@@ -1191,7 +1195,10 @@ export interface components {
             provisional: boolean;
         };
         SloOperationalValue: {
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.
+             */
             evaluation_at: string;
             window: components["schemas"]["SloEvaluationWindow"];
             quality: components["schemas"]["SloOperationalQuality"];
@@ -4247,7 +4254,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Snapshot-consistent overview page */
+            /** @description Current operational overview page */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4283,16 +4290,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Snapshot expired; restart pagination */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Resource limit or storage unavailable; no partial overview is returned */
+            /** @description Storage unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

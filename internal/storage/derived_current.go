@@ -210,9 +210,6 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	} else if err != nil {
 		return err
 	}
-	if err := publishRetainedCurrent(bounded, q, row, contextRow, detail, sourceGeneration, now); err != nil {
-		return err
-	}
 	generationID, err := q.InsertDerivedGeneration(bounded, dbgen.InsertDerivedGenerationParams{
 		SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
 		CalculationVersion: detail.CalculationVersion, EvaluatedThrough: timestamp(detail.EffectiveAt), RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), PublishedAt: timestamp(now),
@@ -224,15 +221,19 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 		LeadingReason: detail.LeadingReason, Reasons: detail.Reasons, Burn1h: detail.Burn1h, Burn6h: detail.Burn6h, Exhaustion: detail.Exhaustion, BudgetSparkline: []api.SloOperationalSample{}}
 	stamp := generationStamp(generationID, sourceGeneration, row.DefinitionRevision, row.MeasurementRevision, detail.CalculationVersion, detail.EffectiveAt, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
 	item.Generation = &stamp
-	if err := attachLatestBudget(bounded, q, &item, row, sourceGeneration, detail.EffectiveAt, now); err != nil {
+	budgetCache, err := attachExtremaBudget(bounded, q, &item, row, contextRow, now)
+	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(item)
+	payload, err := json.Marshal(struct {
+		api.SloOperationalOverviewItem
+		ValidUntil time.Time `json:"_current_valid_until"`
+	}{SloOperationalOverviewItem: item, ValidUntil: currentCacheDeadline(row, contextRow, now, detail.Current.Quality, detail.Burn1h.Quality, detail.Burn6h.Quality)})
 	if err != nil {
 		return err
 	}
 	_, err = q.PublishDerivedCurrentProjection(bounded, dbgen.PublishDerivedCurrentProjectionParams{SloID: id, GenerationID: generationID, ServiceID: row.ServiceID,
-		SortName: strings.ToLower(row.Name), Urgency: string(detail.Urgency), Payload: payload})
+		SortName: strings.ToLower(row.Name), Urgency: string(detail.Urgency), Payload: payload, BudgetCache: budgetCache})
 	if err != nil {
 		return err
 	}

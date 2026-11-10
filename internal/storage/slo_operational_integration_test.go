@@ -7,7 +7,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"math/big"
-	"slices"
+	"reflect"
 	"testing"
 	"time"
 
@@ -15,9 +15,65 @@ import (
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sli"
-	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
+
+func TestIntegrationRetainedDailyMetAndShortenedMatchRawOracle(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "daily-retained-oracle", true)
+	end := utcDayStart(s.at).Add(24 * time.Hour)
+	if _, err := execObservationFixture(t, s.conn, s.sliID, `INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,c.sli_id,c.measurement_revision,'observed',990,1000,c.result_digest,'{}',
+gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,point+interval '1 minute',point+interval '1 minute'
+FROM (SELECT * FROM public.almanac_sli_observations WHERE sli_id=$1 LIMIT 1)c
+CROSS JOIN generate_series($2::timestamptz-interval '1 hour',$2::timestamptz-interval '1 minute',interval '1 minute')point`, s.sliID, end); err != nil {
+		t.Fatal(err)
+	}
+	s.now = end.Add(90 * time.Second)
+	s.at = s.now
+	met := s.createSLO(t, "daily-met")
+	var verifier [32]byte
+	verifier[0] = 98
+	proof := DatasourceProof{SessionVerifier: verifier}
+	row, err := dbgen.New(s.conn).GetSlo(t.Context(), mustPGUUID(met))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shortFrom := end.Add(-30 * time.Minute)
+	_, shortSLO, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: "daily-shortened", DisplayName: "Daily shortened", ServiceID: row.ServiceID.String(), SliID: s.sliID, Target: "0.99", RollingWindowSeconds: 3600, EvaluationValidFrom: &shortFrom, IdempotencyKey: "daily-shortened", RequestID: "daily-shortened", Now: s.clock}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readOperationalOverviewForTest(t.Context(), s.f.databaseURL, OperationalOverviewInput{Proof: proof, Now: s.clock}); err != nil {
+		t.Fatal(err)
+	}
+	for range 1000 {
+		worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !worked {
+			break
+		}
+	}
+	start := end.Add(-24 * time.Hour)
+	for _, fixture := range []struct{ id, status, reason string }{{met, "met", ""}, {shortSLO.ID, "unknown", "shortened_window"}} {
+		input := OperationalDetailInput{Proof: proof, ID: fixture.id, At: &end, Start: &start, End: &end, BurnWindow: 3600, Now: s.clock}
+		want, err := readOperationalDetailForTest(t.Context(), s.f.databaseURL, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.Runtime = s.runtime
+		got, err := ReadSloOperationalDetail(t.Context(), s.f.databaseURL, input)
+		if err != nil || got.HistoryPreparation != nil || !reflect.DeepEqual(got.ComplianceSeries, want.ComplianceSeries) || !reflect.DeepEqual(got.ComplianceSummary, want.ComplianceSummary) {
+			t.Fatalf("retained daily %s differs from raw fixture: got=%+v want=%+v err=%v", fixture.status, got.ComplianceSeries, want.ComplianceSeries, err)
+		}
+		if len(got.ComplianceSeries.Days) != 1 || string(got.ComplianceSeries.Days[0].Status) != fixture.status || fixture.reason != "" && got.ComplianceSeries.Days[0].Explanation != fixture.reason {
+			t.Fatalf("unexpected daily fixture: %+v", got.ComplianceSeries)
+		}
+	}
+}
 
 func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testing.T) {
 	t.Parallel()
@@ -56,13 +112,14 @@ func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testin
 	}
 	badSLI := createSLI("operational-bad")
 	goodSLI := createSLI("operational-good")
+	partialSLI := createSLI("operational-partial")
 	start := f.base.Add(6 * time.Hour)
 	at := start.Add(6 * time.Hour)
 	historyStart := start.Add(-time.Hour)
 	missingAt := start.Add(-30 * time.Minute)
 	conn := integrationConnect(t, f.databaseURL)
 	defer closeIntegrationConn(conn)
-	for _, measurement := range []SliRecord{badSLI, goodSLI} {
+	for _, measurement := range []SliRecord{badSLI, goodSLI, partialSLI} {
 		if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_measurements SET effective_from=$1 WHERE sli_id=$2 AND revision=1`, historyStart, measurement.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -73,28 +130,28 @@ func TestIntegrationOperationalOverviewGroupsAndIndependentBurnWindows(t *testin
 	}
 	seed := func(measurement SliRecord, bad bool) {
 		t.Helper()
-		_, seedErr := conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point, $1, 1, point + interval '1 minute', 'observed', decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + interval '1 minute'
-FROM generate_series($5::timestamptz, $6::timestamptz - interval '1 minute', interval '1 minute') point
+		_, seedErr := execObservationFixture(t, conn, measurement.ID, `
+INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+ execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,$1,1,'observed',
+ CASE WHEN NOT $8 THEN 1000 WHEN point=$6::timestamptz-interval '1 minute' THEN 990
+ WHEN point>=$6::timestamptz-interval '6 hours' AND point<$6::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END,
+ CASE WHEN NOT $8 THEN 1000 WHEN point=$6::timestamptz-interval '1 minute' THEN 1000
+ WHEN point>=$6::timestamptz-interval '6 hours' AND point<$6::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END,
+ decode(repeat('ab',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$2,$3,1,$4,point,point+interval '1 minute'
+FROM generate_series($5::timestamptz,$6::timestamptz-interval '1 minute',interval '1 minute') point
 WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID, grant.Generation, leaseID, historyStart, at, missingAt, bad)
-		if seedErr != nil {
-			t.Fatal(seedErr)
-		}
-		_, seedErr = conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT point, $1, 1,
-       CASE WHEN NOT $2 THEN 1000 WHEN point = $3::timestamptz - interval '1 minute' THEN 990 WHEN point >= $3::timestamptz - interval '6 hours' AND point < $3::timestamptz - interval '6 hours' + interval '5 minutes' THEN 1000 ELSE 0 END,
-       CASE WHEN NOT $2 THEN 1000 WHEN point = $3::timestamptz - interval '1 minute' THEN 1000 WHEN point >= $3::timestamptz - interval '6 hours' AND point < $3::timestamptz - interval '6 hours' + interval '5 minutes' THEN 1000 ELSE 0 END
-FROM generate_series($4::timestamptz, $3::timestamptz - interval '1 minute', interval '1 minute') point
-WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyStart, missingAt)
 		if seedErr != nil {
 			t.Fatal(seedErr)
 		}
 	}
 	seed(badSLI, true)
 	seed(goodSLI, false)
+	seed(partialSLI, false)
+	if _, err := execObservationFixture(t, conn, partialSLI.ID, `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2`, partialSLI.ID, at.Add(-15*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 	now = at
 	var freshVerifier [32]byte
 	freshVerifier[0] = 99
@@ -119,41 +176,16 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 	}
 	attention := createSLO("operational-attention", badSLI.ID, start)
 	healthy := createSLO("operational-healthy", goodSLI.ID, historyStart)
-	watch := createSLO("operational-watch", goodSLI.ID, at.Add(-30*time.Minute))
+	watch := createSLO("operational-watch", partialSLI.ID, at.Add(-30*time.Minute))
 	readAt := at
 	readNow := func() time.Time { return readAt }
 	t.Run("derived aggregate, durable preparation and recovery", func(t *testing.T) {
 		verifyDerivedOperationalRecovery(t, f.databaseURL, proof, attention.ID, readNow)
 	})
-	t.Run("history admission fences stale snapshots", func(t *testing.T) {
-		verifyHistoryAdmissionSnapshotFences(t, f.databaseURL, attention.ID, readNow)
-	})
 	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
 		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
 	})
-	t.Run("overlapping overview admission waits for the preceding filter", func(t *testing.T) {
-		lockTx, err := conn.Begin(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer lockTx.Rollback(t.Context())
-		if _, err := lockTx.Exec(t.Context(), "SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission', 0))"); err != nil {
-			t.Fatal(err)
-		}
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer cancel()
-		released := make(chan error, 1)
-		timer := time.AfterFunc(100*time.Millisecond, func() { released <- lockTx.Rollback(ctx) })
-		defer timer.Stop()
-		_, err = ReadSloOperationalOverview(ctx, f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
-		if releaseErr := <-released; releaseErr != nil {
-			t.Fatal(releaseErr)
-		}
-		if err != nil {
-			t.Fatalf("overview rejected a transient admission overlap: %v", err)
-		}
-	})
-	t.Run("cancelled filter releases its reserved snapshot", func(t *testing.T) {
+	t.Run("cancelled overview read returns deadline exceeded", func(t *testing.T) {
 		lockTx, err := conn.Begin(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -168,146 +200,90 @@ WHERE NOT (NOT $2 AND point=$5::timestamptz)`, measurement.ID, bad, at, historyS
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("cancelled filter returned %v", err)
 		}
-		var live int
-		if err := lockTx.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2`, f.userID, freshVerifier[:]).Scan(&live); err != nil || live != 0 {
-			t.Fatalf("cancelled filter retained %d snapshots: %v", live, err)
-		}
+
 	})
 	var page api.SloOperationalOverviewPage
 	for refresh := range 5 {
-		page, err = ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
+		page, err = readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow})
 		if err != nil {
 			t.Fatalf("single-page refresh %d: %v", refresh+1, err)
 		}
-		var live int
-		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3`, f.userID, freshVerifier[:], at).Scan(&live); err != nil || live != 0 {
-			t.Fatalf("single-page refresh %d left %d live snapshots: %v", refresh+1, live, err)
-		}
+
 	}
 	if page.GroupCounts.NeedsAttention != 1 || page.GroupCounts.Watch != 1 || page.GroupCounts.Healthy != 1 || len(page.Items) != 3 || page.NextCursor != "" {
 		t.Fatalf("overview groups/items = %+v/%d cursor=%q", page.GroupCounts, len(page.Items), page.NextCursor)
 	}
-	first, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
+	gapMarker := false
+	for _, item := range page.Items {
+		if item.Slo.Name == healthy.Name {
+			for _, sample := range item.BudgetSparkline {
+				if sample.State == "partial" && !sample.EvaluationAt.Before(missingAt) && sample.EvaluationAt.Before(missingAt.Add(6*time.Hour+time.Minute)) {
+					gapMarker = true
+				}
+			}
+		}
+	}
+	if !gapMarker {
+		t.Fatal("overview omitted the historical gap marker before the late write")
+	}
+	first, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 	if err != nil || first.NextCursor == "" || first.PreviousCursor != "" {
 		t.Fatalf("first paginated overview = %+v, %v", first, err)
 	}
-	if _, _, err := loadOperationalFacts(t.Context(), dbgen.New(conn), operationalStreamKey(goodSLI.ID, 1), operationalStream{cadence: 60}, historyStart, at, 1); !errors.Is(err, ErrOperationalResource) {
-		t.Fatalf("row cap sentinel = %v, want resource limit", err)
-	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Query: "different", Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
-		t.Fatalf("snapshot filter binding error = %v", err)
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Query: "different", Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
+		t.Fatalf("cursor filter binding error = %v", err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slos SET display_name='Healthy metadata changed',version=version+1,updated_at=$2 WHERE id=$1`, healthy.ID, at); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',decode(repeat('cd',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$6::timestamptz)`, missingAt, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID, at); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES ($1,$2,1,1000,1000)`, missingAt, goodSLI.ID); err != nil {
+	readAt = readAt.Add(time.Second)
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `
+INSERT INTO public.almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+VALUES ($1::timestamptz,$2,1,'observed',1000,1000,decode(repeat('cd',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$6::timestamptz)`, missingAt, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID, at); err != nil {
 		t.Fatal(err)
 	}
 	secondInput := OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}
-	second, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, secondInput)
+	second, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, secondInput)
 	if err != nil || second.NextCursor == "" || second.PreviousCursor == "" {
 		t.Fatalf("second paginated overview = %+v, %v", second, err)
 	}
-	replayedSecond, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, secondInput)
+	replayedSecond, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, secondInput)
 	if err != nil || len(replayedSecond.Items) != 1 || replayedSecond.Items[0].Slo.Id != second.Items[0].Slo.Id || replayedSecond.NextCursor != second.NextCursor {
 		t.Fatalf("replayed second page = %+v, %v", replayedSecond, err)
 	}
-	previousPage, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: second.PreviousCursor, Now: readNow})
+	previousPage, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: second.PreviousCursor, Now: readNow})
 	if err != nil || len(previousPage.Items) != 1 || previousPage.Items[0].Slo.Id != first.Items[0].Slo.Id {
 		t.Fatalf("previous page = %+v, %v", previousPage, err)
 	}
 	thirdInput := OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: second.NextCursor, Now: readNow}
-	third, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, thirdInput)
-	if err != nil || len(third.Items) != 1 || third.Items[0].Slo.Name != healthy.Name || third.Items[0].Slo.DisplayName != healthy.DisplayName || third.NextCursor != "" {
-		t.Fatalf("third page did not retain snapshot metadata: %+v, %v", third, err)
+	third, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, thirdInput)
+	if err != nil || len(third.Items) != 1 || third.Items[0].Slo.Name != healthy.Name || third.Items[0].Slo.DisplayName != "Healthy metadata changed" || third.NextCursor != "" {
+		t.Fatalf("third page did not read live metadata: %+v, %v", third, err)
 	}
-	replayedThird, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, thirdInput)
-	if err != nil || len(replayedThird.Items) != 1 || replayedThird.Items[0].Slo.DisplayName != healthy.DisplayName {
+	replayedThird, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, thirdInput)
+	if err != nil || len(replayedThird.Items) != 1 || replayedThird.Items[0].Slo.DisplayName != "Healthy metadata changed" {
 		t.Fatalf("replayed final page = %+v, %v", replayedThird, err)
 	}
-	oldGapMarker := false
-	for _, sample := range replayedThird.Items[0].BudgetSparkline {
-		if sample.State == "partial" && !sample.EvaluationAt.Before(missingAt) && sample.EvaluationAt.Before(missingAt.Add(6*time.Hour+time.Minute)) {
-			oldGapMarker = true
-		}
-	}
-	if !oldGapMarker {
-		t.Fatal("snapshot omitted the interior historical gap marker")
-	}
-	refreshed, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Query: healthy.Name, Now: readNow})
+	refreshed, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Query: healthy.Name, Now: readNow})
 	if err != nil || len(refreshed.Items) != 1 || refreshed.Items[0].Slo.DisplayName != "Healthy metadata changed" {
 		t.Fatalf("refreshed overview after late write = %+v, %v", refreshed, err)
 	}
 	for _, sample := range refreshed.Items[0].BudgetSparkline {
 		if sample.State == "partial" && !sample.EvaluationAt.Before(missingAt) && sample.EvaluationAt.Before(missingAt.Add(6*time.Hour+time.Minute)) {
-			t.Fatal("new snapshot kept the cleared historical gap marker")
+			t.Fatal("refreshed overview kept the cleared historical gap marker")
 		}
-	}
-	var multiPageSnapshots int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2 AND expires_at>$3`, f.userID, freshVerifier[:], at).Scan(&multiPageSnapshots); err != nil || multiPageSnapshots != 1 {
-		t.Fatalf("multi-page snapshot retention count = %d, %v", multiPageSnapshots, err)
-	}
-	for snapshotIndex := range 6 {
-		admitted, admissionErr := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
-		if admissionErr != nil || admitted.NextCursor == "" {
-			t.Fatalf("admission snapshot %d = %+v, %v", snapshotIndex+2, admitted, admissionErr)
-		}
-	}
-	replayedAfterReads, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow})
-	if err != nil || replayedAfterReads.SnapshotId != first.SnapshotId || len(replayedAfterReads.Items) != 1 {
-		t.Fatalf("old cursor after seven ready snapshots = %+v, %v", replayedAfterReads, err)
-	}
-	var buildingVerifier [32]byte
-	buildingVerifier[0] = 100
-	if _, err := IssueSession(t.Context(), f.databaseURL, IssueSessionInput{UserID: f.userID, ExpectedCredentialEpoch: f.epoch,
-		ExpectedCredentialRevision: f.revision, Verifier: buildingVerifier, Now: at.Add(-time.Minute), RequestID: "overview-building-session"}); err != nil {
-		t.Fatal(err)
-	}
-	buildingInput := OperationalOverviewInput{Proof: DatasourceProof{SessionVerifier: buildingVerifier}, Limit: 1, Now: readNow}
-	for range 4 {
-		if _, _, reused, err := reserveSloOverviewSnapshot(t.Context(), f.databaseURL, buildingInput); err != nil || reused {
-			t.Fatalf("reserve independent build: reused=%v err=%v", reused, err)
-		}
-	}
-	if _, _, _, err := reserveSloOverviewSnapshot(t.Context(), f.databaseURL, buildingInput); !errors.Is(err, ErrOperationalResource) {
-		t.Fatalf("fifth concurrent build = %v, want resource limit", err)
-	}
-	actorID, validActor := canonicalUUID(f.userID)
-	if !validActor {
-		t.Fatal("invalid fixture actor")
-	}
-	usage, err := dbgen.New(conn).SloOverviewSnapshotUsage(t.Context(), dbgen.SloOverviewSnapshotUsageParams{
-		ActorID: actorID, SessionVerifier: buildingVerifier[:], Now: timestamp(at), ReservedBytes: 16 << 20, MinimumBytes: 16 << 10,
-	})
-	if err != nil || usage.SessionBuilds != 4 || usage.SessionBytes != 64<<20 {
-		t.Fatalf("reserved build accounting = %+v, %v", usage, err)
-	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow}); err != nil {
-		t.Fatalf("another session's builds blocked a small ready view: %v", err)
-	}
-	if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_slo_overview_snapshots WHERE actor_id=$1 AND session_verifier=$2`, f.userID, buildingVerifier[:]); err != nil {
-		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='editor' WHERE id=$1`, f.userID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}); !errors.Is(err, ErrOperationalSnapshot) {
-		t.Fatalf("role-bound snapshot cursor error = %v", err)
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: readNow}); err != nil {
+		t.Fatalf("authorized current role could not use the keyset cursor: %v", err)
 	}
 	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_users SET role='administrator' WHERE id=$1`, f.userID); err != nil {
 		t.Fatal(err)
 	}
-	expiredNow := at.Add(sloOverviewTTL + time.Microsecond)
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: first.NextCursor, Now: func() time.Time { return expiredNow }}); !errors.Is(err, ErrOperationalSnapshotOld) {
-		t.Fatalf("expired snapshot cursor error = %v", err)
-	}
-	detail, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow})
+	detail, err := readOperationalDetailForTest(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,18 +296,18 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if detail.Current.Performance.Total == nil || *detail.Current.Performance.Total != "6000.000000000000" || detail.Current.Performance.Good == nil || *detail.Current.Performance.Good != "5990.000000000000" {
 		t.Fatalf("six-hour current totals = good:%v total:%v", detail.Current.Performance.Good, detail.Current.Performance.Total)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=CASE WHEN interval_start >= $3::timestamptz - interval '1 hour' THEN 1000 ELSE 0 END,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, badSLI.ID, start, at); err != nil {
+	if _, err := execObservationFixture(t, conn, badSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,good_count=CASE WHEN interval_start >= $3::timestamptz - interval '1 hour' THEN 1000 ELSE 0 END,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, badSLI.ID, start, at); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=990,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,good_count=990,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
 		t.Fatal(err)
 	}
 	var finalHourGood, finalHourTotal string
-	if err := conn.QueryRow(t.Context(), `SELECT sum(good_count)::text,sum(total_count)::text FROM public.almanac_sli_observation_values WHERE sli_id=$1 AND interval_start >= $2::timestamptz - interval '1 hour' AND interval_start < $2`, badSLI.ID, at).Scan(&finalHourGood, &finalHourTotal); err != nil || !sameDecimal(finalHourGood, "60000") || !sameDecimal(finalHourTotal, "60000") {
+	if err := conn.QueryRow(t.Context(), `SELECT sum(good_count)::text,sum(total_count)::text FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start >= $2::timestamptz - interval '1 hour' AND interval_start < $2`, badSLI.ID, at).Scan(&finalHourGood, &finalHourTotal); err != nil || !sameDecimal(finalHourGood, "60000") || !sameDecimal(finalHourTotal, "60000") {
 		t.Fatalf("standalone final-hour success = %s/%s, %v", finalHourGood, finalHourTotal, err)
 	}
 	dailyRange := OperationalDetailInput{Proof: proof, ID: attention.ID, At: &at, Start: &start, End: &at, BurnWindow: 3600, Now: readNow}
-	violatedDaily, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, dailyRange)
+	violatedDaily, err := readOperationalDetailForTest(t.Context(), f.databaseURL, dailyRange)
 	if err != nil {
 		t.Fatalf("daily violated detail: %v", err)
 	}
@@ -342,28 +318,28 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 		t.Fatalf("completed rolling violation = %+v / %+v", violatedDaily.ComplianceSeries, violatedDaily.ComplianceSummary)
 	}
 	dailyRange.ID = healthy.ID
-	metDaily, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, dailyRange)
+	metDaily, err := readOperationalDetailForTest(t.Context(), f.databaseURL, dailyRange)
 	if err != nil || len(metDaily.ComplianceSeries.Days) != 1 || metDaily.ComplianceSeries.Days[0].Status != api.SloDailyComplianceDayStatusMet || metDaily.ComplianceSummary.MetDays != 1 ||
 		metDaily.ComplianceSeries.Days[0].Performance.Attainment == nil || !sameDecimal(*metDaily.ComplianceSeries.Days[0].Performance.Attainment, "0.99") {
 		t.Fatalf("completed rolling exact target result = %+v / %+v, %v", metDaily.ComplianceSeries, metDaily.ComplianceSummary, err)
 	}
 	dailyRange.ID = watch.ID
-	shortenedDaily, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, dailyRange)
+	shortenedDaily, err := readOperationalDetailForTest(t.Context(), f.databaseURL, dailyRange)
 	if err != nil || len(shortenedDaily.ComplianceSeries.Days) != 1 || shortenedDaily.ComplianceSeries.Days[0].Status != api.SloDailyComplianceDayStatusUnknown ||
 		!shortenedDaily.ComplianceSeries.Days[0].Performance.Provisional || shortenedDaily.ComplianceSeries.Days[0].Explanation != "shortened_window" || shortenedDaily.ComplianceSummary.UnknownDays != 1 {
 		t.Fatalf("shortened daily rolling result = %+v / %+v, %v", shortenedDaily.ComplianceSeries, shortenedDaily.ComplianceSummary, err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET
+	if _, err := execObservationFixture(t, conn, badSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,
 good_count=CASE WHEN interval_start=$2::timestamptz-interval '1 minute' THEN 990 WHEN interval_start >= $2::timestamptz-interval '6 hours' AND interval_start < $2::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END,
 total_count=CASE WHEN interval_start=$2::timestamptz-interval '1 minute' THEN 1000 WHEN interval_start >= $2::timestamptz-interval '6 hours' AND interval_start < $2::timestamptz-interval '6 hours'+interval '5 minutes' THEN 1000 ELSE 0 END
 WHERE sli_id=$1 AND interval_start >= $3 AND interval_start < $2`, badSLI.ID, at, start); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=1000,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `UPDATE public.almanac_sli_observations SET ingestion_generation=0,good_count=1000,total_count=1000 WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, goodSLI.ID, start, at); err != nil {
 		t.Fatal(err)
 	}
 	activationOnly := createSLO("operational-activation-only", goodSLI.ID, at)
-	activationDetail, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: activationOnly.ID, Now: readNow})
+	activationDetail, err := readOperationalDetailForTest(t.Context(), f.databaseURL, OperationalDetailInput{Proof: proof, ID: activationOnly.ID, Now: readNow})
 	if err != nil {
 		t.Fatalf("new objective detail with pre-validity SLI facts: %v", err)
 	}
@@ -390,38 +366,21 @@ WHERE sli_id=$1 AND interval_start >= $3 AND interval_start < $2`, badSLI.ID, at
 	if err := partitionTx.Commit(t.Context()); err != nil {
 		t.Fatalf("commit old-fact partitions: %v", err)
 	}
-	if _, err := conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',decode(repeat('ef',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$1::timestamptz + interval '1 minute')`, irrelevantOldFact, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES ($1,$2,1,1000,1000)`, irrelevantOldFact, goodSLI.ID); err != nil {
+	if _, err := execObservationFixture(t, conn, goodSLI.ID, `
+INSERT INTO public.almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+VALUES ($1::timestamptz,$2,1,'observed',1000,1000,decode(repeat('ef',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),$3,$4,1,$5,$1::timestamptz,$1::timestamptz + interval '1 minute')`, irrelevantOldFact, goodSLI.ID, created.Agent.ID, grant.Generation, leaseID); err != nil {
 		t.Fatal(err)
 	}
 	longObjective := createSLO("operational-long-horizon", goodSLI.ID, longHistory)
 	if longObjective.ID == "" {
 		t.Fatal("long-horizon objective was not created")
 	}
-	_, streams, err := loadOperationalDefinitions(t.Context(), dbgen.New(conn), OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow}, at)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stream := streams[operationalStreamKey(goodSLI.ID, 1)]
-	wantStart := floorSliBoundary(at.Add(-7*24*time.Hour-6*time.Hour), time.Minute)
-	if !stream.factStart.Equal(wantStart) {
-		t.Fatalf("overview source horizon = %s, want 7 d chart + 6 h window = %s", stream.factStart, wantStart)
-	}
-	boundedFacts, boundedCount, err := loadOperationalFacts(t.Context(), dbgen.New(conn), operationalStreamKey(goodSLI.ID, 1), stream, stream.factStart, at, 500)
-	oldIncluded := slices.ContainsFunc(boundedFacts, func(fact slo.Observation) bool { return fact.Start.Equal(irrelevantOldFact) })
-	if err != nil || boundedCount != 420 || oldIncluded {
-		t.Fatalf("bounded horizon loaded irrelevant history: count=%d oldIncluded=%t err=%v", boundedCount, oldIncluded, err)
-	}
-	readAt = expiredNow
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow}); err != nil {
+	readAt = at.Add(2*time.Minute + time.Microsecond)
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 50, Now: readNow}); err != nil {
 		t.Fatalf("overview with out-of-horizon old fact: %v", err)
 	}
-	forbidden, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
+	forbidden, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Now: readNow})
 	if err != nil || forbidden.NextCursor == "" {
 		t.Fatalf("revocation fixture snapshot = %+v, %v", forbidden, err)
 	}
@@ -429,7 +388,7 @@ VALUES ($1::timestamptz,$2,1,$1::timestamptz + interval '1 minute','observed',de
 	if revoked, err := RevokeSession(t.Context(), f.databaseURL, freshVerifier, revokedAt, "revoke-operational-session"); err != nil || !revoked {
 		t.Fatalf("revoke operational session = %t, %v", revoked, err)
 	}
-	if _, err := ReadSloOperationalOverview(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: forbidden.NextCursor, Now: func() time.Time { return revokedAt.Add(time.Second) }}); !errors.Is(err, ErrInvalidSession) {
+	if _, err := readOperationalOverviewForTest(t.Context(), f.databaseURL, OperationalOverviewInput{Proof: proof, Limit: 1, Cursor: forbidden.NextCursor, Now: func() time.Time { return revokedAt.Add(time.Second) }}); !errors.Is(err, ErrInvalidSession) {
 		t.Fatalf("revoked session snapshot error = %v", err)
 	}
 	groups := map[string]string{}

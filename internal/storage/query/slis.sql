@@ -88,8 +88,8 @@ SELECT sli.id, sli.name, sli.display_name, sli.version, sli.measurement_revision
        latest.interval_start AS latest_interval_start,
        latest.interval_end AS latest_interval_end,
        COALESCE(latest.outcome, '')::text AS latest_outcome,
-       latest.good_count AS latest_good_count,
-       latest.total_count AS latest_total_count,
+       COALESCE(latest.good_count,'')::text AS latest_good_count,
+       COALESCE(latest.total_count,'')::text AS latest_total_count,
        latest.error_code AS latest_error_code,
        latest.missing_components AS latest_missing_components,
        latest.recorded_at AS latest_recorded_at,
@@ -109,7 +109,7 @@ JOIN public.almanac_agents AS agent ON agent.id = datasource.agent_id
 LEFT JOIN public.almanac_agent_incompatible_attempts AS incompatible ON incompatible.agent_id = datasource.agent_id
 LEFT JOIN LATERAL (
     SELECT coverage.recorded_at::timestamptz AS last_observation_at
-    FROM public.almanac_sli_coverage AS coverage
+    FROM public.almanac_sli_observations AS coverage
     WHERE coverage.sli_id = sli.id
       AND coverage.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
       AND coverage.outcome IN ('observed', 'complete_empty')
@@ -117,27 +117,31 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS accepted ON true
 LEFT JOIN LATERAL (
-    SELECT coverage.observation_id, coverage.measurement_revision, coverage.interval_start,
-           coverage.interval_end, coverage.outcome, COALESCE(obs.good_count::text, '') AS good_count,
-           COALESCE(obs.total_count::text, '') AS total_count, coverage.error_code,
+    -- Receipt expiry leaves the ID NULL; the DTO derives it from the canonical interval key.
+    SELECT receipt.observation_id, coverage.measurement_revision, coverage.interval_start,
+           (coverage.interval_start+source.polling_interval_seconds*interval '1 second')::timestamptz AS interval_end,
+           coverage.outcome, COALESCE(coverage.good_count::text, '')::text AS good_count,
+           COALESCE(coverage.total_count::text, '')::text AS total_count, coverage.error_code,
            coverage.missing_components, coverage.recorded_at
     FROM (
-        SELECT c.* FROM public.almanac_sli_coverage AS c
+        SELECT c.* FROM public.almanac_sli_observations AS c
         WHERE c.sli_id = sli.id AND c.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
         ORDER BY c.interval_start DESC, c.recorded_at DESC
         LIMIT 1
     ) AS coverage
-    LEFT JOIN public.almanac_sli_observation_values AS obs
-      ON obs.interval_start = coverage.interval_start AND obs.sli_id = coverage.sli_id
-     AND obs.measurement_revision = coverage.measurement_revision
+    JOIN public.almanac_sli_measurements AS definition
+      ON definition.sli_id=coverage.sli_id AND definition.revision=coverage.measurement_revision
+    JOIN public.almanac_datasources AS source ON source.id=definition.datasource_id
+    LEFT JOIN public.almanac_sli_delivery_receipts AS receipt
+      ON receipt.agent_id=coverage.agent_id AND receipt.delivery_id=coverage.delivery_id
     UNION ALL
     SELECT attempt.observation_id, attempt.measurement_revision, attempt.interval_start,
-           attempt.interval_end, attempt.outcome, '' AS good_count, '' AS total_count,
+           attempt.interval_end, attempt.outcome, ''::text AS good_count, ''::text AS total_count,
            attempt.error_code, attempt.missing_components, attempt.recorded_at
     FROM (
         SELECT a.* FROM public.almanac_sli_execution_attempts AS a
         WHERE a.sli_id = sli.id AND a.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
-          AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage c WHERE c.sli_id = a.sli_id
+          AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_observations c WHERE c.sli_id = a.sli_id
             AND c.measurement_revision = a.measurement_revision AND c.interval_start = a.interval_start)
           AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts newer WHERE newer.sli_id = a.sli_id
             AND newer.measurement_revision = a.measurement_revision AND newer.interval_start = a.interval_start
@@ -195,16 +199,12 @@ LEFT JOIN LATERAL (
             SELECT picked.outcome, picked.good_count, picked.total_count
             FROM (
                 SELECT coverage.outcome,
-                       obs.good_count::text AS good_count,
-                       obs.total_count::text AS total_count,
+                       coverage.good_count::text AS good_count,
+                       coverage.total_count::text AS total_count,
                        0 AS precedence,
                        coverage.recorded_at,
-                       coverage.observation_id AS tie_id
-                FROM public.almanac_sli_coverage AS coverage
-                LEFT JOIN public.almanac_sli_observation_values AS obs
-                  ON obs.interval_start = coverage.interval_start
-                 AND obs.sli_id = coverage.sli_id
-                 AND obs.measurement_revision = coverage.measurement_revision
+                       coverage.execution_id AS tie_id
+                FROM public.almanac_sli_observations AS coverage
                 WHERE coverage.sli_id = sli.id
                   AND coverage.measurement_revision = measurement.revision
                   AND coverage.interval_start = slot.interval_start
@@ -216,7 +216,7 @@ LEFT JOIN LATERAL (
                   AND attempt.measurement_revision = measurement.revision
                   AND attempt.interval_start = slot.interval_start
                   AND NOT EXISTS (
-                      SELECT 1 FROM public.almanac_sli_coverage AS covered
+                      SELECT 1 FROM public.almanac_sli_observations AS covered
                       WHERE covered.sli_id = attempt.sli_id
                         AND covered.measurement_revision = attempt.measurement_revision
                         AND covered.interval_start = attempt.interval_start
@@ -350,18 +350,13 @@ WHERE agent_id = $1 AND delivery_id = $2
 FOR UPDATE;
 
 -- name: GetSliCoverageByCanonicalInterval :one
-SELECT result_digest, observation_id, outcome, recorded_at
-FROM public.almanac_sli_coverage
-WHERE interval_start = $1 AND sli_id = $2 AND measurement_revision = $3
-FOR UPDATE;
-
--- name: InsertSliCoverage :exec
-INSERT INTO public.almanac_sli_coverage(
-    interval_start, sli_id, measurement_revision, interval_end, outcome,
-    result_digest, error_code, missing_components, execution_id, delivery_id,
-    observation_id, agent_id, session_generation, configuration_revision,
-    lease_id, agent_created_at, recorded_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17);
+-- A retained interval can outlive its receipt; callers derive the canonical ID when NULL.
+SELECT observation.result_digest,receipt.observation_id,observation.outcome,observation.recorded_at
+FROM public.almanac_sli_observations AS observation
+LEFT JOIN public.almanac_sli_delivery_receipts AS receipt
+  ON receipt.agent_id=observation.agent_id AND receipt.delivery_id=observation.delivery_id
+WHERE observation.interval_start=$1 AND observation.sli_id=$2 AND observation.measurement_revision=$3
+FOR UPDATE OF observation;
 
 -- name: InsertSliExecutionAttempt :exec
 INSERT INTO public.almanac_sli_execution_attempts(
@@ -372,11 +367,6 @@ INSERT INTO public.almanac_sli_execution_attempts(
 -- name: HasSliExecutionAttempt :one
 SELECT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts WHERE agent_id = $1 AND execution_id = $2);
 
--- name: InsertSliObservationValue :exec
-INSERT INTO public.almanac_sli_observation_values(
-    interval_start, sli_id, measurement_revision, good_count, total_count
-) VALUES ($1, $2, $3, sqlc.arg(good_count)::text::numeric(38,12), sqlc.arg(total_count)::text::numeric(38,12));
-
 -- name: InsertSliDeliveryReceipt :exec
 INSERT INTO public.almanac_sli_delivery_receipts(
     delivery_id, payload_digest, sli_id, measurement_revision, interval_start,
@@ -385,36 +375,49 @@ INSERT INTO public.almanac_sli_delivery_receipts(
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: ListSliObservations :many
-SELECT * FROM (
-SELECT coverage.observation_id, coverage.measurement_revision,
-       coverage.interval_start, coverage.interval_end, coverage.outcome,
-       COALESCE(obs.good_count::text, '') AS good_count, COALESCE(obs.total_count::text, '') AS total_count,
+SELECT history.observation_id,history.measurement_revision,history.interval_start,history.interval_end,history.outcome,
+       COALESCE(history.good_count,'')::text AS good_count,COALESCE(history.total_count,'')::text AS total_count,
+       history.error_code,history.missing_components,history.recorded_at
+FROM (
+-- Enrich only a bounded canonical page; missing receipt IDs use the caller's natural-key fallback.
+SELECT receipt.observation_id, coverage.measurement_revision,
+       coverage.interval_start,(coverage.interval_start+source.polling_interval_seconds*interval '1 second')::timestamptz AS interval_end,
+       coverage.outcome,
+       COALESCE(coverage.good_count::text, '')::text AS good_count, COALESCE(coverage.total_count::text, '')::text AS total_count,
        coverage.error_code, coverage.missing_components, coverage.recorded_at
-FROM public.almanac_sli_coverage AS coverage
-LEFT JOIN public.almanac_sli_observation_values AS obs
-  ON obs.interval_start = coverage.interval_start AND obs.sli_id = coverage.sli_id
- AND obs.measurement_revision = coverage.measurement_revision
-WHERE coverage.sli_id = $1 AND
+FROM (
+    SELECT coverage.* FROM public.almanac_sli_observations AS coverage
+    WHERE coverage.sli_id = $1 AND
       coverage.interval_start >= sqlc.arg(retention_cutoff)::timestamptz AND
       coverage.interval_start >= sqlc.arg(range_start)::timestamptz AND
       ($2::timestamptz IS NULL OR coverage.interval_start < $2)
+    ORDER BY coverage.interval_start DESC,coverage.recorded_at DESC LIMIT $3
+) AS coverage
+JOIN public.almanac_sli_measurements AS definition
+  ON definition.sli_id=coverage.sli_id AND definition.revision=coverage.measurement_revision
+JOIN public.almanac_datasources AS source ON source.id=definition.datasource_id
+LEFT JOIN public.almanac_sli_delivery_receipts AS receipt
+  ON receipt.agent_id=coverage.agent_id AND receipt.delivery_id=coverage.delivery_id
 UNION ALL
+SELECT * FROM (
 SELECT attempt.observation_id, attempt.measurement_revision, attempt.interval_start,
-       attempt.interval_end, attempt.outcome, '' AS good_count, '' AS total_count,
+       attempt.interval_end, attempt.outcome, ''::text AS good_count, ''::text AS total_count,
        attempt.error_code, attempt.missing_components, attempt.recorded_at
 FROM public.almanac_sli_execution_attempts AS attempt
 WHERE attempt.sli_id = $1 AND attempt.interval_start >= sqlc.arg(retention_cutoff)::timestamptz
   AND attempt.interval_start >= sqlc.arg(range_start)::timestamptz
   AND ($2::timestamptz IS NULL OR attempt.interval_start < $2)
-  AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_coverage c WHERE c.sli_id = attempt.sli_id
+  AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_observations c WHERE c.sli_id = attempt.sli_id
     AND c.measurement_revision = attempt.measurement_revision AND c.interval_start = attempt.interval_start)
   AND NOT EXISTS (SELECT 1 FROM public.almanac_sli_execution_attempts newer WHERE newer.sli_id = attempt.sli_id
     AND newer.measurement_revision = attempt.measurement_revision AND newer.interval_start = attempt.interval_start
     AND (newer.recorded_at, newer.execution_id) > (attempt.recorded_at, attempt.execution_id))
+ORDER BY attempt.interval_start DESC,attempt.recorded_at DESC LIMIT $3
+) AS attempts
 ) AS history
 ORDER BY interval_start DESC, recorded_at DESC
 LIMIT $3;
 
 -- name: LatestSliAcceptedAt :one
-SELECT max(recorded_at)::timestamptz FROM public.almanac_sli_coverage
+SELECT max(recorded_at)::timestamptz FROM public.almanac_sli_observations
 WHERE sli_id = $1 AND interval_start >= $2 AND outcome IN ('observed', 'complete_empty');

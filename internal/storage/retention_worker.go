@@ -81,7 +81,7 @@ func (r *Runtime) discoverRetention(ctx context.Context, now time.Time) error {
 		return err
 	}
 	impact.PreviewRowLimit = 1000
-	impact.CalculatedRowsAtLeast = map[string]int64{"points": counts.Points, "tiles": counts.Tiles, "tile_work": counts.TileWork, "source_hours": counts.SourceHours}
+	impact.CalculatedRowsAtLeast = map[string]int64{"extrema": counts.Extrema, "source_hours": counts.SourceHours}
 	payload, err := json.Marshal(impact)
 	if err != nil {
 		return err
@@ -178,15 +178,11 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 	}
 	counts := make(map[string]int64)
 	if !work.CanonicalAppliedAt.Valid {
-		counts["expired_history_jobs"], err = locked.ExpireRetentionHistoryJobs(bounded, dbgen.ExpireRetentionHistoryJobsParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Now: timestamp(now)})
-		if err != nil {
-			return true, err
-		}
 		counts["expired_source_work"], err = locked.ExpireRetentionSourceWork(bounded, dbgen.ExpireRetentionSourceWorkParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Cutoff: work.Cutoff, Now: timestamp(now)})
 		if err != nil {
 			return true, err
 		}
-		if counts["expired_history_jobs"]+counts["expired_source_work"] > 0 {
+		if counts["expired_source_work"] > 0 {
 			if err := retentionProgress(bounded, locked, work, now, counts, false); err != nil {
 				return true, err
 			}
@@ -195,9 +191,8 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 	} else {
 		return true, finishRetentionCleanup(bounded, tx, locked, work, now)
 	}
-	// Match ingestion's coverage-before-values order. ONLY avoids locking all
-	// child partitions while dependencies and catalog identities are rechecked.
-	if _, err := tx.Exec(bounded, "LOCK TABLE ONLY public.almanac_sli_coverage, ONLY public.almanac_sli_observation_values IN ACCESS EXCLUSIVE MODE"); err != nil {
+	// ONLY avoids locking all child partitions while catalog identities are rechecked.
+	if _, err := tx.Exec(bounded, "LOCK TABLE ONLY public.almanac_sli_observations IN ACCESS EXCLUSIVE MODE"); err != nil {
 		return true, err
 	}
 	rows, err := locked.ListCanonicalRetentionPartitions(bounded)
@@ -234,12 +229,6 @@ func (r *Runtime) applyRetentionPreview(ctx context.Context, now time.Time) (wor
 		return true, errRetentionBlocked
 	}
 	for _, part := range preview.Partitions {
-		// Detach removes inherited FK dependencies from still-retained values partitions.
-		if part.Parent == "almanac_sli_coverage" {
-			if _, err := tx.Exec(bounded, "ALTER TABLE public.almanac_sli_coverage DETACH PARTITION "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
-				return true, err
-			}
-		}
 		if _, err := tx.Exec(bounded, "DROP TABLE "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
 			return true, err
 		}
@@ -286,25 +275,7 @@ func finishRetentionCleanup(ctx context.Context, tx pgx.Tx, q *dbgen.Queries, wo
 	if blocked {
 		return errRetentionBlocked
 	}
-	counts["skipped_repair_prefixes"], err = q.SkipExpiredRetainedRepairs(ctx, dbgen.SkipExpiredRetainedRepairsParams{RangeEnd: work.RangeEnd, Cutoff: work.RangeEnd, Now: timestamp(now)})
-	if err != nil {
-		return err
-	}
-	counts["tile_work"], err = q.DeleteExpiredRetainedTileWork(ctx, dbgen.DeleteExpiredRetainedTileWorkParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd, Now: timestamp(now)})
-	if err != nil {
-		return err
-	}
-	if counts["skipped_repair_prefixes"] == 1000 || counts["tile_work"] == 1000 {
-		if err := retentionProgress(ctx, q, work, now, counts, true); err != nil {
-			return err
-		}
-		return tx.Commit(ctx)
-	}
-	counts["points"], err = q.DeleteExpiredRetainedPoints(ctx, dbgen.DeleteExpiredRetainedPointsParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
-	if err != nil {
-		return err
-	}
-	counts["tiles"], err = q.DeleteExpiredRetainedTiles(ctx, dbgen.DeleteExpiredRetainedTilesParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
+	counts["extrema"], err = q.DeleteExpiredRetentionExtrema(ctx, dbgen.DeleteExpiredRetentionExtremaParams{RangeStart: work.RangeStart, RangeEnd: work.RangeEnd})
 	if err != nil {
 		return err
 	}

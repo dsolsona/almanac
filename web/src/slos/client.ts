@@ -120,7 +120,7 @@ function validDailyCompliance(value:unknown,summary:unknown,objective:Record<str
   return summary.met_days===seen.met&&summary.violated_days===seen.violated&&summary.unknown_days===seen.unknown&&summary.not_applicable_days===seen.not_applicable;
 }
 function validOperationalOverview(value:unknown):boolean {
-  if(!record(value)||typeof value.snapshot_id!=='string'||!/^[0-9a-f-]{36}$/.test(value.snapshot_id)||!Array.isArray(value.items)||value.items.length>200||!record(value.group_counts)||
+  if(!record(value)||!Array.isArray(value.items)||value.items.length>200||!record(value.group_counts)||
     typeof value.next_cursor!=='string'||value.next_cursor.length>512||typeof value.previous_cursor!=='string'||value.previous_cursor.length>512) return false;
   const counts=value.group_counts;
   if(!['needs_attention','watch','healthy'].every(k=>nonnegativeInteger(counts[k]))) return false;
@@ -160,7 +160,7 @@ function validCurrentStatus(value:unknown,pathID:string):boolean {
     generation.definition_revision!==value.slo.definition_revision||!utcTimestamp(generation.evaluated_through)||!utcTimestamp(generation.published_at)||
     typeof generation.calculation_version!=='string'||typeof generation.calculation_lag_seconds!=='number'||!Number.isFinite(generation.calculation_lag_seconds)||generation.calculation_lag_seconds<0||
     !record(value.current)||generation.evaluated_through!==value.current.evaluation_at)return false;
-  return validOperationalOverview({snapshot_id:generation.generation_id,items:[{...value,budget_sparkline:[]}],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});
+  return validOperationalOverview({items:[{...value,budget_sparkline:[]}],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});
 }
 function validHistoryValues(value:unknown,generationID:string,pathID:string,params:URLSearchParams):boolean {
   if(!record(value)||!record(value.generation)||value.generation.generation_id!==generationID||value.lane!==params.get('lane')||value.offset!==Number(params.get('offset')??0)||
@@ -229,10 +229,10 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     const code = typeof data === 'object' && data !== null && 'code' in data && typeof data.code === 'string' ? data.code : '';
     const errors = record(data) && Array.isArray(data.field_errors) && data.field_errors.length <= 16 ? data.field_errors : [];
     const guidance = errors.filter(record).map(item => fieldMessages[`${item.field}:${item.code}`]).filter(Boolean).join(' ');
-    const listLimit=code==='resource_limit'&&path.split('?')[0]==='/api/v1/slos/overview'
-      ? 'The SLO list is temporarily at its resource limit. Try Refresh shortly.' : '';
+    const listCursor=code==='invalid_request'&&path.split('?')[0]==='/api/v1/slos/overview'&&new URL(path,'https://almanac.invalid').searchParams.has('cursor')
+      ? 'The SLO list changed. Refresh to restart from the first page.' : '';
     if(response.status===401 || response.status===403)clearQueryCache(false);
-    throw new SloFailure(guidance || listLimit || (code==='service_in_use'?'Move or remove the referencing SLOs and service dependencies before deleting this service.':messages[code]) || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
+    throw new SloFailure(guidance || listCursor || (code==='service_in_use'?'Move or remove the referencing SLOs and service dependencies before deleting this service.':messages[code]) || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
   }
   const expected = init.method === 'POST' ? 201 : 200;
   if (response.status !== expected) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);
@@ -257,7 +257,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     typeof item.rolling_window_seconds === 'number' && Number.isSafeInteger(item.rolling_window_seconds) && item.rolling_window_seconds > 0 &&
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
-  const valid = isOverview ? validOperationalOverview(value)
+  const valid = isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
     : valuesPath ? validHistoryValues(value,valuesPath[2]!,valuesPath[1]!,new URLSearchParams(path.split('?')[1]??''))
     : statusID ? validCurrentStatus(value,statusID)
     : operationalID ? validOperationalDetail(value,operationalID)

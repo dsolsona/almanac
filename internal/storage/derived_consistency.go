@@ -40,6 +40,9 @@ func (r *Runtime) checkDerivedConsistency(ctx context.Context, now time.Time) (d
 	}
 	defer conn.Release()
 	q := dbgen.New(conn)
+	if _, err := q.EnsureSloExtremaCursors(bounded, dbgen.EnsureSloExtremaCursorsParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion}); err != nil {
+		return dbgen.ReadSloDerivedStatesRow{}, 0, err
+	}
 	restarted, err := q.RestartStoppedDerivedWork(bounded, timestamp(now))
 	if err != nil {
 		return dbgen.ReadSloDerivedStatesRow{}, 0, err

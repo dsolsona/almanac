@@ -166,6 +166,54 @@ test('set an SLO on the SLI and read its evaluation', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Timeline', exact: true })).toBeVisible();
 });
 
+test('a new 98% SLO becomes Healthy from collected eligible data without a full rolling window', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const previous = (await expectOk(api(page, 'GET', '/api/v1/slos?limit=200'))).body.items
+    .find((item: { display_name: string }) => item.display_name === sloName);
+  const name = unique('Availability 98%');
+  await page.goto('/slos/new');
+  await page.getByLabel('Display name', { exact: true }).fill(name);
+  await page.getByLabel('Service', { exact: true }).fill(previous.service_display_name);
+  await page.getByRole('option').filter({ hasText: previous.service_display_name }).click();
+  await page.getByLabel('SLI', { exact: true }).click();
+  await page.locator(`#slo-sli-option-${sliID}`).click();
+  await page.getByRole('radiogroup', { name: 'Target', exact: true }).getByRole('radio', { name: 'Custom…', exact: true }).click();
+  await page.getByLabel('Custom target', { exact: true }).fill('98');
+  await page.getByLabel('Custom target', { exact: true }).press('Enter');
+  await page.getByRole('radio', { name: '28 days', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: /Apply this target to earlier SLI measurements/ })).not.toBeChecked();
+  await page.getByRole('button', { name: 'Create SLO', exact: true }).click();
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Current SLO status', exact: true })).toContainText('No intervals are due yet.');
+  await reloadUntil(page, async () => {
+    const status = page.getByRole('region', { name: 'Current SLO status', exact: true });
+    await expect(status).toContainText('Why it is healthy', { timeout: 2_000 });
+    await expect(status.locator('.app-budget-hero')).toHaveText('50%');
+    await expect(status.locator('.app-status-facts')).toContainText('0.5×');
+    await expect(status).toContainText('Measurements through');
+  });
+  const objectivePath = new URL(page.url()).pathname;
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/settings/account');
+    await page.getByRole('radiogroup', { name: 'Theme', exact: true }).getByRole('radio', { name: theme === 'dark' ? 'Dark' : 'Light', exact: true }).click();
+    await expect(page.locator('html')).toHaveClass(theme === 'dark' ? /dark/ : /^(?!.*\bdark\b)/);
+    await page.goto(objectivePath);
+    for (const width of [1440, 360]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expect(page.getByRole('region', { name: 'Current SLO status', exact: true })).toContainText('Why it is healthy');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await testInfo.attach(`new-slo-${theme}-${width}`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLOs' }).click();
+  const row = page.locator('.app-slo-row').filter({ hasText: name });
+  await expect(row.getByText('Healthy', { exact: true })).toBeVisible();
+  await expect(row.locator('.app-slo-budget b')).toHaveText('50%');
+  await expect(row.locator('.app-slo-burn b')).toHaveText('0.5×');
+});
+
 test('rename the SLO from its page', async ({ page }) => {
   await page.goto('/slos');
   await page.getByRole('link', { name: sloName, exact: true }).click();

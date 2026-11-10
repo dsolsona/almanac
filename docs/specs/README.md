@@ -51,3 +51,4 @@ feature; mark irrelevant sections as such with a brief reason.
 | [SPEC-0017](0017-slo-timeline-annotations.md) | SLO timeline annotations | accepted | not started |
 | [SPEC-0018](0018-agent-management-usability.md) | Usable agent startup and management | accepted | not started |
 | [SPEC-0019](0019-backend-performance-and-derived-data.md) | Backend performance and derived data | accepted | in progress |
+| [SPEC-0020](0020-cumulative-slo-calculation.md) | Retained SLO extrema over exact hourly aggregates | accepted | not started |

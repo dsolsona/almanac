@@ -2029,7 +2029,7 @@ func (e SloOperationalSeriesKind) Valid() bool {
 const (
 	Aggregate SloPreparationJobStage = "aggregate"
 	Current   SloPreparationJobStage = "current"
-	History   SloPreparationJobStage = "history"
+	Extrema   SloPreparationJobStage = "extrema"
 )
 
 // Valid indicates whether the value is a known member of the SloPreparationJobStage enum.
@@ -2039,7 +2039,7 @@ func (e SloPreparationJobStage) Valid() bool {
 		return true
 	case Current:
 		return true
-	case History:
+	case Extrema:
 		return true
 	default:
 		return false
@@ -3664,12 +3664,15 @@ type SloOperationalOverviewPage struct {
 	GroupCounts SloUrgencyCounts             `json:"group_counts"`
 	Items       []SloOperationalOverviewItem `json:"items"`
 
-	// NextCursor Empty string when this snapshot has no further page.
+	// NextCursor Keyset cursor after this page; empty when no further row was found.
 	NextCursor string `json:"next_cursor"`
 
-	// PreviousCursor Signed cursor for the previous page of this same snapshot
-	PreviousCursor string             `json:"previous_cursor"`
-	SnapshotId     openapi_types.UUID `json:"snapshot_id"`
+	// PreviousCursor Keyset cursor before this page; empty on the first page.
+	PreviousCursor string `json:"previous_cursor"`
+
+	// SnapshotId Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	SnapshotId openapi_types.UUID `json:"snapshot_id"`
 }
 
 // SloOperationalQuality defines model for SloOperationalQuality.
@@ -3760,6 +3763,7 @@ type SloOperationalSeriesKind string
 
 // SloOperationalValue defines model for SloOperationalValue.
 type SloOperationalValue struct {
+	// EvaluationAt Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.
 	EvaluationAt time.Time                `json:"evaluation_at"`
 	Performance  SloEvaluationPerformance `json:"performance"`
 	Quality      SloOperationalQuality    `json:"quality"`
@@ -5149,9 +5153,9 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
 	CreateSlo(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+	// GetSloOperationalOverview Read a keyset-paginated operational SLO overview
 	//
-	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 	//
 	// Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
 	GetSloOperationalOverview(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5181,7 +5185,7 @@ type ClientInterface interface {
 
 	// EvaluateSlo Evaluate a rolling occurrence objective
 	//
-	// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+	// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Without at, the effective end uses the same due/received measurement cutoff as current operational status. Explicit at evaluates its exact cadence boundary. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 	EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5195,21 +5199,21 @@ type ClientInterface interface {
 
 	// GetSloOperationalDetail Read current operational evaluation and bounded history
 	//
-	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. Without at, current objective and burn windows cover due eligible measurements, including complete intervals already received early; their actual endpoints are disclosed separately from snapshot evaluation_at. Pending collection is not a data gap. Explicit at and historical series retain exact cadence-aligned endpoints. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 	GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
 	//
-	// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+	// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
 	GetSloPreparation(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
 	//
-	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 	//
 	// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 	RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6501,9 +6505,9 @@ func (c *Client) CreateSlo(ctx context.Context, params *CreateSloParams, body Cr
 	return c.Client.Do(req)
 }
 
-// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+// GetSloOperationalOverview Read a keyset-paginated operational SLO overview
 //
-// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 //
 // Corresponds with GET /api/v1/slos/overview (the `GetSloOperationalOverview` operationId).
 func (c *Client) GetSloOperationalOverview(ctx context.Context, params *GetSloOperationalOverviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6573,7 +6577,7 @@ func (c *Client) PatchSloMetadata(ctx context.Context, sloId SloId, params *Patc
 
 // EvaluateSlo Evaluate a rolling occurrence objective
 //
-// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Without at, the effective end uses the same due/received measurement cutoff as current operational status. Explicit at evaluates its exact cadence boundary. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/evaluation (the `EvaluateSlo` operationId).
 func (c *Client) EvaluateSlo(ctx context.Context, sloId SloId, params *EvaluateSloParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6607,7 +6611,7 @@ func (c *Client) GetSloHistoryValues(ctx context.Context, sloId SloId, generatio
 
 // GetSloOperationalDetail Read current operational evaluation and bounded history
 //
-// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. Without at, current objective and burn windows cover due eligible measurements, including complete intervals already received early; their actual endpoints are disclosed separately from snapshot evaluation_at. Pending collection is not a data gap. Explicit at and historical series retain exact cadence-aligned endpoints. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/operational (the `GetSloOperationalDetail` operationId).
 func (c *Client) GetSloOperationalDetail(ctx context.Context, sloId SloId, params *GetSloOperationalDetailParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6624,7 +6628,7 @@ func (c *Client) GetSloOperationalDetail(ctx context.Context, sloId SloId, param
 
 // GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
 //
-// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
 func (c *Client) GetSloPreparation(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6641,7 +6645,7 @@ func (c *Client) GetSloPreparation(ctx context.Context, sloId SloId, reqEditors 
 
 // RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
 //
-// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 //
 // Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10826,9 +10830,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/slos (the `CreateSlo` operationId).
 	CreateSloWithResponse(ctx context.Context, params *CreateSloParams, body CreateSloJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSloResponse, error)
 
-	// GetSloOperationalOverviewWithResponse Read a snapshot-paginated operational SLO overview
+	// GetSloOperationalOverviewWithResponse Read a keyset-paginated operational SLO overview
 	//
-	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+	// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10862,7 +10866,7 @@ type ClientWithResponsesInterface interface {
 
 	// EvaluateSloWithResponse Evaluate a rolling occurrence objective
 	//
-	// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+	// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Without at, the effective end uses the same due/received measurement cutoff as current operational status. Explicit at evaluates its exact cadence boundary. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10880,7 +10884,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
 	//
-	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+	// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. Without at, current objective and burn windows cover due eligible measurements, including complete intervals already received early; their actual endpoints are disclosed separately from snapshot evaluation_at. Pending collection is not a data gap. Explicit at and historical series retain exact cadence-aligned endpoints. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10889,7 +10893,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetSloPreparationWithResponse Read bounded preparation progress and exhausted-job diagnostics
 	//
-	// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+	// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10898,7 +10902,7 @@ type ClientWithResponsesInterface interface {
 
 	// RetrySloPreparationWithResponse Give one exhausted preparation job another bounded attempt budget
 	//
-	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -13549,8 +13553,6 @@ type GetSloOperationalOverviewResponse struct {
 	ApplicationproblemJSON401 *Problem
 	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
 	ApplicationproblemJSON403 *Problem
-	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
-	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
 	ApplicationproblemJSON503 *Problem
 }
@@ -13573,11 +13575,6 @@ func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON401() *Probl
 // GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
 func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON403() *Problem {
 	return r.ApplicationproblemJSON403
-}
-
-// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
-func (r GetSloOperationalOverviewResponse) GetApplicationproblemJSON409() *Problem {
-	return r.ApplicationproblemJSON409
 }
 
 // GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
@@ -15514,9 +15511,9 @@ func (c *ClientWithResponses) CreateSloWithResponse(ctx context.Context, params 
 	return ParseCreateSloResponse(rsp)
 }
 
-// GetSloOperationalOverviewWithResponse Read a snapshot-paginated operational SLO overview
+// GetSloOperationalOverviewWithResponse Read a keyset-paginated operational SLO overview
 //
-// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+// Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15574,7 +15571,7 @@ func (c *ClientWithResponses) PatchSloMetadataWithResponse(ctx context.Context, 
 
 // EvaluateSloWithResponse Evaluate a rolling occurrence objective
 //
-// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
+// This ephemeral current evaluation reads the summary and bounded timeline in one repeatable-read snapshot. It is not a retained report or a commit watermark. Without at, the effective end uses the same due/received measurement cutoff as current operational status. Explicit at evaluates its exact cadence boundary. Both timeline bounds must be provided together, aligned to cadence, within the objective window and at most 1500 intervals. Future evaluation times are rejected.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15604,7 +15601,7 @@ func (c *ClientWithResponses) GetSloHistoryValuesWithResponse(ctx context.Contex
 
 // GetSloOperationalDetailWithResponse Read current operational evaluation and bounded history
 //
-// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
+// Current evaluation is calculated at `at` (default server now), which must be a UTC microsecond-precision instant no later than server now. Without at, current objective and burn windows cover due eligible measurements, including complete intervals already received early; their actual endpoints are disclosed separately from snapshot evaluation_at. Pending collection is not a data gap. Explicit at and historical series retain exact cadence-aligned endpoints. The chart range is independent of the current objective window: start/end must be supplied together, are UTC and cadence aligned, have end no later than effective at, and span a positive interval of at most 365 days. If omitted, end is the cadence-aligned effective time and start is seven days earlier. Alternatively, period selects window, 7d, 90d or 1y without start/end. Window rounds the objective window to the nearest whole day (half up), clamped to 1–365 days. Fixed periods span 7, 90 or 365 days. End aligns down and start up to cadence boundaries, using server now unless at is supplied. Any aligned range within the supported horizon is allowed. 400 is returned for invalid range/window parameters; 503 resource_limit indicates actual canonical coverage rows exceed 2,500,000 across distinct SLI/revision streams or snapshot/query admission failed. Missing and expired spans are computed arithmetically, not expanded into absent ticks. Each series has at most 1,500 samples. Reduced samples retain actual first/last/min/max evaluations and disclose bucket bounds, resolution and reduction; gaps and revision/validity boundaries are never bridged. When fine quality transitions exceed the point bound, display_coverage reports the states present in each bucket; render it conservatively and request a narrower range for finer gaps. Quality-transition density alone cannot reject a supported graph. Exact-table values are the exact represented response samples; use another bounded operational range request to drill into a reduced region. No full interval timeline is embedded. Detail context includes existing authorized SLI queries and datasource identity/display name, never credentials.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15619,7 +15616,7 @@ func (c *ClientWithResponses) GetSloOperationalDetailWithResponse(ctx context.Co
 
 // GetSloPreparationWithResponse Read bounded preparation progress and exhausted-job diagnostics
 //
-// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15634,7 +15631,7 @@ func (c *ClientWithResponses) GetSloPreparationWithResponse(ctx context.Context,
 
 // RetrySloPreparationWithResponse Give one exhausted preparation job another bounded attempt budget
 //
-// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -17913,13 +17910,6 @@ func ParseGetSloOperationalOverviewResponse(rsp *http.Response) (*GetSloOperatio
 		}
 		response.ApplicationproblemJSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSON409 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18817,7 +18807,7 @@ type ServerInterface interface {
 	// CreateSlo Create a single-indicator occurrence SLO
 	// (POST /api/v1/slos)
 	CreateSlo(w http.ResponseWriter, r *http.Request, params CreateSloParams)
-	// GetSloOperationalOverview Read a snapshot-paginated operational SLO overview
+	// GetSloOperationalOverview Read a keyset-paginated operational SLO overview
 	// (GET /api/v1/slos/overview)
 	GetSloOperationalOverview(w http.ResponseWriter, r *http.Request, params GetSloOperationalOverviewParams)
 	// GetSlo Read an SLO definition

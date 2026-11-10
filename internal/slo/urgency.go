@@ -23,7 +23,7 @@ type OperationalUrgency struct {
 	Reasons []OperationalReason
 }
 
-// ClassifyOperational applies ADR-0023 thresholds to exact, unrounded values.
+// ClassifyOperational applies ADR-0023 thresholds as amended by ADR-0043.
 func ClassifyOperational(input OperationalState) OperationalUrgency {
 	attention := make(map[string]bool)
 	watch := make(map[string]bool)
@@ -47,10 +47,7 @@ func ClassifyOperational(input OperationalState) OperationalUrgency {
 	case "partial":
 		add(watch, "incomplete_coverage")
 	case "not_applicable":
-		add(watch, "incomplete_coverage")
-	}
-	if input.ShortenedEligibility {
-		add(watch, "incomplete_coverage")
+		add(watch, "not_yet_eligible")
 	}
 	if input.Provisional && input.QualityState == "complete" {
 		add(watch, "incomplete_coverage")
@@ -86,7 +83,7 @@ func ClassifyOperational(input OperationalState) OperationalUrgency {
 		if burnExact != nil && burnExact.Cmp(big.NewRat(1, 1)) >= 0 {
 			add(attention, "high_1h_burn")
 		}
-		if input.Burn1hQualityState != "" && (input.Burn1hQualityState != "complete" || input.Burn1hFreshness != "fresh" || input.Burn1hProvisional || input.Burn1hShortenedEligibility) {
+		if input.Burn1hQualityState != "" && (input.Burn1hQualityState != "complete" || input.Burn1hFreshness != "fresh" || input.Burn1hProvisional) {
 			add(watch, "short_burn_unavailable")
 		}
 	} else {

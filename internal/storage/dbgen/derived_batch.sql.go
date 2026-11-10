@@ -178,25 +178,21 @@ WITH requested AS (
            unnest($4::timestamptz[]) AS hour_start
 ), computed AS (
     SELECT r.sli_id,r.revision,r.hour_start,r.generation,a.good, a.total, a.observed, a.known_empty, a.zero_traffic, a.missing_values, a.first_interval, a.last_interval, a.latest_receipt, a.first_observation, a.last_observation
-    FROM requested r CROSS JOIN LATERAL (
-        SELECT coalesce(sum(v.good_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS good,
-               coalesce(sum(v.total_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS total,
+    FROM requested r
+    JOIN public.almanac_sli_measurements m ON m.sli_id=r.sli_id AND m.revision=r.revision
+    JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+    CROSS JOIN LATERAL (
+        SELECT coalesce(sum(c.good_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS good,
+               coalesce(sum(c.total_count) FILTER (WHERE c.outcome='observed'),0)::numeric AS total,
                count(*) FILTER (WHERE c.outcome='observed') AS observed,
                count(*) FILTER (WHERE c.outcome='complete_empty') AS known_empty,
-               count(*) FILTER (WHERE c.outcome='observed' AND v.total_count=0) AS zero_traffic,
-               count(*) FILTER (WHERE c.outcome='observed' AND v.total_count IS NULL) AS missing_values,
-               min(c.interval_start) AS first_interval,max(c.interval_end) AS last_interval,max(c.recorded_at) AS latest_receipt,
+               count(*) FILTER (WHERE c.outcome='observed' AND c.total_count=0) AS zero_traffic,
+               count(*) FILTER (WHERE c.outcome='observed' AND c.total_count IS NULL) AS missing_values,
+               min(c.interval_start) AS first_interval,
+               max(c.interval_start+datasource.polling_interval_seconds*interval '1 second') AS last_interval,max(c.recorded_at) AS latest_receipt,
                min(c.interval_start) FILTER (WHERE c.outcome='observed') AS first_observation,
-               max(c.interval_end) FILTER (WHERE c.outcome='observed') AS last_observation
-        FROM public.almanac_sli_coverage c
-        LEFT JOIN LATERAL (
-            SELECT value.good_count,value.total_count
-            FROM public.almanac_sli_observation_values value
-            WHERE value.interval_start=c.interval_start
-              AND value.sli_id=c.sli_id AND value.measurement_revision=c.measurement_revision
-              AND value.interval_start>=r.hour_start AND value.interval_start<r.hour_start+interval '1 hour'
-            LIMIT 1
-        ) v ON true
+               max(c.interval_start+datasource.polling_interval_seconds*interval '1 second') FILTER (WHERE c.outcome='observed') AS last_observation
+        FROM public.almanac_sli_observations c
         WHERE c.sli_id=r.sli_id AND c.measurement_revision=r.revision
           AND c.interval_start>=r.hour_start AND c.interval_start<r.hour_start+interval '1 hour'
     ) a
@@ -235,8 +231,7 @@ type RebuildDerivedBatchRow struct {
 	HourStart           pgtype.Timestamptz `json:"hour_start"`
 }
 
-// Hours with an observed interval whose values are not committed yet are not stored: the aggregate
-// would count the interval with zero totals (ADR-0034). They are returned so the caller defers them.
+// Keep the defensive missing-value result for the caller; canonical row constraints now prevent it.
 func (q *Queries) RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) ([]RebuildDerivedBatchRow, error) {
 	rows, err := q.db.Query(ctx, rebuildDerivedBatch,
 		arg.SliIds,

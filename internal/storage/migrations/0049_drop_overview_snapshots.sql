@@ -1,0 +1,6 @@
+DROP TRIGGER almanac_archive_current_slo_projection ON public.almanac_slo_current_projections;
+DROP FUNCTION public.almanac_archive_slo_projection();
+DROP TABLE public.almanac_slo_overview_snapshot_items;
+DROP TABLE public.almanac_slo_overview_snapshots;
+DROP TABLE public.almanac_slo_projection_payloads;
+ALTER TABLE public.almanac_slo_current_projections DROP COLUMN payload_digest;

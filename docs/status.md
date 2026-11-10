@@ -1,10 +1,178 @@
+Eligible SLO status, 2026-11-10: [F3-T12](tasks/F3-T12.md) implements the
+maintainer-approved [ADR-0043](adr/0043-slo-status-from-due-eligible-measurements.md)
+on `fix/slo-eligible-status`, above PR #81 (`a283ab1`). Complete fresh due
+measurements can establish Healthy before the full rolling window exists;
+pending collection is distinct from actual gaps, and the cutoff advances during
+outages. Detail shows eligibility start, cutoff and due interval counts.
+Application `7714899` passes `make check` (447 frontend tests, storage
+116.434 s, 82 browser cases in 1.9 min), all 16 container E2E journeys (5.4 min),
+and six 35-day performance checks (6.6 min). Cold p95 is 332/266 ms for SLO
+list/detail and 172/193 ms for SLI list/detail. Both themes and 1440/360 px
+views pass the new 98% SLO journey with exact 50% budget and 0.5x burn.
+Independent review findings are fixed and regression-tested. Native-stack
+publication and published-head CI evidence belong to the PR; these local results
+do not imply those checks pass. Operator deployment/data remain unchanged, and
+larger/year-long acceptance gaps in earlier tasks remain open. No merge is authorized.
+
+Settings first-visit CI correction, 2026-11-10: application `557a5ef` fixes the
+reported PR [#73](https://github.com/dsolsona/almanac/pull/73) failure. Public
+route assets load from HTML preloads, prefetched modules render immediately,
+and authorized initial reads start without an extra timer. The unchanged UI
+readiness assertions run concurrently. CI run `42825825089` passes all four
+required suites; its 15 E2E journeys take 3.9 minutes and measure Settings at
+489.844149 ms and Users at 131.923434 ms, below the unchanged 1,000 ms limits.
+The original failed 1,006.105811 ms result is retained. The integrated
+`c575e1f` stack passes `make check` (310 observed seconds, 444 frontend tests,
+storage 128.453 seconds, 82 browser cases) and all 15 four-worker container
+journeys (4.6 minutes; Settings 247.130360 ms, Users 77.183120 ms). Detailed
+failure and verification evidence is in [F9-T01](tasks/F9-T01.md). The final
+shared-renderer benchmark and remaining descendant CI are tracked separately;
+no PR merge is authorized.
+
+CodeRabbit follow-up, 2026-11-10: all nine open lean-SLO PRs
+[#72](https://github.com/dsolsona/almanac/pull/72),
+[#73](https://github.com/dsolsona/almanac/pull/73),
+[#75](https://github.com/dsolsona/almanac/pull/75) through
+[#81](https://github.com/dsolsona/almanac/pull/81) were inspected, including
+outside-diff review comments. Valid findings cover retry/lease fencing,
+first-day preparation bounds, retained daily and eviction comparisons,
+sparkline readiness, original receipt identities/digests during migration,
+standalone index availability, empty-page recovery, compatibility UUIDs,
+cursor limits, expired-row existence and locked-cursor backoff. Accepted design tradeoffs remain
+explicit in ADR-0040/0041/0042 and SPEC-0020. Each PR is ready for review;
+implementation acceptance gaps below remain open and no merge is authorized.
+
+Integrated application checkpoint `ad0aafd` passes `make check` (303 seconds,
+storage 115.454 seconds, 437 frontend tests and 82 browser cases in 2.0 minutes)
+and all 15 sequential `make test-e2e` journeys (4.4 minutes). The new daily
+comparisons pass integration on `5f3ae0e` (storage 118.668 seconds); the initial
+propagation attempt exposed a missing test import, corrected before that pass.
+Legacy overview preparation on PR #73 now defers pending retained tiles
+(`6f0fdf3`, storage integration 66.887 seconds); PR #76 retires that job.
+Client UUID validation passes, including missing/null/zero/malformed responses.
+The combined `9fc80a6` stack passes `make check` (307 seconds observed,
+storage 115.763 seconds, 441 frontend tests and 82 browser cases in 1.9 minutes).
+The locked-cursor regression reproduced 50 queries in 250 ms and now passes
+its four-query bound with prompt cancellation; the late-gap test also proves
+the original marker existed before repair. The 35-day benchmark on `82baf7a`
+passes six checks in 7.2 minutes: cold p95 is 404/343 ms for SLO list/detail and
+250/246 ms for SLI list/detail. This measurement precedes the final no-claim
+backoff correction; no later performance result is inferred.
+A browser CI failure on PR #76's prior `89359aa` timed out in charts/services/
+settings and closed browser contexts remains recorded. Subsequent fast/browser
+CI passed; all four application CI checks passed on `82baf7a`. CI for the later
+published heads is tracked separately and is not inferred from these checkpoints.
+Review amendments affect unreleased migrations only; released 0001–0044 and
+operator databases are unchanged. Historical performance JSON is now preserved
+under `docs/evidence/lean-slo/`, linked from [F9-T06](tasks/F9-T06.md).
+
+Earlier delivery checkpoints follow; their draft/measurement statements describe
+those checkpoints, not current PR readiness or completion of remaining criteria.
+
+PR #73 CodeRabbit follow-up, 2026-11-10: `7b9ba35` guards optional-runtime
+history hit/miss metrics, removes dead oracle assignments and clarifies that
+measurement roots follow the measured schema. The nil-pointer regression first
+failed, then passed on both the original pipeline and integrated extrema stack.
+Both review threads have replies and are resolved. After propagation through
+PRs #75–#81, `make check` passes in an observed 290 seconds and all 15 isolated
+container journeys pass in 4.1 minutes (301 seconds observed). See
+[F9-T01](tasks/F9-T01.md). Later PR #72 clarifications are now integrated through the stack;
+benchmarks were not repeated at that checkpoint and merge remains unauthorized.
+
+Lean SLO retention review follow-up, 2026-11-10: `fix/slo-expired-history` in
+`.worktrees/lean-slo-expired-history`, based on `5e19912`, corrects permanently
+pending historical reads after extrema cleanup. Absent expired hours and compliance
+days use arithmetic expired outcomes; available rows retain their original inputs.
+The authorized detail-read regression reproduced the defect. Final `make check`
+passes in an observed 261 seconds, including storage integration in 100.760 seconds,
+437 frontend tests and 82 browser checks. Sequential `make test-e2e` passes all
+15 isolated container journeys in 3.7 minutes (observed command duration 278 seconds).
+See [F9-T02](tasks/F9-T02.md). Merge remains unauthorized.
+
+Lean SLO implementation, 2026-11-09: the maintainer selected PR [#72](https://github.com/dsolsona/almanac/pull/72)
+commit `b7d8a5c` as authoritative, accepted its design and requested all tasks with
+stacked PR delivery. ADR-0040/0041/0042 and SPEC-0020 acceptance is recorded without
+changing their selected scope. [F9-T01](tasks/F9-T01.md) is verified and in review in
+`.worktrees/lean-slo-quick-wins` on `perf/lean-slo-quick-wins`, based on `b7d8a5c`;
+[F9-T06](tasks/F9-T06.md)'s baseline records page timings and storage, with
+minute samples and statement counters still unverified.
+Commits, push and PR publication are authorized; merge is not. No measured
+savings are claimed yet. F9-T01 passed `make check` (241 s), the final
+`make test-integration` (79 s) and all 15 `make test-e2e` journeys (4.6 min).
+
+[F9-T02](tasks/F9-T02.md) is published as draft [PR #75](https://github.com/dsolsona/almanac/pull/75)
+from `.worktrees/lean-slo-extrema`, branch `feat/lean-slo-extrema`, with checkpoints `c82b2a4` and `bae6456` above
+F9-T01's verified `484647d`. The extrema worker, detail reader, pinned values,
+diagnostics, retry and cleanup are implemented. The old current/list pipeline
+remains until F9-T03. The latest `make check` passes, including storage integration
+in 132.630 seconds and 82 browser checks in 2.4 minutes; checkpoint `bae6456`
+also passes race integration (storage 218.763 seconds) and all 15 E2E journeys
+(4.2 minutes). The native stack is verified as #72 → #73 → #75. The 35-day
+performance run passed all five checks in 8.9 minutes: cold p95 was 395/304 ms
+for the SLO list/detail and 236/253 ms for the SLI list/detail. A later CI race
+failure exposed an oversized dense worker transaction; the follow-up caps each
+turn at the existing 960-input budget. Its `make test` and full race integration
+pass, with storage integration taking 160.925 seconds. Full 20-SLO 35/365-day
+equivalence and savings
+are not claimed; F9-T02 remains in progress and the PR remains draft.
+
+[F9-T03](tasks/F9-T03.md) is published as draft [PR #76](https://github.com/dsolsona/almanac/pull/76)
+from `.worktrees/lean-slo-switch` on
+`feat/lean-slo-switch`, based on `bc718bf`. Current refresh now uses hourly extrema
+for list sparklines; the old workers and queries are removed, migration 0046 drops
+their seven tables, and the remaining loops use due-time queries. Checkpoint
+`c8ab6c7` passes `make check` (storage 74.394 seconds, 437 frontend tests and
+82 browser checks in 1.9 minutes), all 15 E2E journeys (4.0 minutes), and all
+five 35-day performance checks (9.4 minutes). Cold p95 is 333/252 ms for the
+SLO list/detail and 164/212 ms for the SLI list/detail; the independent budget
+comparison passes. Required CI is green and the native stack is verified as
+#72 → #73 → #75 → #76. Resource counters, full fleet equivalence, 365-day
+performance and the preview-copy migration rehearsal remain outstanding;
+T03 stays in progress and merge is unauthorized.
+
+[F9-T04](tasks/F9-T04.md) is implemented above PR #76 in
+`.worktrees/lean-slo-observations` on `feat/lean-slo-observations`. Canonical
+observations and counts share one table, ingestion marks derived work explicitly,
+and the preserving copy commits and verifies bounded batches before removing legacy
+storage. Race integration passes (storage 207.661 seconds), `make check` passes
+(storage 102.014 seconds and 82 browser cases), and all 15 container journeys pass
+in 4.0 minutes. The preview-copy migration rehearsal and final integrated performance
+seed remain pending; the task remains in progress and merge is unauthorized.
+
+[F9-T05](tasks/F9-T05.md) is implemented above PR #77 (`754682e`) in
+`.worktrees/lean-slo-keyset` on `feat/slo-overview-keyset`. The overview now uses
+filter-bound keyset cursors and per-request counts; snapshot admission, archives
+are removed with generated browser/CLI contract updates. The subsequent v1
+compatibility correction retains a required deprecated nonzero `snapshot_id`
+without restoring snapshot admission.
+`make check` passes (437 frontend tests, storage 100.621 seconds and 82 browser
+cases), and all 15 container journeys pass in 4.3 minutes. The integrated 35-day
+performance run remains pending, so the task remains in progress.
+
+Final lean-SLO 35-day verification, 2026-11-09: observation storage is published
+in [PR #77](https://github.com/dsolsona/almanac/pull/77), keyset pagination in
+[PR #78](https://github.com/dsolsona/almanac/pull/78), and the measured SLI-list
+ordering correction in [PR #79](https://github.com/dsolsona/almanac/pull/79).
+All four CI checks are green on those application checkpoints. The final
+`make test-perf PERF_DAYS=35` passes six checks in 7.5 minutes on `2484b92`:
+cold p95 is 427/279 ms for SLO list/detail and 200/215 ms for SLI list/detail;
+every cold/warm p95 is below 500 ms. The initial integrated run's SLI-list
+regression is preserved, with a failing-then-passing 200,000-row plan check.
+Canonical allocation is 946,724,864 bytes and derived allocation 32,030,720 bytes,
+14.71% and 88.55% below the recorded baseline snapshot. Actual-minute WAL samples
+and per-table/index totals are in [F9-T06](tasks/F9-T06.md). These are 35-day
+snapshot figures, without production/yearly or WAL-savings extrapolation.
+The 365-day run, preview-copy rehearsal, full-fleet response equivalence,
+performance late-write/retention scenarios and unavailable statement counters
+remain open acceptance gaps. No PR has been merged.
+
 # Delivery status
 
 Optional development tooling, 2026-11-10: [F1-T21](tasks/F1-T21.md) implements
 prepared Firecracker bases, CoW workers, authentication and lifecycle Make targets
 on `feat/firecracker-multi`. Offline checks pass; real base creation and concurrent
 clone boot remain unverified because host sudo authentication was unavailable.
-The maintainer authorized a local commit; publication and merging remain unauthorized.
+The maintainer authorized commits, push and PR publication; merging into main remains unauthorized.
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:
 the end-to-end settings first-visit check recorded 1,041 ms against the 1,000 ms
@@ -52,6 +220,27 @@ restored app and agent against the existing schema-44 database and passed host
 HTTPS readiness. The primary checkout still only knows schema 43; local startup
 must use the candidate worktree until integration. Commit, publication and merge
 remain unauthorized.
+SLI/SLO efficiency review, 2026-11-09: the arithmetic is exact and no numerical
+defect was found. The derived layer stores each computed value several times as
+verbose JSON (one retained point measures 3,633 bytes; about 1.9 GB of points and
+3 GB of tiles per SLO-year at 60 s, estimated from the schema) and runs five queues
+to keep them coherent. A first draft proposed cumulative sums; a branch review the
+same day found stale-sum, retention-floor, global-fence and cadence-offset defects
+in it, and the maintainer delegated the design decision to the primary agent.
+The proposal in [ADR-0040](adr/0040-cumulative-sums-and-compact-extrema.md) and
+draft [SPEC-0020](specs/0020-cumulative-slo-calculation.md) now keeps the exact
+hourly aggregates and batched window query as the only source path and replaces
+points, tiles, summaries, the repair cursor and history jobs with compact extrema
+rows holding complete evaluation inputs, built by one cursor per SLO; late data
+beyond the retention cutoff uses the explicit expired outcome. Estimated derived
+size is about 50 MB per SLO-year, to be measured by F9-T06. Independent proposals:
+[ADR-0041](adr/0041-one-observation-table-with-cumulative-sums.md) merges the
+observation tables with explicit marking; [ADR-0042](adr/0042-keyset-overview-pagination.md)
+is keyset list pagination. [Plan 0030](plans/0030-lean-slo-derived-data.md) and
+tasks F9-T01 to F9-T06 are written; F9-T01 and the F9-T06 baseline are ready inside
+accepted contracts, the rest wait for acceptance. Nothing is implemented. Published
+as PR [#72](https://github.com/dsolsona/almanac/pull/72) on `design/lean-slo-derived-data`,
+base `ea501bc`; merge is not authorized.
 
 PR [#68](https://github.com/dsolsona/almanac/pull/68) Greptile follow-up, 2026-11-08:
 six current findings are corrected with failing-then-passing regressions: remote

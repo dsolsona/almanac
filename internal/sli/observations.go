@@ -23,6 +23,12 @@ func LatestSettledEnd(now time.Time, cadenceSeconds, settlingSeconds int) time.T
 	return time.UnixMicro(quotient * cadence).UTC()
 }
 
+// LatestDueEnd allows one cadence for completion, rounded to the next snapshot tick.
+func LatestDueEnd(now time.Time, id string, cadenceSeconds, settlingSeconds int) time.Time {
+	now = LatestSettledEnd(now, cadenceSeconds, 0)
+	return LatestSettledEnd(now.Add(-DispatchPhase(id, cadenceSeconds)-time.Duration(cadenceSeconds)*time.Second), cadenceSeconds, settlingSeconds)
+}
+
 // DispatchPhase uses the first 64 bits of SHA-256 of the SLI ID, modulo the
 // cadence in microseconds. This algorithm and precision are stable across runs.
 func DispatchPhase(id string, cadenceSeconds int) time.Duration {
