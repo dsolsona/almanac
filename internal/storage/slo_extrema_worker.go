@@ -150,9 +150,17 @@ func extremaBuildEnd(start, closed time.Time, window, cadence time.Duration) tim
 }
 
 func buildExtremaHour(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, base slo.WindowInput, start time.Time) (extremaLanes, error) {
+	end := start.Add(time.Hour)
+	if !end.After(maxTime(base.ValidFrom, base.SliValidFrom, base.RetentionStart)) {
+		reader := retainedSeriesReader{row: row}
+		tile, err := reader.beforeValidity(ctx, base, retainedReadPart{start: start, end: end, resolution: 3600})
+		if err != nil {
+			return extremaLanes{}, err
+		}
+		return makeExtremaLanes([4][]api.SloOperationalSample{tile.Budget, tile.Attainment, tile.Burn1h, tile.Burn6h}, start, end, base.Target, base.Cadence)
+	}
 	durations := retainedRepairDurations(base.Duration, base.Cadence)
 	var inputs []slo.WindowInput
-	end := start.Add(time.Hour)
 	for at := floorSliBoundary(start, base.Cadence).Add(base.Cadence); !at.After(end); at = at.Add(base.Cadence) {
 		for _, duration := range durations {
 			input := base

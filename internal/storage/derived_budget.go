@@ -26,7 +26,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 	eligible := maxTime(start.Truncate(time.Hour), maxTime(base.ValidFrom, base.SliValidFrom).Truncate(time.Hour))
 	state, err := q.ReadSloBudgetExtremaState(ctx, dbgen.ReadSloBudgetExtremaStateParams{SloID: row.ID,
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
-		CalculationVersion: operationalCalculationVersion, RangeStart: timestamp(eligible), ClosedThrough: timestamp(closed)})
+		CalculationVersion: operationalCalculationVersion, RangeStart: timestamp(start.Truncate(time.Hour)), EligibleStart: timestamp(eligible), ClosedThrough: timestamp(closed)})
 	if err != nil {
 		return nil, err
 	}
