@@ -301,7 +301,7 @@ type overviewCursor struct {
 func ReadSloOperationalOverview(ctx context.Context, databaseURL string, input OperationalOverviewInput) (api.SloOperationalOverviewPage, error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "slo.overview.read")
 	defer span.End()
-	if input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) || input.Limit < 0 || input.Limit > 200 || !validOperationalQuery(input.Query) || len(input.Cursor) > 2048 {
+	if input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) || input.Limit < 0 || input.Limit > 200 || !validOperationalQuery(input.Query) || len(input.Cursor) > 512 {
 		return api.SloOperationalOverviewPage{}, ErrOperationalRange
 	}
 	if input.Limit == 0 {
@@ -434,7 +434,7 @@ func encodeOverviewCursor(value overviewCursor) string {
 func decodeOverviewCursor(value string) (overviewCursor, bool) {
 	var cursor overviewCursor
 	raw, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(value) > 2048 || base64.RawURLEncoding.EncodeToString(raw) != value || json.Unmarshal(raw, &cursor, json.RejectUnknownMembers(true)) != nil {
+	if err != nil || len(value) > 512 || base64.RawURLEncoding.EncodeToString(raw) != value || json.Unmarshal(raw, &cursor, json.RejectUnknownMembers(true)) != nil {
 		return cursor, false
 	}
 	digest, err := hex.DecodeString(cursor.Filter)

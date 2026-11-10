@@ -121,7 +121,7 @@ function validDailyCompliance(value:unknown,summary:unknown,objective:Record<str
 }
 function validOperationalOverview(value:unknown):boolean {
   if(!record(value)||!Array.isArray(value.items)||value.items.length>200||!record(value.group_counts)||
-    typeof value.next_cursor!=='string'||value.next_cursor.length>2048||typeof value.previous_cursor!=='string'||value.previous_cursor.length>2048) return false;
+    typeof value.next_cursor!=='string'||value.next_cursor.length>512||typeof value.previous_cursor!=='string'||value.previous_cursor.length>512) return false;
   const counts=value.group_counts;
   if(!['needs_attention','watch','healthy'].every(k=>nonnegativeInteger(counts[k]))) return false;
   return value.items.every(item=>{
