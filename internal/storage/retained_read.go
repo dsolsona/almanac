@@ -65,15 +65,18 @@ func (c *retainedSeriesReader) beforeValidity(ctx context.Context, base slo.Wind
 	revision := strconv.FormatInt(c.row.DefinitionRevision, 10)
 	points := []retainedSloPoint{}
 	first, last := floorSliBoundary(part.start, base.Cadence).Add(base.Cadence), floorSliBoundary(part.end, base.Cadence)
-	for at := first; !at.After(last); at = last {
+	valid := ceilSliBoundary(maxTime(base.ValidFrom, base.SliValidFrom), base.Cadence)
+	endpoints := []time.Time{first, last, valid, valid.Add(base.Cadence)}
+	slices.SortFunc(endpoints, time.Time.Compare)
+	for _, at := range slices.Compact(endpoints) {
+		if at.Before(first) || at.After(last) {
+			continue
+		}
 		point, err := c.unobservedPoint(ctx, base, at)
 		if err != nil {
 			return retainedSloTile{}, err
 		}
 		points = append(points, point)
-		if at.Equal(last) {
-			break
-		}
 	}
 	return compactRetainedPoints(points, part.start, part.end, c.row.Target, revision)
 }

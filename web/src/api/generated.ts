@@ -770,7 +770,7 @@ export interface paths {
         };
         /**
          * Read bounded preparation progress and exhausted-job diagnostics
-         * @description Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+         * @description Returns at most 100 current, history and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
          */
         get: operations["getSloPreparation"];
         put?: never;
@@ -792,7 +792,7 @@ export interface paths {
         put?: never;
         /**
          * Give one exhausted preparation job another bounded attempt budget
-         * @description Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+         * @description Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
          */
         post: operations["retrySloPreparation"];
         delete?: never;
