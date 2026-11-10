@@ -1,3 +1,18 @@
+Settings first-visit CI correction, 2026-11-10: application `557a5ef` fixes the
+reported PR [#73](https://github.com/dsolsona/almanac/pull/73) failure. Public
+route assets load from HTML preloads, prefetched modules render immediately,
+and authorized initial reads start without an extra timer. The unchanged UI
+readiness assertions run concurrently. CI run `42825825089` passes all four
+required suites; its 15 E2E journeys take 3.9 minutes and measure Settings at
+489.844149 ms and Users at 131.923434 ms, below the unchanged 1,000 ms limits.
+The original failed 1,006.105811 ms result is retained. The integrated
+`c575e1f` stack passes `make check` (310 observed seconds, 444 frontend tests,
+storage 128.453 seconds, 82 browser cases) and all 15 four-worker container
+journeys (4.6 minutes; Settings 247.130360 ms, Users 77.183120 ms). Detailed
+failure and verification evidence is in [F9-T01](tasks/F9-T01.md). The final
+shared-renderer benchmark and remaining descendant CI are tracked separately;
+no PR merge is authorized.
+
 CodeRabbit follow-up, 2026-11-10: all nine open lean-SLO PRs
 [#72](https://github.com/dsolsona/almanac/pull/72),
 [#73](https://github.com/dsolsona/almanac/pull/73),
