@@ -166,12 +166,11 @@ func buildCanonicalAttainmentSamples(ctx context.Context, base slo.WindowInput, 
 			index++
 		}
 		factIndex = index
-		expected := int64(bucketEnd.Sub(bucketStart) / cadence)
 		eligibleStart := ceilSliBoundary(maxTime(bucketStart, base.ValidFrom, base.SliValidFrom), cadence)
 		if eligibleStart.After(bucketEnd) {
 			eligibleStart = bucketEnd
 		}
-		expected = int64(bucketEnd.Sub(eligibleStart) / cadence)
+		expected := int64(bucketEnd.Sub(eligibleStart) / cadence)
 		retainedStart := maxTime(eligibleStart, ceilSliBoundary(base.Now.Add(-sli.ObservationRetention), cadence))
 		if retainedStart.After(bucketEnd) {
 			retainedStart = bucketEnd
@@ -237,13 +236,6 @@ func buildCanonicalAttainmentSamples(ctx context.Context, base slo.WindowInput, 
 			state = "known_empty"
 		} else if observed > 0 && (empty > 0 || expired > 0 || missing > 0) {
 			state = "partial"
-		}
-		if first != nil && last != nil {
-			freshness = "fresh"
-			if bucketEnd.After(last.Add(base.FreshnessGrace)) {
-				freshness = "stale"
-			}
-			_ = freshness
 		}
 		samples = append(samples, api.SloOperationalSample{BucketStart: bucketStart, BucketEnd: bucketEnd, EvaluationAt: bucketEnd, State: state,
 			Quality: quality, Revision: revision, Good: goodValue, Total: totalValue, Attainment: attainment, RetainedExtrema: []api.SloOperationalSampleRetainedExtrema{}})
