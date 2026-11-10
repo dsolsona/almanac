@@ -12,6 +12,10 @@ func TestOverviewCursorAcceptsBoundedKeysetAndRejectsMalformedKeys(t *testing.T)
 	if _, ok := decodeOverviewCursor(encode(valid)); !ok {
 		t.Fatal("valid keyset cursor was rejected")
 	}
+	longest := encode(strings.Replace(valid, "alpha", strings.Repeat("x", 63), 1))
+	if _, ok := decodeOverviewCursor(longest); !ok || len(longest) > 512 {
+		t.Fatal("maximum-length native SLO name broke the v1 overview cursor limit")
+	}
 	for _, raw := range []string{
 		strings.Replace(valid, `"r":1`, `"r":-1`, 1),
 		strings.Replace(valid, `"r":1`, `"r":3`, 1),

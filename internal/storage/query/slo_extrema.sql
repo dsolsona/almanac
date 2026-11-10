@@ -8,7 +8,7 @@ WITH expired AS (
       AND EXISTS (SELECT 1 FROM public.almanac_slos s WHERE s.id=w.slo_id AND s.definition_revision=w.definition_revision)
     RETURNING w.id
 ), candidate AS (
-    SELECT w.id FROM public.almanac_slo_extrema_cursor w
+    SELECT w.id,w.attempts AS prior_attempts FROM public.almanac_slo_extrema_cursor w
     JOIN public.almanac_slos s ON s.id=w.slo_id AND s.definition_revision=w.definition_revision
     WHERE w.calculation_version=sqlc.arg(calculation_version)
       AND NOT EXISTS (SELECT 1 FROM expired e WHERE e.id=w.id)
@@ -19,7 +19,7 @@ WITH expired AS (
 )
 UPDATE public.almanac_slo_extrema_cursor w
 SET attempts=LEAST(w.attempts+1,5),lease_epoch=w.lease_epoch+1,lease_until=sqlc.arg(lease_until)::timestamptz
-FROM candidate c WHERE w.id=c.id RETURNING w.*;
+FROM candidate c WHERE w.id=c.id RETURNING w.*,c.prior_attempts;
 
 -- name: PublishSloExtrema :execrows
 INSERT INTO public.almanac_slo_extrema
@@ -43,9 +43,12 @@ WHERE id=sqlc.arg(id) AND version=sqlc.arg(version) AND lease_epoch=sqlc.arg(lea
 
 -- name: DeferSloExtremaCursor :exec
 UPDATE public.almanac_slo_extrema_cursor SET lease_until=NULL,
-    attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,
-    next_attempt_at=sqlc.arg(next_attempt_at)::timestamptz,last_error=sqlc.narg(reason)::text
-WHERE id=sqlc.arg(id) AND lease_epoch=sqlc.arg(lease_epoch) AND version=sqlc.arg(version);
+    attempts=LEAST(attempts,sqlc.arg(prior_attempts)::integer),
+    next_attempt_at=CASE WHEN sqlc.arg(prior_attempts)::integer>=5 AND failing_since IS NOT NULL THEN
+        GREATEST(next_attempt_at,sqlc.arg(now)::timestamptz+CASE WHEN failing_since>sqlc.arg(now)::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END)
+        ELSE GREATEST(next_attempt_at,sqlc.arg(next_attempt_at)::timestamptz) END,
+    last_error=CASE WHEN version<>sqlc.arg(version) OR failing_since IS NOT NULL THEN last_error ELSE sqlc.narg(reason)::text END
+WHERE id=sqlc.arg(id) AND lease_epoch=sqlc.arg(lease_epoch) AND lease_until IS NOT NULL;
 
 -- name: FailSloExtremaCursor :exec
 UPDATE public.almanac_slo_extrema_cursor SET lease_until=NULL,

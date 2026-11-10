@@ -760,7 +760,7 @@ paths:
         - {name: service_id, in: query, required: false, schema: {type: string, format: uuid}}
         - {name: urgency, in: query, required: false, schema: {type: string, enum: [needs_attention, watch, healthy]}}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
-        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 2048}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 512}}
       responses:
         '200': {description: Current operational overview page, content: {application/json: {schema: {$ref: '#/components/schemas/SloOperationalOverviewPage'}}}}
         '400': {description: Invalid filter, cursor or cursor binding, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
@@ -1286,8 +1286,8 @@ components:
         snapshot_id: {type: string, format: uuid, deprecated: true, description: Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.}
         items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SloOperationalOverviewItem'}}
         group_counts: {$ref: '#/components/schemas/SloUrgencyCounts'}
-        next_cursor: {type: string, maxLength: 2048, description: Keyset cursor after this page; empty when no further row was found.}
-        previous_cursor: {type: string, maxLength: 2048, description: Keyset cursor before this page; empty on the first page.}
+        next_cursor: {type: string, maxLength: 512, description: Keyset cursor after this page; empty when no further row was found.}
+        previous_cursor: {type: string, maxLength: 512, description: Keyset cursor before this page; empty on the first page.}
     SloUrgencyCounts:
       type: object
       required: [needs_attention, watch, healthy]
