@@ -157,7 +157,7 @@ or versioned during the API contract review; do not silently alter generated typ
 
 ADR-0042 replaces the 2026-11-01 list snapshot admission clarification. Overview
 pages use the existing 10/20-row controls, default 50/max 200 API limit and
-filter-bound cursors of at most 2,048 bytes. There are no snapshot slots, byte
+filter-bound cursors of at most 512 bytes. There are no snapshot slots, byte
 reservations, fingerprints or full-result materializations. Lists must not
 automatically poll preparing history or refresh without an explicit user action.
 
