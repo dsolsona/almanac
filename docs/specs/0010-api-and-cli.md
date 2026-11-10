@@ -112,9 +112,10 @@ A one-record page must fit within the declared per-field bounds; otherwise the
 response violates the contract. Projection fields remain complete and exact. Other
 response limits remain independent. Under accepted
 [ADR-0042](../adr/0042-keyset-overview-pagination.md), the SLO overview uses
-filter/limit-bound keyset cursors up to 2,048 bytes in urgency rank, lowercase
+filter/limit-bound keyset cursors up to 512 bytes in urgency rank, lowercase
 name and UUID order, with reverse traversal for previous pages. Its response
-has per-row generations and no `snapshot_id`; rows can move between requests.
+has per-row generations and a required deprecated nonzero `snapshot_id` response
+UUID; rows can move between requests, and that identifier does not freeze them.
 Public names are validated and immutable
 where referenced by OpenSLO; renaming display text is separate. Maximum body defaults
 1 MiB management/4 MiB ingestion; OpenSLO import explicitly allows 5 MiB and 1,000
