@@ -1,3 +1,13 @@
+PR #73 CodeRabbit follow-up, 2026-11-10: `7b9ba35` guards optional-runtime
+history hit/miss metrics, removes dead oracle assignments and clarifies that
+measurement roots follow the measured schema. The nil-pointer regression first
+failed, then passed on both the original pipeline and integrated extrema stack.
+Both review threads have replies and are resolved. After propagation through
+PRs #75–#81, `make check` passes in an observed 290 seconds and all 15 isolated
+container journeys pass in 4.1 minutes (301 seconds observed). See
+[F9-T01](tasks/F9-T01.md). New PR #72 documentation at `a140fc8` remains separate;
+benchmarks were not repeated and merge is unauthorized.
+
 Lean SLO retention review follow-up, 2026-11-10: `fix/slo-expired-history` in
 `.worktrees/lean-slo-expired-history`, based on `5e19912`, corrects permanently
 pending historical reads after extrema cleanup. Absent expired hours and compliance
