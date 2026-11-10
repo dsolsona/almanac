@@ -32,6 +32,7 @@ func routeDocuments(assets fs.FS) (map[string][]byte, error) {
 	}
 	documents := make(map[string][]byte)
 	for key, roots := range map[string][]string{
+		"settings":   {"src/settings/SettingsPage.tsx"},
 		"slis":       {"src/slis/SlisPage.tsx"},
 		"slos":       {"src/slos/SlosPage.tsx"},
 		"slo-list":   {"src/slos/SlosPage.tsx", "src/components/charts/BudgetSparklinePlot.tsx"},
@@ -72,6 +73,9 @@ func routeDocuments(assets fs.FS) (map[string][]byte, error) {
 }
 
 func routeDocumentKey(path string) string {
+	if settingsPath.MatchString(path) {
+		return "settings"
+	}
 	if path == "/slos" {
 		return "slo-list"
 	}

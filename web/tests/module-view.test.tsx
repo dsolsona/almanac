@@ -22,6 +22,17 @@ it('reveals resolved code without a timer and ignores superseded imports', async
   expect(two).toHaveBeenCalledOnce();
 });
 
+it('renders a previously loaded module immediately on a new mount', async () => {
+  function View({ name }: { name: string }) { return <p>{name}</p>; }
+  const load = vi.fn(async () => ({ default: View }));
+  const first = render(<ModuleView load={load} componentProps={{ name: 'first' }} fallback={<p>Opening page</p>} />);
+  expect(await screen.findByText('first')).toBeVisible();
+  first.unmount();
+  render(<ModuleView load={load} componentProps={{ name: 'second' }} fallback={<p>Opening page</p>} />);
+  expect(screen.getByText('second')).toBeVisible();
+  expect(load).toHaveBeenCalledOnce();
+});
+
 it('preserves the surrounding screen error boundary for failed imports', async () => {
   class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
     state = { failed: false };
