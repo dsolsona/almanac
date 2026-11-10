@@ -22,15 +22,12 @@ func TestIntegrationRetainedDailyMetAndShortenedMatchRawOracle(t *testing.T) {
 	t.Parallel()
 	s := newSelfHealFixture(t, "daily-retained-oracle", true)
 	end := utcDayStart(s.at).Add(24 * time.Hour)
-	if _, err := s.conn.Exec(t.Context(), `WITH added AS (
-INSERT INTO public.almanac_sli_coverage
-(interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point,c.sli_id,c.measurement_revision,point+interval '1 minute','observed',c.result_digest,'{}',
-gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,point+interval '1 minute',point+interval '1 minute'
-FROM (SELECT * FROM public.almanac_sli_coverage WHERE sli_id=$1 LIMIT 1)c
-CROSS JOIN generate_series($2::timestamptz-interval '1 hour',$2::timestamptz-interval '1 minute',interval '1 minute')point
-RETURNING interval_start,sli_id,measurement_revision)
-INSERT INTO public.almanac_sli_observation_values SELECT interval_start,sli_id,measurement_revision,990,1000 FROM added`, s.sliID, end); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, `INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,c.sli_id,c.measurement_revision,'observed',990,1000,c.result_digest,'{}',
+gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,point+interval '1 minute',point+interval '1 minute'
+FROM (SELECT * FROM public.almanac_sli_observations WHERE sli_id=$1 LIMIT 1)c
+CROSS JOIN generate_series($2::timestamptz-interval '1 hour',$2::timestamptz-interval '1 minute',interval '1 minute')point`, s.sliID, end); err != nil {
 		t.Fatal(err)
 	}
 	s.now = end.Add(90 * time.Second)
