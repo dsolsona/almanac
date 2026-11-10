@@ -369,7 +369,9 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if err == nil {
 		var result api.SloOperationalDetail
 		if json.Unmarshal(cached.Payload, &result) == nil && preparedHistoryMatches(result, key, cached.GenerationID) {
-			input.Runtime.metrics.historyHits.Add(1)
+			if input.Runtime != nil {
+				input.Runtime.metrics.historyHits.Add(1)
+			}
 			// Display metadata is mutable independently of calculation revisions.
 			result.Objective = sloRecordDTO(sloRecord(row))
 			result.RequestedAt = bound.requestedAt
@@ -381,7 +383,9 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return api.SloOperationalDetail{}, err
 	}
-	input.Runtime.metrics.historyMisses.Add(1)
+	if input.Runtime != nil {
+		input.Runtime.metrics.historyMisses.Add(1)
+	}
 	calculation.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
 	result, err = buildSloOperationalDetail(ctx, q, row, source, calculation)
 	if err != nil {
