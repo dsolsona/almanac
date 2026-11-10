@@ -117,6 +117,26 @@ func TestOperationalOverviewUsesServerFiltersAndValidatesProjection(t *testing.T
 	}
 }
 
+func TestOperationalOverviewRequiresCompatibilityUUID(t *testing.T) {
+	for _, field := range []string{"", `"snapshot_id":null,`, `"snapshot_id":"00000000-0000-0000-0000-000000000000",`, `"snapshot_id":"invalid",`} {
+		t.Run(field, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, `{`+field+`"items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`)
+			}))
+			defer server.Close()
+			ops, err := api.NewClient(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = New(ops, func(context.Context, *http.Request) error { return nil }).Do(t.Context(), Input{Kind: "slos", Action: "overview", Limit: 50})
+			failure, ok := errors.AsType[*datasourceclient.Failure](err)
+			if !ok || failure.Code != "invalid_response" {
+				t.Fatalf("accepted missing or invalid compatibility UUID: %v", err)
+			}
+		})
+	}
+}
+
 func TestOperationalOverviewAccepts128UnicodeCharacters(t *testing.T) {
 	query := strings.Repeat("é", 65)
 	calls := 0
