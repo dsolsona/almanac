@@ -257,7 +257,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     typeof item.rolling_window_seconds === 'number' && Number.isSafeInteger(item.rolling_window_seconds) && item.rolling_window_seconds > 0 &&
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
-  const valid = isOverview ? validOperationalOverview(value)
+  const valid = isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
     : valuesPath ? validHistoryValues(value,valuesPath[2]!,valuesPath[1]!,new URLSearchParams(path.split('?')[1]??''))
     : statusID ? validCurrentStatus(value,statusID)
     : operationalID ? validOperationalDetail(value,operationalID)

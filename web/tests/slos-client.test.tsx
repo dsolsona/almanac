@@ -146,6 +146,11 @@ it('requests server-filtered operational pages and rejects incomplete operationa
  await expect(sloClient.overview()).rejects.toThrow('invalid response');
 });
 
+it.each([undefined,null,'00000000-0000-0000-0000-000000000000','invalid'])('rejects an overview with missing or invalid compatibility UUID: %s',async snapshot_id=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({snapshot_id,items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''}),{status:200})));
+ await expect(sloClient.overview()).rejects.toThrow('invalid response');
+});
+
 it('cancels an operational response when its streamed body exceeds the fixed 20 MiB cap',async()=>{
  let cancelled=false;
  const body=new ReadableStream<Uint8Array>({pull(controller){controller.enqueue(new Uint8Array(20*1024*1024+1));},cancel(){cancelled=true;}});

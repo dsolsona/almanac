@@ -1,3 +1,33 @@
+CodeRabbit follow-up, 2026-11-10: all nine open lean-SLO PRs
+[#72](https://github.com/dsolsona/almanac/pull/72),
+[#73](https://github.com/dsolsona/almanac/pull/73),
+[#75](https://github.com/dsolsona/almanac/pull/75) through
+[#81](https://github.com/dsolsona/almanac/pull/81) were inspected, including
+outside-diff review comments. Valid findings cover retry/lease fencing,
+first-day preparation bounds, retained daily and eviction comparisons,
+sparkline readiness, original receipt identities/digests during migration,
+standalone index availability, empty-page recovery, compatibility UUIDs,
+cursor limits and expired-row existence. Accepted design tradeoffs remain
+explicit in ADR-0040/0041/0042 and SPEC-0020. Each PR is ready for review;
+implementation acceptance gaps below remain open and no merge is authorized.
+
+Integrated application checkpoint `ad0aafd` passes `make check` (303 seconds,
+storage 115.454 seconds, 437 frontend tests and 82 browser cases in 2.0 minutes)
+and all 15 sequential `make test-e2e` journeys (4.4 minutes). The new daily
+comparisons pass integration on `5f3ae0e` (storage 118.668 seconds); the initial
+propagation attempt exposed a missing test import, corrected before that pass.
+Legacy overview preparation on PR #73 now defers pending retained tiles
+(`6f0fdf3`, storage integration 66.887 seconds); PR #76 retires that job.
+The latest client UUID validation and final performance checks are pending.
+A browser CI failure on PR #76's prior `89359aa` timed out in charts/services/
+settings and closed browser contexts; it is not dismissed by local success.
+Review amendments affect unreleased migrations only; released 0001–0044 and
+operator databases are unchanged. Historical performance JSON is now preserved
+under `docs/evidence/lean-slo/`, linked from [F9-T06](tasks/F9-T06.md).
+
+Earlier delivery checkpoints follow; their draft/measurement statements describe
+those checkpoints, not current PR readiness or completion of remaining criteria.
+
 PR #73 CodeRabbit follow-up, 2026-11-10: `7b9ba35` guards optional-runtime
 history hit/miss metrics, removes dead oracle assignments and clarifies that
 measurement roots follow the measured schema. The nil-pointer regression first
@@ -5,8 +35,8 @@ failed, then passed on both the original pipeline and integrated extrema stack.
 Both review threads have replies and are resolved. After propagation through
 PRs #75–#81, `make check` passes in an observed 290 seconds and all 15 isolated
 container journeys pass in 4.1 minutes (301 seconds observed). See
-[F9-T01](tasks/F9-T01.md). New PR #72 documentation at `a140fc8` remains separate;
-benchmarks were not repeated and merge is unauthorized.
+[F9-T01](tasks/F9-T01.md). Later PR #72 clarifications are now integrated through the stack;
+benchmarks were not repeated at that checkpoint and merge remains unauthorized.
 
 Lean SLO retention review follow-up, 2026-11-10: `fix/slo-expired-history` in
 `.worktrees/lean-slo-expired-history`, based on `5e19912`, corrects permanently
@@ -71,7 +101,9 @@ seed remain pending; the task remains in progress and merge is unauthorized.
 [F9-T05](tasks/F9-T05.md) is implemented above PR #77 (`754682e`) in
 `.worktrees/lean-slo-keyset` on `feat/slo-overview-keyset`. The overview now uses
 filter-bound keyset cursors and per-request counts; snapshot admission, archives
-and `snapshot_id` are removed with generated browser/CLI contract updates.
+are removed with generated browser/CLI contract updates. The subsequent v1
+compatibility correction retains a required deprecated nonzero `snapshot_id`
+without restoring snapshot admission.
 `make check` passes (437 frontend tests, storage 100.621 seconds and 82 browser
 cases), and all 15 container journeys pass in 4.3 minutes. The integrated 35-day
 performance run remains pending, so the task remains in progress.
