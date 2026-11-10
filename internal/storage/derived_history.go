@@ -275,6 +275,9 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	if err != nil {
 		return err
 	}
+	if input.retainedReader.pending {
+		return ErrDerivedPending
+	}
 	generationID, err := q.InsertDerivedGeneration(bounded, dbgen.InsertDerivedGenerationParams{SloID: job.SloID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 		SourceGeneration: sourceGeneration, CalculationVersion: value.CalculationVersion, EvaluatedThrough: job.EvaluatedThrough, RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), PublishedAt: timestamp(clock())})
 	if err != nil {
