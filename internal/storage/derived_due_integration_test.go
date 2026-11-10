@@ -3,6 +3,8 @@
 package storage
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -37,6 +39,37 @@ func TestIntegrationEmptyDerivedFleetSleepsForOneSecond(t *testing.T) {
 	if err != nil || maintenance.CleanupDue || maintenance.RetentionDue || maintenance.DiscoveryDue ||
 		maintenance.PartitionsDue || maintenance.ConsistencyDue || !maintenance.NextDue.Time.Equal(now.Add(time.Second)) {
 		t.Fatalf("empty maintenance fleet did not sleep: %+v, %v", maintenance, err)
+	}
+}
+
+func TestIntegrationLockedExtremaCursorDoesNotBusyPoll(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "extrema-locked-due", true)
+	id := s.createSLO(t, "extrema-locked-due")
+	now := time.Now().UTC()
+	q := dbgen.New(s.conn)
+	if _, err := q.EnsureSloExtremaCursors(t.Context(), dbgen.EnsureSloExtremaCursorsParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion}); err != nil {
+		t.Fatal(err)
+	}
+	due, err := q.ReadExtremaDue(t.Context(), dbgen.ReadExtremaDueParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
+	if err != nil || !due.ExtremaDue || due.EnsureCursorsDue {
+		t.Fatalf("fixture has no existing due cursor: %+v %v", due, err)
+	}
+	tx, err := s.conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(t.Context(), `SELECT 1 FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1 FOR UPDATE`, id); err != nil {
+		t.Fatal(err)
+	}
+	before := s.runtime.metrics.queries[DerivedTraffic].count.Load()
+	ctx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
+	defer cancel()
+	s.runtime.RunHistory(ctx, slog.Default())
+	queries := s.runtime.metrics.queries[DerivedTraffic].count.Load() - before
+	if ctx.Err() != context.DeadlineExceeded || queries < 2 || queries > 4 {
+		t.Fatalf("locked cursor did not back off and cancel: queries=%d err=%v", queries, ctx.Err())
 	}
 }
 
