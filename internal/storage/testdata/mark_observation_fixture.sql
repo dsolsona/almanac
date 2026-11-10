@@ -40,8 +40,12 @@ WITH pending AS MATERIALIZED (
 UPDATE public.almanac_slo_extrema_cursor w
 SET dirty_from=LEAST(w.dirty_from,a.first_hour),
  dirty_to=GREATEST(w.dirty_to,a.last_hour+(GREATEST(d.rolling_window_seconds,21600)+3600)*interval '1 second'),
- version=w.version+a.observations,attempts=0,failing_since=NULL,last_error=NULL,
- next_attempt_at=LEAST(w.next_attempt_at,a.next_attempt_at)
+ version=w.version+a.observations,
+ attempts=CASE WHEN w.failing_since<=a.next_attempt_at-interval '7 days' THEN 0 ELSE w.attempts END,
+ last_error=CASE WHEN w.failing_since<=a.next_attempt_at-interval '7 days' THEN NULL ELSE w.last_error END,
+ failing_since=CASE WHEN w.failing_since<=a.next_attempt_at-interval '7 days' THEN NULL ELSE w.failing_since END,
+ next_attempt_at=CASE WHEN w.failing_since IS NOT NULL AND w.failing_since>a.next_attempt_at-interval '7 days'
+ THEN w.next_attempt_at ELSE LEAST(w.next_attempt_at,a.next_attempt_at) END
 FROM affected a JOIN public.almanac_slo_definitions d ON d.sli_id=a.sli_id AND d.measurement_revision=a.measurement_revision
 JOIN public.almanac_slos s ON s.id=d.slo_id AND s.definition_revision=d.revision
 WHERE w.slo_id=d.slo_id AND w.definition_revision=d.revision AND w.measurement_revision=d.measurement_revision;

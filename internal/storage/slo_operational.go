@@ -408,11 +408,22 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 		if (cursor.Reverse && more) || (!cursor.Reverse && input.Cursor != "") {
 			previous = key(rows[0], true)
 		}
+	} else if input.Cursor != "" {
+		cursor.Reverse = !cursor.Reverse
+		if cursor.Reverse {
+			previous = encodeOverviewCursor(cursor)
+		} else {
+			next = encodeOverviewCursor(cursor)
+		}
+	}
+	responseID, err := uuid.NewRandom()
+	if err != nil {
+		return api.SloOperationalOverviewPage{}, errors.New("storage: overview response identifier unavailable")
 	}
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloOperationalOverviewPage{}, err
 	}
-	return api.SloOperationalOverviewPage{Items: items, GroupCounts: counts, NextCursor: next, PreviousCursor: previous}, nil
+	return api.SloOperationalOverviewPage{SnapshotId: responseID, Items: items, GroupCounts: counts, NextCursor: next, PreviousCursor: previous}, nil
 }
 
 func encodeOverviewCursor(value overviewCursor) string {

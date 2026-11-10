@@ -7,8 +7,12 @@ BEGIN
     SET dirty_from=LEAST(w.dirty_from,date_trunc('hour',NEW.interval_start AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),
         dirty_to=GREATEST(w.dirty_to,(date_trunc('hour',NEW.interval_start AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
             +(GREATEST(d.rolling_window_seconds,21600)+3600)*interval '1 second'),
-        version=w.version+1,attempts=0,failing_since=NULL,last_error=NULL,
-        next_attempt_at=LEAST(w.next_attempt_at,NEW.recorded_at)
+        version=w.version+1,
+        attempts=CASE WHEN w.failing_since<=NEW.recorded_at-interval '7 days' THEN 0 ELSE w.attempts END,
+        last_error=CASE WHEN w.failing_since<=NEW.recorded_at-interval '7 days' THEN NULL ELSE w.last_error END,
+        failing_since=CASE WHEN w.failing_since<=NEW.recorded_at-interval '7 days' THEN NULL ELSE w.failing_since END,
+        next_attempt_at=CASE WHEN w.failing_since IS NOT NULL AND w.failing_since>NEW.recorded_at-interval '7 days'
+            THEN w.next_attempt_at ELSE LEAST(w.next_attempt_at,NEW.recorded_at) END
     FROM public.almanac_slo_definitions d
     JOIN public.almanac_slos s ON s.id=d.slo_id AND s.definition_revision=d.revision
     WHERE d.sli_id=NEW.sli_id AND d.measurement_revision=NEW.measurement_revision
