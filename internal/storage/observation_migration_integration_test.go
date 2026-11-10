@@ -3,12 +3,15 @@
 package storage
 
 import (
+	"context"
+	"encoding/json/v2"
 	"errors"
 	"io/fs"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -69,6 +72,7 @@ FOR EACH ROW EXECUTE FUNCTION public.almanac_test_interrupt_observation_copy('`+
 	if count != 200_000 || good != "19824691.357802400000" || total != "20000000.000000200000" {
 		t.Fatalf("copy changed exact rows/values: %d %s/%s", count, good, total)
 	}
+	verifySliProjectionPlanBounds(t, s, s.historyStart.Add(200_000*15*time.Second))
 	var lostIDs int
 	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c
 LEFT JOIN public.almanac_sli_delivery_receipts r ON r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id
@@ -76,6 +80,50 @@ WHERE r.observation_id IS DISTINCT FROM c.observation_id`).Scan(&lostIDs); err !
 		t.Fatalf("copy lost original observation identifiers without legacy receipts: %d %v", lostIDs, err)
 	}
 	t.Logf("200000 legacy observations copied with five-second batch bounds and interrupted-prefix recovery in %s", time.Since(started))
+}
+
+func verifySliProjectionPlanBounds(t *testing.T, s *selfHealFixture, at time.Time) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	tx, err := s.conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(ctx, "SET LOCAL statement_timeout='5s'; SET LOCAL jit=off"); err != nil {
+		t.Fatal(err)
+	}
+	captured := &rotationIndexQueryCapture{Tx: tx}
+	rows, err := dbgen.New(captured).ListSlis(ctx, dbgen.ListSlisParams{
+		CreatedAt: timestamp(time.Time{}), CursorID: uuidOrZero(""), LimitCount: 1,
+		RetentionCutoff: timestamp(at.Add(-365 * 24 * time.Hour)), ListNow: timestamp(at),
+	})
+	if err != nil || len(rows) != 1 || !rows[0].LatestIntervalStart.Time.Equal(at.Add(-15*time.Second)) {
+		t.Fatalf("large-history SLI projection: rows=%d err=%v", len(rows), err)
+	}
+	var body []byte
+	if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) "+captured.query, captured.args...).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	var plans []struct{ Plan rotationIndexPlanNode }
+	if err := json.Unmarshal(body, &plans); err != nil || len(plans) != 1 {
+		t.Fatalf("SLI projection plan: %v", err)
+	}
+	var visits float64
+	var inspect func(rotationIndexPlanNode)
+	inspect = func(node rotationIndexPlanNode) {
+		if strings.HasPrefix(node.RelationName, "almanac_sli_observations_") {
+			visits += (node.ActualRows + node.RowsRemovedByFilter + node.RowsRemovedByRecheck) * node.ActualLoops
+		}
+		for _, child := range node.Plans {
+			inspect(child)
+		}
+	}
+	inspect(plans[0].Plan)
+	if visits > 256 {
+		t.Fatalf("one-row SLI projection visited %.0f retained observations; want at most 256", visits)
+	}
 }
 
 func TestIntegrationObservationCopyRejectsInvalidLegacyFacts(t *testing.T) {

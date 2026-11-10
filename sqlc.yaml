@@ -53,6 +53,7 @@ sql:
       - internal/storage/migrations/0047_create_merged_observations.sql
       - internal/storage/migrations/0048_merge_sli_observations.sql
       - internal/storage/migrations/0049_drop_overview_snapshots.sql
+      - internal/storage/migrations/0050_sli_observation_history_order.sql
     gen:
       go:
         package: dbgen
