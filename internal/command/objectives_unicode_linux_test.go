@@ -25,7 +25,7 @@ func TestOperationalOverviewCommandSendsMultibyteQueryThroughClient(t *testing.T
 			_, _ = w.Write([]byte(`{"csrf_token":"csrf","session":{"user_id":"user-1","login":"owner","role":"administrator","restricted":false}}`))
 		case "/api/v1/slos/overview":
 			received = r.URL.Query().Get("q")
-			_, _ = w.Write([]byte(`{"snapshot_id":"11111111-1111-1111-1111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`))
+			_, _ = w.Write([]byte(`{"snapshot_id":"11111111-1111-4111-8111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`))
 		default:
 			http.NotFound(w, r)
 		}

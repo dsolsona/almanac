@@ -109,12 +109,8 @@ func (r *Runtime) cleanupDerivedSnapshots(ctx context.Context, now time.Time) (r
 	if _, err := q.DeleteExpiredSloExtrema(bounded, timestamp(now.Add(-365*24*time.Hour))); err != nil {
 		return err
 	}
-	if err := q.DeleteExpiredSloOverviewSnapshots(bounded, dbgen.DeleteExpiredSloOverviewSnapshotsParams{ExpiresAt: timestamp(now), Limit: sloOverviewCleanupBatch}); err != nil {
-		return err
-	}
 	if _, err := q.DeleteExpiredDerivedGenerations(bounded, timestamp(now.Add(-5*time.Minute))); err != nil {
 		return err
 	}
-	_, err = q.DeleteExpiredSloProjectionPayloads(bounded, timestamp(now.Add(-5*time.Minute)))
-	return err
+	return nil
 }

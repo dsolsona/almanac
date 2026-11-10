@@ -11,121 +11,56 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const findReusableSloOverviewSnapshot = `-- name: FindReusableSloOverviewSnapshot :one
-SELECT id FROM public.almanac_slo_overview_snapshots
-WHERE actor_id=$1 AND session_verifier=$2 AND role=$3
-  AND query_text=$4 AND service_id IS NOT DISTINCT FROM $5::uuid
-  AND urgency IS NOT DISTINCT FROM $6::text AND page_limit=$7
-  AND state='ready' AND expires_at>$8 AND publication_fingerprint=$9::bytea
-ORDER BY created_at DESC,id LIMIT 1
-`
-
-type FindReusableSloOverviewSnapshotParams struct {
-	ActorID         pgtype.UUID        `json:"actor_id"`
-	SessionVerifier []byte             `json:"session_verifier"`
-	Role            string             `json:"role"`
-	QueryText       string             `json:"query_text"`
-	ServiceID       pgtype.UUID        `json:"service_id"`
-	Urgency         pgtype.Text        `json:"urgency"`
-	PageLimit       int32              `json:"page_limit"`
-	Now             pgtype.Timestamptz `json:"now"`
-	Fingerprint     []byte             `json:"fingerprint"`
-}
-
-func (q *Queries) FindReusableSloOverviewSnapshot(ctx context.Context, arg FindReusableSloOverviewSnapshotParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, findReusableSloOverviewSnapshot,
-		arg.ActorID,
-		arg.SessionVerifier,
-		arg.Role,
-		arg.QueryText,
-		arg.ServiceID,
-		arg.Urgency,
-		arg.PageLimit,
-		arg.Now,
-		arg.Fingerprint,
-	)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const operationalScopeFingerprint = `-- name: OperationalScopeFingerprint :one
+const countSloOverviewGroups = `-- name: CountSloOverviewGroups :one
 WITH scope AS (
-    SELECT s.id,s.version,s.display_name,service.display_name AS service_name,measurement.display_name AS sli_name,
-           d.revision,d.measurement_revision,p.generation_id,p.payload_digest,
+    SELECT p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL
              AND g.source_generation<=coalesce(source.generation,0)
-             AND g.evaluated_through>=$2::timestamptz-interval '365 days'
-             AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS usable,
-           coalesce(source.generation,0) AS source_generation,
-           coalesce(f.attempts>=5,false) AS current_failed,
-           EXISTS(SELECT 1 FROM public.almanac_derived_dirty_ranges dirty WHERE dirty.sli_id=d.sli_id
-             AND dirty.measurement_revision=d.measurement_revision AND dirty.attempts>=5
-             AND (dirty.lease_until IS NULL OR dirty.lease_until<=$2::timestamptz)) AS source_failed,
-           EXISTS(SELECT 1 FROM public.almanac_slo_extrema_cursor w WHERE w.slo_id=s.id AND w.definition_revision=d.revision
-             AND w.measurement_revision=d.measurement_revision AND w.calculation_version=$1
-             AND w.attempts>=5) AS budget_failed,
+             AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-             AND EXISTS(SELECT 1 FROM public.almanac_slo_projection_payloads a WHERE a.digest=p.payload_digest),false) AS current
+             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds),false)::boolean AS current
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-    JOIN public.almanac_services service ON service.id=d.service_id
-    JOIN public.almanac_slis measurement ON measurement.id=d.sli_id
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
-    LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision
-      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
     WHERE ($3::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower($3::text))>0)
       AND ($4::uuid IS NULL OR d.service_id=$4::uuid)
-    ORDER BY s.id LIMIT 10001
+), classified AS (
+    SELECT CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency
+    FROM scope
 )
-SELECT sha256(convert_to(coalesce(jsonb_agg(jsonb_build_array(id,version,display_name,service_name,sli_name,
-           revision,measurement_revision,generation_id,source_generation,encode(payload_digest,'hex'),budget_failed,current,usable,current_failed,source_failed) ORDER BY id),'[]'::jsonb)::text,'UTF8'))::bytea AS fingerprint,
-       count(*)::bigint AS definition_count,coalesce(bool_and(current),true)::boolean AS current
-FROM scope
+SELECT count(*) FILTER(WHERE urgency='needs_attention')::bigint AS needs_attention,
+       count(*) FILTER(WHERE urgency='watch')::bigint AS watch,
+       count(*) FILTER(WHERE urgency='healthy')::bigint AS healthy
+FROM classified
 `
 
-type OperationalScopeFingerprintParams struct {
+type CountSloOverviewGroupsParams struct {
 	CalculationVersion string             `json:"calculation_version"`
 	Now                pgtype.Timestamptz `json:"now"`
 	QueryText          pgtype.Text        `json:"query_text"`
 	ServiceID          pgtype.UUID        `json:"service_id"`
 }
 
-type OperationalScopeFingerprintRow struct {
-	Fingerprint     []byte `json:"fingerprint"`
-	DefinitionCount int64  `json:"definition_count"`
-	Current         bool   `json:"current"`
+type CountSloOverviewGroupsRow struct {
+	NeedsAttention int64 `json:"needs_attention"`
+	Watch          int64 `json:"watch"`
+	Healthy        int64 `json:"healthy"`
 }
 
-func (q *Queries) OperationalScopeFingerprint(ctx context.Context, arg OperationalScopeFingerprintParams) (OperationalScopeFingerprintRow, error) {
-	row := q.db.QueryRow(ctx, operationalScopeFingerprint,
+func (q *Queries) CountSloOverviewGroups(ctx context.Context, arg CountSloOverviewGroupsParams) (CountSloOverviewGroupsRow, error) {
+	row := q.db.QueryRow(ctx, countSloOverviewGroups,
 		arg.CalculationVersion,
 		arg.Now,
 		arg.QueryText,
 		arg.ServiceID,
 	)
-	var i OperationalScopeFingerprintRow
-	err := row.Scan(&i.Fingerprint, &i.DefinitionCount, &i.Current)
+	var i CountSloOverviewGroupsRow
+	err := row.Scan(&i.NeedsAttention, &i.Watch, &i.Healthy)
 	return i, err
-}
-
-const setSloOverviewFingerprint = `-- name: SetSloOverviewFingerprint :exec
-UPDATE public.almanac_slo_overview_snapshots SET publication_fingerprint=$2 WHERE id=$1 AND state='ready'
-`
-
-type SetSloOverviewFingerprintParams struct {
-	ID                     pgtype.UUID `json:"id"`
-	PublicationFingerprint []byte      `json:"publication_fingerprint"`
-}
-
-func (q *Queries) SetSloOverviewFingerprint(ctx context.Context, arg SetSloOverviewFingerprintParams) error {
-	_, err := q.db.Exec(ctx, setSloOverviewFingerprint, arg.ID, arg.PublicationFingerprint)
-	return err
 }

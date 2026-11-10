@@ -235,12 +235,12 @@ WITH value AS (
       ELSE jsonb_build_object('_budget_cache',$7::jsonb) END AS payload
 )
 INSERT INTO public.almanac_slo_current_projections
-    (slo_id, generation_id, service_id, sort_name, urgency, payload,payload_digest)
+    (slo_id, generation_id, service_id, sort_name, urgency, payload)
 SELECT $1,$2,$3,$4,$5,
-       value.payload,sha256(convert_to(value.payload::text,'UTF8')) FROM value
+       value.payload FROM value
 ON CONFLICT (slo_id) DO UPDATE
 SET generation_id=EXCLUDED.generation_id, service_id=EXCLUDED.service_id,
-    sort_name=EXCLUDED.sort_name, urgency=EXCLUDED.urgency, payload=EXCLUDED.payload,payload_digest=EXCLUDED.payload_digest
+    sort_name=EXCLUDED.sort_name, urgency=EXCLUDED.urgency, payload=EXCLUDED.payload
 WHERE EXISTS (
     SELECT 1 FROM public.almanac_slo_derived_generations old_generation,
                   public.almanac_slo_derived_generations new_generation
@@ -261,7 +261,6 @@ type PublishDerivedCurrentProjectionParams struct {
 	BudgetCache  []byte      `json:"budget_cache"`
 }
 
-// The digest remains an archive/snapshot identity until F9-T05, not a read-time integrity check.
 func (q *Queries) PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, publishDerivedCurrentProjection,
 		arg.SloID,

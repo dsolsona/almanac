@@ -66,24 +66,6 @@ func (q *Queries) AggregateSloObservations(ctx context.Context, arg AggregateSlo
 	return i, err
 }
 
-const deleteExpiredSloOverviewSnapshots = `-- name: DeleteExpiredSloOverviewSnapshots :exec
-WITH expired AS (
-    SELECT snapshot.id FROM public.almanac_slo_overview_snapshots snapshot
-    WHERE snapshot.expires_at <= $1 ORDER BY snapshot.expires_at, snapshot.id LIMIT $2 FOR UPDATE SKIP LOCKED
-)
-DELETE FROM public.almanac_slo_overview_snapshots s USING expired e WHERE s.id=e.id
-`
-
-type DeleteExpiredSloOverviewSnapshotsParams struct {
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	Limit     int32              `json:"limit"`
-}
-
-func (q *Queries) DeleteExpiredSloOverviewSnapshots(ctx context.Context, arg DeleteExpiredSloOverviewSnapshotsParams) error {
-	_, err := q.db.Exec(ctx, deleteExpiredSloOverviewSnapshots, arg.ExpiresAt, arg.Limit)
-	return err
-}
-
 const deleteObjectiveCreateReceipt = `-- name: DeleteObjectiveCreateReceipt :exec
 DELETE FROM public.almanac_objective_create_receipts WHERE actor_id=$1 AND operation=$2 AND idempotency_key=$3 AND expires_at <= $4
 `
@@ -102,15 +84,6 @@ func (q *Queries) DeleteObjectiveCreateReceipt(ctx context.Context, arg DeleteOb
 		arg.IdempotencyKey,
 		arg.ExpiresAt,
 	)
-	return err
-}
-
-const deleteSloOverviewSnapshot = `-- name: DeleteSloOverviewSnapshot :exec
-DELETE FROM public.almanac_slo_overview_snapshots WHERE id=$1
-`
-
-func (q *Queries) DeleteSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSloOverviewSnapshot, id)
 	return err
 }
 
@@ -142,20 +115,6 @@ func (q *Queries) FindObjectiveCreateReceipt(ctx context.Context, arg FindObject
 		&i.ExpiresAt,
 	)
 	return i, err
-}
-
-const finishSloOverviewSnapshot = `-- name: FinishSloOverviewSnapshot :exec
-UPDATE public.almanac_slo_overview_snapshots SET state='ready',payload_bytes=$2 WHERE id=$1 AND state='preparing'
-`
-
-type FinishSloOverviewSnapshotParams struct {
-	ID           pgtype.UUID `json:"id"`
-	PayloadBytes int32       `json:"payload_bytes"`
-}
-
-func (q *Queries) FinishSloOverviewSnapshot(ctx context.Context, arg FinishSloOverviewSnapshotParams) error {
-	_, err := q.db.Exec(ctx, finishSloOverviewSnapshot, arg.ID, arg.PayloadBytes)
-	return err
 }
 
 const getService = `-- name: GetService :one
@@ -290,51 +249,6 @@ func (q *Queries) GetSloOperationalContext(ctx context.Context, arg GetSloOperat
 	return i, err
 }
 
-const getSloOverviewSnapshot = `-- name: GetSloOverviewSnapshot :one
-SELECT id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urgency,page_limit,
-       group_counts,state,payload_bytes,created_at,expires_at
-FROM public.almanac_slo_overview_snapshots WHERE id=$1 FOR UPDATE
-`
-
-type GetSloOverviewSnapshotRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	CursorSecret    []byte             `json:"cursor_secret"`
-	ActorID         pgtype.UUID        `json:"actor_id"`
-	SessionVerifier []byte             `json:"session_verifier"`
-	Role            string             `json:"role"`
-	QueryText       string             `json:"query_text"`
-	ServiceID       pgtype.UUID        `json:"service_id"`
-	Urgency         pgtype.Text        `json:"urgency"`
-	PageLimit       int32              `json:"page_limit"`
-	GroupCounts     []byte             `json:"group_counts"`
-	State           string             `json:"state"`
-	PayloadBytes    int32              `json:"payload_bytes"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) GetSloOverviewSnapshot(ctx context.Context, id pgtype.UUID) (GetSloOverviewSnapshotRow, error) {
-	row := q.db.QueryRow(ctx, getSloOverviewSnapshot, id)
-	var i GetSloOverviewSnapshotRow
-	err := row.Scan(
-		&i.ID,
-		&i.CursorSecret,
-		&i.ActorID,
-		&i.SessionVerifier,
-		&i.Role,
-		&i.QueryText,
-		&i.ServiceID,
-		&i.Urgency,
-		&i.PageLimit,
-		&i.GroupCounts,
-		&i.State,
-		&i.PayloadBytes,
-		&i.CreatedAt,
-		&i.ExpiresAt,
-	)
-	return i, err
-}
-
 const insertObjectiveCreateReceipt = `-- name: InsertObjectiveCreateReceipt :exec
 INSERT INTO public.almanac_objective_create_receipts(actor_id,operation,idempotency_key,request_digest,result_id,result,created_at,expires_at)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -463,73 +377,6 @@ func (q *Queries) InsertSloDefinition(ctx context.Context, arg InsertSloDefiniti
 	return err
 }
 
-const insertSloOverviewSnapshot = `-- name: InsertSloOverviewSnapshot :exec
-INSERT INTO public.almanac_slo_overview_snapshots
-(id,cursor_secret,actor_id,session_verifier,role,query_text,service_id,urgency,page_limit,group_counts,state,payload_bytes,created_at,expires_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'preparing',0,$11,$12)
-`
-
-type InsertSloOverviewSnapshotParams struct {
-	ID              pgtype.UUID        `json:"id"`
-	CursorSecret    []byte             `json:"cursor_secret"`
-	ActorID         pgtype.UUID        `json:"actor_id"`
-	SessionVerifier []byte             `json:"session_verifier"`
-	Role            string             `json:"role"`
-	QueryText       string             `json:"query_text"`
-	ServiceID       pgtype.UUID        `json:"service_id"`
-	Urgency         pgtype.Text        `json:"urgency"`
-	PageLimit       int32              `json:"page_limit"`
-	GroupCounts     []byte             `json:"group_counts"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) InsertSloOverviewSnapshot(ctx context.Context, arg InsertSloOverviewSnapshotParams) error {
-	_, err := q.db.Exec(ctx, insertSloOverviewSnapshot,
-		arg.ID,
-		arg.CursorSecret,
-		arg.ActorID,
-		arg.SessionVerifier,
-		arg.Role,
-		arg.QueryText,
-		arg.ServiceID,
-		arg.Urgency,
-		arg.PageLimit,
-		arg.GroupCounts,
-		arg.CreatedAt,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
-const insertSloOverviewSnapshotItems = `-- name: InsertSloOverviewSnapshotItems :exec
-WITH items AS (
-    SELECT unnest($2::text[]) AS urgency,
-           unnest($3::text[]) AS payload,
-           unnest($4::integer[]) AS payload_bytes,
-           generate_series(0,cardinality($2::text[])-1) AS ordinal
-)
-INSERT INTO public.almanac_slo_overview_snapshot_items(snapshot_id,ordinal,urgency,payload,payload_bytes)
-SELECT $1::uuid,ordinal,urgency,payload::jsonb,payload_bytes FROM items
-`
-
-type InsertSloOverviewSnapshotItemsParams struct {
-	SnapshotID   pgtype.UUID `json:"snapshot_id"`
-	Urgencies    []string    `json:"urgencies"`
-	Payloads     []string    `json:"payloads"`
-	PayloadSizes []int32     `json:"payload_sizes"`
-}
-
-func (q *Queries) InsertSloOverviewSnapshotItems(ctx context.Context, arg InsertSloOverviewSnapshotItemsParams) error {
-	_, err := q.db.Exec(ctx, insertSloOverviewSnapshotItems,
-		arg.SnapshotID,
-		arg.Urgencies,
-		arg.Payloads,
-		arg.PayloadSizes,
-	)
-	return err
-}
-
 const listServices = `-- name: ListServices :many
 SELECT id, name, display_name, version, created_at, updated_at, metadata, archived_at FROM public.almanac_services
 WHERE archived_at IS NULL AND (created_at, id) > ($1, $2::uuid) ORDER BY created_at, id LIMIT $3
@@ -559,60 +406,6 @@ func (q *Queries) ListServices(ctx context.Context, arg ListServicesParams) ([]A
 			&i.UpdatedAt,
 			&i.Metadata,
 			&i.ArchivedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSloOverviewSnapshotItems = `-- name: ListSloOverviewSnapshotItems :many
-SELECT i.ordinal,(coalesce(a.payload,'{}'::jsonb)||i.payload)::jsonb AS payload,
-       (a.digest IS NOT NULL)::boolean AS projection_valid,
-       (i.projection_current AND (i.projection_digest IS NULL OR
-           a.digest IS NOT NULL))::boolean AS projection_current,
-       coalesce((i.payload->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
-       coalesce((i.payload->>'_source_failed')::boolean,false)::boolean AS source_failed
-FROM public.almanac_slo_overview_snapshot_items i
-LEFT JOIN public.almanac_slo_projection_payloads a ON a.digest=i.projection_digest
-WHERE i.snapshot_id=$1 AND i.ordinal >= $2 ORDER BY i.ordinal LIMIT $3
-`
-
-type ListSloOverviewSnapshotItemsParams struct {
-	SnapshotID pgtype.UUID `json:"snapshot_id"`
-	Ordinal    int32       `json:"ordinal"`
-	Limit      int32       `json:"limit"`
-}
-
-type ListSloOverviewSnapshotItemsRow struct {
-	Ordinal           int32  `json:"ordinal"`
-	Payload           []byte `json:"payload"`
-	ProjectionValid   bool   `json:"projection_valid"`
-	ProjectionCurrent bool   `json:"projection_current"`
-	PreparationFailed bool   `json:"preparation_failed"`
-	SourceFailed      bool   `json:"source_failed"`
-}
-
-func (q *Queries) ListSloOverviewSnapshotItems(ctx context.Context, arg ListSloOverviewSnapshotItemsParams) ([]ListSloOverviewSnapshotItemsRow, error) {
-	rows, err := q.db.Query(ctx, listSloOverviewSnapshotItems, arg.SnapshotID, arg.Ordinal, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListSloOverviewSnapshotItemsRow{}
-	for rows.Next() {
-		var i ListSloOverviewSnapshotItemsRow
-		if err := rows.Scan(
-			&i.Ordinal,
-			&i.Payload,
-			&i.ProjectionValid,
-			&i.ProjectionCurrent,
-			&i.PreparationFailed,
-			&i.SourceFailed,
 		); err != nil {
 			return nil, err
 		}
@@ -772,53 +565,6 @@ func (q *Queries) ListSlos(ctx context.Context, arg ListSlosParams) ([]ListSlosR
 		return nil, err
 	}
 	return items, nil
-}
-
-const sloOverviewSnapshotUsage = `-- name: SloOverviewSnapshotUsage :one
-WITH charged AS (
-    SELECT actor_id=$1 AND session_verifier=$2 AS own_session,
-           state='preparing' AS preparing,
-           CASE WHEN state='preparing' THEN $3::bigint
-                ELSE greatest(payload_bytes::bigint,$4::bigint) END AS bytes
-    FROM public.almanac_slo_overview_snapshots WHERE expires_at>$5
-)
-SELECT count(*) FILTER (WHERE preparing AND own_session)::bigint AS session_builds,
-       count(*) FILTER (WHERE preparing)::bigint AS installation_builds,
-       coalesce(sum(bytes) FILTER (WHERE own_session),0)::bigint AS session_bytes,
-       coalesce(sum(bytes),0)::bigint AS installation_bytes FROM charged
-`
-
-type SloOverviewSnapshotUsageParams struct {
-	ActorID         pgtype.UUID        `json:"actor_id"`
-	SessionVerifier []byte             `json:"session_verifier"`
-	ReservedBytes   int64              `json:"reserved_bytes"`
-	MinimumBytes    int64              `json:"minimum_bytes"`
-	Now             pgtype.Timestamptz `json:"now"`
-}
-
-type SloOverviewSnapshotUsageRow struct {
-	SessionBuilds      int64 `json:"session_builds"`
-	InstallationBuilds int64 `json:"installation_builds"`
-	SessionBytes       int64 `json:"session_bytes"`
-	InstallationBytes  int64 `json:"installation_bytes"`
-}
-
-func (q *Queries) SloOverviewSnapshotUsage(ctx context.Context, arg SloOverviewSnapshotUsageParams) (SloOverviewSnapshotUsageRow, error) {
-	row := q.db.QueryRow(ctx, sloOverviewSnapshotUsage,
-		arg.ActorID,
-		arg.SessionVerifier,
-		arg.ReservedBytes,
-		arg.MinimumBytes,
-		arg.Now,
-	)
-	var i SloOverviewSnapshotUsageRow
-	err := row.Scan(
-		&i.SessionBuilds,
-		&i.InstallationBuilds,
-		&i.SessionBytes,
-		&i.InstallationBytes,
-	)
-	return i, err
 }
 
 const updateServiceMetadata = `-- name: UpdateServiceMetadata :one

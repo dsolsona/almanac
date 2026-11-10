@@ -132,8 +132,8 @@ it('shows safe guidance for an invalid historical start without echoing server t
 
 it('requests server-filtered operational pages and rejects incomplete operational projections', async () => {
  const fetcher=vi.fn()
-  .mockResolvedValueOnce(new Response(JSON.stringify({snapshot_id:id,items:[],group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}))
-  .mockResolvedValueOnce(new Response(JSON.stringify({snapshot_id:id,items:null,group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
+  .mockResolvedValueOnce(new Response(JSON.stringify({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}))
+  .mockResolvedValueOnce(new Response(JSON.stringify({items:null,snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:2,watch:3,healthy:4},next_cursor:'',previous_cursor:''}),{status:200}));
  vi.stubGlobal('fetch',fetcher);
  await expect(sloClient.overview({q:'checkout api',service_id:id,urgency:'watch',limit:25,cursor:'opaque'})).resolves.toMatchObject({group_counts:{watch:3}});
  const [url,init]=fetcher.mock.calls[0]!;
@@ -146,6 +146,11 @@ it('requests server-filtered operational pages and rejects incomplete operationa
  await expect(sloClient.overview()).rejects.toThrow('invalid response');
 });
 
+it.each([undefined,null,'00000000-0000-0000-0000-000000000000','invalid'])('rejects an overview with missing or invalid compatibility UUID: %s',async snapshot_id=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({snapshot_id,items:[],group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''}),{status:200})));
+ await expect(sloClient.overview()).rejects.toThrow('invalid response');
+});
+
 it('cancels an operational response when its streamed body exceeds the fixed 20 MiB cap',async()=>{
  let cancelled=false;
  const body=new ReadableStream<Uint8Array>({pull(controller){controller.enqueue(new Uint8Array(20*1024*1024+1));},cancel(){cancelled=true;}});
@@ -154,9 +159,9 @@ it('cancels an operational response when its streamed body exceeds the fixed 20 
  expect(cancelled).toBe(true);
 });
 
-it('describes list resource failures without suggesting a graph range and never retries the quota',async()=>{
- const fetcher=vi.fn(async()=>new Response(JSON.stringify({code:'resource_limit'}),{status:503}));
+it('restarts invalid overview cursors without retrying them',async()=>{
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({code:'invalid_request'}),{status:400}));
  vi.stubGlobal('fetch',fetcher);
- await expect(sloClient.overview({q:'demo'})).rejects.toThrow('The SLO list is temporarily at its resource limit. Try Refresh shortly.');
+ await expect(sloClient.overview({q:'demo',cursor:'invalid'})).rejects.toThrow('The SLO list changed. Refresh to restart from the first page.');
  expect(fetcher).toHaveBeenCalledOnce();
 });

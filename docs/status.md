@@ -48,6 +48,14 @@ storage. Race integration passes (storage 207.661 seconds), `make check` passes
 in 4.0 minutes. The preview-copy migration rehearsal and final integrated performance
 seed remain pending; the task remains in progress and merge is unauthorized.
 
+[F9-T05](tasks/F9-T05.md) is implemented above PR #77 (`754682e`) in
+`.worktrees/lean-slo-keyset` on `feat/slo-overview-keyset`. The overview now uses
+filter-bound keyset cursors and per-request counts; snapshot admission, archives
+and `snapshot_id` are removed with generated browser/CLI contract updates.
+`make check` passes (437 frontend tests, storage 100.621 seconds and 82 browser
+cases), and all 15 container journeys pass in 4.3 minutes. The integrated 35-day
+performance run remains pending, so the task remains in progress.
+
 # Delivery status
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:

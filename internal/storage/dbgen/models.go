@@ -425,7 +425,6 @@ type AlmanacSloCurrentProjection struct {
 	SortName           string      `json:"sort_name"`
 	Urgency            string      `json:"urgency"`
 	Payload            []byte      `json:"payload"`
-	PayloadDigest      []byte      `json:"payload_digest"`
 	BudgetHistoryState pgtype.Text `json:"budget_history_state"`
 }
 
@@ -501,42 +500,6 @@ type AlmanacSloHistoryBlock struct {
 	Kind              string             `json:"kind"`
 	BudgetSparkline   []byte             `json:"budget_sparkline"`
 	PayloadBytes      pgtype.Int8        `json:"payload_bytes"`
-}
-
-type AlmanacSloOverviewSnapshot struct {
-	ID                     pgtype.UUID        `json:"id"`
-	CursorSecret           []byte             `json:"cursor_secret"`
-	ActorID                pgtype.UUID        `json:"actor_id"`
-	SessionVerifier        []byte             `json:"session_verifier"`
-	Role                   string             `json:"role"`
-	QueryText              string             `json:"query_text"`
-	ServiceID              pgtype.UUID        `json:"service_id"`
-	Urgency                pgtype.Text        `json:"urgency"`
-	PageLimit              int32              `json:"page_limit"`
-	GroupCounts            []byte             `json:"group_counts"`
-	State                  string             `json:"state"`
-	PayloadBytes           int32              `json:"payload_bytes"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
-	PublicationFingerprint []byte             `json:"publication_fingerprint"`
-}
-
-type AlmanacSloOverviewSnapshotItem struct {
-	SnapshotID        pgtype.UUID `json:"snapshot_id"`
-	Ordinal           int32       `json:"ordinal"`
-	Urgency           string      `json:"urgency"`
-	Payload           []byte      `json:"payload"`
-	PayloadBytes      int32       `json:"payload_bytes"`
-	ProjectionDigest  []byte      `json:"projection_digest"`
-	ProjectionCurrent bool        `json:"projection_current"`
-}
-
-type AlmanacSloProjectionPayload struct {
-	Digest       []byte             `json:"digest"`
-	Payload      []byte             `json:"payload"`
-	Urgency      string             `json:"urgency"`
-	PayloadBytes int32              `json:"payload_bytes"`
-	PublishedAt  pgtype.Timestamptz `json:"published_at"`
 }
 
 type AlmanacUser struct {

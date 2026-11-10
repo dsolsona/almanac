@@ -1,16 +1,12 @@
 package storage
 
 import (
-	"context"
-	"errors"
 	"strconv"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/slo"
-	"github.com/dsolsona/almanac/internal/storage/dbgen"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -26,32 +22,6 @@ func overviewScopeFilters(input OperationalOverviewInput) (pgtype.UUID, pgtype.T
 		serviceID, _ = canonicalUUID(input.ServiceID)
 	}
 	return serviceID, pgtype.Text{String: input.Urgency, Valid: input.Urgency != ""}
-}
-
-func canReserveOverview(usage dbgen.SloOverviewSnapshotUsageRow) bool {
-	// Preparing results reserve their maximum size; ready pages charge actual bytes.
-	return usage.SessionBuilds < sloOverviewSessionLimit && usage.InstallationBuilds < sloOverviewInstallationLimit &&
-		usage.SessionBytes <= sloOverviewSessionByteLimit-sloOverviewProjectionByteLimit &&
-		usage.InstallationBytes <= sloOverviewInstallationBytes-sloOverviewProjectionByteLimit
-}
-
-func findReusableOverview(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time, actorID pgtype.UUID, role string) (pgtype.UUID, bool, error) {
-	if input.Runtime == nil {
-		return pgtype.UUID{}, false, nil
-	}
-	fingerprint, err := overviewScopeFingerprint(ctx, q, input, now)
-	if err != nil || fingerprint.DefinitionCount <= int64(input.Limit) {
-		return pgtype.UUID{}, false, err
-	}
-	serviceID, urgency := overviewScopeFilters(input)
-	id, err := q.FindReusableSloOverviewSnapshot(ctx, dbgen.FindReusableSloOverviewSnapshotParams{
-		ActorID: actorID, SessionVerifier: input.Proof.SessionVerifier[:], Role: role, QueryText: input.Query,
-		ServiceID: serviceID, Urgency: urgency, PageLimit: int32(input.Limit), Now: timestamp(now), Fingerprint: fingerprint.Fingerprint,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return pgtype.UUID{}, false, nil
-	}
-	return id, err == nil, err
 }
 
 func unavailableOverviewItem(previous api.SloOperationalOverviewItem, now time.Time, reason string) api.SloOperationalOverviewItem {
@@ -78,16 +48,4 @@ func unavailableOverviewItem(previous api.SloOperationalOverviewItem, now time.T
 		Urgency: api.SloOperationalOverviewItemUrgency(urgency.Group), Reasons: reasons, LeadingReason: leading,
 		Exhaustion: exhaustionValue(value, burn1h, nil), BudgetHistoryState: &history,
 		BudgetSparkline: previous.BudgetSparkline, BudgetHistoryGeneration: previous.BudgetHistoryGeneration}
-}
-
-func overviewScopeFingerprint(ctx context.Context, q *dbgen.Queries, input OperationalOverviewInput, now time.Time) (dbgen.OperationalScopeFingerprintRow, error) {
-	serviceID, _ := overviewScopeFilters(input)
-	result, err := q.OperationalScopeFingerprint(ctx, dbgen.OperationalScopeFingerprintParams{
-		CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ServiceID: serviceID,
-		QueryText: pgtype.Text{String: input.Query, Valid: input.Query != ""},
-	})
-	if err == nil && result.DefinitionCount > sloOverviewDefinitionLimit {
-		return result, ErrOperationalResource
-	}
-	return result, err
 }

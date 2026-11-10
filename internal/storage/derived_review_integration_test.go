@@ -44,16 +44,6 @@ FROM public.almanac_slo_definitions d JOIN public.almanac_slos s ON s.id=d.slo_i
 			return
 		}
 		defer rollbackTransaction(tx)
-		if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_overview_snapshots s WHERE EXISTS (
-            SELECT 1 FROM public.almanac_slo_overview_snapshot_items i WHERE i.snapshot_id=s.id
-              AND (i.payload#>>'{slo,id}')::uuid=ANY($1::uuid[]))`, ids); err != nil {
-			t.Error(err)
-			return
-		}
-		if _, err := tx.Exec(t.Context(), `DELETE FROM public.almanac_slo_projection_payloads WHERE (payload#>>'{slo,id}')::uuid=ANY($1::uuid[])`, ids); err != nil {
-			t.Error(err)
-			return
-		}
 		for _, table := range []string{"almanac_slo_extrema", "almanac_slo_extrema_cursor", "almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
 			key := "slo_id"
 			if table == "almanac_slos" {

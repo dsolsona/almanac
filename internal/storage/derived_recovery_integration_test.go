@@ -513,86 +513,41 @@ func verifyReadyOverviewReuse(t *testing.T, runtime *Runtime, databaseURL string
 	input := OperationalOverviewInput{Runtime: runtime, Proof: proof, Query: "operational", Limit: 1, Now: clock}
 	first, err := readOperationalOverviewForTest(t.Context(), databaseURL, input)
 	if err != nil || len(first.Items) != 1 || first.NextCursor == "" {
-		t.Fatalf("ready overview admission: %v", err)
+		t.Fatalf("ready overview: %v", err)
 	}
 	conn := integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)
-	defer func() {
-		if _, err := conn.Exec(t.Context(), `DELETE FROM public.almanac_slo_overview_snapshots WHERE query_text=$1 AND session_verifier=$2`, input.Query, proof.SessionVerifier[:]); err != nil {
-			t.Error(err)
-		}
-	}()
-	var originalExpiry time.Time
-	if err := conn.QueryRow(t.Context(), `SELECT expires_at FROM public.almanac_slo_overview_snapshots WHERE id=$1`, first.SnapshotId.String()).Scan(&originalExpiry); err != nil {
-		t.Fatal(err)
-	}
-	var referenceRows, copiedRows int
-	var referenceBytes, calculationBytes int64
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE i.projection_digest IS NOT NULL),
-        count(*) FILTER (WHERE i.payload ? 'current'),sum(i.payload_bytes),sum(a.payload_bytes)
-        FROM public.almanac_slo_overview_snapshot_items i
-        JOIN public.almanac_slo_projection_payloads a ON a.digest=i.projection_digest WHERE i.snapshot_id=$1`,
-		first.SnapshotId.String()).Scan(&referenceRows, &copiedRows, &referenceBytes, &calculationBytes); err != nil || referenceRows != 3 || copiedRows != 0 || referenceBytes >= calculationBytes {
-		t.Fatalf("cursor copied calculations instead of pinning bounded references: rows=%d,copied=%d,bytes=%d/%d,%v", referenceRows, copiedRows, referenceBytes, calculationBytes, err)
-	}
 	admission, err := conn.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rollbackTransaction(admission)
-	if _, err := admission.Exec(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission',0))`); err != nil {
+	if _, err := admission.Exec(t.Context(), "SELECT pg_advisory_xact_lock(hashtextextended('slo_overview_snapshot_admission',0))"); err != nil {
 		t.Fatal(err)
 	}
-	for range 100 {
+	for range 10 {
 		page, err := readOperationalOverviewForTest(t.Context(), databaseURL, input)
-		if err != nil || page.SnapshotId != first.SnapshotId || !reflect.DeepEqual(page.Items, first.Items) {
-			t.Fatalf("unchanged overview spent another snapshot slot or changed its immutable values: %v", err)
+		if err != nil || !reflect.DeepEqual(page.Items, first.Items) {
+			t.Fatalf("unchanged read waited for legacy admission or changed values: %v", err)
 		}
 	}
 	if err := admission.Rollback(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	var count int
-	var expiry time.Time
-	if err := conn.QueryRow(t.Context(), `SELECT count(*),max(expires_at) FROM public.almanac_slo_overview_snapshots WHERE query_text=$1 AND session_verifier=$2`, input.Query, proof.SessionVerifier[:]).Scan(&count, &expiry); err != nil || count != 1 || !expiry.Equal(originalExpiry) {
-		t.Fatalf("reuse renewed expiry or consumed admission: count=%d, expiry=%v, %v", count, expiry, err)
-	}
-	// A new publication must create a fresh immutable snapshot, retaining the
-	// preceding page for existing cursors. No canonical measurement changes.
 	id, _ := canonicalUUID(first.Items[0].Slo.Id.String())
 	if err := runtime.refreshCurrentProjection(t.Context(), id, clock); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := readOperationalOverviewForTest(t.Context(), databaseURL, input)
-	if err != nil || changed.SnapshotId == first.SnapshotId {
-		t.Fatalf("new publication reused old page: %v", err)
+	secondInput := input
+	secondInput.Cursor = first.NextCursor
+	second, err := readOperationalOverviewForTest(t.Context(), databaseURL, secondInput)
+	if err != nil || second.PreviousCursor == "" {
+		t.Fatalf("cursor after publication: %v", err)
 	}
-	var originalState string
-	if err := conn.QueryRow(t.Context(), `SELECT state FROM public.almanac_slo_overview_snapshots WHERE id=$1`, first.SnapshotId.String()).Scan(&originalState); err != nil || originalState != "ready" {
-		t.Fatalf("refresh removed or mutated the preceding snapshot: %v", err)
-	}
-	oldSecond := input
-	oldSecond.Cursor = first.NextCursor
-	oldPage, err := readOperationalOverviewForTest(t.Context(), databaseURL, oldSecond)
-	if err != nil || oldPage.PreviousCursor == "" {
-		t.Fatalf("original reference cursor was lost after publication: %v", err)
-	}
-	oldFirst := input
-	oldFirst.Cursor = oldPage.PreviousCursor
-	pinnedFirst, err := readOperationalOverviewForTest(t.Context(), databaseURL, oldFirst)
-	if err != nil || !reflect.DeepEqual(pinnedFirst.Items, first.Items) || pinnedFirst.GroupCounts != first.GroupCounts {
-		t.Fatalf("new publication mutated an archived projection pinned by the old cursor: %v", err)
-	}
-	for _, query := range []string{"operational", "operational-a", "operational-h", "operational-w", "-attention", "-watch", "-healthy"} {
-		single := input
-		single.Query, single.Limit = query, 50
-		page, err := readOperationalOverviewForTest(t.Context(), databaseURL, single)
-		if err != nil || page.NextCursor != "" {
-			t.Fatalf("single-page filtering spent cursor admission: query=%s,%v", query, err)
-		}
-		var retained bool
-		if err := conn.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM public.almanac_slo_overview_snapshots WHERE id=$1)`, page.SnapshotId.String()).Scan(&retained); err != nil || retained {
-			t.Fatalf("single-page result retained an unnecessary cursor snapshot: %v", err)
-		}
+	back := input
+	back.Cursor = second.PreviousCursor
+	current, err := readOperationalOverviewForTest(t.Context(), databaseURL, back)
+	if err != nil || len(current.Items) != 1 || current.Items[0].Generation == nil || current.Items[0].Generation.GenerationId == first.Items[0].Generation.GenerationId {
+		t.Fatalf("reverse cursor did not read the latest publication: %v", err)
 	}
 }

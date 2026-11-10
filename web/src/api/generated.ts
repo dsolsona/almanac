@@ -709,8 +709,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read a snapshot-paginated operational SLO overview
-         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. A PostgreSQL projection snapshot freezes definitions and calculated values across pages; it is bound to the actor, current session, role, filters and limit, expires after two minutes, and is not renewable. At most four snapshots per actor/session and 64 per installation may be building concurrently. Ready snapshots are charged by payload size, with a minimum 16 KiB metadata charge each. Building snapshots reserve 16 MiB each. Combined reservations and ready charges are bounded to 64 MiB per actor/session and 1 GiB per installation; exceeding these bounds returns 503 resource_limit without evicting an unexpired cursor. A snapshot may contain at most 10,000 matching objectives and 16 MiB of projection payload; exceeding either returns 503 resource_limit and asks the client to narrow q or service_id. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
+         * Read a keyset-paginated operational SLO overview
+         * @description Filters by literal case-insensitive substring over name and display_name and optional service_id before calculation. Urgency selection is applied after classification. group_counts describe all name/service matches, before urgency selection; items contain only the selected urgency group. Results are globally ordered by urgency rank, lower(name), then UUID. Opaque keyset cursors bind the filters and limit. Each request reads current rows and group counts; urgency or metadata changes may move rows across pages, so rows can repeat or be skipped. Each row carries its own generation evidence. Authorization is checked for every page. No observation receipt timestamp is a commit watermark. The budget sparkline represents the preceding seven days, with at most 120 exact rolling-evaluation samples preserving actual first/last/min/max values in up to 30 buckets and explicit gaps; represented sample values are exact decimal strings, not averages.
          */
         get: operations["getSloOperationalOverview"];
         put?: never;
@@ -1096,13 +1096,17 @@ export interface components {
             next_cursor: string;
         };
         SloOperationalOverviewPage: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @deprecated
+             * @description Nonzero response identifier retained for v1 CLI compatibility; list contents remain live and are not pinned.
+             */
             snapshot_id: string;
             items: components["schemas"]["SloOperationalOverviewItem"][];
             group_counts: components["schemas"]["SloUrgencyCounts"];
-            /** @description Empty string when this snapshot has no further page. */
+            /** @description Keyset cursor after this page; empty when no further row was found. */
             next_cursor: string;
-            /** @description Signed cursor for the previous page of this same snapshot */
+            /** @description Keyset cursor before this page; empty on the first page. */
             previous_cursor: string;
         };
         SloUrgencyCounts: {
@@ -4247,7 +4251,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Snapshot-consistent overview page */
+            /** @description Current operational overview page */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4283,16 +4287,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Snapshot expired; restart pagination */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Resource limit or storage unavailable; no partial overview is returned */
+            /** @description Storage unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

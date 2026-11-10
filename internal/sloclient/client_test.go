@@ -103,7 +103,7 @@ func TestOperationalOverviewUsesServerFiltersAndValidatesProjection(t *testing.T
 		if r.URL.Path != "/api/v1/slos/overview" || r.URL.Query().Get("q") != "checkout api" || r.URL.Query().Get("service_id") != serviceID || r.URL.Query().Get("urgency") != "watch" || r.URL.Query().Get("limit") != "25" || r.URL.Query().Get("cursor") != "opaque" {
 			t.Errorf("unexpected overview request: %s", r.URL.String())
 		}
-		_, _ = w.Write([]byte(`{"snapshot_id":"11111111-1111-1111-1111-111111111111","items":[],"group_counts":{"needs_attention":2,"watch":3,"healthy":4},"next_cursor":"","previous_cursor":""}`))
+		_, _ = w.Write([]byte(`{"snapshot_id":"11111111-1111-4111-8111-111111111111","items":[],"group_counts":{"needs_attention":2,"watch":3,"healthy":4},"next_cursor":"","previous_cursor":""}`))
 	}))
 	defer server.Close()
 	ops, err := api.NewClient(server.URL)
@@ -117,6 +117,26 @@ func TestOperationalOverviewUsesServerFiltersAndValidatesProjection(t *testing.T
 	}
 }
 
+func TestOperationalOverviewRequiresCompatibilityUUID(t *testing.T) {
+	for _, field := range []string{"", `"snapshot_id":null,`, `"snapshot_id":"00000000-0000-0000-0000-000000000000",`, `"snapshot_id":"invalid",`} {
+		t.Run(field, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, `{`+field+`"items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`)
+			}))
+			defer server.Close()
+			ops, err := api.NewClient(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = New(ops, func(context.Context, *http.Request) error { return nil }).Do(t.Context(), Input{Kind: "slos", Action: "overview", Limit: 50})
+			failure, ok := errors.AsType[*datasourceclient.Failure](err)
+			if !ok || failure.Code != "invalid_response" {
+				t.Fatalf("accepted missing or invalid compatibility UUID: %v", err)
+			}
+		})
+	}
+}
+
 func TestOperationalOverviewAccepts128UnicodeCharacters(t *testing.T) {
 	query := strings.Repeat("é", 65)
 	calls := 0
@@ -125,7 +145,7 @@ func TestOperationalOverviewAccepts128UnicodeCharacters(t *testing.T) {
 		if got := r.URL.Query().Get("q"); got != query {
 			t.Errorf("query rune round trip = %q, want %q", got, query)
 		}
-		_, _ = w.Write([]byte(`{"snapshot_id":"11111111-1111-1111-1111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`))
+		_, _ = w.Write([]byte(`{"snapshot_id":"11111111-1111-4111-8111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`))
 	}))
 	defer server.Close()
 	ops, err := api.NewClient(server.URL)
@@ -146,7 +166,7 @@ func TestOperationalOverviewAccepts128UnicodeCharacters(t *testing.T) {
 
 func TestOperationalOverviewUsesLargerBoundedResponseLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"snapshot_id":"11111111-1111-1111-1111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`+strings.Repeat(" ", 5<<20))
+		_, _ = io.WriteString(w, `{"snapshot_id":"11111111-1111-4111-8111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`+strings.Repeat(" ", 5<<20))
 	}))
 	defer server.Close()
 	ops, err := api.NewClient(server.URL)
@@ -161,7 +181,7 @@ func TestOperationalOverviewUsesLargerBoundedResponseLimit(t *testing.T) {
 
 func TestOperationalReadRejectsResponseAboveBound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"snapshot_id":"11111111-1111-1111-1111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`+strings.Repeat(" ", 20<<20))
+		_, _ = io.WriteString(w, `{"snapshot_id":"11111111-1111-4111-8111-111111111111","items":[],"group_counts":{"needs_attention":0,"watch":0,"healthy":0},"next_cursor":"","previous_cursor":""}`+strings.Repeat(" ", 20<<20))
 	}))
 	defer server.Close()
 	ops, err := api.NewClient(server.URL)
