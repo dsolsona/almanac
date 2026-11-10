@@ -86,6 +86,68 @@ func TestIntegrationExtremaAbandonedFifthLeaseBacksOff(t *testing.T) {
 	}
 }
 
+func TestIntegrationExtremaArrivalsPreserveFailureBackoff(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "extrema-arrival-backoff", true)
+	id := s.createSLO(t, "extrema-arrival-backoff")
+	for index, attempts := range []int{1, 5} {
+		next := s.now.Add(5 * time.Minute)
+		failing := s.now.Add(-time.Hour)
+		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor
+SET attempts=$2,failing_since=$3,last_error='extrema_build_failed',next_attempt_at=$4 WHERE slo_id=$1`, id, attempts, failing, next); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, s.at.Add(time.Duration(index+1)*time.Minute), s.now); err != nil {
+			t.Fatal(err)
+		}
+		var gotAttempts int
+		var gotNext time.Time
+		var gotFailing pgtype.Timestamptz
+		var reason pgtype.Text
+		if err := s.conn.QueryRow(t.Context(), `SELECT attempts,next_attempt_at,failing_since,last_error FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, id).Scan(&gotAttempts, &gotNext, &gotFailing, &reason); err != nil {
+			t.Fatal(err)
+		}
+		if gotAttempts != attempts || !gotNext.Equal(next) || !gotFailing.Valid || !gotFailing.Time.Equal(failing) || !reason.Valid || reason.String != "extrema_build_failed" {
+			t.Fatalf("arrival reset a failing cursor: attempts=%d next=%s failing=%+v reason=%+v", gotAttempts, gotNext, gotFailing, reason)
+		}
+	}
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET failing_since=$2::timestamptz-interval '8 days' WHERE slo_id=$1`, id, s.now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, s.at.Add(3*time.Minute), s.now); err != nil {
+		t.Fatal(err)
+	}
+	var attempts int
+	var failing pgtype.Timestamptz
+	if err := s.conn.QueryRow(t.Context(), `SELECT attempts,failing_since FROM public.almanac_slo_extrema_cursor WHERE slo_id=$1`, id).Scan(&attempts, &failing); err != nil || attempts != 0 || failing.Valid {
+		t.Fatalf("new coverage did not restart stopped work: attempts=%d failing=%+v err=%v", attempts, failing, err)
+	}
+}
+
+func TestIntegrationExtremaFirstDayBoundsPrefixQueries(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixtureCadence(t, "extrema-first-day", true, 15*time.Second)
+	day := utcDayStart(s.at)
+	s.now = day.Add(24*time.Hour + 7*time.Minute)
+	s.at = s.now
+	id := s.createSLOWithHistory(t, "extrema-first-day", time.Hour, day.Add(23*time.Hour))
+	s.drain(t, "first-day sources")
+	before := s.runtime.metrics.queries[DerivedTraffic].count.Load()
+	worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
+	if err != nil || !worked {
+		t.Fatalf("first closed day did not publish in one bounded turn: worked=%v err=%v", worked, err)
+	}
+	queries := s.runtime.metrics.queries[DerivedTraffic].count.Load() - before
+	if queries > 40 {
+		t.Fatalf("pre-validity prefix queried source windows: %d queries", queries)
+	}
+	var hours, days int
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE resolution_seconds=3600),count(*) FILTER(WHERE resolution_seconds=86400)
+FROM public.almanac_slo_extrema WHERE slo_id=$1`, id).Scan(&hours, &days); err != nil || hours != 24 || days != 1 {
+		t.Fatalf("first day incomplete: hours=%d days=%d err=%v", hours, days, err)
+	}
+}
+
 func TestIntegrationConsistencyRecreatesMissingExtremaCursor(t *testing.T) {
 	t.Parallel()
 	s := newSelfHealFixture(t, "extrema-missing", true)

@@ -119,8 +119,6 @@ WHERE NOT (NOT $8 AND point=$7::timestamptz)`, measurement.ID, created.Agent.ID,
 	t.Run("derived aggregate, durable preparation and recovery", func(t *testing.T) {
 		verifyDerivedOperationalRecovery(t, f.databaseURL, proof, attention.ID, readNow)
 	})
-	t.Run("history admission fences stale snapshots", func(t *testing.T) {
-	})
 	t.Run("blocked current work remains fair and exposes failures", func(t *testing.T) {
 		verifyBlockedCurrentFairnessAndFailureStates(t, f.databaseURL, proof, attention.ID, healthy.ID, readNow)
 	})

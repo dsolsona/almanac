@@ -5202,14 +5202,14 @@ type ClientInterface interface {
 
 	// GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
 	//
-	// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+	// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
 	GetSloPreparation(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
 	//
-	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 	//
 	// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 	RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6624,7 +6624,7 @@ func (c *Client) GetSloOperationalDetail(ctx context.Context, sloId SloId, param
 
 // GetSloPreparation Read bounded preparation progress and exhausted-job diagnostics
 //
-// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/preparation (the `GetSloPreparation` operationId).
 func (c *Client) GetSloPreparation(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6641,7 +6641,7 @@ func (c *Client) GetSloPreparation(ctx context.Context, sloId SloId, reqEditors 
 
 // RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
 //
-// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 //
 // Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10889,7 +10889,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetSloPreparationWithResponse Read bounded preparation progress and exhausted-job diagnostics
 	//
-	// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+	// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10898,7 +10898,7 @@ type ClientWithResponsesInterface interface {
 
 	// RetrySloPreparationWithResponse Give one exhausted preparation job another bounded attempt budget
 	//
-	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+	// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -15619,7 +15619,7 @@ func (c *ClientWithResponses) GetSloOperationalDetailWithResponse(ctx context.Co
 
 // GetSloPreparationWithResponse Read bounded preparation progress and exhausted-job diagnostics
 //
-// Returns at most 100 current/history jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
+// Returns at most 100 current and extrema jobs and exhausted source aggregate keys affecting this objective. Error codes are stable and contain no SQL, query text or credentials. An item's id addresses its single retry target. Retrying a shared source aggregate preserves all unrelated dirty keys.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15634,7 +15634,7 @@ func (c *ClientWithResponses) GetSloPreparationWithResponse(ctx context.Context,
 
 // RetrySloPreparationWithResponse Give one exhausted preparation job another bounded attempt budget
 //
-// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, history or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. Admission remains bounded to 64 retained history jobs globally and eight per objective. The retry and its audit record commit together; unrelated work is unchanged.
+// Administrator/editor only, with the normal session CSRF requirements. Retries only the addressed failed current, extrema or aggregate job, identified by the preparation diagnostics, with five automatic attempts and at most one manual retry per minute. The retry and its audit record commit together; unrelated work is unchanged.
 //
 // Returns a wrapper object for the known response body format(s).
 //
