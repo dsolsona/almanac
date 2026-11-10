@@ -68,3 +68,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0040](0040-cumulative-sums-and-compact-extrema.md) | Serve SLO history from compact extrema over exact hourly aggregates | accepted |
 | [ADR-0041](0041-one-observation-table-with-cumulative-sums.md) | One observation table with explicit marking | accepted |
 | [ADR-0042](0042-keyset-overview-pagination.md) | Keyset pagination for the SLO overview | accepted |
+| [ADR-0043](0043-slo-status-from-due-eligible-measurements.md) | SLO status from due eligible measurements | accepted |

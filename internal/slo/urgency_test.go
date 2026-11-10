@@ -75,17 +75,32 @@ func TestClassifyOperationalUsesUnroundedRationalThresholds(t *testing.T) {
 	}
 }
 
-func TestShortenedEligibilityIsWatchUnlessAnotherAttentionReasonApplies(t *testing.T) {
-	state := OperationalState{QualityState: "complete", Freshness: "fresh", PerformanceState: "violated", ShortenedEligibility: true, Burn1hAvailable: false}
+func TestCompleteShortenedEligibilityCanBeHealthy(t *testing.T) {
+	state := OperationalState{QualityState: "complete", Freshness: "fresh", PerformanceState: "met", ShortenedEligibility: true,
+		RemainingFraction: new("0.5"), Burn1h: new("0.5"), Burn1hAvailable: true,
+		Burn1hQualityState: "complete", Burn1hFreshness: "fresh", Burn1hShortenedEligibility: true}
 	got := ClassifyOperational(state)
-	if got.Group != "watch" || got.Reasons[0].Code != "incomplete_coverage" {
-		t.Fatalf("shortened eligibility = %+v, want watch/incomplete_coverage", got)
+	if got.Group != "healthy" || len(got.Reasons) != 1 || got.Reasons[0].Code != "on_track" {
+		t.Fatalf("complete eligible 98%% SLO = %+v, want healthy/on_track", got)
 	}
 	remaining := "-1"
 	state.RemainingBudget = &remaining
 	got = ClassifyOperational(state)
-	if got.Group != "needs_attention" || len(got.Reasons) != 3 || got.Reasons[0].Code != "negative_observed_budget" || !got.Reasons[0].Provisional {
+	if got.Group != "needs_attention" || len(got.Reasons) != 1 || got.Reasons[0].Code != "negative_observed_budget" || !got.Reasons[0].Provisional {
 		t.Fatalf("shortened provisional negative budget = %+v", got)
+	}
+}
+
+func TestFirstDueMeasurementIsWaitingUntilEligible(t *testing.T) {
+	got := ClassifyOperational(OperationalState{QualityState: "not_applicable", Freshness: "unknown", PerformanceState: "not_applicable", ShortenedEligibility: true})
+	if got.Group != "watch" || got.Reasons[0].Code != "not_yet_eligible" {
+		t.Fatalf("no due interval = %+v, want watch/not_yet_eligible", got)
+	}
+	for _, quality := range []string{"partial", "no_data", "expired_history"} {
+		got = ClassifyOperational(OperationalState{QualityState: quality, Freshness: "fresh", PerformanceState: "unknown", ShortenedEligibility: true})
+		if got.Group == "healthy" {
+			t.Errorf("%s was classified healthy", quality)
+		}
 	}
 }
 
@@ -116,8 +131,8 @@ func TestIncompleteOneHourBurnCannotEstablishHealthyAndQualifiesAttention(t *tes
 	base.Burn1hProvisional = false
 	base.Burn1hShortenedEligibility = true
 	got = ClassifyOperational(base)
-	if got.Group != "needs_attention" || !hasOperationalReason(got.Reasons, "high_1h_burn", true) || !hasOperationalReason(got.Reasons, "short_burn_unavailable", false) {
-		t.Fatalf("shortened high 1 h burn classified as %+v; want qualified attention and watch", got)
+	if got.Group != "needs_attention" || !hasOperationalReason(got.Reasons, "high_1h_burn", true) || hasOperationalReason(got.Reasons, "short_burn_unavailable", false) {
+		t.Fatalf("complete shortened high 1 h burn classified as %+v; want qualified attention without a false gap", got)
 	}
 }
 

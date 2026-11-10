@@ -567,6 +567,37 @@ func (q *Queries) ListSlos(ctx context.Context, arg ListSlosParams) ([]ListSlosR
 	return items, nil
 }
 
+const readSloReadyTailEnd = `-- name: ReadSloReadyTailEnd :one
+SELECT coalesce(max(interval_start+$1::integer*interval '1 second'), $2::timestamptz)::timestamptz AS ready_end
+FROM public.almanac_sli_observations
+WHERE sli_id=$3 AND measurement_revision=$4
+  AND interval_start>=$2::timestamptz
+  AND interval_start<$5::timestamptz
+  AND interval_start+$1::integer*interval '1 second'<=$5::timestamptz
+  AND outcome IN ('observed','complete_empty')
+`
+
+type ReadSloReadyTailEndParams struct {
+	CadenceSeconds      int32              `json:"cadence_seconds"`
+	DueEnd              pgtype.Timestamptz `json:"due_end"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	RequestedEnd        pgtype.Timestamptz `json:"requested_end"`
+}
+
+func (q *Queries) ReadSloReadyTailEnd(ctx context.Context, arg ReadSloReadyTailEndParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, readSloReadyTailEnd,
+		arg.CadenceSeconds,
+		arg.DueEnd,
+		arg.SliID,
+		arg.MeasurementRevision,
+		arg.RequestedEnd,
+	)
+	var ready_end pgtype.Timestamptz
+	err := row.Scan(&ready_end)
+	return ready_end, err
+}
+
 const updateServiceMetadata = `-- name: UpdateServiceMetadata :one
 UPDATE public.almanac_services SET display_name = $1, version = version + 1, updated_at = $2
 WHERE id = $3 AND version = $4 RETURNING id, name, display_name, version, created_at, updated_at, metadata, archived_at

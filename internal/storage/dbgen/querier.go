@@ -248,6 +248,7 @@ type Querier interface {
 	ReadSloDerivedStates(ctx context.Context, arg ReadSloDerivedStatesParams) (ReadSloDerivedStatesRow, error)
 	ReadSloExtremaHours(ctx context.Context, arg ReadSloExtremaHoursParams) ([]AlmanacSloExtrema, error)
 	ReadSloExtremaParts(ctx context.Context, arg ReadSloExtremaPartsParams) ([]ReadSloExtremaPartsRow, error)
+	ReadSloReadyTailEnd(ctx context.Context, arg ReadSloReadyTailEndParams) (pgtype.Timestamptz, error)
 	// Keep the defensive missing-value result for the caller; canonical row constraints now prevent it.
 	RebuildDerivedBatch(ctx context.Context, arg RebuildDerivedBatchParams) ([]RebuildDerivedBatchRow, error)
 	RecordAgentConfigurationFailed(ctx context.Context, arg RecordAgentConfigurationFailedParams) (int64, error)

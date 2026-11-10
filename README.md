@@ -193,6 +193,14 @@ to earlier measurements. This uses retained data and does not start backfill.
 The synthetic 99/100 SLI gives 99% measured success. Against a 99.9% target,
 its burn is 10x and its observed error budget is negative. The page shows the
 eligible evaluation range and collection coverage alongside those results.
+
+A new SLO can be Healthy as soon as all due eligible measurements are present;
+it does not need a full rolling window of history. Before the first interval is
+due, it shows Waiting for data. Current calculations allow for source settling,
+scheduled dispatch and bounded completion time; intervals still pending are not
+missing. The status explains when evaluation began, its measurement cutoff and
+the collected/expected interval counts. Explicit historical evaluations and daily
+compliance retain their original bounds.
 Missing measurements qualify observed results; they are never counted as successful
 requests or zero traffic. Expand the exact-value controls for the decimal values
 returned by the API, without additional display rounding.

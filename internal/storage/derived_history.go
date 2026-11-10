@@ -157,6 +157,8 @@ func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 type retainedHistoryPublication struct {
 	generation        dbgen.InsertDerivedGenerationParams
 	history           dbgen.InsertPreparedSloHistoryParams
+	live              bool
+	validUntil        time.Time
 	corruptGeneration pgtype.UUID
 }
 
@@ -190,7 +192,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	}
 	retention := timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
 	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(now), RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
-		EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow)}
+		EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Live: input.At == nil}
 	cached, err := q.FindPreparedSloHistory(ctx, key)
 	if err == nil {
 		var result api.SloOperationalDetail
@@ -227,6 +229,10 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
 		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(normalizedAgentNow(input.Now))}
 	input.historyPublication.history = dbgen.InsertPreparedSloHistoryParams{RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Kind: kind}
+	input.historyPublication.live = input.At == nil
+	if input.At == nil {
+		input.historyPublication.validUntil = currentCacheDeadline(row, source, now, result.Current.Quality, result.Burn1h.Quality, result.Burn6h.Quality)
+	}
 	return result, nil
 }
 
@@ -246,7 +252,11 @@ func publishRetainedHistory(ctx context.Context, q *dbgen.Queries, result api.Sl
 	stamp := generationStamp(generationID, g.SourceGeneration, g.DefinitionRevision, g.MeasurementRevision, g.CalculationVersion,
 		g.EvaluatedThrough.Time, g.PublishedAt.Time, g.RetentionStart.Time)
 	result.Generation = &stamp
-	payload, err := json.Marshal(result)
+	payload, err := json.Marshal(struct {
+		api.SloOperationalDetail
+		Live       bool      `json:"_live"`
+		ValidUntil time.Time `json:"_current_valid_until,omitzero"`
+	}{SloOperationalDetail: result, Live: publication.live, ValidUntil: publication.validUntil})
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}

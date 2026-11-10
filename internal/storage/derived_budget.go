@@ -3,10 +3,12 @@ package storage
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"strconv"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
+	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
 
@@ -116,6 +118,24 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 		}
 	}
 	current := retainedWindowSample(at, item.Current.Quality, item.Current.Performance, strconv.FormatInt(row.DefinitionRevision, 10))
+	if !item.Current.Window.End.Equal(at) {
+		base.At = at
+		values, evalErr := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, []slo.WindowInput{base})
+		switch {
+		case evalErr == nil:
+			current = operationalSample(values[0], at, at, strconv.FormatInt(row.DefinitionRevision, 10))
+		case errors.Is(evalErr, ErrDerivedPending), errors.Is(evalErr, ErrDerivedSourceFailed):
+			history = "preparing"
+			reason := "history_preparing"
+			if errors.Is(evalErr, ErrDerivedSourceFailed) {
+				history, reason = "unavailable", "history_preparation_failed"
+			}
+			gap := unavailableOperationalSamples(at.Add(-cadence), at, cadence, strconv.FormatInt(row.DefinitionRevision, 10), 1, reason)
+			current = gap[len(gap)-1]
+		default:
+			return nil, evalErr
+		}
+	}
 	if len(samples) > 0 && samples[len(samples)-1].EvaluationAt.Equal(at) {
 		samples = samples[:len(samples)-1]
 	}

@@ -490,21 +490,41 @@ func buildCanonicalOperationalDetail(ctx context.Context, facts []slo.Observatio
 		FreshnessGrace: cadence + time.Duration(contextRow.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds)),
 		Target:         sli.NormalizeDecimal(row.Target), Observations: facts}
 	rolling, attainment, daily := buildCanonicalSamples, buildCanonicalAttainmentSamples, buildCanonicalDailyCompliance
+	measurementEnd := effectiveAt
+	if input.At == nil {
+		measurementEnd = floorSliBoundary(effectiveAt.Add(-base.FreshnessGrace), cadence)
+		for _, fact := range facts {
+			if (fact.Outcome == "observed" || fact.Outcome == "complete_empty") && !fact.End.After(effectiveAt) && fact.End.After(measurementEnd) {
+				measurementEnd = fact.End
+			}
+		}
+	}
 	evaluate := func(duration time.Duration) (slo.WindowResult, error) {
-		return evaluateOperationalAt(ctx, base, effectiveAt, duration)
+		result, err := evaluateOperationalAt(ctx, base, measurementEnd, duration)
+		if input.At == nil && result.LastObservation != nil {
+			result.Freshness = "fresh"
+			if requestedAt.After(result.LastObservation.Add(base.FreshnessGrace)) {
+				result.Freshness = "stale"
+			}
+		}
+		return result, err
 	}
 	currentResult, err := evaluate(window)
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
 	burn1h := unavailableBurn(3600, effectiveAt, "cadence_mismatch")
+	burnEvaluation := burnValue
+	if input.At == nil {
+		burnEvaluation = eligibleBurnValue
+	}
 	var burn1hResult *slo.WindowResult
 	if time.Hour%cadence == 0 {
 		result, evalErr := evaluate(time.Hour)
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
-		burn1h = burnValue(result, 3600)
+		burn1h = burnEvaluation(result, 3600)
 		burn1hResult = &result
 	}
 	burn6h := unavailableBurn(21600, effectiveAt, "cadence_mismatch")
@@ -513,9 +533,10 @@ func buildCanonicalOperationalDetail(ctx context.Context, facts []slo.Observatio
 		if evalErr != nil {
 			return api.SloOperationalDetail{}, evalErr
 		}
-		burn6h = burnValue(result, 21600)
+		burn6h = burnEvaluation(result, 21600)
 	}
 	current := operationalValue(currentResult)
+	current.EvaluationAt = effectiveAt
 	current.Window.RequestedStart = requestedAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
 	applyOperationalDefinitionWindow(&current, row.ActivatedAt.Time.UTC(), row.EvaluationValidFrom.Time.UTC(), row.HistoricalRequestedBy, row.HistoricalRequestedAt)
 	urgency := slo.ClassifyOperational(slo.OperationalState{QualityState: currentResult.State, Freshness: currentResult.Freshness, PerformanceState: currentResult.Performance,

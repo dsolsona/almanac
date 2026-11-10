@@ -1,5 +1,10 @@
 # SPEC-0020: Retained SLO extrema over exact hourly aggregates
 
+> Accepted amendment, 2026-11-10: [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md)
+> changes live current cutoffs and shortened-eligibility urgency. Those rules
+> supersede this spec's preservation of the previous live status policy; retained
+> historical endpoints, exact values and daily compliance remain unchanged.
+
 - Status: accepted
 - Created: 2026-11-09
 - Accepted: 2026-11-09

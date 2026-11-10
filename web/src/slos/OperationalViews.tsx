@@ -24,7 +24,7 @@ type Slo=components['schemas']['Slo'];
 type Urgency=OverviewItem['urgency'];
 const groups:[Urgency,string,string][]=[
   ['needs_attention','Needs attention','breached, burning fast, low on budget, or not reporting'],
-  ['watch','Watch','under half the budget left, burning above 1×, or a partial window'],
+  ['watch','Watch','under half the budget left, incomplete data, or unavailable burn'],
   ['healthy','Healthy','on track'],
 ];
 const lastEvaluationFormat=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC',hour12:false});
@@ -84,9 +84,10 @@ function vocabulary(urgency:Urgency,leading:OverviewItem['leading_reason'],lastK
   }
   if(urgency==='watch') {
     if(code==='evaluation_unavailable')return {tone:'none',label:'Unavailable',reason};
-    if(code==='not_yet_eligible')return {tone:'none',label:'No data yet',reason};
+    if(code==='not_yet_eligible')return {tone:'none',label:'Waiting for data',reason};
     if(code==='zero_traffic')return {tone:'none',label:'Zero traffic',reason};
-    if(code==='incomplete_coverage'||code==='short_burn_unavailable')return {tone:'none',label:'Partial data',reason};
+    if(code==='incomplete_coverage')return {tone:'none',label:'Partial data',reason};
+    if(code==='short_burn_unavailable')return {tone:'none',label:'Burn unavailable',reason};
     if(code==='budget_below_half')return {tone:'healthy',label:'Healthy',reason};
     return {tone:'none',label:'Watch',reason};
   }
@@ -324,6 +325,8 @@ function StatusBand({value,target,busy,onRefresh,calculation}:{value:StatusSourc
   const burn1h=value.burn_1h.performance.burn;
   const warning=qualityWarning(q,p,current.window);
   const hero=budgetPercent(p.remaining_fraction);
+  const collectionCoverage=q.expected_intervals>0?`${q.observed_intervals} of ${q.expected_intervals} due intervals collected.`
+    :['not_applicable','not_yet_eligible'].includes(q.state)?'No intervals are due yet.':'Collection coverage is unavailable.';
   return <section className="app-rail-card app-status-band" aria-label="Current SLO status">
     <header><h2>Status</h2><span className="app-timeline-hint">evaluated {clockFormat.format(new Date(current.evaluation_at))} UTC · {q.freshness} · {q.state.replaceAll('_',' ')}</span><div className="app-status-band__tools"><RefreshButton label="Refresh objective status" busy={busy} onClick={onRefresh}/></div></header>
     <div className="app-rail-card-body app-status-band__body">
@@ -332,7 +335,7 @@ function StatusBand({value,target,busy,onRefresh,calculation}:{value:StatusSourc
         {value.reasons.map(reason=><li key={reason.code}><StatusMark tone={reason.code===value.leading_reason.code?words.tone:'none'} label=""/><span>{reasonLabel(reason.code)}{reason.provisional?' · observed only':''}</span></li>)}
         {burn1h!==null&&Number(burn1h)>=1&&value.leading_reason.code!=='high_1h_burn'&&<li><StatusMark tone="warning" label=""/><span>Burning {multiple(burn1h)} over the last hour</span></li>}
         {warning&&<li><StatusMark tone="none" label=""/><span>{warning}</span></li>}
-      </ul></div>
+      </ul><p className="app-coverage-note">Evaluating since <time dateTime={current.window.evaluation_valid_from}>{lastEvaluationFormat.format(new Date(current.window.evaluation_valid_from))} UTC</time> · {collectionCoverage}</p>{q.expected_intervals>0&&<p className="app-coverage-note">Measurements through <time dateTime={current.window.end}>{lastEvaluationFormat.format(new Date(current.window.end))} UTC</time>.</p>}</div>
       <dl className="app-status-facts">{[['Attainment',budgetPercent(p.attainment)],['Target',`${shift(target,2)}%`],['Burn 1 h',burnValue(value.burn_1h),value.burn_1h.performance.burn===null?undefined:`${decimal(value.burn_1h.performance.burn)}×`],['Burn 6 h',burnValue(value.burn_6h),value.burn_6h.performance.burn===null?undefined:`${decimal(value.burn_6h.performance.burn)}×`],['Bad events left',p.remaining_budget===null?'—':decimal(p.remaining_budget),p.allowed_budget===null?undefined:`of ${decimal(p.allowed_budget)} allowed`],['Exhaustion',shortExhaustion(value.exhaustion),formatExhaustion(value.exhaustion)],['Coverage',coveragePercent(q.coverage),`${q.observed_intervals} of ${q.expected_intervals} intervals`]].map(([label,shown,exact])=><div key={label}><dt>{label}</dt><dd title={exact}>{shown}</dd></div>)}</dl>
     </div>
     {calculation}

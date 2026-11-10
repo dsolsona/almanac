@@ -32,6 +32,26 @@ func TestSettledIntervalAndStablePhase(t *testing.T) {
 	}
 }
 
+func TestDueIntervalAdvancesAtFixedCompletionDeadline(t *testing.T) {
+	id := "00000000-0000-4000-8000-000000000010"
+	for _, cadence := range []int{15, 60, 420} {
+		end := LatestSettledEnd(time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC), cadence, 0)
+		deadline := end.Add(time.Minute + time.Duration(cadence)*time.Second + DispatchPhase(id, cadence))
+		deadline = LatestSettledEnd(deadline.Add(time.Duration(cadence)*time.Second-time.Microsecond), cadence, 0)
+		for _, offset := range []time.Duration{-time.Microsecond, 0, time.Microsecond, 3 * time.Duration(cadence) * time.Second} {
+			want := end
+			if offset < 0 {
+				want = end.Add(-time.Duration(cadence) * time.Second)
+			} else if offset > time.Duration(cadence)*time.Second {
+				want = end.Add(offset)
+			}
+			if got := LatestDueEnd(deadline.Add(offset), id, cadence, 60); !got.Equal(want) {
+				t.Errorf("cadence %d offset %s: due end %s, want %s", cadence, offset, got, want)
+			}
+		}
+	}
+}
+
 func TestDefinitionRequiresSupportedMeasurementAndConversion(t *testing.T) {
 	definition := Definition{
 		Name: "request-success", DisplayName: "Request success",

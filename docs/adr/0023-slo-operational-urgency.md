@@ -5,7 +5,7 @@
 - Accepted: 2026-10-29
 - Approval: maintainer working-conversation go-ahead, "ok please start working", after the F3 tasks and this proposed policy were presented
 - Related specs: [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md), [SPEC-0012](../specs/0012-user-interface.md)
-- Supersedes / superseded by: none
+- Supersedes / superseded by: shortened-eligibility and live-interval coverage rules superseded by [ADR-0043](0043-slo-status-from-due-eligible-measurements.md); other decisions stand.
 
 ## Context
 
