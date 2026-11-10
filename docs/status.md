@@ -39,6 +39,15 @@ comparison passes. Required CI is green and the native stack is verified as
 performance and the preview-copy migration rehearsal remain outstanding;
 T03 stays in progress and merge is unauthorized.
 
+[F9-T04](tasks/F9-T04.md) is implemented above PR #76 in
+`.worktrees/lean-slo-observations` on `feat/lean-slo-observations`. Canonical
+observations and counts share one table, ingestion marks derived work explicitly,
+and the preserving copy commits and verifies bounded batches before removing legacy
+storage. Race integration passes (storage 207.661 seconds), `make check` passes
+(storage 102.014 seconds and 82 browser cases), and all 15 container journeys pass
+in 4.0 minutes. The preview-copy migration rehearsal and final integrated performance
+seed remain pending; the task remains in progress and merge is unauthorized.
+
 # Delivery status
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:

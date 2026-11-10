@@ -98,7 +98,7 @@ func TestIntegrationExtremaArrivalsPreserveFailureBackoff(t *testing.T) {
 SET attempts=$2,failing_since=$3,last_error='extrema_build_failed',next_attempt_at=$4 WHERE slo_id=$1`, id, attempts, failing, next); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, s.at.Add(time.Duration(index+1)*time.Minute), s.now); err != nil {
+		if _, err := execObservationFixture(t, s.conn, s.sliID, extremaCoverageInsert, s.sliID, s.at.Add(time.Duration(index+1)*time.Minute), s.now); err != nil {
 			t.Fatal(err)
 		}
 		var gotAttempts int
@@ -115,7 +115,7 @@ SET attempts=$2,failing_since=$3,last_error='extrema_build_failed',next_attempt_
 	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET failing_since=$2::timestamptz-interval '8 days' WHERE slo_id=$1`, id, s.now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, s.at.Add(3*time.Minute), s.now); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, extremaCoverageInsert, s.sliID, s.at.Add(3*time.Minute), s.now); err != nil {
 		t.Fatal(err)
 	}
 	var attempts int

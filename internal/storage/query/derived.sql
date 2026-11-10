@@ -3,7 +3,12 @@ SELECT generation FROM public.almanac_sli_source_generations
 WHERE sli_id=$1 AND measurement_revision=$2;
 
 -- name: ReadDerivedWindowTotals :one
-WITH readiness AS (
+WITH measurement AS (
+    SELECT datasource.polling_interval_seconds
+    FROM public.almanac_sli_measurements m
+    JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+    WHERE m.sli_id=sqlc.arg(sli_id) AND m.revision=sqlc.arg(measurement_revision)
+), readiness AS (
     SELECT NOT EXISTS (
         SELECT 1 FROM public.almanac_derived_dirty_ranges d
         WHERE d.sli_id=sqlc.arg(sli_id) AND d.measurement_revision=sqlc.arg(measurement_revision)
@@ -31,20 +36,18 @@ WITH readiness AS (
       AND a.hour_start < sqlc.arg(full_end)::timestamptz
       AND (SELECT prepared FROM readiness)
     UNION ALL
-    SELECT coalesce(sum(v.good_count),0)::numeric, coalesce(sum(v.total_count),0)::numeric,
+    SELECT coalesce(sum(c.good_count),0)::numeric, coalesce(sum(c.total_count),0)::numeric,
            count(*) FILTER (WHERE c.outcome='observed'),
            count(*) FILTER (WHERE c.outcome='complete_empty'),
-           count(*) FILTER (WHERE c.outcome='observed' AND v.total_count=0),
+           count(*) FILTER (WHERE c.outcome='observed' AND c.total_count=0),
            min(c.interval_start) FILTER (WHERE c.outcome='observed'),
-           max(c.interval_end) FILTER (WHERE c.outcome='observed'), max(c.recorded_at)
-    FROM raw_ranges r JOIN public.almanac_sli_coverage c
+           max(c.interval_start+m.polling_interval_seconds*interval '1 second') FILTER (WHERE c.outcome='observed'), max(c.recorded_at)
+    FROM raw_ranges r JOIN public.almanac_sli_observations c
       ON c.sli_id=sqlc.arg(sli_id) AND c.measurement_revision=sqlc.arg(measurement_revision)
       AND c.interval_start >= r.start_at AND c.interval_start < r.end_at
-      AND c.interval_end <= sqlc.arg(window_end)::timestamptz
-    LEFT JOIN public.almanac_sli_observation_values v
-      ON v.interval_start=c.interval_start AND v.sli_id=c.sli_id
-      AND v.measurement_revision=c.measurement_revision
-    WHERE (SELECT prepared FROM readiness)
+    CROSS JOIN measurement m
+    WHERE c.interval_start+m.polling_interval_seconds*interval '1 second'<=sqlc.arg(window_end)::timestamptz
+      AND (SELECT prepared FROM readiness)
 )
 SELECT coalesce(sum(good),0)::numeric::text AS good,
        coalesce(sum(total),0)::numeric::text AS total,

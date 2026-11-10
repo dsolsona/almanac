@@ -34,14 +34,14 @@ func verifyAuditedRetentionCleanup(t *testing.T, runtime *Runtime, databaseURL, 
 	if err := prepareSliPartitions(t.Context(), tx, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_sli_coverage
-        (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-        SELECT $3,sli_id,measurement_revision,$3::timestamptz+interval '1 minute',outcome,result_digest,missing_components,
-            gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,$3,$3
-        FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=$2 AND outcome='observed' LIMIT 1`, row.SliID, row.MeasurementRevision, old); err != nil {
+	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_sli_observations
+        (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+        SELECT $3,sli_id,measurement_revision,outcome,90,100,result_digest,missing_components,
+            gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,$3,$3
+        FROM public.almanac_sli_observations WHERE sli_id=$1 AND measurement_revision=$2 AND outcome='observed' LIMIT 1`, row.SliID, row.MeasurementRevision, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES ($3,$1,$2,90,100)`, row.SliID, row.MeasurementRevision, old); err != nil {
+	if err := markObservationFixture(t.Context(), tx, row.SliID.String()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(t.Context(), `INSERT INTO public.almanac_slo_extrema
@@ -54,7 +54,7 @@ VALUES ($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',0,$5,$6,'{}')`,
 		t.Fatal(err)
 	}
 	var canonicalBefore int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1`, row.SliID).Scan(&canonicalBefore); err != nil {
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_observations WHERE sli_id=$1`, row.SliID).Scan(&canonicalBefore); err != nil {
 		t.Fatal(err)
 	}
 	if err := runtime.discoverRetention(t.Context(), now); err != nil {
@@ -66,7 +66,7 @@ VALUES ($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',0,$5,$6,'{}')`,
 		t.Fatal(err)
 	}
 	var preview retentionImpact
-	if err := json.Unmarshal(previewBytes, &preview); err != nil || len(preview.Partitions) != 2 || preview.CalculatedRowsAtLeast["extrema"] != 1 || preview.PreviewRowLimit != 1000 {
+	if err := json.Unmarshal(previewBytes, &preview); err != nil || len(preview.Partitions) != 1 || preview.CalculatedRowsAtLeast["extrema"] != 1 || preview.PreviewRowLimit != 1000 {
 		t.Fatalf("committed preview omitted canonical/calculated impact: %+v, %v", preview, err)
 	}
 	if worked, err := runtime.applyRetentionPreview(t.Context(), now); err != nil || worked {
@@ -92,13 +92,18 @@ VALUES ($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',0,$5,$6,'{}')`,
 			t.Fatal("small retention fixture did not finish bounded cleanup")
 		}
 	}
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1`, row.SliID).Scan(&canonicalAfter); err != nil || canonicalAfter != canonicalBefore-1 {
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_observations WHERE sli_id=$1`, row.SliID).Scan(&canonicalAfter); err != nil || canonicalAfter != canonicalBefore-1 {
 		t.Fatalf("retention removed retained rows or failed to remove the expired row: %d -> %d, %v", canonicalBefore, canonicalAfter, err)
 	}
 	missingAt := time.Date(now.Year(), now.Month(), 1, 0, 0, 1, 0, time.UTC)
-	_, err = conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count) VALUES($1,$2,$3,0,1)`, missingAt, row.SliID, row.MeasurementRevision)
+	_, err = conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observations
+(sli_id,measurement_revision,interval_start,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,
+ agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT sli_id,measurement_revision+1000,$2,outcome,good_count,total_count,result_digest,missing_components,gen_random_uuid(),gen_random_uuid(),
+ agent_id,session_generation,configuration_revision,lease_id,$2,$2
+FROM public.almanac_sli_observations WHERE sli_id=$1 AND outcome='observed' LIMIT 1`, row.SliID, missingAt)
 	if foreignKey, ok := errors.AsType[*pgconn.PgError](err); !ok || foreignKey.Code != "23503" {
-		t.Fatalf("cleanup removed the retained observation coverage foreign key: %v", err)
+		t.Fatalf("cleanup removed the retained observation measurement foreign key: %v", err)
 	}
 	var audit int
 	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_audit_events WHERE subject_id=$1 AND action IN ('retention.preview','retention.apply')`, plan).Scan(&audit); err != nil || audit != 2 {
@@ -122,8 +127,8 @@ VALUES ($1,$2,$3,$4,3600,$5,$5::timestamptz+interval '1 hour',0,$5,$6,'{}')`,
 		t.Fatal(err)
 	}
 	for _, part := range replacement.Partitions {
-		if part.Parent == "almanac_sli_coverage" {
-			if _, err := conn.Exec(t.Context(), "ALTER TABLE public.almanac_sli_coverage DETACH PARTITION "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
+		if part.Parent == "almanac_sli_observations" {
+			if _, err := conn.Exec(t.Context(), "ALTER TABLE public.almanac_sli_observations DETACH PARTITION "+pgx.Identifier{"public", part.Name}.Sanitize()); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -69,7 +69,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatal(err)
 	}
 	defer lockTx.Rollback(t.Context())
-	partitionKey := "almanac-sli-partition:almanac_sli_coverage_" + now.Format("200601")
+	partitionKey := "almanac-sli-partition:almanac_sli_observations_" + now.Format("200601")
 	if _, err := lockTx.Exec(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, partitionKey); err != nil {
 		t.Fatal(err)
 	}
@@ -166,9 +166,8 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := IngestAgentObservation(t.Context(), f.databaseURL, issued.ID, issued.Verifier, fenced, clock); !errors.Is(err, ErrObservationDenied) {
 		t.Fatalf("fenced generation authorization: %v", err)
 	}
-	// Remove an empty values partition to verify ingestion fails closed and rolls
-	// back coverage and receipt; restore it through the admission preparation path.
-	partition := "almanac_sli_observation_values_" + item.IntervalStart.Format("200601")
+	// Missing canonical storage must roll back source marking and its receipt too.
+	partition := "almanac_sli_observations_" + item.IntervalStart.Format("200601")
 	if _, err := conn.Exec(t.Context(), "DROP TABLE public."+partition); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +177,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatal("missing partition accepted")
 	}
 	var committed int
-	if err := conn.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1) + (SELECT count(*) FROM public.almanac_sli_delivery_receipts WHERE sli_id=$1)`, record.ID).Scan(&committed); err != nil || committed != 0 {
+	if err := conn.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM public.almanac_sli_observations WHERE sli_id=$1) + (SELECT count(*) FROM public.almanac_sli_delivery_receipts WHERE sli_id=$1) + (SELECT count(*) FROM public.almanac_sli_source_generations WHERE sli_id=$1)`, record.ID).Scan(&committed); err != nil || committed != 0 {
 		t.Fatalf("missing partition left partial writes: %d, %v", committed, err)
 	}
 	tx, err := conn.Begin(t.Context())
@@ -202,6 +201,12 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("failed attempt: %+v", result)
 	}
+	var marked int
+	if err := conn.QueryRow(t.Context(), `SELECT
+(SELECT count(*) FROM public.almanac_sli_source_generations WHERE sli_id=$1)+
+(SELECT count(*) FROM public.almanac_derived_dirty_ranges WHERE sli_id=$1)`, record.ID).Scan(&marked); err != nil || marked != 0 {
+		t.Fatalf("failed execution marked derived work: %d %v", marked, err)
+	}
 	var cursor time.Time
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(item.IntervalEnd) {
 		t.Fatalf("persisted attempt cursor = %v, %v", cursor, err)
@@ -217,6 +222,32 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if accepted.Status != "accepted" {
 		t.Fatalf("observation after failed attempt: %+v", accepted)
 	}
+	var sourceGeneration, dirtyGeneration int64
+	var dirtyStart, dirtyEnd time.Time
+	var attempts int
+	if err := conn.QueryRow(t.Context(), `SELECT s.generation,d.generation,d.range_start,d.range_end,d.attempts
+FROM public.almanac_sli_source_generations s JOIN public.almanac_derived_dirty_ranges d
+USING(sli_id,measurement_revision) WHERE s.sli_id=$1 AND s.measurement_revision=1`, record.ID).Scan(
+		&sourceGeneration, &dirtyGeneration, &dirtyStart, &dirtyEnd, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if sourceGeneration != 1 || dirtyGeneration != 1 || attempts != 0 ||
+		!dirtyStart.Equal(item.IntervalStart.Truncate(time.Hour)) || !dirtyEnd.Equal(maxTime(item.IntervalStart.Truncate(time.Hour).Add(time.Hour), item.IntervalEnd)) {
+		t.Fatalf("canonical acceptance changed marking: source=%d dirty=%d attempts=%d range=%s..%s", sourceGeneration, dirtyGeneration, attempts, dirtyStart, dirtyEnd)
+	}
+	markState := func() string {
+		t.Helper()
+		var state string
+		if err := conn.QueryRow(t.Context(), `SELECT jsonb_build_object(
+'source',(SELECT to_jsonb(s) FROM public.almanac_sli_source_generations s WHERE sli_id=$1 AND measurement_revision=1),
+'hours',(SELECT jsonb_agg(to_jsonb(d) ORDER BY range_start) FROM public.almanac_derived_dirty_ranges d WHERE sli_id=$1 AND measurement_revision=1),
+'cursors',(SELECT jsonb_agg(to_jsonb(w) ORDER BY w.slo_id) FROM public.almanac_slo_extrema_cursor w
+ JOIN public.almanac_slo_definitions def ON def.slo_id=w.slo_id AND def.revision=w.definition_revision WHERE def.sli_id=$1))::text`, record.ID).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		return state
+	}
+	acceptedMarks := markState()
 	if replay := ingest(item); replay.Status != "accepted" || replay.ObservationID != accepted.ObservationID {
 		t.Fatalf("replay: %+v", replay)
 	}
@@ -235,11 +266,14 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if conflict := ingest(item); conflict.Status != "conflicting" {
 		t.Fatalf("canonical conflict: %+v", conflict)
 	}
+	if markState() != acceptedMarks {
+		t.Fatal("replayed, duplicate or conflicting deliveries changed source/hour/cursor work")
+	}
 	var good string
-	if err := conn.QueryRow(t.Context(), `SELECT good_count::text FROM public.almanac_sli_observation_values WHERE sli_id=$1`, record.ID).Scan(&good); err != nil || good != "99.000000000000" {
+	if err := conn.QueryRow(t.Context(), `SELECT good_count::text FROM public.almanac_sli_observations WHERE sli_id=$1`, record.ID).Scan(&good); err != nil || good != "99.000000000000" {
 		t.Fatalf("canonical value = %q, %v", good, err)
 	}
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=0, total_count=0 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
+	if _, err := execObservationFixture(t, conn, record.ID, `UPDATE public.almanac_sli_observations SET good_count=0,total_count=0,ingestion_generation=0 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
 		t.Fatal("seed database-backed SLI zero-traffic projection failed")
 	}
 	zeroPage, err := ListSlis(t.Context(), f.databaseURL, proof, 50, "", "", "", clock)
@@ -301,7 +335,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 			t.Fatalf("bounded twelve-slot SLI list unexpectedly requires JIT compilation: %s", raw)
 		}
 	})
-	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_sli_observation_values SET good_count=99, total_count=100 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
+	if _, err := execObservationFixture(t, conn, record.ID, `UPDATE public.almanac_sli_observations SET good_count=99,total_count=100,ingestion_generation=0 WHERE sli_id=$1 AND measurement_revision=1 AND interval_start=$2`, record.ID, item.IntervalStart); err != nil {
 		t.Fatal("restore database-backed SLI sample after zero-traffic projection failed")
 	}
 	serviceInput := CreateObjectiveInput{Proof: proof, Name: "api", DisplayName: "API", IdempotencyKey: "service-create", RequestID: "service-create", Now: clock}
@@ -461,13 +495,30 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	item.IntervalStart = item.IntervalEnd
 	item.IntervalEnd = item.IntervalStart.Add(15 * time.Second)
 	item.Outcome = sli.ExecutionOutcome{State: sli.OutcomeIncomplete, MissingComponents: []string{"good"}}
+	beforeAttempt := markState()
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("incomplete attempt: %+v", result)
 	}
+	if markState() != beforeAttempt {
+		t.Fatal("incomplete execution changed generations, dirty hours or extrema cursors")
+	}
 	item.DeliveryID, item.ExecutionID = uuid.NewString(), uuid.NewString()
 	item.Outcome = sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "0", TotalCount: "0"}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=5,failing_since=$2,last_error='extrema_build_failed',next_attempt_at=$2::timestamptz+interval '5 minutes'
+WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=$1)`, record.ID, now); err != nil {
+		t.Fatal(err)
+	}
 	if result := ingest(item); result.Status != "accepted" {
 		t.Fatalf("zero traffic after incomplete: %+v", result)
+	}
+	var preserved bool
+	if err := conn.QueryRow(t.Context(), `SELECT count(*)>0 AND bool_and(w.attempts=5 AND w.failing_since=$2 AND w.next_attempt_at=$2::timestamptz+interval '5 minutes' AND w.last_error='extrema_build_failed')
+FROM public.almanac_slo_extrema_cursor w JOIN public.almanac_slo_definitions d ON d.slo_id=w.slo_id AND d.revision=w.definition_revision WHERE d.sli_id=$1`, record.ID, now).Scan(&preserved); err != nil || !preserved {
+		t.Fatalf("canonical API acceptance reset extrema retry backoff: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET attempts=0,failing_since=NULL,last_error=NULL,next_attempt_at=$2
+WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=$1)`, record.ID, now); err != nil {
+		t.Fatal(err)
 	}
 	zeroFrom := item.IntervalStart
 	zeroInput := CreateObjectiveInput{Proof: proof, Name: "zero-window", DisplayName: "Zero window", ServiceID: service.ID, SliID: record.ID, Target: "0.99", RollingWindowSeconds: 120, EvaluationValidFrom: &zeroFrom, IdempotencyKey: "zero-window", RequestID: "zero-window", Now: clock}
@@ -638,7 +689,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatalf("complete empty coverage: %+v", result)
 	}
 	var emptyCount int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage c LEFT JOIN public.almanac_sli_observation_values v USING (interval_start,sli_id,measurement_revision) WHERE c.sli_id=$1 AND c.interval_start=$2 AND c.outcome='complete_empty' AND v.sli_id IS NULL`, record.ID, empty.IntervalStart).Scan(&emptyCount); err != nil || emptyCount != 1 {
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2 AND outcome='complete_empty' AND good_count IS NULL AND total_count IS NULL`, record.ID, empty.IntervalStart).Scan(&emptyCount); err != nil || emptyCount != 1 {
 		t.Fatalf("complete empty coverage without fabricated values: %d, %v", emptyCount, err)
 	}
 	emptyFrom := empty.IntervalStart
@@ -690,10 +741,18 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
-	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_extrema, public.almanac_slo_extrema_cursor`); err != nil {
+	recreateLegacyObservationTables(t, conn)
+	if _, err := conn.Exec(t.Context(), `CREATE TEMP TABLE expected_migrated_observation_ids AS
+SELECT c.agent_id,c.delivery_id,c.observation_id,r.payload_digest,r.replay_until FROM public.almanac_sli_coverage c
+LEFT JOIN public.almanac_sli_delivery_receipts r ON r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id;
+DELETE FROM public.almanac_sli_delivery_receipts r USING public.almanac_sli_coverage c
+WHERE r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_sli_coverage_revision_time_idx`); err != nil {
+	if _, err := conn.Exec(t.Context(), "DROP TABLE public.almanac_sli_observations"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_extrema, public.almanac_slo_extrema_cursor`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_retention_work`); err != nil {
@@ -702,7 +761,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_archive_current_slo_projection ON public.almanac_slo_current_projections; DROP FUNCTION public.almanac_archive_slo_projection(); DROP TABLE public.almanac_slo_projection_payloads CASCADE`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_slo_series_invalidation ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_invalidate_slo_series(); DROP TABLE public.almanac_slo_current_failures`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_current_failures`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_derived_cache_usage; DROP FUNCTION public.almanac_account_derived_cache() CASCADE; DROP FUNCTION public.almanac_history_payload_metadata() CASCADE`); err != nil {
@@ -714,7 +773,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_user_receipts, public.almanac_user_challenges; ALTER TABLE public.almanac_users DROP COLUMN full_name, DROP COLUMN email, DROP COLUMN login_is_alias, DROP COLUMN version, DROP COLUMN last_sign_in, DROP COLUMN sign_in_history_known, DROP COLUMN password_login_suspended, DROP COLUMN deleted_at`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_sli_derived_dirty ON public.almanac_sli_coverage; DROP FUNCTION public.almanac_mark_derived_dirty(); DROP TABLE public.almanac_slo_history_blocks, public.almanac_slo_current_projections, public.almanac_slo_derived_generations, public.almanac_sli_hourly_aggregates, public.almanac_derived_dirty_ranges, public.almanac_sli_source_generations; DROP INDEX public.almanac_sli_latest_accepted_receipt_idx, public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_service_dependencies, public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_coverage_lease_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version >= 16`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_history_blocks, public.almanac_slo_current_projections, public.almanac_slo_derived_generations, public.almanac_sli_hourly_aggregates, public.almanac_derived_dirty_ranges, public.almanac_sli_source_generations; DROP INDEX public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_service_dependencies, public.almanac_slo_overview_snapshot_items, public.almanac_slo_overview_snapshots, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version >= 16`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_coverage DROP COLUMN ingestion_generation`); err != nil {
@@ -725,6 +784,13 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 	}
 	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
+	}
+	var changedIDs int
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM expected_migrated_observation_ids e
+LEFT JOIN public.almanac_sli_delivery_receipts r USING(agent_id,delivery_id)
+WHERE e.observation_id IS DISTINCT FROM r.observation_id
+OR (e.payload_digest IS NOT NULL AND (e.payload_digest IS DISTINCT FROM r.payload_digest OR e.replay_until IS DISTINCT FROM r.replay_until))`).Scan(&changedIDs); err != nil || changedIDs != 0 {
+		t.Fatalf("upgrade changed externally visible observation identifiers: %d %v", changedIDs, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT last_attempted_interval_end FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, record.ID).Scan(&cursor); err != nil || !cursor.Equal(empty.IntervalEnd) {
 		t.Fatalf("backfilled cursor = %v, %v", cursor, err)
@@ -807,7 +873,7 @@ func TestIntegrationSLIIngestionAttemptsReplayAndCanonicalConflict(t *testing.T)
 		t.Fatal(err)
 	}
 	var partitions int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('almanac_sli_coverage_202610','almanac_sli_coverage_202611','almanac_sli_coverage_202612','almanac_sli_observation_values_202610','almanac_sli_observation_values_202611','almanac_sli_observation_values_202612')`).Scan(&partitions); err != nil || partitions != 6 {
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('almanac_sli_observations_202610','almanac_sli_observations_202611','almanac_sli_observations_202612')`).Scan(&partitions); err != nil || partitions != 3 {
 		t.Fatalf("month boundary preparation count=%d err=%v", partitions, err)
 	}
 	// Keep durable grant evidence beyond the delivery window to isolate replay

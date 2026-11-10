@@ -174,7 +174,7 @@ func TestIntegrationLateExtremaRebuildRefreshesCoveredSparkline(t *testing.T) {
 	verifyFixtureSparkline(t, s, before)
 	late := s.at.Add(-3*24*time.Hour + 10*time.Minute)
 	s.now = s.now.Add(time.Second)
-	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, late, s.now); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, extremaCoverageInsert, s.sliID, late, s.now); err != nil {
 		t.Fatal(err)
 	}
 	s.drain(t, "late sparkline source")

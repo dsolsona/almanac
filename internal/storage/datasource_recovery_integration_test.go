@@ -216,7 +216,7 @@ func TestIntegrationDatasourceRecoveryDoesNotWaitForSource(t *testing.T) {
 		t.Fatalf("recovered replacement: %+v err=%v", completed, err)
 	}
 	var observations, revision int
-	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_coverage WHERE sli_id=$1`, measurement.ID).Scan(&observations); err != nil || observations != 3 {
+	if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_sli_observations WHERE sli_id=$1`, measurement.ID).Scan(&observations); err != nil || observations != 3 {
 		t.Fatalf("preserved coverage: %d err=%v", observations, err)
 	}
 	if err := conn.QueryRow(t.Context(), `SELECT measurement_revision FROM public.almanac_slis WHERE id=$1`, measurement.ID).Scan(&revision); err != nil || revision != 1 {

@@ -58,7 +58,7 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 	// Autovacuum often analyses the freshly loaded fixture at this moment. It yields to a waiting lock
 	// only after deadlock_timeout (1 s), so this setup step waits longer than that; the plan check
 	// below keeps the production 250 ms limit.
-	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout='3s'; ANALYZE public.almanac_sli_coverage; ANALYZE public.almanac_sli_observation_values; ANALYZE public.almanac_sli_hourly_aggregates; SET LOCAL lock_timeout='250ms'`); err != nil {
+	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout='3s'; ANALYZE public.almanac_sli_observations; ANALYZE public.almanac_sli_hourly_aggregates; SET LOCAL lock_timeout='250ms'`); err != nil {
 		t.Fatal("analyze retained fixture before query-plan acceptance", err)
 	}
 	var plan []byte
@@ -87,7 +87,7 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 	inspect = func(node map[string]any) {
 		name, _ := node["Node Type"].(string)
 		relation, _ := node["Relation Name"].(string)
-		if strings.HasPrefix(relation, "almanac_sli_coverage") {
+		if strings.HasPrefix(relation, "almanac_sli_observations") {
 			hits, _ := node["Shared Hit Blocks"].(float64)
 			reads, _ := node["Shared Read Blocks"].(float64)
 			coverageBlocks += hits + reads
@@ -203,7 +203,7 @@ func verifyDerivedBatchValueLookup(t *testing.T, tx pgx.Tx, batch dbgen.RebuildD
 	if _, err := dbgen.New(capture).RebuildDerivedBatch(t.Context(), batch); !errors.Is(err, errFactsQueryCaptured) {
 		t.Fatal("capture source aggregate query failed", err)
 	}
-	// Exercise the hash-join alternative without loading a year merely to change planner statistics.
+	// Disable nested loops to ensure the canonical range remains bounded under another plan.
 	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_nestloop=off"); err != nil {
 		t.Fatal(err)
 	}
@@ -225,10 +225,14 @@ func verifyDerivedBatchValueLookup(t *testing.T, tx pgx.Tx, batch dbgen.RebuildD
 	lookups := 0
 	var inspect func(map[string]any)
 	inspect = func(node map[string]any) {
-		if relation, _ := node["Relation Name"].(string); strings.HasPrefix(relation, "almanac_sli_observation_values") {
-			condition, _ := node["Index Cond"].(string)
-			if !strings.Contains(condition, "c.interval_start") {
-				t.Fatalf("source aggregate can scan retained values instead of the outer interval: %s; plan=%s", condition, body)
+		if relation, _ := node["Relation Name"].(string); strings.HasPrefix(relation, "almanac_sli_observations") {
+			indexCondition, _ := node["Index Cond"].(string)
+			filter, _ := node["Filter"].(string)
+			recheck, _ := node["Recheck Cond"].(string)
+			condition := indexCondition + filter + recheck
+			if !strings.Contains(condition, "sli_id") || !strings.Contains(condition, "measurement_revision") ||
+				!strings.Contains(condition, "interval_start >=") || !strings.Contains(condition, "interval_start <") {
+				t.Fatalf("source aggregate can scan outside its keyed canonical hour: %s; plan=%s", condition, body)
 			}
 			lookups++
 		}
@@ -242,6 +246,6 @@ func verifyDerivedBatchValueLookup(t *testing.T, tx pgx.Tx, batch dbgen.RebuildD
 	}
 	inspect(plan[0].Plan)
 	if lookups == 0 {
-		t.Fatal("source aggregate plan omitted value lookup evidence")
+		t.Fatal("source aggregate plan omitted bounded canonical observation access")
 	}
 }

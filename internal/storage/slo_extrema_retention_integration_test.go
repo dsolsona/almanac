@@ -18,10 +18,7 @@ func TestIntegrationLateExtremaRebuildUsesCurrentCutoffAndPreservesNeighbour(t *
 		t.Fatal(err)
 	}
 	late := s.historyStart.Add(10 * time.Minute)
-	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observation_values WHERE sli_id=$1 AND interval_start=$2`, s.sliID, late); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_coverage WHERE sli_id=$1 AND interval_start=$2`, s.sliID, late); err != nil {
+	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2`, s.sliID, late); err != nil {
 		t.Fatal(err)
 	}
 	id := s.createSLOWithHistory(t, "extrema-retention", 28*24*time.Hour, valid)
@@ -55,7 +52,7 @@ func TestIntegrationLateExtremaRebuildUsesCurrentCutoffAndPreservesNeighbour(t *
 	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_extrema_cursor SET built_through=$2 WHERE slo_id=$1`, id, s.now.Truncate(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.conn.Exec(t.Context(), extremaCoverageInsert, s.sliID, late, s.now); err != nil {
+	if _, err := execObservationFixture(t, s.conn, s.sliID, extremaCoverageInsert, s.sliID, late, s.now); err != nil {
 		t.Fatal(err)
 	}
 	s.drain(t, "late retention source")

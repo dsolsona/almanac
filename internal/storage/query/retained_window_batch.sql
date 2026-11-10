@@ -1,7 +1,12 @@
 -- Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct
 -- interior once; only cadence-aligned boundary fragments use canonical rows.
 -- name: ReadRetainedWindowBatch :many
-WITH requested AS MATERIALIZED (
+WITH measurement AS MATERIALIZED (
+    SELECT datasource.polling_interval_seconds
+    FROM public.almanac_sli_measurements m
+    JOIN public.almanac_datasources datasource ON datasource.id=m.datasource_id
+    WHERE m.sli_id=sqlc.arg(sli_id) AND m.revision=sqlc.arg(measurement_revision)
+), requested AS MATERIALIZED (
     SELECT generate_series(1,cardinality(sqlc.arg(window_ends)::timestamptz[]))::integer AS ordinal,
            unnest(sqlc.arg(window_ends)::timestamptz[]) AS window_end,
            unnest(sqlc.arg(full_starts)::timestamptz[]) AS full_start,
@@ -58,18 +63,15 @@ WITH requested AS MATERIALIZED (
            CASE WHEN c.outcome='observed' AND c.total_count=0 THEN 1 ELSE 0 END::bigint AS zero_traffic,
            CASE WHEN c.outcome='observed' THEN c.interval_start END AS first_observation,
            CASE WHEN c.outcome='observed' THEN c.interval_end END AS last_observation,c.recorded_at AS latest_receipt
-    FROM anchors a
+    FROM anchors a CROSS JOIN measurement m
     -- Preserve a parameterized range scan for each anchor, not a year-wide join.
     CROSS JOIN LATERAL (
-        SELECT c.interval_start,c.interval_end,c.outcome,c.recorded_at,v.good_count,v.total_count
-        FROM public.almanac_sli_coverage c
-        LEFT JOIN LATERAL (
-            SELECT v.good_count,v.total_count FROM public.almanac_sli_observation_values v
-            WHERE v.sli_id=c.sli_id AND v.measurement_revision=c.measurement_revision AND v.interval_start=c.interval_start
-              AND v.interval_start>=a.start_at AND v.interval_start<a.end_at LIMIT 1
-        ) v ON true
+        SELECT c.interval_start,(c.interval_start+m.polling_interval_seconds*interval '1 second')::timestamptz AS interval_end,
+               c.outcome,c.recorded_at,c.good_count,c.total_count
+        FROM public.almanac_sli_observations c
         WHERE c.sli_id=sqlc.arg(sli_id) AND c.measurement_revision=sqlc.arg(measurement_revision)
-          AND c.interval_start>=a.start_at AND c.interval_start<a.end_at AND c.interval_end<=a.end_at
+          AND c.interval_start>=a.start_at AND c.interval_start<a.end_at
+          AND c.interval_start+m.polling_interval_seconds*interval '1 second'<=a.end_at
         OFFSET 0
     ) c
     UNION ALL

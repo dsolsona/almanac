@@ -50,6 +50,8 @@ sql:
       - internal/storage/migrations/0044_immediate_datasource_reassignment.sql
       - internal/storage/migrations/0045_slo_extrema.sql
       - internal/storage/migrations/0046_drop_point_pipeline.sql
+      - internal/storage/migrations/0047_create_merged_observations.sql
+      - internal/storage/migrations/0048_merge_sli_observations.sql
     gen:
       go:
         package: dbgen

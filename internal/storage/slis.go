@@ -566,7 +566,7 @@ func ListSliObservations(ctx context.Context, databaseURL string, proof Datasour
 	}
 	covered := make(map[int64]bool, len(rows))
 	for _, row := range rows {
-		page.Items = append(page.Items, sliObservationFromListRow(row))
+		page.Items = append(page.Items, sliObservationFromListRow(id, row))
 		if row.Outcome == string(sli.OutcomeObserved) || row.Outcome == string(sli.OutcomeCompleteEmpty) {
 			covered[row.IntervalStart.Time.UnixMicro()] = true
 		}
@@ -612,7 +612,7 @@ func sliRecordFromGet(ctx context.Context, queries *dbgen.Queries, row dbgen.Get
 	}
 	var latest *SliObservationRecord
 	if len(rows) > 0 {
-		value := sliObservationFromListRow(rows[0])
+		value := sliObservationFromListRow(row.ID, rows[0])
 		latest = &value
 	}
 	acceptedAt, err := latestSliAcceptedAt(ctx, queries, row.ID, now)
@@ -630,8 +630,12 @@ func sliRecordFromGet(ctx context.Context, queries *dbgen.Queries, row dbgen.Get
 
 func sliRecordFromListRow(ctx context.Context, row dbgen.ListSlisRow, now time.Time) (SliRecord, error) {
 	var latest *SliObservationRecord
-	if row.LatestObservationID.Valid {
-		value := SliObservationRecord{ObservationID: row.LatestObservationID.String(), MeasurementRevision: row.LatestMeasurementRevision,
+	if row.LatestIntervalStart.Valid {
+		id := row.LatestObservationID
+		if !id.Valid {
+			id = uuidToPG(canonicalObservationID(row.ID.String(), row.LatestMeasurementRevision, row.LatestIntervalStart.Time))
+		}
+		value := SliObservationRecord{ObservationID: id.String(), MeasurementRevision: row.LatestMeasurementRevision,
 			IntervalStart: row.LatestIntervalStart.Time.UTC(), IntervalEnd: row.LatestIntervalEnd.Time.UTC(),
 			Outcome: row.LatestOutcome, GoodCount: nullableSliCount(row.LatestGoodCount), TotalCount: nullableSliCount(row.LatestTotalCount),
 			ErrorCode: nullableText(row.LatestErrorCode), MissingComponents: append([]string(nil), row.LatestMissingComponents...), RecordedAt: row.LatestRecordedAt.Time.UTC()}
@@ -773,8 +777,12 @@ func sliAgentReachability(enabled bool, lastHeartbeatAt, runtimeUpdatedAt, incom
 	return "unreachable"
 }
 
-func sliObservationFromListRow(row dbgen.ListSliObservationsRow) SliObservationRecord {
-	return SliObservationRecord{ObservationID: row.ObservationID.String(), MeasurementRevision: row.MeasurementRevision,
+func sliObservationFromListRow(sliID pgtype.UUID, row dbgen.ListSliObservationsRow) SliObservationRecord {
+	id := row.ObservationID
+	if !id.Valid {
+		id = uuidToPG(canonicalObservationID(sliID.String(), row.MeasurementRevision, row.IntervalStart.Time))
+	}
+	return SliObservationRecord{ObservationID: id.String(), MeasurementRevision: row.MeasurementRevision,
 		IntervalStart: row.IntervalStart.Time.UTC(), IntervalEnd: row.IntervalEnd.Time.UTC(), Outcome: row.Outcome,
 		GoodCount: nullableSliCount(row.GoodCount), TotalCount: nullableSliCount(row.TotalCount),
 		ErrorCode: nullableText(row.ErrorCode), MissingComponents: append([]string(nil), row.MissingComponents...), RecordedAt: row.RecordedAt.Time.UTC()}

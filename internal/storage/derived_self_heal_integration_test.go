@@ -13,10 +13,11 @@ import (
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// selfHealFixture is one SLI with three hours of one-minute interval records (values optional) and a
+// selfHealFixture is one SLI with three hours of atomic observations and a
 // clock the test moves, for the ADR-0034 recovery tests.
 type selfHealFixture struct {
 	f            agentFixture
@@ -37,6 +38,9 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 
 func newSelfHealFixtureCadence(t *testing.T, name string, withValues bool, cadence time.Duration) *selfHealFixture {
 	t.Helper()
+	if !withValues {
+		t.Fatal("observed fixture rows require their counts")
+	}
 	f := newAgentFixture(t)
 	s := &selfHealFixture{f: f, now: f.base.Add(5 * time.Second), cadence: cadence}
 	issued, created := createOwnershipAgent(t, f, name+"-agent")
@@ -79,16 +83,13 @@ func newSelfHealFixtureCadence(t *testing.T, name string, withValues bool, caden
 	if err := s.conn.QueryRow(t.Context(), `SELECT lease_id FROM public.almanac_agent_execution_grants WHERE agent_id=$1 AND generation=$2 ORDER BY configuration_revision LIMIT 1`, created.Agent.ID, grant.Generation).Scan(&leaseID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_coverage
-    (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point, $1, 1, point + make_interval(secs=>$7), 'observed', decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + make_interval(secs=>$7)
+	if _, err := execObservationFixture(t, s.conn, s.sliID, `
+INSERT INTO public.almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point, $1, 1, 'observed', 990, 1000, decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + make_interval(secs=>$7)
 FROM generate_series($5::timestamptz, $6::timestamptz - make_interval(secs=>$7), make_interval(secs=>$7)) point`,
 		s.sliID, created.Agent.ID, grant.Generation, leaseID, s.historyStart, s.at, cadence.Seconds()); err != nil {
 		t.Fatal(err)
-	}
-	if withValues {
-		s.insertValues(t)
 	}
 	s.now = s.at
 	s.runtime, err = OpenRuntime(t.Context(), f.databaseURL)
@@ -97,17 +98,6 @@ FROM generate_series($5::timestamptz, $6::timestamptz - make_interval(secs=>$7),
 	}
 	t.Cleanup(s.runtime.Close)
 	return s
-}
-
-// insertValues commits 990 good of 1,000 for every interval, so every full window attains exactly 99%.
-func (s *selfHealFixture) insertValues(t *testing.T) {
-	t.Helper()
-	if _, err := s.conn.Exec(t.Context(), `
-INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT point, $1, 1, 990, 1000 FROM generate_series($2::timestamptz, $3::timestamptz - make_interval(secs=>$4), make_interval(secs=>$4)) point`,
-		s.sliID, s.historyStart, s.at, s.cadence.Seconds()); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // drain runs the aggregator until nothing it may claim now remains.
@@ -200,19 +190,19 @@ AND (mark->>'at')::timestamptz>$2::timestamptz+interval '1 hour' AND (mark->>'at
 	}
 }
 
-// ADR-0034: the performance seed of 2026-11-06 committed interval records before their values; the
-// aggregator ran in between and stored zero totals for observed intervals, and every calculation that
-// read them failed until its work stopped for good. This reproduces that order: records, aggregation,
-// values, then an SLO with a historical start whose long history must still be built correctly.
-func TestIntegrationDerivedDataHealsWhenValuesArriveAfterAggregation(t *testing.T) {
+// Canonical observed rows cannot enter aggregation without their exact counts.
+func TestIntegrationDerivedDataRejectsMissingObservationValues(t *testing.T) {
 	t.Parallel()
-	s := newSelfHealFixture(t, "self-heal-late", false)
-	s.drain(t, "before values")
-	s.insertValues(t)
-	s.drain(t, "after values")
-	sloID := s.createSLO(t, "self-heal-late")
+	s := newSelfHealFixture(t, "self-heal-atomic", true)
+	s.drain(t, "atomic observations")
+	_, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_sli_observations SET good_count=NULL
+WHERE sli_id=$1 AND interval_start=$2`, s.sliID, s.historyStart)
+	if failure, ok := errors.AsType[*pgconn.PgError](err); !ok || failure.Code != "23514" {
+		t.Fatalf("observed row without counts was accepted: %v", err)
+	}
+	sloID := s.createSLO(t, "self-heal-atomic")
 	if err := s.buildHistory(t, sloID); err != nil {
-		t.Fatalf("retained history never completed; last error: %v", err)
+		t.Fatalf("atomic observation history never completed: %v", err)
 	}
 	s.requireExactHistory(t, sloID)
 }

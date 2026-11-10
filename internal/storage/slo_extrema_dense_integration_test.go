@@ -19,27 +19,19 @@ func TestIntegrationExtremaDenseHistoryKeepsCoverageWithinReadBudget(t *testing.
 	s.at = s.historyStart.Add(14 * 24 * time.Hour)
 	s.now = s.at.Add(7 * time.Minute)
 	for start := s.historyStart; start.Before(s.at); start = start.Add(time.Hour) {
-		if _, err := s.conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_coverage
-(interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,
-execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point,c.sli_id,c.measurement_revision,point+interval '15 seconds','observed',c.result_digest,'{}',
-gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,point,point+interval '15 seconds'
-FROM (SELECT * FROM public.almanac_sli_coverage WHERE sli_id=$1 LIMIT 1) c
+		if _, err := execObservationFixture(t, s.conn, s.sliID, `INSERT INTO public.almanac_sli_observations
+(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point,c.sli_id,c.measurement_revision,'observed',990,1000,c.result_digest,'{}',
+gen_random_uuid(),gen_random_uuid(),c.agent_id,c.session_generation,c.configuration_revision,c.lease_id,point,point+interval '15 seconds'
+FROM (SELECT * FROM public.almanac_sli_observations WHERE sli_id=$1 LIMIT 1) c
 CROSS JOIN generate_series($2::timestamptz,$3::timestamptz-interval '15 seconds',interval '15 seconds') point
 ON CONFLICT DO NOTHING`, s.sliID, start, start.Add(time.Hour)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_sli_coverage SET outcome='complete_empty'
+	if _, err := execObservationFixture(t, s.conn, s.sliID, `UPDATE public.almanac_sli_observations SET outcome='complete_empty',good_count=NULL,total_count=NULL,ingestion_generation=0
 WHERE sli_id=$1 AND mod(extract(epoch FROM interval_start)::bigint/15,2)=0`, s.sliID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observation_values WHERE sli_id=$1`, s.sliID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_observation_values
-(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT interval_start,sli_id,measurement_revision,990,1000 FROM public.almanac_sli_coverage WHERE sli_id=$1 AND outcome='observed'`, s.sliID); err != nil {
 		t.Fatal(err)
 	}
 	s.drain(t, "dense extrema source")
