@@ -200,8 +200,6 @@ type Querier interface {
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
 	ListManagedUsers(ctx context.Context, arg ListManagedUsersParams) ([]AlmanacUser, error)
-	ListOperationalSloDefinitions(ctx context.Context, arg ListOperationalSloDefinitionsParams) ([]ListOperationalSloDefinitionsRow, error)
-	ListOperationalSloFacts(ctx context.Context, arg ListOperationalSloFactsParams) ([]ListOperationalSloFactsRow, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
 	ListReadyDatasourceReassignments(ctx context.Context, retryAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
 	ListRetentionScopes(ctx context.Context) ([][]byte, error)
@@ -280,7 +278,6 @@ type Querier interface {
 	// Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct
 	// interior once; only cadence-aligned boundary fragments use canonical rows.
 	ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedWindowBatchParams) ([]ReadRetainedWindowBatchRow, error)
-	ReadReusableSloBlocks(ctx context.Context, arg ReadReusableSloBlocksParams) ([]ReadReusableSloBlocksRow, error)
 	ReadServiceCatalogFields(ctx context.Context, dollar_1 []pgtype.UUID) ([]ReadServiceCatalogFieldsRow, error)
 	// Each active SLO is stopped (some of its work failed for seven days), failing (some of its work failed
 	// five times in a row), catching up (its current values or retained history are behind) or up to date.
@@ -342,7 +339,6 @@ type Querier interface {
 	UpdateSourceRemovalRevisions(ctx context.Context, arg UpdateSourceRemovalRevisionsParams) error
 	UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error
 	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
-	UpsertSloDisplayBlock(ctx context.Context, arg UpsertSloDisplayBlockParams) error
 	UserEmailInUse(ctx context.Context, arg UserEmailInUseParams) (bool, error)
 }
 

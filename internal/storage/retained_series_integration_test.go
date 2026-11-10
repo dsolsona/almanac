@@ -17,6 +17,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+func TestIntegrationPendingOverviewWaitsForRetainedTiles(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "pending-overview", true)
+	id := s.createSLO(t, "pending-overview")
+	s.now = s.now.Add(2*time.Hour + 5*time.Second)
+	s.drain(t, "overview sources")
+	if err := s.runtime.refreshCurrentProjections(t.Context(), s.clock); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.runtime.queueDueBudgetHistory(t.Context(), s.now); err != nil {
+		t.Fatal(err)
+	}
+	worked := false
+	if err := s.runtime.prepareHistory(t.Context(), s.clock, &worked); !worked || !errors.Is(err, ErrDerivedPending) {
+		t.Fatalf("unready overview was published instead of deferred: worked=%v err=%v", worked, err)
+	}
+	var pending bool
+	if err := s.conn.QueryRow(t.Context(), `SELECT state='pending' AND attempts=0 AND lease_until IS NULL FROM public.almanac_slo_history_jobs WHERE slo_id=$1 AND kind='overview'`, id).Scan(&pending); err != nil || !pending {
+		t.Fatalf("pending overview lost its dependency retry: %v", err)
+	}
+	var blocks int
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='overview'`, id).Scan(&blocks); err != nil || blocks != 0 {
+		t.Fatalf("pending overview left a ready cache entry: %d %v", blocks, err)
+	}
+	s.now = s.now.Add(2 * time.Second)
+	for range 1000 {
+		repaired, err := s.runtime.repairRetainedSeries(t.Context(), s.clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tiled, err := s.runtime.prepareRetainedTile(t.Context(), s.clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !repaired && !tiled {
+			break
+		}
+	}
+	worked = false
+	if err := s.runtime.prepareHistory(t.Context(), s.clock, &worked); err != nil || !worked {
+		t.Fatalf("ready tiles did not release overview preparation: worked=%v err=%v", worked, err)
+	}
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_blocks b JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id WHERE g.slo_id=$1 AND b.kind='overview'`, id).Scan(&blocks); err != nil || blocks != 1 {
+		t.Fatalf("ready overview was not published exactly once: %d %v", blocks, err)
+	}
+}
+
 func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL string, proof DatasourceProof, id string, clock func() time.Time, oracle api.SloOperationalDetail) {
 	t.Helper()
 	conn := integrationConnect(t, databaseURL)
@@ -37,7 +84,7 @@ func verifyRetainedCurrentPoint(t *testing.T, runtime *Runtime, databaseURL stri
 	}
 	end := oracle.EffectiveAt
 	start := end.Add(-time.Duration(oracle.Objective.CadenceSeconds) * time.Second)
-	interval, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id, Now: clock, At: &end, Start: &start, End: &end, BurnWindow: 3600})
+	interval, err := readOperationalDetailForTest(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id, Now: clock, At: &end, Start: &start, End: &end, BurnWindow: 3600})
 	if err != nil || len(interval.AttainmentSeries.Samples) != 1 {
 		t.Fatalf("canonical interval oracle failed: %v", err)
 	}
@@ -335,7 +382,7 @@ func verifyRetainedRepairBatch(t *testing.T, databaseURL string, proof Datasourc
 	for _, point := range points {
 		at := point.Current.EvaluationAt
 		from := at.Add(-cadence)
-		canonical, err := ReadSloOperationalDetail(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
+		canonical, err := readOperationalDetailForTest(t.Context(), databaseURL, OperationalDetailInput{Proof: proof, ID: id,
 			Now: clock, At: &at, Start: &from, End: &at, BurnWindow: 3600})
 		if err != nil || len(canonical.AttainmentSeries.Samples) != 1 {
 			t.Fatalf("canonical historical oracle failed: %v", err)

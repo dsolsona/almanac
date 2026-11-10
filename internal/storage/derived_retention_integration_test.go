@@ -121,7 +121,6 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 			t.Fatal(err)
 		}
 		t.Logf("retained fixture cadence=%ds days=%d canonical_intervals=80640 setup=%s", fixture.cadence, fixture.days, time.Since(setupAt))
-		logRetainedFactsPlan(t, conn, measurement.ID, start, end, fixture.cadence)
 		runtime, err := OpenRuntime(t.Context(), f.databaseURL)
 		if err != nil {
 			t.Fatal(err)
@@ -149,7 +148,7 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsBefore); err != nil {
 			t.Fatal(err)
 		}
-		if partial, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input); err != nil || partial.HistoryPreparation == nil || partial.HistoryPreparation.ReadySeconds >= partial.HistoryPreparation.TotalSeconds {
+		if partial, err := readOperationalDetailForTest(t.Context(), f.databaseURL, input); err != nil || partial.HistoryPreparation == nil || partial.HistoryPreparation.ReadySeconds >= partial.HistoryPreparation.TotalSeconds {
 			t.Fatalf("explicit retained bootstrap was not disclosed: %+v, %v", partial.HistoryPreparation, err)
 		}
 		if err := conn.QueryRow(t.Context(), `SELECT count(*) FROM public.almanac_slo_history_jobs`).Scan(&jobsAfter); err != nil || jobsAfter != jobsBefore {
@@ -192,7 +191,7 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 		if err := runtime.refreshCurrentProjection(t.Context(), pgID, clock); err != nil {
 			t.Fatal(err)
 		}
-		prepared, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input)
+		prepared, err := readOperationalDetailForTest(t.Context(), f.databaseURL, input)
 		if err != nil || prepared.Generation == nil {
 			t.Fatalf("retained history not published: %v", err)
 		}
@@ -206,7 +205,7 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 		}
 		defer restarted.Close()
 		input.Runtime = restarted
-		replayed, err := ReadSloOperationalDetail(t.Context(), f.databaseURL, input)
+		replayed, err := readOperationalDetailForTest(t.Context(), f.databaseURL, input)
 		if err != nil || !reflect.DeepEqual(replayed, prepared) {
 			t.Fatalf("restart changed ready retained history: %v", err)
 		}

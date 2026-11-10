@@ -1,9 +1,9 @@
 # ADR-0042: Keyset pagination for the SLO overview
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-09
-- Accepted: pending
-- Approval: pending; this changes list semantics the maintainer clarified on 2026-11-01 and needs an explicit decision
+- Accepted: 2026-11-09
+- Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; merge remains unauthorized
 - Related specs: [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0010](../specs/0010-api-and-cli.md), [SPEC-0012](../specs/0012-user-interface.md)
 - Supersedes / superseded by: would replace the overview snapshot admission rules of SPEC-0019 ("Browser behavior", 2026-11-01 clarification)
 

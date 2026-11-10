@@ -1,3 +1,14 @@
+Lean SLO implementation, 2026-11-09: the maintainer selected PR [#72](https://github.com/dsolsona/almanac/pull/72)
+commit `b7d8a5c` as authoritative, accepted its design and requested all tasks with
+stacked PR delivery. ADR-0040/0041/0042 and SPEC-0020 acceptance is recorded without
+changing their selected scope. [F9-T01](tasks/F9-T01.md) is verified and in review in
+`.worktrees/lean-slo-quick-wins` on `perf/lean-slo-quick-wins`, based on `b7d8a5c`;
+[F9-T06](tasks/F9-T06.md)'s baseline records page timings and storage, with
+minute samples and statement counters still unverified.
+Commits, push and PR publication are authorized; merge is not. No measured
+savings are claimed yet. F9-T01 passed `make check` (241 s), the final
+`make test-integration` (79 s) and all 15 `make test-e2e` journeys (4.6 min).
+
 # Delivery status
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:

@@ -255,15 +255,20 @@ func (r *Runtime) prepareHistory(ctx context.Context, clock func() time.Time, wo
 	}
 	at, start, end := job.EvaluatedThrough.Time.UTC(), job.RangeStart.Time.UTC(), job.RangeEnd.Time.UTC()
 	now := clock().UTC()
-	cache := &sloDisplayCache{q: q, row: row, sourceGeneration: sourceGeneration, now: now}
-	input := OperationalDetailInput{displayCache: cache, overviewOnly: job.Kind == "overview", Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)}
-	if input.overviewOnly {
-		input.displayCache = nil
-		input.retainedReader = &retainedSeriesReader{q: q, row: row, source: contextRow, now: now}
+	if job.Kind != "overview" {
+		if _, err := q.CompleteSloHistoryJob(bounded, dbgen.CompleteSloHistoryJobParams{ID: job.ID, LeaseEpoch: job.LeaseEpoch}); err != nil {
+			return err
+		}
+		return tx.Commit(bounded)
 	}
+	input := OperationalDetailInput{overviewOnly: true, retainedReader: &retainedSeriesReader{q: q, row: row, source: contextRow, now: now},
+		Now: func() time.Time { return now }, At: &at, Start: &start, End: &end, BurnWindow: int(job.BurnWindowSeconds)}
 	value, err := buildSloOperationalDetail(bounded, q, row, contextRow, input)
 	if err != nil {
 		return err
+	}
+	if input.retainedReader.pending {
+		return ErrDerivedPending
 	}
 	generationID, err := q.InsertDerivedGeneration(bounded, dbgen.InsertDerivedGenerationParams{SloID: job.SloID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
 		SourceGeneration: sourceGeneration, CalculationVersion: value.CalculationVersion, EvaluatedThrough: job.EvaluatedThrough, RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), PublishedAt: timestamp(clock())})
@@ -367,7 +372,9 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if err == nil {
 		var result api.SloOperationalDetail
 		if json.Unmarshal(cached.Payload, &result) == nil && preparedHistoryMatches(result, key, cached.GenerationID) {
-			input.Runtime.metrics.historyHits.Add(1)
+			if input.Runtime != nil {
+				input.Runtime.metrics.historyHits.Add(1)
+			}
 			// Display metadata is mutable independently of calculation revisions.
 			result.Objective = sloRecordDTO(sloRecord(row))
 			result.RequestedAt = bound.requestedAt
@@ -379,7 +386,9 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return api.SloOperationalDetail{}, err
 	}
-	input.Runtime.metrics.historyMisses.Add(1)
+	if input.Runtime != nil {
+		input.Runtime.metrics.historyMisses.Add(1)
+	}
 	calculation.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
 	result, err = buildSloOperationalDetail(ctx, q, row, source, calculation)
 	if err != nil {

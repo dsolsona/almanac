@@ -1,9 +1,9 @@
 # ADR-0040: Serve SLO history from compact extrema over exact hourly aggregates
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-09
-- Accepted: pending
-- Approval: pending; on 2026-11-09 the maintainer delegated the design decision to the primary agent and asked for the resulting documents in PR #72
+- Accepted: 2026-11-09
+- Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; merge remains unauthorized
 - Related specs: [SPEC-0020](../specs/0020-cumulative-slo-calculation.md), [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0007](../specs/0007-storage-and-retention.md), [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md)
 - Supersedes / superseded by: proposes to supersede the retained point/tile series of [ADR-0025](0025-fast-operational-journeys-and-tracing.md) and the history jobs and display blocks of [ADR-0024](0024-precomputed-operational-reads.md). ADR-0024's hourly aggregates, dirty ranges and generation fencing and [ADR-0034](0034-self-healing-derived-data.md)'s retry rules remain. Independent of [ADR-0041](0041-one-observation-table-with-cumulative-sums.md).
 

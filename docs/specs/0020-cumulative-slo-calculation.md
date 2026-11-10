@@ -1,9 +1,9 @@
 # SPEC-0020: Retained SLO extrema over exact hourly aggregates
 
-- Status: draft
+- Status: accepted
 - Created: 2026-11-09
-- Accepted: pending
-- Approval: pending
+- Accepted: 2026-11-09
+- Approval: maintainer selected PR #72 commit `b7d8a5c` as authoritative on 2026-11-09 and requested implementation of all tasks through stacked PRs; merge remains unauthorized
 - Implementation: not started
 - Related ADRs: [ADR-0040](../adr/0040-cumulative-sums-and-compact-extrema.md), [ADR-0041](../adr/0041-one-observation-table-with-cumulative-sums.md) (independent), [ADR-0042](../adr/0042-keyset-overview-pagination.md) (optional)
 - Plan: [Lean SLO derived data](../plans/0030-lean-slo-derived-data.md)

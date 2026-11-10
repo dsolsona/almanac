@@ -132,7 +132,7 @@ func TestOperationalSamplesPreserveEvictionExtremaAndGapRuns(t *testing.T) {
 			{Start: start, End: start.Add(cadence), Received: start.Add(2 * time.Second), Outcome: "observed", Good: "0", Total: "100"},
 			{Start: start.Add(cadence), End: start.Add(2 * cadence), Received: start.Add(2*cadence + 2*time.Second), Outcome: "observed", Good: "100", Total: "100"},
 		}}
-	samples, err := buildOperationalSamples(context.Background(), base, start, start.Add(5*cadence), 2*cadence, cadence, "1", "remaining_budget", 2)
+	samples, err := buildCanonicalSamples(context.Background(), base, start, start.Add(5*cadence), 2*cadence, cadence, "1", "remaining_budget", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestOperationalSamplesPreserveEvictionExtremaAndGapRuns(t *testing.T) {
 			{Start: start, End: start.Add(cadence), Received: start.Add(2 * time.Second), Outcome: "observed", Good: "100", Total: "100"},
 			{Start: start.Add(2 * cadence), End: start.Add(3 * cadence), Received: start.Add(3*cadence + 2*time.Second), Outcome: "observed", Good: "100", Total: "100"},
 		}}
-	gapSamples, err := buildOperationalSamples(context.Background(), gapBase, start, start.Add(3*cadence), 3*cadence, cadence, "1", "remaining_budget", 1)
+	gapSamples, err := buildCanonicalSamples(context.Background(), gapBase, start, start.Add(3*cadence), 3*cadence, cadence, "1", "remaining_budget", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestBudgetReductionRetainsExactRemainingFractionExtrema(t *testing.T) {
 	}
 	base := slo.WindowInput{Now: start.Add(4 * cadence), ValidFrom: start, SliValidFrom: start, RetentionStart: start.Add(-time.Hour),
 		Cadence: cadence, Target: "0.99", FreshnessGrace: 10 * time.Minute, Observations: facts}
-	samples, err := buildOperationalSamples(context.Background(), base, start.Add(cadence), start.Add(4*cadence), cadence, cadence, "1", "remaining_fraction", 1)
+	samples, err := buildCanonicalSamples(context.Background(), base, start.Add(cadence), start.Add(4*cadence), cadence, cadence, "1", "remaining_fraction", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestDailyComplianceUsesRollingResultsAndRetainsUncertainDays(t *testing.T) 
 	}
 	base := slo.WindowInput{Now: dayEnd, ValidFrom: dayEnd.Add(-24 * time.Hour), SliValidFrom: dayEnd.Add(-24 * time.Hour), RetentionStart: dayEnd.Add(-400 * 24 * time.Hour),
 		Cadence: cadence, Target: "0.99", FreshnessGrace: 3 * time.Minute, Observations: facts}
-	series, summary, err := buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
+	series, summary, err := buildCanonicalDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
 		api.SloId{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x41, 0x11, 0x81, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, "1", "0.99", window, cadence)
 	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusMet || summary.MetDays != 1 || summary.EvaluableDays != 1 ||
 		series.Days[0].Performance.Attainment == nil || !operationalTestDecimalEquals(*series.Days[0].Performance.Attainment, "0.99") || !series.Days[0].RequestedAt.Equal(dayEnd) || !series.Days[0].EffectiveAt.Equal(dayEnd) {
@@ -229,7 +229,7 @@ func TestDailyComplianceUsesRollingResultsAndRetainsUncertainDays(t *testing.T) 
 
 	facts[0].Good, facts[0].Total = "0", "0"
 	base.Observations = facts
-	series, summary, err = buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
+	series, summary, err = buildCanonicalDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
 		series.Days[0].SloId, "1", "0.99", window, cadence)
 	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusMet || series.Days[0].Performance.Provisional || summary.MetDays != 1 || summary.EvaluableDays != 1 || series.Days[0].Quality.ZeroTrafficIntervals != 1 {
 		t.Fatalf("mixed quiet and positive rolling day = %+v summary=%+v err=%v", series, summary, err)
@@ -240,7 +240,7 @@ func TestDailyComplianceUsesRollingResultsAndRetainsUncertainDays(t *testing.T) 
 	}
 	facts[0].Good, facts[0].Total = "0", "0"
 	base.Observations = facts
-	series, summary, err = buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
+	series, summary, err = buildCanonicalDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
 		series.Days[0].SloId, "1", "0.99", window, cadence)
 	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusViolated || summary.ViolatedDays != 1 || summary.EvaluableDays != 1 || series.Days[0].Quality.ZeroTrafficIntervals != 1 {
 		t.Fatalf("mixed quiet and violating rolling day = %+v summary=%+v err=%v", series, summary, err)
@@ -250,7 +250,7 @@ func TestDailyComplianceUsesRollingResultsAndRetainsUncertainDays(t *testing.T) 
 		facts[index].Good, facts[index].Total = "0", "0"
 	}
 	base.Observations = facts
-	series, summary, err = buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
+	series, summary, err = buildCanonicalDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), dayEnd, dayEnd,
 		series.Days[0].SloId, "1", "0.99", window, cadence)
 	if err != nil || len(series.Days) != 1 || series.Days[0].Status != api.SloDailyComplianceDayStatusUnknown || !series.Days[0].Performance.Provisional || summary.UnknownDays != 1 || summary.EvaluableDays != 0 || series.Days[0].Explanation != "zero_traffic" {
 		t.Fatalf("all-zero-traffic rolling day = %+v summary=%+v err=%v", series, summary, err)
@@ -276,7 +276,7 @@ func TestOperationalSamplesKeepMultipleShortGapTransitionsWithinOverviewBudget(t
 	}
 	base := slo.WindowInput{Now: start.Add(300 * cadence), ValidFrom: start, SliValidFrom: start, RetentionStart: start.Add(-time.Hour),
 		Cadence: cadence, Target: "0.99", FreshnessGrace: time.Hour, Observations: observations}
-	samples, err := buildOperationalSamples(context.Background(), base, start, start.Add(300*cadence), cadence, cadence, "1", "remaining_fraction", 30)
+	samples, err := buildCanonicalSamples(context.Background(), base, start, start.Add(300*cadence), cadence, cadence, "1", "remaining_fraction", 30)
 	if err != nil {
 		t.Fatalf("two short gaps in one overview bucket: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestOperationalSamplesRejectGloballyDenseCriticalPoints(t *testing.T) {
 	}
 	base := slo.WindowInput{Now: start.Add(300 * cadence), ValidFrom: start, SliValidFrom: start, RetentionStart: start.Add(-time.Hour),
 		Cadence: cadence, Target: "0.99", FreshnessGrace: time.Hour, Observations: observations}
-	if _, err := buildOperationalSamples(context.Background(), base, start, start.Add(300*cadence), cadence, cadence, "1", "remaining_fraction", 30); !errors.Is(err, ErrOperationalRangeDense) {
+	if _, err := buildCanonicalSamples(context.Background(), base, start, start.Add(300*cadence), cadence, cadence, "1", "remaining_fraction", 30); !errors.Is(err, ErrOperationalRangeDense) {
 		t.Fatalf("globally over-budget transitions error = %v, want ErrOperationalRangeDense", err)
 	}
 }
@@ -316,7 +316,7 @@ func TestDailyComplianceFloorsNonDivisorCadenceAndExcludesUnfinishedToday(t *tes
 	now := dayEnd.Add(12*time.Hour + 34*time.Minute)
 	base := slo.WindowInput{Now: now, ValidFrom: dayEnd.Add(-7 * 24 * time.Hour), SliValidFrom: dayEnd.Add(-7 * 24 * time.Hour),
 		RetentionStart: dayEnd.Add(-400 * 24 * time.Hour), Cadence: cadence, Target: "0.99", FreshnessGrace: time.Minute}
-	series, summary, err := buildDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), now, now,
+	series, summary, err := buildCanonicalDailyCompliance(context.Background(), base, dayEnd.Add(-24*time.Hour), now, now,
 		api.SloId{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x41, 0x11, 0x81, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, "1", "0.99", window, cadence)
 	wantEffective := time.Date(2026, 10, 27, 23, 58, 0, 0, time.UTC)
 	if err != nil || len(series.Days) != 1 || !series.Days[0].DayEnd.Equal(dayEnd) || !series.Days[0].RequestedAt.Equal(dayEnd) ||
@@ -336,7 +336,7 @@ func TestAttainmentBucketsExcludePreValidityFacts(t *testing.T) {
 			{Start: start.Add(cadence), End: start.Add(2 * cadence), Received: start.Add(2 * cadence), Outcome: "observed", Good: "0", Total: "100"},
 			{Start: start.Add(2 * cadence), End: start.Add(3 * cadence), Received: start.Add(3 * cadence), Outcome: "observed", Good: "100", Total: "100"},
 		}}
-	samples, _, _, err := buildAttainmentSamples(context.Background(), base, start, end, cadence, "1")
+	samples, _, _, err := buildCanonicalAttainmentSamples(context.Background(), base, start, end, cadence, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,13 +351,13 @@ func TestOperationalFactsStartUsesTheMinimumRequiredHorizon(t *testing.T) {
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
 	window := 30 * 24 * time.Hour
 	chartStart := now.Add(-7 * 24 * time.Hour)
-	start := operationalFactsStart(now, window, 6*time.Hour, chartStart, window, time.Hour,
+	start := canonicalFactsStart(now, window, 6*time.Hour, chartStart, window, time.Hour,
 		now.Add(-400*24*time.Hour), now.Add(-400*24*time.Hour), now.Add(-400*24*time.Hour), cadence)
 	want := now.Add(-37 * 24 * time.Hour)
 	if !start.Equal(want) {
 		t.Fatalf("30 d objective + 7 d chart horizon = %s, want %s", start, want)
 	}
-	clipped := operationalFactsStart(now, window, 6*time.Hour, chartStart, window, time.Hour,
+	clipped := canonicalFactsStart(now, window, 6*time.Hour, chartStart, window, time.Hour,
 		now.Add(-10*24*time.Hour), now.Add(-400*24*time.Hour), now.Add(-400*24*time.Hour), cadence)
 	if !clipped.Equal(now.Add(-10 * 24 * time.Hour)) {
 		t.Fatalf("horizon before objective validity was not clipped: %s", clipped)

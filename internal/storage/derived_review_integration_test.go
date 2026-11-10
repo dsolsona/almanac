@@ -220,7 +220,7 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 		pageInput := input
 		sourceFailures, calculationFailures, ready := 0, 0, 0
 		for pageIndex := range 3 {
-			page, err := ReadSloOperationalOverview(t.Context(), databaseURL, pageInput)
+			page, err := readOperationalOverviewForTest(t.Context(), databaseURL, pageInput)
 			if err != nil || page.GroupCounts.Watch != 100 || page.GroupCounts.Healthy != 1 {
 				t.Fatalf("unavailable rows blocked the list or changed pinned counts: %+v, %v", page.GroupCounts, err)
 			}
@@ -278,7 +278,7 @@ VALUES($1,$2,1,$3,$3::timestamptz+interval '1 hour',5,$4,$4)`, definition.SliID,
 	}
 	checkIsolatedFailures(true)
 	input.Query = "review-healthy"
-	if page, err := ReadSloOperationalOverview(t.Context(), databaseURL, input); err != nil || len(page.Items) != 1 {
+	if page, err := readOperationalOverviewForTest(t.Context(), databaseURL, input); err != nil || len(page.Items) != 1 {
 		t.Fatalf("unrelated healthy filtered rows were unavailable: %v", err)
 	}
 }
