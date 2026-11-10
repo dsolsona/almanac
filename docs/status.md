@@ -1,3 +1,58 @@
+Settings first-visit CI correction, 2026-11-10: application `557a5ef` fixes the
+reported PR [#73](https://github.com/dsolsona/almanac/pull/73) failure. Public
+route assets load from HTML preloads, prefetched modules render immediately,
+and authorized initial reads start without an extra timer. The unchanged UI
+readiness assertions run concurrently. CI run `42825825089` passes all four
+required suites; its 15 E2E journeys take 3.9 minutes and measure Settings at
+489.844149 ms and Users at 131.923434 ms, below the unchanged 1,000 ms limits.
+The original failed 1,006.105811 ms result is retained. The integrated
+`c575e1f` stack passes `make check` (310 observed seconds, 444 frontend tests,
+storage 128.453 seconds, 82 browser cases) and all 15 four-worker container
+journeys (4.6 minutes; Settings 247.130360 ms, Users 77.183120 ms). Detailed
+failure and verification evidence is in [F9-T01](tasks/F9-T01.md). The final
+shared-renderer benchmark and remaining descendant CI are tracked separately;
+no PR merge is authorized.
+
+CodeRabbit follow-up, 2026-11-10: all nine open lean-SLO PRs
+[#72](https://github.com/dsolsona/almanac/pull/72),
+[#73](https://github.com/dsolsona/almanac/pull/73),
+[#75](https://github.com/dsolsona/almanac/pull/75) through
+[#81](https://github.com/dsolsona/almanac/pull/81) were inspected, including
+outside-diff review comments. Valid findings cover retry/lease fencing,
+first-day preparation bounds, retained daily and eviction comparisons,
+sparkline readiness, original receipt identities/digests during migration,
+standalone index availability, empty-page recovery, compatibility UUIDs,
+cursor limits, expired-row existence and locked-cursor backoff. Accepted design tradeoffs remain
+explicit in ADR-0040/0041/0042 and SPEC-0020. Each PR is ready for review;
+implementation acceptance gaps below remain open and no merge is authorized.
+
+Integrated application checkpoint `ad0aafd` passes `make check` (303 seconds,
+storage 115.454 seconds, 437 frontend tests and 82 browser cases in 2.0 minutes)
+and all 15 sequential `make test-e2e` journeys (4.4 minutes). The new daily
+comparisons pass integration on `5f3ae0e` (storage 118.668 seconds); the initial
+propagation attempt exposed a missing test import, corrected before that pass.
+Legacy overview preparation on PR #73 now defers pending retained tiles
+(`6f0fdf3`, storage integration 66.887 seconds); PR #76 retires that job.
+Client UUID validation passes, including missing/null/zero/malformed responses.
+The combined `9fc80a6` stack passes `make check` (307 seconds observed,
+storage 115.763 seconds, 441 frontend tests and 82 browser cases in 1.9 minutes).
+The locked-cursor regression reproduced 50 queries in 250 ms and now passes
+its four-query bound with prompt cancellation; the late-gap test also proves
+the original marker existed before repair. The 35-day benchmark on `82baf7a`
+passes six checks in 7.2 minutes: cold p95 is 404/343 ms for SLO list/detail and
+250/246 ms for SLI list/detail. This measurement precedes the final no-claim
+backoff correction; no later performance result is inferred.
+A browser CI failure on PR #76's prior `89359aa` timed out in charts/services/
+settings and closed browser contexts remains recorded. Subsequent fast/browser
+CI passed; all four application CI checks passed on `82baf7a`. CI for the later
+published heads is tracked separately and is not inferred from these checkpoints.
+Review amendments affect unreleased migrations only; released 0001–0044 and
+operator databases are unchanged. Historical performance JSON is now preserved
+under `docs/evidence/lean-slo/`, linked from [F9-T06](tasks/F9-T06.md).
+
+Earlier delivery checkpoints follow; their draft/measurement statements describe
+those checkpoints, not current PR readiness or completion of remaining criteria.
+
 Lean SLO implementation, 2026-11-09: the maintainer selected PR [#72](https://github.com/dsolsona/almanac/pull/72)
 commit `b7d8a5c` as authoritative, accepted its design and requested all tasks with
 stacked PR delivery. ADR-0040/0041/0042 and SPEC-0020 acceptance is recorded without
@@ -51,10 +106,29 @@ seed remain pending; the task remains in progress and merge is unauthorized.
 [F9-T05](tasks/F9-T05.md) is implemented above PR #77 (`754682e`) in
 `.worktrees/lean-slo-keyset` on `feat/slo-overview-keyset`. The overview now uses
 filter-bound keyset cursors and per-request counts; snapshot admission, archives
-and `snapshot_id` are removed with generated browser/CLI contract updates.
+are removed with generated browser/CLI contract updates. The subsequent v1
+compatibility correction retains a required deprecated nonzero `snapshot_id`
+without restoring snapshot admission.
 `make check` passes (437 frontend tests, storage 100.621 seconds and 82 browser
 cases), and all 15 container journeys pass in 4.3 minutes. The integrated 35-day
 performance run remains pending, so the task remains in progress.
+
+Final lean-SLO 35-day verification, 2026-11-09: observation storage is published
+in [PR #77](https://github.com/dsolsona/almanac/pull/77), keyset pagination in
+[PR #78](https://github.com/dsolsona/almanac/pull/78), and the measured SLI-list
+ordering correction in [PR #79](https://github.com/dsolsona/almanac/pull/79).
+All four CI checks are green on those application checkpoints. The final
+`make test-perf PERF_DAYS=35` passes six checks in 7.5 minutes on `2484b92`:
+cold p95 is 427/279 ms for SLO list/detail and 200/215 ms for SLI list/detail;
+every cold/warm p95 is below 500 ms. The initial integrated run's SLI-list
+regression is preserved, with a failing-then-passing 200,000-row plan check.
+Canonical allocation is 946,724,864 bytes and derived allocation 32,030,720 bytes,
+14.71% and 88.55% below the recorded baseline snapshot. Actual-minute WAL samples
+and per-table/index totals are in [F9-T06](tasks/F9-T06.md). These are 35-day
+snapshot figures, without production/yearly or WAL-savings extrapolation.
+The 365-day run, preview-copy rehearsal, full-fleet response equivalence,
+performance late-write/retention scenarios and unavailable statement counters
+remain open acceptance gaps. No PR has been merged.
 
 # Delivery status
 

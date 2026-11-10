@@ -1,12 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { ingestionBetween, pauseAgent, relationSizes, resourceDelta, resourceSnapshot, writeResources } from './resources.ts';
 
 // Page speed of the four main pages (SPEC-0019, ADR-0025, ADR-0033) on the seeded fleet. The time is the
 // UI's own journey measurement: from navigation start until the page's content (and, on SLO detail,
 // its charts) has painted, reported by the `almanac:journey` browser event. Budget: < 1,000 ms at p95.
 const BUDGET_MS = 1_000;
 const RUNS = Number(process.env.PERF_RUNS ?? 10);
-type Fleet = { days: number; size: number; slis: { id: string }[]; slos: { id: string; expectedBudget: string }[] };
+type Fleet = { days: number; size: number; slis: { id: string }[]; slos: { id: string; expectedBudget: string }[]; agentContainer: string };
 // Written by perf/seed.setup.ts, which runs first; read when the tests run, not when they are collected.
 let fleet: Fleet;
 test.beforeAll(() => { fleet = JSON.parse(readFileSync('perf/.fleet.json', 'utf8')) as Fleet; });
@@ -82,6 +83,53 @@ test('in-app navigation between the pages', async ({ page }) => {
     seen = await count(page, 'slo.list');
     await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: 'SLOs' }).click();
     record('slo.list', 'warm', await journey(page, 'slo.list', seen));
+  }
+});
+
+test('record storage, WAL and statement-counter availability', async () => {
+  test.setTimeout(3 * 60_000);
+  const evidence = JSON.parse(readFileSync('../.local/perf/resources.json', 'utf8')) as { start: ReturnType<typeof resourceSnapshot> };
+  const end = resourceSnapshot();
+  const sizes = relationSizes();
+  expect(sizes.filter((row) => row.kind === 'canonical').length).toBe(1);
+  expect(sizes.every((row) => Number.isSafeInteger(row.total_bytes) && row.total_bytes >= 0 && row.index_bytes >= 0)).toBe(true);
+  const windows = [];
+  let paused = false;
+  try {
+    // Measure ordinary ingestion before pausing, avoiding a reconnect/catch-up burst in its rate.
+    for (const phase of ['ingesting', 'idle'] as const) {
+      if (phase === 'idle') {
+        pauseAgent(fleet.agentContainer, true);
+        paused = true;
+      }
+      const start = resourceSnapshot();
+      // A fixed interval is the measurement itself, not a readiness wait or a retry.
+      await new Promise((resolve) => setTimeout(resolve, 60_000));
+      const end = resourceSnapshot();
+      const delta = resourceDelta(start, end);
+      const acceptedRows = ingestionBetween(start.at, end.at);
+      const window = { phase, ...delta, observations_accepted: acceptedRows,
+        wal_bytes_per_accepted_row: acceptedRows > 0 ? delta.wal_bytes / acceptedRows : null,
+        statements_per_accepted_row: acceptedRows > 0 && delta.statements !== null ? delta.statements / acceptedRows : null,
+        statements_per_minute_per_slo: delta.statements_per_minute === null ? null : delta.statements_per_minute / fleet.size };
+      windows.push(window);
+      expect(window.seconds).toBeGreaterThanOrEqual(60);
+      if (window.statements !== null) expect(window.statements).toBeGreaterThan(0);
+      else expect(start.statement_counter_unavailable_reason ?? end.statement_counter_unavailable_reason).toBeTruthy();
+      if (phase === 'idle') expect(window.observations_accepted).toBe(0);
+      else expect(window.observations_accepted).toBeGreaterThan(0);
+    }
+  } finally {
+    try {
+      writeResources({ ...evidence, seed_and_page_timings: resourceDelta(evidence.start, end), sizes, windows,
+        seed_wal_scope: 'setup, synthetic bulk history, preparation and page timings; not comparable to steady ingestion',
+        window_scope: 'idle means no agent ingestion; background work may still be catching up',
+        accepted_row_scope: 'rows recorded_at in [start,end); WAL covers fixture PostgreSQL, statements cover its app DB, including background work; zero-row ratios are null',
+        runtime_metrics: 'unavailable: metrics listener is disabled in the normal Compose stack',
+        statement_scope: 'all fixture-database statements, including sampler calls; null when counters are unavailable' });
+    } finally {
+      if (paused) pauseAgent(fleet.agentContainer, false);
+    }
   }
 });
 

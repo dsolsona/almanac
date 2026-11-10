@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { api, expectOk, unique } from '../e2e/support/api.ts';
 import { psql, startAgent } from '../e2e/support/stack.ts';
+import { resourceSnapshot, writeResources } from './resources.ts';
 
 // Performance fixture (ADR-0033): one page of 20 SLIs and 20 SLOs with PERF_DAYS of one-minute history.
 // A real agent collects every SLI first, so retained history carries real collection provenance; the
@@ -18,11 +19,12 @@ const markObservations = readFileSync(new URL('../../internal/storage/testdata/m
 
 test('seed the performance fleet', async ({ page }) => {
   test.setTimeout(30 * 60_000);
+  writeResources({ start: resourceSnapshot() });
   await page.goto('/');
 
   const agentName = unique('perf-agent');
   const registered = await expectOk(api(page, 'POST', '/api/v1/agents', { name: agentName, display_name: 'Performance agent' }));
-  startAgent(registered.body.token);
+  const agentContainer = startAgent(registered.body.token);
   const agentID: string = registered.body.agent.id;
   await expect.poll(async () => (await api(page, 'GET', `/api/v1/agents/${agentID}`)).body.runtime?.reachability, { timeout: 60_000 }).toBe('connected');
 
@@ -119,5 +121,5 @@ UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli
       item.budget_history_state === 'ready' && item.current.performance.remaining_fraction !== null).length;
   }, { timeout: 20 * 60_000, intervals: [10_000] }).toBe(SIZE);
 
-  writeFileSync('perf/.fleet.json', JSON.stringify({ days: DAYS, size: SIZE, slis, slos }, null, 2));
+  writeFileSync('perf/.fleet.json', JSON.stringify({ days: DAYS, size: SIZE, slis, slos, agentContainer }, null, 2));
 });
