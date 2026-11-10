@@ -54,7 +54,7 @@ WITH expired AS (
       AND EXISTS (SELECT 1 FROM public.almanac_slos s WHERE s.id=w.slo_id AND s.definition_revision=w.definition_revision)
     RETURNING w.id
 ), candidate AS (
-    SELECT w.id FROM public.almanac_slo_extrema_cursor w
+    SELECT w.id,w.attempts AS prior_attempts FROM public.almanac_slo_extrema_cursor w
     JOIN public.almanac_slos s ON s.id=w.slo_id AND s.definition_revision=w.definition_revision
     WHERE w.calculation_version=$3
       AND NOT EXISTS (SELECT 1 FROM expired e WHERE e.id=w.id)
@@ -65,7 +65,7 @@ WITH expired AS (
 )
 UPDATE public.almanac_slo_extrema_cursor w
 SET attempts=LEAST(w.attempts+1,5),lease_epoch=w.lease_epoch+1,lease_until=$1::timestamptz
-FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.built_through, w.dirty_from, w.dirty_to, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.failing_since, w.manual_retried_at
+FROM candidate c WHERE w.id=c.id RETURNING w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.built_through, w.dirty_from, w.dirty_to, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.failing_since, w.manual_retried_at,c.prior_attempts
 `
 
 type ClaimSloExtremaCursorParams struct {
@@ -75,14 +75,34 @@ type ClaimSloExtremaCursorParams struct {
 	ClosedThrough      pgtype.Timestamptz `json:"closed_through"`
 }
 
-func (q *Queries) ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (AlmanacSloExtremaCursor, error) {
+type ClaimSloExtremaCursorRow struct {
+	ID                  pgtype.UUID        `json:"id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	BuiltThrough        pgtype.Timestamptz `json:"built_through"`
+	DirtyFrom           pgtype.Timestamptz `json:"dirty_from"`
+	DirtyTo             pgtype.Timestamptz `json:"dirty_to"`
+	Version             int64              `json:"version"`
+	Attempts            int32              `json:"attempts"`
+	LeaseEpoch          int64              `json:"lease_epoch"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError           pgtype.Text        `json:"last_error"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	PriorAttempts       int32              `json:"prior_attempts"`
+}
+
+func (q *Queries) ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (ClaimSloExtremaCursorRow, error) {
 	row := q.db.QueryRow(ctx, claimSloExtremaCursor,
 		arg.LeaseUntil,
 		arg.Now,
 		arg.CalculationVersion,
 		arg.ClosedThrough,
 	)
-	var i AlmanacSloExtremaCursor
+	var i ClaimSloExtremaCursorRow
 	err := row.Scan(
 		&i.ID,
 		&i.SloID,
@@ -100,32 +120,40 @@ func (q *Queries) ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtrema
 		&i.LastError,
 		&i.FailingSince,
 		&i.ManualRetriedAt,
+		&i.PriorAttempts,
 	)
 	return i, err
 }
 
 const deferSloExtremaCursor = `-- name: DeferSloExtremaCursor :exec
 UPDATE public.almanac_slo_extrema_cursor SET lease_until=NULL,
-    attempts=CASE WHEN attempts>=5 AND failing_since IS NOT NULL THEN attempts ELSE GREATEST(attempts-1,0) END,
-    next_attempt_at=$1::timestamptz,last_error=$2::text
-WHERE id=$3 AND lease_epoch=$4 AND version=$5
+    attempts=LEAST(attempts,$1::integer),
+    next_attempt_at=CASE WHEN $1::integer>=5 AND failing_since IS NOT NULL THEN
+        GREATEST(next_attempt_at,$2::timestamptz+CASE WHEN failing_since>$2::timestamptz-interval '24 hours' THEN interval '5 minutes' ELSE interval '1 hour' END)
+        ELSE GREATEST(next_attempt_at,$3::timestamptz) END,
+    last_error=CASE WHEN version<>$4 OR failing_since IS NOT NULL THEN last_error ELSE $5::text END
+WHERE id=$6 AND lease_epoch=$7 AND lease_until IS NOT NULL
 `
 
 type DeferSloExtremaCursorParams struct {
+	PriorAttempts int32              `json:"prior_attempts"`
+	Now           pgtype.Timestamptz `json:"now"`
 	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	Version       int64              `json:"version"`
 	Reason        pgtype.Text        `json:"reason"`
 	ID            pgtype.UUID        `json:"id"`
 	LeaseEpoch    int64              `json:"lease_epoch"`
-	Version       int64              `json:"version"`
 }
 
 func (q *Queries) DeferSloExtremaCursor(ctx context.Context, arg DeferSloExtremaCursorParams) error {
 	_, err := q.db.Exec(ctx, deferSloExtremaCursor,
+		arg.PriorAttempts,
+		arg.Now,
 		arg.NextAttemptAt,
+		arg.Version,
 		arg.Reason,
 		arg.ID,
 		arg.LeaseEpoch,
-		arg.Version,
 	)
 	return err
 }
