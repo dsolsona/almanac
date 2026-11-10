@@ -41,9 +41,9 @@ Container images
   publish               Build/push app and agent images to IMAGE_REGISTRY
 
 Optional Firecracker microVMs (Linux host; Docker runs inside each VM)
-  vm-base               Build/rebuild shared dependencies; VM adopts an existing seed
-  vm-setup              Clone the base; copy the checkout and available host logins
-  vm-run                Clone/start a worker and launch Codex in the background
+  vm-base               Build/rebuild the shared OS, tools and dependency disk
+  vm-run                Prepare a worker from the base and start background Codex
+  vm-setup              Prepare a worker for manual use; Codex is not started
   vm-list               List running, stopped and partially prepared VMs
   vm-start              Boot an existing VM and wait for SSH
   vm-codex              Attach to the worker's Codex terminal

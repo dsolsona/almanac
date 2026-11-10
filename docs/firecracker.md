@@ -87,6 +87,10 @@ If that branch already exists in the source, a numeric suffix preserves it.
 The host's Git author name/email and a sanitized GitHub HTTPS `origin` are copied.
 SSH agents and global Codex plugins/configuration are not forwarded.
 
+For normal Codex tasks, use `vm-base` once and `vm-run` for each worker. `vm-run`
+performs worker setup automatically. The separate `vm-setup` command prepares a
+worker for manual shell work and does not launch Codex.
+
 By default, the copied source is the checkout containing the launcher. Use
 `--repo /path/to/checkout` on first `setup` or `run` to select another checkout
 or linked worktree; `VM_REPO=/path/to/checkout` selects it through Make. The guest
