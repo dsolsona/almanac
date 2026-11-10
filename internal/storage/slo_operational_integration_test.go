@@ -51,6 +51,15 @@ INSERT INTO public.almanac_sli_observation_values SELECT interval_start,sli_id,m
 	if _, err := readOperationalOverviewForTest(t.Context(), s.f.databaseURL, OperationalOverviewInput{Proof: proof, Now: s.clock}); err != nil {
 		t.Fatal(err)
 	}
+	for range 1000 {
+		worked, err := s.runtime.buildSloExtrema(t.Context(), s.clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !worked {
+			break
+		}
+	}
 	start := end.Add(-24 * time.Hour)
 	for _, fixture := range []struct{ id, status, reason string }{{met, "met", ""}, {shortSLO.ID, "unknown", "shortened_window"}} {
 		input := OperationalDetailInput{Proof: proof, ID: fixture.id, At: &end, Start: &start, End: &end, BurnWindow: 3600, Now: s.clock}
