@@ -37,7 +37,7 @@ type Querier interface {
 	ClaimRetainedSeriesRepair(ctx context.Context, arg ClaimRetainedSeriesRepairParams) (AlmanacSloSeriesRepair, error)
 	ClaimRetainedTileWork(ctx context.Context, arg ClaimRetainedTileWorkParams) (AlmanacSloSeriesTileWork, error)
 	ClaimRetentionWork(ctx context.Context, arg ClaimRetentionWorkParams) (AlmanacRetentionWork, error)
-	ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (AlmanacSloExtremaCursor, error)
+	ClaimSloExtremaCursor(ctx context.Context, arg ClaimSloExtremaCursorParams) (ClaimSloExtremaCursorRow, error)
 	ClaimSloHistoryJob(ctx context.Context, arg ClaimSloHistoryJobParams) (AlmanacSloHistoryJob, error)
 	ClearCurrentPreparationFailure(ctx context.Context, sloID pgtype.UUID) error
 	CloseSliOwnershipEpoch(ctx context.Context, arg CloseSliOwnershipEpochParams) (int64, error)

@@ -52,7 +52,8 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 			if errors.Is(resultErr, ErrDerivedSourceFailed) {
 				reason = pgtype.Text{String: "source_aggregate_failed", Valid: true}
 			}
-			resultErr = errors.Join(resultErr, q.DeferSloExtremaCursor(cleanup, dbgen.DeferSloExtremaCursorParams{ID: work.ID, Version: work.Version, LeaseEpoch: work.LeaseEpoch, NextAttemptAt: timestamp(clock().Add(time.Second)), Reason: reason}))
+			now := clock()
+			resultErr = errors.Join(resultErr, q.DeferSloExtremaCursor(cleanup, dbgen.DeferSloExtremaCursorParams{ID: work.ID, Version: work.Version, LeaseEpoch: work.LeaseEpoch, PriorAttempts: work.PriorAttempts, Now: timestamp(now), NextAttemptAt: timestamp(now.Add(time.Second)), Reason: reason}))
 		} else {
 			resultErr = errors.Join(resultErr, q.FailSloExtremaCursor(cleanup, dbgen.FailSloExtremaCursorParams{ID: work.ID, Version: work.Version, LeaseEpoch: work.LeaseEpoch, Now: timestamp(clock()), Reason: derivedFailureReason(resultErr, "extrema_build_failed")}))
 		}
@@ -185,7 +186,7 @@ func buildExtremaHour(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow
 	return makeExtremaLanes(samples, start, end, base.Target, base.Cadence)
 }
 
-func publishExtrema(ctx context.Context, q *dbgen.Queries, work dbgen.AlmanacSloExtremaCursor, lanes extremaLanes, start, end time.Time, generation int64, retention, now time.Time) error {
+func publishExtrema(ctx context.Context, q *dbgen.Queries, work dbgen.ClaimSloExtremaCursorRow, lanes extremaLanes, start, end time.Time, generation int64, retention, now time.Time) error {
 	payload, err := json.Marshal(lanes)
 	if err != nil {
 		return err
@@ -205,7 +206,7 @@ func publishExtrema(ctx context.Context, q *dbgen.Queries, work dbgen.AlmanacSlo
 	return nil
 }
 
-func buildExtremaDay(ctx context.Context, q *dbgen.Queries, work dbgen.AlmanacSloExtremaCursor, row dbgen.GetSloRow, base slo.WindowInput, end time.Time, generation int64, now time.Time) error {
+func buildExtremaDay(ctx context.Context, q *dbgen.Queries, work dbgen.ClaimSloExtremaCursorRow, row dbgen.GetSloRow, base slo.WindowInput, end time.Time, generation int64, now time.Time) error {
 	start := end.Add(-24 * time.Hour)
 	rows, err := q.ReadSloExtremaHours(ctx, dbgen.ReadSloExtremaHoursParams{SloID: row.ID, DefinitionRevision: row.DefinitionRevision,
 		MeasurementRevision: row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, RangeStart: timestamp(start), RangeEnd: timestamp(end)})
