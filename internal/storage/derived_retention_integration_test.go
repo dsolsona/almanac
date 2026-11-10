@@ -11,6 +11,8 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5"
 )
 
 // This is a retained-history correctness/restart regression, not the controlled
@@ -187,10 +189,43 @@ FROM public.almanac_sli_coverage WHERE sli_id=$1 AND measurement_revision=1 AND 
 				t.Fatal("retained tile reduction exceeded the fixture's hour/day bound")
 			}
 		}
+		maxExtremaTurns := fixture.days*24 + 2
+		for attempt := range maxExtremaTurns {
+			worked, err := runtime.buildSloExtrema(t.Context(), clock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !worked {
+				break
+			}
+			if attempt == maxExtremaTurns-1 {
+				t.Fatal("extrema preparation exceeded the fixture's hourly bound")
+			}
+		}
 		verifyRetainedTileWire(t, conn, pgID, end.Truncate(time.Hour).Add(-time.Hour))
 		if err := runtime.refreshCurrentProjection(t.Context(), pgID, clock); err != nil {
 			t.Fatal(err)
 		}
+		snapshot, err := conn.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rollbackTransaction(snapshot)
+		q := dbgen.New(snapshot)
+		row, err := q.GetSlo(t.Context(), pgID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		contextRow, err := q.GetSloOperationalContext(t.Context(), dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, period := range []string{"7d", "90d", "1y", "window"} {
+			for _, burn := range []int{3600, 21600} {
+				verifyExtremaDetailReaders(t, q, row, contextRow, OperationalDetailInput{Runtime: runtime, ID: objective.ID, Period: period, BurnWindow: burn, Now: clock})
+			}
+		}
+		rollbackTransaction(snapshot)
 		prepared, err := readOperationalDetailForTest(t.Context(), f.databaseURL, input)
 		if err != nil || prepared.Generation == nil {
 			t.Fatalf("retained history not published: %v", err)

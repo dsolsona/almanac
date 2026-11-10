@@ -31,6 +31,14 @@ WITH objective AS (
     FROM public.almanac_slo_series_repair w JOIN objective o ON w.slo_id=o.id
       AND w.definition_revision=o.revision AND w.measurement_revision=o.measurement_revision
     WHERE w.calculation_version=sqlc.arg(calculation_version) AND w.cursor_at<w.end_at
+    UNION ALL
+    SELECT w.id,'extrema',CASE WHEN w.attempts>=5 THEN 'failed' WHEN w.lease_until>sqlc.arg(now)::timestamptz THEN 'running' ELSE 'pending' END,
+           w.attempts,w.next_attempt_at,coalesce(w.last_error,'')
+    FROM public.almanac_slo_extrema_cursor w JOIN objective o ON w.slo_id=o.id
+      AND w.definition_revision=o.revision AND w.measurement_revision=o.measurement_revision
+    WHERE w.calculation_version=sqlc.arg(calculation_version)
+      AND (w.built_through<date_trunc('hour',sqlc.arg(now)::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        OR w.dirty_from<LEAST(w.dirty_to,date_trunc('hour',sqlc.arg(now)::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'))
 )
 SELECT id,stage,state,attempts,next_attempt_at,last_error FROM jobs
 ORDER BY (state='failed') DESC,next_attempt_at,id LIMIT 101;
@@ -68,5 +76,15 @@ SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=sqlc.a
 WHERE id=sqlc.arg(job_id) AND slo_id=sqlc.arg(slo_id)
   AND definition_revision=sqlc.arg(definition_revision) AND measurement_revision=sqlc.arg(measurement_revision)
   AND calculation_version=sqlc.arg(calculation_version) AND cursor_at<end_at AND attempts>=5
+  AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
+  AND (manual_retried_at IS NULL OR manual_retried_at<=sqlc.arg(now)::timestamptz-interval '1 minute');
+
+-- name: RetrySloExtrema :execrows
+UPDATE public.almanac_slo_extrema_cursor
+SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=sqlc.arg(now)::timestamptz,
+    manual_retried_at=sqlc.arg(now)::timestamptz,last_error=NULL,failing_since=NULL
+WHERE id=sqlc.arg(job_id) AND slo_id=sqlc.arg(slo_id)
+  AND definition_revision=sqlc.arg(definition_revision) AND measurement_revision=sqlc.arg(measurement_revision)
+  AND calculation_version=sqlc.arg(calculation_version) AND attempts>=5
   AND (lease_until IS NULL OR lease_until<=sqlc.arg(now)::timestamptz)
   AND (manual_retried_at IS NULL OR manual_retried_at<=sqlc.arg(now)::timestamptz-interval '1 minute');

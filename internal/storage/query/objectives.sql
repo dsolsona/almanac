@@ -44,8 +44,16 @@ ORDER BY s.created_at,s.id LIMIT $3;
 INSERT INTO public.almanac_slos(id,name,display_name,created_at,updated_at) VALUES ($1,$2,$3,$4,$4);
 
 -- name: InsertSloDefinition :exec
+WITH definition AS (
 INSERT INTO public.almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from,historical_requested_by,historical_requested_at)
-VALUES ($1,1,$2,$3,$4,sqlc.arg(target)::text::numeric(38,12),$5,$6,$7,$8,$9,$10);
+VALUES ($1,1,$2,$3,$4,sqlc.arg(target)::text::numeric(38,12),$5,$6,$7,$8,$9,$10)
+RETURNING *
+)
+INSERT INTO public.almanac_slo_extrema_cursor
+    (slo_id,definition_revision,measurement_revision,calculation_version,built_through,next_attempt_at)
+SELECT d.slo_id,d.revision,d.measurement_revision,'occurrences-operational-v1',
+       date_trunc('hour',GREATEST(d.evaluation_valid_from,m.effective_from) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',d.activated_at
+FROM definition d JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision;
 
 -- name: UpdateSloMetadata :one
 UPDATE public.almanac_slos SET display_name=$1,version=version+1,updated_at=$2

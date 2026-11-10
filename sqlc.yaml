@@ -48,6 +48,7 @@ sql:
       - internal/storage/migrations/0042_user_administration.sql
       - internal/storage/migrations/0043_service_catalog.sql
       - internal/storage/migrations/0044_immediate_datasource_reassignment.sql
+      - internal/storage/migrations/0045_slo_extrema.sql
     gen:
       go:
         package: dbgen

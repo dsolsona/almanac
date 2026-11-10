@@ -483,6 +483,40 @@ type AlmanacSloDisplayBlock struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AlmanacSloExtrema struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	ResolutionSeconds   int32              `json:"resolution_seconds"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	SourceGeneration    int64              `json:"source_generation"`
+	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	Lanes               []byte             `json:"lanes"`
+}
+
+type AlmanacSloExtremaCursor struct {
+	ID                  pgtype.UUID        `json:"id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	BuiltThrough        pgtype.Timestamptz `json:"built_through"`
+	DirtyFrom           pgtype.Timestamptz `json:"dirty_from"`
+	DirtyTo             pgtype.Timestamptz `json:"dirty_to"`
+	Version             int64              `json:"version"`
+	Attempts            int32              `json:"attempts"`
+	LeaseEpoch          int64              `json:"lease_epoch"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError           pgtype.Text        `json:"last_error"`
+	FailingSince        pgtype.Timestamptz `json:"failing_since"`
+	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+}
+
 type AlmanacSloHistoryAdmission struct {
 	Singleton bool `json:"singleton"`
 }

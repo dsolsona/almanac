@@ -87,8 +87,10 @@ freshness values of all endpoints in the range. A lane whose window is not a
 multiple of the cadence is `null`. A range with no endpoint (cadence longer than
 the range) stores lanes with empty `marks` and empty sets. Expected, expired and
 missing counts are not stored; the reader recomputes them from `at`, the lane
-window, validity and the mark's `retention_start` when present, otherwise the
-row's boundary.
+window, validity and the mark's original `retention_start`, defaulting to the
+row boundary. Composing a daily row never changes an untouched hourly mark's
+cutoff. A lane also records whether reduction discarded dense transitions, so
+the existing `display_coverage` disclosure remains reproducible.
 
 Minimum and maximum compare the exact attainment `good/total` by cross
 multiplication; ties keep the earlier endpoint; zero-traffic endpoints do not
@@ -267,3 +269,7 @@ Not verified yet.
   cadence-offset defects in that draft. Rewritten without cumulative sums over
   the existing hourly aggregates; marks carry complete inputs and absolute
   endpoints; late data beyond the cutoff uses the explicit expired outcome.
+- 2026-11-09: Clarified internal daily-mark provenance: composing hours built
+  against different cutoffs retains each selected mark's original boundary.
+  This implements the existing requirement to preserve untouched values;
+  no additional history store or change to retention behavior is introduced.

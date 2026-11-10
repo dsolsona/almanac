@@ -60,6 +60,10 @@ WITH slo AS (
     SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_current_failures
     UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_series_repair WHERE cursor_at<end_at
     UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_series_tile_work
+    UNION ALL SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.attempts,w.failing_since FROM public.almanac_slo_extrema_cursor w
+        WHERE w.calculation_version=$1
+          AND (w.built_through<date_trunc('hour',$2::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            OR w.dirty_from<LEAST(w.dirty_to,date_trunc('hour',$2::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'))
     UNION ALL SELECT slo_id,definition_revision,measurement_revision,attempts,failing_since FROM public.almanac_slo_history_jobs
         WHERE last_error IS DISTINCT FROM 'retention_expired'
     UNION ALL SELECT d.slo_id,d.revision,d.measurement_revision,dirty.attempts,dirty.failing_since
@@ -68,12 +72,12 @@ WITH slo AS (
         WHERE dirty.last_error IS DISTINCT FROM 'retention_expired'
 ), classified AS (
     SELECT s.id,
-           bool_or(w.attempts>=5 AND w.failing_since<=$1::timestamptz-interval '7 days') AS stopped,
+           bool_or(w.attempts>=5 AND w.failing_since<=$2::timestamptz-interval '7 days') AS stopped,
            bool_or(w.attempts>=5) AS failing,
            bool_or(w.slo_id IS NOT NULL) AS queued,
            bool_or(s.generation_id IS NULL OR s.g_revision<>s.revision OR s.g_measurement_revision<>s.measurement_revision
-               OR s.g_calculation_version<>$2::text OR s.g_source_generation<>s.source_generation
-               OR s.evaluated_through<to_timestamp(floor(extract(epoch FROM $1::timestamptz)/s.cadence_seconds)*s.cadence_seconds)) AS behind
+               OR s.g_calculation_version<>$1::text OR s.g_source_generation<>s.source_generation
+               OR s.evaluated_through<to_timestamp(floor(extract(epoch FROM $2::timestamptz)/s.cadence_seconds)*s.cadence_seconds)) AS behind
     FROM slo s
     LEFT JOIN work w ON w.slo_id=s.id AND w.definition_revision=s.revision AND w.measurement_revision=s.measurement_revision
     GROUP BY s.id
@@ -86,8 +90,8 @@ FROM classified
 `
 
 type ReadSloDerivedStatesParams struct {
-	Now                pgtype.Timestamptz `json:"now"`
 	CalculationVersion string             `json:"calculation_version"`
+	Now                pgtype.Timestamptz `json:"now"`
 }
 
 type ReadSloDerivedStatesRow struct {
@@ -100,7 +104,7 @@ type ReadSloDerivedStatesRow struct {
 // Each active SLO is stopped (some of its work failed for seven days), failing (some of its work failed
 // five times in a row), catching up (its current values or retained history are behind) or up to date.
 func (q *Queries) ReadSloDerivedStates(ctx context.Context, arg ReadSloDerivedStatesParams) (ReadSloDerivedStatesRow, error) {
-	row := q.db.QueryRow(ctx, readSloDerivedStates, arg.Now, arg.CalculationVersion)
+	row := q.db.QueryRow(ctx, readSloDerivedStates, arg.CalculationVersion, arg.Now)
 	var i ReadSloDerivedStatesRow
 	err := row.Scan(
 		&i.Stopped,
@@ -138,9 +142,14 @@ WITH changed AS (
       AND j.state='failed' AND j.last_error IS DISTINCT FROM 'retention_expired'
       AND j.attempts>=5 AND j.failing_since<=$1::timestamptz-interval '7 days' AND c.updated_at>j.failing_since
     RETURNING 1
+), extrema_work AS (
+    UPDATE public.almanac_slo_extrema_cursor w SET attempts=0,failing_since=NULL,next_attempt_at=$1::timestamptz
+    FROM changed c WHERE w.slo_id=c.slo_id AND w.definition_revision=c.definition_revision AND w.measurement_revision=c.measurement_revision
+      AND w.attempts>=5 AND w.failing_since<=$1::timestamptz-interval '7 days' AND c.updated_at>w.failing_since
+    RETURNING 1
 )
 SELECT ((SELECT count(*) FROM current_work)+(SELECT count(*) FROM repair_work)
-       +(SELECT count(*) FROM tile_work)+(SELECT count(*) FROM history_work))::bigint AS restarted
+       +(SELECT count(*) FROM tile_work)+(SELECT count(*) FROM history_work)+(SELECT count(*) FROM extrema_work))::bigint AS restarted
 `
 
 // ADR-0034: work that stopped after seven days of continuous failure starts again once its SLI has

@@ -61,6 +61,12 @@ func RetrySloPreparation(ctx context.Context, databaseURL string, input RetrySlo
 				CalculationVersion: operationalCalculationVersion, Now: now})
 		}
 		if err == nil && changed == 0 {
+			action = "slo.extrema.retry"
+			changed, err = q.RetrySloExtrema(ctx, dbgen.RetrySloExtremaParams{JobID: jobID, SloID: id,
+				DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
+				CalculationVersion: operationalCalculationVersion, Now: now})
+		}
+		if err == nil && changed == 0 {
 			action = "sli.aggregate.retry"
 			changed, err = q.RetrySourceAggregate(ctx, dbgen.RetrySourceAggregateParams{JobID: jobID, SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, Now: now})
 		}

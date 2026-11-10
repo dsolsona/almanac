@@ -31,7 +31,7 @@ WITH dirty AS (
  'public.almanac_slo_overview_snapshots','public.almanac_slo_overview_snapshot_items',
  'public.almanac_slo_projection_payloads','public.almanac_slo_series_points',
  'public.almanac_slo_series_tiles','public.almanac_slo_series_repair',
- 'public.almanac_slo_series_tile_work']) table_name
+ 'public.almanac_slo_series_tile_work','public.almanac_slo_extrema','public.almanac_slo_extrema_cursor']) table_name
 )
 SELECT dirty.total AS dirty_keys,dirty.failed AS failed_keys,dirty.age AS oldest_dirty_seconds,
  history.total AS history_jobs,history.failed AS failed_history_jobs,history.age AS oldest_history_seconds,

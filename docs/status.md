@@ -9,6 +9,22 @@ Commits, push and PR publication are authorized; merge is not. No measured
 savings are claimed yet. F9-T01 passed `make check` (241 s), the final
 `make test-integration` (79 s) and all 15 `make test-e2e` journeys (4.6 min).
 
+[F9-T02](tasks/F9-T02.md) is published as draft [PR #75](https://github.com/dsolsona/almanac/pull/75)
+from `.worktrees/lean-slo-extrema`, branch `feat/lean-slo-extrema`, with checkpoints `c82b2a4` and `bae6456` above
+F9-T01's verified `484647d`. The extrema worker, detail reader, pinned values,
+diagnostics, retry and cleanup are implemented. The old current/list pipeline
+remains until F9-T03. The latest `make check` passes, including storage integration
+in 132.630 seconds and 82 browser checks in 2.4 minutes; checkpoint `bae6456`
+also passes race integration (storage 218.763 seconds) and all 15 E2E journeys
+(4.2 minutes). The native stack is verified as #72 → #73 → #75. The 35-day
+performance run passed all five checks in 8.9 minutes: cold p95 was 395/304 ms
+for the SLO list/detail and 236/253 ms for the SLI list/detail. A later CI race
+failure exposed an oversized dense worker transaction; the follow-up caps each
+turn at the existing 960-input budget. Its `make test` and full race integration
+pass, with storage integration taking 160.925 seconds. Full 20-SLO 35/365-day
+equivalence and savings
+are not claimed; F9-T02 remains in progress and the PR remains draft.
+
 # Delivery status
 
 PR [#71](https://github.com/dsolsona/almanac/pull/71) CI follow-up, 2026-11-09:

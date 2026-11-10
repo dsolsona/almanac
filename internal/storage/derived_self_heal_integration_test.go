@@ -25,14 +25,19 @@ type selfHealFixture struct {
 	historyStart time.Time
 	at           time.Time
 	now          time.Time
+	cadence      time.Duration
 }
 
 func (s *selfHealFixture) clock() time.Time { return s.now }
 
 func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFixture {
+	return newSelfHealFixtureCadence(t, name, withValues, time.Minute)
+}
+
+func newSelfHealFixtureCadence(t *testing.T, name string, withValues bool, cadence time.Duration) *selfHealFixture {
 	t.Helper()
 	f := newAgentFixture(t)
-	s := &selfHealFixture{f: f, now: f.base.Add(5 * time.Second)}
+	s := &selfHealFixture{f: f, now: f.base.Add(5 * time.Second), cadence: cadence}
 	issued, created := createOwnershipAgent(t, f, name+"-agent")
 	capabilities, err := json.Marshal([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"collect", "connection_test", "query_preview"}}})
 	if err != nil {
@@ -47,8 +52,10 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 	if err := RecordAgentConfigurationApplied(t.Context(), f.databaseURL, issued.ID, issued.Verifier, resume, grant.Generation, 1, s.clock); err != nil {
 		t.Fatal(err)
 	}
+	settings := datasource.DefaultSettings(name+"-metrics", "Self-heal Metrics", "https://metrics.example.test", created.Agent.ID)
+	settings.PollingIntervalSeconds = int(cadence / time.Second)
 	source, err := CreateDatasource(t.Context(), f.databaseURL, nil, CreateDatasourceInput{Proof: DatasourceProof{SessionVerifier: f.verifier},
-		Settings: datasource.DefaultSettings(name+"-metrics", "Self-heal Metrics", "https://metrics.example.test", created.Agent.ID),
+		Settings: settings,
 		Password: datasource.SecretAction{Action: "clear"}, Token: datasource.SecretAction{Action: "clear"}, IdempotencyKey: name + "-source", RequestID: name + "-source", Now: s.clock})
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +67,7 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 		t.Fatal(err)
 	}
 	s.sliID = measurement.ID
-	s.historyStart = f.base.Add(time.Hour)
+	s.historyStart = ceilSliBoundary(f.base.Add(time.Hour), cadence)
 	s.at = s.historyStart.Add(3 * time.Hour)
 	s.conn = integrationConnect(t, f.databaseURL)
 	t.Cleanup(func() { closeIntegrationConn(s.conn) })
@@ -74,9 +81,9 @@ func newSelfHealFixture(t *testing.T, name string, withValues bool) *selfHealFix
 	if _, err := s.conn.Exec(t.Context(), `
 INSERT INTO public.almanac_sli_coverage
     (interval_start,sli_id,measurement_revision,interval_end,outcome,result_digest,missing_components,execution_id,delivery_id,observation_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT point, $1, 1, point + interval '1 minute', 'observed', decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + interval '1 minute'
-FROM generate_series($5::timestamptz, $6::timestamptz - interval '1 minute', interval '1 minute') point`,
-		s.sliID, created.Agent.ID, grant.Generation, leaseID, s.historyStart, s.at); err != nil {
+SELECT point, $1, 1, point + make_interval(secs=>$7), 'observed', decode(repeat('ab',32),'hex'), '{}', gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $2, $3, 1, $4, point, point + make_interval(secs=>$7)
+FROM generate_series($5::timestamptz, $6::timestamptz - make_interval(secs=>$7), make_interval(secs=>$7)) point`,
+		s.sliID, created.Agent.ID, grant.Generation, leaseID, s.historyStart, s.at, cadence.Seconds()); err != nil {
 		t.Fatal(err)
 	}
 	if withValues {
@@ -96,8 +103,8 @@ func (s *selfHealFixture) insertValues(t *testing.T) {
 	t.Helper()
 	if _, err := s.conn.Exec(t.Context(), `
 INSERT INTO public.almanac_sli_observation_values(interval_start,sli_id,measurement_revision,good_count,total_count)
-SELECT point, $1, 1, 990, 1000 FROM generate_series($2::timestamptz, $3::timestamptz - interval '1 minute', interval '1 minute') point`,
-		s.sliID, s.historyStart, s.at); err != nil {
+SELECT point, $1, 1, 990, 1000 FROM generate_series($2::timestamptz, $3::timestamptz - make_interval(secs=>$4), make_interval(secs=>$4)) point`,
+		s.sliID, s.historyStart, s.at, s.cadence.Seconds()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -120,6 +127,12 @@ func (s *selfHealFixture) drain(t *testing.T, stage string) {
 // createSLO creates a one-hour-window 99% SLO evaluated from the start of the history.
 func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	t.Helper()
+	window := ((time.Hour + s.cadence - 1) / s.cadence) * s.cadence
+	return s.createSLOWithHistory(t, name, window, s.historyStart)
+}
+
+func (s *selfHealFixture) createSLOWithHistory(t *testing.T, name string, window time.Duration, validFrom time.Time) string {
+	t.Helper()
 	var verifier [32]byte
 	verifier[0] = 98
 	if _, err := IssueSession(t.Context(), s.f.databaseURL, IssueSessionInput{UserID: s.f.userID, ExpectedCredentialEpoch: s.f.epoch,
@@ -132,9 +145,8 @@ func (s *selfHealFixture) createSLO(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	validFrom := s.historyStart
 	_, objective, err := CreateObjective(t.Context(), s.f.databaseURL, CreateObjectiveInput{Proof: proof, Name: name + "-slo", DisplayName: "Self-heal SLO",
-		ServiceID: service.ID, SliID: s.sliID, Target: "0.99", RollingWindowSeconds: int64(time.Hour / time.Second), EvaluationValidFrom: &validFrom,
+		ServiceID: service.ID, SliID: s.sliID, Target: "0.99", RollingWindowSeconds: int64(window / time.Second), EvaluationValidFrom: &validFrom,
 		IdempotencyKey: name + "-slo", RequestID: name + "-slo", Now: s.clock}, true)
 	if err != nil {
 		t.Fatal(err)

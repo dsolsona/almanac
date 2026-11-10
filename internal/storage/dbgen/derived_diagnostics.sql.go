@@ -44,6 +44,14 @@ WITH objective AS (
     FROM public.almanac_slo_series_repair w JOIN objective o ON w.slo_id=o.id
       AND w.definition_revision=o.revision AND w.measurement_revision=o.measurement_revision
     WHERE w.calculation_version=$2 AND w.cursor_at<w.end_at
+    UNION ALL
+    SELECT w.id,'extrema',CASE WHEN w.attempts>=5 THEN 'failed' WHEN w.lease_until>$3::timestamptz THEN 'running' ELSE 'pending' END,
+           w.attempts,w.next_attempt_at,coalesce(w.last_error,'')
+    FROM public.almanac_slo_extrema_cursor w JOIN objective o ON w.slo_id=o.id
+      AND w.definition_revision=o.revision AND w.measurement_revision=o.measurement_revision
+    WHERE w.calculation_version=$2
+      AND (w.built_through<date_trunc('hour',$3::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        OR w.dirty_from<LEAST(w.dirty_to,date_trunc('hour',$3::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'))
 )
 SELECT id,stage,state,attempts,next_attempt_at,last_error FROM jobs
 ORDER BY (state='failed') DESC,next_attempt_at,id LIMIT 101
@@ -178,6 +186,41 @@ type RetryRetainedTileParams struct {
 
 func (q *Queries) RetryRetainedTile(ctx context.Context, arg RetryRetainedTileParams) (int64, error) {
 	result, err := q.db.Exec(ctx, retryRetainedTile,
+		arg.Now,
+		arg.JobID,
+		arg.SloID,
+		arg.DefinitionRevision,
+		arg.MeasurementRevision,
+		arg.CalculationVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retrySloExtrema = `-- name: RetrySloExtrema :execrows
+UPDATE public.almanac_slo_extrema_cursor
+SET attempts=0,lease_until=NULL,lease_epoch=lease_epoch+1,next_attempt_at=$1::timestamptz,
+    manual_retried_at=$1::timestamptz,last_error=NULL,failing_since=NULL
+WHERE id=$2 AND slo_id=$3
+  AND definition_revision=$4 AND measurement_revision=$5
+  AND calculation_version=$6 AND attempts>=5
+  AND (lease_until IS NULL OR lease_until<=$1::timestamptz)
+  AND (manual_retried_at IS NULL OR manual_retried_at<=$1::timestamptz-interval '1 minute')
+`
+
+type RetrySloExtremaParams struct {
+	Now                 pgtype.Timestamptz `json:"now"`
+	JobID               pgtype.UUID        `json:"job_id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+}
+
+func (q *Queries) RetrySloExtrema(ctx context.Context, arg RetrySloExtremaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retrySloExtrema,
 		arg.Now,
 		arg.JobID,
 		arg.SloID,
