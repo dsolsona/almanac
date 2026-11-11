@@ -3,6 +3,8 @@
 SLO monitoring and reliability management platform. Track SLIs, error budgets,
 burn rates and alerts across services.
 
+Run `make help` for grouped commands, useful options and examples.
+
 ## Run locally
 
 Install Docker with its Compose plugin, Make and curl, then run:
@@ -55,6 +57,10 @@ deployment or restore qualification.
 The current app supports administrator onboarding, agent and datasource management,
 agent-collected event-count SLIs, and request-count SLOs with fixed rolling windows.
 Calendar reports, OpenSLO import, annotations and alerting remain under development.
+
+For an optional Linux development VM with Codex and Docker running inside it,
+see [Firecracker development](docs/firecracker.md). VM disks and credentials stay
+in ignored local storage; the repository contains only the setup script.
 
 ### Images
 
