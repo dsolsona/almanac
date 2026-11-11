@@ -759,7 +759,9 @@ it.each([false,true])('keeps a pending sorted scan honest after initial failure:
  const user=userEvent.setup();
  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
  await screen.findByText('Sorting SLIs');
- await waitFor(()=>expect(screen.queryByText('offline')).not.toBeInTheDocument());
+ await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+ await waitFor(()=>expect(screen.queryByText('Checking datasources')).not.toBeInTheDocument());
+ expect(screen.getByText('Sorting SLIs')).toBeInTheDocument();
  expect(screen.queryByText('Create your first SLI from a Prometheus datasource with New SLI.')).not.toBeInTheDocument();
  if(!initialFailure) expect(screen.getByRole('navigation',{name:'SLI result pages'})).toHaveTextContent('Loading sorted results');
  await act(async()=>pending.resolve(response({items:[],next_cursor:''})));
