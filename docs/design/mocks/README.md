@@ -1,5 +1,10 @@
 # UI mocks: unified SLI, SLO, datasource and agent screens
 
+Approved SLI detail update, 2026-11-11: [mockup E](sli-detail-options/refined.html)
+governs the SLI detail under [ADR-0046](../../adr/0046-sli-measurements-and-collection-detail.md).
+It replaces the four tiles with an integrated graph summary, exact interval
+inspection and aligned collection squares. Original A–D remain for comparison.
+
 Approved design, 2026-11-06: [Settings and user administration](settings/README.md)
 has clickable Settings, account, user list/add/edit and password journeys. It is
 approved for implementation with pixel parity, including its settings-specific table sizing.
@@ -23,7 +28,8 @@ folder holds desktop light renders for quick comparison; the HTML is the referen
 | `slo-create.html` | New SLO: Identity → Indicator → Objective → Alerting | [F6-T04](../../tasks/F6-T04.md), in review (description, budget preview deferred) |
 | `slo-edit.html` | Edit SLO with revision banner and history | deferred (revision contract); display-name dialog from F6-T02 |
 | `sli-list.html` | Dense SLI table with health filter and 24 h strip | [F6-T03](../../tasks/F6-T03.md), in review (health filter deferred) |
-| `sli-detail.html` | Single-column SLI detail: tiles, chart, intervals, definition, objectives | [F6-T03](../../tasks/F6-T03.md), in review (range chips, volume bars, objective status deferred) |
+| `sli-detail-options/refined.html` | Approved SLI detail: integrated measurement summary, interval states and exact inspection | [F6-T10](../../tasks/F6-T10.md) |
+| `sli-detail.html` | Historical SLI detail with four tiles | Superseded by ADR-0046 |
 | `sli-create.html` | New SLI: Identity → Source → Measurement with query test | [F6-T04](../../tasks/F6-T04.md), in review (description, units toggle, query test deferred) |
 | `ds-list.html` | Datasource list with health, agent, cadence, SLI count | [F6-T05](../../tasks/F6-T05.md), in review (last query deferred) |
 | `ds-detail.html` | Datasource detail: status, tiles, Connection, Agent, Test, delete | [F6-T05](../../tasks/F6-T05.md), in review (last test summary, delete deferred) |
