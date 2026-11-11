@@ -180,3 +180,34 @@ it.each(['success','failure'])('ignores a late user save %s after navigation to 
  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('User B');
  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+it('loads session settings when the same signed-in user becomes an administrator', async () => {
+  history.replaceState({}, '', '/settings/sessions');
+  vi.stubGlobal('fetch', vi.fn(async () => response({ idle_minutes: 480, version: 1 })));
+  const viewer: AuthContext = { ...admin, session: { ...admin.session!, role: 'viewer' } };
+  const view = render(<SettingsPage context={viewer}/>);
+  expect(await screen.findByText('Admin access required.')).toBeVisible();
+  view.rerender(<SettingsPage context={admin}/>);
+  expect(await screen.findByLabelText('Inactivity timeout (minutes)')).toHaveValue(480);
+  view.rerender(<SettingsPage context={viewer}/>);
+  expect(screen.queryByLabelText('Inactivity timeout (minutes)')).not.toBeInTheDocument();
+  expect(await screen.findByText('Admin access required.')).toBeVisible();
+});
+
+it('recovers a conflicted policy form after administrator access is restored', async () => {
+  history.replaceState({}, '', '/settings/sessions');
+  vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    init?.method === 'PUT'
+      ? response({ code: 'conflict' }, 409)
+      : response({ idle_minutes: 480, version: 2 })));
+  const view = render(<SettingsPage context={admin}/>);
+  const input = await screen.findByLabelText('Inactivity timeout (minutes)');
+  fireEvent.change(input, { target: { value: '360' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  expect(await screen.findByText('Session settings changed. Refresh to review the current timeout.')).toBeVisible();
+  expect(input).toBeDisabled();
+  const viewer: AuthContext = { ...admin, session: { ...admin.session!, role: 'viewer' } };
+  view.rerender(<SettingsPage context={viewer}/>);
+  view.rerender(<SettingsPage context={admin}/>);
+  expect(await screen.findByLabelText('Inactivity timeout (minutes)')).toBeEnabled();
+});

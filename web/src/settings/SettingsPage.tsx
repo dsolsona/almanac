@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 're
 import type { AuthContext } from '../auth/client.ts';
 import { AuthFailure, createAuthClient } from '../auth/client.ts';
 import { Button, Combobox, Dialog, FormActions, FormSection, PageHeader, Pager, RefreshButton, RoleChip, SearchField, SegmentedControl, StatusChip, TextField, ThemeChoice, Toolbar, ToolbarSpacer } from '../components/ui/index.ts';
-import { settingsClient, SettingsFailure, type CommandResult, type ManagedUser, type UserAction, type UserPage, type UserRole } from './client.ts';
+import { settingsClient, SettingsFailure, type CommandResult, type ManagedUser, type SessionPolicy, type UserAction, type UserPage, type UserRole } from './client.ts';
 import { journeyContentReady } from '../telemetry/client.ts';
 import './settings.css';
 
@@ -30,6 +30,8 @@ function LastSignIn({user,now}:{user:ManagedUser;now:number}) {
 export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChange,onAuthFailure,onCheckSession,client=defaultAuthClient}:{context:AuthContext;onIssuedLink:(result:CommandResult)=>void;onProfileChange?:(user:ManagedUser)=>void;onSessionChange?:(context:AuthContext)=>void;onAuthFailure?:(error:AuthFailure)=>void;onCheckSession?:()=>void;client?:ReturnType<typeof createAuthClient>}) {
   const authClient=useRef(client).current;
   const [path,setPath]=useState(location.pathname);
+  const [sessionPolicy, setSessionPolicy] = useState<SessionPolicy | null>(null);
+  const [idleMinutes, setIdleMinutes] = useState('');
   const [record,setRecord]=useState<ManagedUser|null>(null);
   const [page,setPage]=useState<UserPage|null>(null);
   const [search,setSearch]=useState(''),[status,setStatus]=useState(''),[roleFilter,setRoleFilter]=useState('');
@@ -45,6 +47,7 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
   const heading=useRef<HTMLHeadingElement>(null),trigger=useRef<HTMLElement>(null),cancelButton=useRef<HTMLButtonElement>(null);
   const busy=useRef(false),live=useRef(true),navigation=useRef(0),intent=useRef<{signature:string;key:string}|null>(null);
   const account=path==='/settings'||path==='/settings/account', users=path.startsWith('/settings/users'), list=path==='/settings/users', creating=path==='/settings/users/new', changingPassword=path==='/settings/password';
+  const sessions = path === '/settings/sessions';
   const admin=context.session?.role==='administrator', id=path.split('/')[3];
   const target=record && (account?record.id===context.session?.user_id:record.id===id)?record:null;
   const blocked=pending||uncertain;
@@ -52,11 +55,20 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
   useEffect(()=>{setPassword('');setConfirmation('');setConfirmAction(null);setFieldErrors({});setError('');setUncertain(false);intent.current=null;heading.current?.focus();},[path]);
   useEffect(()=>{
     const controller=new AbortController();setReadPending(true);setError('');
-    if(users&&!admin||changingPassword) {setReadPath(path);setReadPending(false);return()=>controller.abort();}
+    if((users||sessions)&&!admin||changingPassword) {setReadPath(path);setReadPending(false);return()=>controller.abort();}
     if(creating) {setRecord(null);setName('');setEmail('');setRole(null);setDraftPath(path);setReadPath(path);setReadPending(false);return()=>controller.abort();}
+    if (sessions) setSessionPolicy(null);
     const read=async()=>{
       try {
-        if(list) { const query=new URLSearchParams({limit:String(limit)});if(cursors[offset/limit])query.set('cursor',cursors[offset/limit]!);if(search)query.set('q',search);if(status)query.set('status',status);if(roleFilter)query.set('role',roleFilter);const result=await settingsClient.users(query,context,controller.signal);if(!controller.signal.aborted){setPage(result);setNow(Date.now());} }
+        if (sessions) {
+          const policy = await settingsClient.sessionPolicy(context, controller.signal);
+          if (!controller.signal.aborted) {
+            setSessionPolicy(policy);
+            setIdleMinutes(String(policy.idle_minutes));
+            // Reconcile only uncertainty that existed when this read began.
+            if (uncertain) setUncertain(false);
+          }
+        } else if(list) { const query=new URLSearchParams({limit:String(limit)});if(cursors[offset/limit])query.set('cursor',cursors[offset/limit]!);if(search)query.set('q',search);if(status)query.set('status',status);if(roleFilter)query.set('role',roleFilter);const result=await settingsClient.users(query,context,controller.signal);if(!controller.signal.aborted){setPage(result);setNow(Date.now());} }
         else {const user=account?await settingsClient.account(context,controller.signal):await settingsClient.user(id??'',context,controller.signal);if(!controller.signal.aborted){setRecord(user);setName(user.full_name);setEmail(user.email??'');setRole(user.role);setDraftPath(path);if(account)onProfileChange?.(user);}}
       } catch(err) {if(!controller.signal.aborted)setError(err instanceof Error?err.message:'Account settings could not be loaded.');}
       finally {if(!controller.signal.aborted){setReadPending(false);setReadPath(path);}}
@@ -64,7 +76,7 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
     const timer=list&&search?setTimeout(()=>void read(),150):undefined;
     if(timer===undefined)void read();
     return()=>{clearTimeout(timer);controller.abort();};
-  },[path,search,status,roleFilter,limit,offset,cursors,refresh,context.session?.user_id]); // callbacks and CSRF changes must not discard a draft
+  },[path,search,status,roleFilter,limit,offset,cursors,refresh,context.session?.user_id,admin]); // callbacks and CSRF changes must not discard a draft
 
   useEffect(()=>{if(!readPending&&readPath===path)journeyContentReady('management',Boolean(error));},[readPending,readPath,path,error]);
 
@@ -106,13 +118,52 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
     catch(err){if(live.current){if(err instanceof AuthFailure&&err.kind==='uncertain'){if(onAuthFailure)onAuthFailure(err);else if(err.recovery)onSessionChange?.(err.recovery);}setError(err instanceof Error?err.message:'Password change could not be confirmed. Check your session before trying again.');}}
     finally{busy.current=false;if(live.current)setPending(false);}
   }
+  async function saveSessionPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy.current || blocked || !sessionPolicy) return;
+    const minutes = Number(idleMinutes);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 720) {
+      setFieldErrors({ idleMinutes: 'Enter a whole number from 1 to 720.' });
+      return;
+    }
+    const revision = navigation.current;
+    busy.current = true;
+    setPending(true);
+    setError('');
+    setMessage('');
+    setFieldErrors({});
+    try {
+      const policy = await settingsClient.updateSessionPolicy(context, {
+        idle_minutes: minutes,
+        version: sessionPolicy.version,
+      });
+      if (live.current && revision === navigation.current) {
+        setSessionPolicy(policy);
+        setIdleMinutes(String(policy.idle_minutes));
+        setMessage('Session settings saved.');
+      }
+    } catch (err) {
+      if (live.current && revision === navigation.current) {
+        const failure = err instanceof SettingsFailure ? err : null;
+        setUncertain(Boolean(failure?.uncertain || failure?.status === 409));
+        setError(failure?.status === 409
+          ? 'Session settings changed. Refresh to review the current timeout.'
+          : failure?.uncertain
+            ? 'The save could not be confirmed. Refresh to see the current timeout.'
+            : failure?.message ?? 'Session settings could not be saved.');
+      }
+    } finally {
+      busy.current = false;
+      if (live.current) setPending(false);
+    }
+  }
   function openConfirmation(action:UserAction,event:MouseEvent<HTMLButtonElement>){trigger.current=event.currentTarget;setConfirmAction(action);setError('');}
   function routeClick(event:MouseEvent<HTMLElement>){
     const anchor=event.target instanceof Element?event.target.closest<HTMLAnchorElement>('a[data-settings-route]'):null;
     if(anchor&&!event.defaultPrevented&&event.button===0&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();if(pending)return;setConfirmAction(null);setMessage('');navigate(anchor.pathname);}
   }
   const crumb=(current:string,isUser=false)=><nav className="settings-crumbs" aria-label="Breadcrumb"><a href="/settings/account" data-settings-route>Settings</a><span aria-hidden="true">/</span>{isUser&&<><a href="/settings/users" data-settings-route>Users</a><span aria-hidden="true">/</span></>}<span aria-current="page">{current}</span></nav>;
-  const title=list?'Users':creating?'Add user':account?'Your account':changingPassword?'Change password':target?.full_name??'User details';
+  const title=sessions?'Sessions':list?'Users':creating?'Add user':account?'Your account':changingPassword?'Change password':target?.full_name??'User details';
   const notice=error&&<div className="settings-notice settings-notice--error" role="alert">{error}{!creating&&(uncertain||!pending)&&<Button variant="link" onClick={changingPassword?onCheckSession:reload} disabled={changingPassword&&!onCheckSession}>{changingPassword?'Check session':'Refresh'}</Button>}</div>;
   const confirmTitle=target&&confirmAction?confirmAction==='delete'?`Delete ${target.full_name}?`:confirmAction==='disable'?`Disable ${target.full_name}?`:confirmAction==='enable'?`Enable ${target.full_name}?`:confirmAction==='reset-password'?`Reset ${target.full_name}’s password?`:confirmAction==='cancel-password-reset'?'Cancel password reset?':'Replace password setup link?':'';
   const confirmDescription:Record<UserAction,string>={delete:'This permanently removes the account and revokes its sessions, tokens and pending links. Past audit activity keeps its attribution. This cannot be undone.',disable:'They will be signed out immediately. Their sessions, personal tokens and pending setup or reset links will be revoked. Their profile and role are kept.',enable:'Restore this account’s access. They will need to sign in again; previous sessions and links stay revoked.','reset-password':'This signs the user out, revokes their tokens and pending links, and suspends password sign-in until the new password is set. Share the new link privately; it expires in 15 minutes.','cancel-password-reset':'The reset link will stop working. The user can sign in again with their previous password. Revoked sessions and tokens stay revoked.','replace-setup-link':'The original setup link will stop working. Share the replacement privately; it expires in 24 hours.'};
@@ -120,12 +171,33 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
   const resetAction:UserAction=target?.status==='resetting'?'cancel-password-reset':target?.status==='pending'?'replace-setup-link':'reset-password';
 
   return <div className="settings-page" onClick={routeClick}>
-    <nav className="settings-tabs" aria-label="Settings"><a href="/settings/account" data-settings-route aria-current={!users?'page':undefined}>Your account</a>{admin&&<a href="/settings/users" data-settings-route aria-current={users?'page':undefined}>Users</a>}</nav>
+    <nav className="settings-tabs" aria-label="Settings"><a href="/settings/account" data-settings-route aria-current={!users&&!sessions?'page':undefined}>Your account</a>{admin&&<a href="/settings/users" data-settings-route aria-current={users?'page':undefined}>Users</a>}{admin&&<a href="/settings/sessions" data-settings-route aria-current={sessions?'page':undefined}>Sessions</a>}</nav>
     {message&&<div className="settings-notice" role="status">{message}</div>}
     {changingPassword?<nav className="settings-crumbs" aria-label="Breadcrumb"><a href="/settings/account" data-settings-route>Your account</a><span aria-hidden="true">/</span><span aria-current="page">Change password</span></nav>:crumb(list||users&&!admin?'Users':title,users&&!list&&admin)}
     {account?<div className="settings-head"><h1 ref={heading} tabIndex={-1}>Your account</h1><RoleChip role={context.session?.role??'viewer'}/></div>:<PageHeader title={title} headingRef={heading} actions={list&&admin?<Button onClick={()=>{setMessage('');navigate('/settings/users/new');}}>Add user</Button>:target&&!changingPassword?userStatus(target):undefined}/>}
     {notice}
-    {users&&!admin?<><div className="settings-notice settings-notice--warning"><strong>Admin access required.</strong><p>Your role can manage your own account, but cannot view or change other users.</p></div><a className="settings-link-button" href="/settings/account" data-settings-route>Your account</a></>:list?<>
+    {sessions ? !admin ? <div className="settings-notice settings-notice--warning"><strong>Admin access required.</strong><p>Only admins can change session settings.</p></div>
+      : sessionPolicy && readPath === path ? <form onSubmit={event => void saveSessionPolicy(event)}>
+        <FormSection title="Session expiry">
+          <div className="ui-form-grid">
+            <TextField id="session-idle-minutes" label="Inactivity timeout (minutes)" type="number" min={1} max={720} step={1} required
+              value={idleMinutes} onChange={event => setIdleMinutes(event.target.value)} error={fieldErrors.idleMinutes} disabled={blocked}
+              hint="Enter 1 to 720 minutes. The default is 480 minutes (8 hours)." />
+          </div>
+          <p>Changes apply the next time users sign in.</p>
+          <p>Sessions end after 12 hours even with activity.</p>
+        </FormSection>
+        <FormActions className="settings-form-actions">
+          <Button variant="outline" disabled={blocked} onClick={() => {
+            setIdleMinutes(String(sessionPolicy.idle_minutes));
+            setFieldErrors({});
+            setError('');
+            setMessage('');
+          }}>Cancel</Button>
+          <Button type="submit" pending={pending} disabled={uncertain || idleMinutes === String(sessionPolicy.idle_minutes)}>Save changes</Button>
+        </FormActions>
+      </form> : readPending ? <span className="sr-only" role="status">Opening session settings</span> : null
+      : users&&!admin?<><div className="settings-notice settings-notice--warning"><strong>Admin access required.</strong><p>Your role can manage your own account, but cannot view or change other users.</p></div><a className="settings-link-button" href="/settings/account" data-settings-route>Your account</a></>:list?<>
       <Toolbar><SearchField id="user-search" label="Search users" placeholder="Search name or email" shortcut value={search} onChange={event=>{setSearch(event.target.value);resetPage();}}/><SegmentedControl label="User status" value={status} onChange={value=>{setStatus(value);resetPage();}} options={[{value:'',label:'All'},{value:'active',label:'Active'},{value:'pending',label:'Pending'},{value:'disabled',label:'Disabled'}]}/><select className={`settings-role-filter ${roleFilter?'is-active':''}`} aria-label="Filter by role" value={roleFilter} onChange={event=>{setRoleFilter(event.target.value);resetPage();}}><option value="">All roles</option>{roleOptions.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select><ToolbarSpacer/><RefreshButton label="Refresh users" onClick={reload} busy={readPending}/></Toolbar>
       {page&&<div className="settings-list-frame" aria-busy={readPending}>
         {page.items.length?<div className="settings-table-scroll" role="region" aria-label="Users table" tabIndex={0}><table className="settings-table"><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Role</th><th scope="col">Last sign-in</th></tr></thead><tbody>{page.items.map(user=><tr key={user.id} onClick={event=>{if(event.button===0&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey&&!(event.target as Element).closest('a,button,input,select')&&!window.getSelection()?.toString())navigate(`/settings/users/${user.id}`);}}><td><a href={`/settings/users/${user.id}`} data-settings-route>{user.full_name}{user.id===context.session?.user_id&&<span className="settings-you">You</span>}</a></td><td className="settings-email">{user.email??<span className="settings-muted">—</span>}</td><td>{userStatus(user)}</td><td><RoleChip role={user.role}/></td><td className="settings-last-sign-in"><LastSignIn user={user} now={now}/></td></tr>)}</tbody></table></div>:<div className="settings-empty"><h2>{search||status||roleFilter?'No matching users':'Add your first teammate'}</h2><p>{search||status||roleFilter?'Try another name, email or filter.':'Create an account, choose a role and share a one-time password setup link.'}</p>{(search||status||roleFilter)&&<Button variant="outline" onClick={()=>{setSearch('');setStatus('');setRoleFilter('');resetPage();}}>Clear filters</Button>}</div>}

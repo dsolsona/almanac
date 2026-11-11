@@ -1,4 +1,4 @@
-# ADR-0044: Prepared Firecracker development workers
+# ADR-0045: Prepared Firecracker development workers
 
 - Status: accepted
 - Created: 2026-11-10

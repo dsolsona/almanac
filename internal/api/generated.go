@@ -3156,6 +3156,12 @@ type ServiceSloSummary struct {
 // ServiceSloSummaryState defines model for ServiceSloSummary.State.
 type ServiceSloSummaryState string
 
+// SessionPolicy defines model for SessionPolicy.
+type SessionPolicy struct {
+	IdleMinutes int32 `json:"idle_minutes"`
+	Version     int32 `json:"version"`
+}
+
 // Sli defines model for Sli.
 type Sli struct {
 	// ActivatedAt Configuration acknowledgement time when collection authority was activated.
@@ -4299,6 +4305,9 @@ type CreateServiceJSONRequestBody = ServiceCreateRequest
 // PatchServiceMetadataJSONRequestBody defines body for PatchServiceMetadata for application/json ContentType.
 type PatchServiceMetadataJSONRequestBody = ServiceMetadataWrite
 
+// UpdateSessionPolicyJSONRequestBody defines body for UpdateSessionPolicy for application/json ContentType.
+type UpdateSessionPolicyJSONRequestBody = SessionPolicy
+
 // CreateSliJSONRequestBody defines body for CreateSli for application/json ContentType.
 type CreateSliJSONRequestBody = SliCreateRequest
 
@@ -5080,6 +5089,29 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
 	PatchServiceMetadata(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSessionPolicy Read the installation's session inactivity policy (administrator only)
+	//
+	// Corresponds with GET /api/v1/settings/sessions (the `GetSessionPolicy` operationId).
+	GetSessionPolicy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSessionPolicyWithBody Change the inactivity timeout for newly issued sessions (administrator only)
+	//
+	// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+	UpdateSessionPolicyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSessionPolicy Change the inactivity timeout for newly issued sessions (administrator only)
+	//
+	// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+	UpdateSessionPolicy(ctx context.Context, body UpdateSessionPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListSlis List SLIs
 	//
@@ -6323,6 +6355,59 @@ func (c *Client) PatchServiceMetadataWithBody(ctx context.Context, serviceId Ser
 // Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
 func (c *Client) PatchServiceMetadata(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchServiceMetadataRequest(c.Server, serviceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSessionPolicy Read the installation's session inactivity policy (administrator only)
+//
+// Corresponds with GET /api/v1/settings/sessions (the `GetSessionPolicy` operationId).
+func (c *Client) GetSessionPolicy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSessionPolicyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateSessionPolicyWithBody Change the inactivity timeout for newly issued sessions (administrator only)
+//
+// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+func (c *Client) UpdateSessionPolicyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSessionPolicyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateSessionPolicy Change the inactivity timeout for newly issued sessions (administrator only)
+//
+// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+func (c *Client) UpdateSessionPolicy(ctx context.Context, body UpdateSessionPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSessionPolicyRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8762,6 +8847,73 @@ func NewPatchServiceMetadataRequestWithBody(server string, serviceId ServiceId, 
 	return req, nil
 }
 
+// NewGetSessionPolicyRequest constructs an http.Request for the GetSessionPolicy method
+func NewGetSessionPolicyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/settings/sessions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateSessionPolicyRequest calls the generic UpdateSessionPolicy builder with application/json body
+func NewUpdateSessionPolicyRequest(server string, body UpdateSessionPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateSessionPolicyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUpdateSessionPolicyRequestWithBody constructs an http.Request for the UpdateSessionPolicy method, with any body, and a specified content type
+func NewUpdateSessionPolicyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/settings/sessions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListSlisRequest constructs an http.Request for the ListSlis method
 func NewListSlisRequest(server string, params *ListSlisParams) (*http.Request, error) {
 	var err error
@@ -10749,6 +10901,31 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/services/{service_id} (the `PatchServiceMetadata` operationId).
 	PatchServiceMetadataWithResponse(ctx context.Context, serviceId ServiceId, params *PatchServiceMetadataParams, body PatchServiceMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchServiceMetadataResponse, error)
+
+	// GetSessionPolicyWithResponse Read the installation's session inactivity policy (administrator only)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/settings/sessions (the `GetSessionPolicy` operationId).
+	GetSessionPolicyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSessionPolicyResponse, error)
+
+	// UpdateSessionPolicyWithBodyWithResponse Change the inactivity timeout for newly issued sessions (administrator only)
+	//
+	// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+	UpdateSessionPolicyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSessionPolicyResponse, error)
+
+	// UpdateSessionPolicyWithResponse Change the inactivity timeout for newly issued sessions (administrator only)
+	//
+	// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+	UpdateSessionPolicyWithResponse(ctx context.Context, body UpdateSessionPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSessionPolicyResponse, error)
 
 	// ListSlisWithResponse List SLIs
 	//
@@ -13129,6 +13306,102 @@ func (r PatchServiceMetadataResponse) ContentType() string {
 	return ""
 }
 
+type GetSessionPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SessionPolicy
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSessionPolicyResponse) GetJSON200() *SessionPolicy {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSessionPolicyResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSessionPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSessionPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSessionPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSessionPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateSessionPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SessionPolicy
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *UserProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateSessionPolicyResponse) GetJSON200() *SessionPolicy {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateSessionPolicyResponse) GetApplicationproblemJSONDefault() *UserProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateSessionPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateSessionPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateSessionPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateSessionPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListSlisResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15371,6 +15644,49 @@ func (c *ClientWithResponses) PatchServiceMetadataWithResponse(ctx context.Conte
 	return ParsePatchServiceMetadataResponse(rsp)
 }
 
+// GetSessionPolicyWithResponse Read the installation's session inactivity policy (administrator only)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/settings/sessions (the `GetSessionPolicy` operationId).
+func (c *ClientWithResponses) GetSessionPolicyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSessionPolicyResponse, error) {
+	rsp, err := c.GetSessionPolicy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSessionPolicyResponse(rsp)
+}
+
+// UpdateSessionPolicyWithBodyWithResponse Change the inactivity timeout for newly issued sessions (administrator only)
+//
+// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+func (c *ClientWithResponses) UpdateSessionPolicyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSessionPolicyResponse, error) {
+	rsp, err := c.UpdateSessionPolicyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSessionPolicyResponse(rsp)
+}
+
+// UpdateSessionPolicyWithResponse Change the inactivity timeout for newly issued sessions (administrator only)
+//
+// Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/settings/sessions (the `UpdateSessionPolicy` operationId).
+func (c *ClientWithResponses) UpdateSessionPolicyWithResponse(ctx context.Context, body UpdateSessionPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSessionPolicyResponse, error) {
+	rsp, err := c.UpdateSessionPolicy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSessionPolicyResponse(rsp)
+}
+
 // ListSlisWithResponse List SLIs
 //
 // Returns a wrapper object for the known response body format(s).
@@ -17536,6 +17852,72 @@ func ParsePatchServiceMetadataResponse(rsp *http.Response) (*PatchServiceMetadat
 	return response, nil
 }
 
+// ParseGetSessionPolicyResponse parses an HTTP response from a GetSessionPolicyWithResponse call
+func ParseGetSessionPolicyResponse(rsp *http.Response) (*GetSessionPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSessionPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SessionPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateSessionPolicyResponse parses an HTTP response from a UpdateSessionPolicyWithResponse call
+func ParseUpdateSessionPolicyResponse(rsp *http.Response) (*UpdateSessionPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateSessionPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SessionPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UserProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListSlisResponse parses an HTTP response from a ListSlisWithResponse call
 func ParseListSlisResponse(rsp *http.Response) (*ListSlisResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -18786,6 +19168,12 @@ type ServerInterface interface {
 	// PatchServiceMetadata Update service display metadata
 	// (PATCH /api/v1/services/{service_id})
 	PatchServiceMetadata(w http.ResponseWriter, r *http.Request, serviceId ServiceId, params PatchServiceMetadataParams)
+	// GetSessionPolicy Read the installation's session inactivity policy (administrator only)
+	// (GET /api/v1/settings/sessions)
+	GetSessionPolicy(w http.ResponseWriter, r *http.Request)
+	// UpdateSessionPolicy Change the inactivity timeout for newly issued sessions (administrator only)
+	// (PUT /api/v1/settings/sessions)
+	UpdateSessionPolicy(w http.ResponseWriter, r *http.Request)
 	// ListSlis List SLIs
 	// (GET /api/v1/slis)
 	ListSlis(w http.ResponseWriter, r *http.Request, params ListSlisParams)
@@ -20351,6 +20739,34 @@ func (siw *ServerInterfaceWrapper) PatchServiceMetadata(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetSessionPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetSessionPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSessionPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSessionPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSessionPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSessionPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSlis operation middleware
 func (siw *ServerInterfaceWrapper) ListSlis(w http.ResponseWriter, r *http.Request) {
 
@@ -21714,6 +22130,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/account", wrapper.UpdateAccount)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/account/activation", wrapper.RedeemUserChallenge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/account/activation/context", wrapper.InspectUserChallenge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/settings/sessions", wrapper.GetSessionPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/settings/sessions", wrapper.UpdateSessionPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/users/{user_id}", wrapper.GetUser)

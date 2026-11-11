@@ -191,7 +191,7 @@ func (q *Queries) InsertAgentReceipt(ctx context.Context, arg InsertAgentReceipt
 
 const lockAgentSession = `-- name: LockAgentSession :one
 SELECT id, user_id, verifier, credential_revision, credential_epoch,
-       restricted, created_at, last_seen_at
+       restricted, created_at, last_seen_at, idle_minutes
 FROM public.almanac_sessions
 WHERE verifier = $1
 FOR UPDATE
@@ -209,6 +209,7 @@ func (q *Queries) LockAgentSession(ctx context.Context, verifier []byte) (Almana
 		&i.Restricted,
 		&i.CreatedAt,
 		&i.LastSeenAt,
+		&i.IdleMinutes,
 	)
 	return i, err
 }

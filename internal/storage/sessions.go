@@ -18,7 +18,6 @@ var (
 )
 
 const (
-	sessionIdleLifetime     = 30 * time.Minute
 	sessionAbsoluteLifetime = 12 * time.Hour
 	sessionIssuedAction     = "identity.session.issued"
 	sessionRevokedAction    = "identity.session.revoked"
@@ -316,7 +315,7 @@ func invalidSessionState(installation dbgen.LockSessionInstallationRow, user dbg
 		now.Before(session.CreatedAt.Time) {
 		return true
 	}
-	return !now.Before(session.LastSeenAt.Time.Add(sessionIdleLifetime)) ||
+	return !now.Before(session.LastSeenAt.Time.Add(time.Duration(session.IdleMinutes)*time.Minute)) ||
 		!now.Before(session.CreatedAt.Time.Add(sessionAbsoluteLifetime))
 }
 

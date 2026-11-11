@@ -431,8 +431,8 @@ func TestIntegrationCreateAgentProofAndSessionExpiryAfterLockWait(t *testing.T) 
 		wantCounts agentCounts
 	}{
 		{"session authorization remains valid after the old proof window", 3 * time.Second, 2 * time.Second, 35 * time.Second, nil, agentCounts{agents: 1, credentials: 1, receipts: 1, audits: 2}},
-		// Session issued at base+1s: cross its exact 30-minute idle boundary.
-		{"expired current session remains denied", 30*time.Minute - time.Second, 30*time.Minute - 2*time.Second, 30*time.Minute + time.Second, ErrInvalidSession, agentCounts{}},
+		// Session issued at base+1s: cross its exact eight-hour idle boundary.
+		{"expired current session remains denied", 8*time.Hour - time.Second, 8*time.Hour - 2*time.Second, 8*time.Hour + time.Second, ErrInvalidSession, agentCounts{}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := newAgentFixture(t)

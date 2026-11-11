@@ -21,6 +21,7 @@
   const me = users.find(user => user.id === 'owner') || { id: 'owner', name: 'Alex Morgan', email: 'alex@example.com', role: 'administrator', status: 'active' };
   let previewRole = params.get('role') in roles ? params.get('role') : 'administrator';
   let filter = 'all', search = '', roleFilter = '', page = 1, pageSize = 10;
+  let idleMinutes = 480;
   let notice = '', failSave = false, listFailed = state === 'error';
   let dialogAction = null, dialogTrigger = null;
   const screen = document.querySelector('#screen');
@@ -173,6 +174,16 @@
       `<div class="p-head"><h1 tabindex="-1">Your account</h1><span class="hc role-chip" aria-label="Role: ${roles[previewRole]}">${roles[previewRole]}</span></div>` +
       `<form id="account-form">${section('Profile', `<div class="grid2">${field('name', 'Full name', me.name)}<div class="field"><label for="account-email">Sign-in email</label><input id="account-email" type="email" value="${escape(me.email)}" readonly aria-describedby="email-help"><div class="hint" id="email-help">An admin can change your email in Users.</div></div></div><div class="field"><span class="role-label" id="theme-label">Theme</span><div class="seg" role="group" aria-labelledby="theme-label"><button type="button" data-theme="light" aria-pressed="${!dark}">Light</button><button type="button" data-theme="dark" aria-pressed="${dark}">Dark</button></div></div>`)}<div id="form-error" role="alert"></div><div class="form-actions">${link('Change password', '#password')}<div class="actions">${link('Cancel', '#settings')}<button class="btn primary" type="submit">Save changes</button></div></div></form>`;
   }
+  function sessions() {
+    const heading = '<nav class="p-crumbs" aria-label="Breadcrumb"><a href="#settings">Settings</a><span aria-hidden="true">/</span><span aria-current="page">Sessions</span></nav>' + head('Sessions');
+    if (previewRole !== 'administrator') return heading + '<div class="notice warning"><strong>Admin access required.</strong><p>Only admins can change session settings.</p></div>';
+    const input = '<div class="field"><label for="session-idle-minutes">Inactivity timeout (minutes)</label>' +
+      `<input id="session-idle-minutes" name="idle_minutes" type="number" value="${idleMinutes}" min="1" max="720" step="1" required aria-describedby="session-idle-hint">` +
+      '<div class="hint" id="session-idle-hint">Enter 1 to 720 minutes. The default is 480 minutes (8 hours).</div></div>';
+    return heading + '<form id="sessions-form">' + section('Session expiry', '<div class="grid2">' + input + '</div>' +
+      '<p>Changes apply the next time users sign in.</p><p>Sessions end after 12 hours even with activity.</p>') +
+      '<div id="form-error" role="alert"></div><div class="form-actions"><div class="actions"><button class="btn" type="reset">Cancel</button><button class="btn primary" type="submit" disabled>Save changes</button></div></div></form>';
+  }
   function passwordForm(publicFlow, id) {
     const user = users.find(item => item.id === id);
     if (publicFlow && (state === 'expired' || !user || !['pending', 'resetting'].includes(user.status))) {
@@ -197,16 +208,25 @@
       const user = users.find(item => item.id === parts[1]);
       content = user ? userForm(user) : crumb('User unavailable') + head('User unavailable') + '<p>This account was deleted or is no longer available.</p>' + link('Back to users', '#users');
     } else if (current === 'account') content = account();
+    else if (current === 'sessions') content = sessions();
     else if (current === 'password') content = passwordForm(false);
     else if (parts[0] === 'activate') content = passwordForm(true, parts[1]);
     else if (current === 'ready') content = '<div class="auth-wordmark">Almanac</div>' + head('Your account is ready') + '<div class="notice" role="status">Your password is set. You can now sign in with your email.</div>' + link('Continue to sign in', '#sign-in', 'primary');
     else if (current === 'sign-in') content = '<div class="auth-wordmark">Almanac</div>' + head('Sign in') + `<form id="sign-in-form">${section('Your account', field('email', 'Email', '', 'email') + field('password', 'Password', '', 'password'))}<div id="form-error" role="alert"></div><p class="role-help">Design preview: this form does not authenticate.</p><div class="actions"><button class="btn primary" type="submit">Sign in</button></div></form>`;
     else content = account();
-    const tabs = !publicFlow ? `<nav class="settings-nav" aria-label="Settings"><a href="#account" ${['account', 'password'].includes(current) ? 'aria-current="page"' : ''}>Your account</a>${previewRole === 'administrator' ? `<a href="#users" ${parts[0] === 'users' ? 'aria-current="page"' : ''}>Users</a>` : ''}</nav>` : '';
+    const tabs = !publicFlow ? `<nav class="settings-nav" aria-label="Settings"><a href="#account" ${['account', 'password'].includes(current) ? 'aria-current="page"' : ''}>Your account</a>${previewRole === 'administrator' ? `<a href="#users" ${parts[0] === 'users' ? 'aria-current="page"' : ''}>Users</a><a href="#sessions" ${current === 'sessions' ? 'aria-current="page"' : ''}>Sessions</a>` : ''}</nav>` : '';
     screen.innerHTML = tabs + (notice ? `<div class="notice" role="status">${escape(notice)}</div>` : '') + content;
     notice = '';
     renderRows();
     setupRolePicker();
+    if (current === 'sessions') {
+      const form = screen.querySelector('#sessions-form');
+      if (form) {
+        const save = form.querySelector('[type="submit"]');
+        form.oninput = () => { save.disabled = Number(form.elements.idle_minutes.value) === idleMinutes; };
+        form.onreset = () => { save.disabled = true; };
+      }
+    }
     if (current === 'sign-in') document.querySelector('#password').autocomplete = 'current-password';
     document.title = `${screen.querySelector('h1')?.textContent || 'Settings'} · Almanac mock`;
     screen.querySelector('h1')?.focus({ preventScroll:true });
@@ -334,6 +354,9 @@
       me.name = name;
       document.querySelector('.account .id strong').textContent = name;
       go('account', 'Your name has been updated.');
+    } else if (form.id === 'sessions-form') {
+      idleMinutes = Number(data.get('idle_minutes'));
+      go('sessions', 'Session settings saved.');
     } else if (form.id === 'password-form') {
       const password = data.get('password'), length = [...password].length;
       if (length < 15 || length > 128) return formError('Use between 15 and 128 characters.', 'password');

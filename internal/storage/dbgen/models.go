@@ -275,6 +275,13 @@ type AlmanacSession struct {
 	Restricted         bool               `json:"restricted"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
+	IdleMinutes        int32              `json:"idle_minutes"`
+}
+
+type AlmanacSessionPolicy struct {
+	Singleton   bool  `json:"singleton"`
+	IdleMinutes int32 `json:"idle_minutes"`
+	Version     int32 `json:"version"`
 }
 
 type AlmanacSli struct {

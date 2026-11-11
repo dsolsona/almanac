@@ -80,6 +80,11 @@ test('an administrator creates a user, shares setup, and controls real account a
     await expect(user.getByRole('link',{name:'Users',exact:true})).toHaveCount(0);
     const forbidden = await api(user,'GET','/api/v1/users');
     expect(forbidden.status).toBe(403);
+    await expect(user.getByRole('link', { name: 'Sessions', exact: true })).toHaveCount(0);
+    expect((await api(user, 'GET', '/api/v1/settings/sessions')).status).toBe(403);
+    expect((await api(user, 'PUT', '/api/v1/settings/sessions', { idle_minutes: 120, version: 1 })).status).toBe(403);
+    await user.goto('/settings/sessions');
+    await expect(user.getByText('Admin access required.', { exact: true })).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole('button',{name:'Reset password',exact:true})).toBeEnabled();
@@ -156,4 +161,36 @@ test('an administrator can keep and redeem their own reset link after signing ou
     await user.getByRole('button',{name:'Set password',exact:true}).click();
     await expect(user.getByRole('heading',{name:'Your account is ready',exact:true})).toBeVisible();
   }finally{await person.close();}
+});
+
+test('an administrator saves the session inactivity timeout', async ({ page }) => {
+  await page.goto('/settings/account');
+  const sessions = page.getByRole('link', { name: 'Sessions', exact: true });
+  await sessions.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/settings\/sessions$/);
+  const timeout = page.getByRole('spinbutton', { name: 'Inactivity timeout (minutes)' });
+  await expect(timeout).toHaveValue('480');
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Your account', exact: true })).toBeVisible();
+  await page.goForward();
+  await expect(timeout).toHaveValue('480');
+  await timeout.fill('300');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(timeout).toHaveValue('480');
+  const path = '/api/v1/settings/sessions';
+  const initial = (await expectOk(api(page, 'GET', path))).body;
+  expect((await api(page, 'PUT', path, { idle_minutes: 721, version: initial.version })).status).toBe(400);
+  try {
+    await timeout.fill('360');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Session settings saved.' })).toBeVisible();
+    expect((await api(page, 'PUT', path, { idle_minutes: 120, version: initial.version })).status).toBe(409);
+    await page.reload();
+    await expect(timeout).toHaveValue('360');
+    await expect(page.getByText('Sessions end after 12 hours even with activity.', { exact: true })).toBeVisible();
+  } finally {
+    const current = (await expectOk(api(page, 'GET', path))).body;
+    await expectOk(api(page, 'PUT', path, { idle_minutes: 480, version: current.version }));
+  }
 });

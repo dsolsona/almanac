@@ -1,3 +1,14 @@
+Configurable session inactivity, 2026-11-11: [F1-T22](tasks/F1-T22.md)
+adds Settings → Sessions for administrators, with an eight-hour default and
+versioned, audited persistence under [ADR-0044](adr/0044-configurable-session-inactivity.md).
+New and rotated sessions use the saved policy. Existing sessions retain their
+original timeout. Fast verification passes 449 frontend tests after CodeRabbit recovery fixes; PostgreSQL
+integration passes (storage 221.249 s) and isolated browser verification passes
+82 cases in 3m6s. All 17 fresh container E2E journeys pass in 5.8 minutes after a nine-hour
+host suspension, whose original collection timeout is preserved in the task.
+Independent review found no actionable defects. PR publication and
+CodeRabbit monitoring are authorized. Merge remains unauthorized.
+
 Eligible SLO status, 2026-11-10: [F3-T12](tasks/F3-T12.md) implements the
 maintainer-approved [ADR-0043](adr/0043-slo-status-from-due-eligible-measurements.md)
 on `fix/slo-eligible-status`, above PR #81 (`a283ab1`). Complete fresh due

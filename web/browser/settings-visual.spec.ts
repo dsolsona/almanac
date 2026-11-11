@@ -40,16 +40,17 @@ test(`settings matches the approved reference at ${width}px in ${theme} theme`,a
    await actual.route('**/api/v1/auth/context',route=>route.fulfill({json:{csrf_token:'visual-fixture-csrf',session:{user_id:users[0]!.id,login:'alex@example.com',role:'administrator',restricted:false}}}));
    await actual.route('**/api/v1/account',route=>route.request().method()==='GET'?route.fulfill({json:users[0]}):route.continue());
    await actual.route('**/api/v1/account/activation/context',route=>route.fulfill({json:{full_name:'Priya Shah',email:'priya@example.com',purpose:'setup'}}));
+   await actual.route('**/api/v1/settings/sessions',route=>route.fulfill({json:{idle_minutes:480,version:1}}));
    await actual.route('**/api/v1/users**',route=>{
     if(route.request().method()!=='GET')return route.continue();
     const url=new URL(route.request().url());const id=url.pathname.split('/')[4];
     return route.fulfill({json:id?users.find(user=>user.id===id):{items:users.slice(0,10),total:users.length,next_cursor:'visual-next'}});
    });
    const reference=await context.newPage();
-   for(const [name,route,hash] of [['account','account','account'],['users','users','users'],['new','users/new','users/new'],['edit',`users/${users[1].id}`,'users/sam'],['password','password','password'],['setup','/activate#alu_setup_visual','activate/pending'],['disable',`users/${users[1].id}`,'users/sam']]){
+   for(const [name,route,hash] of [['account','account','account'],['users','users','users'],['sessions','sessions','sessions'],['new','users/new','users/new'],['edit',`users/${users[1].id}`,'users/sam'],['password','password','password'],['setup','/activate#alu_setup_visual','activate/pending'],['disable',`users/${users[1].id}`,'users/sam']]){
     await actual.goto(route.startsWith('/')?route:'/settings/'+route);await actual.getByRole('heading',{level:1}).waitFor();
     if(name==='users')await actual.locator('tbody tr').first().waitFor();
-    else await actual.getByLabel(name==='password'||name==='setup'?'Password':'Full name',{exact:true}).waitFor();
+    else await actual.getByLabel(name==='sessions'?'Inactivity timeout (minutes)':name==='password'||name==='setup'?'Password':'Full name',{exact:true}).waitFor();
     await actual.evaluate(()=>document.fonts.ready);
     await reference.goto(`http://127.0.0.1:${address.port}/docs/design/mocks/settings/?theme=${theme}#${hash}`);
     await reference.evaluate(()=>document.fonts.ready);
