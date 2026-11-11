@@ -24,7 +24,7 @@ SELECT user_id FROM public.almanac_sessions WHERE verifier = sqlc.arg(verifier);
 
 -- name: LockSession :one
 SELECT id, user_id, verifier, credential_revision, credential_epoch,
-       restricted, created_at, last_seen_at
+       restricted, created_at, last_seen_at, idle_minutes
 FROM public.almanac_sessions
 WHERE verifier = sqlc.arg(verifier)
 FOR UPDATE;
@@ -32,9 +32,10 @@ FOR UPDATE;
 -- name: InsertSession :one
 INSERT INTO public.almanac_sessions (
     user_id, verifier, credential_revision, credential_epoch, restricted,
-    created_at, last_seen_at
+    created_at, last_seen_at, idle_minutes
 )
-VALUES ($1, $2, $3, $4, $5, $6, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $6,
+        (SELECT idle_minutes FROM public.almanac_session_policy WHERE singleton))
 RETURNING id;
 
 -- name: TouchSession :execrows
@@ -51,3 +52,12 @@ INSERT INTO public.almanac_audit_events (
 )
 VALUES (sqlc.arg(actor), sqlc.arg(subject_id), sqlc.arg(action), 'success',
         sqlc.arg(occurred_at), sqlc.arg(request_id));
+
+-- name: ReadSessionPolicy :one
+SELECT idle_minutes, version FROM public.almanac_session_policy WHERE singleton;
+
+-- name: UpdateSessionPolicy :one
+UPDATE public.almanac_session_policy
+SET idle_minutes = sqlc.arg(idle_minutes), version = version + 1
+WHERE singleton AND version = sqlc.arg(expected_version)
+RETURNING idle_minutes, version;

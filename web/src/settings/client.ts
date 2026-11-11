@@ -2,6 +2,7 @@ import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 
 export type ManagedUser = components['schemas']['ManagedUser'];
+export type SessionPolicy = components['schemas']['SessionPolicy'];
 export type UserPage = components['schemas']['UserPage'];
 export type CommandResult = components['schemas']['UserCommandResult'];
 export type UserRole = components['schemas']['UserRole'];
@@ -73,7 +74,22 @@ async function command(path:string,context:AuthContext,method:string,body:unknow
   }
   return value as CommandResult;
 }
+function checkSessionPolicy(value: unknown, saving = false): SessionPolicy {
+  if (!object(value) || typeof value.idle_minutes !== 'number' || !Number.isInteger(value.idle_minutes)
+    || value.idle_minutes < 1 || value.idle_minutes > 720
+    || typeof value.version !== 'number' || !Number.isSafeInteger(value.version) || value.version < 1) {
+    throw new SettingsFailure(saving ? 'outcome_unknown' : 'user_unavailable', saving);
+  }
+  return { idle_minutes: value.idle_minutes, version: value.version };
+}
+
 export const settingsClient = {
+  async sessionPolicy(context: AuthContext, signal?: AbortSignal) {
+    return checkSessionPolicy(await request('settings/sessions', context, 'GET', undefined, undefined, undefined, signal));
+  },
+  async updateSessionPolicy(context: AuthContext, policy: SessionPolicy) {
+    return checkSessionPolicy(await request('settings/sessions', context, 'PUT', policy), true);
+  },
   async challenge(context:AuthContext,token:string,signal?:AbortSignal):Promise<components['schemas']['UserChallengeContext']> {
     const value=await request('account/activation/context',context,'POST',{token},undefined,undefined,signal);
     if(!object(value)||typeof value.full_name!=='string'||(value.email!==null&&typeof value.email!=='string')||!['setup','reset'].includes(String(value.purpose)))throw new SettingsFailure('link_unavailable');

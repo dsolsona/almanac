@@ -143,7 +143,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]Alman
 
 const lockAgentSessionRead = `-- name: LockAgentSessionRead :one
 SELECT id, user_id, verifier, credential_revision, credential_epoch,
-       restricted, created_at, last_seen_at
+       restricted, created_at, last_seen_at, idle_minutes
 FROM public.almanac_sessions
 WHERE verifier = $1
 FOR SHARE
@@ -161,6 +161,7 @@ func (q *Queries) LockAgentSessionRead(ctx context.Context, verifier []byte) (Al
 		&i.Restricted,
 		&i.CreatedAt,
 		&i.LastSeenAt,
+		&i.IdleMinutes,
 	)
 	return i, err
 }

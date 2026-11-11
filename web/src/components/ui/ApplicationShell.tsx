@@ -79,7 +79,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       return;
     }
     const next = new URL(anchor.href, window.location.href);
-    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
+    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/sessions|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
     const path = `${next.pathname === '/' ? '/agents' : next.pathname}${query.size ? `?${query}` : ''}${next.hash}`;

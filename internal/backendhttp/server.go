@@ -149,6 +149,7 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	users := userhttp.New(databaseURL, cfg.PublicOrigin, auth, service, time.Now, s.authenticationPreflight)
 	mux.Handle("/api/v1/account", users)
 	mux.Handle("/api/v1/account/", users)
+	mux.Handle("/api/v1/settings/sessions", users)
 	mux.Handle("/api/v1/users", users)
 	mux.Handle("/api/v1/users/", users)
 	mux.Handle("/api/v1/telemetry/traces", browserTelemetry(auth, service))

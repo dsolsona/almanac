@@ -745,6 +745,10 @@ WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_session_policy;
+ALTER TABLE public.almanac_sessions DROP COLUMN idle_minutes`); err != nil {
+		t.Fatal(err)
+	}
 	recreateLegacyObservationTables(t, conn)
 	if _, err := conn.Exec(t.Context(), `CREATE TEMP TABLE expected_migrated_observation_ids AS
 SELECT c.agent_id,c.delivery_id,c.observation_id,r.payload_digest,r.replay_until FROM public.almanac_sli_coverage c

@@ -181,7 +181,7 @@ func TestIntegrationAgentReadAndLifecycleAuthorizationPreservesState(t *testing.
 			}
 			conn := integrationConnect(t, f.databaseURL)
 			if tc.name == "expired-session" {
-				// The issued session expires at base+30m+1s; preserve last_seen_at >= created_at.
+				// The issued session expires at base+8h+1s; preserve last_seen_at >= created_at.
 			} else if tc.name == "restricted" {
 				if _, err := conn.Exec(t.Context(), tc.sql, f.verifier[:]); err != nil {
 					t.Fatal(err)
@@ -201,7 +201,7 @@ func TestIntegrationAgentReadAndLifecycleAuthorizationPreservesState(t *testing.
 			}
 			readAt := f.base.Add(5 * time.Second)
 			if tc.name == "expired-session" {
-				readAt = f.base.Add(30*time.Minute + time.Second)
+				readAt = f.base.Add(8*time.Hour + time.Second)
 			}
 			_, err = GetAgent(t.Context(), f.databaseURL, AgentReadInput{SessionVerifier: f.verifier, AgentID: targetID, Now: func() time.Time { return readAt }})
 			if !errors.Is(err, tc.want) {
@@ -282,7 +282,7 @@ func TestIntegrationAgentReadRechecksSessionExpiryAfterTargetLock(t *testing.T) 
 	if _, err := tx.Exec(t.Context(), "SELECT id FROM public.almanac_agents WHERE id=$1 FOR UPDATE", created.Agent.ID); err != nil {
 		t.Fatal(err)
 	}
-	initial := f.base.Add(30 * time.Minute)
+	initial := f.base.Add(8 * time.Hour)
 	var nanos atomic.Int64
 	nanos.Store(initial.UnixNano())
 	result := make(chan struct {
@@ -299,7 +299,7 @@ func TestIntegrationAgentReadRechecksSessionExpiryAfterTargetLock(t *testing.T) 
 	observer := integrationConnect(t, f.databaseURL)
 	defer closeIntegrationConn(observer)
 	waitForAgentQueryWait(t, observer, "%FROM public.almanac_agents%")
-	nanos.Store(f.base.Add(30*time.Minute + 2*time.Second).UnixNano())
+	nanos.Store(f.base.Add(8*time.Hour + 2*time.Second).UnixNano())
 	if err := tx.Commit(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -883,7 +883,7 @@ func TestIntegrationLifecycleTargetLockWaitRechecksProofAndSession(t *testing.T)
 	}{
 		{name: "user-proof", lock: "SELECT id FROM public.almanac_users WHERE id=$1 FOR UPDATE", pattern: "%FROM public.almanac_users%", expiry: 35 * time.Second},
 		{name: "agent-proof", lock: "SELECT id FROM public.almanac_agents WHERE id=$1 FOR UPDATE", pattern: "%FROM public.almanac_agents%", expiry: 35 * time.Second},
-		{name: "credential-session", lock: "SELECT id FROM public.almanac_agent_credentials WHERE id=$1 FOR UPDATE", pattern: "%FROM public.almanac_agent_credentials%", expiry: 30*time.Minute + 2*time.Second},
+		{name: "credential-session", lock: "SELECT id FROM public.almanac_agent_credentials WHERE id=$1 FOR UPDATE", pattern: "%FROM public.almanac_agent_credentials%", expiry: 8*time.Hour + 2*time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newAgentFixture(t)
@@ -909,7 +909,7 @@ func TestIntegrationLifecycleTargetLockWaitRechecksProofAndSession(t *testing.T)
 			}
 			initial := f.base.Add(5 * time.Second)
 			if tc.name == "credential-session" {
-				initial = f.base.Add(30 * time.Minute)
+				initial = f.base.Add(8 * time.Hour)
 			}
 			var nanos atomic.Int64
 			nanos.Store(initial.UnixNano())

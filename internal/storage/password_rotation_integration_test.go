@@ -392,7 +392,7 @@ func TestIntegrationRotatePasswordDenialsPreserveState(t *testing.T) {
 					t.Fatal("revoke test session failed")
 				}
 			case "idle expired":
-				input.Now = fixture.now.Add(sessionIdleLifetime)
+				input.Now = fixture.now.Add(8 * time.Hour)
 			case "absolute expired":
 				if _, err := conn.Exec(t.Context(), "UPDATE public.almanac_sessions SET last_seen_at=$2 WHERE verifier=$1", input.CurrentSessionVerifier[:], fixture.now.Add(sessionAbsoluteLifetime-time.Minute)); err != nil {
 					t.Fatal("set absolute-expiry session last-seen boundary failed")

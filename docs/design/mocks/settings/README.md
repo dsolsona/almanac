@@ -15,7 +15,8 @@ the window to 360 px to review mobile; Menu opens a native navigation dialog.
 ## Scope and design
 
 Settings opens directly on **Your account**, with **Your account** and **Users**
-as tabs; there is no card overview. Users opens a
+as tabs; there is no card overview. The administrator also has a **Sessions** tab
+for the inactivity setting in [ADR-0044](../../../adr/0044-configurable-session-inactivity.md). Users opens a
 name-first list with separate Name and Email columns, status, role and last sign-in;
 search, status and role filters;
 10/20 rows per page; and one primary Add user action. Add/edit use one compact

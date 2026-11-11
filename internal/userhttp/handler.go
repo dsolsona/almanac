@@ -73,6 +73,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proof := storage.DatasourceProof{SessionVerifier: verifier}
 	path := r.URL.Path
 	switch {
+	case path == "/api/v1/settings/sessions":
+		h.sessionPolicy(w, r, id, verifier)
+		return
 	case path == "/api/v1/account":
 		if r.Method == http.MethodGet {
 			user, err := storage.GetAccount(ctx, h.databaseURL, proof, h.now)
@@ -142,6 +145,30 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Allow", "GET, PUT, POST")
 	h.problem(w, 405, "method_not_allowed", id)
 }
+func (h *Handler) sessionPolicy(w http.ResponseWriter, r *http.Request, id string, verifier [32]byte) {
+	var policy storage.SessionPolicy
+	var err error
+	switch r.Method {
+	case http.MethodGet:
+		policy, err = storage.GetSessionPolicy(r.Context(), h.databaseURL, verifier, h.now)
+	case http.MethodPut:
+		var body api.SessionPolicy
+		if !h.decode(w, r, &body, id) {
+			return
+		}
+		policy, err = storage.UpdateSessionPolicy(r.Context(), h.databaseURL, verifier, h.now, body.IdleMinutes, body.Version, id)
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		h.problem(w, http.StatusMethodNotAllowed, "method_not_allowed", id)
+		return
+	}
+	if err != nil {
+		h.failure(w, err, id)
+		return
+	}
+	h.json(w, http.StatusOK, api.SessionPolicy{IdleMinutes: policy.IdleMinutes, Version: policy.Version})
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request, id string, proof storage.DatasourceProof) {
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	for key, list := range values {
