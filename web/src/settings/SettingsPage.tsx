@@ -74,7 +74,7 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
     const timer=list&&search?setTimeout(()=>void read(),150):undefined;
     if(timer===undefined)void read();
     return()=>{clearTimeout(timer);controller.abort();};
-  },[path,search,status,roleFilter,limit,offset,cursors,refresh,context.session?.user_id]); // callbacks and CSRF changes must not discard a draft
+  },[path,search,status,roleFilter,limit,offset,cursors,refresh,context.session?.user_id,admin]); // callbacks and CSRF changes must not discard a draft
 
   useEffect(()=>{if(!readPending&&readPath===path)journeyContentReady('management',Boolean(error));},[readPending,readPath,path,error]);
 
