@@ -742,3 +742,46 @@ it('does not turn a rejected sorted read into a first-use empty state', async ()
   expect(screen.getByRole('alert')).toBeVisible();
   expect(screen.queryByText(/Create your first SLI/)).not.toBeInTheDocument();
 });
+
+it.each([false,true])('keeps a pending sorted scan honest after initial failure: %s',async(initialFailure)=>{
+ history.replaceState({},'','/slis');
+ const pending=deferredResponse();
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+  const url=String(input);
+  if(url.startsWith('/api/v1/datasources')) return response({items:[source()],next_cursor:''});
+  if(url.includes('cursor=more')) return pending.promise;
+  if(url.includes('limit=200')) return response({items:[sli()],next_cursor:'more'});
+  if(initialFailure) throw new Error('offline');
+  return response({items:[sli()],next_cursor:'more'});
+ }));
+ render(<SlisPage context={admin}/>);
+ if(initialFailure) await screen.findByRole('alert'); else await screen.findByRole('link',{name:'Request success'});
+ const user=userEvent.setup();
+ await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+ await screen.findByText('Sorting SLIs');
+ await waitFor(()=>expect(screen.queryByText('offline')).not.toBeInTheDocument());
+ expect(screen.queryByText('Create your first SLI from a Prometheus datasource with New SLI.')).not.toBeInTheDocument();
+ if(!initialFailure) expect(screen.getByRole('navigation',{name:'SLI result pages'})).toHaveTextContent('Loading sorted results');
+ await act(async()=>pending.resolve(response({items:[],next_cursor:''})));
+ await screen.findByRole('link',{name:'Request success'});
+});
+
+it('keeps the URL and Created page in sync with a sorted page-size change',async()=>{
+ history.replaceState({},'','/slis');
+ const records=Array.from({length:20},(_,i)=>({...sli(),id:`00000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`,name:`indicator-${i}`,display_name:`Indicator ${i}`}));
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+  const url=String(input);
+  if(url.startsWith('/api/v1/datasources')) return response({items:[source()],next_cursor:''});
+  return response({items:url.includes('limit=10')?records.slice(0,10):records,next_cursor:''});
+ }));
+ render(<SlisPage context={admin}/>);
+ await screen.findByRole('link',{name:'Indicator 19'});
+ const user=userEvent.setup();
+ await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+ await waitFor(()=>expect(screen.getByRole('columnheader',{name:'SLI'})).toHaveAttribute('aria-sort','ascending'));
+ await user.selectOptions(screen.getByRole('combobox',{name:'Per page'}),'10');
+ await waitFor(()=>expect(location.search).toContain('page_size=10'));
+ await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'');
+ await waitFor(()=>expect(screen.queryByRole('link',{name:'Indicator 19'})).not.toBeInTheDocument());
+ expect(screen.getAllByRole('link',{name:/Indicator /})).toHaveLength(10);
+});
