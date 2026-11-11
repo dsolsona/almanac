@@ -398,17 +398,21 @@ Path(os.environ['CAPTURE_MAKE_ARGS']).write_text(json.dumps(sys.argv[1:]))
 PY
 ''')
     make_payload = f'Read literal $(shell touch {directory}/make-injected), $$ and "quotes".'
+    make_env = dict(env, CAPTURE_MAKE_ARGS=str(make_fixture / "args.json"))
+    # Parent Make exports its checkout; this fixture tests its own default checkout.
+    make_env.pop("VM_REPO", None)
     result = subprocess.run(
         ["make", "-f", str(root / "Makefile"), "vm-run", "VM=api", f"VM_PROMPT={make_payload}"],
-        cwd=make_fixture, env=dict(env, CAPTURE_MAKE_ARGS=str(make_fixture / "args.json")),
+        cwd=make_fixture, env=make_env,
         text=True, capture_output=True, timeout=10,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads((make_fixture / "args.json").read_text()) == [
+    args = json.loads((make_fixture / "args.json").read_text())
+    assert args == [
         "run", "api", "--repo", str(make_fixture), "--prompt", make_payload,
-    ], "Make expanded prompt text"
+    ], f"Make changed launcher arguments: {args}"
     assert not (Path(directory) / "make-injected").exists()
-    unnamed_env = dict(env, CAPTURE_MAKE_ARGS=str(make_fixture / "args.json"))
+    unnamed_env = dict(make_env)
     unnamed_env.pop("VM", None)
     for target, action in (("vm-run", "run"), ("vm-setup", "setup"), ("vm-base", "base")):
         result = subprocess.run(
