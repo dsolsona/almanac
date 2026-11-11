@@ -37,9 +37,10 @@ func (q *Queries) FindSessionUserID(ctx context.Context, verifier []byte) (pgtyp
 const insertSession = `-- name: InsertSession :one
 INSERT INTO public.almanac_sessions (
     user_id, verifier, credential_revision, credential_epoch, restricted,
-    created_at, last_seen_at
+    created_at, last_seen_at, idle_minutes
 )
-VALUES ($1, $2, $3, $4, $5, $6, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $6,
+        (SELECT idle_minutes FROM public.almanac_session_policy WHERE singleton))
 RETURNING id
 `
 
@@ -95,7 +96,7 @@ func (q *Queries) InsertSessionAudit(ctx context.Context, arg InsertSessionAudit
 
 const lockSession = `-- name: LockSession :one
 SELECT id, user_id, verifier, credential_revision, credential_epoch,
-       restricted, created_at, last_seen_at
+       restricted, created_at, last_seen_at, idle_minutes
 FROM public.almanac_sessions
 WHERE verifier = $1
 FOR UPDATE
@@ -113,6 +114,7 @@ func (q *Queries) LockSession(ctx context.Context, verifier []byte) (AlmanacSess
 		&i.Restricted,
 		&i.CreatedAt,
 		&i.LastSeenAt,
+		&i.IdleMinutes,
 	)
 	return i, err
 }
@@ -206,6 +208,22 @@ func (q *Queries) ReadLocalIdentity(ctx context.Context, login string) (ReadLoca
 	return i, err
 }
 
+const readSessionPolicy = `-- name: ReadSessionPolicy :one
+SELECT idle_minutes, version FROM public.almanac_session_policy WHERE singleton
+`
+
+type ReadSessionPolicyRow struct {
+	IdleMinutes int32 `json:"idle_minutes"`
+	Version     int32 `json:"version"`
+}
+
+func (q *Queries) ReadSessionPolicy(ctx context.Context) (ReadSessionPolicyRow, error) {
+	row := q.db.QueryRow(ctx, readSessionPolicy)
+	var i ReadSessionPolicyRow
+	err := row.Scan(&i.IdleMinutes, &i.Version)
+	return i, err
+}
+
 const touchSession = `-- name: TouchSession :execrows
 UPDATE public.almanac_sessions
 SET last_seen_at = GREATEST(last_seen_at, $1::timestamptz)
@@ -223,4 +241,28 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateSessionPolicy = `-- name: UpdateSessionPolicy :one
+UPDATE public.almanac_session_policy
+SET idle_minutes = $1, version = version + 1
+WHERE singleton AND version = $2
+RETURNING idle_minutes, version
+`
+
+type UpdateSessionPolicyParams struct {
+	IdleMinutes     int32 `json:"idle_minutes"`
+	ExpectedVersion int32 `json:"expected_version"`
+}
+
+type UpdateSessionPolicyRow struct {
+	IdleMinutes int32 `json:"idle_minutes"`
+	Version     int32 `json:"version"`
+}
+
+func (q *Queries) UpdateSessionPolicy(ctx context.Context, arg UpdateSessionPolicyParams) (UpdateSessionPolicyRow, error) {
+	row := q.db.QueryRow(ctx, updateSessionPolicy, arg.IdleMinutes, arg.ExpectedVersion)
+	var i UpdateSessionPolicyRow
+	err := row.Scan(&i.IdleMinutes, &i.Version)
+	return i, err
 }

@@ -31,7 +31,7 @@ func TestColdNavigationPreloadsOnlyItsPublicRouteDependencies(t *testing.T) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	for _, route := range []string{"/slos", "/slos/new", "/slos/00000000-0000-0000-0000-000000000001", "/slis", "/agents", "/settings", "/settings/account", "/settings/password", "/settings/users", "/settings/users/new", "/settings/users/00000000-0000-0000-0000-000000000001"} {
+	for _, route := range []string{"/slos", "/slos/new", "/slos/00000000-0000-0000-0000-000000000001", "/slis", "/agents", "/settings", "/settings/account", "/settings/password", "/settings/sessions", "/settings/users", "/settings/users/new", "/settings/users/00000000-0000-0000-0000-000000000001"} {
 		for _, compressed := range []bool{false, true} {
 			request := httptest.NewRequest(http.MethodGet, route, nil)
 			if compressed {

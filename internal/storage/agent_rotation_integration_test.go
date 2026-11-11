@@ -497,7 +497,7 @@ func TestIntegrationAgentRotationRechecksFreshProofAndSessionAfterTargetLockWait
 			if err := observer.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", f.verifier[:]).Scan(&lastSeen); err != nil {
 				t.Fatal(err)
 			}
-			initial := lastSeen.Add(sessionIdleLifetime - 2*time.Second)
+			initial := lastSeen.Add(8*time.Hour - 2*time.Second)
 			var nanos atomic.Int64
 			nanos.Store(initial.UnixNano())
 			proof := f.input("unused", "unused").Proof
@@ -506,7 +506,7 @@ func TestIntegrationAgentRotationRechecksFreshProofAndSessionAfterTargetLockWait
 			result := make(chan error, 1)
 			go func() { _, err := RotateAgentCredential(t.Context(), f.databaseURL, input); result <- err }()
 			waitForAgentQueryWait(t, observer, tc.pattern)
-			nanos.Store(lastSeen.Add(sessionIdleLifetime).UnixNano())
+			nanos.Store(lastSeen.Add(8 * time.Hour).UnixNano())
 			if err := tx.Commit(t.Context()); err != nil {
 				t.Fatal(err)
 			}
@@ -874,6 +874,7 @@ func TestIntegrationRetirementMigrationPreservesExistingAgentAndIdentityRows(t *
 	defer closeIntegrationConn(conn)
 	var gotAgent, gotUser string
 	var gotSession []byte
+	var idleMinutes int
 	var retireAt *time.Time
 	var receiptPreserved bool
 	if err := conn.QueryRow(t.Context(), "SELECT id::text FROM public.almanac_agents WHERE id=$1", agentID).Scan(&gotAgent); err != nil {
@@ -882,7 +883,7 @@ func TestIntegrationRetirementMigrationPreservesExistingAgentAndIdentityRows(t *
 	if err := conn.QueryRow(t.Context(), "SELECT id::text FROM public.almanac_users WHERE id=$1", userID).Scan(&gotUser); err != nil {
 		t.Fatal(err)
 	}
-	if err := conn.QueryRow(t.Context(), "SELECT verifier FROM public.almanac_sessions WHERE user_id=$1", userID).Scan(&gotSession); err != nil {
+	if err := conn.QueryRow(t.Context(), "SELECT verifier, idle_minutes FROM public.almanac_sessions WHERE user_id=$1", userID).Scan(&gotSession, &idleMinutes); err != nil {
 		t.Fatal(err)
 	}
 	if err := conn.QueryRow(t.Context(), "SELECT retire_at FROM public.almanac_agent_credentials WHERE id=$1", credentialID).Scan(&retireAt); err != nil {
@@ -890,6 +891,9 @@ func TestIntegrationRetirementMigrationPreservesExistingAgentAndIdentityRows(t *
 	}
 	if err := conn.QueryRow(t.Context(), "SELECT result=$2::jsonb FROM public.almanac_management_receipts WHERE actor_id=$1 AND idempotency_key='old-receipt'", userID, string(receipt)).Scan(&receiptPreserved); err != nil {
 		t.Fatal(err)
+	}
+	if idleMinutes != 30 {
+		t.Fatalf("pre-upgrade session idle timeout = %d minutes, want 30", idleMinutes)
 	}
 	if gotAgent != agentID || gotUser != userID || !bytes.Equal(gotSession, bytes.Repeat([]byte{1}, 32)) || retireAt != nil || !receiptPreserved {
 		t.Fatalf("migration changed prior state agent=%s user=%s session_len=%d retire=%v receipt_equal=%v", gotAgent, gotUser, len(gotSession), retireAt, receiptPreserved)
@@ -905,7 +909,7 @@ func addRotationAdministrator(t *testing.T, fixture agentFixture, login string, 
 	}
 	var verifier [32]byte
 	verifier[0] = marker
-	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sessions(user_id,verifier,credential_revision,credential_epoch,restricted,created_at,last_seen_at) VALUES($1,$2,$3,$4,false,$5,$5)`, userID, verifier[:], fixture.revision, fixture.epoch, fixture.base); err != nil {
+	if _, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sessions(user_id,verifier,credential_revision,credential_epoch,restricted,created_at,last_seen_at,idle_minutes) VALUES($1,$2,$3,$4,false,$5,$5,480)`, userID, verifier[:], fixture.revision, fixture.epoch, fixture.base); err != nil {
 		t.Fatal(err)
 	}
 	closeIntegrationConn(conn)

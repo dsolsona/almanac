@@ -242,6 +242,7 @@ type Querier interface {
 	// interior once; only cadence-aligned boundary fragments use canonical rows.
 	ReadRetainedWindowBatch(ctx context.Context, arg ReadRetainedWindowBatchParams) ([]ReadRetainedWindowBatchRow, error)
 	ReadServiceCatalogFields(ctx context.Context, dollar_1 []pgtype.UUID) ([]ReadServiceCatalogFieldsRow, error)
+	ReadSessionPolicy(ctx context.Context) (ReadSessionPolicyRow, error)
 	ReadSloBudgetExtremaState(ctx context.Context, arg ReadSloBudgetExtremaStateParams) (ReadSloBudgetExtremaStateRow, error)
 	// Each active SLO is stopped (some of its work failed for seven days), failing (some of its work failed
 	// five times in a row), catching up (its current values or retained history are behind) or up to date.
@@ -290,6 +291,7 @@ type Querier interface {
 	UpdateManagedUser(ctx context.Context, arg UpdateManagedUserParams) (AlmanacUser, error)
 	UpdateServiceCatalog(ctx context.Context, arg UpdateServiceCatalogParams) (AlmanacService, error)
 	UpdateServiceMetadata(ctx context.Context, arg UpdateServiceMetadataParams) (AlmanacService, error)
+	UpdateSessionPolicy(ctx context.Context, arg UpdateSessionPolicyParams) (UpdateSessionPolicyRow, error)
 	UpdateSliDisplayName(ctx context.Context, arg UpdateSliDisplayNameParams) (AlmanacSli, error)
 	UpdateSliEffectiveFrom(ctx context.Context, arg UpdateSliEffectiveFromParams) (int64, error)
 	UpdateSloMetadata(ctx context.Context, arg UpdateSloMetadataParams) (pgtype.UUID, error)

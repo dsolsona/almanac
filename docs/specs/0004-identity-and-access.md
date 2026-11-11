@@ -190,8 +190,13 @@ minimum parameters are 19 MiB, two iterations, parallelism one, with deployment
 benchmarking allowed to raise cost. [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 
 Use random 256-bit opaque session secrets; persist only their verifiers. Rotate
-on login and privilege change. Sessions expire after 30 minutes idle or 12 hours
-absolute, using server time. Browser cookies use `Secure`, `HttpOnly`, `SameSite=Lax`,
+on login and privilege change. Sessions expire after eight hours idle by default
+or 12 hours absolute, using server time. Unrestricted administrators can change
+the installation's idle timeout under Settings → Sessions in whole minutes from
+1 to 720. The persisted policy is versioned and changes are audited. A newly
+issued or rotated session uses the current value for its lifetime. Pre-upgrade
+sessions retain their original 30-minute idle timeout. See
+[ADR-0044](../adr/0044-configurable-session-inactivity.md). Browser cookies use `Secure`, `HttpOnly`, `SameSite=Lax`,
 `Path=/`, and the `__Host-` prefix, with no Domain. State-changing cookie requests
 require a session-bound CSRF token and same-origin validation; GET has no mutations.
 Do not store browser authentication in local storage. Logout revokes server state.

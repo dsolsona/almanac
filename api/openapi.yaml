@@ -41,6 +41,23 @@ paths:
       responses:
         '200': {description: Valid link context, content: {application/json: {schema: {$ref: '#/components/schemas/UserChallengeContext'}}}}
         default: {$ref: '#/components/responses/UserProblem'}
+  /api/v1/settings/sessions:
+    get:
+      operationId: getSessionPolicy
+      summary: Read the installation's session inactivity policy (administrator only)
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: Current policy, content: {application/json: {schema: {$ref: '#/components/schemas/SessionPolicy'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
+    put:
+      operationId: updateSessionPolicy
+      summary: Change the inactivity timeout for newly issued sessions (administrator only)
+      description: Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SessionPolicy'}}}}
+      responses:
+        '200': {description: Updated policy, content: {application/json: {schema: {$ref: '#/components/schemas/SessionPolicy'}}}}
+        default: {$ref: '#/components/responses/UserProblem'}
   /api/v1/users:
     get:
       operationId: listUsers
@@ -1111,6 +1128,13 @@ components:
         items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/ManagedUser'}}
         total: {type: integer, format: int64, minimum: 0}
         next_cursor: {type: string, maxLength: 2048}
+    SessionPolicy:
+      type: object
+      additionalProperties: false
+      required: [idle_minutes, version]
+      properties:
+        idle_minutes: {type: integer, format: int32, minimum: 1, maximum: 720}
+        version: {type: integer, format: int32, minimum: 1}
     AccountUpdateRequest:
       type: object
       additionalProperties: false

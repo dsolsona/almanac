@@ -56,6 +56,11 @@ file; the original one-time secret cannot be retrieved. Password and redemption
 commands read exact bytes from a protected `--password-file`. No email is sent.
 General API-key management remains deferred.
 
+Unrestricted administrators can read and update the session inactivity policy
+using GET and PUT on `/api/v1/settings/sessions`. PUT uses the current version
+from GET and returns HTTP 409 for stale writes. Changes apply to newly issued
+sessions under [ADR-0044](../adr/0044-configurable-session-inactivity.md).
+
 Management routes use `/api/v1`; private worker operations use `/internal/v1` and
 separate scopes/listener controls. Agent operations live under `/api/agent/v1` and
 use agent credentials. Shared ingestion validation is reached through operation-

@@ -3,7 +3,7 @@ SELECT user_id FROM public.almanac_sessions WHERE verifier = sqlc.arg(verifier);
 
 -- name: LockAgentSession :one
 SELECT id, user_id, verifier, credential_revision, credential_epoch,
-       restricted, created_at, last_seen_at
+       restricted, created_at, last_seen_at, idle_minutes
 FROM public.almanac_sessions
 WHERE verifier = sqlc.arg(verifier)
 FOR UPDATE;

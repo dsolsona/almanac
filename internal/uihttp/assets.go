@@ -128,6 +128,6 @@ func staticHandler(assets fs.FS) (http.Handler, error) {
 
 var datasourceDetailPath = regexp.MustCompile(`^/datasources/[0-9a-fA-F-]{36}$`)
 var sliDetailPath = regexp.MustCompile(`^/slis/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-var settingsPath = regexp.MustCompile(`^/settings(?:/account|/password|/users(?:/new|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)?$`)
+var settingsPath = regexp.MustCompile(`^/settings(?:/account|/password|/sessions|/users(?:/new|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)?$`)
 var sloDetailPath = regexp.MustCompile(`^/slos/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var serviceDetailPath = regexp.MustCompile(`^/services(?:/new|/dependencies|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:/edit)?)?$`)

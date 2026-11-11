@@ -128,10 +128,10 @@ VALUES ('null-verifier', 'editor', false, false, $1, $1)`, now); err != nil {
 	if err != nil || !touched.LastSeenAt.Equal(beforeIdle) || !touched.AbsoluteExpiresAt.Equal(wantNow.Add(12*time.Hour)) {
 		t.Fatalf("before-idle authentication = %+v, %v", touched, err)
 	}
-	if _, err := AuthenticateSession(t.Context(), databaseURL, verifier, beforeIdle.Add(30*time.Minute)); !errors.Is(err, ErrInvalidSession) {
+	if _, err := AuthenticateSession(t.Context(), databaseURL, verifier, beforeIdle.Add(8*time.Hour)); !errors.Is(err, ErrInvalidSession) {
 		t.Fatalf("exact idle boundary error = %v, want invalid session", err)
 	}
-	if revoked, err := RevokeSession(t.Context(), databaseURL, verifier, beforeIdle.Add(30*time.Minute), "expired-revoke"); err != nil || revoked {
+	if revoked, err := RevokeSession(t.Context(), databaseURL, verifier, beforeIdle.Add(8*time.Hour), "expired-revoke"); err != nil || revoked {
 		t.Fatalf("revoke at idle expiry = %t, %v; want false", revoked, err)
 	}
 	if revoked, err := RevokeSession(t.Context(), databaseURL, verifier, beforeIdle, "revoke-session"); err != nil || !revoked {
@@ -195,10 +195,10 @@ func TestIntegrationInspectSessionDoesNotExtendIdleExpiry(t *testing.T) {
 	if err := conn.QueryRow(t.Context(), "SELECT last_seen_at FROM public.almanac_sessions WHERE verifier=$1", verifier[:]).Scan(&beforeInspect); err != nil {
 		t.Fatal("read persisted last_seen_at failed")
 	}
-	if access, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(29*time.Minute)); err != nil || !access.LastSeenAt.Equal(wantNow) {
+	if access, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(8*time.Hour-time.Microsecond)); err != nil || !access.LastSeenAt.Equal(wantNow) {
 		t.Fatalf("read-only inspection near idle expiry = %+v, %v", access, err)
 	}
-	if _, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(30*time.Minute)); !errors.Is(err, ErrInvalidSession) {
+	if _, err := InspectSession(t.Context(), databaseURL, verifier, wantNow.Add(8*time.Hour)); !errors.Is(err, ErrInvalidSession) {
 		t.Fatalf("inspection extended idle expiry: %v", err)
 	}
 	var afterInspect time.Time

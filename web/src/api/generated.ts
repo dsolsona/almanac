@@ -62,6 +62,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the installation's session inactivity policy (administrator only) */
+        get: operations["getSessionPolicy"];
+        /**
+         * Change the inactivity timeout for newly issued sessions (administrator only)
+         * @description Supply the version returned by the last read. A stale version returns 409. The absolute session lifetime is 12 hours.
+         */
+        put: operations["updateSessionPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -921,6 +942,12 @@ export interface components {
             /** Format: int64 */
             total: number;
             next_cursor: string;
+        };
+        SessionPolicy: {
+            /** Format: int32 */
+            idle_minutes: number;
+            /** Format: int32 */
+            version: number;
         };
         AccountUpdateRequest: {
             full_name: string;
@@ -2319,6 +2346,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserChallengeContext"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    getSessionPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionPolicy"];
+                };
+            };
+            default: components["responses"]["UserProblem"];
+        };
+    };
+    updateSessionPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionPolicy"];
+            };
+        };
+        responses: {
+            /** @description Updated policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionPolicy"];
                 };
             };
             default: components["responses"]["UserProblem"];
