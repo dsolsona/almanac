@@ -21,7 +21,8 @@ production sandbox service.
 - For automatic login transfer, a file-based Codex host login and the host GitHub
   CLI (`gh`) already authenticated to `github.com`.
 - `bash`, `curl`, `python3`, Git, OpenSSH client, `tar`, coreutils, `flock`,
-  `unsquashfs`, `mkfs.ext4`, `mount`, `umount`, `ip`, `iptables` and `sudo`.
+  `unsquashfs`, `mkfs.ext4`, `mount`, `umount`, `find`, `ip`, `iptables`,
+  `ip6tables` and `sudo`.
 - A reflink-capable filesystem, such as Btrfs or reflink-enabled XFS, for the
   shared state directory. Bases and workers must be on the same filesystem.
   `cp --reflink=always` fails instead of silently making a full disk copy.
@@ -39,7 +40,7 @@ production sandbox service.
   Disks grow as images, build caches and application data accumulate.
 
 For example, Arch's relevant packages are `squashfs-tools`, `e2fsprogs`,
-`iproute2`, `iptables-nft`, `openssh`, `python`, `git`, `curl`, `util-linux`
+`iproute2`, `iptables-nft`, `findutils`, `openssh`, `python`, `git`, `curl`, `util-linux`
 and `sudo`. Install missing host packages yourself; the launcher never runs a
 host package manager. Host Docker is not required.
 
@@ -50,11 +51,17 @@ disk can boot with the same network. Use one shared `FIRECRACKER_STATE_DIR` for
 concurrent instances. The original unnamed guest keeps `almfc0` on
 `192.168.241.0/30`; its existing disk and SSH configuration are preserved.
 Setup refuses an existing TAP or overlapping route rather than changing it.
-Guests can reach the public
-internet, but cannot initiate connections to the host or private IPv4 networks.
-IPv6 is disabled in the guest kernel at boot. Host-initiated SSH and its replies
-are allowed. A corporate proxy, private
-registry or VPN-only datasource may need a separately reviewed network change.
+Host IPv4 input rules reject new connections from the guest. Forwarding rules
+block common private and special IPv4 ranges, including RFC 1918, carrier-grade
+NAT, loopback and link-local destinations. Other host-routed LAN or VPN ranges,
+such as `198.18.0.0/15` or publicly addressed internal networks, remain reachable
+unless the host firewall blocks them separately. Host-initiated SSH and its
+replies are allowed. A corporate proxy, private registry or VPN-only datasource
+may need a separately reviewed network change.
+IPv6 is disabled in the guest kernel at boot. Host `ip6tables` rules also drop
+IPv6 input and forwarding from the TAP before it is activated, covering raw
+frames sent by guest administrators. Existing running guests receive these
+host rules on their next stop/start cycle with the updated launcher.
 Guests cannot initiate connections to each other through their private networks.
 
 ## First use
@@ -76,6 +83,10 @@ the seed before copying its disk. The base retains development images, Playwrigh
 Go/npm dependencies and Docker build caches. Stopped seeds are preserved.
 Private local generations live in `.local/firecracker/base-images/`, with an
 atomic `base-image` pointer to the current complete generation.
+An interrupted rebuild can leave an unpublished raw seed copy under
+`base-images/image.*`, including seed credentials if sanitization failed. These
+private copies remain available for inspection and manual cleanup. Publication
+updates the base pointer only after sanitization succeeds.
 
 `setup` and `run` require a prepared base. They create writable CoW clones with
 fresh SSH keys, hostname, machine identity and networking, then copy the current
@@ -233,6 +244,17 @@ it exists is rejected. Quit that session before starting a new task in the same 
 Git root, `/home/dev/almanac`, in the guest's Codex config so typing `codex` there
 uses the same trust as a background worker. Opening a shell also applies this
 setting to older guests with the original launcher config.
+An existing customized or symlinked `config.toml` is preserved, so manual Codex
+may still ask for trust. Accept that prompt once, or merge the following setting
+into `/home/dev/.codex/config.toml` inside the guest. If the project table already
+exists, update its `trust_level` entry.
+
+```toml
+[projects."/home/dev/almanac"]
+trust_level = "trusted"
+```
+
+The background launcher supplies this trust override on the command line.
 
 Each guest inherits the base's warmed Docker images and dependency caches.
 Several copied ChatGPT auth caches may require fresh logins after token rotation;
@@ -261,6 +283,11 @@ is in `instances/NAME/`; the original unnamed guest stays at the root. Commit
 only the script, its test and documentation. Repeating setup preserves a completed
 guest; it does not sync host changes over guest work. A failed image build is
 preserved under the instance's `build/` directory for inspection before a retry.
+Deletion removes private contents before retiring the instance directory. A
+failed removal remains listed as `partial` under its original name, retaining its
+network reservation so `make vm-delete VM=NAME` can finish the cleanup. Older
+launchers can leave `deleted-NAME.*` directories at the state root after an
+interrupted deletion. Those directories require manual inspection and removal.
 
 Before first setup, `VM_CPUS` and `VM_MEMORY_MIB` can override the defaults.
 Clones inherit the base disk size. `VM_DISK_GIB` selects the first seed's disk size;

@@ -56,6 +56,35 @@ with tempfile.TemporaryDirectory(prefix="almanac-firecracker-") as directory:
     result = run("run", "api", "--prompt", "", env=env)
     assert result.returncode != 0 and not state.exists(), result.stderr
 
+    # Missing bases must fail before allocating names, addresses or instance files.
+    preflight = '''source "$1"
+shift
+check() { :; }
+start() { :; }
+launch_agent() { :; }
+prepare_base() { printf 'seed preparation\\n'; }
+main "$@"
+'''
+    missing_base = Path(directory) / "missing-base"
+    preflight_env = dict(env, FIRECRACKER_STATE_DIR=str(missing_base))
+    for args in (("setup",), ("setup", "api"), ("setup", "almanac"),
+                 ("run", "--prompt", "task"), ("run", "api", "--prompt", "task")):
+        result = subprocess.run(
+            ["bash", "-c", preflight, "test", str(script), *args],
+            env=preflight_env, text=True, capture_output=True, timeout=10,
+        )
+        assert result.returncode != 0 and "prepare shared dependencies first" in result.stderr, result
+        assert not missing_base.exists(), "missing base consumed a name or network slot"
+    ready_guest = missing_base / "instances/existing"
+    ready_guest.mkdir(parents=True)
+    (ready_guest / "ready").touch()
+    for args in (("setup", "existing"), ("run", "existing", "--prompt", "task"), ("base", "seed")):
+        result = subprocess.run(
+            ["bash", "-c", preflight, "test", str(script), *args],
+            env=preflight_env, text=True, capture_output=True, timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+
     # Real terminal editing and EOF/cancellation must finish before any VM work.
     def own_terminal():
         os.setsid()
@@ -276,12 +305,24 @@ prepare_base
     victim = state / "instances/delete-me"
     victim.mkdir(parents=True)
     (victim / "private-key").write_text("private fixture")
+    (victim / "ready").touch()
+    (victim / "network-slot").write_text("100\n")
     (state / "downloads").mkdir()
     (state / "downloads/keep").write_text("shared cache")
     deletion = '''source "$1"
-sudo() { "$@"; }
+sudo() { [[ -z ${FAIL_DELETE:-} ]] || return 1; "$@"; }
 main delete delete-me
 '''
+    result = subprocess.run(
+        ["bash", "-c", deletion, "test", str(script)], env=dict(env, FAIL_DELETE="1"),
+        text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode != 0, "failed privileged deletion reported success"
+    assert (victim / "private-key").read_text() == "private fixture", "failed deletion hid credentials"
+    assert (victim / "network-slot").read_text() == "100\n", "failed deletion released its address"
+    assert not (victim / "ready").exists(), "partly deleted worker still appears ready"
+    result = run("list", env=env)
+    assert result.returncode == 0 and re.search(r"delete-me\s+partial", result.stdout), result
     result = subprocess.run(
         ["bash", "-c", deletion, "test", str(script)], env=env,
         text=True, capture_output=True, timeout=10,
@@ -330,6 +371,8 @@ printf '%s\\n' "$guest" "$gateway" "$subnet" "$tap" "$chain" "$guest_mac" "$stat
 
     payload = f'''Keep "quotes", 'apostrophes', `backticks`, $(touch {directory}/injected),
 newlines, --options and Unicode: café.\n\n'''
+    # Parser-only fixtures stand in for an already prepared dependency base.
+    (state / "base-image").mkdir()
     parse_only = '''source "$1"
 shift
 check() { :; }
@@ -398,9 +441,12 @@ Path(os.environ['CAPTURE_MAKE_ARGS']).write_text(json.dumps(sys.argv[1:]))
 PY
 ''')
     make_payload = f'Read literal $(shell touch {directory}/make-injected), $$ and "quotes".'
-    make_env = dict(env, CAPTURE_MAKE_ARGS=str(make_fixture / "args.json"))
-    # Parent Make exports its checkout; this fixture tests its own default checkout.
-    make_env.pop("VM_REPO", None)
+    make_env = dict(env, CAPTURE_MAKE_ARGS=str(make_fixture / "args.json"),
+                    VM="parent-vm", VM_REPO="/parent-checkout", VM_PROMPT="parent task",
+                    MAKEFLAGS="--just-print", MAKELEVEL="3", MFLAGS="-n")
+    # Fixture invocations must ignore the parent Make's options and VM settings.
+    for variable in ("VM", "VM_REPO", "VM_PROMPT", "MAKEFLAGS", "MAKELEVEL", "MFLAGS"):
+        make_env.pop(variable, None)
     result = subprocess.run(
         ["make", "-f", str(root / "Makefile"), "vm-run", "VM=api", f"VM_PROMPT={make_payload}"],
         cwd=make_fixture, env=make_env,
@@ -494,6 +540,56 @@ prepare_network "$2"
     assert not (outside / "systemd-networkd.service").is_symlink()
     for file in (rootfs / "etc/resolv.conf", rootfs / "etc/systemd/network/10-almanac.network"):
         assert file.stat().st_mode & 0o777 == 0o644, f"guest network config unreadable: {file}"
+
+    # Host IPv6 rejection must precede TAP activation and clean up its own rules.
+    network_tools = Path(directory) / "network-tools"
+    network_tools.mkdir()
+    network_log = Path(directory) / "network-commands.jsonl"
+    for tool in ("ip", "iptables", "ip6tables"):
+        program = network_tools / tool
+        program.write_text('''#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+tool = Path(sys.argv[0]).name
+args = sys.argv[1:]
+with open(os.environ['TEST_NETWORK_LOG'], 'a') as log:
+    log.write(json.dumps([tool, *args]) + '\\n')
+if tool == 'ip' and args[:2] == ['link', 'show']:
+    sys.exit(1)
+if tool == 'ip' and args[:4] == ['-j', '-4', 'route', 'show']:
+    print('[]')
+if tool == 'ip6tables' and os.environ.get('FAIL_IPV6'):
+    sys.exit(1)
+''')
+        program.chmod(0o700)
+    firewall_program = '''source "$1"
+tap=lo
+sudo() { if [[ $1 == -v ]]; then return; fi; "$@"; }
+read() { [[ $* == '-r alias' ]] || return 99; alias="almanac-firecracker:$state"; }
+network_up
+network_down
+'''
+    firewall_env = dict(env, TEST_NETWORK_LOG=str(network_log),
+                        PATH=str(network_tools) + os.pathsep + os.environ['PATH'])
+    result = subprocess.run(
+        ["bash", "-c", firewall_program, "test", str(script)], env=firewall_env,
+        text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    network_commands = [json.loads(line) for line in network_log.read_text().splitlines()]
+    for chain in ("INPUT", "FORWARD"):
+        reject = ["ip6tables", "-w", "-I", chain, "1", "-i", "lo", "-j", "DROP"]
+        assert reject in network_commands, f"guest IPv6 can bypass the host {chain} policy"
+        assert network_commands.index(reject) < network_commands.index(["ip", "link", "set", "dev", "lo", "up"])
+        assert ["ip6tables", "-w", "-t", "filter", "-D", chain, "-i", "lo", "-j", "DROP"] in network_commands
+    network_log.unlink()
+    result = subprocess.run(
+        ["bash", "-c", firewall_program, "test", str(script)], env=dict(firewall_env, FAIL_IPV6="1"),
+        text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode != 0, "IPv6 firewall failure was ignored"
+    network_commands = [json.loads(line) for line in network_log.read_text().splitlines()]
+    assert ["ip", "link", "set", "dev", "lo", "up"] not in network_commands
 
     disk = jail / "rootfs.ext4"
     disk.write_text("existing guest data")
@@ -838,6 +934,7 @@ main delete refuse-delete
     shared_base = state / "base-images/preserved"
     shared_base.mkdir(parents=True)
     (shared_base / "rootfs.ext4").write_text("shared dependency image")
+    (state / "base-image").rmdir()
     (state / "base-image").symlink_to(shared_base)
     result = subprocess.run(
         ["bash", "-c", 'source "$1"; sudo() { "$@"; }; main delete almanac',

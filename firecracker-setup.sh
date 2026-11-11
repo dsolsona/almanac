@@ -185,7 +185,7 @@ check() {
     (( EUID != 0 )) || fail 'run as your normal user, not root'
     local tool
     for tool in curl sha256sum tar unsquashfs mkfs.ext4 ssh ssh-keygen scp git \
-        ip iptables sudo python3 flock realpath truncate install sed stat readlink mount umount; do
+        ip iptables ip6tables sudo python3 flock realpath truncate install sed stat readlink mount umount find; do
         command -v "$tool" >/dev/null || fail "missing host command: $tool (see docs/firecracker.md)"
     done
     [[ -r /dev/kvm && -w /dev/kvm ]] || fail '/dev/kvm must be readable and writable'
@@ -219,10 +219,13 @@ for route in routes:
 PY
     sudo ip tuntap add dev "$tap" mode tap user "$(id -u)"
     sudo ip link set dev "$tap" alias "almanac-firecracker:$state"
+    # Guest administrators can send raw frames despite the guest's IPv6 boot flag.
+    sudo ip6tables -w -I INPUT 1 -i "$tap" -j DROP
+    sudo ip6tables -w -I FORWARD 1 -i "$tap" -j DROP
     sudo ip addr add "$gateway/30" dev "$tap"
     sudo ip link set dev "$tap" up
     sudo iptables -w -N "$chain"
-    # Guests may reach the public internet, but cannot initiate connections to the host/LAN.
+    # Reject common private/special IPv4 destinations before accepting internet traffic.
     local range
     for range in 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 \
         169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4; do
@@ -244,23 +247,25 @@ network_down() {
     [[ $alias == "almanac-firecracker:$state" ]] || fail "refusing to remove another workspace's $tap"
     sudo -v
     # A failed start can leave only some of these exact, owned rules installed.
-    remove_rule filter FORWARD -i "$tap" -j "$chain"
-    remove_rule filter FORWARD -o "$tap" -d "$guest/32" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    remove_rule filter INPUT -i "$tap" -s "$guest/32" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    remove_rule filter INPUT -i "$tap" -j REJECT
-    remove_rule nat POSTROUTING -s "$guest/32" ! -o "$tap" -j MASQUERADE
+    remove_rule iptables filter FORWARD -i "$tap" -j "$chain"
+    remove_rule iptables filter FORWARD -o "$tap" -d "$guest/32" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    remove_rule iptables filter INPUT -i "$tap" -s "$guest/32" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    remove_rule iptables filter INPUT -i "$tap" -j REJECT
+    remove_rule iptables nat POSTROUTING -s "$guest/32" ! -o "$tap" -j MASQUERADE
     if sudo iptables -w -S "$chain" >/dev/null 2>&1; then
         sudo iptables -w -F "$chain"
         sudo iptables -w -X "$chain"
     fi
+    remove_rule ip6tables filter INPUT -i "$tap" -j DROP
+    remove_rule ip6tables filter FORWARD -i "$tap" -j DROP
     sudo ip link del "$tap"
 }
 
 remove_rule() {
-    local table=$1
-    shift
-    if sudo iptables -w -t "$table" -C "$@" 2>/dev/null; then
-        sudo iptables -w -t "$table" -D "$@"
+    local firewall=$1 table=$2
+    shift 2
+    if sudo "$firewall" -w -t "$table" -C "$@" 2>/dev/null; then
+        sudo "$firewall" -w -t "$table" -D "$@"
     fi
 }
 
@@ -349,6 +354,10 @@ PY
             "$state/checkout-copied" "$state/ready" "$state/repo.bundle" "$state/repo-head" \
             "$state/checkout.tar.gz" "$state/git-config.json"
     else
+        # Keep failed credential removal discoverable and retryable under the original name.
+        rm -f -- "$state/ready"
+        sudo find "$state" -mindepth 1 -maxdepth 1 ! -name lock ! -name network-slot \
+            -exec rm -rf -- {} +
         local removed
         removed=$(mktemp -d "$base/deleted-$name.XXXXXX")
         mv -T -- "$state" "$removed"
@@ -968,6 +977,10 @@ main() {
     if [[ ( $action == stop || $action == delete ) && ! -d $state ]]; then printf 'Guest absent/stopped.\n'; return; fi
     if [[ $action == check ]]; then check; return; fi
     if [[ $action != stop && $action != delete ]]; then check; fi
+    if [[ ( $action == setup || $action == run ) && ! -e $base/base-image ]] \
+        && { (( auto_name )) || [[ ! -f $state/ready ]]; }; then
+        fail 'prepare shared dependencies first: ./firecracker-setup.sh base --repo PATH'
+    fi
     umask 077
     if (( auto_name )); then reserve_random_instance; fi
     mkdir -p "$state"
